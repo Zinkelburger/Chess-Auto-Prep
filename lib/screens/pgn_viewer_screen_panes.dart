@@ -82,76 +82,86 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
         _controller.isSolitaireMode &&
         solitaire.feedback == SolitaireFeedback.incorrect;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      child: Center(
-        child: AspectRatio(
-          aspectRatio: 1,
-          child: Stack(
-            children: [
-              ChessBoardWidget(
-                position: _controller.currentPosition,
-                flipped: _controller.boardFlipped,
-                recentMoveSquares: _activeMovetextController.recentMoveSquares,
-                // A solitaire hint rings the piece that moves. A square tint
-                // would be the same mark the board puts under a piece you
-                // picked up yourself, so the hint has to be a different shape,
-                // not a different shade.
-                annotations: [
-                  if (_controller.isSolitaireMode &&
-                      solitaire.hintSquare != null)
-                    BoardAnnotation(
-                      orig: solitaire.hintSquare!,
-                      brush: AnnotationBrush.yellow,
+    return Column(
+      children: [
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: Stack(
+                  children: [
+                    ChessBoardWidget(
+                      position: _controller.currentPosition,
+                      flipped: _controller.boardFlipped,
+                      recentMoveSquares:
+                          _activeMovetextController.recentMoveSquares,
+                      // A solitaire hint rings the piece that moves. A square tint
+                      // would be the same mark the board puts under a piece you
+                      // picked up yourself, so the hint has to be a different shape,
+                      // not a different shade.
+                      annotations: [
+                        if (_controller.isSolitaireMode &&
+                            solitaire.hintSquare != null)
+                          BoardAnnotation(
+                            orig: solitaire.hintSquare!,
+                            brush: AnnotationBrush.yellow,
+                          ),
+                        // The explorer row under the pointer, drawn where it goes.
+                        if (_explorerHoverMove case final hover?
+                            when hover.uci.length >= 4)
+                          BoardAnnotation(
+                            orig: hover.uci.substring(0, 2),
+                            dest: hover.uci.substring(2, 4),
+                            brush: AnnotationBrush.green,
+                          ),
+                      ],
+                      onMove: (move) => _handleBoardMove(move.san),
+                      // In solitaire, moves are allowed while guessing and again
+                      // once the game completes (free exploration of the annotated
+                      // game); only opponent auto-play locks the board.
+                      enableUserMoves:
+                          !_controller.isSolitaireMode ||
+                          solitaire.waitingForUser ||
+                          solitaire.isComplete,
                     ),
-                  // The explorer row under the pointer, drawn where it goes.
-                  if (_explorerHoverMove case final hover?
-                      when hover.uci.length >= 4)
-                    BoardAnnotation(
-                      orig: hover.uci.substring(0, 2),
-                      dest: hover.uci.substring(2, 4),
-                      brush: AnnotationBrush.green,
-                    ),
-                ],
-                onMove: (move) => _handleBoardMove(move.san),
-                // In solitaire, moves are allowed while guessing and again
-                // once the game completes (free exploration of the annotated
-                // game); only opponent auto-play locks the board.
-                enableUserMoves:
-                    !_controller.isSolitaireMode ||
-                    solitaire.waitingForUser ||
-                    solitaire.isComplete,
-              ),
-              if (showWrongGuess)
-                Positioned(
-                  top: 8,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.dangerSurface.withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Text(
-                        'Incorrect — try again',
-                        style: TextStyle(
-                          color: AppColors.ink,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                    if (showWrongGuess)
+                      Positioned(
+                        top: 8,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.dangerSurface.withValues(
+                                alpha: 0.85,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Incorrect — try again',
+                              style: TextStyle(
+                                color: AppColors.ink,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ),
+                  ],
                 ),
-            ],
+              ),
+            ),
           ),
         ),
-      ),
+        if (_controller.filteredGames.isNotEmpty) _buildCollectionNavigation(),
+      ],
     );
   }
 
@@ -250,59 +260,52 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                 )
               : _buildGameTab(),
         ),
-        if (_controller.filteredGames.isNotEmpty)
-          GameNavBar(
-            games: [
-              for (final g in _controller.filteredGames)
-                GameNavItem.fromEntry(g),
-            ],
-            currentIndex: _controller.currentGameIndex,
-            currentRating: _controller
-                .filteredGames[_controller.currentGameIndex]
-                .studyRating,
-            sortMode: _controller.sortMode,
-            isAutoPlaying: !_onLineTab && _controller.isAutoPlaying,
-            autoPlayDelaySec: _controller.autoPlayDelaySec,
-            autoNextGame: _controller.autoNextGame,
-            // Switching games throws a half-finished solitaire game away, so
-            // the user is asked first when there is something to lose.
-            onPrev: () =>
-                unawaited(_guardingSolitaireProgress(_controller.prevGame)),
-            onNext: () =>
-                unawaited(_guardingSolitaireProgress(_controller.nextGame)),
-            onGoToGame: (index) {
-              _controller.goToGame(index);
-              // Typing a number leaves focus in the nav bar's box; put it back
-              // on the screen so ←/→ move through the game we just landed on.
-              _reclaimFocus();
-            },
-            onSetRating: _controller.setRating,
-            onSetSortMode: _controller.setSortMode,
-            // Playback/fullscreen unmount or drive the game reader. Keeping
-            // them enabled while Book owns the board would mutate an invisible
-            // cursor, so they are deliberately unavailable in that pane.
-            onToggleAutoPlay: _onLineTab ? null : _controller.toggleAutoPlay,
-            onToggleFullScreen: _onLineTab
-                ? null
-                : _controller.toggleFullScreen,
-            onSetSpeed: _onLineTab ? null : _controller.setAutoPlaySpeed,
-            onSetAutoNext: _onLineTab ? null : _controller.setAutoNextGame,
-            onCopyPgn: _copyCurrentGamePgn,
-            hasEphemeralAnnotations:
-                _activeMovetextController.hasEphemeralMoves,
-            onClearAnnotations: () {
-              _controller.stopAutoPlay();
-              _activeMovetextController.clearEphemeralMoves();
-              setState(() {});
-              _reclaimFocus();
-            },
-            onToggleEditMode: _onLineTab ? null : _toggleEditMode,
-            isEditMode: _editMode,
-            isSolitaireMode: _controller.isSolitaireMode,
-          ),
       ],
     );
   }
+
+  Widget _buildCollectionNavigation() => GameNavBar(
+    games: [
+      for (final g in _controller.filteredGames) GameNavItem.fromEntry(g),
+    ],
+    currentIndex: _controller.currentGameIndex,
+    currentRating:
+        _controller.filteredGames[_controller.currentGameIndex].studyRating,
+    sortMode: _controller.sortMode,
+    isAutoPlaying: !_onLineTab && _controller.isAutoPlaying,
+    autoPlayDelaySec: _controller.autoPlayDelaySec,
+    autoNextGame: _controller.autoNextGame,
+    // Switching games throws a half-finished solitaire game away, so
+    // the user is asked first when there is something to lose.
+    onPrev: () => unawaited(_guardingSolitaireProgress(_controller.prevGame)),
+    onNext: () => unawaited(_guardingSolitaireProgress(_controller.nextGame)),
+    onGoToGame: (index) {
+      _controller.goToGame(index);
+      // Typing a number leaves focus in the nav bar's box; put it back
+      // on the screen so ←/→ move through the game we just landed on.
+      _reclaimFocus();
+    },
+    onSetRating: _controller.setRating,
+    onSetSortMode: _controller.setSortMode,
+    // Playback/fullscreen unmount or drive the game reader. Keeping
+    // them enabled while Book owns the board would mutate an invisible
+    // cursor, so they are deliberately unavailable in that pane.
+    onToggleAutoPlay: _onLineTab ? null : _controller.toggleAutoPlay,
+    onToggleFullScreen: _onLineTab ? null : _controller.toggleFullScreen,
+    onSetSpeed: _onLineTab ? null : _controller.setAutoPlaySpeed,
+    onSetAutoNext: _onLineTab ? null : _controller.setAutoNextGame,
+    onCopyPgn: _copyCurrentGamePgn,
+    hasEphemeralAnnotations: _activeMovetextController.hasEphemeralMoves,
+    onClearAnnotations: () {
+      _controller.stopAutoPlay();
+      _activeMovetextController.clearEphemeralMoves();
+      setState(() {});
+      _reclaimFocus();
+    },
+    onToggleEditMode: _onLineTab ? null : _toggleEditMode,
+    isEditMode: _editMode,
+    isSolitaireMode: _controller.isSolitaireMode,
+  );
 
   /// The Line tab: what my books say about the game on screen, and the prepared
   /// line itself on the same board.
@@ -539,7 +542,6 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             ),
             editMode: _editMode,
             bookFormatting: game.isCourseStyle,
-            preferFocusedReading: game.isCourseStyle,
             initialMainLineIndex: _controller.resumePlyFor(game),
             // The result is the answer to "how did this go?" — the one header
             // field a guesser must not see before the last move. Only once

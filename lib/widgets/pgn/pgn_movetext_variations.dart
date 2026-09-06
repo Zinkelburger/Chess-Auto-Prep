@@ -1,9 +1,5 @@
 part of 'pgn_movetext_view.dart';
 
-/// Nesting depth of a sideline branching directly off the mainline. The
-/// mainline itself is depth 0.
-const _kRootVariationDepth = 1;
-
 /// Deepest sideline level rendered unconditionally. Alternatives that would
 /// land deeper are folded behind a "▸ N more lines" stub the reader can open.
 /// Machine-generated repertoire trees routinely nest far past anything a human
@@ -79,214 +75,201 @@ List<InlineSpan>? _buildInlineVariationAtPly(
   return spans;
 }
 
-/// A single rendered row of sideline movetext, or the disclosure stub standing
-/// in for a folded group.
-class _VarRow {
-  final int depth;
-
-  /// Spans of the row. Empty for a stub row.
-  final List<InlineSpan> spans;
-
-  /// Non-null when this row is a fold disclosure for the branch under this
-  /// node id.
-  final int? branchId;
-
-  /// Number of alternatives hidden (or revealed) by the stub.
-  final int hiddenCount;
-
-  /// Whether the folded group is currently open.
-  final bool open;
-
-  const _VarRow(this.depth, this.spans)
-    : branchId = null,
-      hiddenCount = 0,
-      open = false;
-
-  const _VarRow.stub(
-    this.depth,
-    this.branchId,
-    this.hiddenCount, {
-    required this.open,
-  }) : spans = const [];
-
-  bool get isStub => branchId != null;
-}
-
-/// Build the widget rows for every sideline branching at [ply].
-///
-/// Each row is indented one step per nesting level and carries a hairline in
-/// its left gutter, so depth survives both wrapping and a narrow pane. There
-/// are deliberately no `( )` brackets: indentation, the gutter rule, and the
-/// ink/weight step already say "sideline", and stacked parentheses are exactly
-/// what makes deep trees unreadable.
-///
-/// [nodeVisible] (solitaire) prunes the tree: a node it rejects is not drawn,
-/// and neither is anything below it.
+/// Render sidelines as ordinary paragraphs, with a foldable move label in
+/// the gutter. Nesting changes structure, never the size of the explanation.
 List<Widget> _buildVariationRowsAtPly(
   PgnMovetextView view,
   int ply, {
   bool Function(MoveNode node)? nodeVisible,
-  required Set<int> expandedBranches,
+  required Map<int, bool> branchVisibility,
   required ValueChanged<int> onToggleBranch,
-}) {
-  var roots = view.variationsByPly[ply];
-  if (roots == null || roots.isEmpty) return const [];
-  if (nodeVisible != null) {
-    roots = roots.where(nodeVisible).toList();
-    if (roots.isEmpty) return const [];
-  }
+}) => [
+  for (final root in view.variationsByPly[ply] ?? <MoveNode>[])
+    if (nodeVisible == null || nodeVisible(root))
+      _buildVariationDocument(
+        view,
+        root,
+        ply: ply,
+        branchPly: ply,
+        depth: 1,
+        branchVisibility: branchVisibility,
+        onToggleBranch: onToggleBranch,
+        nodeVisible: nodeVisible,
+      ),
+];
 
-  final coords = _coordsAtPly(view, ply);
-  final rows = <_VarRow>[];
-
-  for (final root in roots) {
-    final row = <InlineSpan>[];
-    _walkVariation(
-      view,
-      root,
-      moveNumber: coords.moveNumber,
-      isWhiteTurn: coords.isWhite,
-      isFirstOfRow: true,
-      depth: _kRootVariationDepth,
-      branchPly: ply,
-      row: row,
-      out: rows,
-      expandedBranches: expandedBranches,
-      nodeVisible: nodeVisible,
-    );
-    if (row.isNotEmpty) rows.add(_VarRow(_kRootVariationDepth, row));
-  }
-
-  return [for (final row in rows) _variationRowWidget(row, onToggleBranch)];
-}
-
-/// Walk a sideline, appending spans to [row] and completed rows to [out].
-///
-/// A node's first child continues the *same* row; every further child is an
-/// alternative, so the row is closed at the branch point, the alternatives are
-/// emitted as their own indented rows, and the continuation resumes on a fresh
-/// row at the same depth (re-stating `N...` for Black). That break-and-resume
-/// shape is what makes a sub-variation visible instead of buried mid-line.
-void _walkVariation(
+Widget _buildVariationDocument(
   PgnMovetextView view,
-  MoveNode node, {
-  required int moveNumber,
-  required bool isWhiteTurn,
-  required bool isFirstOfRow,
-  required int depth,
+  MoveNode root, {
+  required int ply,
   required int branchPly,
-  required List<InlineSpan> row,
-  required List<_VarRow> out,
-  required Set<int> expandedBranches,
-  bool Function(MoveNode node)? nodeVisible,
+  required int depth,
+  required Map<int, bool> branchVisibility,
+  required ValueChanged<int> onToggleBranch,
+  bool Function(MoveNode)? nodeVisible,
 }) {
-  final isNullMove = isNullMoveSan(node.san);
-
-  // Null-move nodes pass the turn: show any comment, hide the SAN, then
-  // keep walking so `1. d4 Z0 2. Nf3` does not stop at the pass.
-  if (isNullMove) {
-    if (node.comment != null && node.comment!.isNotEmpty) {
-      row.addAll(_variationCommentSpans(view, node.comment!, depth));
-    }
-  } else {
-    if (isWhiteTurn) {
-      row.add(
-        TextSpan(
-          text: '$moveNumber. ',
-          style: PgnTextStyles.moveNumberAt(depth),
+  final containsCurrent = view.analysisPath.any((n) => n.id == root.id);
+  final defaultOpen = branchVisibility.putIfAbsent(
+    root.id,
+    () => view.expandAll || depth <= _kAlwaysVisibleDepth,
+  );
+  final open = depth == 0 || containsCurrent || defaultOpen;
+  final coords = _coordsAtPly(view, ply);
+  final label =
+      '${coords.moveNumber}${coords.isWhite ? '.' : '...'} ${root.san}';
+  final children = <Widget>[];
+  final run = <InlineSpan>[];
+  void flush() {
+    if (run.isEmpty) return;
+    children.add(
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Text.rich(
+          TextSpan(
+            style: PgnTextStyles.rowRootAt(depth),
+            children: List.of(run),
+          ),
         ),
-      );
-    } else if (isFirstOfRow) {
-      row.add(
-        TextSpan(
-          text: '$moveNumber... ',
-          style: PgnTextStyles.moveNumberAt(depth),
-        ),
-      );
-    }
-
-    row.add(_variationMoveSpan(view, node, depth, branchPly));
-    row.add(const TextSpan(text: ' '));
-
-    if (node.comment != null && node.comment!.isNotEmpty) {
-      row.addAll(_variationCommentSpans(view, node.comment!, depth));
-    }
-  }
-
-  // Solitaire hides what the drill has not reached: the line's next move and
-  // any alternatives to it drop out until they are revealed.
-  final children = nodeVisible == null
-      ? node.children
-      : node.children.where(nodeVisible).toList();
-  if (children.isEmpty) return;
-
-  final nextMoveNumber = isWhiteTurn ? moveNumber : moveNumber + 1;
-  final nextIsWhite = !isWhiteTurn;
-
-  if (children.length == 1) {
-    _walkVariation(
-      view,
-      children.first,
-      moveNumber: nextMoveNumber,
-      isWhiteTurn: nextIsWhite,
-      isFirstOfRow: isNullMove ? isFirstOfRow : false,
-      depth: depth,
-      branchPly: branchPly,
-      row: row,
-      out: out,
-      expandedBranches: expandedBranches,
-      nodeVisible: nodeVisible,
+      ),
     );
-    return;
-  }
-
-  // Branch point: close the row here so the alternatives sit directly under
-  // the move they replace.
-  out.add(_VarRow(depth, List.of(row)));
-  row.clear();
-
-  final alternatives = children.skip(1).toList();
-  final altDepth = depth + 1;
-  final folded = altDepth > _kAlwaysVisibleDepth;
-  final open = !folded || expandedBranches.contains(node.id);
-
-  if (folded) {
-    out.add(_VarRow.stub(altDepth, node.id, alternatives.length, open: open));
+    run.clear();
   }
 
   if (open) {
-    for (final alternative in alternatives) {
-      final altRow = <InlineSpan>[];
-      _walkVariation(
-        view,
-        alternative,
-        moveNumber: nextMoveNumber,
-        isWhiteTurn: nextIsWhite,
-        isFirstOfRow: true,
-        depth: altDepth,
-        branchPly: branchPly,
-        row: altRow,
-        out: out,
-        expandedBranches: expandedBranches,
-        nodeVisible: nodeVisible,
-      );
-      if (altRow.isNotEmpty) out.add(_VarRow(altDepth, altRow));
+    MoveNode? cursor = root;
+    var index = ply;
+    while (cursor != null) {
+      final node = cursor;
+      final pos = _coordsAtPly(view, index);
+      final comment = node.comment;
+      final rendered = comment == null
+          ? (block: null, spans: <InlineSpan>[])
+          : _renderComment(
+              view,
+              comment,
+              anchorPos: node.positionOrNull,
+              anchorPly: index + 1,
+              interactive: false,
+            );
+      final metrics = comment == null
+          ? <InlineSpan>[]
+          : _metricsSpans(comment, depth: depth);
+      final annotated = rendered.block != null || rendered.spans.isNotEmpty;
+      if (annotated) flush();
+      final passageStart = children.length;
+      if (!isNullMoveSan(node.san)) {
+        if (pos.isWhite || run.isEmpty) {
+          run.add(
+            TextSpan(
+              text: '${pos.moveNumber}${pos.isWhite ? '.' : '...'} ',
+              style: PgnTextStyles.moveNumberAt(depth),
+            ),
+          );
+        }
+        run.add(
+          _variationMoveSpan(
+            view,
+            node,
+            depth,
+            branchPly,
+            attachKey: !annotated,
+          ),
+        );
+        run.add(const TextSpan(text: ' '));
+      }
+      if (metrics.isNotEmpty) {
+        flush();
+        children.add(Text.rich(TextSpan(children: metrics)));
+      }
+      if (annotated) {
+        flush();
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 15),
+            child:
+                rendered.block ??
+                Text.rich(
+                  TextSpan(
+                    style: PgnTextStyles.commentAt(depth),
+                    children: rendered.spans,
+                  ),
+                ),
+          ),
+        );
+        final passage = children.sublist(passageStart);
+        children.removeRange(passageStart, children.length);
+        children.add(
+          PgnReadingPassage(
+            key: view.analysisPath.lastOrNull?.id == node.id
+                ? view.currentMoveKey
+                : null,
+            active: view.analysisPath.lastOrNull?.id == node.id,
+            children: passage,
+          ),
+        );
+      }
+      final next = nodeVisible == null
+          ? node.children
+          : node.children.where(nodeVisible).toList();
+      if (next.length > 1) {
+        flush();
+        for (final alternative in next.skip(1)) {
+          children.add(
+            _buildVariationDocument(
+              view,
+              alternative,
+              ply: index + 1,
+              branchPly: branchPly,
+              depth: depth + 1,
+              branchVisibility: branchVisibility,
+              onToggleBranch: onToggleBranch,
+              nodeVisible: nodeVisible,
+            ),
+          );
+        }
+      }
+      cursor = next.firstOrNull;
+      index++;
     }
+    flush();
   }
 
-  // Resume the continuation on a fresh row at this depth.
-  _walkVariation(
-    view,
-    children.first,
-    moveNumber: nextMoveNumber,
-    isWhiteTurn: nextIsWhite,
-    isFirstOfRow: true,
-    depth: depth,
-    branchPly: branchPly,
-    row: row,
-    out: out,
-    expandedBranches: expandedBranches,
-    nodeVisible: nodeVisible,
+  final content = Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (depth > 0)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: ValueKey('pgn-branch-${root.id}'),
+            onPressed: containsCurrent ? null : () => onToggleBranch(root.id),
+            icon: Icon(
+              open ? Icons.expand_more : Icons.chevron_right,
+              size: 16,
+            ),
+            label: Text(label, style: PgnTextStyles.collapsedStub),
+            style: TextButton.styleFrom(padding: EdgeInsets.zero),
+          ),
+        ),
+      ...children,
+    ],
+  );
+  if (depth == 0) return content;
+  return Container(
+    margin: EdgeInsets.only(
+      left: depth <= PgnTextStyles.maxStyledDepth ? 5 : 0,
+      top: 16,
+      bottom: 22,
+    ),
+    padding: EdgeInsets.only(
+      left: depth <= PgnTextStyles.maxStyledDepth ? 17 : 0,
+    ),
+    decoration: BoxDecoration(
+      border: depth <= PgnTextStyles.maxStyledDepth
+          ? const Border(left: BorderSide(color: AppColors.pgnVariationRule))
+          : null,
+    ),
+    child: content,
   );
 }
 
@@ -295,8 +278,9 @@ InlineSpan _variationMoveSpan(
   PgnMovetextView view,
   MoveNode node,
   int depth,
-  int branchPly,
-) {
+  int branchPly, {
+  bool attachKey = true,
+}) {
   final isCurrentNode =
       view.analysisPath.isNotEmpty && view.analysisPath.last.id == node.id;
 
@@ -304,7 +288,11 @@ InlineSpan _variationMoveSpan(
   // sideline is there.
   final nagSuffix = allNagSuffix(node.nags);
 
-  final base = PgnTextStyles.moveAt(depth, ephemeral: node.isEphemeral);
+  final base = PgnTextStyles.moveAt(
+    depth,
+    ephemeral: node.isEphemeral,
+    quiet: attachKey,
+  );
   final sanStyle = isCurrentNode
       ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
       : base;
@@ -313,18 +301,14 @@ InlineSpan _variationMoveSpan(
         ? AppColors.pgnEphemeralBg
         : AppColors.pgnMoveCurrentBg,
     borderRadius: BorderRadius.circular(3),
-    border: Border.all(
-      color: node.isEphemeral
-          ? AppColors.pgnEphemeralMove
-          : AppColors.pgnMoveCurrent,
-      width: 1,
-    ),
+    border: Border.all(color: Colors.transparent, width: 1),
   );
 
   return WidgetSpan(
     alignment: PlaceholderAlignment.baseline,
     baseline: TextBaseline.alphabetic,
     child: MoveChip(
+      containerKey: isCurrentNode && attachKey ? view.currentMoveKey : null,
       san: node.san,
       nagSuffix: nagSuffix,
       sanStyle: sanStyle,
@@ -343,56 +327,6 @@ InlineSpan _variationMoveSpan(
               details.globalPosition,
             )
           : null,
-    ),
-  );
-}
-
-/// Indent a row by its depth and draw the gutter hairline that carries the
-/// depth signal through wrapped lines.
-Widget _variationRowWidget(_VarRow row, ValueChanged<int> onToggleBranch) {
-  final Widget content = row.isStub
-      ? _foldStub(row, onToggleBranch)
-      : Text.rich(
-          TextSpan(
-            style: PgnTextStyles.rowRootAt(row.depth),
-            children: row.spans,
-          ),
-        );
-
-  return Padding(
-    padding: EdgeInsets.only(
-      left: (row.depth - _kRootVariationDepth) * PgnTextStyles.depthIndent,
-      top: 1,
-      bottom: 1,
-    ),
-    child: Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(left: 8),
-      decoration: const BoxDecoration(
-        border: Border(
-          left: BorderSide(color: AppColors.pgnVariationRule, width: 1),
-        ),
-      ),
-      child: content,
-    ),
-  );
-}
-
-/// The "▸ 3 more lines" disclosure standing in for a folded group.
-Widget _foldStub(_VarRow row, ValueChanged<int> onToggleBranch) {
-  final n = row.hiddenCount;
-  final label = row.open
-      ? '▾ ${n == 1 ? '1 line' : '$n lines'}'
-      : '▸ ${n == 1 ? '1 more line' : '$n more lines'}';
-  return MouseRegion(
-    cursor: SystemMouseCursors.click,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onToggleBranch(row.branchId!),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1),
-        child: Text(label, style: PgnTextStyles.collapsedStub),
-      ),
     ),
   );
 }
