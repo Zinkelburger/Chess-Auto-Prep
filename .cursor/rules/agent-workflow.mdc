@@ -1,11 +1,19 @@
 ---
-description: Local agent resource and verification workflow
+description: Durable worktree, remote backup, and verification workflow
 alwaysApply: true
 ---
 
-Follow the Local agent workflow in AGENTS.md. Use an isolated worktree,
-focused local tests through scripts/ci.sh, and scripts/app_driver.py for
-headless app checks. Full PR checks run in GitHub CI. Do not open windows on
-the user's display unless requested or needed for native desktop behavior.
-One task, one commit: squash a branch's intermediate commits before handing
-the work back (see Committing in AGENTS.md).
+Follow the Local agent workflow in AGENTS.md. Editing worktrees must be made
+with `python3 scripts/agent_worktree.py <task-name>` and must never live under
+`/tmp`; the creator establishes the remote branch automatically. Detached
+`/tmp` snapshots are only for disposable tests, previews, and bisects.
+
+Before stopping, checkpoint unfinished work with a commit and push. Before
+reporting completion, run
+`python3 scripts/agent_worktree.py --verify .`; it must confirm a clean tree
+whose exact HEAD exists on the remote. Report the branch and commit SHA.
+
+Run focused tests through scripts/ci.sh and use scripts/app_driver.py for
+headless UI checks. Full PR checks run in GitHub CI. One task lands as one
+commit; squash private checkpoint commits before review, using
+`--force-with-lease` only on your own unmerged `codex/*` branch.

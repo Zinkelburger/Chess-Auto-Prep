@@ -5,9 +5,15 @@ games, repertoire building/training, player analysis, studies.
 
 ## Local agent workflow
 
-Use one worktree per editing task. Codex, Claude Code and Cursor can create
-worktrees themselves; run `python3 scripts/agent_worktree.py --prepare . --assets-from /path/to/main-checkout` inside a new one to fetch dependencies
-and link immutable engine assets. Or use `python3 scripts/agent_worktree.py <task-name>` to create and prepare one. Never reset another agent's checkout.
+Use one worktree per editing task. Create it with
+`python3 scripts/agent_worktree.py <task-name>`; this puts it under
+`~/.local/share/chess-prep/worktrees/`, creates `codex/<task-name>`, and pushes
+the branch to `origin` before work begins. A worktree created by Codex, Claude
+Code or Cursor must be prepared with
+`python3 scripts/agent_worktree.py --prepare . --assets-from /path/to/main-checkout`,
+which applies the same remote-backup check. A branch-backed worktree must never
+live under `/tmp`; detached `/tmp` snapshots are disposable and may be used
+only for tests, previews and bisects. Never reset another agent's checkout.
 
 - Start with `scripts/doctor.sh --quiet` when the environment is unfamiliar or
   a command fails. It is diagnostic, not a prerequisite for every action.
@@ -38,28 +44,55 @@ The runner enforces limits and cleanup; keep those mechanics out of prompts.
 If systemd cannot provide containment, the job fails without running uncapped.
 The app's one-thread Stockfish default is a preference, not a resource limit.
 
+## Backing up and handing off work
+
+A local branch is not a backup. Before an editing task stops, waits for later,
+or reports completion, commit every intended file and push the branch. For a
+long task, make and push checkpoint commits at natural stopping points; never
+leave the only copy of meaningful work dirty overnight or across a reboot.
+
+Before reporting completion, run:
+
+```
+python3 scripts/agent_worktree.py --verify .
+```
+
+It must confirm that the tree is clean and its exact `HEAD` exists on the
+configured remote. The handoff must name the branch, commit SHA, checks run and
+any dependency on another branch. Open a draft PR after the first meaningful
+pushed commit so the work is visible and CI can run.
+
+Integration starts from an updated `origin/main` and uses pushed remote
+branches, never unpublished local refs. Delete a source worktree or branch only
+after the integrated result is pushed and the remote PR/commit is confirmed on
+`origin/main`. Use `git branch -d`, not `-D`; remove the remote branch last.
+
 ## Committing
 
-One task, one commit. Everything a session produces for a single piece of
-work — the change, its tests, the docs it forces — lands as one commit, never
-as a trail of "wip", "fix test", "address feedback". A mammoth push is still
-one commit if it is one piece of work; the size of the diff is not a reason to
-split it.
+One task lands as one final commit. Everything a session produces for a single
+piece of work — the change, its tests, the docs it forces — is squashed before
+review or integration. Temporary checkpoint commits are allowed on a private
+unmerged `codex/*` branch because a pushed imperfect checkpoint is safer than
+uncommitted work that exists on one machine. A mammoth change is still one
+final commit if it is one piece of work; size alone is not a reason to split it.
 
 Split only when the parts are genuinely independent and you would want to
 revert one without the other. A release/version bump stays its own commit.
 
-If a branch already carries intermediate commits, squash before handing the
-work back or opening a PR. Interactive rebase is not available here, so:
+If a branch carries checkpoint commits, squash them before marking its draft
+PR ready or handing it to the integrator. Interactive rebase is not available
+here, so:
 
 ```
-git reset --soft $(git merge-base HEAD main) && git commit
+git fetch origin
+git reset --soft $(git merge-base HEAD origin/main) && git commit
+git push --force-with-lease
 ```
 
-Or merge with `--squash`, or `git merge-base` against whatever the branch
-forked from. Never rewrite history that is already pushed, already on `main`,
-or in another agent's checkout — squash your own branch before it leaves,
-not after.
+`--force-with-lease` is permitted only for the task's own unmerged `codex/*`
+branch while converting checkpoints into its final commit. Never rewrite
+`main`, a merged branch, a branch under review without warning the reviewer, or
+another agent's branch. After the final push, rerun the handoff verification.
 
 ## Conventions that CI enforces indirectly
 
