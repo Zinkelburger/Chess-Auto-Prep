@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import '../../../models/crosstable.dart';
 import '../../../models/game_outcome.dart';
 import '../../../services/crosstable_builder.dart';
+import '../../../widgets/common/choice_field.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/time_format.dart';

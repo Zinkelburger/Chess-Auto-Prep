@@ -33,14 +33,23 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
 
   // ── Stockfish settings ────────────────────────────────────────────────
 
-  /// Number of parallel Stockfish workers (each: 1 thread, 128 MB hash).
-  /// Defaults to one; users can increase this up to the logical core count.
-  int _workers = kDefaultWorkers;
-  int get workers => _workers;
-  set workers(int value) => _assignIfChanged(
-    _workers,
-    value.clamp(1, systemCores),
-    (v) => _workers = v,
+  /// CPU cores Stockfish may use, 1..[systemCores]. The one machine-level
+  /// number: the board engine runs this many threads in a single process,
+  /// and bulk work (game review, tactics mining, tree builds) runs this many
+  /// single-thread processes. Cores and threads used to be two settings and
+  /// nobody could say which did what.
+  int _cores = kDefaultCores;
+  int get cores => _cores;
+  set cores(int value) =>
+      _assignIfChanged(_cores, value.clamp(1, systemCores), (v) => _cores = v);
+
+  /// RAM each Stockfish process gets for its search table (UCI Hash), MB.
+  int _hashMb = kDefaultHashMb;
+  int get hashMb => _hashMb;
+  set hashMb(int value) => _assignIfChanged(
+    _hashMb,
+    value.clamp(kMinHashMb, kMaxHashMb),
+    (v) => _hashMb = v,
   );
 
   int _depth = kDefaultDepth;
@@ -56,16 +65,6 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     kMinMultiPv,
     kMaxMultiPv,
     (v) => _multiPv = v,
-  );
-
-  /// Threads for the inline (PGN) engine worker.  Uses a single Stockfish
-  /// process so more threads = faster search on one position.
-  int _inlineThreads = kDefaultInlineThreads;
-  int get inlineThreads => _inlineThreads;
-  set inlineThreads(int value) => _assignIfChanged(
-    _inlineThreads,
-    value.clamp(1, systemCores),
-    (v) => _inlineThreads = v,
   );
 
   /// Maximum total moves to display in the analysis table.
@@ -313,15 +312,17 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
       int loadInt(String key, int def, int min, int max) =>
           (prefs.getInt('$_prefix$key') ?? def).clamp(min, max);
 
-      _workers = loadInt('workers', kDefaultWorkers, 1, systemCores);
+      // `cores` replaced the separate `workers` / `inline_threads` pair; an
+      // older profile keeps the larger of the two it had set.
+      final legacyCores = [
+        prefs.getInt('${_prefix}workers'),
+        prefs.getInt('${_prefix}inline_threads'),
+      ].whereType<int>().fold<int?>(null, (a, b) => a == null || b > a ? b : a);
+      _cores = (prefs.getInt('${_prefix}cores') ?? legacyCores ?? kDefaultCores)
+          .clamp(1, systemCores);
+      _hashMb = loadInt('hash_mb', kDefaultHashMb, kMinHashMb, kMaxHashMb);
       _depth = loadInt('depth', kDefaultDepth, kMinDepth, kMaxDepth);
       _multiPv = loadInt('multi_pv', kDefaultMultiPv, kMinMultiPv, kMaxMultiPv);
-      _inlineThreads = loadInt(
-        'inline_threads',
-        kDefaultInlineThreads,
-        1,
-        systemCores,
-      );
       _maxAnalysisMoves = loadInt(
         'max_analysis_moves',
         kDefaultMaxAnalysisMoves,
@@ -389,10 +390,10 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
   Future<void> _writePrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('${_prefix}workers', _workers);
+      await prefs.setInt('${_prefix}cores', _cores);
+      await prefs.setInt('${_prefix}hash_mb', _hashMb);
       await prefs.setInt('${_prefix}depth', _depth);
       await prefs.setInt('${_prefix}multi_pv', _multiPv);
-      await prefs.setInt('${_prefix}inline_threads', _inlineThreads);
       await prefs.setInt('${_prefix}max_analysis_moves', _maxAnalysisMoves);
       await prefs.setInt('${_prefix}pv_rows', _pvRows);
       await prefs.setBool('${_prefix}show_stockfish', _showStockfish);
@@ -435,10 +436,10 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
 
   /// Reset all settings to defaults
   void resetToDefaults() {
-    _workers = kDefaultWorkers;
+    _cores = kDefaultCores;
+    _hashMb = kDefaultHashMb;
     _depth = kDefaultDepth;
     _multiPv = kDefaultMultiPv;
-    _inlineThreads = kDefaultInlineThreads;
     _maxAnalysisMoves = kDefaultMaxAnalysisMoves;
     _pvRows = kDefaultPvRows;
     _showStockfish = kDefaultShowStockfish;

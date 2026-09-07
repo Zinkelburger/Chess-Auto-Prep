@@ -216,14 +216,14 @@ void main() {
     addTearDown(h.games.dispose);
     addTearDown(h.runner.dispose);
     final engine = EngineSettings.instance;
-    final before = engine.workers;
-    addTearDown(() => engine.workers = before);
-    engine.workers = 1;
+    final before = engine.cores;
+    addTearDown(() => engine.cores = before);
+    engine.cores = 1;
 
     await pump(tester, runner: h.runner, coordinator: h.co);
     expect(find.text('1 core'), findsOneWidget);
 
-    engine.workers = 2;
+    engine.cores = 2;
     await tester.pump();
     expect(find.text('2 cores'), findsOneWidget);
   });

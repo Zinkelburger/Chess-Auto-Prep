@@ -106,8 +106,8 @@ class _StockfishSettingsBody extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Machine-level knobs — engine workers, inline threads, and the '
-              'Maia rating — live in App settings (⚙ in the top bar).',
+              'CPU cores, memory and the opponent rating are in App settings '
+              '(⚙ in the top bar).',
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.onSurfaceMuted,

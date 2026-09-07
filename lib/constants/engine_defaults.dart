@@ -14,11 +14,19 @@ const int kDefaultMultiPv = 3;
 const int kMinMultiPv = 1;
 const int kMaxMultiPv = 10;
 
-const int kDefaultInlineThreads = 1;
-
-/// Start conservatively; users can opt into more CPU in engine settings.
-const int kDefaultWorkers = 1;
+/// CPU cores Stockfish may use. Start conservatively; the user raises it in
+/// App settings. One number covers both uses: the board engine runs them as
+/// threads in one process, bulk review runs that many single-thread
+/// processes.
+const int kDefaultCores = 1;
 const int kDefaultGenerationThreads = 1;
+
+/// RAM per Stockfish process for its search table (UCI Hash), in MB. 128 MB
+/// is comfortable up to about depth 25; bulk review runs one process per
+/// core, so the total is cores × this.
+const int kDefaultHashMb = 128;
+const int kMinHashMb = 16;
+const int kMaxHashMb = 8192;
 
 const int kDefaultMaxAnalysisMoves = 8;
 const int kMinMaxAnalysisMoves = 3;

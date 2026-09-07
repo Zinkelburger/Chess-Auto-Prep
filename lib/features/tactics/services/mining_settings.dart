@@ -7,7 +7,7 @@
 /// this is the value that stepper edits.
 ///
 /// Companion knob: how many cores that pass may use, which is
-/// [EngineSettings.workers] — a machine-level setting with its own owner. Depth
+/// [EngineSettings.cores] — a machine-level setting with its own owner. Depth
 /// is per-workload, so it lives here.
 library;
 

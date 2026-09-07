@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../models/engine_settings.dart';
 import '../engine/stockfish_pool.dart';
 import '../generation/generation_config.dart';
 import 'generation_phase.dart';
@@ -187,7 +188,7 @@ String? generationResourceLabel(TreeBuildConfig? config, {int? workers}) {
   final lanes = StockfishPool.laneCountFor(threads, workers: workers);
   final threadsPerWorker = StockfishPool.threadsPerLane(threads, lanes);
   final activeThreads = lanes * threadsPerWorker;
-  final hashMb = lanes * kPoolHashPerWorkerMb;
+  final hashMb = lanes * EngineSettings.instance.hashMb;
   return '$lanes worker${lanes == 1 ? '' : 's'} × '
       '$threadsPerWorker thread${threadsPerWorker == 1 ? '' : 's'} · '
       '$activeThreads/$threads CPU · $hashMb MB hash + engine memory';

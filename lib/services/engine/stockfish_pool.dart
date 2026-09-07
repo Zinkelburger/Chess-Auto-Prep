@@ -1,8 +1,8 @@
 /// Pure Stockfish worker pool — spawns workers, provides acquire/release.
 ///
 /// No analysis orchestration, no UI concerns, no dynamic RAM budgeting.
-/// Workers use a fixed [kPoolHashPerWorkerMb] MB hash and a single thread
-/// each.
+/// Workers take [EngineSettings.hashMb] of hash each and a single thread
+/// unless a build asks for more.
 ///
 /// Used by [AnalysisService] for interactive analysis and by
 /// [TreeBuildService] for generation-mode evaluation.
@@ -21,9 +21,6 @@ import 'package:chess_auto_prep/utils/log.dart';
 
 export 'eval_worker.dart' show EvalResult, EvalWorker;
 export '../../models/analysis/discovery_result.dart';
-
-/// Fixed hash per worker in MB.  128 MB gives comfortable headroom up to ~depth 25.
-const int kPoolHashPerWorkerMb = 128;
 
 class StockfishPool {
   // ── Singleton ───────────────────────────────────────────────────────────
@@ -79,7 +76,7 @@ class StockfishPool {
       _threadsPerWorker = threadsPerWorker;
     }
 
-    final target = count ?? EngineSettings.instance.workers;
+    final target = count ?? EngineSettings.instance.cores;
     _targetCount = target;
     while (_workers.length < target) {
       final w = await _spawnOne(_workers.length);
@@ -88,6 +85,15 @@ class StockfishPool {
       _workers.add(w);
       _free.add(w);
     }
+
+    // The memory setting may have moved since a worker was spawned. Idle
+    // workers pick it up here; a busy one keeps its table until it is next
+    // between searches (a resize mid-search is not allowed by UCI).
+    final hashMb = EngineSettings.instance.hashMb;
+    await Future.wait([
+      for (final w in _free)
+        if (w.hashMb != hashMb) w.setHash(hashMb),
+    ]);
 
     if (_workers.isNotEmpty &&
         _threadsPerWorker > 1 &&
@@ -98,7 +104,7 @@ class StockfishPool {
     if (kDebugMode && _workers.isNotEmpty) {
       log.i(
         '[Pool] ${_workers.length} workers ready '
-        '($kPoolHashPerWorkerMb MB hash, '
+        '(${EngineSettings.instance.hashMb} MB hash, '
         '$_threadsPerWorker thread(s) each)',
       );
     }
@@ -119,7 +125,7 @@ class StockfishPool {
   /// UCI Threads.  A fixed-depth search scales sub-linearly with threads
   /// (lazy SMP), while N single-thread workers on N different positions
   /// scale nearly linearly, so for the same CPU the build gets several times
-  /// the throughput.  How many lanes: [EngineSettings.workers], capped by the
+  /// the throughput.  How many lanes: [EngineSettings.cores], capped by the
   /// budget so a 4-thread budget never spawns 8 workers; any threads left
   /// over after that split go to each worker (a 12-thread budget on a
   /// 4-worker setting gives 4 workers × 3 threads).
@@ -137,7 +143,7 @@ class StockfishPool {
   /// worker count, clamped to the budget and to at least one.
   static int laneCountFor(int threadBudget, {int? workers}) {
     final budget = threadBudget < 1 ? 1 : threadBudget;
-    final want = workers ?? EngineSettings.instance.workers;
+    final want = workers ?? EngineSettings.instance.cores;
     return want.clamp(1, budget);
   }
 
@@ -155,7 +161,7 @@ class StockfishPool {
       if (engine == null) return null;
       final worker = EvalWorker(engine);
       await worker.init(
-        hashMb: kPoolHashPerWorkerMb,
+        hashMb: EngineSettings.instance.hashMb,
         threads: _threadsPerWorker,
       );
       return worker;

@@ -5,7 +5,7 @@
 /// game PGN without its own engine integration.
 ///
 /// Spawns its own dedicated [EvalWorker] with configurable threads (via
-/// [EngineSettings.inlineThreads]) so it doesn't compete with the pool
+/// [EngineSettings.cores]) so it doesn't compete with the pool
 /// workers used by the repertoire pane.
 library;
 
@@ -21,7 +21,6 @@ import '../../services/eval_cache.dart';
 import '../../services/engine/engine_lifecycle.dart';
 import '../../services/engine/eval_worker.dart';
 import '../../services/engine/stockfish_connection_factory.dart';
-import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart'
@@ -94,9 +93,11 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   int _lastDepth = 0;
   int _lastMultiPv = 0;
   int _lastInlineThreads = 0;
+  int _lastHashMb = 0;
 
   EvalWorker? _worker;
   int _workerThreads = 0;
+  int _workerHashMb = 0;
 
   bool _gateLocked = EngineGate.isLocked;
 
@@ -111,7 +112,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _settings.addListener(_onSettingsChanged);
     _lastDepth = _settings.depth;
     _lastMultiPv = _settings.multiPv;
-    _lastInlineThreads = _settings.inlineThreads;
+    _lastInlineThreads = _settings.cores;
+    _lastHashMb = _settings.hashMb;
     EngineLifecycle.instance.addListener(_onEngineGateChanged);
     _externalToggleNotifier.add(_onExternalToggle);
     if (_engineEnabled && widget.isActive) {
@@ -166,19 +168,22 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   void _onSettingsChanged() {
-    // Only depth / MultiPV / inline-thread changes affect the inline search;
+    // Only depth / MultiPV / cores / memory changes affect the inline search;
     // EngineSettings fires for ~30 unrelated fields and each one used to abort
     // and restart the in-progress search.
     final relevant =
         _settings.depth != _lastDepth ||
         _settings.multiPv != _lastMultiPv ||
-        _settings.inlineThreads != _lastInlineThreads;
+        _settings.cores != _lastInlineThreads ||
+        _settings.hashMb != _lastHashMb;
     if (!relevant) return;
     _lastDepth = _settings.depth;
     _lastMultiPv = _settings.multiPv;
-    _lastInlineThreads = _settings.inlineThreads;
+    _lastInlineThreads = _settings.cores;
+    _lastHashMb = _settings.hashMb;
 
-    if (_settings.inlineThreads != _workerThreads) {
+    if (_settings.cores != _workerThreads ||
+        _settings.hashMb != _workerHashMb) {
       _disposeWorker();
     }
     _lastAnalyzedFen = null;
@@ -223,8 +228,13 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   Future<EvalWorker?> _ensureWorker() async {
-    final wantThreads = _settings.inlineThreads;
-    if (_worker != null && _workerThreads == wantThreads) return _worker;
+    final wantThreads = _settings.cores;
+    final wantHash = _settings.hashMb;
+    if (_worker != null &&
+        _workerThreads == wantThreads &&
+        _workerHashMb == wantHash) {
+      return _worker;
+    }
 
     _disposeWorker();
     if (!StockfishConnectionFactory.isAvailable) return null;
@@ -233,9 +243,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       final engine = await StockfishConnectionFactory.create();
       if (engine == null) return null;
       final w = EvalWorker(engine);
-      await w.init(hashMb: kPoolHashPerWorkerMb, threads: wantThreads);
+      await w.init(hashMb: wantHash, threads: wantThreads);
       _worker = w;
       _workerThreads = wantThreads;
+      _workerHashMb = wantHash;
       return w;
     } catch (e) {
       if (kDebugMode) debugPrint('[InlineEngine] Worker spawn failed: $e');
@@ -247,6 +258,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _worker?.dispose();
     _worker = null;
     _workerThreads = 0;
+    _workerHashMb = 0;
   }
 
   Future<void> _runDiscovery() async {

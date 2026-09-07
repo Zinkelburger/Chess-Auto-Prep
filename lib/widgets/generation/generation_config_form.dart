@@ -14,6 +14,7 @@ import '../../services/master_games/twic_client.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/app_messages.dart';
+import '../common/choice_field.dart';
 import '../labeled_toggle.dart';
 import '../pgn_sources_controller.dart';
 import '../pgn_sources_panel.dart';

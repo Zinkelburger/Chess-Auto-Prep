@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/tactics_position.dart';
+import '../../../widgets/common/choice_field.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
 
@@ -274,21 +275,14 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
                 monospace: true,
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _mistakeType,
-                decoration: const InputDecoration(
-                  labelText: 'Mistake type',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
+              ChoiceField<String>(
+                label: 'Mistake type',
+                value: _mistakeType,
                 items: [
                   for (final entry in _mistakeTypes.entries)
-                    DropdownMenuItem(
-                      value: entry.key,
-                      child: Text(entry.value),
-                    ),
+                    ChoiceItem(value: entry.key, label: entry.value),
                 ],
-                onChanged: (v) => setState(() => _mistakeType = v ?? '?'),
+                onChanged: (v) => setState(() => _mistakeType = v),
               ),
               const SizedBox(height: 12),
               _textField(

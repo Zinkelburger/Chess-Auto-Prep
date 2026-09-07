@@ -173,28 +173,18 @@ mixin _GenerationConfigAdvanced
   List<Widget> _moveChoiceModeField(VoidCallback refresh) {
     final isBook = _buildMode == BuildMode.chessDbBook;
     return [
-      DropdownButtonFormField<SelectionMode>(
-        initialValue: _effectiveSelectionMode,
-        decoration: const InputDecoration(
-          labelText: 'How the repertoire move is picked',
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
+      ChoiceField<SelectionMode>(
+        label: 'How the repertoire move is picked',
+        value: _effectiveSelectionMode,
+        enabled: !widget.isGenerating && !isBook,
         items: [
           for (final mode in SelectionMode.values)
-            DropdownMenuItem(
-              value: mode,
-              child: Text(_selectionModeLabel(mode)),
-            ),
+            ChoiceItem(value: mode, label: _selectionModeLabel(mode)),
         ],
-        onChanged: widget.isGenerating || isBook
-            ? null
-            : (v) {
-                if (v != null) {
-                  _selectionMode = v;
-                  refresh();
-                }
-              },
+        onChanged: (v) {
+          _selectionMode = v;
+          refresh();
+        },
       ),
       _caption(
         isBook
@@ -482,34 +472,28 @@ mixin _GenerationConfigAdvanced
         },
       ),
       const SizedBox(height: 8),
-      DropdownButtonFormField<MoveAnnotationDetail>(
-        initialValue: _annotationDetail,
-        decoration: const InputDecoration(
-          labelText: 'Per-move annotations',
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
+      ChoiceField<MoveAnnotationDetail>(
+        label: 'Per-move annotations',
+        value: _annotationDetail,
+        enabled: !widget.isGenerating,
         items: const [
-          DropdownMenuItem(
+          ChoiceItem(
             value: MoveAnnotationDetail.none,
-            child: Text('None — moves only'),
+            label: 'None — moves only',
           ),
-          DropdownMenuItem(
+          ChoiceItem(
             value: MoveAnnotationDetail.likelihood,
-            child: Text('Reply likelihood'),
+            label: 'Reply likelihood',
           ),
-          DropdownMenuItem(
+          ChoiceItem(
             value: MoveAnnotationDetail.full,
-            child: Text('Full — eval, ease, scores'),
+            label: 'Full — eval, ease, scores',
           ),
         ],
-        onChanged: widget.isGenerating
-            ? null
-            : (v) {
-                if (v == null) return;
-                _annotationDetail = v;
-                refresh();
-              },
+        onChanged: (v) {
+          _annotationDetail = v;
+          refresh();
+        },
       ),
       _caption(
         'Full writes the numbers the build already computed — evaluation, '

@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
+import '../models/engine_settings.dart';
 import 'engine/stockfish_pool.dart';
 import '../models/analysis/move_analysis_result.dart';
 import '../utils/chess_utils.dart' show playUciMove;
@@ -103,7 +104,7 @@ class AnalysisService {
       poolStatus.value = PoolStatus(
         phase: 'discovering',
         activeWorkers: _pool.workerCount,
-        hashPerWorkerMb: kPoolHashPerWorkerMb,
+        hashPerWorkerMb: EngineSettings.instance.hashMb,
       );
     });
 
@@ -133,7 +134,7 @@ class AnalysisService {
               discoveryNodes: intermediate.nodes,
               discoveryNps: intermediate.nps,
               activeWorkers: _pool.workerCount,
-              hashPerWorkerMb: kPoolHashPerWorkerMb,
+              hashPerWorkerMb: EngineSettings.instance.hashMb,
             );
           });
           if (kDebugMode &&
@@ -215,7 +216,7 @@ class AnalysisService {
         phase: 'evaluating',
         totalMoves: moveUcis.length,
         activeWorkers: _pool.workerCount,
-        hashPerWorkerMb: kPoolHashPerWorkerMb,
+        hashPerWorkerMb: EngineSettings.instance.hashMb,
       );
     });
 
@@ -258,7 +259,7 @@ class AnalysisService {
         totalMoves: _moveQueue.length,
         completedMoves: results.value.length,
         activeWorkers: _pool.workerCount,
-        hashPerWorkerMb: kPoolHashPerWorkerMb,
+        hashPerWorkerMb: EngineSettings.instance.hashMb,
       );
     });
   }
@@ -282,7 +283,7 @@ class AnalysisService {
               totalMoves: _moveQueue.length,
               completedMoves: results.value.length,
               activeWorkers: _pool.workerCount,
-              hashPerWorkerMb: kPoolHashPerWorkerMb,
+              hashPerWorkerMb: EngineSettings.instance.hashMb,
             );
           });
         }

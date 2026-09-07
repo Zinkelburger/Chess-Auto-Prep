@@ -692,7 +692,7 @@ class TacticsImportService {
 
     // ── Ensure the shared pool has enough workers ─────────────
     final pool = this.pool;
-    final targetWorkers = maxCores ?? EngineSettings.instance.workers;
+    final targetWorkers = maxCores ?? EngineSettings.instance.cores;
     await pool.ensureWorkers(targetWorkers);
 
     if (pool.workerCount == 0) {

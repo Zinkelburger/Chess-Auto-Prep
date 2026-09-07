@@ -184,6 +184,8 @@ hand-rolling any of the following, check the shared one:
 | A NAG's symbol or colour | `utils/pgn_nags.dart` |
 | A labelled number, inline or stacked | `InlineStat` / `StackedStat` (`widgets/common/stat_display.dart`) |
 | "Are you sure?" | `confirmAction` (`widgets/common/confirm_dialog.dart`) |
+| Pick one thing from a list | `ChoiceField` (`widgets/common/choice_field.dart`): a text box that filters the list as you type. Never a `DropdownButton`; two or three fixed options are a `SegmentedButton` |
+| A whole number the user sets | `NumberStepper` (`widgets/common/number_stepper.dart`): −/+ around a typeable box. Never a fixed list of numbers in a menu |
 | "Name this thing", with validation | `showNameEntryDialog` (`widgets/common/name_entry_dialog.dart`) |
 | A findings report with filters, a cap and dismissal | `HuntReportPanel` (`features/audit/widgets/hunt_report_panel.dart`) |
 | A threshold field, a "more" disclosure, a visible-cap editor | `features/audit/widgets/hunt_controls.dart` |
