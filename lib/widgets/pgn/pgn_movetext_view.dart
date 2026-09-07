@@ -247,7 +247,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
 
     /// Put [child] on its own full-width row so Wrap cannot glue it into
     /// neighboring move spans (anti-spaghetti for comments / variations).
-    void emitFullWidthRow(Widget child, {double vertical = 7.5}) {
+    void emitFullWidthRow(Widget child, {double vertical = 4}) {
       flushSpans();
       forceBlackEllipsis = true;
       children.add(
@@ -276,7 +276,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       );
       if (rendered.block != null) {
         // Blocks already carry their own vertical margin — don't double it.
-        emitFullWidthRow(rendered.block!);
+        emitFullWidthRow(rendered.block!, vertical: 0);
       } else if (rendered.spans.isNotEmpty) {
         emitFullWidthRow(
           RichText(
@@ -343,7 +343,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       if (rows.isEmpty) return;
       emitFullWidthRow(
         Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
-        vertical: 6,
+        vertical: 0,
       );
     }
 

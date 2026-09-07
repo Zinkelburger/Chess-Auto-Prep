@@ -1,7 +1,7 @@
 part of 'pgn_movetext_view.dart';
 
 /// Deepest sideline level rendered unconditionally. Alternatives that would
-/// land deeper are folded behind a "▸ N more lines" stub the reader can open.
+/// land deeper are folded behind their first move, which the reader can open.
 /// Machine-generated repertoire trees routinely nest far past anything a human
 /// wants to read in one pass; without a fold they bury the mainline.
 const _kAlwaysVisibleDepth = 2;
@@ -75,8 +75,8 @@ List<InlineSpan>? _buildInlineVariationAtPly(
   return spans;
 }
 
-/// Render sidelines as ordinary paragraphs, with a foldable move label in
-/// the gutter. Nesting changes structure, never the size of the explanation.
+/// Render sidelines as ordinary paragraphs, with a disclosure arrow beside
+/// the first real move. Nesting never changes the size of the explanation.
 List<Widget> _buildVariationRowsAtPly(
   PgnMovetextView view,
   int ply, {
@@ -118,20 +118,54 @@ Widget _buildVariationDocument(
   final label =
       '${coords.moveNumber}${coords.isWhite ? '.' : '...'} ${root.san}';
   final children = <Widget>[];
+  final indent = depth > 0 && depth <= PgnTextStyles.maxStyledDepth
+      ? 24.0
+      : 0.0;
+  Widget disclosure() => SizedBox(
+    width: 24,
+    height: 28,
+    child: IconButton(
+      key: ValueKey('pgn-branch-${root.id}'),
+      tooltip: containsCurrent
+          ? 'Current variation: $label'
+          : '${open ? 'Collapse' : 'Expand'} variation: $label',
+      onPressed: containsCurrent ? null : () => onToggleBranch(root.id),
+      padding: EdgeInsets.zero,
+      iconSize: 18,
+      icon: Icon(open ? Icons.expand_more : Icons.chevron_right),
+    ),
+  );
+  Widget moveRow(Widget text, {required bool first}) => first && depth > 0
+      ? Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            disclosure(),
+            Expanded(child: text),
+          ],
+        )
+      : Padding(
+          padding: EdgeInsets.only(left: indent),
+          child: text,
+        );
+  var firstRun = true;
   final run = <InlineSpan>[];
   void flush() {
     if (run.isEmpty) return;
     children.add(
       Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Text.rich(
-          TextSpan(
-            style: PgnTextStyles.rowRootAt(depth),
-            children: List.of(run),
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: moveRow(
+          Text.rich(
+            TextSpan(
+              style: PgnTextStyles.rowRootAt(depth),
+              children: List.of(run),
+            ),
           ),
+          first: firstRun,
         ),
       ),
     );
+    firstRun = false;
     run.clear();
   }
 
@@ -179,13 +213,18 @@ Widget _buildVariationDocument(
       }
       if (metrics.isNotEmpty) {
         flush();
-        children.add(Text.rich(TextSpan(children: metrics)));
+        children.add(
+          Padding(
+            padding: EdgeInsets.only(left: indent),
+            child: Text.rich(TextSpan(children: metrics)),
+          ),
+        );
       }
       if (annotated) {
         flush();
         children.add(
           Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 15),
+            padding: EdgeInsets.only(left: indent),
             child:
                 rendered.block ??
                 Text.rich(
@@ -215,15 +254,18 @@ Widget _buildVariationDocument(
         flush();
         for (final alternative in next.skip(1)) {
           children.add(
-            _buildVariationDocument(
-              view,
-              alternative,
-              ply: index + 1,
-              branchPly: branchPly,
-              depth: depth + 1,
-              branchVisibility: branchVisibility,
-              onToggleBranch: onToggleBranch,
-              nodeVisible: nodeVisible,
+            Padding(
+              padding: EdgeInsets.only(left: indent),
+              child: _buildVariationDocument(
+                view,
+                alternative,
+                ply: index + 1,
+                branchPly: branchPly,
+                depth: depth + 1,
+                branchVisibility: branchVisibility,
+                onToggleBranch: onToggleBranch,
+                nodeVisible: nodeVisible,
+              ),
             ),
           );
         }
@@ -236,39 +278,35 @@ Widget _buildVariationDocument(
 
   final content = Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      if (depth > 0)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            key: ValueKey('pgn-branch-${root.id}'),
-            onPressed: containsCurrent ? null : () => onToggleBranch(root.id),
-            icon: Icon(
-              open ? Icons.expand_more : Icons.chevron_right,
-              size: 16,
+    children: open
+        ? children
+        : [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: moveRow(
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text:
+                            '${coords.moveNumber}${coords.isWhite ? '.' : '...'} ',
+                        style: PgnTextStyles.moveNumberAt(depth),
+                      ),
+                      TextSpan(
+                        text: '${root.san}${allNagSuffix(root.nags)}',
+                        style: PgnTextStyles.moveAt(depth),
+                      ),
+                    ],
+                  ),
+                ),
+                first: true,
+              ),
             ),
-            label: Text(label, style: PgnTextStyles.collapsedStub),
-            style: TextButton.styleFrom(padding: EdgeInsets.zero),
-          ),
-        ),
-      ...children,
-    ],
+          ],
   );
   if (depth == 0) return content;
-  return Container(
-    margin: EdgeInsets.only(
-      left: depth <= PgnTextStyles.maxStyledDepth ? 5 : 0,
-      top: 16,
-      bottom: 22,
-    ),
-    padding: EdgeInsets.only(
-      left: depth <= PgnTextStyles.maxStyledDepth ? 17 : 0,
-    ),
-    decoration: BoxDecoration(
-      border: depth <= PgnTextStyles.maxStyledDepth
-          ? const Border(left: BorderSide(color: AppColors.pgnVariationRule))
-          : null,
-    ),
+  return Padding(
+    padding: const EdgeInsets.only(top: 6, bottom: 8),
     child: content,
   );
 }
