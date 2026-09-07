@@ -14,8 +14,8 @@ import '../../../widgets/layout/board_zone.dart';
 /// Four controls, in the order they are reached for:
 /// - the title doubles as the repertoire/chapter switcher,
 /// - one `Actions ▾` menu ([RepertoireActionsMenu]) holds everything that
-///   *does* something to the repertoire, in three named groups: every way of
-///   adding lines, training, and the audit,
+///   *does* something to the repertoire, in named groups: the two engine
+///   builds, the import, training, and the audit,
 /// - the mode switcher,
 /// - the trailing `⋮` holds the two settings dialogs and nothing else.
 ///
@@ -45,8 +45,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onTrainRepertoire,
     this.onOpenGeneration,
     this.onPlanBuild,
-    this.onBuildByPlaying,
-    this.onBuildFromGames,
     this.onOpenAudit,
     this.onImportPgn,
     this.isWhiteRepertoire,
@@ -72,8 +70,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
   final VoidCallback? onPlanBuild;
-  final VoidCallback? onBuildByPlaying;
-  final VoidCallback? onBuildFromGames;
   final VoidCallback? onOpenAudit;
   final VoidCallback? onImportPgn;
   final bool? isWhiteRepertoire;
@@ -112,8 +108,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         RepertoireActionsMenu(
           onPlanBuild: onPlanBuild,
           onGenerate: onOpenGeneration,
-          onBuildByPlaying: onBuildByPlaying,
-          onBuildFromGames: onBuildFromGames,
           onImportPgn: onImportPgn,
           onTrain: showTrainAction ? onTrainRepertoire : null,
           onAudit: onOpenAudit,
@@ -470,15 +464,22 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
 
 /// The one menu for everything that *does* something to the repertoire.
 ///
-/// Three groups under uppercase headings, in the order they are reached for:
+/// Four groups under uppercase headings, in the order they are reached for:
 ///
-/// - **Add lines** — plan a build, generate from the board, play the moves
-///   yourself, mine your own games, or load a PGN off disk. Every entry opens
-///   its own configuration step or picker first, so nothing heavy can fire
-///   by accident.
+/// - **Generate** — the two ways of having the engine build lines: plan
+///   them first (a few questions, then one build per chapter) or run the
+///   tree search from the position on the board. Both open a configuration
+///   step first, so nothing heavy can fire by accident.
+/// - **Import** — load a PGN off disk or from the clipboard.
 /// - **Train** — the open chapter in the trainer. It was a filled button
 ///   beside this menu; see [RepertoireToolbar].
 /// - **Check** — audit the chapter for gaps.
+///
+/// "Play the moves myself…" and "From my games…" used to sit here too. Both
+/// are now the planner's job: it takes a move played on the board at any
+/// question, and its "My games" walk asks about every position the user
+/// actually reached — so the menu no longer offers three ways to do what one
+/// screen does.
 ///
 /// Rows are labels only — no explaining sentence, and no leading icon. The
 /// icons were decoration: a sparkle, a gamepad and a download arrow that no
@@ -487,19 +488,15 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
 /// not "author lines by playing them"). The label is the discriminator, so
 /// it is the only thing here; the headings do the grouping.
 ///
-/// Within "Add lines" the rows come in two families — three verbs for making
-/// moves at the board, then two sources the moves come out of — and the
-/// labels carry that on their own. ("Plan a build" and "Import PGN" were
-/// the two labels that broke the pattern — "a build" is the pipeline's word
-/// for itself, and "Import" named the transport rather than where the lines
-/// come from.)
+/// The headings say what kind of thing each row is, so the labels only have
+/// to say which one. ("Plan a build" and "Import PGN" were two labels that
+/// broke the pattern — "a build" is the pipeline's word for itself, and
+/// "Import" named the transport rather than where the lines come from.)
 class RepertoireActionsMenu extends StatelessWidget {
   const RepertoireActionsMenu({
     super.key,
     this.onPlanBuild,
     this.onGenerate,
-    this.onBuildByPlaying,
-    this.onBuildFromGames,
     this.onImportPgn,
     this.onTrain,
     this.onAudit,
@@ -508,8 +505,6 @@ class RepertoireActionsMenu extends StatelessWidget {
 
   final VoidCallback? onPlanBuild;
   final VoidCallback? onGenerate;
-  final VoidCallback? onBuildByPlaying;
-  final VoidCallback? onBuildFromGames;
   final VoidCallback? onImportPgn;
   final VoidCallback? onTrain;
   final VoidCallback? onAudit;
@@ -521,22 +516,22 @@ class RepertoireActionsMenu extends StatelessWidget {
   /// Finder handle for tests: the control that opens the menu.
   static const Key menuKey = Key('repertoire-actions-menu');
 
-  static const _addLines = 'Add lines';
+  static const _generate = 'Generate';
+  static const _import = 'Import';
   static const _train = 'Train';
   static const _check = 'Check';
 
   List<AppMenuEntry> get _entries {
-    final add = <AppMenuEntry>[
+    final generate = <AppMenuEntry>[
       if (onPlanBuild != null)
         AppMenuEntry(label: 'Plan the lines…', onRun: onPlanBuild!),
+      // Under GENERATE so it reads as what it is — the tree search (Fast or
+      // Pure, chosen on its screen) started from the board — and not as a
+      // third way of writing lines by hand.
       if (onGenerate != null)
         AppMenuEntry(label: 'Generate from here…', onRun: onGenerate!),
-      // Named for what the user does, not for the mode's internal name: the
-      // one thing that separates it from Generate is who chooses our moves.
-      if (onBuildByPlaying != null)
-        AppMenuEntry(label: 'Play the moves myself…', onRun: onBuildByPlaying!),
-      if (onBuildFromGames != null)
-        AppMenuEntry(label: 'From my games…', onRun: onBuildFromGames!),
+    ];
+    final import_ = <AppMenuEntry>[
       // One entry, not the old "Load from disk…" / "Paste PGN…" pair: the
       // dialog it opens offers both, so the menu no longer asks the user to
       // pick a transport before it will show them the import.
@@ -556,7 +551,8 @@ class RepertoireActionsMenu extends StatelessWidget {
         AppMenuEntry(label: 'Audit for gaps…', onRun: onAudit!),
     ];
     return [
-      ..._headed(_addLines, add),
+      ..._headed(_generate, generate),
+      ..._headed(_import, import_),
       ..._headed(_train, train),
       ..._headed(_check, check),
     ];

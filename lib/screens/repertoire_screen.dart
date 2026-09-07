@@ -69,13 +69,7 @@ import '../features/repertoire/widgets/repertoire_database_pane.dart';
 import '../features/traps/controllers/trap_session_controller.dart';
 import '../features/traps/services/trap_line_builder.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
-import '../services/build_by_playing/build_by_playing_config.dart';
-import '../services/build_by_playing/build_by_playing_controller.dart';
-import '../services/games_repertoire/games_draft_controller.dart';
 import '../theme/app_colors.dart';
-import '../widgets/build_by_playing/build_session_board_bar.dart';
-import '../widgets/build_by_playing/build_session_pane.dart';
-import '../widgets/games_repertoire/draft_review_pane.dart';
 import '../widgets/layout/jobs_tab_content.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../models/board_annotation.dart';
@@ -83,7 +77,6 @@ import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show sanToUci;
 import 'repertoire_chapters_screen.dart';
 import 'repertoire_selection_screen.dart';
-import '../features/repertoire/controllers/build_launcher.dart';
 import '../features/repertoire/controllers/generation_notification_router.dart';
 import '../features/repertoire/controllers/audit_entry_router.dart';
 import '../features/repertoire/controllers/repertoire_outline_controller.dart';
@@ -204,21 +197,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// size. Shrinking the board is how the user hands width to the engine
   /// lines and PGN beside it.
   final RepertoireLayoutPrefs _layout = RepertoireLayoutPrefs();
-
-  // ── Build-from-games draft session (inline in the Lines/Draft tab) ──
-  final GamesDraftController _draftController = GamesDraftController();
-
-  bool get _isDraftActive => _draftController.isActive;
-
-  // ── Build-by-playing session (takes over the Lines/Draft tab) ──
-  late final BuildByPlayingController _buildSession;
-  bool _wasBuildSessionActive = false;
-
-  bool get _isBuildSessionActive => _buildSession.isActive;
-
-  /// Owns the build-from-games and build-by-playing launch flows
-  /// (form → config → controller); the screen only lends it a context.
-  late final BuildLauncher _buildLauncher;
 
   String? _lastRepertoireId;
 
@@ -453,21 +431,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     unawaited(_layout.load());
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
-    _buildSession = BuildByPlayingController(repertoire: _controller);
-    _buildSession.addListener(_onBuildSessionChanged);
-    unawaited(BuildByPlayingSettings.instance.loadFromPrefs());
-    _buildLauncher = BuildLauncher(
-      repertoire: _controller,
-      draft: _draftController,
-      session: _buildSession,
-      generation: _generationController,
-      appState: () => _appState ?? context.read<AppState>(),
-      showLinesSurface: _showLinesSurface,
-    );
     _generationController.addListener(_onGenerationChanged);
     _auditController.addListener(_onAuditChanged);
     _coverageController.addListener(_onCoverageChanged);
-    _draftController.addListener(_onDraftChanged);
     _trapSession.addListener(_onTrapsChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -593,8 +559,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           _auditController.onRepertoireSwitching(_lastRepertoireId);
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
-          // A build-by-playing session must not survive a repertoire swap.
-          _buildSession.endSession();
           // Drop the old repertoire's trees now, then bring in whatever this
           // one saved — the last full build and every probe since.
           _generationController.clearTree();
@@ -954,10 +918,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _planRunner.dispose();
     _focusNode.dispose();
     _boardPreview.dispose();
-    _draftController.removeListener(_onDraftChanged);
-    _draftController.dispose();
-    _buildSession.removeListener(_onBuildSessionChanged);
-    _buildSession.dispose();
     _coverageController.removeListener(_onCoverageChanged);
     _coverageController.dispose();
     _auditController.removeListener(_onAuditChanged);
@@ -1085,8 +1045,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onTrainRepertoire: _trainRepertoire,
         onOpenGeneration: _openGenerationDialog,
         onPlanBuild: () => unawaited(_openPlanner()),
-        onBuildByPlaying: () => _buildLauncher.startBuildByPlaying(context),
-        onBuildFromGames: () => _buildLauncher.buildFromGames(context),
         onOpenAudit: _openAuditDialog,
         onImportPgn: _importPgn,
         trapNavigation: _buildTrapNavigation(),

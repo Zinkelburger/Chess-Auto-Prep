@@ -26,38 +26,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     _toolsTabController.animateTo(0);
   }
 
-  /// While a build-by-playing session is active, ←/→ navigate the scratchpad
-  /// (no-ops outside exploration) instead of the repertoire cursor — moving
-  /// the cursor away from a decision point would pause the session.
-  void _sessionAwareGoBack() {
-    if (_isBuildSessionActive) {
-      _buildSession.scratchGoBack();
-      return;
-    }
-    _controller.goBack();
-  }
+  void _sessionAwareGoBack() => _controller.goBack();
 
-  void _sessionAwareGoForward() {
-    if (_isBuildSessionActive) {
-      _buildSession.scratchGoForward();
-      return;
-    }
-    _controller.goForward();
-  }
+  void _sessionAwareGoForward() => _controller.goForward();
 
   Future<void> _performUndo() async {
-    if (_isBuildSessionActive) {
-      final undone = await _buildSession.undoLastCommit();
-      if (undone && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Undid last committed move'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
-    }
     if (!_controller.writer.canUndo) return;
     try {
       final undone = await _controller.writer.undo();
@@ -194,22 +167,6 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     setState(() {});
   }
 
-  void _onBuildSessionChanged() {
-    if (!mounted) return;
-    setState(() {});
-    if (_buildSession.isActive && !_wasBuildSessionActive) {
-      _showLinesSurface();
-    }
-    _wasBuildSessionActive = _buildSession.isActive;
-  }
-
-  void _onDraftChanged() {
-    if (!mounted) return;
-    // A draft opening from any entry point should always be visible.
-    if (_draftController.isActive) _showLinesSurface();
-    setState(() {});
-  }
-
   void _selectLine(RepertoireLine line) {
     _controller.loadPgnLine(line);
     // Bring the PGN editor into view; in the wide layout it is always
@@ -316,12 +273,6 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   /// Handle moves from the chessboard - board has already made the move and gives us rich info
   void _handleMove(CompletedMove move) {
     if (!mounted) return;
-    if (_isBuildSessionActive) {
-      // Session moves are scratchpad exploration (or ignored while the
-      // opponent thinks) — never direct repertoire-tree edits.
-      _buildSession.handleBoardMove(move.san);
-      return;
-    }
     _controller.playMove(move.san);
   }
 

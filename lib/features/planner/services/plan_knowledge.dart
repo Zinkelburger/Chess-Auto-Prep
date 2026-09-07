@@ -49,8 +49,19 @@ class PlanKnowledge {
   ({double share, int games})? ownReplyAt(String fen, String san) =>
       _shareOf(ownReplies, fen, san);
 
+  /// Number of the user's games that reached [fen], whoever is to move.
+  /// (Only one of the two maps has entries for a given side to move.)
   int ownGamesAt(String fen) =>
-      (ownMoves[normalizeFen(fen)] ?? const {}).values.fold(0, (a, b) => a + b);
+      ownCountsAt(fen).values.fold(0, (a, b) => a + b);
+
+  /// SAN → games for whatever was played at [fen] in the user's games: their
+  /// own moves when it is their turn, the opponents' replies otherwise.
+  Map<String, int> ownCountsAt(String fen) {
+    final key = normalizeFen(fen);
+    return ownMoves[key] ?? ownReplies[key] ?? const {};
+  }
+
+  bool get hasOwnGames => ownMoves.isNotEmpty || ownReplies.isNotEmpty;
 
   static ({double share, int games})? _shareOf(
     MoveCounts counts,
@@ -112,7 +123,7 @@ class PlanKnowledge {
     int maxPlies = 40,
   }) {
     return Isolate.run(
-      () => _countOwnGamesSync(
+      () => countOwnGamesSync(
         pgnText,
         heroNames: heroNames,
         isWhite: isWhite,
@@ -121,11 +132,12 @@ class PlanKnowledge {
     );
   }
 
-  static ({MoveCounts moves, MoveCounts replies, int games}) _countOwnGamesSync(
+  /// Same as [countOwnGames], on the calling isolate (small corpora, tests).
+  static ({MoveCounts moves, MoveCounts replies, int games}) countOwnGamesSync(
     String pgnText, {
     required String heroNames,
     required bool isWhite,
-    required int maxPlies,
+    int maxPlies = 40,
   }) {
     final moves = <String, Map<String, int>>{};
     final replies = <String, Map<String, int>>{};

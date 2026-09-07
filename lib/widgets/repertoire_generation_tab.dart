@@ -352,6 +352,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildStartingPositionBanner(context),
+                          const SizedBox(height: 6),
+                          // What this screen runs, in one line: the planner
+                          // asks questions first; this one just searches.
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              'Runs the tree search from this position — Fast '
+                              'or Pure, under Search — and saves the lines it '
+                              'finds into this chapter.',
+                              style: AppTextStyles.caption,
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           GenerationConfigForm(
                             key: _configFormKey,

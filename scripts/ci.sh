@@ -27,8 +27,7 @@ run_step() {
         echo "lint: layering violation (core/models/services/utils importing widgets/screens)"; bad=1
       fi
       local feat
-      feat=$(grep -rlE "import '.*(widgets/|screens/)" lib/features/*/controllers lib/features/*/services lib/features/*/models 2>/dev/null \
-        | grep -v 'features/repertoire/controllers/build_launcher.dart' || true)
+      feat=$(grep -rlE "import '.*(widgets/|screens/)" lib/features/*/controllers lib/features/*/services lib/features/*/models 2>/dev/null || true)
       if [[ -n "$feat" ]]; then
         echo "$feat"; echo "lint: feature non-widget layer importing widgets/screens"; bad=1
       fi

@@ -15,14 +15,11 @@ import '../../../theme/app_text_styles.dart';
 /// What the first side-panel tab is currently showing. The collapsed strip
 /// names it, so a session or draft running behind a collapsed panel is still
 /// visible.
-enum RepertoireLinesSurface { lines, draft, session }
-
 class RepertoireLinesSidePanel extends StatelessWidget {
   const RepertoireLinesSidePanel({
     super.key,
     required this.collapsed,
     required this.width,
-    required this.surface,
     required this.lineCount,
     required this.tabController,
     required this.tabs,
@@ -35,8 +32,8 @@ class RepertoireLinesSidePanel extends StatelessWidget {
 
   final bool collapsed;
 
-  /// Label on the collapsed strip when the panel is not showing lines,
-  /// drafts or sessions — e.g. "Analysis". Null keeps the surface-based label.
+  /// Label on the collapsed strip when the panel is not showing lines —
+  /// e.g. "Analysis". Null keeps the "Lines (N)" label.
   final String? stripLabel;
   final String hideTooltip;
   final String showTooltip;
@@ -44,7 +41,6 @@ class RepertoireLinesSidePanel extends StatelessWidget {
   /// Expanded width, already resolved against the available space.
   final double width;
 
-  final RepertoireLinesSurface surface;
   final int lineCount;
 
   final TabController tabController;
@@ -99,16 +95,7 @@ class RepertoireLinesSidePanel extends StatelessWidget {
   }
 
   Widget _buildStrip(BuildContext context) {
-    final theme = Theme.of(context);
-    final (label, color) = switch (surface) {
-      RepertoireLinesSurface.session => ('Session', theme.colorScheme.primary),
-      RepertoireLinesSurface.draft => ('Draft', AppColors.warning),
-      RepertoireLinesSurface.lines => (
-        stripLabel ?? 'Lines ($lineCount)',
-        AppColors.onSurfaceMuted,
-      ),
-    };
-    final highlighted = surface != RepertoireLinesSurface.lines;
+    final label = stripLabel ?? 'Lines ($lineCount)';
 
     return InkWell(
       onTap: () => onCollapsedChanged(false),
@@ -132,8 +119,7 @@ class RepertoireLinesSidePanel extends StatelessWidget {
                 label,
                 style: AppTextStyles.caption.copyWith(
                   fontSize: 12,
-                  color: color,
-                  fontWeight: highlighted ? FontWeight.w600 : null,
+                  color: AppColors.onSurfaceMuted,
                 ),
               ),
             ),
