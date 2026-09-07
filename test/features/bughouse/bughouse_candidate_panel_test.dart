@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/models/bughouse_state.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
+import 'package:chess_auto_prep/features/bughouse/services/bughouse_book.dart';
 import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_analysis_panel.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +15,19 @@ void main() {
 
   setUp(() {
     engine = FakeBughouseEngine(searchDelay: const Duration(milliseconds: 1));
-    controller = BughouseController(engineOverride: engine);
+    controller = BughouseController(
+      engineOverride: engine,
+      bookOverride: BughouseBook.canned(
+        status: const BughouseBookStatus(
+          path: 'fixture',
+          games: 0,
+          maxPly: 16,
+          minGames: 3,
+          years: [2025],
+        ),
+        lookup: (_, _) => BughouseBookPosition.empty,
+      ),
+    );
   });
 
   tearDown(() => controller.dispose());
@@ -83,7 +96,7 @@ void main() {
     expect(find.textContaining('d4', findRichText: true), findsNothing);
     for (var i = 0; i < 3; i++) {
       final slot = find.byKey(ValueKey('bughouse-line-slot-white-$i'));
-      expect(tester.getSize(slot).height, 72);
+      expect(tester.getSize(slot).height, 80);
       expect(find.byKey(ValueKey('bughouse-line-slot-black-$i')), findsNothing);
     }
     await tester.tap(find.text('Opponents'));
@@ -95,16 +108,23 @@ void main() {
 
   testWidgets('rules and engine controls open directly', (tester) async {
     await pumpPanel(tester);
-    await tester.tap(find.text('Position rules'));
+    await tester.tap(find.text('Board'));
     await tester.pumpAndSettle();
     expect(find.text('You play on Board 1'), findsOneWidget);
     expect(find.text('Allow sitting'), findsOneWidget);
-    await tester.tap(find.text('Engine'));
+    await tester.tap(find.text('Engine settings'));
     await tester.pumpAndSettle();
+    expect(find.byType(TabBar), findsOneWidget);
+    expect(find.byType(SegmentedButton<int>), findsNothing);
     expect(find.text('Memory'), findsOneWidget);
     expect(find.text('Lines'), findsOneWidget);
     expect(find.text('Time per pass'), findsOneWidget);
     expect(find.byType(ExpansionTile), findsNothing);
+    controller.toggleBook();
+    await tester.pumpAndSettle();
+    expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 0);
+    expect(find.text('FICS archive'), findsOneWidget);
+    expect(find.text('Memory'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

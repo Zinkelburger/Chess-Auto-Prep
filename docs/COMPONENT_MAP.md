@@ -54,7 +54,10 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 ### Bughouse analysis and editing
 
 `features/bughouse/widgets/bughouse_screen.dart` keeps Board 1 and Board 2
-beside one analysis/reference panel. The layout follows lila's separation of
+beside one analysis/reference panel. Underlined Engine / Board / Engine settings
+tabs provide navigation, distinct from the segmented team and database selectors.
+Engine moves use the PGN notation face at 16px, with full-contrast continuations,
+quieter move numbers and separators between candidates. The layout follows lila's separation of
 boards, engine lines and opening explorer. Smaller windows stack the panel.
 
 | User action | Control / behavior |
@@ -67,9 +70,9 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 | Play a continuation | Click a move to play the joint sequence through that point, including its other-board moves |
 | Browse FICS | Book icon opens the archive immediately in the right panel; Board 1 / Board 2 filters the recorded next moves |
 | Interpret archive results | Result bars always describe your team. Move frequencies use the selected board’s recorded continuations; the archive remains keyed by both boards |
-| Change team, sitting or clocks | Position rules tab; editable clocks remain beside the players |
-| Compare clock assumptions | Position rules → Compare clock scenarios |
-| Change cores, lines, memory or time | Engine tab, with number steppers and typed entry |
+| Change team, sitting or clocks | Board tab; editable clocks remain beside the players |
+| Compare clock assumptions | Board → Compare clock scenarios |
+| Change cores, lines, memory or time | Engine settings tab, with number steppers and typed entry |
 | Edit either board | Pencil icon; shared drag editor supports palette placement, arbitrary piece movement and right-click removal; illegal kingless bughouse positions are rejected |
 | Change turn, castling, reserves, clear/reset | Edit position controls and reserve slots |
 | Load/copy a position | Dual FEN controls in the editor; copy menu below the boards |

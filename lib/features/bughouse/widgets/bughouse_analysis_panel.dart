@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../theme/pgn_text_styles.dart';
 import '../../../widgets/copy_button.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_engine_settings.dart';
@@ -29,7 +30,9 @@ class BughouseAnalysisPanel extends StatefulWidget {
   State<BughouseAnalysisPanel> createState() => _BughouseAnalysisPanelState();
 }
 
-class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
+class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
   bool _opponents = false;
   int _tab = 0;
   bool _bookWasOpen = false;
@@ -37,6 +40,7 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(length: 3, vsync: this);
     // Analysis belongs to the pane being on screen, not to a controller
     // existing: this is what keeps a 54 MB network off the critical path of
     // everything else that builds one.
@@ -44,9 +48,18 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
   }
 
   @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    if (controller.bookOpen && !_bookWasOpen) _tab = 0;
+    if (controller.bookOpen && !_bookWasOpen) {
+      _tab = 0;
+      _tabs.index = 0;
+    }
     _bookWasOpen = controller.bookOpen;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -68,17 +81,25 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
           _Banner(message: controller.notice!, isError: false),
         ],
         const SizedBox(height: 8),
-        SegmentedButton<int>(
-          segments: const [
-            ButtonSegment(value: 0, label: Text('Analysis')),
-            ButtonSegment(value: 1, label: Text('Position rules')),
-            ButtonSegment(value: 2, label: Text('Engine')),
+        TabBar(
+          controller: _tabs,
+          labelColor: AppColors.ink,
+          unselectedLabelColor: AppColors.onSurfaceMuted,
+          labelStyle: AppTextStyles.bodyStrong,
+          unselectedLabelStyle: AppTextStyles.body,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+          indicatorColor: AppColors.ink,
+          indicatorSize: TabBarIndicatorSize.tab,
+          dividerColor: AppColors.divider,
+          tabs: const [
+            Tab(text: 'Engine'),
+            Tab(text: 'Board'),
+            Tab(text: 'Engine settings'),
           ],
-          selected: {_tab},
-          showSelectedIcon: false,
-          onSelectionChanged: (values) {
+          onTap: (index) {
             if (!mounted) return;
-            setState(() => _tab = values.first);
+            controller.hoverAction(null);
+            setState(() => _tab = index);
           },
         ),
         const SizedBox(height: 12),
@@ -362,7 +383,7 @@ class _LineRow extends StatefulWidget {
   /// Two lines of moves, and then the line is cut off — the way every
   /// engine pane cuts a long variation rather than growing to hold it. Fixed
   /// so the slot it sits in is the same height empty or full.
-  static const double height = 72;
+  static const double height = 80;
 
   @override
   State<_LineRow> createState() => _LineRowState();
@@ -406,10 +427,42 @@ class _LineRowState extends State<_LineRow> {
     super.dispose();
   }
 
+  List<Widget> _movesOn(BughouseBoard which) {
+    final moves = <Widget>[];
+    final steps = widget.steps;
+    for (var i = 0; i < steps.length; i++) {
+      final san = steps[i].on(which);
+      if (san == null) continue;
+      final position = steps[i].before.board(which);
+      final first = moves.isEmpty;
+      final number = san == 'sit'
+          ? ''
+          : position.turn == Side.white
+          ? '${position.fullmoves}.'
+          : first
+          ? '${position.fullmoves}...'
+          : '';
+      moves.add(
+        _MoveToken(
+          number: number,
+          san: san,
+          ink: AppColors.ink,
+          weight: first ? FontWeight.w600 : FontWeight.w400,
+          onEnter: () => _controller.hoverStep(steps[i], owner: this),
+          onExit: _exitStep,
+          onTap: () => _controller.playLine(steps, throughPly: i),
+        ),
+      );
+    }
+    return moves.isEmpty
+        ? [const Text('—', style: AppTextStyles.muted)]
+        : moves;
+  }
+
   @override
   Widget build(BuildContext context) {
     final steps = widget.steps;
-    final ink = widget.primary ? AppColors.ink : AppColors.onSurfaceMuted;
+    const ink = AppColors.ink;
     final weight = widget.primary ? FontWeight.w600 : FontWeight.w400;
 
     return MouseRegion(
@@ -425,10 +478,10 @@ class _LineRowState extends State<_LineRow> {
             : () => _controller.playLine(steps, throughPly: 0),
         child: Container(
           height: _LineRow.height,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           decoration: BoxDecoration(
             color: _lit ? AppColors.hoverOverlay : Colors.transparent,
-            borderRadius: BorderRadius.circular(3),
+            border: const Border(bottom: BorderSide(color: AppColors.divider)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -474,42 +527,7 @@ class _LineRowState extends State<_LineRow> {
                                 Expanded(
                                   child: SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
-                                    child: Row(
-                                      children: [
-                                        for (var i = 0; i < steps.length; i++)
-                                          if (steps[i].on(which)
-                                              case final san?)
-                                            _MoveToken(
-                                              number: san == 'sit'
-                                                  ? ''
-                                                  : '${steps[i].before.board(which).fullmoves}${steps[i].before.board(which).turn == Side.white ? '.' : '...'}',
-                                              san: san,
-                                              ink: i == 0
-                                                  ? ink
-                                                  : AppColors.onSurfaceMuted,
-                                              weight: i == 0
-                                                  ? weight
-                                                  : FontWeight.w400,
-                                              onEnter: () =>
-                                                  _controller.hoverStep(
-                                                    steps[i],
-                                                    owner: this,
-                                                  ),
-                                              onExit: _exitStep,
-                                              onTap: () => _controller.playLine(
-                                                steps,
-                                                throughPly: i,
-                                              ),
-                                            ),
-                                        if (steps.every(
-                                          (step) => step.on(which) == null,
-                                        ))
-                                          const Text(
-                                            '—',
-                                            style: AppTextStyles.muted,
-                                          ),
-                                      ],
-                                    ),
+                                    child: Row(children: _movesOn(which)),
                                   ),
                                 ),
                               ],
@@ -554,25 +572,22 @@ class _MoveToken extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           child: Text.rich(
+            style: PgnTextStyles.moveAt(1).copyWith(height: 1.4),
             TextSpan(
               children: [
                 TextSpan(
-                  text: '$number ',
+                  text: number.isEmpty ? '' : '$number ',
                   style: AppTextStyles.monoDense.copyWith(
                     color: AppColors.onSurfaceMuted,
                   ),
                 ),
                 TextSpan(
                   text: san,
-                  style: AppTextStyles.mono.copyWith(
-                    color: ink,
-                    fontWeight: weight,
-                    decoration: TextDecoration.underline,
-                    decorationStyle: TextDecorationStyle.dotted,
-                    decorationColor: AppColors.onSurfaceDim,
-                  ),
+                  style: PgnTextStyles.moveAt(
+                    1,
+                  ).copyWith(height: 1.4, color: ink, fontWeight: weight),
                 ),
               ],
             ),
