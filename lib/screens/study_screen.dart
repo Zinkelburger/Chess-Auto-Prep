@@ -3,9 +3,13 @@
 library;
 
 import 'dart:async';
+import 'dart:convert' show utf8;
 
+import 'package:dartchess/dartchess.dart' show Side;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
@@ -14,10 +18,10 @@ import '../core/study_controller.dart';
 import '../models/move_tree.dart' show TreePath;
 import '../services/repertoire_line_ids.dart';
 import '../services/repertoire_service.dart';
+import '../services/storage/storage_factory.dart';
 import '../services/study_import/study_import_controller.dart';
 import '../services/study_import/study_import_exception.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -31,9 +35,12 @@ import '../widgets/common/searchable_picker_dialog.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/study/chapter_manager_dialog.dart';
-import '../widgets/study/study_chapter_sidebar.dart';
+import '../widgets/study/edit_chapter_dialog.dart';
 import '../widgets/study/import_from_url_dialog.dart';
+import '../widgets/study/new_chapter_dialog.dart';
 import '../widgets/study/study_board_pane.dart';
+import '../widgets/study/study_chapter_actions.dart';
+import '../widgets/study/study_chapter_sidebar.dart';
 import '../widgets/study/study_import_status_chip.dart';
 import '../widgets/study/study_name_dialog.dart';
 import '../widgets/study/study_picker_bar.dart';
@@ -223,9 +230,6 @@ class _StudyScreenState extends State<StudyScreen> {
 
   // ── Study / chapter management ───────────────────────────────────────
 
-  Future<String?> _promptName(String title, {String? initial}) =>
-      promptStudyName(context, title: title, initial: initial);
-
   Future<void> _newStudy() async {
     final name = await promptStudyName(context, title: 'New study');
     if (name == null) return;
@@ -340,20 +344,37 @@ class _StudyScreenState extends State<StudyScreen> {
     );
   }
 
-  /// Paste-in PGN import: every game becomes a chapter appended to the study.
+  /// Open a PGN file from disk: every game becomes a chapter appended to
+  /// the study.  (Pasting PGN is the "New chapter" dialog's job.)
   Future<void> _importPgn() async {
-    final pgn = await showDialog<String>(
-      context: context,
-      builder: (ctx) => const _PgnPasteDialog(),
+    final file = await FilePicker.pickFile(
+      dialogTitle: 'Import PGN as chapters',
+      type: FileType.custom,
+      allowedExtensions: ['pgn', 'txt'],
     );
-    if (pgn == null || pgn.trim().isEmpty) return;
-    final added = await _study.importChapters(pgn);
+    final path = file?.path;
+    if (path == null) return;
+    final pgn = await StorageFactory.instance.readFile(path) ?? '';
+    if (!mounted) return;
+    await _addChaptersFromPgn(pgn);
+  }
+
+  Future<void> _addChaptersFromPgn(
+    String pgn, {
+    String? name,
+    Side? orientation,
+  }) async {
+    final added = await _study.importChapters(
+      pgn,
+      name: name,
+      orientation: orientation,
+    );
     if (!mounted) return;
     showAppSnackBar(
       context,
       added == 0
           ? 'No games found in that PGN.'
-          : 'Imported $added chapter${added == 1 ? '' : 's'}.',
+          : 'Added $added chapter${added == 1 ? '' : 's'}.',
       isError: added == 0,
     );
   }
@@ -363,6 +384,21 @@ class _StudyScreenState extends State<StudyScreen> {
     await _study.flushSave();
     await Clipboard.setData(ClipboardData(text: _study.doc.toPgn()));
     if (mounted) showAppSnackBar(context, 'Study PGN copied to clipboard.');
+  }
+
+  /// Write the study out as a PGN file of the user's choosing — the Lichess
+  /// "Download" — leaving the study's own file where it is.
+  Future<void> _saveStudyAs() async {
+    await _study.flushSave();
+    final outUri = await FilePicker.saveFile(
+      dialogTitle: 'Save study PGN',
+      fileName: '${_study.doc.name}.pgn',
+      type: FileType.custom,
+      allowedExtensions: ['pgn'],
+      bytes: utf8.encode(_study.doc.toPgn()),
+    );
+    if (outUri == null || !mounted) return;
+    showAppSnackBar(context, 'Saved ${p.basename(outUri.toFilePath())}.');
   }
 
   Future<void> _deleteCurrentStudy() async {
@@ -377,20 +413,30 @@ class _StudyScreenState extends State<StudyScreen> {
     if (confirmed) await _study.deleteStudy(path);
   }
 
-  Future<void> _addChapter({bool fromPosition = false}) async {
-    String? startingFen;
-    if (fromPosition) {
-      final position = await BoardEditorDialog.show(
-        context,
-        actionLabel: 'Start chapter here',
-      );
-      if (position == null) return;
-      startingFen = position.fen;
+  /// The Lichess "New chapter" dialog: empty, from a position, or from
+  /// pasted PGN (several games, several chapters).
+  Future<void> _newChapter() async {
+    final request = await showNewChapterDialog(
+      context,
+      defaultName: _study.nextChapterName(),
+    );
+    if (request == null || !mounted) return;
+    switch (request) {
+      case NewEmptyChapter():
+        _study.addChapter(request.name, orientation: request.orientation);
+      case NewChapterFromFen():
+        _study.addChapter(
+          request.name,
+          startingFen: request.fen,
+          orientation: request.orientation,
+        );
+      case NewChaptersFromPgn():
+        await _addChaptersFromPgn(
+          request.pgn,
+          name: request.name,
+          orientation: request.orientation,
+        );
     }
-    if (!mounted) return;
-    final name = await _promptName('New chapter');
-    if (name == null) return;
-    _study.addChapter(name, startingFen: startingFen);
   }
 
   /// Open the board editor to set/replace the current chapter's starting
@@ -455,7 +501,7 @@ class _StudyScreenState extends State<StudyScreen> {
       final service = RepertoireService();
       lineId =
           service.lineIdForGamePgn(
-            _study.chapter.toPgn(),
+            _study.chapterPgn(_study.chapterIndex),
             _study.chapterIndex,
           ) ??
           repertoireLineIds.stable(
@@ -469,6 +515,17 @@ class _StudyScreenState extends State<StudyScreen> {
     if (!mounted) return;
     context.read<AppState>().switchToStudyTraining(path: path, lineId: lineId);
   }
+
+  /// The chapter-row menu, shared by the sidebar, the compact chapter bar
+  /// and the chapter manager.
+  StudyChapterActions get _chapterActions => StudyChapterActions(
+    onEdit: (i) => unawaited(_editChapterAt(i)),
+    onSetStartingPosition: (i) => unawaited(_setStartingPositionAt(i)),
+    onCopyPgn: (i) => unawaited(_copyChapterPgnAt(i)),
+    onClearAnnotations: (i) => unawaited(_clearAnnotationsAt(i)),
+    onClearVariations: (i) => unawaited(_clearVariationsAt(i)),
+    onDelete: (i) => unawaited(_deleteChapterAt(i)),
+  );
 
   /// The Edit↔Browse toggle: reopen this study as a game collection in the
   /// PGN viewer, parked on the same chapter. The viewer's own toggle comes
@@ -496,18 +553,52 @@ class _StudyScreenState extends State<StudyScreen> {
     await showChapterManagerDialog(
       context,
       study: _study,
-      promptName: _promptName,
+      editChapter: _editChapterAt,
     );
     if (mounted) setState(() {});
   }
 
-  Future<void> _renameChapterAt(int index) async {
-    final name = await _promptName(
-      'Rename chapter',
-      initial: _study.doc.chapters[index].name,
+  Future<void> _editChapterAt(int index) async {
+    final edit = await showEditChapterDialog(
+      context,
+      chapter: _study.doc.chapters[index],
     );
-    if (name == null) return;
-    _study.renameChapter(index, name);
+    if (edit == null) return;
+    _study.updateChapter(
+      index,
+      name: edit.name,
+      orientation: edit.orientation,
+      headers: edit.headers,
+    );
+  }
+
+  Future<void> _copyChapterPgnAt(int index) async {
+    await Clipboard.setData(ClipboardData(text: _study.chapterPgn(index)));
+    if (mounted) showAppSnackBar(context, 'Chapter PGN copied to clipboard.');
+  }
+
+  Future<void> _clearAnnotationsAt(int index) async {
+    final confirmed = await confirmAction(
+      context,
+      title: 'Clear all comments, glyphs and shapes?',
+      message:
+          'Every note in "${_study.doc.chapters[index].name}" goes; the '
+          'moves stay.',
+      confirmLabel: 'Clear',
+    );
+    if (confirmed) _study.clearChapterAnnotations(index);
+  }
+
+  Future<void> _clearVariationsAt(int index) async {
+    final confirmed = await confirmAction(
+      context,
+      title: 'Clear variations?',
+      message:
+          'Every sideline in "${_study.doc.chapters[index].name}" goes; '
+          'the main line and its notes stay.',
+      confirmLabel: 'Clear',
+    );
+    if (confirmed) _study.clearChapterVariations(index);
   }
 
   /// Gear action on a sidebar row: the board-editor flow edits the *current*
@@ -550,6 +641,7 @@ class _StudyScreenState extends State<StudyScreen> {
             onImportUrl: () => unawaited(_importFromUrl()),
             onImportPgn: () => unawaited(_importPgn()),
             onExportPgn: () => unawaited(_exportPgn()),
+            onSaveAs: () => unawaited(_saveStudyAs()),
             onDeleteStudy: () => unawaited(_deleteCurrentStudy()),
           ),
         ),
@@ -607,36 +699,23 @@ class _StudyScreenState extends State<StudyScreen> {
               study: _study,
               moveInputKey: _moveInputKey,
               keyBindings: _keyBindings,
-              onShapeDrawn: (orig, dest) {
-                if (!_study.cursorHasNode) {
-                  showAppSnackBar(
-                    context,
-                    'Play a move first — arrows attach to a move, not the start position.',
-                  );
-                  return;
-                }
-                applyStudyBoardShape(
-                  _study,
-                  orig,
-                  dest,
-                  brush: studyShapeBrushFromKeyboard(),
-                );
-              },
+              // Shapes on the start position go into the chapter's
+              // introduction comment, as they do on Lichess.
+              onShapeDrawn: (orig, dest) => applyStudyBoardShape(
+                _study,
+                orig,
+                dest,
+                brush: studyShapeBrushFromKeyboard(),
+              ),
             );
             final side = StudySidePane(
               study: _study,
               compact: compact,
               onEngineLine: _addEngineLine,
-              onAddChapter: () => unawaited(_addChapter()),
-              onAddChapterFromPosition: () =>
-                  unawaited(_addChapter(fromPosition: true)),
-              onEditChapterPosition: () => unawaited(_editChapterPosition()),
+              onAddChapter: () => unawaited(_newChapter()),
               onPickChapter: () => unawaited(_pickChapter()),
               onManageChapters: () => unawaited(_manageChapters()),
-              onRenameChapter: () =>
-                  unawaited(_renameChapterAt(_study.chapterIndex)),
-              onDeleteChapter: () =>
-                  unawaited(_deleteChapterAt(_study.chapterIndex)),
+              actions: _chapterActions,
             );
             // Wide: Lichess study layout — chapters | board | moves. Compact
             // keeps the stacked two-pane layout with the chapter bar in the
@@ -655,12 +734,8 @@ class _StudyScreenState extends State<StudyScreen> {
                         width: 240,
                         child: StudyChapterSidebar(
                           study: _study,
-                          onAddChapter: _addChapter,
-                          onAddChapterFromPosition: () =>
-                              _addChapter(fromPosition: true),
-                          onRenameChapter: _renameChapterAt,
-                          onSetStartingPosition: _setStartingPositionAt,
-                          onDeleteChapter: _deleteChapterAt,
+                          onAddChapter: () => unawaited(_newChapter()),
+                          actions: _chapterActions,
                         ),
                       ),
                       Container(width: 1, color: AppColors.outline),
@@ -722,61 +797,5 @@ class _StudyScreenState extends State<StudyScreen> {
       emptyMessage: 'This study has no chapters yet.',
     );
     if (picked != null) _study.selectChapter(picked);
-  }
-}
-
-/// Paste-in PGN dialog. Owns its text controller so it is disposed with the
-/// route, not while the route is still animating out.
-class _PgnPasteDialog extends StatefulWidget {
-  const _PgnPasteDialog();
-
-  @override
-  State<_PgnPasteDialog> createState() => _PgnPasteDialogState();
-}
-
-class _PgnPasteDialogState extends State<_PgnPasteDialog> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Load from disk'),
-      content: SizedBox(
-        width: 460,
-        child: TextField(
-          controller: _controller,
-          autofocus: true,
-          minLines: 6,
-          maxLines: 14,
-          style: const TextStyle(
-            fontFamily: AppTextStyles.monoFamily,
-            fontSize: 12,
-          ),
-          decoration: const InputDecoration(
-            hintText:
-                'Paste one or more games in PGN…\n\n'
-                'Each game becomes a chapter.',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context, _controller.text),
-          child: const Text('Import'),
-        ),
-      ],
-    );
   }
 }

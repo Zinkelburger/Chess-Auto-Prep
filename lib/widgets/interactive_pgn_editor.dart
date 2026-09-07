@@ -185,12 +185,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   /// Comment committed from the persistent bottom annotation panel.
-  void _commitPanelComment(TreePath path, String text) {
-    final node = widget.tree.nodeAt(path);
-    if (node == null) return;
-    final trimmed = text.trim();
-    final normalized = trimmed.isEmpty ? null : trimmed;
-    if (node.comment == normalized) return;
+  ///
+  /// The field shows prose only; the comment's `[%cal]` shapes, `[%eval]`
+  /// readouts and quiz markers are re-attached here, so typing a note can
+  /// never delete them.  The empty path is the chapter's introduction
+  /// ([MoveTree.rootComment]).
+  void _commitPanelComment(TreePath path, String prose) {
+    if (path.isNotEmpty && widget.tree.nodeAt(path) == null) return;
+    final raw = widget.tree.commentAt(path) ?? '';
+    final merged = mergeCommentProse(raw, prose);
+    final normalized = merged.isEmpty ? null : merged;
+    if (raw == merged) return;
     widget.onCommentChanged?.call(path, normalized);
     widget.onDirty?.call();
     _scheduleAutoSave();
@@ -198,6 +203,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   void _togglePanelNag(TreePath path, int nagId) {
+    if (path.isEmpty) return; // the start position takes no glyph
     // Hosts with a controller own the mutation (keeps core → widgets layering);
     // fall back to editing the tree directly for hosts that don't pass one.
     if (widget.onToggleNag != null) {
@@ -362,14 +368,16 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             text: hasComment ? 'Edit Comment' : 'Add Comment',
           ),
         ),
+        // Quiz markers: where the trainer starts asking for moves and where
+        // it stops.  Moves before the start auto-play as the intro.
         if (widget.onCommentChanged != null) ...[
           PopupMenuItem(
             value: 'puzzle_start',
             child: _PopupMenuRow(
               icon: Icons.flag,
               text: hasPuzzleStart(node?.comment)
-                  ? 'Clear Puzzle Start'
-                  : 'Puzzle Starts Here',
+                  ? 'Unmark Quiz Start'
+                  : 'Start Quiz From This Move',
             ),
           ),
           PopupMenuItem(
@@ -377,8 +385,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             child: _PopupMenuRow(
               icon: Icons.sports_score,
               text: hasPuzzleEnd(node?.comment)
-                  ? 'Clear Puzzle End'
-                  : 'Puzzle Ends Here',
+                  ? 'Unmark Quiz End'
+                  : 'End Quiz After This Move',
             ),
           ),
         ],
@@ -461,126 +469,121 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    // Stretch: the movetext box fills the pane it is given.  Left to size
+    // itself it was exactly as wide as its longest row, which put a lone
+    // "1. e4" in a black strip with empty pane either side.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Column(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.pgnSurface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.divider),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (widget.ephemeralTitle != null) ...[
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 3),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.warning_amber_rounded,
-                              size: 14,
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.pgnSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.divider),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.ephemeralTitle != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          size: 14,
+                          color: AppColors.warning,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            widget.ephemeralTitle!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.warning,
                             ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                widget.ephemeralTitle!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.warning,
-                                ),
-                              ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppColors.divider),
+                  const SizedBox(height: 4),
+                ] else if (_showTitleField) ...[
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.drive_file_rename_outline,
+                        size: 15,
+                        color: AppColors.onSurfaceMuted,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: TextField(
+                          controller: _titleController,
+                          decoration: const InputDecoration(
+                            hintText: 'Line title',
+                            hintStyle: TextStyle(
+                              color: AppColors.onSurfaceMuted,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
                             ),
-                          ],
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 4),
+                          ),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.inkSoft,
+                          ),
+                          onChanged: (_) {
+                            widget.onDirty?.call();
+                            _scheduleAutoSave();
+                          },
                         ),
                       ),
-                      const Divider(height: 1, color: AppColors.divider),
-                      const SizedBox(height: 4),
-                    ] else if (_showTitleField) ...[
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.drive_file_rename_outline,
-                            size: 15,
-                            color: AppColors.onSurfaceMuted,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: TextField(
-                              controller: _titleController,
-                              decoration: const InputDecoration(
-                                hintText: 'Line title',
-                                hintStyle: TextStyle(
-                                  color: AppColors.onSurfaceMuted,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding: EdgeInsets.symmetric(
-                                  vertical: 4,
-                                ),
-                              ),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.inkSoft,
-                              ),
-                              onChanged: (_) {
-                                widget.onDirty?.call();
-                                _scheduleAutoSave();
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 1, color: AppColors.divider),
-                      const SizedBox(height: 4),
                     ],
-                    Expanded(
-                      child: SingleChildScrollView(child: _buildMovesDisplay()),
-                    ),
-                  ],
+                  ),
+                  const Divider(height: 1, color: AppColors.divider),
+                  const SizedBox(height: 4),
+                ],
+                Expanded(
+                  child: SingleChildScrollView(child: _buildMovesDisplay()),
                 ),
-              ),
+              ],
             ),
-            if (_showTitleField || widget.showAnnotationPanel)
-              _buildAnnotationPanel(),
-          ],
+          ),
         ),
+        if (_showTitleField || widget.showAnnotationPanel)
+          _buildAnnotationPanel(),
       ],
     );
   }
 
   /// Persistent annotation strip pinned below the move list: the move the
-  /// cursor sits on is always editable here, no right-click needed.
+  /// cursor sits on is always editable here, no right-click needed.  At the
+  /// start position it edits the chapter's introduction instead.
   Widget _buildAnnotationPanel() {
     final path = widget.currentPath;
     final node = path.isEmpty ? null : widget.tree.nodeAt(path);
-    final canMark = widget.onCommentChanged != null;
+    final atRoot = path.isEmpty;
+    final raw = widget.tree.commentAt(path) ?? '';
     return PgnAnnotationPanel(
-      targetKey: node == null ? null : 'n${node.id}',
-      moveLabel: node == null ? '' : _moveLabelFor(path, node),
+      targetKey: atRoot ? 'root' : (node == null ? null : 'n${node.id}'),
+      moveLabel: atRoot
+          ? 'the start position'
+          : (node == null ? '' : _moveLabelFor(path, node)),
       nags: node?.nags ?? const [],
-      comment: node?.comment ?? '',
+      glyphsEnabled: !atRoot,
+      comment: commentProse(raw),
       onToggleNag: (nagId) => _togglePanelNag(path, nagId),
       onCommentChanged: (text) => _commitPanelComment(path, text),
-      puzzleStart: hasPuzzleStart(node?.comment),
-      puzzleEnd: hasPuzzleEnd(node?.comment),
-      onTogglePuzzleStart: canMark
-          ? () => _togglePuzzleMarker(path, start: true)
-          : null,
-      onTogglePuzzleEnd: canMark
-          ? () => _togglePuzzleMarker(path, start: false)
-          : null,
     );
   }
 
@@ -595,7 +598,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   Widget _buildMovesDisplay() {
-    if (widget.tree.isEmpty) {
+    if (widget.tree.isEmpty && widget.tree.rootComment == null) {
       return const SizedBox.shrink();
     }
 
@@ -764,6 +767,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       );
     }
 
+    // The chapter introduction reads first, as its own paragraph.
+    final intro = widget.tree.rootComment;
+    if (intro != null) {
+      spans.addAll(commentProseSpans(intro, style: PgnTextStyles.commentAt(0)));
+      flushSpans();
+    }
     appendSiblings(
       widget.tree.roots,
       startMoveNumber,
@@ -791,8 +800,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         padding: const EdgeInsets.only(left: 1, right: 1),
         child: Tooltip(
           message: start
-              ? 'Puzzle starts here — training quizzes from this move'
-              : 'Puzzle ends here — training stops after this move',
+              ? 'Quiz starts here: training auto-plays the moves before '
+                    'this one and asks for this one'
+              : 'Quiz ends here: training stops after this move',
           child: Icon(
             start ? Icons.flag : Icons.sports_score,
             size: 13,

@@ -10,6 +10,7 @@ import '../../core/study_controller.dart';
 import '../../utils/app_messages.dart';
 import '../engine/inline_engine_bar.dart';
 import '../interactive_pgn_editor.dart';
+import 'study_chapter_actions.dart';
 
 class StudySidePane extends StatelessWidget {
   const StudySidePane({
@@ -18,24 +19,18 @@ class StudySidePane extends StatelessWidget {
     required this.compact,
     required this.onEngineLine,
     required this.onAddChapter,
-    required this.onAddChapterFromPosition,
-    required this.onEditChapterPosition,
     required this.onPickChapter,
     required this.onManageChapters,
-    required this.onRenameChapter,
-    required this.onDeleteChapter,
+    required this.actions,
   });
 
   final StudyController study;
   final bool compact;
   final void Function(List<String> sanMoves, int clickedIndex) onEngineLine;
   final VoidCallback onAddChapter;
-  final VoidCallback onAddChapterFromPosition;
-  final VoidCallback onEditChapterPosition;
   final VoidCallback onPickChapter;
   final VoidCallback onManageChapters;
-  final VoidCallback onRenameChapter;
-  final VoidCallback onDeleteChapter;
+  final StudyChapterActions actions;
 
   @override
   Widget build(BuildContext context) {
@@ -51,12 +46,9 @@ class StudySidePane extends StatelessWidget {
           _CompactChapterBar(
             study: study,
             onAddChapter: onAddChapter,
-            onAddChapterFromPosition: onAddChapterFromPosition,
-            onEditChapterPosition: onEditChapterPosition,
             onPickChapter: onPickChapter,
             onManageChapters: onManageChapters,
-            onRenameChapter: onRenameChapter,
-            onDeleteChapter: onDeleteChapter,
+            actions: actions,
           ),
           const Divider(height: 8),
         ] else
@@ -86,26 +78,25 @@ class StudySidePane extends StatelessWidget {
   }
 }
 
+/// Manage-and-reorder sits above the shared per-chapter menu.  It needs a
+/// value of its own: a null menu value reads as "dismissed" to
+/// [PopupMenuButton] and never reaches `onSelected`.
+const _manageChapters = 'manage';
+
 class _CompactChapterBar extends StatelessWidget {
   const _CompactChapterBar({
     required this.study,
     required this.onAddChapter,
-    required this.onAddChapterFromPosition,
-    required this.onEditChapterPosition,
     required this.onPickChapter,
     required this.onManageChapters,
-    required this.onRenameChapter,
-    required this.onDeleteChapter,
+    required this.actions,
   });
 
   final StudyController study;
   final VoidCallback onAddChapter;
-  final VoidCallback onAddChapterFromPosition;
-  final VoidCallback onEditChapterPosition;
   final VoidCallback onPickChapter;
   final VoidCallback onManageChapters;
-  final VoidCallback onRenameChapter;
-  final VoidCallback onDeleteChapter;
+  final StudyChapterActions actions;
 
   @override
   Widget build(BuildContext context) {
@@ -149,39 +140,21 @@ class _CompactChapterBar extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             onPressed: onAddChapter,
           ),
-          PopupMenuButton<String>(
+          PopupMenuButton<Object>(
             icon: const Icon(Icons.more_vert, size: 18),
             tooltip: 'Chapter actions',
-            onSelected: (action) {
-              switch (action) {
-                case 'manage':
-                  onManageChapters();
-                case 'add_from_position':
-                  onAddChapterFromPosition();
-                case 'set_position':
-                  onEditChapterPosition();
-                case 'rename':
-                  onRenameChapter();
-                case 'delete':
-                  onDeleteChapter();
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: 'manage',
+            onSelected: (action) => action is ChapterAction
+                ? actions.run(action, study.chapterIndex)
+                : onManageChapters(),
+            itemBuilder: (_) => [
+              const PopupMenuItem<Object>(
+                value: _manageChapters,
                 child: Text('Manage & reorder chapters…'),
               ),
-              PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'add_from_position',
-                child: Text('New chapter from position…'),
+              const PopupMenuDivider(),
+              ...StudyChapterActions.menuItems(
+                canDelete: study.doc.chapters.length > 1,
               ),
-              PopupMenuItem(
-                value: 'set_position',
-                child: Text('Set starting position…'),
-              ),
-              PopupMenuItem(value: 'rename', child: Text('Rename chapter…')),
-              PopupMenuItem(value: 'delete', child: Text('Delete chapter…')),
             ],
           ),
         ],
