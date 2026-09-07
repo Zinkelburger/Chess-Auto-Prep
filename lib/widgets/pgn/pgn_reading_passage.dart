@@ -64,6 +64,12 @@ class _RenderPassage extends RenderBox
           RenderBox,
           ContainerBoxParentData<RenderBox>
         > {
+  // This wrapper owns passage spacing; child prose need not add another
+  // paragraph-sized margin around the same move and explanation.
+  static const _topPadding = 6.0;
+  static const _headingGap = 4.0;
+  static const _bottomPadding = 8.0;
+
   ScrollPosition? _position;
   bool _active;
   _RenderPassage(this._position, this._active);
@@ -113,13 +119,20 @@ class _RenderPassage extends RenderBox
     body.layout(childConstraints, parentUsesSize: true);
     (body.parentData! as BoxParentData).offset = Offset(
       0,
-      14 + heading.size.height + 9,
+      _topPadding + heading.size.height + _headingGap,
     );
-    (heading.parentData! as BoxParentData).offset = const Offset(0, 14);
+    (heading.parentData! as BoxParentData).offset = const Offset(
+      0,
+      _topPadding,
+    );
     size = constraints.constrain(
       Size(
         constraints.maxWidth,
-        14 + heading.size.height + 9 + body.size.height + 16,
+        _topPadding +
+            heading.size.height +
+            _headingGap +
+            body.size.height +
+            _bottomPadding,
       ),
     );
   }
@@ -130,19 +143,27 @@ class _RenderPassage extends RenderBox
     if (_active && _position != null) {
       final viewport = RenderAbstractViewport.maybeOf(this);
       if (viewport != null) {
-        final top = viewport.getOffsetToReveal(this, 0).offset + 14;
+        final top = viewport.getOffsetToReveal(this, 0).offset + _topPadding;
         pinned = (_position!.pixels - top).clamp(
           0.0,
-          size.height - lastChild!.size.height - 14,
+          size.height - lastChild!.size.height - _topPadding,
         );
       }
     }
-    (lastChild!.parentData! as BoxParentData).offset = Offset(0, 14 + pinned);
+    (lastChild!.parentData! as BoxParentData).offset = Offset(
+      0,
+      _topPadding + pinned,
+    );
     defaultPaint(context, offset);
     if (_active) {
       context.canvas.drawRRect(
         RRect.fromRectAndRadius(
-          Rect.fromLTWH(offset.dx - 17, offset.dy + 18 + pinned, 3, 25),
+          Rect.fromLTWH(
+            offset.dx - 17,
+            offset.dy + _topPadding + 4 + pinned,
+            3,
+            25,
+          ),
           const Radius.circular(2),
         ),
         Paint()..color = AppColors.pgnMoveCurrent,

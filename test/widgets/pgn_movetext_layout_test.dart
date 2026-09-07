@@ -237,6 +237,46 @@ void main() {
     );
   });
 
+  testWidgets('variation arrow shares the real move row and folds its prose', (
+    tester,
+  ) async {
+    final root = MoveNode(san: 'b5', fen: 'f1', comment: 'Queenside space.');
+    await pumpMovetext(
+      tester,
+      moveHistory: [PgnNodeData(san: 'e4')],
+      variationsByPly: {
+        1: [root],
+      },
+    );
+
+    final arrow = find.byKey(ValueKey('pgn-branch-${root.id}'));
+    final move = find.text('b5', findRichText: true);
+    expect(move, findsOneWidget);
+    expect(find.text('1... b5'), findsNothing);
+    expect(
+      (tester.getCenter(arrow).dy - tester.getCenter(move).dy).abs(),
+      lessThan(8),
+    );
+    expect(tester.getRect(arrow).right, lessThan(tester.getRect(move).left));
+
+    await tester.tap(arrow);
+    await tester.pump();
+    expect(
+      find.textContaining('Queenside space.', findRichText: true),
+      findsNothing,
+    );
+    expect(find.textContaining('1... b5', findRichText: true), findsOneWidget);
+
+    await tester.tap(arrow);
+    await tester.pump();
+    expect(move, findsOneWidget);
+    expect(find.text('1... b5'), findsNothing);
+    expect(
+      find.textContaining('Queenside space.', findRichText: true),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('long plain comments remain in the continuous reading passage', (
     tester,
   ) async {
