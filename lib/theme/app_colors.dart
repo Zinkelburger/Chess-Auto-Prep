@@ -211,70 +211,26 @@ abstract final class AppColors {
   /// branch chips all render in the single near-white ink below.
   static const pgnMainLine = accent;
 
-  /// Background of movetext panels (the repertoire editor pane). Pure black:
-  /// movetext ink on it hits maximum contrast.
-  static const pgnSurface = Color(0xFF000000);
-
-  // PGN text policy: one ink (white), varied only in *value*. Nesting depth is
-  // encoded by indentation + gutter rule + weight + value + size — never by
-  // hue. Hue in the movetext means exactly one thing: "you are here".
-
-  /// Mainline (depth 0) movetext ink: pure white, 21:1 on [pgnSurface].
-  static const pgnMove = Color(0xFFFFFFFF);
-
-  /// Depth-1 sideline ink (~87% white, ~16:1). One step down in value so a
-  /// sideline reads as subordinate even where the indent is clipped.
-  static const pgnVariation = Color(0xDDFFFFFF);
-
-  /// Depth-2 sideline ink (~73% white, ~11:1).
-  static const pgnVariationDeep = Color(0xBBFFFFFF);
-
-  /// Depth-3+ sideline ink (~65% white, ~8:1) — the floor; deeper levels reuse
-  /// it and separate by indentation alone.
-  static const pgnVariationDeepest = Color(0xA6FFFFFF);
-
-  /// Move numbers (`1.` / `2...`) at depths 0..3+. A move number is a
-  /// coordinate label, not content: it sits a full step below its move's ink
-  /// so `Nf3` wins the eye. All stay >= 4.5:1 on [pgnSurface].
-  static const pgnMoveNumber = Color(0xA0FFFFFF);
-  static const pgnMoveNumberDepth1 = Color(0x96FFFFFF);
-  static const pgnMoveNumberDepth2 = Color(0x8CFFFFFF);
-  static const pgnMoveNumberDepth3 = Color(0x88FFFFFF);
-
-  /// Hairline in a sideline row's left gutter — one rule per nesting level.
-  /// Carries the depth signal when text wraps past the indent.
-  static const pgnVariationRule = Color(0x2EFFFFFF);
-
-  /// Hover fill behind a movetext move. Replaces the former always-on dotted
-  /// underline: clickability is shown on demand, not painted on every move.
-  static const pgnMoveHoverBg = Color(0x1FFFFFFF);
-
-  /// Current navigation position — the sole "you are here" hue accent.
-  static const pgnMoveCurrent = info;
-
-  /// Fill of the current-move pill (pairs with [pgnMoveCurrent] border).
-  static const pgnMoveCurrentBg = Color(0xFF1F6FB2);
-
-  /// Text on the current-move / active pill.
-  static const pgnMoveCurrentFg = Color(0xFFFFFFFF);
-
-  /// Solitaire / scratch analysis moves — same ink as their depth; italics
-  /// (see `PgnTextStyles`) plus the ephemeral pill fill mark unsaved analysis.
+  /// A continuous paper surface for reading PGNs. Notes use this same
+  /// background; only the current move gets a restrained blue highlight.
+  static const pgnSurface = Color(0xFF1E2126);
+  static const pgnMove = Color(0xFFE9EBEF);
+  static const pgnVariation = pgnMove;
+  static const pgnVariationDeep = pgnMove;
+  static const pgnVariationDeepest = Color(0xFFA8ADB7);
+  static const pgnMoveNumber = Color(0xFFA8ADB7);
+  static const pgnMoveNumberDepth1 = pgnMoveNumber;
+  static const pgnMoveNumberDepth2 = pgnMoveNumber;
+  static const pgnMoveNumberDepth3 = pgnMoveNumber;
+  static const pgnVariationRule = Color(0xFF4B5565);
+  static const pgnMoveHoverBg = Color(0xFF282D35);
+  static const pgnMoveCurrent = Color(0xFFC0D3FB);
+  static const pgnMoveCurrentBg = Color(0xFF303D56);
+  static const pgnMoveCurrentFg = Color(0xFFE7EFFF);
   static const pgnEphemeralMove = pgnMove;
-
-  /// Fill of the current ephemeral node pill.
-  static const pgnEphemeralBg = Color(0xFF42607D);
-
-  /// Move comments — a shade under mainline ink; own-row layout does the rest.
-  /// Commentary ink. Comments sit on their own cool-tinted reading card, so
-  /// use the full app ink instead of another translucent grey rung.
-  static const pgnComment = ink;
-
-  /// Near-black fill for bordered comment blocks on [surface].
-  /// A quiet blue-teal reading surface for prose. This is deliberately not a
-  /// grey-on-grey card: long annotations should be instantly distinguishable
-  /// from notation without sacrificing contrast.
-  static const pgnCommentBlockBg = Color(0xFF142322);
+  static const pgnEphemeralBg = pgnMoveCurrentBg;
+  static const pgnComment = Color(0xFFD7DBE2);
+  static const pgnCommentBlockBg = pgnSurface;
 
   // ── Coherence / traps / scores ──────────────────────────────────────────
 

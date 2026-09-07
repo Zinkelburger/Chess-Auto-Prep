@@ -1309,6 +1309,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// that would disturb a puzzle. Keep descriptions in sync with the button
   /// tooltips that advertise them.
   List<KeyBinding> get _keyBindings => [
+    KeyBinding.run(LogicalKeyboardKey.enter, 'Focus current variation', () {
+      if (_activeMovetextController
+          case final PgnViewerWidgetController reader) {
+        reader.focusVariation();
+      }
+    }, control: true),
+    KeyBinding.run(LogicalKeyboardKey.arrowLeft, 'Return to parent line', () {
+      if (_activeMovetextController
+          case final PgnViewerWidgetController reader) {
+        reader.returnToParentLine();
+      }
+    }, control: true),
     // Solitaire: arrows/Home/End still browse the revealed region (the PGN
     // widget caps mainline navigation at the frontier); R reveals, and the
     // autoplay/tab-switch/engine/amend keys are swallowed so they can't
@@ -1464,6 +1476,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       AppShortcut.leave,
       'Exit solitaire / amend / fullscreen, clear analysis moves',
       () {
+        if (_activeMovetextController
+            case final PgnViewerWidgetController reader) {
+          if (reader.returnToReadingMove()) return;
+        }
         if (_controller.isSolitaireMode || _controller.isSolitaireSetup) {
           unawaited(_leaveSolitaire());
         } else if (_editMode) {

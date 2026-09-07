@@ -17,13 +17,10 @@ abstract final class PgnTextStyles {
   /// book instead of a code listing.
 
   /// Indent applied per nesting level by the movetext view.
-  static const depthIndent = 15.0;
+  static const depthIndent = 18.0;
 
-  /// Deepest level with its own type treatment; beyond it, only the indent
-  /// changes. Three visible steps is the practical ceiling for value scales.
+  /// Cap structural indentation so deep branches retain a readable measure.
   static const maxStyledDepth = 3;
-
-  static const _sizes = <double>[15.0, 13.5, 13.0, 12.5];
 
   static const _inks = <Color>[
     AppColors.pgnMove,
@@ -44,21 +41,25 @@ abstract final class PgnTextStyles {
   /// SAN ink at nesting [depth] (0 = mainline).
   static Color inkAt(int depth) => _inks[_clamp(depth)];
 
-  static double sizeAt(int depth) => _sizes[_clamp(depth)];
+  static double sizeAt(int depth) => 16;
 
   /// SAN style at [depth]. The mainline is semibold and every sideline is
   /// regular — the print convention (bold mainline, roman variations). Weight
-  /// stays a *two-state* signal on purpose; further depth is carried by ink
-  /// value, size, and indentation, which have more usable steps.
+  /// stays a *two-state* signal on purpose; further depth is carried by
+  /// bounded indentation and fold controls.
   ///
   /// Note the current move does **not** get extra weight: the pill marks it.
   /// A weight change on navigation would still alter glyph widths and reflow
   /// the wrapped pane, even in the notation face.
-  static TextStyle moveAt(int depth, {bool ephemeral = false}) => TextStyle(
+  static TextStyle moveAt(
+    int depth, {
+    bool ephemeral = false,
+    bool quiet = false,
+  }) => TextStyle(
     fontFamily: AppTextStyles.monoFamily,
-    fontSize: sizeAt(depth),
-    height: 1.45,
-    fontWeight: depth == 0 ? FontWeight.w600 : FontWeight.w400,
+    fontSize: quiet ? 15 : sizeAt(depth),
+    height: 1.7,
+    fontWeight: !quiet && depth == 0 ? FontWeight.w600 : FontWeight.w400,
     // Ephemeral (scratch / solitaire) moves italicize rather than take a hue:
     // "unsaved" is orthogonal to depth, so it gets an orthogonal axis.
     fontStyle: ephemeral ? FontStyle.italic : FontStyle.normal,
@@ -70,7 +71,7 @@ abstract final class PgnTextStyles {
   static TextStyle moveNumberAt(int depth) => TextStyle(
     fontFamily: AppTextStyles.monoFamily,
     fontSize: sizeAt(depth),
-    height: 1.45,
+    height: 1.7,
     color: _numberInks[_clamp(depth)],
   );
 
@@ -80,19 +81,19 @@ abstract final class PgnTextStyles {
   static TextStyle parenthesisAt(int depth) => TextStyle(
     fontFamily: AppTextStyles.monoFamily,
     fontSize: sizeAt(depth),
-    height: 1.45,
+    height: 1.7,
     fontWeight: FontWeight.w600,
     color: _numberInks[_clamp(depth)],
   );
 
   /// Comment prose at [depth]. Upright — book chapters are mostly comments,
   /// and italicizing the whole pane makes the moves harder to scan. Depth
-  /// still recedes via ink and size.
-  static TextStyle commentAt(int depth) => TextStyle(
+  /// is carried by the gutter, never by making explanations smaller.
+  static TextStyle commentAt(int depth) => const TextStyle(
     fontFamily: AppTextStyles.uiFamily,
-    fontSize: depth == 0 ? 14.5 : 13,
-    height: depth == 0 ? 1.6 : 1.5,
-    color: depth == 0 ? AppColors.pgnComment : inkAt(depth),
+    fontSize: 17,
+    height: 1.72,
+    color: AppColors.pgnComment,
   );
 
   /// Generated `[%...]` metrics at [depth]. Upright, because they are measured
@@ -111,11 +112,10 @@ abstract final class PgnTextStyles {
   static TextStyle rowRootAt(int depth) =>
       TextStyle(fontSize: sizeAt(depth), height: 1.4, color: inkAt(depth));
 
-  /// The "⋯ 3 more lines" disclosure that stands in for collapsed deep
-  /// sidelines.
+  /// A variation disclosure is labelled by its first numbered move.
   static const collapsedStub = TextStyle(
-    fontFamily: AppTextStyles.uiFamily,
-    fontSize: 13,
+    fontFamily: AppTextStyles.monoFamily,
+    fontSize: 14,
     height: 1.4,
     fontWeight: FontWeight.w500,
     color: AppColors.pgnVariationDeepest,
@@ -157,14 +157,14 @@ abstract final class PgnTextStyles {
   );
 
   static const commentQuote = TextStyle(
-    fontSize: 14,
-    height: 1.5,
-    color: Color(0xDDF2F2F2),
+    fontSize: 17,
+    height: 1.72,
+    color: AppColors.pgnComment,
   );
 
   static const commentBracket = TextStyle(
-    fontSize: 14,
-    height: 1.4,
+    fontSize: 17,
+    height: 1.72,
     color: AppColors.pgnComment,
   );
 
