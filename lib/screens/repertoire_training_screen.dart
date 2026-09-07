@@ -32,6 +32,7 @@ import '../widgets/training/chapter_reader_screen.dart';
 import '../widgets/training/chapter_setup_dialog.dart';
 import '../widgets/training/line_preview_dialog.dart';
 import '../widgets/training/move_input_widget.dart';
+import '../widgets/chapter_list_body.dart' show ChapterPick;
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/training/repertoire_selector_panel.dart';
 import '../widgets/training/trainer_browser.dart';
@@ -195,12 +196,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   }
 
   Future<void> _selectRepertoire() async {
-    final result = await Navigator.of(context).push<RepertoireMetadata>(
+    final pick = await Navigator.of(context).push<ChapterPick>(
       MaterialPageRoute(builder: (_) => const RepertoireSelectionScreen()),
     );
-    if (result != null) {
-      _training.setRepertoire(result);
-      await _training.loadRepertoire();
+    if (pick != null) {
+      _training.setRepertoire(pick.chapter);
+      await _training.loadRepertoire(startChapter: pick.courseChapter);
     }
   }
 
@@ -430,6 +431,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     unawaited(_training.loadRepertoire());
   }
 
+  /// A course chapter tapped in the picker: open its file scoped to it.
+  void _onCourseChapterSelected(RepertoireMetadata chapter, String course) {
+    _training.setRepertoire(chapter);
+    unawaited(_training.loadRepertoire(startChapter: course));
+  }
+
   void _onStudySelected(RepertoireMetadata study) {
     _training.setStudySource(study);
     unawaited(_training.loadRepertoire());
@@ -472,6 +479,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     if (_training.repertoire == null && !_training.isLoading) {
       return RepertoireListBody(
         onSelected: _onRepertoireSelected,
+        onCourseChapterSelected: _onCourseChapterSelected,
         onStudySelected: _onStudySelected,
       );
     }

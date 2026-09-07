@@ -583,6 +583,69 @@ void main() {
   /// `[EventDate]` starts with `[Event`, so a game-splitter that cuts on the
   /// bare prefix finds two games in every Chessable export and every
   /// index-addressed edit lands on the wrong one.
+  group('courseChaptersOf', () {
+    String game(String white, String moves, {Map<String, String>? extra}) => [
+      '[Event "Course"]',
+      '[White "$white"]',
+      '[Black "Variation"]',
+      '[Result "*"]',
+      for (final e in (extra ?? const {}).entries) '[${e.key} "${e.value}"]',
+      '',
+      '$moves *',
+      '',
+    ].join('\n');
+
+    test('lists a course export\'s chapters in file order with counts', () {
+      final content = [
+        game('Exchange', '1. d4 d5 2. c4 e6 3. cxd5'),
+        game('Exchange', '1. d4 d5 2. c4 e6 3. Nc3 Nf6 4. cxd5'),
+        game('Catalan', '1. d4 d5 2. c4 e6 3. g3'),
+        game('Exchange', '1. d4 d5 2. c4 e6 3. Nf3 Nf6 4. cxd5'),
+      ].join('\n');
+      final chapters = RepertoireService().courseChaptersOf(content);
+      expect(chapters.map((c) => c.name), ['Exchange', 'Catalan']);
+      expect(chapters.map((c) => c.lineCount), [3, 1]);
+    });
+
+    test('model games are listed under their chapter but not counted', () {
+      final content = [
+        game('Exchange', '1. d4 d5 2. c4 e6 3. cxd5'),
+        game(
+          'Exchange',
+          '1. d4 d5 2. c4 e6 3. Nc3',
+          extra: {'ModelGameWhite': 'Carlsen', 'ModelGameResult': '1-0'},
+        ),
+        game('Catalan', '1. d4 d5 2. c4 e6 3. g3'),
+        game('Catalan', '1. d4 d5 2. c4 e6 3. g3 Nf6'),
+      ].join('\n');
+      final chapters = RepertoireService().courseChaptersOf(content);
+      expect(chapters.map((c) => c.name), ['Exchange', 'Catalan']);
+      expect(chapters.map((c) => c.lineCount), [1, 2]);
+    });
+
+    test('a hand-made chapter has no course chapters', () {
+      final content = [
+        '// Color: White',
+        '',
+        '[Event "Repertoire Line"]',
+        '[White "Me"]',
+        '[Black "Opponent"]',
+        '[Result "*"]',
+        '',
+        '1. d4 d5 2. c4 *',
+        '',
+        '[Event "Repertoire Line"]',
+        '[White "Me"]',
+        '[Black "Opponent"]',
+        '[Result "*"]',
+        '',
+        '1. d4 Nf6 2. c4 *',
+      ].join('\n');
+      expect(RepertoireService().courseChaptersOf(content), isEmpty);
+      expect(RepertoireService().courseChaptersOf(''), isEmpty);
+    });
+  });
+
   group('game indices in a file with [EventDate] headers', () {
     late Directory tempDir;
     late String path;

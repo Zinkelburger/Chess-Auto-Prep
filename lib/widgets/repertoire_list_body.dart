@@ -13,6 +13,7 @@ import 'package:path/path.dart' as p;
 
 import '../models/repertoire_metadata.dart';
 import '../screens/repertoire_chapters_screen.dart';
+import 'chapter_list_body.dart' show ChapterPick;
 import '../services/repertoire_creation.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
@@ -30,6 +31,13 @@ class RepertoireListBody extends StatefulWidget {
   /// selected chapter is what the builder / trainer actually load.
   final ValueChanged<RepertoireMetadata> onSelected;
 
+  /// Called instead of [onSelected] when the user tapped one of the course
+  /// chapters the chapter list shows inside a file, with that chapter's
+  /// title. Left null, such a tap opens the whole file through [onSelected]
+  /// — right for the Builder, whose outline shows the chapters anyway.
+  final void Function(RepertoireMetadata chapter, String courseChapter)?
+  onCourseChapterSelected;
+
   /// When set, studies are listed in their own section (as trainable
   /// custom-tactics sets) and tapping one calls this instead.
   final ValueChanged<RepertoireMetadata>? onStudySelected;
@@ -37,6 +45,7 @@ class RepertoireListBody extends StatefulWidget {
   const RepertoireListBody({
     super.key,
     required this.onSelected,
+    this.onCourseChapterSelected,
     this.onStudySelected,
   });
 
@@ -382,13 +391,19 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   /// Opens the chapter list for [repertoire]; a chosen chapter is forwarded to
   /// [widget.onSelected] (the contract the builder / trainer already consume).
   Future<void> _openRepertoire(RepertoireMetadata repertoire) async {
-    final chapter = await Navigator.of(context).push<RepertoireMetadata>(
+    final pick = await Navigator.of(context).push<ChapterPick>(
       MaterialPageRoute(
         builder: (_) => RepertoireChaptersScreen(repertoire: repertoire),
       ),
     );
-    if (chapter != null && mounted) {
-      widget.onSelected(chapter);
+    if (pick != null && mounted) {
+      final courseChapter = pick.courseChapter;
+      final onCourseChapter = widget.onCourseChapterSelected;
+      if (courseChapter != null && onCourseChapter != null) {
+        onCourseChapter(pick.chapter, courseChapter);
+      } else {
+        widget.onSelected(pick.chapter);
+      }
     } else if (mounted) {
       // Chapters may have been added/removed while browsing.
       await _loadRepertoires();

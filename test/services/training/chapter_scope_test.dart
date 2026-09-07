@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/services/asked_questions_store.dart';
 import 'package:chess_auto_prep/services/training/chapter_scope.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// [ChapterScope] carries the chapter grouping/scoping logic that used to sit
 /// inline in TrainingSessionController. It reads its inputs through suppliers
@@ -223,6 +224,85 @@ void main() {
       final s = scopeOver(settings, const []).scope;
       expect(s.canOffer, isFalse);
       expect(s.reopenPrompt(), isFalse);
+      expect(s.pendingPrompt, isNull);
+    });
+  });
+
+  group('adoptChapter', () {
+    // A course-shaped file: two chapters, one with several lines.
+    final course = [
+      line('a', chapter: 'Intro'),
+      line('b', chapter: 'Intro'),
+      line('c', chapter: 'Exchange'),
+      line('d', chapter: 'Exchange'),
+    ];
+
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('scopes to the chapter when grouping is already on', () async {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, course).scope;
+      expect(await s.adoptChapter('Exchange', filePath: null), isTrue);
+      expect(s.activeChapter, 'Exchange');
+      expect(s.scopedLines.map((l) => l.id), ['c', 'd']);
+    });
+
+    test('a pending "sort into chapters?" prompt is answered yes', () async {
+      settings.chapterGrouping = ChapterGroupingMode.off;
+      final s = scopeOver(settings, course).scope;
+      // What resolveLayout does once the file is parsed, minus the disk.
+      s.onSettingsChanged();
+      s.reopenPrompt();
+      expect(s.pendingPrompt, isNotNull);
+
+      expect(await s.adoptChapter('Intro', filePath: null), isTrue);
+      expect(s.pendingPrompt, isNull, reason: 'picking a chapter answers it');
+      expect(settings.chapterGrouping, ChapterGroupingMode.auto);
+      expect(s.activeChapter, 'Intro');
+    });
+
+    test(
+      'a pending prompt is answered even when grouping is already on',
+      () async {
+        // The default setting groups by header, so the chapter exists before
+        // the file's question is answered — the prompt must still not show.
+        settings.chapterGrouping = ChapterGroupingMode.auto;
+        final s = scopeOver(settings, course).scope;
+        s.onSettingsChanged();
+        s.reopenPrompt();
+        expect(s.pendingPrompt, isNotNull);
+
+        expect(await s.adoptChapter('Intro', filePath: null), isTrue);
+        expect(s.pendingPrompt, isNull);
+        expect(s.activeChapter, 'Intro');
+      },
+    );
+
+    test('an earlier "keep one flat list" gives way', () async {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, course).scope;
+      s.onSettingsChanged();
+      s.declined = true;
+      expect(s.names, isEmpty);
+
+      expect(await s.adoptChapter('Intro', filePath: null), isTrue);
+      expect(s.declined, isFalse);
+      expect(s.activeChapter, 'Intro');
+    });
+
+    test('an unknown chapter leaves the scope alone', () async {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, course).scope;
+      expect(await s.adoptChapter('Tarrasch', filePath: null), isFalse);
+      expect(s.activeChapter, isNull);
+    });
+
+    test('a flat file cannot be scoped', () async {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, [line('a'), line('b')]).scope;
+      s.onSettingsChanged();
+      expect(await s.adoptChapter('Intro', filePath: null), isFalse);
+      expect(s.activeChapter, isNull);
       expect(s.pendingPrompt, isNull);
     });
   });
