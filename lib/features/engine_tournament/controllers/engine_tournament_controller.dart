@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:chess_auto_prep/utils/chess_utils.dart';
 
 import '../../../services/engine/stockfish_bundle.dart';
 import '../../../services/storage/app_paths.dart';
@@ -365,11 +366,12 @@ class EngineTournamentController extends ChangeNotifier
   Future<String> _bundledPath() => StockfishBundle.ensureExecutable();
 
   static String _describeMove(GameMoveEvent move) {
-    final score = move.scoreMate != null
-        ? '#${move.scoreMate}'
-        : move.scoreCp != null
-        ? '${move.scoreCp! >= 0 ? '+' : ''}${(move.scoreCp! / 100).toStringAsFixed(2)}'
-        : '';
+    final score = formatEvalDisplay(
+      scoreCp: move.scoreCp,
+      scoreMate: move.scoreMate,
+      decimals: 2,
+      empty: '',
+    );
     final suffix = score.isEmpty ? '' : '  $score/${move.depth}';
     return '${move.moveNumber}${move.byWhite ? '.' : '...'} '
         '${move.san}$suffix';
