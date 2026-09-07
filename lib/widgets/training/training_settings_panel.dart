@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../common/choice_field.dart';
 import '../../models/training_settings.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';

@@ -971,22 +971,34 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Both sides flex: the games walk adds "N of your games" to the
+              // right-hand label, and a long line name on the left, so a Row
+              // of two intrinsic Texts overflows a narrow card.
               Row(
                 children: [
-                  Text(
-                    step.positionName ?? _movesLabel(step.moves),
-                    style: AppTextStyles.caption,
+                  Flexible(
+                    child: Text(
+                      step.positionName ?? _movesLabel(step.moves),
+                      style: AppTextStyles.caption,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const Spacer(),
-                  Text(
-                    [
-                      if (_plan.basis == PlanBasis.ownGames)
-                        '${step.ownGames} of your games',
-                      ours
-                          ? '${whiteToMove ? 'White' : 'Black'} (you) to move'
-                          : 'Opponent to move',
-                    ].join(' · '),
-                    style: AppTextStyles.caption,
+                  const SizedBox(width: 12),
+                  // Expanded, not Flexible: it takes the rest of the row so
+                  // the label stays hard right, as the Spacer used to keep it.
+                  Expanded(
+                    child: Text(
+                      [
+                        if (_plan.basis == PlanBasis.ownGames)
+                          '${step.ownGames} of your games',
+                        ours
+                            ? '${whiteToMove ? 'White' : 'Black'} (you) to move'
+                            : 'Opponent to move',
+                      ].join(' · '),
+                      style: AppTextStyles.caption,
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),

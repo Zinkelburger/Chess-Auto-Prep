@@ -74,7 +74,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     // One worker asked for, one worker injected: `ensureWorkers()` then has
     // nothing to spawn, so no real Stockfish is started.
-    EngineSettings.instance.workers = 1;
+    EngineSettings.instance.cores = 1;
     engine = ScriptedEngine();
     worker = await installScriptedWorker(engine);
     service = EngineWeaknessService();
@@ -292,7 +292,7 @@ void main() {
         onWorkersReady: (workers, hashMb) => ready.add('$workers/$hashMb'),
       );
 
-      expect(ready, ['1/$kPoolHashPerWorkerMb']);
+      expect(ready, ['1/${EngineSettings.instance.hashMb}']);
       expect(service.workerCount, 1);
     });
   });

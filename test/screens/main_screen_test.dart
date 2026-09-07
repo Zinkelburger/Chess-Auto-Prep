@@ -50,11 +50,11 @@ void main() {
       );
       await pumpNavigation();
 
-      expect(find.text('Choose a player'), findsNothing);
+      expect(find.text('Which player?'), findsNothing);
 
       appState.setMode(AppMode.positionAnalysis);
       await pumpNavigation();
-      expect(find.text('Choose a player'), findsOneWidget);
+      expect(find.text('Which player?'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Back'));
       await pumpNavigation();
@@ -65,7 +65,7 @@ void main() {
       appState.setMode(AppMode.positionAnalysis);
       await pumpNavigation();
 
-      expect(find.text('Choose a player'), findsNothing);
+      expect(find.text('Which player?'), findsNothing);
       expect(find.text('No player selected'), findsOneWidget);
     },
   );

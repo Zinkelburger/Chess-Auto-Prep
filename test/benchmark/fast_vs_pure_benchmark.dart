@@ -101,7 +101,7 @@ void main() {
       final maia = MaiaFactory.instance!;
       await maia.initialize();
       expect((await maia.evaluate(fen, 2200)).policy, isNotEmpty);
-      EngineSettings.instance.workers = _workers;
+      EngineSettings.instance.cores = _workers;
       await StockfishPool.instance.prepareForTreeBuild(_workers);
       startup.stop();
       final service = TreeBuildService();

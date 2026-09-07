@@ -421,7 +421,7 @@ void main() {
 [GameId "lichess_cited111"]
 [FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
 
-*
+1. e4 *
 ''');
       await storeGames([lichessGame('cited111'), lichessGame('orphan11')]);
       final service = await serviceWithAnalyzed([

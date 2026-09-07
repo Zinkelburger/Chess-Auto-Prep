@@ -20,7 +20,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../widgets/common/choice_field.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../controllers/bughouse_controller.dart';

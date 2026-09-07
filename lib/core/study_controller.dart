@@ -195,10 +195,9 @@ class StudyController extends ChangeNotifier
           StudyChapter(
             name: c.name,
             headers: c.headers,
+            // The copy carries the chapter's opening note with it, so this
+            // snapshot is what the next autosave writes back intact.
             tree: c.tree.copyWithFreshIds(),
-            // Carried, not re-derived: this copy is what the next autosave
-            // writes back, so anything left off here is deleted from the file.
-            intro: c.intro,
             // Already resolved from the file's tags, which [headers] no
             // longer carries.
             orientation: c.orientation,
@@ -390,7 +389,7 @@ class StudyController extends ChangeNotifier
     ];
     final firstNewIndex = _doc.chapters.length;
     final givenName = name?.trim();
-    for (final (i, (headers, tree, intro)) in usable.indexed) {
+    for (final (i, (headers, tree)) in usable.indexed) {
       final chapterName = givenName == null || givenName.isEmpty
           ? StudyChapter.nameFromHeaders(
               headers,
@@ -405,7 +404,6 @@ class StudyController extends ChangeNotifier
           name: chapterName,
           headers: headers,
           tree: tree.copyWithFreshIds(),
-          intro: intro,
           orientation: orientation,
         ),
       );
@@ -415,7 +413,12 @@ class StudyController extends ChangeNotifier
       _path = TreePath.empty;
       _faceChapterOrientation();
       _markDirty();
-      if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
+      // Only a study with a file can fail to reach one. A study that has not
+      // been saved yet has nowhere to write, which is not an import error —
+      // the chapters are in the document either way.
+      if (_doc.filePath != null && !await flushSave()) {
+        throw StateError(saveError ?? 'Study not saved');
+      }
     }
     return usable.length;
   }
@@ -622,16 +625,11 @@ class StudyController extends ChangeNotifier
 /// One record per game: its headers, its tree, and the note it opens with.
 /// The intro travels with the rest because a chapter that arrives without it
 /// is a chapter whose note the next autosave deletes.
-List<(Map<String, String>, MoveTree, String)> _parseChapterTreesEntry(
-  String pgn,
-) {
+List<(Map<String, String>, MoveTree)> _parseChapterTreesEntry(String pgn) {
   final games = splitPgnIntoGames(stripBom(pgn));
   return [
+    // The tree carries the chapter's opening note itself (MoveTree.rootComment).
     for (final gameText in games)
-      (
-        extractHeaders(gameText),
-        MoveTree.fromPgn(gameText),
-        StudyChapter.fromGameText(gameText).intro,
-      ),
+      (extractHeaders(gameText), MoveTree.fromPgn(gameText)),
   ];
 }

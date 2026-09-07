@@ -121,7 +121,8 @@ void main() {
       );
       final tree = harness.treeAt(fen);
       final engine = _ZeroEngine();
-      book(String f) => throw StateError('Fast must not query master data');
+      Never book(String f) =>
+          throw StateError('Fast must not query master data');
       await PureTreeBuilder(
         harness.runFor(config, tree, engine, book: book),
       ).build();
@@ -160,7 +161,8 @@ void main() {
       );
       final tree = harness.treeAt(fen);
       final engine = _ZeroEngine();
-      book(String f) => throw StateError('Fast must not query master data');
+      Never book(String f) =>
+          throw StateError('Fast must not query master data');
       await PureTreeBuilder(
         harness.runFor(config.copyWith(maxNodes: 10), tree, engine, book: book),
       ).build();

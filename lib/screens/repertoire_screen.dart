@@ -137,6 +137,11 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// entry point is triggered twice (menu, shortcut, jobs panel).
   bool _configRouteOpen = false;
 
+  /// Whether the run that just finished was a board-side position generation.
+  /// One that was should leave the reader where they started it, so the Lines
+  /// surface is not pushed over the board they were generating from.
+  bool _lastRunWasPositionGeneration = false;
+
   final JobManager _jobManager = JobManager.instance;
 
   final BoardPreviewController _boardPreview = BoardPreviewController();
@@ -277,6 +282,13 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
             existingLineMoves: [
               for (final line in _controller.repertoireLines) line.moves,
             ],
+            onTrimLines: (droppedKeys) => _controller.deleteLines([
+              for (final line in _controller.repertoireLines)
+                // Match on the same identity the export writes with, so a
+                // line the user added by hand is never caught by a cut of
+                // the generated ones.
+                if (droppedKeys.contains(line.moves.join(' '))) line,
+            ]),
             onLinesSaved: (lines) {
               _controller.appendNewLines([
                 for (final l in lines)

@@ -100,8 +100,10 @@ class StockfishPool {
       _threadsPerWorker = threadsPerWorker;
     }
 
+    // Zero is a real request — callers that must not start an engine pass it
+    // (the tactics import's `maxCores: 0`), so the floor here is 0, not 1.
     final target = (count ?? EngineSettings.instance.cores).clamp(
-      1,
+      0,
       EngineSettings.systemCores,
     );
     _targetCount = target;

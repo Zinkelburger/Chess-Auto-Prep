@@ -703,7 +703,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
       if (widget.onGenerateInto != null)
         const _MenuEntry(
           'generate',
-          'Open Generate for this chapter…',
+          'Generate lines into this chapter…',
           Icons.auto_awesome,
         ),
       if (widget.onAuditChapter != null)
@@ -1018,12 +1018,14 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
   }
 
   Set<String> _chapterNamesIn(String folderPath) => {
-    for (final c in _c.outline?.findFolder(folderPath)?.chapters ?? const [])
+    for (final c in _c.outline?.findFolder(folderPath)?.chapters ??
+        const <OutlineChapter>[])
       c.name.toLowerCase(),
   };
 
   Set<String> _folderNamesIn(String parentPath) => {
-    for (final f in _c.outline?.findFolder(parentPath)?.folders ?? const [])
+    for (final f in _c.outline?.findFolder(parentPath)?.folders ??
+        const <OutlineFolder>[])
       f.name.toLowerCase(),
   };
 

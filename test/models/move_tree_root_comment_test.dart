@@ -45,14 +45,19 @@ void main() {
     });
   });
 
-  test('a comment written before a move joins that move rather than '
-      'vanishing', () {
+  test('a comment written before a move is kept in its own slot, not '
+      'merged into the move\'s', () {
     final tree = MoveTree.fromPgn(
       '1. e4 e5 (1... { The Sicilian. } c5 { Sharp. }) 2. Nf3 *',
     );
     final c5 = tree.nodeAt(const TreePath([0, 1]))!;
     expect(c5.san, 'c5');
-    expect(c5.comment, 'The Sicilian. Sharp.');
+    // Two comments in the PGN, two here: a pre-move comment has a slot of its
+    // own ([MoveNode.startingComment]) and is written back before the move,
+    // rather than being folded into the move's own comment.
+    expect(c5.startingComment, 'The Sicilian.');
+    expect(c5.comment, 'Sharp.');
+    expect(tree.toPgnMoveText(), contains('{The Sicilian.} 1... c5'));
   });
 
   group('clearAnnotations', () {

@@ -69,7 +69,10 @@ void main() {
     final saved = _reopen(_chapter).toPgn();
     expect(saved, contains('[Site "https://lichess.org/study/abcd1234"]'));
     expect(saved, contains('[Annotator "me"]'));
-    expect(saved, contains('[Event "Chapter one"]'));
+    // The chapter name now travels in Lichess's own tags: `[Event]` is
+    // "<study>: <chapter>" and `[ChapterName]` carries the chapter alone.
+    expect(saved, contains('[ChapterName "Chapter one"]'));
+    expect(saved, contains('Chapter one"]'));
   });
 
   test('saving twice is a fixed point', () {

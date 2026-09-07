@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../common/choice_field.dart';
 import '../common/number_stepper.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -347,6 +348,52 @@ class SettingsStepperTile extends StatelessWidget {
 }
 
 /// A labelled preference that stacks its control below the copy in narrow panes.
+/// A labelled preference whose value is one of a list — the settings-panel
+/// wrapper around [ChoiceField].
+///
+/// It used to hold a `DropdownButton`. It does not any more: a settings list
+/// is exactly the case [ChoiceField] exists for, so the choice can be typed
+/// at instead of hunted for in a menu.
+class SettingsChoiceTile<T> extends StatelessWidget {
+  const SettingsChoiceTile({
+    super.key,
+    required this.label,
+    this.description,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String? description;
+  final T value;
+
+  /// `(value, label)` pairs, in the order they should be offered.
+  final List<(T, String)> items;
+
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) => SettingsValueRow(
+    label: label,
+    description: description,
+    // Bounded: in the wide layout [SettingsValueRow] puts the control in a
+    // Row, and a text field — which is what a ChoiceField is — has no width of
+    // its own there. The `DropdownButton` this replaced sized itself.
+    control: SizedBox(
+      width: 240,
+      child: ChoiceField<T>(
+        value: value,
+        items: [
+          for (final (itemValue, itemLabel) in items)
+            ChoiceItem<T>(value: itemValue, label: itemLabel),
+        ],
+        onChanged: onChanged,
+      ),
+    ),
+  );
+}
+
 class SettingsValueRow extends StatelessWidget {
   const SettingsValueRow({
     super.key,

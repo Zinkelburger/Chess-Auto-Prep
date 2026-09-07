@@ -264,7 +264,10 @@ void main() {
 
       await tester.tap(find.text('Tree'));
       await _settle(tester);
-      await _settleUntil(tester, find.text('Repertoire tree'));
+
+      // The pane is titled for the loaded repertoire now, not "Repertoire
+      // tree" — so there is no pre-load title left to wait on.
+      await _settleUntil(tester, find.text('Saved lines: Main'));
 
       expect(find.text('Saved lines: Main'), findsOneWidget);
       final book = find.byTooltip('Show Lichess opening explorer');

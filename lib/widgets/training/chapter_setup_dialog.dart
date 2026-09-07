@@ -35,7 +35,7 @@ class _ChapterSetupDialog extends StatelessWidget {
     final chapters = proposal.chapters;
 
     return AlertDialog(
-      title: const Text('Preview chapter grouping'),
+      title: Text('Looks like ${proposal.formatLabel}'),
       // A *tight* width, not a max: [AlertDialog] wraps its content in an
       // [IntrinsicWidth], and asking a lazy viewport for its intrinsic width
       // throws ("RenderShrinkWrappingViewport does not support returning
@@ -53,7 +53,7 @@ class _ChapterSetupDialog extends StatelessWidget {
             Text(proposal.explanation, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 12),
             Text(
-              'Show ${proposal.groupedLineCount} lines under these '
+              'Sort ${proposal.groupedLineCount} lines into these '
               '${proposal.chapterCount} chapters?',
               style: theme.textTheme.titleSmall,
             ),

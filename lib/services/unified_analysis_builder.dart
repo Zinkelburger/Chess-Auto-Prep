@@ -58,7 +58,8 @@ class UnifiedAnalysisBuilder {
     void Function(int current, int total)? onProgress,
   }) {
     final usernameLower = username.toLowerCase();
-    final total = pgnList.length;
+    final pgnGames = PgnGame.parseMultiGamePgn(pgnList.join('\n\n'));
+    final total = pgnGames.length;
     final progressInterval = (total / 100).ceil().clamp(1, 100);
     final acc = _ColorAccumulator();
 
@@ -123,7 +124,8 @@ class UnifiedAnalysisBuilder {
     void Function(int current, int total)? onProgress,
   }) {
     final usernameLower = username.toLowerCase();
-    final total = pgnList.length;
+    final pgnGames = PgnGame.parseMultiGamePgn(pgnList.join('\n\n'));
+    final total = pgnGames.length;
     final progressInterval = (total / 100).ceil().clamp(1, 100);
 
     final white = _ColorAccumulator();

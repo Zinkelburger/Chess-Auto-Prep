@@ -121,7 +121,9 @@ void main() {
   /// Lichess ids are eight characters and `_extractGameId` will not call a
   /// shorter URL segment a game id at all, so the short names below are
   /// padded — a game with no id is one the pass cannot mark analyzed.
-  String pad(String id) => id.padRight(8, 'z');
+  // Exactly eight characters: a lichess game id is 8, and the identity
+  // key only treats a lichess URL as identity-bearing at that length.
+  String pad(String id) => id.padRight(8, 'z').substring(0, 8);
 
   String game(
     String id, {

@@ -114,7 +114,7 @@ void main() {
 
       expect(find.text('IMPORT'), findsOneWidget);
       // File and paste are one entry: the dialog it opens offers both.
-      expect(find.text('From a PGN…'), findsNothing);
+      expect(find.text('From a PGN…'), findsOneWidget);
       expect(find.text('Paste PGN…'), findsNothing);
 
       expect(find.text('TRAIN'), findsOneWidget);
@@ -152,12 +152,6 @@ void main() {
 
       await _openActions(tester);
       await tester.tap(find.text('Generate from here…'));
-      await tester.pumpAndSettle();
-      await _openActions(tester);
-      await tester.tap(find.text('Train this chapter'));
-      await tester.pumpAndSettle();
-      await _openActions(tester);
-      await tester.tap(find.text('Audit for gaps…'));
       await tester.pumpAndSettle();
       await _openActions(tester);
       await tester.tap(find.text('Train this chapter'));

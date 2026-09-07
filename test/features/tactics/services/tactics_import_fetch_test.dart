@@ -567,16 +567,18 @@ void main() {
           _archivesUrl: _ok(archivesJson(['$_chesscomBase/2025/05'])),
           '$_chesscomBase/2025/05/pgn': _ok(
             [
-              chesscomGame('kept', date: '2025.05.20'),
-              chesscomGame('edge', date: '2025.05.15'),
-              chesscomGame('old', date: '2025.05.14'),
+              // Numeric ids: a chess.com game URL is identity-bearing only
+              // with one, and these have to be recognised to be skipped.
+              chesscomGame('520', date: '2025.05.20'),
+              chesscomGame('515', date: '2025.05.15'),
+              chesscomGame('514', date: '2025.05.14'),
             ].join('\n\n'),
           ),
         };
         final service = await serviceWithAnalyzed([
-          'chesscom_kept',
-          'chesscom_edge',
-          'chesscom_old',
+          'chesscom_520',
+          'chesscom_515',
+          'chesscom_514',
         ]);
 
         final result = await service.importGamesFromChessCom(

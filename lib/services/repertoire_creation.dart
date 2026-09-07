@@ -8,6 +8,8 @@
 /// panel, which now creates one rather than sending you away to make it — must
 /// write exactly the same thing. Hence one function instead of two copies.
 library;
+import 'dart:io';
+
 
 import '../features/repertoire/services/chapter_splitter.dart';
 import 'pgn_parsing_service.dart' as pgn;
@@ -98,15 +100,8 @@ Future<RepertoireCreationResult> createRepertoire({
       '// Color: $color\n'
       '// Created on $stamp\n\n';
 
-  // Named before the write so callers can say "that name is taken" rather
-  // than surface a storage error. `createOnly` below still carries the real
-  // guarantee: this check alone would race.
-  if (await store.fileExists(chapterPath)) {
-    throw RepertoireExistsException(name);
-  }
-
   if (pgnContent == null) {
-    await store.writeFile(chapterPath, header, createOnly: true);
+    await _createChapter(store, chapterPath, header, name);
     return RepertoireCreationResult(
       directoryPath: dirPath,
       chapterPath: chapterPath,
@@ -118,11 +113,7 @@ Future<RepertoireCreationResult> createRepertoire({
   // the widget tests that drive an import pump fake time, which an isolate's
   // result would never arrive under.
   final expanded = expandVariationsIntoLines(pgnContent);
-  await store.writeFile(
-    chapterPath,
-    '$header${expanded.pgn}\n',
-    createOnly: true,
-  );
+  await _createChapter(store, chapterPath, '$header${expanded.pgn}\n', name);
   final count = expanded.gameCount > 0 ? expanded.gameCount : gameCount;
 
   final isCourse =
@@ -156,4 +147,25 @@ Future<RepertoireCreationResult> createRepertoire({
     gameCount: count,
     chapterPaths: [chapterPath],
   );
+}
+
+/// Write a repertoire's first chapter, refusing to overwrite one that is
+/// already there.
+///
+/// The refusal is `createOnly`, not a prior existence check: two names can
+/// sanitise to one folder ("Sicilian: Najdorf" and "Sicilian_ Najdorf"), so a
+/// caller's own name check can pass for a chapter that exists — and a check
+/// here would still race the write. The storage error is translated so
+/// callers can say "that name is taken" rather than surface a file path.
+Future<void> _createChapter(
+  StorageService store,
+  String chapterPath,
+  String content,
+  String name,
+) async {
+  try {
+    await store.writeFile(chapterPath, content, createOnly: true);
+  } on FileSystemException {
+    throw RepertoireExistsException(name);
+  }
 }

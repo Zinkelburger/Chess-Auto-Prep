@@ -1,8 +1,9 @@
 /// What the viewer is allowed to do to a PGN file the reader owns.
 ///
-/// The viewer does not patch a file in place: every save rewrites the whole
-/// thing from the collection it holds in memory (`doPersistMetadata`). So
-/// anything the load dropped, or any game a save re-serialized lossily, is
+/// A save patches the games it changed into the file as it currently stands
+/// (`doPersistMetadata` → `patchPgnDocument` under `updateFile`). It used to
+/// rewrite the whole file from the collection held in memory, and then
+/// anything the load dropped, or any game a save re-serialized lossily, was
 /// deleted from the reader's own file — by a star, a comment edit, or an
 /// engine review they may not have asked for, since opening a reviewed game
 /// fills in its missing engine lines and stores them.
@@ -19,6 +20,8 @@
 /// the reader: **a save may add, and may change the game it was told to
 /// change, but nothing else in the file may disappear.**
 library;
+
+import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -55,8 +58,26 @@ class _MemoryStorage implements StorageService {
   Future<String?> readFile(String path) async => files[path];
 
   @override
-  Future<void> writeFile(String path, String content) async {
+  Future<void> writeFile(
+    String path,
+    String content, {
+    bool createOnly = false,
+    String? expectedContent,
+  }) async {
     writeBehindOurBack(path, content);
+  }
+
+  /// Read-modify-write, as the real one does under a lock. The viewer's save
+  /// goes through here now: it patches the games it changed into whatever the
+  /// file currently holds rather than rewriting the file from memory.
+  @override
+  Future<String> updateFile(
+    String path,
+    FutureOr<String> Function(String?) update,
+  ) async {
+    final next = await update(files[path]);
+    writeBehindOurBack(path, next);
+    return next;
   }
 
   @override
