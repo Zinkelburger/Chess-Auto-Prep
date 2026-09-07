@@ -52,7 +52,7 @@ scripts/ci.sh with -- COMMAND             # bounded arbitrary heavy command
 scripts/ci.sh status
 ```
 
-Full PR checks run in GitHub CI. A full local suite on every commit is not
+Full batch checks run on the development backup in GitHub CI. A full local suite on every commit is not
 required; choose focused checks and report their results. If display setup is
 missing, run `scripts/setup_agent_display.sh`. Never fall back to a visible
 window or an uncapped command to work around a failed launcher.

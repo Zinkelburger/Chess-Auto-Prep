@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Focused local checks. Full PR checks remain in .github/workflows/ci.yml.
+# Focused local checks. Full batch checks run in .github/workflows/ci.yml.
 # ci.sh [analyze|lint|format|test [FILES/OPTIONS...]|tools|integration|full]
 # ci.sh with -- COMMAND... runs any heavy command under the same limits.
 set -uo pipefail

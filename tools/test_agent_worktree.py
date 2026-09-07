@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -80,6 +81,26 @@ class AgentWorktreeTests(unittest.TestCase):
         agent_worktree.require_durable_branch(
             Path('/tmp/disposable-preview'), None,
         )
+
+    def test_new_task_starts_from_local_main_not_callers_branch(self):
+        with tempfile.TemporaryDirectory(dir=ROOT.parent) as temp:
+            checkout, remote = self.make_repository(Path(temp))
+            run(checkout, 'branch', 'codex/older-task')
+            (checkout / 'README').write_text('unpublished development\n')
+            run(checkout, 'add', 'README')
+            run(checkout, 'commit', '-m', 'local development')
+            local_main = run(checkout, 'rev-parse', 'HEAD')
+            run(checkout, 'switch', 'codex/older-task')
+            fake_home = Path(temp) / 'home'
+            with patch.object(agent_worktree, 'ROOT', checkout), \
+                    patch.object(agent_worktree.Path, 'home', return_value=fake_home), \
+                    patch.object(agent_worktree, 'prepare'), \
+                    patch('sys.argv', ['agent_worktree.py', 'new-task']):
+                agent_worktree.main()
+            target = fake_home / '.local/share/chess-prep/worktrees/new-task'
+            self.assertEqual(run(target, 'rev-parse', 'HEAD'), local_main)
+            self.assertEqual(run(remote, 'rev-parse', 'refs/heads/codex/new-task'), local_main)
+            self.assertNotEqual(run(remote, 'rev-parse', 'refs/heads/main'), local_main)
 
     def test_prepare_migrates_rules_and_preserves_local_changes(self):
         with tempfile.TemporaryDirectory(dir=ROOT.parent) as temp:

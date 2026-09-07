@@ -23,12 +23,13 @@ WORKFLOW_FILES = (
     '.agents/skills/run-chess-auto-prep/driver.py',
     '.claude/skills/run-chess-auto-prep/SKILL.md',
     '.claude/skills/run-chess-auto-prep/driver.py',
-    'scripts/agent_job.py', 'scripts/agent_worktree.py', 'scripts/app_driver.py',
+    'scripts/agent_job.py', 'scripts/agent_worktree.py', 'scripts/agent_integrate.py',
+    'scripts/app_driver.py',
     'scripts/ci.sh', 'scripts/doctor.sh', 'scripts/setup_agent_display.sh',
     'scripts/hooks/flutter_gate.sh', 'scripts/test_tools.sh',
     'scripts/check_coverage.sh', 'scripts/health_log.sh',
     'scripts/oom_containment.sh', 'tools/test_agent_jobs.py',
-    'tools/test_agent_worktree.py', 'tools/test_agent_rules.py',
+    'tools/test_agent_worktree.py', 'tools/test_agent_rules.py', 'tools/test_agent_integrate.py',
 )
 
 # Remove superseded rules when preparing older worktrees, but only if clean.
@@ -213,7 +214,10 @@ def main():
             parser.error('provide a simple task name, or --prepare EXISTING_WORKTREE')
         target = Path.home() / '.local/share/chess-prep/worktrees' / args.name
         target.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(['git', 'worktree', 'add', '-b', f'codex/{args.name}', str(target), 'HEAD'], cwd=ROOT, check=True)
+        # main includes the user's unpublished development; HEAD might be an
+        # unrelated task branch and origin/main is the published version only.
+        base = git_text(ROOT, 'rev-parse', '--verify', 'refs/heads/main')
+        subprocess.run(['git', 'worktree', 'add', '-b', f'codex/{args.name}', str(target), base], cwd=ROOT, check=True)
     branch = branch_name(target)
     require_durable_branch(target, branch)
     push_branch(target, branch)

@@ -3,11 +3,23 @@
 Flutter desktop app for Linux, Windows and macOS: chess preparation,
 repertoires, training, player analysis and studies.
 
+## Local-first workflow
+
+- The user's working checkout on local `main` is where completed changes belong.
+  Routine tasks need no PR or separate merge approval. Read
+  [Local integration and publishing](docs/agents/git.md) before integrating.
+- Edit/test in an isolated task worktree, then automatically integrate into
+  local `main` with `python3 scripts/agent_integrate.py` from the task worktree.
+  A pushed task branch alone is not completion: report when it is visible on main.
+- `origin/backup/local-main` is the automatic development backup.
+  `origin/main` is the published version: update it only when the user asks to
+  publish/release. Never use a plain `git push` from local main.
+
 ## Work safely
 
 - Use one worktree per editing task:
   `python3 scripts/agent_worktree.py <task-name>`.
-  It creates a durable `codex/<task-name>` branch and pushes it before work.
+  It branches from current local `main` and pushes the task branch before work.
 - Prepare an existing agent-created worktree with
   `python3 scripts/agent_worktree.py --prepare . --assets-from /path/to/main-checkout`.
 - Branch-backed worktrees must never live under `/tmp`. Detached `/tmp`
@@ -32,19 +44,23 @@ repertoires, training, player analysis and studies.
   For instructions/docs-only changes, run `scripts/ci.sh lint` and check links.
 - For visible changes, use the `run-chess-auto-prep` skill and inspect a
   screenshot from the headless app. Stop your preview before testing its tree.
-- Full coverage, offline tools and integration checks run on PRs in GitHub CI;
-  a full local suite before each commit is not required.
+- Full coverage, offline tools and integration checks run on the development
+  backup in GitHub CI. Require a passing batch before publishing; a full local
+  suite before each commit is not required.
 - Before stopping, waiting for later or reporting completion, commit all
   intended files and push. Push checkpoint commits during long tasks.
-- Open a draft PR after the first meaningful pushed commit. One task lands as
-  one final commit; squash private checkpoints before review or integration.
-  Split only independently revertible work; release bumps stay separate.
+- Keep useful local commits/checkpoints; do not rewrite shared local main to
+  tidy history. Squash the development batch in a separate publication worktree
+  when requested. Release/version changes stay a separate commit.
 - Before handing off, run `python3 scripts/agent_worktree.py --verify .`.
   It must confirm a clean tree and the exact HEAD on the remote. Report the
   branch, commit SHA, checks (including failures/skips) and branch dependencies.
-- Integration starts from updated `origin/main` and pushed remote branches.
-  Never rewrite `main` or another agent's branch. Before squashing checkpoints
-  or deleting integrated branches/worktrees, read [Git handoff](docs/agents/git.md).
+- Integrate against current local main, preserving its unpublished commits and
+  unrelated working edits. Resolve conflicts in your task worktree and retest.
+  Never stash/reset someone else's edits or force-push either main or its backup.
+  Verify the main backup with `python3 scripts/agent_integrate.py --verify`.
+  If integration is blocked by overlapping unfinished edits, identify the paths;
+  keep the task backed up and explicitly say it is not yet visible on main.
 
 ## Load only guidance relevant to the task
 

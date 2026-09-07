@@ -22,6 +22,7 @@
       "mcp__chess-prep__tournament_engines",
       "Bash(python3 scripts/app_driver.py:*)",
       "Bash(python3 scripts/agent_worktree.py:*)",
+      "Bash(python3 scripts/agent_integrate.py:*)",
       "Bash(scripts/setup_agent_display.sh:*)"
     ]
   },

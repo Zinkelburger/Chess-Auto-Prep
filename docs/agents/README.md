@@ -45,6 +45,8 @@ root-policy growth. Check links and representative path scopes when changing
 the layout. This validates repository configuration, not a live client session.
 Keep the guidance files in `scripts/agent_worktree.py`'s `WORKFLOW_FILES` so
 preparing older worktrees carries the complete policy, not broken references.
+Local integration and delayed publication are defined in [git.md](git.md);
+`scripts/agent_integrate.py` owns the safe main update and backup operation.
 
 Do not copy canonical policy into commands or skills. Keep their trigger
 metadata and task steps; link to shared requirements. Add mechanical checks

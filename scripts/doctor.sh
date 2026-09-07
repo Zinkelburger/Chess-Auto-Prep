@@ -123,7 +123,7 @@ fi
 # forever. Twice on 2026-09-04. While it is like that, every `systemd-run
 # --scope` from ci.sh and the driver blocks holding the Flutter lock, and so
 # does anything else that starts a unit (an app launch, a timer). ci.sh now
-# probes and runs uncapped; the fix for the machine is one command.
+# probes and refuses uncapped work; the fix for the machine is one command.
 if command -v systemctl >/dev/null 2>&1; then
   jobs=$(timeout 5 systemctl --user list-jobs --no-legend 2>/dev/null)
   jrc=$?
@@ -195,13 +195,32 @@ if [[ "$branch" != "HEAD" && "$branch" != "?" && "$checkout" == /tmp/* ]]; then
   bad "branch-backed worktree is under /tmp and will disappear on reboot — recreate it with scripts/agent_worktree.py"
 fi
 if [[ "$branch" != "HEAD" && "$branch" != "?" ]]; then
-  upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)
+  if [[ "$branch" == main ]]; then
+    # main intentionally differs from the published origin/main. Check its
+    # development backup; publication status is not a health failure.
+    upstream=origin/backup/local-main
+    if ! git rev-parse --verify "$upstream" >/dev/null 2>&1; then
+      upstream=''
+    fi
+  else
+    upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)
+  fi
   if [[ -z "$upstream" ]]; then
-    bad "$branch has no remote upstream — run: git push -u origin HEAD"
+    if [[ "$branch" == main ]]; then
+      bad "local main has no development backup — run scripts/agent_integrate.py from a tested, pushed task"
+    else
+      bad "$branch has no remote upstream — run: git push -u origin HEAD"
+    fi
   else
     ahead=$(git rev-list --count "$upstream"..HEAD 2>/dev/null || echo 0)
     behind=$(git rev-list --count HEAD.."$upstream" 2>/dev/null || echo 0)
-    (( ahead > 0 )) && bad "$branch has $ahead committed change(s) not backed up to $upstream — git push"
+    if (( ahead > 0 )); then
+      if [[ "$branch" == main ]]; then
+        bad "local main has $ahead unbacked commit(s) — rerun scripts/agent_integrate.py from the task; do not push origin/main"
+      else
+        bad "$branch has $ahead committed change(s) not backed up to $upstream — git push"
+      fi
+    fi
     (( behind > 0 )) && bad "$branch is $behind commit(s) behind $upstream — fetch and reconcile before editing"
     (( ahead == 0 && behind == 0 )) && ok "$branch is synchronized with $upstream"
   fi
@@ -236,6 +255,7 @@ contract=(CLAUDE.md .mcp.json .claude/settings.json
           .claude/skills/bughouse-mcp/SKILL.md
           scripts/ci.sh scripts/doctor.sh scripts/hooks/flutter_gate.sh
           scripts/agent_job.py scripts/app_driver.py scripts/agent_worktree.py
+          scripts/agent_integrate.py
           scripts/setup_agent_display.sh tools/test_agent_jobs.py
           tools/test_agent_worktree.py
           scripts/oom_containment.sh scripts/health_log.sh
