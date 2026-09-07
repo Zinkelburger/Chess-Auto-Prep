@@ -35,7 +35,6 @@ from chess_prep.roster import (  # noqa: E402
     Roster,
     RosterEntry,
     parse_entry_list,
-    roster_to_csv,
 )
 from chess_prep.server import Server  # noqa: E402
 from chess_prep.swiss import (  # noqa: E402
