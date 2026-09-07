@@ -256,6 +256,19 @@ RepertoireDB* rdb_open(const char *path) {
         return NULL;
     }
     
+    /* Inference settings are part of a cached policy's identity. Older
+     * memory-pattern-dependent policies cannot be mixed with fresh ones. */
+    if (!execute_sql(rdb->db,
+        "BEGIN;"
+        "DELETE FROM maia_cache WHERE NOT EXISTS (SELECT 1 FROM build_metadata "
+        "WHERE key='maia_policy_version' AND value='1');"
+        "INSERT OR REPLACE INTO build_metadata VALUES ('maia_policy_version','1');"
+        "COMMIT;")) {
+        sqlite3_close(rdb->db);
+        free(rdb);
+        return NULL;
+    }
+
     /* Prepare statements */
     if (!prepare_statements(rdb)) {
         sqlite3_close(rdb->db);
@@ -1034,13 +1047,24 @@ bool rdb_import_cache_from(RepertoireDB *dst, const char *src_path,
     if (n < 0) ok = false;
     else counts.multipv_cache = n;
 
-    n = rdb_exec_import(dst,
-        "INSERT OR IGNORE INTO maia_cache "
-        "(fen, elo, move_count, moves_blob, cached_at) "
-        "SELECT fen, elo, move_count, moves_blob, cached_at "
-        "FROM import_src.maia_cache");
-    if (n < 0) ok = false;
-    else counts.maia_cache = n;
+    /* Older import files may have no metadata table at all. They still
+     * contain useful Stockfish rows; only their unversioned Maia rows are skipped. */
+    sqlite3_stmt *policy_version = NULL;
+    bool current_policy = sqlite3_prepare_v2(dst->db,
+        "SELECT value FROM import_src.build_metadata WHERE key='maia_policy_version'",
+        -1, &policy_version, NULL) == SQLITE_OK &&
+        sqlite3_step(policy_version) == SQLITE_ROW &&
+        sqlite3_column_int(policy_version, 0) == 1;
+    sqlite3_finalize(policy_version);
+    if (current_policy) {
+        n = rdb_exec_import(dst,
+            "INSERT OR IGNORE INTO maia_cache "
+            "(fen, elo, move_count, moves_blob, cached_at) "
+            "SELECT fen, elo, move_count, moves_blob, cached_at "
+            "FROM import_src.maia_cache");
+        if (n < 0) ok = false;
+        else counts.maia_cache = n;
+    }
 
     if (!execute_sql(dst->db, "DETACH DATABASE import_src"))
         ok = false;

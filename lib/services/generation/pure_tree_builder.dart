@@ -8,6 +8,7 @@ import '../maia/maia_factory.dart';
 import 'build_run.dart';
 import 'eca_calculator.dart';
 import 'generation_config.dart';
+import 'lanes.dart';
 import 'pure_position.dart';
 
 class PureTreeBuilder {
@@ -32,6 +33,9 @@ class PureTreeBuilder {
     }
     if (run.tree.root.children.isNotEmpty) {
       final previous = run.tree.configSnapshot;
+      if (previous['maia_policy_version'] != 1) {
+        throw StateError('Maia inference has changed. Start a new build.');
+      }
       if ((previous['search_algorithm'] == 'rolling') !=
           config.isRollingSearch) {
         throw StateError(
@@ -66,6 +70,7 @@ class PureTreeBuilder {
     run.tree.configSnapshot = {
       ...config.toJson(),
       'algorithm_version': 3,
+      'maia_policy_version': 1,
       'search_algorithm': config.isRollingSearch ? 'rolling' : 'pure',
       'opponent_book_source': source,
     };
@@ -131,8 +136,25 @@ class PureTreeBuilder {
         continue;
       }
       if (node.ply >= horizon) {
-        await _evaluate(node);
-        run.markExplored(node);
+        // Frontier leaves are independent. Bound the queue handed to engines,
+        // including when there is only one legal move at each earlier node.
+        final leaves = <BuildTreeNode>[node];
+        while (queue.isNotEmpty &&
+            queue.first.ply >= horizon &&
+            leaves.length < 256) {
+          final leaf = queue.removeFirst()..historyAware = true;
+          final position = run.positionOrNullOf(leaf);
+          if (position == null) {
+            throw StateError('Invalid Pure search position: ${leaf.fen}');
+          }
+          leaf.terminalValue = pureTerminal(leaf, position, config.playAsWhite);
+          leaves.add(leaf);
+        }
+        if (!await _evaluateBatch(leaves)) return false;
+        for (final leaf in leaves) {
+          run.markExplored(leaf);
+        }
+        run.emitNodeProgress(leaves.last);
         continue;
       }
       if (node.explored && node.children.isNotEmpty) {
@@ -172,11 +194,11 @@ class PureTreeBuilder {
           played.after,
           config.playAsWhite,
         );
-        if (ours) await _evaluate(candidate);
         candidates.add(candidate);
         if (run.isCancelled || run.shouldFinish()) return false;
       }
       if (ours) {
+        if (!await _evaluateBatch(candidates)) return false;
         final best = candidates
             .map((c) => c.evalForUs(config.playAsWhite))
             .reduce((a, b) => a > b ? a : b);
@@ -195,6 +217,32 @@ class PureTreeBuilder {
       run.emitNodeProgress(node);
     }
     return true;
+  }
+
+  /// Workers take the next position as soon as they finish. Only evaluations
+  /// run concurrently: action sets, node IDs and Fast decisions are committed
+  /// by the caller in legal-move order after the entire batch succeeds.
+  Future<bool> _evaluateBatch(List<BuildTreeNode> nodes) async {
+    var failed = false;
+    bool stopped() => failed || run.isCancelled || run.shouldFinish();
+    // runLanes drains all in-flight evaluations even if one fails, so no
+    // worker can mutate a node after build() returns or its pool is released.
+    await runLanes(
+      nodes,
+      lanes: run.expansionLanes,
+      stop: stopped,
+      task: (node) async {
+        await run.waitIfPaused();
+        if (stopped()) return;
+        try {
+          await _evaluate(node);
+        } catch (_) {
+          failed = true;
+          rethrow;
+        }
+      },
+    );
+    return !run.isCancelled && !run.shouldFinish();
   }
 
   Future<void> _evaluate(BuildTreeNode node) async {

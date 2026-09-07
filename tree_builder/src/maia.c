@@ -417,6 +417,19 @@ MaiaContext *maia_create(const char *model_path) {
         return NULL;
     }
 
+    /* The bundled model/runtime changes output after its first Run when
+     * memory patterns are enabled. Keep first/repeated/resumed policies equal. */
+    status = ctx->api->DisableMemPattern(ctx->session_options);
+    if (status) {
+        fprintf(stderr, "Maia: Could not disable memory patterns: %s\n",
+                ctx->api->GetErrorMessage(status));
+        ctx->api->ReleaseStatus(status);
+        ctx->api->ReleaseSessionOptions(ctx->session_options);
+        ctx->api->ReleaseEnv(ctx->env);
+        free(ctx);
+        return NULL;
+    }
+
     status = ctx->api->CreateSession(ctx->env, model_path,
                                      ctx->session_options, &ctx->session);
     if (status) {

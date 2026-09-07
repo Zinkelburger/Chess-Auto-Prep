@@ -126,7 +126,8 @@ class BuildRun {
   int get expansionLanes {
     if (!config.usesStockfish) return 1;
     final budget = math.max(1, config.resolvedEngineThreads);
-    return pool.workerCount.clamp(1, budget);
+    // A previous consumer may have spawned more workers than this build owns.
+    return pool.concurrencyLimit.clamp(1, budget);
   }
 
   // ── Positions ───────────────────────────────────────────────────────────

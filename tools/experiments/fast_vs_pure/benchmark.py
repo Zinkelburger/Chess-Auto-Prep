@@ -15,6 +15,7 @@ import subprocess
 import time
 
 CASES = [
+    ('winawer-root', '', 'e4 e6 d4 d5 Nc3 Bb4', 1),
     ('pawn-control', '8/8/8/8/8/4k3/P7/4K3 w - - 0 1', '', 4),
     ('pawn-six', '8/8/8/8/8/4k3/P7/4K3 w - - 0 1', '', 6),
     ('italian-six', '', 'e4 e5 Nf3 Nc6 Bc4 Bc5', 6),
@@ -25,7 +26,7 @@ CASES = [
 def report(out, results):
     rows = [
         '# Fast compared with Pure', '',
-        'Single-worker, fresh-process pairs. Same fixed engine depth, horizon, '
+        'Fresh-process pairs (worker counts recorded in stats.json). Same fixed engine depth, horizon, '
         '40 cp candidate-loss limit, Maia 2200 throughout. '
         'Startup excluded. Alternating run order. Incomplete pairs have no speedup or quality claim.', '',
         '| Position | Pure s | Fast s | Pure / Fast complete | Pure / Fast nodes | Speedup¹ | Root moves (Pure / Fast) |',
@@ -57,11 +58,12 @@ def main():
     parser.add_argument('output', nargs='?', default=f'/tmp/fast-pure-{time.strftime("%Y%m%d-%H%M%S")}')
     parser.add_argument('--seconds', type=int, default=90, help='Cooperative cap per build; atomic expansions can overrun it')
     parser.add_argument('--depth', type=int, default=8)
+    parser.add_argument('--workers', type=int, default=1)
     parser.add_argument('--case', choices=[c[0] for c in CASES], action='append')
     parser.add_argument('--onnx-lib', default=os.environ.get('ONNX_LIB', 'build/linux/x64/debug/bundle/lib'))
     args = parser.parse_args()
-    if args.seconds < 1 or args.depth < 1:
-        parser.error('seconds and depth must be positive')
+    if args.seconds < 1 or args.depth < 1 or args.workers < 1:
+        parser.error('seconds, depth and workers must be positive')
     out = Path(args.output).resolve()
     if out.exists() and any(out.iterdir()):
         parser.error('Output must be a new or empty directory; existing measurements are immutable')
@@ -91,7 +93,7 @@ def main():
                 raise SystemExit(f'Refusing to reuse a cold-run directory: {run}')
             run.mkdir(parents=True)
             definitions = dict(ALGO=algorithm, OUT=str(run), MAX_PLY=plies,
-                               EVAL_DEPTH=args.depth, BUDGET_SECONDS=args.seconds,
+                               EVAL_DEPTH=args.depth, BUDGET_SECONDS=args.seconds, WORKERS=args.workers,
                                START_MOVES=moves)
             if fen:
                 definitions['FEN'] = fen

@@ -41,7 +41,8 @@ class EvalCache {
   ///  1 — evals keyed by full FEN
   ///  2 — + maia_cache
   ///  3 — both tables re-keyed by canonical 4-field FEN
-  static const int _schemaVersion = 3;
+  ///  4 — discard Maia policies inferred with unstable memory patterns
+  static const int _schemaVersion = 4;
 
   /// Pending puts are flushed after this delay, or as soon as this many are
   /// waiting — whichever comes first.
@@ -107,6 +108,7 @@ class EvalCache {
           onUpgrade: (db, oldVersion, newVersion) async {
             if (oldVersion < 2) await _createMaia(db);
             if (oldVersion < 3) await rekeyToCanonical(db);
+            if (oldVersion < 4) await db.delete('maia_cache');
           },
         ),
       );

@@ -58,9 +58,10 @@ The separate database build modes keep their own data workflows.
 Saved trees record `opponent_book_source: "none"` and
 `use_master_games: false`. C also records `maia_only: true`. Earlier trees
 built with master probabilities cannot resume under this policy: start a fresh
-build. Existing Maia-only trees can continue with the same position, rating,
+build. Maia-only trees with `maia_policy_version: 1` can continue with the same position, rating,
 evaluation settings and search method. Changes to the Maia or Stockfish model
-versions can still affect newly evaluated positions.
+versions can still affect newly evaluated positions. Older inference versions
+require a fresh build; see [parallel search and Maia repeatability](PARALLEL_EXPECTIMAX.md).
 
 ## Chess state and draw convention
 

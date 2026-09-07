@@ -31,18 +31,37 @@ static bool terminal_node(TreeNode *node, bool white, int outcome) {
     node->has_engine_eval = true;
     return true;
 }
-static bool evaluate(TreeNode *node, const TreeConfig *cfg) {
-    if (node->has_engine_eval)
-        return true;
-    EvalJob job = {0};
-    if (!engine_pool_evaluate_full(cfg->engine_pool, node->fen, &job) || !job.success ||
-        (!job.is_mate && job.depth_reached < cfg->eval_depth))
+/* Tree mutation stays on the coordinator. Workers evaluate independent FENs;
+ * no worker touches Maia, path histories, node IDs, budgets or Fast decisions. */
+static bool evaluate_nodes(TreeNode **nodes, int count, const TreeConfig *cfg) {
+    EvalJob *jobs = calloc((size_t)count, sizeof(*jobs));
+    if (!jobs)
         return false;
-    node->engine_eval_cp = job.is_mate ? (job.mate_in > 0 ? 10000 : -10000) : job.eval_cp;
-    node->has_engine_eval = true;
-    if (cfg->stats)
-        cfg->stats->sf_single_calls++;
-    return true;
+    int pending = 0;
+    for (int i = 0; i < count; i++) {
+        if (!nodes[i]->has_engine_eval)
+            snprintf(jobs[pending++].fen, MAX_EVAL_FEN_LENGTH, "%s", nodes[i]->fen);
+    }
+    if (pending)
+        engine_pool_evaluate_batch_single_thread(cfg->engine_pool, jobs, pending);
+    bool ok = true;
+    int j = 0;
+    for (int i = 0; i < count; i++) {
+        TreeNode *node = nodes[i];
+        if (node->has_engine_eval)
+            continue;
+        EvalJob *job = &jobs[j++];
+        if (!job->success || (!job->is_mate && job->depth_reached < cfg->eval_depth)) {
+            ok = false;
+            continue;
+        }
+        node->engine_eval_cp = job->is_mate ? (job->mate_in > 0 ? 10000 : -10000) : job->eval_cp;
+        node->has_engine_eval = true;
+        if (cfg->stats)
+            cfg->stats->sf_single_calls++;
+    }
+    free(jobs);
+    return ok;
 }
 static bool policy(TreeNode *node, const TreeConfig *cfg,
                    PureMove *moves, int n, double *p) {
@@ -78,6 +97,10 @@ bool pure_tree_build(Tree *tree, const char *fen, const TreeConfig *cfg,
         fprintf(stderr, "Legacy search tree: start a new Pure build.\n");
         return false;
     }
+    if (tree->root && tree->root->children_count && tree->config.maia_policy_version != 1) {
+        fprintf(stderr, "Maia inference has changed. Start a new build.\n");
+        return false;
+    }
     const char *source = "none";
     if (tree->root && tree->root->children_count &&
         (strcmp(tree->config.pure_book_source, source) != 0))
@@ -95,6 +118,7 @@ bool pure_tree_build(Tree *tree, const char *fen, const TreeConfig *cfg,
     }
     engine_pool_set_depth(cfg->engine_pool, cfg->eval_depth);
     tree->config = *cfg;
+    tree->config.maia_policy_version = 1;
     tree->config.use_masters = false;
     tree->config.maia_only = true;
     snprintf(tree->config.pure_book_source, sizeof(tree->config.pure_book_source), "%s", source);
@@ -139,11 +163,28 @@ static bool search_window(Tree *tree, TreeNode *root, const TreeConfig *cfg,
             continue;
         }
         if (node->depth >= horizon) {
-            if (!evaluate(node, cfg)) {
+            TreeNode *leaves[PURE_MAX_MOVES] = {node};
+            int count = 1;
+            while (head < tail && queue[head]->depth >= horizon && count < PURE_MAX_MOVES) {
+                TreeNode *leaf = queue[head++];
+                leaf->history_aware = true;
+                PureMove ignored[PURE_MAX_MOVES];
+                int end;
+                if (pure_legal(leaf->fen, ignored, &end) < 0) {
+                    ok = false;
+                    break;
+                }
+                terminal_node(leaf, cfg->play_as_white, end);
+                leaves[count++] = leaf;
+            }
+            if (!ok || !evaluate_nodes(leaves, count, cfg)) {
                 ok = false;
                 break;
             }
-            node->explored = true;
+            for (int i = 0; i < count; i++)
+                leaves[i]->explored = true;
+            tree->build_active_depth = node->depth;
+            tree->build_queue_pending = tail - head;
             continue;
         }
         if (!(node->explored && node->children_count)) {
@@ -185,18 +226,21 @@ static bool search_window(Tree *tree, TreeNode *root, const TreeConfig *cfg,
                     break;
                 }
                 terminal_node(child, cfg->play_as_white, end);
-                if (ours && !evaluate(child, cfg)) {
-                    ok = false;
-                    break;
-                }
-                int cp = node_eval_for_us(child, cfg->play_as_white);
-                if (ours && cp > best)
-                    best = cp;
                 if (!tree->is_building) {
                     ok = false;
                     break;
                 }
             }
+            if (ok && ours) {
+                ok = evaluate_nodes(children, nc, cfg);
+                for (int i = 0; i < nc; i++) {
+                    int cp = node_eval_for_us(children[i], cfg->play_as_white);
+                    if (cp > best)
+                        best = cp;
+                }
+            }
+            if (!tree->is_building)
+                ok = false;
             if (!ok) {
                 for (int i = 0; i < nc; i++)
                     node_destroy_single(children[i]);

@@ -253,6 +253,18 @@ class ArgvReuseTest(unittest.TestCase):
         self.assertEqual(out.count("-d"), 1)
         self.assertEqual(out[-1], "/runs/x/tree")
 
+    def test_threads_override_preserves_search_and_output(self):
+        for flag in ("-t", "--threads"):
+            original = ex.argv_with(self.ARGV, flag, "1", "--search", "rolling")
+            out = ex.argv_with_threads(original, 10)
+            self.assertEqual(out[out.index(flag) + 1], "10")
+            self.assertEqual(out[-1], self.ARGV[-1])
+            self.assertIn("rolling", out)
+            self.assertEqual(original[original.index(flag) + 1], "1")
+        self.assertEqual(ex.argv_with_threads(self.ARGV, 10)[-3:], ["-t", "10", self.ARGV[-1]])
+        with self.assertRaises(ToolError):
+            ex.argv_with_threads(self.ARGV, 0)
+
     def test_plies_override_when_there_was_no_depth_flag(self):
         out = ex.argv_with_plies(["/bin/tree_builder", "-c", "b", "/x"], 6)
         self.assertEqual(out[out.index("-d") + 1], "6")

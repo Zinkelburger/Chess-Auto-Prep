@@ -1,5 +1,6 @@
 #include "cJSON.h"
 #include "pure_search.h"
+#include "maia.h"
 #include "serialization.h"
 #include <assert.h>
 #include <math.h>
@@ -20,6 +21,20 @@ static TreeNode *find(TreeNode *n, int id) {
 }
 int main(int argc, char **argv) {
     assert(argc == 2);
+    MaiaContext *maia = maia_create("../assets/maia3_simplified.onnx");
+    assert(maia);
+    MaiaResponse first = {0}, again = {0};
+    const char *repeat_fen = "8/8/8/8/P7/3k4/8/4K3 b - - 0 2";
+    assert(maia_evaluate(maia, repeat_fen, 2200, &first) && first.success);
+    for (int i = 0; i < 3; i++) {
+        assert(maia_evaluate(maia, repeat_fen, 2200, &again) && again.success);
+        assert(first.move_count == again.move_count);
+        for (int j = 0; j < first.move_count; j++) {
+            assert(!strcmp(first.moves[j].uci, again.moves[j].uci));
+            assert(first.moves[j].probability == again.moves[j].probability);
+        }
+    }
+    maia_destroy(maia);
     /* Probability and decision-value persistence must not drift on reload. */
     double exact = 0.5439807132251868;
     cJSON *number = cJSON_CreateNumber(exact);
@@ -110,6 +125,9 @@ int main(int argc, char **argv) {
     assert(!pure_tree_build(tree, fen, &cfg, NULL));
     cfg.rolling_search = true;
     snprintf(tree->config.pure_book_source, sizeof(tree->config.pure_book_source), "lichess-masters");
+    assert(!pure_tree_build(tree, fen, &cfg, NULL));
+    snprintf(tree->config.pure_book_source, sizeof(tree->config.pure_book_source), "none");
+    tree->config.maia_policy_version = 0;
     assert(!pure_tree_build(tree, fen, &cfg, NULL));
     tree_destroy(tree);
     engine_pool_destroy(pool);

@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
@@ -32,6 +33,7 @@ const _white = bool.fromEnvironment('PLAY_WHITE', defaultValue: true);
 const _plies = int.fromEnvironment('MAX_PLY', defaultValue: 6);
 const _depth = int.fromEnvironment('EVAL_DEPTH', defaultValue: 8);
 const _seconds = int.fromEnvironment('BUDGET_SECONDS', defaultValue: 90);
+const _workers = int.fromEnvironment('WORKERS', defaultValue: 1);
 const _loss = int.fromEnvironment('MAX_EVAL_LOSS', defaultValue: 40);
 
 class _Paths extends PathProviderPlatform with MockPlatformInterfaceMixin {
@@ -49,6 +51,7 @@ void main() {
     expect(_out, isNotEmpty);
     expect(['pure', 'fast'], contains(_algo));
     expect(_seconds, greaterThan(0));
+    expect(_workers, greaterThan(0));
     final output = Directory(_out)..createSync(recursive: true);
     for (final dir in ['support', 'docs']) {
       Directory(p.join(output.path, dir)).createSync();
@@ -82,7 +85,7 @@ void main() {
       maxPly: _plies,
       evalDepth: _depth,
       maxEvalLossCp: _loss,
-      engineThreads: 1,
+      engineThreads: _workers,
       maiaElo: 2200,
       useMasterGames: false,
       verifyFinal: false,
@@ -98,7 +101,8 @@ void main() {
       final maia = MaiaFactory.instance!;
       await maia.initialize();
       expect((await maia.evaluate(fen, 2200)).policy, isNotEmpty);
-      await StockfishPool.instance.prepareForTreeBuild(1);
+      EngineSettings.instance.workers = _workers;
+      await StockfishPool.instance.prepareForTreeBuild(_workers);
       startup.stop();
       final service = TreeBuildService();
       final wall = Stopwatch()..start();
@@ -144,6 +148,8 @@ void main() {
       visit(tree.root, '');
       final stats = {
         'algorithm': _algo,
+        'workers': StockfishPool.instance.concurrencyLimit,
+        'threads_per_worker': StockfishPool.instance.threadsPerWorker,
         'start_fen': fen,
         'config': tree.configSnapshot,
         'budget_seconds': _seconds,

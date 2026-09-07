@@ -639,6 +639,17 @@ def argv_with_plies(argv: list[str], plies: int) -> list[str]:
     return argv_with(out, "-d", str(plies))
 
 
+def argv_with_threads(argv: list[str], threads: int) -> list[str]:
+    if threads < 1:
+        raise ToolError("threads must be positive")
+    out = list(argv)
+    for flag in ("-t", "--threads"):
+        if flag in out:
+            out[out.index(flag) + 1] = str(threads)
+            return out
+    return argv_with(out, "-t", str(threads))
+
+
 def _slug(text: str) -> str:
     keep = [c if c.isalnum() else "-" for c in text.lower()]
     slug = "".join(keep).strip("-")
@@ -906,6 +917,8 @@ def register_expectimax_tools(registry: Any) -> None:
         argv = _build_argv(directory, state, chain)
         if args.get("plies") is not None:
             argv = argv_with_plies(argv, int(args["plies"]))
+        if args.get("threads") is not None:
+            argv = argv_with_threads(argv, int(args["threads"]))
 
         log_path = directory / LOG_FILE
         try:
@@ -1026,13 +1039,14 @@ def register_expectimax_tools(registry: Any) -> None:
 
     registry._add(
         "expectimax_resume",
-        "Carry on building a stopped run, optionally to a greater depth. Every "
+        "Carry on building a stopped run, optionally with more workers or a greater depth. Every "
         "evaluation already computed is cached, so resuming is much cheaper "
         "than starting over.",
         _obj(
             {
                 "id": _s("Run id (default: the most recent)."),
                 "plies": _i("New depth in half-moves (default: as before)."),
+                "threads": _i("Parallel Stockfish workers (default: as before)."),
             }
         ),
         expectimax_resume,

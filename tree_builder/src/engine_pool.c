@@ -795,9 +795,9 @@ static void batch_eval_task(void *arg) {
 }
 
 
-int engine_pool_evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
-                                void (*progress_callback)(int completed, int total, void *ud),
-                                void *user_data) {
+static int evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
+                          void (*progress_callback)(int completed, int total, void *ud),
+                          void *user_data, bool single_thread) {
     if (!pool || !jobs || num_jobs <= 0) return 0;
     
     int completed_count = 0;
@@ -809,6 +809,13 @@ int engine_pool_evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
     int base_threads = pool->total_cores / (active > 0 ? active : 1);
     int extra_threads = pool->total_cores % (active > 0 ? active : 1);
     if (base_threads < 1) base_threads = 1;
+
+    if (single_thread) {
+        base_threads = 1;
+        extra_threads = 0;
+    }
+    // A reused job array must not retain successes from an earlier batch.
+    for (int i = 0; i < num_jobs; i++) jobs[i].success = false;
 
     /* Submit jobs to thread pool (stop early on interrupt/shutdown) */
     for (int i = 0; i < num_jobs; i++) {
@@ -826,7 +833,8 @@ int engine_pool_evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
         bta->total_count = num_jobs;
         bta->progress_lock = &progress_lock;
         
-        thread_pool_submit(pool->thread_pool, batch_eval_task, bta);
+        if (!thread_pool_submit(pool->thread_pool, batch_eval_task, bta))
+            free(bta);
     }
     
     /* Wait for all to complete */
@@ -843,6 +851,15 @@ int engine_pool_evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
     return successes;
 }
 
+
+int engine_pool_evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
+                               void (*progress_callback)(int, int, void *), void *user_data) {
+    return evaluate_batch(pool, jobs, num_jobs, progress_callback, user_data, false);
+}
+
+int engine_pool_evaluate_batch_single_thread(EnginePool *pool, EvalJob *jobs, int num_jobs) {
+    return evaluate_batch(pool, jobs, num_jobs, NULL, NULL, true);
+}
 
 void engine_pool_set_depth(EnginePool *pool, int depth) {
     if (pool && depth > 0) {

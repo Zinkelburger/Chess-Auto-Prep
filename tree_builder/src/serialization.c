@@ -170,6 +170,7 @@ static char* tree_to_json_internal(const Tree *tree, const SerializationOptions 
         cJSON_AddNumberToObject(config, "algorithm_version", tree->root && tree->root->history_aware ? 3 : 1);
         cJSON_AddStringToObject(config, "search_algorithm", tree->config.rolling_search ? "rolling" : "pure");
         cJSON_AddStringToObject(config, "opponent_book_source", tree->config.pure_book_source);
+        cJSON_AddNumberToObject(config, "maia_policy_version", tree->config.maia_policy_version);
         cJSON_AddStringToObject(config, "build_mode", tree->config.build_mode==BUILD_MODE_DB_EXPLORER ? "dbExplorer" : tree->config.build_mode==BUILD_MODE_MAIA_DB_EXPLORE ? "maiaDbExplore" : "stockfishExpectimax");
         cJSON_AddBoolToObject(config, "play_as_white", tree->config.play_as_white);
         cJSON_AddNumberToObject(config, "eval_depth", tree->config.eval_depth);
@@ -633,6 +634,8 @@ Tree* tree_load_from_buffer(const char *buffer, size_t size) {
     if (config) {
         cJSON *algorithm=cJSON_GetObjectItem(config,"search_algorithm");
         tree->config.rolling_search=cJSON_IsString(algorithm) && strcmp(algorithm->valuestring,"rolling")==0;
+        cJSON *policy_version=cJSON_GetObjectItem(config,"maia_policy_version");
+        if(cJSON_IsNumber(policy_version)) tree->config.maia_policy_version=policy_version->valueint;
         cJSON *source=cJSON_GetObjectItem(config,"opponent_book_source");
         if(cJSON_IsString(source)) snprintf(tree->config.pure_book_source,sizeof(tree->config.pure_book_source),"%s",source->valuestring);
         cJSON *item=cJSON_GetObjectItem(config,"play_as_white");

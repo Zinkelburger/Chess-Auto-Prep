@@ -237,6 +237,7 @@ typedef struct TreeConfig {
      * for novelty scoring during selection.  If you know you won't use
      * novelty (`novelty_weight == 0`), setting this to false saves one
      * Maia inference per our-move node. */
+    int maia_policy_version;        /* 1: stable memory-pattern-disabled inference. */
     char pure_book_source[32];      /* Snapshot source for safe resume. */
     struct MaiaContext *maia;       /* NULL = disabled */
     int    maia_elo;                /* Elo for Maia predictions (600-2400) */

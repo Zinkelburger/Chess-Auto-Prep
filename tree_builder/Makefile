@@ -422,10 +422,12 @@ help:
 
 # Shared mathematical oracle, using production backup and JSON loader.
 .PHONY: test-pure
-test-pure: directories $(BIN_DIR)/test_pure $(BIN_DIR)/test_rolling $(TARGET)
+test-pure: directories $(BIN_DIR)/test_pure $(BIN_DIR)/test_rolling $(BIN_DIR)/test_parallel_pool $(TARGET)
 	$(BIN_DIR)/test_pure ../test/fixtures/pure_expectimax_oracles.json
 	$(BIN_DIR)/test_rolling ../test/fixtures/rolling_expectimax_oracles.json
 	python3 tests/test_rolling_cli.py
+	$(BIN_DIR)/test_parallel_pool
+	python3 tests/test_parallel_cli.py
 
 $(BIN_DIR)/test_pure: tests/test_pure.c $(filter-out $(BUILD_DIR)/main.o,$(OBJS))
 	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@ $(LDFLAGS) $(LOCAL_LIB)
@@ -433,4 +435,7 @@ $(BIN_DIR)/test_pure: tests/test_pure.c $(filter-out $(BUILD_DIR)/main.o,$(OBJS)
 -include $(wildcard $(BUILD_DIR)/*.d)
 
 $(BIN_DIR)/test_rolling: tests/test_rolling.c $(filter-out $(BUILD_DIR)/main.o,$(OBJS))
+	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@ $(LDFLAGS)
+
+$(BIN_DIR)/test_parallel_pool: tests/test_parallel_pool.c $(filter-out $(BUILD_DIR)/main.o,$(OBJS))
 	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@ $(LDFLAGS)
