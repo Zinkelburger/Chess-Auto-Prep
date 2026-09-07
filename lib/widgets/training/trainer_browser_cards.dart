@@ -17,10 +17,6 @@ class _BrowserHeader extends StatelessWidget {
   final VoidCallback? onRead;
   final int learnBatchSize;
   final int reviewBatchSize;
-  final VoidCallback? onOpenChapterSetup;
-  final bool? playingWhite;
-  final VoidCallback? onChangePlayingSide;
-  final VoidCallback? onOpenSettings;
 
   const _BrowserHeader({
     required this.title,
@@ -33,10 +29,6 @@ class _BrowserHeader extends StatelessWidget {
     this.onRead,
     this.learnBatchSize = 0,
     this.reviewBatchSize = 0,
-    this.onOpenChapterSetup,
-    this.playingWhite,
-    this.onChangePlayingSide,
-    this.onOpenSettings,
   });
 
   @override
@@ -82,32 +74,6 @@ class _BrowserHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              if (playingWhite != null)
-                _PlayingSideButton(
-                  playingWhite: playingWhite!,
-                  dense: dense,
-                  onPressed: onChangePlayingSide,
-                ),
-              if (onOpenChapterSetup != null)
-                TextButton.icon(
-                  onPressed: onOpenChapterSetup,
-                  icon: const Icon(
-                    Icons.auto_awesome_motion_outlined,
-                    size: 16,
-                  ),
-                  label: const Text('Chapters…'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.onSurfaceSoft,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-              if (onOpenSettings != null)
-                IconButton(
-                  onPressed: onOpenSettings,
-                  icon: const Icon(Icons.settings_outlined),
-                  tooltip: 'Training settings…',
-                  visualDensity: VisualDensity.compact,
-                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -206,48 +172,6 @@ class _ReadAction extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// "Black Repertoire" — which side of the loaded file is being trained.
-///
-/// A header control, not a settings-screen row, because for an imported course
-/// this is a *guess*: the file says nothing, so the trainer reads it off the
-/// move tree. When the guess is wrong every line asks for the opponent's move,
-/// and the only place the user is looking is this list.
-class _PlayingSideButton extends StatelessWidget {
-  final bool playingWhite;
-  final bool dense;
-  final VoidCallback? onPressed;
-
-  const _PlayingSideButton({
-    required this.playingWhite,
-    required this.dense,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final side = playingWhite ? 'White' : 'Black';
-    return Tooltip(
-      message:
-          'This file trains $side — you are asked for '
-          "${playingWhite ? "White's" : "Black's"} moves.\n"
-          'Click to change which side it trains.',
-      waitDuration: const Duration(milliseconds: 400),
-      child: TextButton.icon(
-        onPressed: onPressed,
-        icon: Icon(
-          playingWhite ? Icons.circle_outlined : Icons.circle,
-          size: 13,
-        ),
-        label: Text(dense ? side : '$side Repertoire'),
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.onSurfaceSoft,
-          visualDensity: VisualDensity.compact,
         ),
       ),
     );
