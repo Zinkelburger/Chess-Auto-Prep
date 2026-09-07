@@ -51,6 +51,46 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 
 **Chess logic:** `dartchess` for rules/FEN; `flutter_chess_board` for display.
 
+### Bughouse analysis and editing
+
+`features/bughouse/widgets/bughouse_screen.dart` keeps Board 1 and Board 2
+beside one analysis/reference panel. The layout follows lila's separation of
+boards, engine lines and opening explorer. Smaller windows stack the panel.
+
+| User action | Control / behavior |
+|---|---|
+| Play or drop a piece | Drag on either board; reserve pieces also support click then square |
+| Identify seats | You / Partner / Opponent / Partner’s opponent, beside each clock |
+| Pause or resume | Analysis toolbar, or Space |
+| Read candidate continuations | One ranked list; select You + Partner or Opponents. Each candidate has separate numbered Board 1 and Board 2 move strips |
+| Preview a continuation | Hover a move or candidate to show the resulting boards and reserves; exit restores the current position without changing history |
+| Play a continuation | Click a move to play the joint sequence through that point, including its other-board moves |
+| Browse FICS | Book icon opens the archive immediately in the right panel; Board 1 / Board 2 filters the recorded next moves |
+| Interpret archive results | Result bars always describe your team. Move frequencies use the selected board’s recorded continuations; the archive remains keyed by both boards |
+| Change team, sitting or clocks | Position rules tab; editable clocks remain beside the players |
+| Compare clock assumptions | Position rules → Compare clock scenarios |
+| Change cores, lines, memory or time | Engine tab, with number steppers and typed entry |
+| Edit either board | Pencil icon; shared drag editor supports palette placement, arbitrary piece movement and right-click removal; illegal kingless bughouse positions are rejected |
+| Change turn, castling, reserves, clear/reset | Edit position controls and reserve slots |
+| Load/copy a position | Dual FEN controls in the editor; copy menu below the boards |
+| Navigate or undo | Controls below the boards; arrows and Home/End navigate history |
+| Flip a board | Its header control; F for Board 1, G for Board 2 |
+| Run or review engine matches | More bughouse tools → Engine tournament; Done returns to analysis |
+
+`BughouseCpuLimit` limits all threads of the Linux analysis process with
+`taskset`, restricted to the parent process’s allowed CPU set. The persisted
+default is two cores. This controls CPU affinity, not Hivemind's compiled
+worker count; Windows/macOS still use the engine's own CPU allocation.
+Tournament resources remain owned by the tournament runner.
+
+`widgets/board_editor/editable_board.dart` supplies the shared drag surface to
+both ordinary board editors and bughouse. `BoardEditorWidget` binds it to
+`BoardEditorController`; the bughouse cards bind it to their dual-board state.
+Bughouse king moves update the board atomically before validating the position.
+
+The app driver sets `BUGHOUSE_DB_HOME` to its disposable profile. An explicit
+archive override is authoritative and cannot fall through to the user's book.
+
 ### Architecture invariants (do not regress)
 
 These rules were added after the generation/traps remediation

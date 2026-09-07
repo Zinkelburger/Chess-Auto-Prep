@@ -145,6 +145,7 @@ def profile_env(checkout: Path) -> dict[str, str]:
     (profile / 'config/user-dirs.dirs').write_text(
         f'XDG_DOCUMENTS_DIR="{profile / "Documents"}"\n'
         f'XDG_DOWNLOAD_DIR="{profile / "Downloads"}"\n')
+    env['BUGHOUSE_DB_HOME'] = str(profile / 'data/com.example.chess_auto_prep')
     env['CHESS_AUTO_PREP_NEW_INSTANCE'] = '1'
     env['OMP_NUM_THREADS'] = '1'
     env['OPENBLAS_NUM_THREADS'] = '1'

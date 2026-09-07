@@ -12,35 +12,14 @@ import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_eval.dart';
 import '../models/bughouse_state.dart';
-import 'bughouse_number_field.dart';
+import '../../../widgets/common/number_stepper.dart';
+import '../../../widgets/shortcut_tooltip.dart';
+import '../../../utils/app_shortcuts.dart';
+import 'bughouse_book_panel.dart';
+import '../services/bughouse_cpu_limit.dart';
 import 'bughouse_panel_section.dart';
 
-/// What the engine thinks, kept running.
-///
-/// Shaped like an analysis board rather than a form: the engine is already
-/// thinking when you arrive, so the eval is the first thing on the panel, it
-/// stays pinned while the rest scrolls, and there is nothing to press to get
-/// one. Below it are the two answers a bughouse player actually wants — what
-/// our team should do, and what the other team is about to do.
-///
-/// Each of those is a *table*, not a sentence, and that is the point. A joint
-/// action is two decisions taken together, so the shortlist has two move
-/// columns headed by the seats that carry them: A and C for our team, B and D
-/// for theirs. Read down a column and you see your own candidate moves; read
-/// across a row and you see the pair that go together. Written as running text
-/// — which is what this panel used to do — neither reading is available.
-///
-/// Nothing on the panel changes size as the engine reports. Every block that
-/// lists lines or candidates reserves its slots up front — as many rows as the
-/// engine is asked for, each a fixed height — and fills them as results
-/// arrive. Before this, the first pass added rows, the next pass's rows were
-/// longer, a superseded search took rows away, and every one of those moved
-/// everything below it under the pointer.
-///
-/// The rules that shape a bughouse search (which seat we hold, where we stand
-/// on the clock, whether we may sit) and the engine's own knobs are real
-/// inputs but are not what you look at while a search runs, so they sit in
-/// collapsed sections at the bottom.
+/// Analysis, rules and engine settings beside the two boards.
 class BughouseAnalysisPanel extends StatefulWidget {
   const BughouseAnalysisPanel({super.key, required this.controller});
 
@@ -51,6 +30,10 @@ class BughouseAnalysisPanel extends StatefulWidget {
 }
 
 class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
+  bool _opponents = false;
+  int _tab = 0;
+  bool _bookWasOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +46,8 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    if (controller.bookOpen && !_bookWasOpen) _tab = 0;
+    _bookWasOpen = controller.bookOpen;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -82,285 +67,59 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
           const SizedBox(height: 10),
           _Banner(message: controller.notice!, isError: false),
         ],
+        const SizedBox(height: 8),
+        SegmentedButton<int>(
+          segments: const [
+            ButtonSegment(value: 0, label: Text('Analysis')),
+            ButtonSegment(value: 1, label: Text('Position rules')),
+            ButtonSegment(value: 2, label: Text('Engine')),
+          ],
+          selected: {_tab},
+          showSelectedIcon: false,
+          onSelectionChanged: (values) {
+            if (!mounted) return;
+            setState(() => _tab = values.first);
+          },
+        ),
         const SizedBox(height: 12),
         Expanded(
           child: ListView(
             padding: EdgeInsets.zero,
-            children: [
-              _OnMoveCandidates(controller: controller),
-              const SizedBox(height: 16),
-              const Text('VARIATIONS', style: AppTextStyles.eyebrow),
-              const SizedBox(height: 3),
-              const Text(
-                'Hover a move to preview it on both boards. Click any move '
-                'in a line to play up to that point.',
-                style: AppTextStyles.muted,
-              ),
-              const SizedBox(height: 10),
-              _TeamLines(controller: controller, analysis: controller.ours),
-              const SizedBox(height: 16),
-              _TeamLines(controller: controller, analysis: controller.theirs),
-              if (controller.scenarios.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                _ScenarioTable(controller: controller),
+            children: switch (_tab) {
+              1 => [
+                _TableRules(controller: controller),
+                if (controller.scenarios.isNotEmpty)
+                  _ScenarioTable(controller: controller),
               ],
-              const SizedBox(height: 16),
-              _TableRules(controller: controller),
-              const SizedBox(height: 8),
-              _EngineSection(controller: controller),
-              const SizedBox(height: 24),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The answer to the first question at a four-player table: who has the move,
-/// and what can that person play?
-///
-/// The engine searches a *team* and ranks joint actions, which is the right
-/// model for bughouse but the wrong first thing to make a person decode. This
-/// projects those same ranked actions onto each board's active seat. Nothing
-/// is re-ranked: two moves that only make sense together still hover and play
-/// as one joint action, and the complete continuation remains directly below.
-class _OnMoveCandidates extends StatelessWidget {
-  const _OnMoveCandidates({required this.controller});
-
-  final BughouseController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text('TO MOVE NOW', style: AppTextStyles.eyebrow),
-        const SizedBox(height: 6),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final which in BughouseBoard.values) ...[
-              if (which == BughouseBoard.b) const SizedBox(width: 8),
-              Expanded(
-                child: _PlayerCandidateCard(
-                  controller: controller,
-                  which: which,
+              2 => [_EngineSection(controller: controller)],
+              _ => [
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('You + Partner')),
+                    ButtonSegment(value: true, label: Text('Opponents')),
+                  ],
+                  showSelectedIcon: false,
+                  selected: {_opponents},
+                  onSelectionChanged: (values) {
+                    if (!mounted) return;
+                    controller.hoverAction(null);
+                    setState(() => _opponents = values.first);
+                  },
                 ),
-              ),
-            ],
-          ],
+                const SizedBox(height: 8),
+                _TeamLines(
+                  controller: controller,
+                  analysis: _opponents ? controller.theirs : controller.ours,
+                ),
+                if (controller.bookOpen) ...[
+                  const Divider(height: 24),
+                  BughouseBookPanel(controller: controller),
+                ],
+              ],
+            },
+          ),
         ),
       ],
-    );
-  }
-}
-
-typedef _Candidate = ({String move, String eval, BughousePvStep step});
-
-/// One board's active person and the distinct first moves found for them.
-class _PlayerCandidateCard extends StatelessWidget {
-  const _PlayerCandidateCard({required this.controller, required this.which});
-
-  final BughouseController controller;
-  final BughouseBoard which;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = controller.state;
-    final mover = state.board(which).turn;
-    final team = which == BughouseBoard.a ? mover : mover.opposite;
-    final analysis = team == state.team ? controller.ours : controller.theirs;
-    final candidates = _candidates(analysis);
-    final letter = state.seatLetter(which, mover);
-    final role = state.seatRole(which, mover);
-    final ours = team == state.team;
-
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: ours ? AppColors.successTint : AppColors.dangerTint,
-        border: Border.all(
-          color: ours ? AppColors.successMuted : AppColors.dangerMuted,
-        ),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '${which.label.toUpperCase()} · PLAYER $letter',
-            style: AppTextStyles.eyebrow,
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '${_sentenceCase(role)} · ${mover.name}',
-            style: AppTextStyles.caption.copyWith(
-              fontWeight: ours ? FontWeight.w600 : FontWeight.w400,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 6),
-          // One slot per candidate the engine can report, filled top down and
-          // blank below that, so the card is the same height before the first
-          // result, after it, and with the search paused.
-          for (var i = 0; i < slots; i++)
-            SizedBox(
-              height: _CandidateChip.height,
-              child: i < candidates.length
-                  ? Align(
-                      alignment: Alignment.centerLeft,
-                      child: _CandidateChip(
-                        key: ValueKey(
-                          'bughouse-candidate-${which.name}-${candidates[i].move}',
-                        ),
-                        controller: controller,
-                        candidate: candidates[i],
-                      ),
-                    )
-                  : i == 0
-                  ? Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        controller.analysisEnabled
-                            ? 'Finding moves…'
-                            : 'Analysis paused',
-                        style: AppTextStyles.muted,
-                      ),
-                    )
-                  : null,
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// How many candidates the card can hold: one per ranked line the engine
-  /// is asked for, and never more than three — the shortlist a player reads.
-  int get slots => controller.shortlistSize.clamp(1, maxCandidates);
-
-  static const int maxCandidates = 3;
-
-  List<_Candidate> _candidates(BughouseTeamAnalysis analysis) {
-    final infos = analysis.lines.isNotEmpty
-        ? analysis.lines
-        : [?analysis.latest];
-    final result = <_Candidate>[];
-    final seen = <String>{};
-    for (final info in infos) {
-      final steps = controller.describePv(info, team: analysis.team);
-      if (steps.isEmpty) continue;
-      final move = steps.first.on(which);
-      if (move == null || !seen.add(move)) continue;
-      result.add((
-        move: move,
-        eval: controller.evalOf(info, team: analysis.team).label,
-        step: steps.first,
-      ));
-      if (result.length == maxCandidates) break;
-    }
-
-    // A bestmove can arrive before the engine's first complete info block.
-    if (result.isEmpty && analysis.best != null) {
-      final action = analysis.best!;
-      final info = BughouseInfo(
-        depth: 0,
-        scoreCp: 0,
-        nodes: 0,
-        nps: 0,
-        timeMs: 0,
-        pv: [action],
-      );
-      final steps = controller.describePv(info, team: analysis.team);
-      if (steps.isNotEmpty) {
-        final move = steps.first.on(which);
-        if (move != null) {
-          result.add((move: move, eval: '—', step: steps.first));
-        }
-      }
-    }
-    return result;
-  }
-
-  static String _sentenceCase(String value) =>
-      '${value[0].toUpperCase()}${value.substring(1)}';
-}
-
-/// A Lichess-like candidate token: move first, compact eval second. Hovering
-/// previews the whole joint action, not just this board's projection.
-class _CandidateChip extends StatefulWidget {
-  const _CandidateChip({
-    super.key,
-    required this.controller,
-    required this.candidate,
-  });
-
-  final BughouseController controller;
-  final _Candidate candidate;
-
-  /// The slot a chip sits in: the chip itself plus the gap to the next one.
-  static const double height = 30;
-
-  @override
-  State<_CandidateChip> createState() => _CandidateChipState();
-}
-
-class _CandidateChipState extends State<_CandidateChip> {
-  void _enter() =>
-      widget.controller.hoverStep(widget.candidate.step, owner: this);
-
-  void _exit() => widget.controller.clearHover(this);
-
-  @override
-  void dispose() {
-    final controller = widget.controller;
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!controller.isDisposed) controller.clearHover(this);
-    });
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Preview this joint action',
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => _enter(),
-        onExit: (_) => _exit(),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(4),
-          onTap: () =>
-              widget.controller.playJoint(widget.candidate.step.action),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceElevated,
-              border: Border.all(color: AppColors.outline),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: widget.candidate.move,
-                    style: AppTextStyles.mono.copyWith(
-                      color: AppColors.ink,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  TextSpan(
-                    text: '  ${widget.candidate.eval}',
-                    style: AppTextStyles.monoDense.copyWith(
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -395,7 +154,10 @@ class _Eval extends StatelessWidget {
             IconButton(
               visualDensity: VisualDensity.compact,
               icon: Icon(on ? Icons.pause : Icons.play_arrow, size: 22),
-              tooltip: on ? 'Stop thinking' : 'Think about this position',
+              tooltip: actionTooltip(
+                on ? 'Pause analysis' : 'Resume analysis',
+                shortcut: AppShortcut.autoPlay,
+              ),
               onPressed: controller.isComparing
                   ? null
                   : () => controller.setAnalysisEnabled(!on),
@@ -413,19 +175,29 @@ class _Eval extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            if (eval != null)
-              Tooltip(
-                message:
-                    'Relative engine estimate after recentering its value. '
-                    '50% is level; this is not a calibrated win probability.',
-                child: Text(
-                  '${eval.winLabel} for us',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.onSurfaceMuted,
-                  ),
-                ),
+            const Expanded(
+              child: Text(
+                'You + Partner',
+                style: AppTextStyles.muted,
+                overflow: TextOverflow.ellipsis,
               ),
-            const Spacer(),
+            ),
+            IconButton(
+              tooltip: 'Edit position',
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              onPressed: () => controller.setMode(BughouseMode.setup),
+            ),
+            PopupMenuButton<BughouseMode>(
+              tooltip: 'More bughouse tools',
+              icon: const Icon(Icons.more_horiz, size: 20),
+              onSelected: controller.setMode,
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: BughouseMode.tournament,
+                  child: Text('Engine tournament'),
+                ),
+              ],
+            ),
           ],
         ),
         const SizedBox(height: 4),
@@ -474,27 +246,12 @@ class _Eval extends StatelessWidget {
   }
 }
 
-/// One team's shortlist: the ranked lines of its last finished pass, laid
-/// out the way every engine pane in this app lays lines out — a score, then
-/// the line in SAN with every move of it clickable.
-///
-/// The first ply of a line is the candidate the row is ranked by, drawn
-/// heavier; what follows is the continuation the engine expects. A bughouse
-/// ply is a joint action on two boards, so each move carries the letter of
-/// the seat that plays it — `A d4` is ours on board 1, `D d5` is their
-/// partner's on board 2 — and plies are separated by a dot. Hovering a move
-/// draws it on the boards; clicking one plays the line through it, and
-/// clicking the row plays its first ply. Nothing about a row changes shape
-/// when the pointer crosses it: the continuation used to unfold under the
-/// pointer, which moved every row below it and put a different row under the
-/// pointer than the one it had entered.
+/// One selected team’s ranked continuations, split into board rows.
 class _TeamLines extends StatelessWidget {
   const _TeamLines({required this.controller, required this.analysis});
 
   final BughouseController controller;
   final BughouseTeamAnalysis analysis;
-
-  bool get _isOurs => analysis.team == controller.state.team;
 
   /// Width of the score column. Wide enough for `-12.34` and `#-3`, and fixed
   /// so every score in both tables sits on the same axis.
@@ -550,33 +307,14 @@ class _TeamLines extends StatelessWidget {
         ),
     ];
     final String? message = !onMove
-        ? 'Nothing to move — both boards are the other team\'s.'
+        ? 'Waiting for the opponents to move.'
         : lines.isEmpty
-        ? 'Thinking…'
+        ? (controller.analysisEnabled ? 'Thinking…' : 'Analysis paused')
         : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Text(
-              _isOurs ? 'YOUR TEAM' : 'OTHER TEAM',
-              style: AppTextStyles.eyebrow,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Tooltip(
-                message: _isOurs ? 'You and your partner' : 'The two of them',
-                child: Text(
-                  '${state.teamLetters(analysis.team)} · joint lines',
-                  style: AppTextStyles.caption,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
         // As many slots as lines the engine is asked for, every one the same
         // height, whether or not there is a line to put in it yet.
         for (var i = 0; i < controller.shortlistSize; i++)
@@ -597,13 +335,7 @@ class _TeamLines extends StatelessWidget {
   }
 }
 
-/// `+0.02   A Nf3 · B e5 D d5 · A Nc3` — one line of a search.
-///
-/// Stateful for one bit, whether the pointer is over it, which tints the row
-/// and is what the boards' highlight follows. The state object doubles as the
-/// highlight's owner: a row that is unmounted while lit clears its own
-/// highlight and nobody else's, after the frame, because `dispose` runs with
-/// the tree locked and the boards listening to the highlight would rebuild.
+/// A stable-height continuation with independent board move strips.
 class _LineRow extends StatefulWidget {
   const _LineRow({
     super.key,
@@ -630,7 +362,7 @@ class _LineRow extends StatefulWidget {
   /// Two lines of moves, and then the line is cut off — the way every
   /// engine pane cuts a long variation rather than growing to hold it. Fixed
   /// so the slot it sits in is the same height empty or full.
-  static const double height = 44;
+  static const double height = 72;
 
   @override
   State<_LineRow> createState() => _LineRowState();
@@ -642,6 +374,7 @@ class _LineRowState extends State<_LineRow> {
   BughouseController get _controller => widget.controller;
 
   void _enterRow() {
+    if (!mounted) return;
     setState(() => _lit = true);
     if (widget.steps.isNotEmpty) {
       _controller.hoverStep(widget.steps.first, owner: this);
@@ -649,6 +382,7 @@ class _LineRowState extends State<_LineRow> {
   }
 
   void _exitRow() {
+    if (!mounted) return;
     setState(() => _lit = false);
     _controller.clearHover(this);
   }
@@ -675,7 +409,6 @@ class _LineRowState extends State<_LineRow> {
   @override
   Widget build(BuildContext context) {
     final steps = widget.steps;
-    final state = _controller.state;
     final ink = widget.primary ? AppColors.ink : AppColors.onSurfaceMuted;
     final weight = widget.primary ? FontWeight.w600 : FontWeight.w400;
 
@@ -726,31 +459,61 @@ class _LineRowState extends State<_LineRow> {
                     // whatever the line needs; the moves past the cut are
                     // still played by clicking the last visible one and
                     // stepping forward.
-                    : Wrap(
-                        clipBehavior: Clip.hardEdge,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        runSpacing: 2,
+                    : Column(
                         children: [
-                          for (var i = 0; i < steps.length; i++) ...[
-                            if (i > 0) const _PlyDot(),
-                            for (final which in BughouseBoard.values)
-                              if (steps[i].on(which) case final san?)
-                                _MoveToken(
-                                  seat: steps[i].seatOn(which, state),
-                                  san: san,
-                                  ink: i == 0 ? ink : AppColors.onSurfaceMuted,
-                                  weight: i == 0 ? weight : FontWeight.w400,
-                                  onEnter: () => _controller.hoverStep(
-                                    steps[i],
-                                    owner: this,
-                                  ),
-                                  onExit: _exitStep,
-                                  onTap: () => _controller.playLine(
-                                    steps,
-                                    throughPly: i,
+                          for (final which in BughouseBoard.values)
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: 58,
+                                  child: Text(
+                                    which.label,
+                                    style: AppTextStyles.caption,
                                   ),
                                 ),
-                          ],
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        for (var i = 0; i < steps.length; i++)
+                                          if (steps[i].on(which)
+                                              case final san?)
+                                            _MoveToken(
+                                              seat: san == 'sit'
+                                                  ? ''
+                                                  : '${steps[i].before.board(which).fullmoves}${steps[i].before.board(which).turn == Side.white ? '.' : '...'}',
+                                              san: san,
+                                              ink: i == 0
+                                                  ? ink
+                                                  : AppColors.onSurfaceMuted,
+                                              weight: i == 0
+                                                  ? weight
+                                                  : FontWeight.w400,
+                                              onEnter: () =>
+                                                  _controller.hoverStep(
+                                                    steps[i],
+                                                    owner: this,
+                                                  ),
+                                              onExit: _exitStep,
+                                              onTap: () => _controller.playLine(
+                                                steps,
+                                                throughPly: i,
+                                              ),
+                                            ),
+                                        if (steps.every(
+                                          (step) => step.on(which) == null,
+                                        ))
+                                          const Text(
+                                            '—',
+                                            style: AppTextStyles.muted,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                         ],
                       ),
               ),
@@ -760,22 +523,6 @@ class _LineRowState extends State<_LineRow> {
       ),
     );
   }
-}
-
-/// The gap between two plies of a line. A dot rather than a move number,
-/// because a line across two boards has no single number to count by: each
-/// board counts its own moves, and a ply here may touch both.
-class _PlyDot extends StatelessWidget {
-  const _PlyDot();
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 3),
-    child: Text(
-      '·',
-      style: AppTextStyles.monoDense.copyWith(color: AppColors.onSurfaceDim),
-    ),
-  );
 }
 
 /// One seat's move in a line: the seat letter, muted, then the SAN — `A Nf3`,
@@ -848,14 +595,10 @@ class _TableRules extends StatelessWidget {
     final state = controller.state;
     final derived = controller.deriveTimeAdvantageFromClocks;
 
-    return BughousePanelSection(
-      title: 'Table',
-      summary:
-          '${state.team == Side.white ? 'White' : 'Black'} on board 1 · '
-          '${state.timeStance.shortLabel}'
-          '${controller.requireMoveOn == RequireMoveOn.none ? '' : ' · ${controller.requireMoveOn.label}'}',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const BughousePanelLabel('Our team plays'),
+        const BughousePanelLabel('You play on Board 1'),
         SegmentedButton<Side>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: const [
@@ -873,7 +616,7 @@ class _TableRules extends StatelessWidget {
         // offered because that is how players think, but the engine takes one
         // bit — "Level" and "Behind" run the same search. The genuinely
         // distinct third case is the must-move constraint below.
-        const BughousePanelLabel('Clock stance'),
+        const BughousePanelLabel('Your team’s clock advantage'),
         SegmentedButton<BughouseTimeStance>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: [
@@ -896,7 +639,7 @@ class _TableRules extends StatelessWidget {
           onChanged: (v) => controller.setDeriveTimeAdvantage(v ?? false),
           controlAffinity: ListTileControlAffinity.leading,
           title: const Text(
-            'Read it off the four clocks',
+            'Use the board clocks',
             style: AppTextStyles.caption,
           ),
         ),
@@ -907,13 +650,13 @@ class _TableRules extends StatelessWidget {
           ),
         const SizedBox(height: 4),
 
-        const BughousePanelLabel('Must the team move?'),
+        const BughousePanelLabel('Require a move'),
         SegmentedButton<RequireMoveOn>(
           style: const ButtonStyle(visualDensity: VisualDensity.compact),
           segments: const [
             ButtonSegment(
               value: RequireMoveOn.none,
-              label: Text('Either'),
+              label: Text('Allow sitting'),
               tooltip: 'The team may pass on a board',
             ),
             ButtonSegment(
@@ -943,109 +686,89 @@ class _TableRules extends StatelessWidget {
   }
 }
 
-/// How hard the engine works, and what it is working with.
-///
-/// Four numbers you type and one you read. The one you read is the core
-/// count: Hivemind fixes its search workers at build time and gives ONNX
-/// Runtime every remaining core, so it already uses the whole machine and
-/// has no thread option to set — the honest thing is to say what it is
-/// doing where a person would look for the control.
 class _EngineSection extends StatelessWidget {
   const _EngineSection({required this.controller});
-
   final BughouseController controller;
-
-  /// Wide enough for "Think up to", the longest label in the column.
-  static const double labelWidth = 84;
 
   @override
   Widget build(BuildContext context) {
     final settings = controller.engineSettings;
-    final detail = controller.backendDetail;
-
-    return BughousePanelSection(
-      title: 'Analysis engine',
-      summary:
-          '${settings.hashMb} MB · batch ${settings.batchSize} · '
-          '${settings.lines} line${settings.lines == 1 ? '' : 's'} · '
-          'up to ${settings.thinkSeconds}s a pass',
-      children: [
-        BughouseNumberField(
-          key: const Key('bughouse-engine-hash'),
-          label: 'Memory',
-          unit: 'MB',
-          hint: 'The search tree\'s hash table.',
-          value: settings.hashMb,
-          min: BughouseEngineSettings.hashMin,
-          max: BughouseEngineSettings.hashMax,
-          labelWidth: _EngineSection.labelWidth,
-          onChanged: (v) =>
-              controller.setEngineSettings(settings.copyWith(hashMb: v)),
-        ),
-        BughouseNumberField(
-          key: const Key('bughouse-engine-lines'),
-          label: 'Lines',
-          hint: 'How many ranked lines each pass reports.',
-          value: settings.lines,
-          min: BughouseEngineSettings.linesMin,
-          max: BughouseEngineSettings.linesMax,
-          labelWidth: _EngineSection.labelWidth,
-          onChanged: (v) =>
-              controller.setEngineSettings(settings.copyWith(lines: v)),
-        ),
-        BughouseNumberField(
-          key: const Key('bughouse-engine-think'),
-          label: 'Think up to',
-          unit: 's a pass',
-          hint:
-              'The engine keeps thinking for as long as the position is on '
-              'screen. It works in passes that each run longer than the last; '
-              'this is the longest a pass gets.',
-          value: settings.thinkSeconds,
-          min: BughouseEngineSettings.thinkMin,
-          max: BughouseEngineSettings.thinkMax,
-          labelWidth: _EngineSection.labelWidth,
-          onChanged: (v) =>
-              controller.setEngineSettings(settings.copyWith(thinkSeconds: v)),
-        ),
-        BughouseNumberField(
-          key: const Key('bughouse-engine-batch'),
-          label: 'Batch',
-          hint:
-              'Positions sent to the network at once. Larger is faster and '
-              'coarser.',
-          value: settings.batchSize,
-          min: BughouseEngineSettings.batchMin,
-          max: BughouseEngineSettings.batchMax,
-          labelWidth: _EngineSection.labelWidth,
-          onChanged: (v) =>
-              controller.setEngineSettings(settings.copyWith(batchSize: v)),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(
-                width: _EngineSection.labelWidth,
-                child: Tooltip(
-                  message:
-                      'The engine has no thread setting: its worker count is '
-                      'fixed by the build and the rest of the cores go to the '
-                      'network.',
-                  child: Text('Cores', style: AppTextStyles.muted),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  detail.isEmpty
-                      ? 'Reported once the engine is running'
-                      : '$detail · every core, fixed by the engine',
-                  style: AppTextStyles.caption,
-                ),
-              ),
-            ],
+    Widget number(
+      String label,
+      int value,
+      int min,
+      int max,
+      ValueChanged<int> change, {
+      String? suffix,
+      String? hint,
+    }) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Tooltip(
+              message: hint ?? label,
+              child: Text(label, style: AppTextStyles.body),
+            ),
           ),
+          NumberStepper(
+            value: value,
+            min: min,
+            max: max,
+            onChanged: change,
+            suffix: suffix,
+          ),
+        ],
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (BughouseCpuLimit.supported)
+          number(
+            'CPU cores',
+            settings.cores,
+            1,
+            BughouseCpuLimit.available,
+            (v) => controller.setEngineSettings(settings.copyWith(cores: v)),
+            hint: 'Maximum CPU cores available to analysis',
+          ),
+        if (!BughouseCpuLimit.supported)
+          const Text(
+            'CPU cores: managed by this engine build',
+            style: AppTextStyles.muted,
+          ),
+        number(
+          'Lines',
+          settings.lines,
+          BughouseEngineSettings.linesMin,
+          BughouseEngineSettings.linesMax,
+          (v) => controller.setEngineSettings(settings.copyWith(lines: v)),
+        ),
+        number(
+          'Memory',
+          settings.hashMb,
+          BughouseEngineSettings.hashMin,
+          BughouseEngineSettings.hashMax,
+          (v) => controller.setEngineSettings(settings.copyWith(hashMb: v)),
+          suffix: 'MB',
+        ),
+        number(
+          'Time per pass',
+          settings.thinkSeconds,
+          BughouseEngineSettings.thinkMin,
+          BughouseEngineSettings.thinkMax,
+          (v) =>
+              controller.setEngineSettings(settings.copyWith(thinkSeconds: v)),
+          suffix: 's',
+        ),
+        number(
+          'Batch size',
+          settings.batchSize,
+          BughouseEngineSettings.batchMin,
+          BughouseEngineSettings.batchMax,
+          (v) => controller.setEngineSettings(settings.copyWith(batchSize: v)),
+          hint: 'Positions evaluated together by the network',
         ),
       ],
     );

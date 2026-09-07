@@ -1,28 +1,3 @@
-/// What four thousand people actually played from here.
-///
-/// The engine's panel says what is *good*; this one says what is *played*,
-/// out of 3.6 million FICS games. In bughouse that gap is wider than it is in
-/// chess — the archive is blitz played by four people at once, so a line the
-/// engine dislikes can still be the one you have to be ready for, and a line
-/// it loves can be one nobody has ever tried on you.
-///
-/// It is the same table as the Lichess opening explorer elsewhere in the app
-/// ([ExplorerMoveRow] and friends), with the FICS book as its data source and
-/// a seat letter before each move, because four people play. It opens under
-/// the two boards from the book icon on their strip, the way the repertoire
-/// builder's explorer opens from the book icon on its tree, and it is a fixed
-/// height whatever the position holds: twelve rows' worth, blank where the
-/// archive has fewer, so the boards above never move when a move changes how
-/// many continuations there are.
-///
-/// It is the same table as the Lichess opening explorer elsewhere in the app
-/// ([ExplorerMoveRow] and friends), with the FICS book as its data source and
-/// a seat letter before each move, because four people play. Like the lab's
-/// other reference blocks it starts shut, with its one-line summary showing;
-/// the engine pane above is what you look at while thinking.
-///
-/// The panel is silent on a machine with no book, which is the normal case:
-/// see [BughouseBook.open].
 library;
 
 import 'package:dartchess/dartchess.dart';
@@ -32,7 +7,7 @@ import '../../../theme/app_text_styles.dart';
 import '../../../widgets/opening_explorer/explorer_move_row.dart';
 import '../controllers/bughouse_controller.dart';
 import '../services/bughouse_book.dart';
-import 'bughouse_panel_section.dart';
+import '../models/bughouse_state.dart';
 
 class BughouseBookPanel extends StatefulWidget {
   const BughouseBookPanel({super.key, required this.controller});
@@ -57,6 +32,7 @@ class _BughouseBookPanelState extends State<BughouseBookPanel> {
   /// boards — a row rebuilt away while lit clears itself on dispose, and by
   /// then another row may already be drawing.
   BughouseBookMove? _hovered;
+  BughouseBoard _board = BughouseBoard.a;
 
   void _onHover(BughouseBookMove move, bool over) {
     if (over) {
@@ -82,14 +58,29 @@ class _BughouseBookPanelState extends State<BughouseBookPanel> {
     final book = _controller.bookPosition;
     if (status == null || book == null) return const SizedBox.shrink();
 
-    return BughousePanelSection(
-      title: 'FICS ARCHIVE',
-      summary: book.games == 0
-          ? _nothing(status)
-          : '${formatExplorerCount(book.games)} games here · '
-                '${status.yearRange}',
-      padding: EdgeInsets.zero,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const Text('FICS archive', style: AppTextStyles.bodyStrong),
+        Text(
+          '${formatExplorerCount(book.games)} games · ${status.yearRange}',
+          style: AppTextStyles.caption,
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<BughouseBoard>(
+          segments: [
+            for (final which in BughouseBoard.values)
+              ButtonSegment(value: which, label: Text(which.label)),
+          ],
+          selected: {_board},
+          showSelectedIcon: false,
+          onSelectionChanged: (values) {
+            if (!mounted) return;
+            _controller.clearHover(this);
+            setState(() => _board = values.first);
+          },
+        ),
+        const SizedBox(height: 8),
         if (book.isEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 4, 10, 12),
@@ -112,40 +103,39 @@ class _BughouseBookPanelState extends State<BughouseBookPanel> {
     // it is. The book counts for the pair holding White on board A, which is
     // us exactly when our team plays White there.
     final oursIsTeamA = state.team == Side.white;
+    final moves = book.moves.where((move) => move.board == _board).toList();
+    final recorded = moves.fold<int>(0, (sum, move) => sum + move.games);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (moves.isEmpty)
+          const Text(
+            'No recorded continuations on this board.',
+            style: AppTextStyles.muted,
+          ),
         const ExplorerTableHeader(
-          barCaption: 'Win / Draw / Loss',
+          barCaption: 'Your team: Win / Draw / Loss',
           gamesTooltip:
-              'Games in which the move was played, and its share of every '
-              'archived game from this position',
+              'Recorded next moves on the selected board, from this two-board position',
         ),
-        for (final move in book.moves.take(BughouseBookPanel.maxRows))
+        for (final move in moves.take(BughouseBookPanel.maxRows))
           ExplorerMoveRow(
             // Keyed by the move and the position it belongs to, so a row that
             // changes under the pointer is a new row rather than the old one
             // wearing new numbers.
             key: ValueKey('${book.key}:${move.board}:${move.san}'),
-            seat: state.seatLetter(move.board, move.mover),
             san: move.san,
             games: move.games,
             wins: oursIsTeamA ? move.teamA : move.teamB,
             draws: move.draws,
             losses: oursIsTeamA ? move.teamB : move.teamA,
-            playFraction: book.games == 0 ? 0 : move.games / book.games,
+            playFraction: recorded == 0 ? 0 : move.games / recorded,
             tooltip: move.averageElo == null
                 ? null
                 : 'Average rating: ${move.averageElo}',
             onPlay: () => _controller.playBookMove(move),
             onHover: (over) => _onHover(move, over),
           ),
-        ExplorerTotalsRow(
-          games: book.games,
-          wins: oursIsTeamA ? book.teamA : book.teamB,
-          draws: book.draws,
-          losses: oursIsTeamA ? book.teamB : book.teamA,
-        ),
       ],
     );
   }

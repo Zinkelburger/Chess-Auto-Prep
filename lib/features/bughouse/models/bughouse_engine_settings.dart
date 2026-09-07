@@ -3,23 +3,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../utils/log.dart';
 
-/// The engine knobs Hivemind actually has, and how hard it is asked to think.
-///
-/// Asked of the binary rather than assumed. `uci` advertises `Hash`,
-/// `BatchSize`, `MultiPV`, `Ponder` and a row of MCTS tuning permilles
-/// alongside the three bughouse rule options — and, importantly, it does
-/// **not** advertise `Threads`. The worker count is a compile-time constant
-/// of the build (four search workers) and the engine hands every remaining
-/// core to ONNX Runtime as intra-op threads, so it already uses the whole
-/// machine and there is no core count to offer. The panel reports what the
-/// engine chose instead of showing a control that does nothing.
-///
-/// Each value is a free integer inside a range rather than one of a fixed
-/// list of choices: the ranges are the engine's own (`Hash` 1–33554432 MB,
-/// `BatchSize` 1–1024, `MultiPV` 1–500), narrowed to what a desktop can use.
+/// Persisted analysis resource limits and search settings.
 @immutable
 class BughouseEngineSettings {
   const BughouseEngineSettings({
+    this.cores = 2,
     this.hashMb = 256,
     this.batchSize = 8,
     this.lines = 3,
@@ -30,6 +18,7 @@ class BughouseEngineSettings {
   /// value written by hand or by an older build can never leave the panel
   /// with a number it will not accept.
   factory BughouseEngineSettings.clamped({
+    int? cores,
     int? hashMb,
     int? batchSize,
     int? lines,
@@ -37,6 +26,7 @@ class BughouseEngineSettings {
   }) {
     const fallback = BughouseEngineSettings();
     return BughouseEngineSettings(
+      cores: (cores ?? fallback.cores).clamp(1, 1024),
       hashMb: (hashMb ?? fallback.hashMb).clamp(hashMin, hashMax),
       batchSize: (batchSize ?? fallback.batchSize).clamp(batchMin, batchMax),
       lines: (lines ?? fallback.lines).clamp(linesMin, linesMax),
@@ -52,6 +42,7 @@ class BughouseEngineSettings {
   /// The engine's own default is 16 MB, which is small for an MCTS tree that
   /// gets thirty seconds a pass; 256 is the desktop default here. Raising it
   /// costs nothing but memory and is what "give the engine more room" means.
+  final int cores;
   final int hashMb;
 
   /// The `BatchSize` option: how many positions go to the network at once.
@@ -83,11 +74,13 @@ class BughouseEngineSettings {
   static const int thinkMax = 3600;
 
   BughouseEngineSettings copyWith({
+    int? cores,
     int? hashMb,
     int? batchSize,
     int? lines,
     int? thinkSeconds,
   }) => BughouseEngineSettings(
+    cores: cores ?? this.cores,
     hashMb: hashMb ?? this.hashMb,
     batchSize: batchSize ?? this.batchSize,
     lines: lines ?? this.lines,
@@ -97,18 +90,22 @@ class BughouseEngineSettings {
   /// Whether moving from [other] to this needs the process reconfigured, as
   /// opposed to only changing what the next search is asked for.
   bool reconfigures(BughouseEngineSettings other) =>
-      hashMb != other.hashMb || batchSize != other.batchSize;
+      cores != other.cores ||
+      hashMb != other.hashMb ||
+      batchSize != other.batchSize;
 
   @override
   bool operator ==(Object other) =>
       other is BughouseEngineSettings &&
+      other.cores == cores &&
       other.hashMb == hashMb &&
       other.batchSize == batchSize &&
       other.lines == lines &&
       other.thinkSeconds == thinkSeconds;
 
   @override
-  int get hashCode => Object.hash(hashMb, batchSize, lines, thinkSeconds);
+  int get hashCode =>
+      Object.hash(cores, hashMb, batchSize, lines, thinkSeconds);
 
   // ----------------------------------------------------------- persistence
 
@@ -123,6 +120,7 @@ class BughouseEngineSettings {
     try {
       final prefs = await SharedPreferences.getInstance();
       return BughouseEngineSettings.clamped(
+        cores: prefs.getInt('bughouse.engine.cores'),
         hashMb: prefs.getInt(_hashKey),
         batchSize: prefs.getInt(_batchKey),
         lines: prefs.getInt(_linesKey),
@@ -137,6 +135,7 @@ class BughouseEngineSettings {
   Future<void> save() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('bughouse.engine.cores', cores);
       await prefs.setInt(_hashKey, hashMb);
       await prefs.setInt(_batchKey, batchSize);
       await prefs.setInt(_linesKey, lines);

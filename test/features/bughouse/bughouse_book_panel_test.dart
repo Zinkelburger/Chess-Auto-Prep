@@ -128,11 +128,6 @@ void main() {
     return gesture;
   }
 
-  Future<void> open(WidgetTester tester) async {
-    await tester.tap(find.text('FICS ARCHIVE'));
-    await tester.pumpAndSettle();
-  }
-
   testWidgets('known positions retain counts when continuations are filtered', (
     tester,
   ) async {
@@ -154,9 +149,8 @@ void main() {
     );
     controller.setAnalysisEnabled(false);
     await pump(tester);
-    expect(find.text('4 games here · 2005–2025'), findsOneWidget);
+    expect(find.text('4 games · 2005–2025'), findsOneWidget);
     expect(find.text('No archived game reached this position.'), findsNothing);
-    await open(tester);
     expect(
       find.textContaining(
         'No continuations meet the archive minimum of 3 games',
@@ -165,63 +159,33 @@ void main() {
     );
   });
 
-  testWidgets('starts shut, with the position summed up in one line', (
-    tester,
-  ) async {
+  testWidgets('opens immediately and filters to one board', (tester) async {
     await pump(tester);
-
-    expect(find.text('FICS ARCHIVE'), findsOneWidget);
-    expect(find.text('2.0k games here · 2005–2025'), findsOneWidget);
-    expect(find.byType(ExplorerMoveRow), findsNothing);
-    expect(find.text('Move'), findsNothing);
-
-    await open(tester);
-    expect(find.byType(ExplorerMoveRow), findsWidgets);
-
-    await tester.tap(find.text('FICS ARCHIVE'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ExplorerMoveRow), findsNothing);
-  });
-
-  testWidgets('is the explorer table: captions, seats, a cap and a Σ row', (
-    tester,
-  ) async {
-    await pump(tester);
-    await open(tester);
-
-    expect(find.text('Move'), findsOneWidget);
-    expect(find.text('Win / Draw / Loss'), findsOneWidget);
-    expect(find.byType(ExplorerTableHeader), findsOneWidget);
-    // 16 continuations in the book, 12 listed — the Lichess explorer's cap.
+    expect(find.text('FICS archive'), findsOneWidget);
+    expect(find.text('2.0k games · 2005–2025'), findsOneWidget);
     expect(
       find.byType(ExplorerMoveRow),
       findsNWidgets(BughouseBookPanel.maxRows),
     );
-    expect(find.text('a3'), findsOneWidget);
-    expect(find.text('f4'), findsOneWidget);
-    expect(find.text('g3'), findsNothing);
-
-    // Seat letters, not board letters: White on board 1 is us (A); White on
-    // board 2 is our partner's opponent (D).
     expect(find.text('e4'), findsOneWidget);
+    expect(find.text('d4'), findsNothing);
+    expect(find.text('A'), findsNothing);
+    expect(find.text('Your team: Win / Draw / Loss'), findsOneWidget);
+    await tester.tap(find.text('Board 2'));
+    await tester.pumpAndSettle();
+    expect(find.text('e4'), findsNothing);
     expect(find.text('d4'), findsOneWidget);
-    expect(find.text('A'), findsWidgets);
-    expect(find.text('D'), findsOneWidget);
-
-    // 1000 of 2000 games; the Σ row counts every game, listed or not.
-    expect(find.text('1.0k'), findsOneWidget);
-    expect(find.text('50%'), findsWidgets);
-    expect(find.text('Σ'), findsOneWidget);
-    expect(find.text('2.0k'), findsOneWidget);
+    expect(find.byType(ExplorerMoveRow), findsOneWidget);
     expect(find.text('100%'), findsOneWidget);
-    expect(find.byType(ExplorerTotalsRow), findsOneWidget);
+    final row = tester.widget<ExplorerMoveRow>(find.byType(ExplorerMoveRow));
+    expect(row.games, 400);
+    expect(row.wins, 200);
   });
 
   testWidgets('hover says one thing, and draws on the boards without moving', (
     tester,
   ) async {
     await pump(tester);
-    await open(tester);
 
     final rows = find.byType(ExplorerMoveRow);
     final e4 = rows.at(0);
@@ -246,8 +210,8 @@ void main() {
 
     await pointer.moveTo(tester.getCenter(d4));
     await tester.pumpAndSettle();
-    expect(controller.hover.value!.on(BughouseBoard.b), isNotEmpty);
-    expect(controller.hover.value!.on(BughouseBoard.a), isEmpty);
+    expect(controller.hover.value!.on(BughouseBoard.a), isNotEmpty);
+    expect(controller.hover.value!.on(BughouseBoard.b), isEmpty);
 
     await pointer.moveTo(const Offset(390, 5));
     await tester.pumpAndSettle();
@@ -258,7 +222,6 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    await open(tester);
 
     final pointer = await mouse(tester);
     await pointer.moveTo(tester.getCenter(find.text('e4')));
@@ -279,7 +242,7 @@ void main() {
     final drawn = controller.hover.value!.on(BughouseBoard.a);
     expect(drawn.map((a) => a.dest), contains('e5'));
     expect(drawn.map((a) => a.dest), isNot(contains('e4')));
-    expect(find.text('900 games here · 2005–2025'), findsOneWidget);
+    expect(find.text('900 games · 2005–2025'), findsOneWidget);
     expect(find.text('e5'), findsOneWidget);
     expect(find.text('d4'), findsNothing);
     expect(find.byType(ExplorerMoveRow), findsOneWidget);
@@ -301,10 +264,9 @@ void main() {
       find.text('No archived game reached this position.'),
       findsOneWidget,
     );
-    await open(tester);
     expect(
       find.text('No archived game reached this position.'),
-      findsNWidgets(2),
+      findsOneWidget,
     );
     expect(find.byType(ExplorerMoveRow), findsNothing);
     expect(find.byType(ExplorerTotalsRow), findsNothing);

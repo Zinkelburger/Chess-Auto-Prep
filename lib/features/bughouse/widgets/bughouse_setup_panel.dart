@@ -38,7 +38,7 @@ class _BughouseSetupPanelState extends State<BughouseSetupPanel> {
         const Text('Place pieces', style: AppTextStyles.subtitle),
         const SizedBox(height: 2),
         const Text(
-          'Pick a piece, then click a square on either board; right-click a '
+          'Drag a piece from here or move one on either board. Right-click a '
           'square to clear it. Click a reserve slot to add one, right-click '
           'to take one away.',
           style: AppTextStyles.caption,
@@ -137,9 +137,20 @@ class _Palette extends StatelessWidget {
                   onTap: () => controller.setTool(
                     PlaceTool(Piece(color: side, role: role)),
                   ),
-                  child: PieceImage(
-                    piece: Piece(color: side, role: role),
-                    size: 28,
+                  child: Draggable<Piece>(
+                    data: Piece(color: side, role: role),
+                    dragAnchorStrategy: pointerDragAnchorStrategy,
+                    feedback: Transform.translate(
+                      offset: const Offset(-20, -20),
+                      child: PieceImage(
+                        piece: Piece(color: side, role: role),
+                        size: 40,
+                      ),
+                    ),
+                    child: PieceImage(
+                      piece: Piece(color: side, role: role),
+                      size: 28,
+                    ),
                   ),
                 ),
               if (side == Side.black) ...[

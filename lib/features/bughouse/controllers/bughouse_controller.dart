@@ -84,11 +84,11 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   BughouseBookStatus? get bookStatus => _book?.status;
 
-  /// Whether the archive's table is open under the boards.
+  /// Whether the archive's table is open beside the boards.
   ///
   /// Shut by default: the engine is what the lab is for, and the archive is
   /// a reference you open the way Lichess opens its explorer — a book icon
-  /// beside the boards, and the table appears under them.
+  /// beside the boards, and the table appears beside them.
   bool _bookOpen = false;
   bool get bookOpen => _bookOpen && hasBook;
 
@@ -208,6 +208,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   void hoverStep(BughousePvStep step, {required Object owner}) {
     hover.value = BughouseHover(
       owner: owner,
+      preview: _preview(step.before, step.action),
       a: _annotate(
         BughouseBoard.a,
         step.action,
@@ -223,6 +224,44 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     );
   }
 
+  BughouseState _preview(BughouseState before, BughouseJointMove action) {
+    var next = before;
+    for (final which in BughouseBoard.values) {
+      final uci = action.half(which).uci;
+      if (uci == null) continue;
+      final move = _parseUci(before.board(which), uci);
+      if (move != null && before.board(which).isLegal(move)) {
+        next = next.playMove(which, move) ?? next;
+      }
+    }
+    return next;
+  }
+
+  void placeEditorPiece(BughouseBoard which, Square square, Piece piece) {
+    final next = state.withPieceAt(which, square, piece);
+    if (next != null) _replaceCurrent(next);
+  }
+
+  void moveEditorPiece(BughouseBoard which, Square from, Square? to) {
+    final piece = state.board(which).board.pieceAt(from);
+    if (piece == null || from == to) return;
+    final setup = state.setupOf(which);
+    var board = setup.board.removePieceAt(from);
+    if (to != null) board = board.setPieceAt(to, piece);
+    final position = BughouseState.tryBuild(
+      Setup(
+        board: board,
+        pockets: setup.pockets,
+        turn: setup.turn,
+        castlingRights: setup.castlingRights,
+        epSquare: null,
+        halfmoves: setup.halfmoves,
+        fullmoves: setup.fullmoves,
+      ),
+    );
+    if (position != null) _replaceCurrent(state.withBoard(which, position));
+  }
+
   /// Lights a joint action on the current position up. Null clears.
   void hoverAction(BughouseJointMove? action, {Object? owner}) {
     if (action == null) {
@@ -231,6 +270,7 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     }
     hover.value = BughouseHover(
       owner: owner ?? action,
+      preview: _preview(state, action),
       a: _annotate(BughouseBoard.a, action, AnnotationBrush.blue),
       b: _annotate(BughouseBoard.b, action, AnnotationBrush.blue),
     );
@@ -1465,8 +1505,16 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     // Cleared first: a failure must not retry on every pass forever, and the
     // error is surfaced by the caller either way.
     _optionsDirty = false;
-    await engine.setOption('Hash', _engineSettings.hashMb);
-    await engine.setOption('BatchSize', _engineSettings.batchSize);
+    try {
+      await engine.setOption('Hash', _engineSettings.hashMb);
+      await engine.setOption('BatchSize', _engineSettings.batchSize);
+      if (engine is BughouseEngine) {
+        await engine.setCpuLimit(_engineSettings.cores);
+      }
+    } catch (_) {
+      _optionsDirty = true;
+      rethrow;
+    }
   }
 
   Future<BughouseAnalysisEngine> _ensureEngine() {
@@ -1635,11 +1683,17 @@ class BughousePvStep {
 /// the panel row that owns the hover knows which.
 @immutable
 class BughouseHover {
-  const BughouseHover({required this.owner, required this.a, required this.b});
+  const BughouseHover({
+    required this.owner,
+    required this.a,
+    required this.b,
+    this.preview,
+  });
 
   /// Who set it — so a row leaving the screen clears only its own highlight.
   final Object owner;
 
+  final BughouseState? preview;
   final List<BoardAnnotation> a;
   final List<BoardAnnotation> b;
 

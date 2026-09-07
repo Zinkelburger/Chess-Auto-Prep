@@ -33,7 +33,6 @@ import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_state.dart';
 import 'bughouse_analysis_panel.dart';
 import 'bughouse_board_card.dart';
-import 'bughouse_book_panel.dart';
 import 'bughouse_move_list.dart';
 import 'bughouse_setup_panel.dart';
 import 'bughouse_tournament_panel.dart';
@@ -280,16 +279,6 @@ class _Boards extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         BughouseLineControls(controller: controller),
-        // The archive, under the pair, at a fixed height. The boards are not
-        // resized to make room for it: the column scrolls if the window is
-        // short, and the boards stay where they were.
-        if (controller.bookOpen) ...[
-          const SizedBox(height: 8),
-          SizedBox(
-            width: boardWidth * 2 + _gap,
-            child: BughouseBookPanel(controller: controller),
-          ),
-        ],
       ],
     );
   }
@@ -315,32 +304,40 @@ class _SidePanel extends StatelessWidget {
             // you set going and leave. So the three are a switch in the corner
             // rather than the first control on the panel, and the score keeps
             // the top of the column.
-            Row(
-              children: [
-                Expanded(
-                  // Short, because the two switches beside it are not: the
-                  // eyebrow wrapping onto a second line moved the score.
-                  child: Text(switch (mode) {
-                    BughouseMode.setup => 'EDIT POSITION',
-                    BughouseMode.tournament => 'ENGINE TOURNAMENT',
-                    BughouseMode.play => 'ANALYSIS',
-                  }, style: AppTextStyles.eyebrow),
-                ),
-                _ModeButton(
-                  controller: controller,
-                  mode: BughouseMode.tournament,
-                  icon: Icons.emoji_events_outlined,
-                  label: 'Engine tournament',
-                ),
-                _ModeButton(
-                  controller: controller,
-                  mode: BughouseMode.setup,
-                  icon: Icons.edit,
-                  label: 'Edit position',
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
+            if (mode != BughouseMode.play)
+              Row(
+                children: [
+                  Expanded(
+                    // Short, because the two switches beside it are not: the
+                    // eyebrow wrapping onto a second line moved the score.
+                    child: Text(switch (mode) {
+                      BughouseMode.setup => 'EDIT POSITION',
+                      BughouseMode.tournament => 'ENGINE TOURNAMENT',
+                      BughouseMode.play => 'ANALYSIS',
+                    }, style: AppTextStyles.eyebrow),
+                  ),
+                  PopupMenuButton<BughouseMode>(
+                    tooltip: 'More bughouse tools',
+                    icon: const Icon(Icons.more_horiz),
+                    onSelected: controller.setMode,
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: BughouseMode.tournament,
+                        child: Text('Engine tournament'),
+                      ),
+                    ],
+                  ),
+                  _ModeButton(
+                    controller: controller,
+                    mode: mode == BughouseMode.tournament
+                        ? BughouseMode.tournament
+                        : BughouseMode.setup,
+                    icon: Icons.edit,
+                    label: 'Edit position',
+                  ),
+                ],
+              ),
+            if (mode != BughouseMode.play) const SizedBox(height: 8),
             Expanded(
               child: switch (mode) {
                 BughouseMode.setup => SingleChildScrollView(

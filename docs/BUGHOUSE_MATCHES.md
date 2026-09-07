@@ -16,7 +16,7 @@ This is the engine tournament's question asked about two boards, and it is
 
 ## In the app
 
-**Bughouse Lab → Matches**, beside "Edit position". Play the opening on the
+**Bughouse Lab → More bughouse tools → Engine tournament**. Play the opening on the
 boards (`1. d4 d5 2. Bf4`), press **New match**, and the games arrive as they
 finish. Clicking a row replays that game on the two boards.
 

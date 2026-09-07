@@ -403,10 +403,10 @@ class BughouseState {
   /// captures land in your opponent's reserve.
   String seatRole(BughouseBoard which, Side mover) =>
       switch (seatLetter(which, mover)) {
-        'A' => 'you',
-        'B' => 'opponent',
-        'C' => 'partner',
-        _ => 'partner\'s opponent',
+        'A' => 'You',
+        'B' => 'Opponent',
+        'C' => 'Partner',
+        _ => 'Partner’s opponent',
       };
 
   /// The same seat spelled out, for a tooltip: `A — you, white on board 1`.
@@ -416,7 +416,7 @@ class BughouseState {
   /// a tooltip is read once and can afford to say whose.
   String seatDescription(BughouseBoard which, Side mover) {
     final who = switch (seatLetter(which, mover)) {
-      'A' => 'you',
+      'A' => 'You',
       'B' => 'your opponent',
       'C' => 'your partner',
       _ => 'your partner\'s opponent',

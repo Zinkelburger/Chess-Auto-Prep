@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controlle
 import 'package:chess_auto_prep/features/bughouse/models/bughouse_state.dart';
 import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_board_card.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
+import 'package:chess_auto_prep/widgets/board_editor/editable_board.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
@@ -207,7 +208,7 @@ void main() {
       ),
     );
 
-    final board = tester.getRect(find.byType(ChessBoardWidget));
+    final board = tester.getRect(find.byType(EditableBoard));
     await tester.tapAt(centreOf(board, Square.e5));
     await tester.pumpAndSettle();
     expect(

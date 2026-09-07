@@ -66,9 +66,20 @@ class PiecePalette extends StatelessWidget {
               };
               controller.selectTool(alreadySelected ? null : PieceBrush(piece));
             },
-            child: PieceImage(
-              piece: Piece(color: side, role: role),
-              size: 30,
+            child: Draggable<Piece>(
+              data: Piece(color: side, role: role),
+              dragAnchorStrategy: pointerDragAnchorStrategy,
+              feedback: Transform.translate(
+                offset: const Offset(-20, -20),
+                child: PieceImage(
+                  piece: Piece(color: side, role: role),
+                  size: 40,
+                ),
+              ),
+              child: PieceImage(
+                piece: Piece(color: side, role: role),
+                size: 30,
+              ),
             ),
           ),
         // Eraser only on the white row's trailing edge would look lopsided;
