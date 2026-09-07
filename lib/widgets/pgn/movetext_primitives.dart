@@ -17,6 +17,7 @@ library;
 import '../../utils/pgn_nags.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_text_styles.dart';
+import '../../utils/san_display.dart';
 
 /// A single move in the movetext: the SAN, an optional bold NAG-quality glyph
 /// suffix (`Nf3` → `Nf3!?`), wrapped in a tappable rounded container.
@@ -97,7 +98,10 @@ class _MoveChipState extends State<MoveChip> {
         child: Text.rich(
           TextSpan(
             children: [
-              TextSpan(text: widget.san, style: widget.sanStyle),
+              TextSpan(
+                text: displaySan(context, widget.san),
+                style: widget.sanStyle,
+              ),
               if (widget.nagSuffix.isNotEmpty)
                 TextSpan(text: widget.nagSuffix, style: widget.nagStyle),
             ],

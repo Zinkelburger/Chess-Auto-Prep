@@ -120,6 +120,14 @@ class _SessionSettingsForm extends StatelessWidget {
           value: !settings.includeOneStar,
           onChanged: (v) => onChanged(settings.copyWith(includeOneStar: !v)),
         ),
+        AppCheckbox(
+          label: 'Accept other winning moves',
+          subtitle:
+              'A move that is not the stored answer is checked by Stockfish '
+              'and counts when it is just as good.',
+          value: settings.acceptAlternatives,
+          onChanged: (v) => onChanged(settings.copyWith(acceptAlternatives: v)),
+        ),
       ],
     );
   }

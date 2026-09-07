@@ -101,6 +101,12 @@ flutter:
           weight: 600
         - asset: assets/fonts/SourceCodePro-Bold.ttf
           weight: 700
+    # The chess figurines (U+2654–U+265F) only: a pyftsubset cut of Noto Sans
+    # Symbols 2, so ♘f3 draws the same on every OS instead of falling back to
+    # whatever symbol font the machine has. OFL; see LICENSE-NotoSansSymbols2.
+    - family: NotoSansSymbols2
+      fonts:
+        - asset: assets/fonts/NotoSansSymbols2-Chess.ttf
 
 flutter_launcher_icons:
   android: true

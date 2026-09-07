@@ -10,6 +10,7 @@ import '../services/games_library/games_library_service.dart'
     show GamesPlatform;
 import '../features/tactics/services/tactics_import_coordinator.dart';
 import '../features/tactics/controllers/tactics_session_controller.dart';
+import '../features/tactics/services/alternative_move_judge.dart';
 import '../features/tactics/services/tactics_database.dart';
 import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
@@ -321,8 +322,12 @@ class _TacticsModeView extends StatelessWidget {
           create: (_) => TacticsDatabase(),
         ),
         ChangeNotifierProvider<TacticsSessionController>(
-          create: (ctx) =>
-              TacticsSessionController(database: ctx.read<TacticsDatabase>()),
+          create: (ctx) => TacticsSessionController(
+            database: ctx.read<TacticsDatabase>(),
+            // "Accept other winning moves" asks Stockfish about a move
+            // that is not the stored answer; the session option gates it.
+            alternativeJudge: EngineAlternativeJudge().judge,
+          ),
         ),
         ChangeNotifierProvider<TacticsImportCoordinator>(
           create: (ctx) =>

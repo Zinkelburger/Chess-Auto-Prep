@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/models/board_display_settings.dart';
 import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/models/eval_database_settings.dart';
 import 'package:chess_auto_prep/screens/settings_screen.dart';
@@ -38,7 +39,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'unsaved-token');
 
-    await tester.tap(find.byKey(const Key('settings-nav-2')));
+    await tester.tap(find.byKey(const Key('settings-nav-3')));
     await tester.pumpAndSettle();
     expect(find.text('CPU cores'), findsOneWidget);
     expect(find.text('Your chess usernames'), findsNothing);
@@ -54,17 +55,19 @@ void main() {
   ) async {
     await pumpSettings(tester, const Size(800, 360));
     await tester.scrollUntilVisible(
-      find.byKey(const Key('settings-nav-4')),
+      find.byKey(const Key('settings-nav-5')),
       60,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.byKey(const Key('settings-nav-4')));
+    await tester.ensureVisible(find.byKey(const Key('settings-nav-5')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings-nav-5')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Reset settings…'),
       180,
       scrollable: find.descendant(
-        of: find.byKey(const PageStorageKey('settings-page-4')),
+        of: find.byKey(const PageStorageKey('settings-page-5')),
         matching: find.byType(Scrollable),
       ),
     );
@@ -84,6 +87,7 @@ void main() {
     (tester) async {
       await pumpSettings(tester, const Size(400, 640));
       for (final section in [
+        'Display',
         'Repertoires',
         'Engine',
         'Data',
@@ -136,7 +140,7 @@ void main() {
       );
       await tester.tap(find.text('Open settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('settings-nav-3')));
+      await tester.tap(find.byKey(const Key('settings-nav-4')));
       await tester.pumpAndSettle();
       expect(find.textContaining('Years of games'), findsNothing);
       expect(find.textContaining('ChessDB data directory'), findsNothing);
@@ -152,4 +156,42 @@ void main() {
       expect(app.currentMode, AppMode.databases);
     },
   );
+
+  testWidgets('display preferences change the live preview and persist', (
+    tester,
+  ) async {
+    addTearDown(() => BoardDisplaySettings.instance.resetToDefaults());
+    await pumpSettings(tester, const Size(1280, 720));
+    await tester.tap(find.byKey(const Key('settings-nav-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Board coordinates'), findsOneWidget);
+    expect(find.text('Piece notation'), findsOneWidget);
+    expect(find.byKey(const Key('display-preview-board')), findsOneWidget);
+
+    Text previewLine() =>
+        tester.widget<Text>(find.byKey(const Key('display-preview-line')));
+    expect(previewLine().data, contains('Nf3'));
+
+    await tester.tap(find.text('Letters (KQRBN)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Figurines (♔♕♖♗♘)').last);
+    await tester.pumpAndSettle();
+    expect(previewLine().data, contains('♘f3'));
+    expect(
+      BoardDisplaySettings.instance.pieceNotation,
+      PieceNotation.figurines,
+    );
+
+    await tester.tap(find.text('Inside the board'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Every square').last);
+    await tester.pumpAndSettle();
+    expect(
+      BoardDisplaySettings.instance.coordinates,
+      BoardCoordinates.everySquare,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('display.board_coordinates'), 'everySquare');
+    expect(tester.takeException(), isNull);
+  });
 }

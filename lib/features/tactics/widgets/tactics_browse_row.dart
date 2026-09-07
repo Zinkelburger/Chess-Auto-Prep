@@ -205,7 +205,8 @@ class TacticsBrowseRow extends StatelessWidget {
                   // The whole trainable line, not just its first move: a
                   // 3-move tactic listed as "h5 → Qf3" was indistinguishable
                   // from a one-mover.
-                  '${pos.userMove} → ${pos.correctLine.join(' ')}',
+                  '${displaySan(context, pos.userMove)} → '
+                  '${displaySanList(context, pos.correctLine).join(' ')}',
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 13,

@@ -31,6 +31,8 @@ TacticsPosition _position({
 Widget _panel(
   TacticsPosition position, {
   bool solved = false,
+  bool attempted = false,
+  bool isAtStartingPosition = true,
   bool showSolution = false,
   List<String> solutionSan = const [],
   List<String> trainableSan = const [],
@@ -45,8 +47,9 @@ Widget _panel(
           engine: TacticsEngine(),
           currentMoveIndex: currentMoveIndex,
           positionSolved: solved,
+          attempted: attempted,
           showSolution: showSolution,
-          isAtStartingPosition: true,
+          isAtStartingPosition: isAtStartingPosition,
           feedback: feedback,
           autoAdvance: false,
           onToggleSolution: () {},
@@ -78,8 +81,13 @@ void main() {
       await tester.pumpWidget(_panel(_position()));
 
       expect(
-        find.textContaining('You played h5 (blunder).', findRichText: true),
+        find.textContaining('You played h5 (blunder)', findRichText: true),
         findsOneWidget,
+      );
+      // A caption, not a sentence: "(blunder)." read as a typo.
+      expect(
+        find.textContaining('(blunder).', findRichText: true),
+        findsNothing,
       );
       expect(find.textContaining('??', findRichText: true), findsNothing);
     });
@@ -145,7 +153,7 @@ void main() {
 
       expect(
         find.textContaining(
-          'You played h5 (blunder), allowing Nxe5.  +0.5 → -2.1',
+          'You played h5 (blunder), allowing Nxe5  +0.5 → -2.1',
           findRichText: true,
         ),
         findsOneWidget,
@@ -158,7 +166,7 @@ void main() {
       await tester.pumpWidget(_panel(_position(note: ''), solved: true));
 
       expect(
-        find.textContaining('allowing Nxe5.', findRichText: true),
+        find.textContaining('allowing Nxe5', findRichText: true),
         findsOneWidget,
       );
       expect(find.textContaining('→', findRichText: true), findsNothing);
@@ -207,6 +215,56 @@ void main() {
       );
 
       expect(find.text('Correct!'), findsOneWidget);
+    });
+  });
+
+  group('buttons keep their places', () {
+    testWidgets('Skip becomes Next once an attempt has been scored', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_panel(_position()));
+      expect(find.text('Skip'), findsOneWidget);
+
+      await tester.pumpWidget(_panel(_position(), attempted: true));
+      expect(find.text('Next'), findsOneWidget);
+      expect(find.text('Skip'), findsNothing);
+
+      await tester.pumpWidget(_panel(_position(), solved: true));
+      expect(find.text('Next'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Analyze stays put; Reset is its own control, off at the start',
+      (tester) async {
+        await tester.pumpWidget(_panel(_position()));
+        expect(find.text('Analyze'), findsOneWidget);
+        final reset = find.byKey(const Key('tactic-reset-board'));
+        expect(reset, findsOneWidget);
+        expect(tester.widget<IconButton>(reset).onPressed, isNull);
+        expect(find.text('Reset'), findsNothing);
+
+        await tester.pumpWidget(
+          _panel(_position(), isAtStartingPosition: false),
+        );
+        expect(
+          find.text('Analyze'),
+          findsOneWidget,
+          reason: 'never swapped out',
+        );
+        expect(tester.widget<IconButton>(reset).onPressed, isNotNull);
+      },
+    );
+
+    testWidgets('solving empties the solution slot but does not move Analyze', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_panel(_position()));
+      final before = tester.getTopLeft(find.text('Analyze'));
+
+      await tester.pumpWidget(_panel(_position(), solved: true));
+      expect(find.text('Show Solution'), findsNothing);
+      expect(find.text('Hide Solution'), findsNothing);
+      expect(tester.getTopLeft(find.text('Analyze')), before);
     });
   });
 }

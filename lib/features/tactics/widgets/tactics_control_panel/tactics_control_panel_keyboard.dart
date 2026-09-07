@@ -46,7 +46,7 @@ mixin _TacticsKeyboardActions
     if (_tabController.index != 0) return false;
     if (_session.positionSolved ||
         _session.showSolution ||
-        _session.waitingForOpponent) {
+        _session.inputLocked) {
       return false;
     }
     if (isPrimaryModifierPressed || HardwareKeyboard.instance.isAltPressed) {

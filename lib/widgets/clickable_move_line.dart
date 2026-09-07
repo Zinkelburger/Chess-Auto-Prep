@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/san_display.dart';
 
 /// Per-move annotation rendered inline after or before the move SAN.
 class MoveAnnotation {
@@ -230,7 +231,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                                 ),
                               ),
                         child: Text(
-                          sanMoves[i],
+                          displaySan(context, sanMoves[i]),
                           style: TextStyle(
                             fontSize: fontSize,
                             color: isActive
@@ -277,7 +278,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
       } else {
         spans.add(
           TextSpan(
-            text: '${sanMoves[i]} ',
+            text: '${displaySan(context, sanMoves[i])} ',
             style: TextStyle(
               fontSize: fontSize,
               color: AppColors.pgnMove,

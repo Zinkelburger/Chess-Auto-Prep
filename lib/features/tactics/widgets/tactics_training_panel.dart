@@ -10,6 +10,7 @@ import '../services/tactics_engine.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart' show fenAfterMoves, sanToUci;
+import '../../../utils/san_display.dart';
 import '../../../widgets/clickable_move_line.dart';
 import '../../../widgets/engine/floating_board_preview.dart';
 import '../../../widgets/labeled_toggle.dart';
@@ -23,6 +24,7 @@ class TacticsTrainingPanel extends StatefulWidget {
     required this.engine,
     required this.currentMoveIndex,
     required this.positionSolved,
+    this.attempted = false,
     required this.showSolution,
     required this.isAtStartingPosition,
     required this.feedback,
@@ -49,6 +51,11 @@ class TacticsTrainingPanel extends StatefulWidget {
   final TacticsEngine engine;
   final int currentMoveIndex;
   final bool positionSolved;
+
+  /// An attempt has been scored — right or wrong. After a wrong answer the
+  /// puzzle can still be solved, but moving on is no longer *skipping* it,
+  /// so the button reads Next.
+  final bool attempted;
   final bool showSolution;
   final bool isAtStartingPosition;
   final String feedback;
@@ -110,7 +117,8 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
   bool get _showRating =>
       !widget.autoAdvance && (widget.positionSolved || widget.showSolution);
 
-  bool get _useNextLabel => widget.positionSolved || widget.showSolution;
+  bool get _useNextLabel =>
+      widget.positionSolved || widget.showSolution || widget.attempted;
 
   String get _nextLabel {
     if (widget.isLastSessionPuzzle) return 'Finish';
@@ -126,6 +134,13 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
   /// Everything that would give the tactic away is shown once the puzzle is
   /// solved or the solution is asked for.
   bool get _isRevealed => widget.positionSolved || widget.showSolution;
+
+  /// Three controls share the first row, so its two text buttons give up
+  /// half the default horizontal padding; at the pane's usual width the
+  /// default wrapped "Show Solution" onto two lines.
+  static final ButtonStyle _rowOneStyle = OutlinedButton.styleFrom(
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+  );
 
   /// The solution line to print: the whole thing once revealed, otherwise
   /// just the moves found so far — so a multi-move puzzle shows where you are.
@@ -173,55 +188,67 @@ class _TacticsTrainingPanelState extends State<TacticsTrainingPanel> {
               : _buildSolutionLine(context, solution),
         ),
         const SizedBox(height: 12),
+        // Three controls with fixed homes. Analyze used to turn into Reset
+        // the moment the board left the puzzle position and to stretch across
+        // the row on solving — a button that renamed and moved under the
+        // cursor. Now each keeps its slot: the solution slot empties (but
+        // keeps its width) once the answer is on screen, and Reset is a
+        // separate control that is simply disabled while there is nothing
+        // to reset.
         Row(
           children: [
-            // Once solved, the solution is already on screen.
-            if (!widget.positionSolved) ...[
-              Expanded(
-                child: shortcutTooltip(
-                  description: widget.showSolution
-                      ? 'Hide solution'
-                      : 'Show solution',
-                  shortcut: AppShortcut.toggleSolution,
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: widget.onToggleSolution,
-                      child: Text(
-                        widget.showSolution ? 'Hide Solution' : 'Show Solution',
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
             Expanded(
-              child: widget.isAtStartingPosition
-                  ? shortcutTooltip(
-                      description: 'Analyze',
-                      // V only: A is the a-file, and the move box is always
-                      // hot while solving, so an A binding can never fire.
-                      shortcut: AppShortcut.analyzePosition,
+              // Once solved, the solution is already on screen; the empty
+              // box keeps the column so Analyze does not slide over.
+              child: widget.positionSolved
+                  ? const SizedBox.shrink()
+                  : shortcutTooltip(
+                      description: widget.showSolution
+                          ? 'Hide solution'
+                          : 'Show solution',
+                      shortcut: AppShortcut.toggleSolution,
                       child: SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
-                          onPressed: widget.onAnalyze,
-                          child: const Text('Analyze'),
-                        ),
-                      ),
-                    )
-                  : Tooltip(
-                      message: 'Reset analysis',
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: widget.onResetAnalysis,
-                          icon: const Icon(Icons.refresh, size: 16),
-                          label: const Text('Reset'),
+                          onPressed: widget.onToggleSolution,
+                          style: _rowOneStyle,
+                          child: Text(
+                            widget.showSolution
+                                ? 'Hide Solution'
+                                : 'Show Solution',
+                          ),
                         ),
                       ),
                     ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: shortcutTooltip(
+                description: 'Analyze this position in the game',
+                // V only: A is the a-file, and the move box is always
+                // hot while solving, so an A binding can never fire.
+                shortcut: AppShortcut.analyzePosition,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: widget.onAnalyze,
+                    style: _rowOneStyle,
+                    child: const Text('Analyze'),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.outlined(
+              key: const Key('tactic-reset-board'),
+              onPressed: widget.isAtStartingPosition
+                  ? null
+                  : widget.onResetAnalysis,
+              icon: const Icon(Icons.replay, size: 18),
+              tooltip: widget.isAtStartingPosition
+                  ? 'The board is at the puzzle position'
+                  : 'Reset the board to the puzzle position',
+              visualDensity: VisualDensity.compact,
             ),
           ],
         ),
@@ -520,9 +547,11 @@ class TacticsPositionInfo extends StatelessWidget {
   }
 }
 
-/// "You played h5 (blunder)." — and once the answer is out, what it allowed
+/// "You played h5 (blunder)" — and once the answer is out, what it allowed
 /// and what it cost on the same line: "You played h5 (blunder), allowing
-/// Nxe5.  +0.5 → -2.1". Plain prose; the moves are bold and nothing else is.
+/// Nxe5  +0.5 → -2.1". Plain prose; the moves are bold and nothing else is.
+/// No full stop: it is a caption, not a sentence, and "(blunder)." read as a
+/// typo to everyone who saw it.
 class _GameLine extends StatelessWidget {
   const _GameLine({required this.position, required this.revealed});
 
@@ -541,7 +570,7 @@ class _GameLine extends StatelessWidget {
 
     final spans = <TextSpan>[
       const TextSpan(text: 'You played '),
-      TextSpan(text: position.userMove, style: move),
+      TextSpan(text: displaySan(context, position.userMove), style: move),
       // The one coloured word on the line: blue / amber / red mean
       // inaccuracy / mistake / blunder everywhere else in chess too.
       if (severity.isNotEmpty)
@@ -553,10 +582,9 @@ class _GameLine extends StatelessWidget {
     if (revealed && refutation.isNotEmpty) {
       spans.addAll([
         const TextSpan(text: ', allowing '),
-        TextSpan(text: refutation, style: move),
+        TextSpan(text: displaySan(context, refutation), style: move),
       ]);
     }
-    spans.add(const TextSpan(text: '.'));
     if (revealed && note != null) {
       spans.add(
         TextSpan(text: '  ${note.evalBefore} → ${note.evalAfter}', style: soft),

@@ -28,6 +28,7 @@ class TacticsSessionSettings {
     this.skipReviewed = false,
     this.mistakeTypes = const {'??', '?', customMistakeType},
     this.maxAgeDays = defaultMaxAgeDays,
+    this.acceptAlternatives = false,
   });
 
   /// Default recency window: positions from games older than this are
@@ -61,6 +62,12 @@ class TacticsSessionSettings {
   /// parseable game date are never age-filtered (curation isn't
   /// recency-driven, and an unknown date shouldn't hide a puzzle).
   final int? maxAgeDays;
+
+  /// When a move is not the stored answer, ask Stockfish whether it is just
+  /// as good before calling it wrong. Off by default: the check takes the
+  /// engine a moment per wrong move, and a puzzle mined from a game has one
+  /// stored answer that is usually the only one.
+  final bool acceptAlternatives;
 
   /// Returns `true` when [pos] should be included in a session with these
   /// settings.
@@ -102,6 +109,7 @@ class TacticsSessionSettings {
     Set<String>? mistakeTypes,
     int? maxAgeDays,
     bool clearMaxAgeDays = false,
+    bool? acceptAlternatives,
   }) {
     return TacticsSessionSettings(
       order: order ?? this.order,
@@ -110,6 +118,7 @@ class TacticsSessionSettings {
       skipReviewed: skipReviewed ?? this.skipReviewed,
       mistakeTypes: mistakeTypes ?? this.mistakeTypes,
       maxAgeDays: clearMaxAgeDays ? null : (maxAgeDays ?? this.maxAgeDays),
+      acceptAlternatives: acceptAlternatives ?? this.acceptAlternatives,
     );
   }
 
@@ -122,6 +131,7 @@ class TacticsSessionSettings {
 
   /// Stored value for [maxAgeDays]; 0 encodes "all time" (null).
   static const _keyMaxAgeDays = 'tactics_session.max_age_days';
+  static const _keyAcceptAlternatives = 'tactics_session.accept_alternatives';
 
   /// Load saved session settings, falling back to defaults for any missing key.
   static Future<TacticsSessionSettings> load() async {
@@ -154,6 +164,8 @@ class TacticsSessionSettings {
       maxAgeDays: storedMaxAge == null
           ? defaults.maxAgeDays
           : (storedMaxAge <= 0 ? null : storedMaxAge),
+      acceptAlternatives:
+          prefs.getBool(_keyAcceptAlternatives) ?? defaults.acceptAlternatives,
     );
   }
 
@@ -167,5 +179,6 @@ class TacticsSessionSettings {
     await prefs.setBool(_keySkipReviewed, skipReviewed);
     await prefs.setStringList(_keyMistakeTypes, mistakeTypes.toList());
     await prefs.setInt(_keyMaxAgeDays, maxAgeDays ?? 0);
+    await prefs.setBool(_keyAcceptAlternatives, acceptAlternatives);
   }
 }
