@@ -89,7 +89,11 @@ void showAppSnackBar(
       // onSurfaceSoft measured only 2.99:1).
       closeIconColor: AppColors.ink,
       action: actionLabel != null && onAction != null
-          ? SnackBarAction(label: actionLabel, onPressed: onAction)
+          ? SnackBarAction(
+              label: actionLabel,
+              onPressed: onAction,
+              textColor: AppColors.ink,
+            )
           : null,
     ),
   );

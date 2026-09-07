@@ -12,6 +12,12 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   GameAnalysisController get _analysisController;
   TabController get _tabController;
   bool get _onLineTab;
+  int get _explorerTabIndex;
+  int get _analysisTabIndex;
+  GameViewPreferences get _viewPreferences;
+  bool get _reviewHandoff;
+  void _showPanel(int index);
+  void _startAutoAnalysisForCurrentGame();
   PgnViewerHandle get _activeMovetextController;
   void _handleBoardMove(String san);
   bool get _editMode;
@@ -160,6 +166,12 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             ),
           ),
         ),
+        if (!_controller.isSolitaireMode &&
+            _controller.filteredGames.isNotEmpty &&
+            (_viewPreferences.graph || _reviewHandoff) &&
+            !_onLineTab &&
+            !_controller.showOpeningTree)
+          _buildAnalysisOverview(),
         if (_controller.filteredGames.isNotEmpty) _buildCollectionNavigation(),
       ],
     );
@@ -179,53 +191,23 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             showTabs &&
             _lineTabVisible)
           _DeviationBanner(report: deviation, onShowLine: _showLineTab),
-        if (showTabs)
+        if (showTabs && _tabController.index != 0)
           Row(
             children: [
+              TextButton.icon(
+                onPressed: () => _showPanel(0),
+                icon: const Icon(Icons.arrow_back, size: 18),
+                label: const Text('Back to game'),
+              ),
+              const SizedBox(width: 12),
               Expanded(
-                child: TabBar(
-                  controller: _tabController,
-                  tabs: [
-                    const Tab(text: 'Game'),
-                    if (_lineTabVisible)
-                      Tab(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('Book'),
-                            if (deviation != null && !deviation.inBook) ...[
-                              const SizedBox(width: 5),
-                              Icon(
-                                Icons.circle,
-                                size: 7,
-                                color: deviation.bookEnded
-                                    ? AppColors.onSurfaceMuted
-                                    : AppColors.warning,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    const Tab(text: 'Explorer'),
-                    Tab(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('Analysis'),
-                          if (_analysisController.isAnalyzing) ...[
-                            const SizedBox(width: 6),
-                            const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1.5,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  _onLineTab
+                      ? 'My repertoire'
+                      : _tabController.index == _explorerTabIndex
+                      ? 'Opening explorer'
+                      : 'Game analysis',
+                  style: AppTextStyles.muted,
                 ),
               ),
             ],
@@ -234,6 +216,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
           child: showTabs
               ? TabBarView(
                   controller: _tabController,
+                  physics: const NeverScrollableScrollPhysics(),
                   children: [
                     _buildGameTab(),
                     if (_lineTabVisible) _buildLineTab(),
@@ -264,46 +247,67 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     );
   }
 
+  Widget _buildAnalysisOverview() {
+    final evals = _analysisController.evals;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _analysisController.isAnalyzing
+                      ? 'Analyzing ${_analysisController.analyzedMoves}/${_analysisController.totalMoves}'
+                      : evals.isNotEmpty
+                      ? (evals.length < _analysisController.totalMoves
+                            ? 'Partial evaluation · ${evals.length}/${_analysisController.totalMoves} moves'
+                            : 'Game evaluation')
+                      : 'Game analysis',
+                  style: AppTextStyles.caption,
+                ),
+              ),
+              TextButton(
+                onPressed: evals.isEmpty
+                    ? _startAutoAnalysisForCurrentGame
+                    : () => _showPanel(_analysisTabIndex),
+                child: Text(evals.isEmpty ? 'Analyze game' : 'Review moves'),
+              ),
+            ],
+          ),
+        ),
+        if (evals.isNotEmpty)
+          GameAnalysisChart(
+            height: 110,
+            evals: evals,
+            startWinChance: _analysisController.startWinChance,
+            currentPly: _controller.currentPly,
+            onPlySelected: (ply) {
+              _controller.stopAutoPlay();
+              _pgnWidgetController.goToMainLineIndex(ply);
+              _reclaimFocus();
+            },
+          ),
+      ],
+    );
+  }
+
   Widget _buildCollectionNavigation() => GameNavBar(
     games: [
       for (final g in _controller.filteredGames) GameNavItem.fromEntry(g),
     ],
     currentIndex: _controller.currentGameIndex,
-    currentRating:
-        _controller.filteredGames[_controller.currentGameIndex].studyRating,
     sortMode: _controller.sortMode,
     isAutoPlaying: !_onLineTab && _controller.isAutoPlaying,
-    autoPlayDelaySec: _controller.autoPlayDelaySec,
-    autoNextGame: _controller.autoNextGame,
-    // Switching games throws a half-finished solitaire game away, so
-    // the user is asked first when there is something to lose.
+    showPlayback: _viewPreferences.playback,
     onPrev: () => unawaited(_guardingSolitaireProgress(_controller.prevGame)),
     onNext: () => unawaited(_guardingSolitaireProgress(_controller.nextGame)),
     onGoToGame: (index) {
-      _controller.goToGame(index);
-      // Typing a number leaves focus in the nav bar's box; put it back
-      // on the screen so ←/→ move through the game we just landed on.
+      unawaited(_guardingSolitaireProgress(() => _controller.goToGame(index)));
       _reclaimFocus();
     },
-    onSetRating: _controller.setRating,
-    onSetSortMode: _controller.setSortMode,
-    // Playback/fullscreen unmount or drive the game reader. Keeping
-    // them enabled while Book owns the board would mutate an invisible
-    // cursor, so they are deliberately unavailable in that pane.
     onToggleAutoPlay: _onLineTab ? null : _controller.toggleAutoPlay,
-    onToggleFullScreen: _onLineTab ? null : _controller.toggleFullScreen,
-    onSetSpeed: _onLineTab ? null : _controller.setAutoPlaySpeed,
-    onSetAutoNext: _onLineTab ? null : _controller.setAutoNextGame,
-    onCopyPgn: _copyCurrentGamePgn,
-    hasEphemeralAnnotations: _activeMovetextController.hasEphemeralMoves,
-    onClearAnnotations: () {
-      _controller.stopAutoPlay();
-      _activeMovetextController.clearEphemeralMoves();
-      setState(() {});
-      _reclaimFocus();
-    },
-    onToggleEditMode: _onLineTab ? null : _toggleEditMode,
-    isEditMode: _editMode,
     isSolitaireMode: _controller.isSolitaireMode,
   );
 
@@ -494,7 +498,9 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     final game = _controller.filteredGames[_controller.currentGameIndex];
     return Column(
       children: [
-        if (!_controller.isSolitaireMode && !_controller.isSolitaireSetup)
+        if (_viewPreferences.engine &&
+            !_controller.isSolitaireMode &&
+            !_controller.isSolitaireSetup)
           InlineEngineBar(
             fen: _controller.currentPosition.fen,
             onLineMoveTapped: _controller.onEngineLineMoveTapped,
@@ -520,6 +526,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
         if (_editMode) _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
+            showStartEndButtons: true,
+            showReadingOptions: false,
             key: ValueKey('game_${_controller.currentGameIndex}'),
             pgnText: game.pgnText,
             controller: _pgnWidgetController,

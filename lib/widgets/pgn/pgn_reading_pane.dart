@@ -29,6 +29,7 @@ typedef PgnDocumentBuilder =
 /// never changes the board; only a navigation action requests an anchor.
 class PgnReadingPane extends StatefulWidget {
   final Object selection;
+  final bool showReadingOptions;
   final List<MoveNode> analysisPath;
   final int branchPly;
   final int startingMoveNumber;
@@ -40,6 +41,7 @@ class PgnReadingPane extends StatefulWidget {
   const PgnReadingPane({
     super.key,
     required this.selection,
+    this.showReadingOptions = true,
     required this.analysisPath,
     required this.branchPly,
     required this.startingMoveNumber,
@@ -64,6 +66,50 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
   double _anchor = 0;
   double? _restoreOffset;
   int _scrollRequest = 0;
+
+  void _applyReadingOption(String value) {
+    setState(() {
+      if (value == 'expand') {
+        _foldRevision++;
+        _expandAll = true;
+      } else if (value == 'fold') {
+        _foldRevision++;
+        _expandAll = false;
+      } else {
+        _anchor = double.parse(value);
+      }
+      _browsing = false;
+    });
+    _scheduleAnchor();
+  }
+
+  /// Hosts can place this action in their own settings menu.
+  Future<void> showReadingOptions() async {
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Move list'),
+        children: [
+          for (final option in const {
+            '0': 'Anchor near top',
+            '0.35': 'Anchor near middle',
+            '0.68': 'Anchor near bottom',
+            'expand': 'Expand all variations',
+            'fold': 'Fold deep variations',
+          }.entries)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, option.key),
+              child: Text(option.value),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    if (mounted && value != null) _applyReadingOption(value);
+  }
 
   List<PgnReadingBranch> get _branches {
     final path = widget.analysisPath;
@@ -212,96 +258,90 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
         borderRadius: BorderRadius.circular(8),
         child: Column(
           children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFF363B43))),
-              ),
-              child: Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 4,
-                runSpacing: 2,
-                children: [
-                  TextButton(
-                    onPressed: branches.isEmpty ? null : _mainline,
-                    child: const Tooltip(
-                      message: 'Return to mainline (R)',
-                      child: Text('Main line', style: AppTextStyles.muted),
-                    ),
-                  ),
-                  for (final branch in branches) ...[
-                    const Icon(Icons.chevron_right, size: 14),
+            if (widget.showReadingOptions || branches.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Color(0xFF363B43))),
+                ),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: [
                     TextButton(
-                      onPressed: () =>
-                          widget.onNode(branch.root, branch.branchPly),
-                      child: Text(_label(branch), style: AppTextStyles.mono),
-                    ),
-                  ],
-                  if (branches.isNotEmpty)
-                    IconButton(
-                      tooltip: 'Parent line (Ctrl+←)',
-                      onPressed: returnToParent,
-                      icon: const Icon(Icons.subdirectory_arrow_left, size: 18),
-                    ),
-                  if (branches.isNotEmpty &&
-                      branches.last.root.id != _scope?.root.id)
-                    TextButton(
-                      onPressed: focusVariation,
+                      onPressed: branches.isEmpty ? null : _mainline,
                       child: const Tooltip(
-                        message:
-                            'Read this variation at full width (Ctrl+Enter)',
-                        child: Text('Focus variation'),
+                        message: 'Return to mainline (R)',
+                        child: Text('Main line', style: AppTextStyles.muted),
                       ),
                     ),
-                  PopupMenuButton<String>(
-                    tooltip: 'Reading options',
-                    icon: const Icon(Icons.tune, size: 18),
-                    onSelected: (value) {
-                      setState(() {
-                        if (value == 'expand') {
-                          _foldRevision++;
-                          _expandAll = true;
-                        } else if (value == 'fold') {
-                          _foldRevision++;
-                          _expandAll = false;
-                        } else {
-                          _anchor = double.parse(value);
-                        }
-                        _browsing = false;
-                      });
-                      _scheduleAnchor();
-                    },
-                    itemBuilder: (_) => [
-                      CheckedPopupMenuItem(
-                        value: '0',
-                        checked: _anchor == 0,
-                        child: const Text('Anchor near top'),
-                      ),
-                      CheckedPopupMenuItem(
-                        value: '0.35',
-                        checked: _anchor == .35,
-                        child: const Text('Anchor near middle'),
-                      ),
-                      CheckedPopupMenuItem(
-                        value: '0.68',
-                        checked: _anchor == .68,
-                        child: const Text('Anchor near bottom'),
-                      ),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(
-                        value: 'expand',
-                        child: Text('Expand all variations'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'fold',
-                        child: Text('Fold deep variations'),
+                    for (final branch in branches) ...[
+                      const Icon(Icons.chevron_right, size: 14),
+                      TextButton(
+                        onPressed: () =>
+                            widget.onNode(branch.root, branch.branchPly),
+                        child: Text(_label(branch), style: AppTextStyles.mono),
                       ),
                     ],
-                  ),
-                ],
+                    if (branches.isNotEmpty)
+                      IconButton(
+                        tooltip: 'Parent line (Ctrl+←)',
+                        onPressed: returnToParent,
+                        icon: const Icon(
+                          Icons.subdirectory_arrow_left,
+                          size: 18,
+                        ),
+                      ),
+                    if (branches.isNotEmpty &&
+                        branches.last.root.id != _scope?.root.id)
+                      TextButton(
+                        onPressed: focusVariation,
+                        child: const Tooltip(
+                          message:
+                              'Read this variation at full width (Ctrl+Enter)',
+                          child: Text('Focus variation'),
+                        ),
+                      ),
+                    if (widget.showReadingOptions)
+                      PopupMenuButton<String>(
+                        tooltip: 'Reading options',
+                        icon: const Icon(Icons.tune, size: 18),
+                        onSelected: _applyReadingOption,
+                        itemBuilder: (_) => [
+                          CheckedPopupMenuItem(
+                            value: '0',
+                            checked: _anchor == 0,
+                            child: const Text('Anchor near top'),
+                          ),
+                          CheckedPopupMenuItem(
+                            value: '0.35',
+                            checked: _anchor == .35,
+                            child: const Text('Anchor near middle'),
+                          ),
+                          CheckedPopupMenuItem(
+                            value: '0.68',
+                            checked: _anchor == .68,
+                            child: const Text('Anchor near bottom'),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'expand',
+                            child: Text('Expand all variations'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'fold',
+                            child: Text('Fold deep variations'),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
               ),
-            ),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {

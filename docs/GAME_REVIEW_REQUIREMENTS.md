@@ -6,6 +6,30 @@ Status: draft for Andrew to edit. This describes what the page should do, not a 
 
 Legend: **Required** reflects the requested direction. **Proposed** is a suggested behavior to edit. **Decide** identifies an unresolved product choice. Unchecked boxes are reviewable requirements, not a record of implementation status.
 
+## Implementation checkpoint — 7 September 2026
+
+The `codex/games-study-workspace` change implements a quieter default: board and moves, four move-navigation buttons, collection navigation, a study action, and one labelled View menu. There are no permanent activity tabs, rating stars, always-visible engine controls, or default Play button. The existing file picker is labelled with the collection name or “Open games”.
+
+Implemented in this change:
+
+- Add the current game, or select multiple games from the currently filtered collection, to an existing or new study. Keep reviewing after saving; offer an Open study link. Append a batch in one file write and retain unsaved edits when the destination is already open.
+- When viewing a study, offer Edit study and return to that chapter and position. Copying into another study is a secondary action.
+- Keep filters accessible through one Filter games control; show matching/total counts when active. Preserve the existing detailed filter dialog.
+- One View menu contains Explore this game, Solitaire chess, Customize view, Game and collection, and App settings. Contextual panels offer Back to game.
+- Remember explicit engine-control, saved-graph, and playback visibility, playback speed, and continue-to-next-game choices. Restore simple defaults is available. Restoring playback visibility never starts playback.
+- Show stored evaluation below the board and synchronize graph clicks with the game. Analysis handoffs keep the moves visible. Detailed move analysis remains an on-demand panel.
+- Make the existing My repertoire comparison reader available for imported games as well as recent-game/tactics handoffs.
+
+Still open for product review: membership indicators and duplicate detection; source references beyond preserved PGN headers; richer matching across multiple related repertoire chapters/lines; reading the game and several prepared lines simultaneously. The requirements below deliberately retain these ambitions. This change does not claim to implement them.
+
+Validation: 20 focused tests pass, including study batch persistence, open-study edits, selection scope, preference reload, navigation routing, and move-reader options. Analyze and lint pass; the analyzer reports one existing informational const suggestion in `review_counterexamples_test.dart`.
+
+Headless app checks used an isolated three-game fixture. Verified adding a two-game selection to a new study, appending to that existing study, opening the new chapter, browsing a study and returning through Edit study, position filtering (2/3 games), filtered study selection, and playback visibility after restart without autoplay. The shared snackbar action now uses the same legible ink as its close control, so Open study stays readable on the dark surface.
+
+Review screenshots: [default reader](images/game-review/default.png), [choose games](images/game-review/study-selection.png), [optional controls](images/game-review/view-options.png), [added-to-study confirmation](images/game-review/study-added.png).
+
+The variation typography work is separate (`codex/pgn-variation-flow`); this change does not edit its movetext rendering files. Shared reader changes only let the host relocate reading settings into View; the reader retains its existing standalone settings by default.
+
 ## 1. Product priorities
 
 - [ ] **Required:** Board and played moves are the stable center of the page.

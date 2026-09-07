@@ -32,6 +32,7 @@ class AddToStudyResult {
 class AddToStudyDialog extends StatefulWidget {
   final String initialChapterName;
   final String title;
+  final String? selectionSummary;
 
   /// A study to list first, labelled as the prep file — an opponent's, when
   /// Player Analysis knows who it is looking at.
@@ -41,6 +42,7 @@ class AddToStudyDialog extends StatefulWidget {
     super.key,
     required this.initialChapterName,
     this.title = 'Add line to study',
+    this.selectionSummary,
     this.preferredPath,
   });
 
@@ -134,13 +136,19 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
-              controller: _chapterCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Chapter name',
-                isDense: true,
+            if (widget.selectionSummary != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(widget.selectionSummary!),
+              )
+            else
+              TextField(
+                controller: _chapterCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Chapter name',
+                  isDense: true,
+                ),
               ),
-            ),
             const SizedBox(height: 12),
             TextField(
               controller: _searchCtrl,

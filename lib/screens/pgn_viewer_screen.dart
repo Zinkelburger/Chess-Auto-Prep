@@ -1,8 +1,7 @@
 /// PGN Viewer mode — browse master game collections for study.
 ///
 /// Features: file picker, position/header-based dataset slicing, game-by-game
-/// navigation with counter, auto-play with configurable delay, 1-5 star game
-/// rating (persisted as [StudyRating] PGN header, auto-saved), full-game
+/// navigation with counter, optional playback, study curation, and full-game
 /// Stockfish analysis with eval graph, inline engine bar, and comment editing.
 ///
 /// The screen state is split across part files: app-bar builders in
@@ -11,8 +10,8 @@
 /// flow in `pgn_viewer_screen_repertoire.dart`.
 library;
 
-import '../widgets/common/name_entry_dialog.dart';
 import 'dart:async';
+import '../widgets/common/name_entry_dialog.dart';
 import 'dart:convert';
 import 'package:dartchess/dartchess.dart' show PgnGame, PgnNodeData, Position;
 import 'package:file_picker/file_picker.dart';
@@ -35,7 +34,6 @@ import '../features/games/services/opening_review.dart' show deviationVerdict;
 import '../features/games/services/game_moves.dart';
 import '../features/games/services/my_repertoire_settings.dart';
 import '../features/games/widgets/repertoire_line_panel.dart';
-import '../core/study_controller.dart';
 import '../services/games_library/game_filter.dart' show dedupKeyForHeaders;
 import '../services/storage/app_paths.dart';
 import '../services/lichess_auth_service.dart';
@@ -55,10 +53,8 @@ import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
-import '../widgets/shortcut_tooltip.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_switcher.dart';
-import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/common/confirm_dialog.dart';
 import '../widgets/engine/engine_gate.dart';
@@ -67,6 +63,9 @@ import '../widgets/chess_board_widget.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/fullscreen_game_view.dart';
 import '../widgets/game_analysis_tab.dart';
+import '../widgets/game_analysis_chart.dart';
+import '../features/games/models/game_view_preferences.dart';
+import '../features/games/widgets/add_games_to_study.dart';
 import '../widgets/game_nav_bar.dart';
 import '../widgets/game_number_field.dart';
 import '../widgets/game_search_dialog.dart';
@@ -74,8 +73,6 @@ import '../widgets/pgn/generate_repertoire_dialog.dart';
 import '../widgets/study/add_to_study_flow.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
-import '../widgets/pgn/pgn_perspective_button.dart';
-import '../widgets/pgn/pgn_slice_chips.dart';
 import '../widgets/pgn/solitaire_status_widgets.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn_slice_dialog.dart';
@@ -127,17 +124,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   bool _singleGameFocusValue = false;
 
-  @override
   bool get _singleGameFocus => _singleGameFocusValue;
 
-  /// Book tab is only for reviewing one of your games from Games/tactics.
+  /// Repertoire comparison is available for imports as well as handoffs.
   @override
-  bool get _lineTabVisible => _singleGameFocusValue;
+  bool get _lineTabVisible => true;
 
+  @override
   int get _lineTabIndex => _lineTabVisible ? 1 : -1;
 
+  @override
   int get _explorerTabIndex => _lineTabVisible ? 2 : 1;
 
+  @override
   int get _analysisTabIndex => _lineTabVisible ? 3 : 2;
 
   /// The opening explorer beside the game: what the databases say about the
@@ -172,7 +171,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     super.initState();
     // Game · Explorer · Analysis by default. Line is added only for a
     // Games/tactics handoff (see [_lineTabVisible]).
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _explorer = LiveExplorerService();
     _gameOpener = ExplorerGameOpener();
     _pgnWidgetController = PgnViewerWidgetController();
@@ -200,6 +199,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // reading owns the board, so flipping between them is a comparison of the
     // same position rather than two viewers fighting over one board.
     _tabController.addListener(_onSideTabChanged);
+    unawaited(_loadViewPreferences());
     unawaited(_controller.loadRecentFiles());
     unawaited(_controller.loadCollections());
     unawaited(_controller.loadSolitaireSettings());
@@ -216,8 +216,58 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     });
   }
 
+  @override
+  GameViewPreferences _viewPreferences = const GameViewPreferences();
+  bool _preferencesChanged = false;
+  @override
+  bool _reviewHandoff = false;
+  @override
+  bool _viewingStudy = false;
+  String? _studyPathChecked;
+
+  Future<void> _loadViewPreferences() async {
+    final saved = await GameViewPreferences.load();
+    if (!mounted || _preferencesChanged) return;
+    setState(() => _viewPreferences = saved);
+    _controller.setAutoPlaySpeed(saved.speed);
+    _controller.setAutoNextGame(saved.autoNext);
+  }
+
+  @override
+  void _setViewPreferences(GameViewPreferences value) {
+    _preferencesChanged = true;
+    _reviewHandoff = false;
+    setState(() => _viewPreferences = value);
+    if (!value.playback) _controller.stopAutoPlay();
+    _controller.setAutoPlaySpeed(value.speed);
+    _controller.setAutoNextGame(value.autoNext);
+    unawaited(value.save());
+  }
+
+  Future<void> _checkStudyPath(String? path) async {
+    final isStudy = path != null && await _isStudyPath(path);
+    if (mounted && _controller.filePath == path) {
+      setState(() => _viewingStudy = isStudy);
+    }
+  }
+
+  @override
+  void _showPanel(int index) {
+    _controller.stopAutoPlay();
+    if (_controller.showOpeningTree) _controller.toggleOpeningTree();
+    if (index == _lineTabIndex) _lineTabVisited = true;
+    _tabController.index = index;
+    setState(() {});
+    _reclaimFocus();
+  }
+
   void _onControllerUpdate() {
     if (!mounted) return;
+    if (_studyPathChecked != _controller.filePath) {
+      _studyPathChecked = _controller.filePath;
+      _viewingStudy = false;
+      unawaited(_checkStudyPath(_studyPathChecked));
+    }
     // Trophies belong to one game's analysis; the banner and the per-move
     // markers key off its positions, so they must not survive a game switch.
     if (_detectedTrophies.isNotEmpty &&
@@ -339,6 +389,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Solitaire hides the side-panel tabs entirely; don't fight the mode.
   void _applyHandoffTab(OpenPgnViewer handoff) {
     if (_controller.isSolitaireMode) return;
+    _reviewHandoff = handoff.tab == PgnViewerTab.analysis;
     switch (handoff.tab) {
       case PgnViewerTab.game:
         _tabController.animateTo(_kGameTab);
@@ -347,7 +398,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       case PgnViewerTab.explorer:
         _tabController.animateTo(_explorerTabIndex);
       case PgnViewerTab.analysis:
-        _tabController.animateTo(_analysisTabIndex);
+        _tabController.animateTo(_kGameTab);
     }
     if (handoff.autoAnalyze) _startAutoAnalysisForCurrentGame();
     final ply = handoff.ply;
@@ -422,9 +473,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Start the engine review of the current game unless cached `[%eval]`s
   /// already cover it. Mirrors the Analysis tab's manual "Analyze Game"
   /// button, including persistence and trophy detection.
+  @override
   void _startAutoAnalysisForCurrentGame() {
     if (_controller.filteredGames.isEmpty) return;
-    _tabController.animateTo(_analysisTabIndex);
+    _tabController.animateTo(_kGameTab);
     if (_analysisController.isAnalyzing) return;
     if (_analysisController.evals.isNotEmpty) return;
     if (!EngineGate.ensureAvailable(context)) return;
@@ -477,6 +529,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   void _onSideTabChanged() {
     if (!mounted || _tabController.indexIsChanging) return;
+    setState(() {});
     if (_tabController.index == _lineTabIndex) {
       // Book has its own cursor. Never leave the hidden Game reader advancing
       // or editing behind it after a tab switch.
@@ -967,21 +1020,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _addCurrentGameToStudy() async {
-    if (_controller.filteredGames.isEmpty) return;
-    final game = _controller.filteredGames[_controller.currentGameIndex];
-    // The guess notes are already merged into this game's movetext by the time
-    // the completion banner shows, so the stored PGN is the annotated artifact.
-    final pgn = game.pgnText;
-    final white = game.headers['White'] ?? 'White';
-    final black = game.headers['Black'] ?? 'Black';
-    final suggested = '$white – $black (solitaire)';
-
-    await runAddToStudyFlow(
+    await addGamesToStudy(
       context,
-      suggestedChapterName: suggested,
-      pickerTitle: 'Add game to study',
-      viewActionLabel: 'View game',
-      buildPgn: (_) => pgn,
+      games: _controller.filteredGames,
+      currentIndex: _controller.currentGameIndex,
     );
     _reclaimFocus();
   }
@@ -1219,39 +1261,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// exploring a big collection to curating the interesting games.
   @override
   Future<void> _saveSliceAsStudy() async {
-    final games = _controller.filteredGames;
-    if (games.isEmpty) return;
-
-    final suggested = _controller.filePath == null
-        ? 'New study'
-        : p.basenameWithoutExtension(_controller.filePath!);
-    final name = await showNameEntryDialog(
+    await addGamesToStudy(
       context,
-      title: 'Save ${games.length} games as study',
-      fieldLabel: 'Study name',
-      confirmLabel: 'Save',
-      initialValue: suggested,
-      allowUnchanged: true,
-    );
-    final trimmed = name?.trim();
-    if (trimmed == null || trimmed.isEmpty || !mounted) {
-      _reclaimFocus();
-      return;
-    }
-
-    final study = context.read<StudyController>();
-    final appState = context.read<AppState>();
-    final path = await study.createStudyFromPgn(
-      trimmed,
-      _controller.buildExportContent(),
-    );
-    if (!mounted) return;
-    showAppSnackBar(
-      context,
-      'Saved ${games.length} game${games.length == 1 ? '' : 's'} as '
-      '"${study.doc.name}".',
-      actionLabel: 'Edit study',
-      onAction: () => appState.switchToStudyEdit(path: path),
+      games: _controller.filteredGames,
+      currentIndex: _controller.currentGameIndex,
+      chooseGames: true,
     );
     _reclaimFocus();
   }

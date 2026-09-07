@@ -188,6 +188,9 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   @override
   void returnToMainline() => _state?._returnToMainline();
 
+  void showReadingOptions() =>
+      _state?._readingPaneKey.currentState?.showReadingOptions();
+
   void focusVariation() =>
       _state?._readingPaneKey.currentState?.focusVariation();
   void returnToParentLine() =>
@@ -252,6 +255,7 @@ class PgnViewerWidget extends StatefulWidget {
   final PgnViewerWidgetController? controller;
   final String? initialFen;
   final bool showStartEndButtons;
+  final bool showReadingOptions;
   final ValueChanged<String>? onCommentsChanged;
   final bool editMode;
 
@@ -283,6 +287,7 @@ class PgnViewerWidget extends StatefulWidget {
     this.controller,
     this.initialFen,
     this.showStartEndButtons = true,
+    this.showReadingOptions = true,
     this.onCommentsChanged,
     this.editMode = false,
     this.initialMainLineIndex = 0,
@@ -713,6 +718,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         Expanded(
           child: PgnReadingPane(
             key: _readingPaneKey,
+            showReadingOptions: widget.showReadingOptions,
             selection: (
               _game,
               _mainLineIndex,
