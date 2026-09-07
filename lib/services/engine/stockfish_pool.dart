@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/analysis/discovery_result.dart';
 import '../../models/engine_settings.dart';
 import 'engine_interrupt.dart';
+import 'engine_connection.dart';
 import 'eval_worker.dart';
 import 'stockfish_connection_factory.dart';
 import 'package:chess_auto_prep/utils/log.dart';
@@ -32,9 +33,15 @@ class StockfishPool {
 
   /// Create an independent instance (unit tests only).
   @visibleForTesting
-  StockfishPool.fresh() : this._();
+  StockfishPool.fresh({Future<EngineConnection?> Function()? createConnection})
+    : _createConnection = createConnection ?? StockfishConnectionFactory.create;
 
-  StockfishPool._();
+  StockfishPool._() : _createConnection = StockfishConnectionFactory.create;
+
+  final Future<EngineConnection?> Function() _createConnection;
+  Future<void> _provisioning = Future.value();
+  int _generation = 0;
+  final Set<EvalWorker> _starting = {};
 
   // ── State ───────────────────────────────────────────────────────────────
   final List<EvalWorker> _workers = [];
@@ -72,26 +79,54 @@ class StockfishPool {
   /// [threadsPerWorker] sets Stockfish UCI Threads on each worker (MultiPV
   /// searches benefit strongly from >1 thread).  Existing workers are
   /// reconfigured when [threadsPerWorker] differs from the current value.
-  Future<void> ensureWorkers([int? count, int? threadsPerWorker]) async {
+  Future<void> ensureWorkers([int? count, int? threadsPerWorker]) {
+    final generation = _generation;
+    final pending = _provisioning.then((_) async {
+      if (generation != _generation) return;
+      await _ensureWorkers(count, threadsPerWorker, generation);
+    });
+    _provisioning = pending.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return pending;
+  }
+
+  Future<void> _ensureWorkers(
+    int? count,
+    int? threadsPerWorker,
+    int generation,
+  ) async {
     if (!StockfishConnectionFactory.isAvailable) return;
 
     if (threadsPerWorker != null && threadsPerWorker > 0) {
       _threadsPerWorker = threadsPerWorker;
     }
 
-    final target = count ?? EngineSettings.instance.workers;
+    final target = (count ?? EngineSettings.instance.workers).clamp(
+      1,
+      EngineSettings.systemCores,
+    );
     _targetCount = target;
     while (_workers.length < target) {
       final w = await _spawnOne(_workers.length);
       if (w == null) break;
+      if (generation != _generation) {
+        w.dispose();
+        return;
+      }
       _watchWorker(w);
       _workers.add(w);
-      _free.add(w);
+      if (_waiters.isNotEmpty) {
+        _busy.add(w);
+        _waiters.removeAt(0).complete(w);
+      } else {
+        _free.add(w);
+      }
     }
 
-    if (_workers.isNotEmpty &&
-        _threadsPerWorker > 1 &&
-        threadsPerWorker != null) {
+    if (generation != _generation) return;
+    if (_workers.isNotEmpty && threadsPerWorker != null) {
       await reconfigureAllWorkers(_threadsPerWorker);
     }
 
@@ -150,18 +185,27 @@ class StockfishPool {
   }
 
   Future<EvalWorker?> _spawnOne(int index) async {
+    final generation = _generation;
+    EvalWorker? worker;
     try {
-      final engine = await StockfishConnectionFactory.create();
+      final engine = await _createConnection();
       if (engine == null) return null;
-      final worker = EvalWorker(engine);
-      await worker.init(
-        hashMb: kPoolHashPerWorkerMb,
-        threads: _threadsPerWorker,
-      );
+      if (generation != _generation) {
+        engine.dispose();
+        return null;
+      }
+      worker = EvalWorker(engine);
+      _starting.add(worker);
+      await worker
+          .init(hashMb: kPoolHashPerWorkerMb, threads: _threadsPerWorker)
+          .timeout(const Duration(seconds: 15));
       return worker;
     } catch (e) {
+      worker?.dispose();
       if (kDebugMode) log.e('[Pool] Worker #$index spawn failed: $e');
       return null;
+    } finally {
+      _starting.remove(worker);
     }
   }
 
@@ -396,17 +440,7 @@ class StockfishPool {
       log.e('[Pool] Worker died; respawning');
     }
     if (_workers.length >= _targetCount) return;
-    final replacement = await _spawnOne(_workers.length);
-    if (replacement == null) return;
-    _watchWorker(replacement);
-    _workers.add(replacement);
-    if (_waiters.isNotEmpty) {
-      final next = _waiters.removeAt(0);
-      _busy.add(replacement);
-      if (!next.isCompleted) next.complete(replacement);
-    } else {
-      _free.add(replacement);
-    }
+    await ensureWorkers(_targetCount);
   }
 
   /// Set the provisioned worker count without spawning anything, so a test
@@ -424,6 +458,11 @@ class StockfishPool {
   }
 
   void _disposeAllWorkers() {
+    _generation++;
+    for (final worker in _starting) {
+      worker.dispose();
+    }
+    _starting.clear();
     for (final w in _workers) {
       w.dispose();
     }

@@ -48,6 +48,28 @@ void main() {
       expect(field.decoration?.hintText, isNull);
     });
 
+    testWidgets(
+      'large pasted PGN is counted asynchronously and can be cleared',
+      (tester) async {
+        await _open(tester);
+        final content =
+            '[Event "Large"]\n\n{${List.filled(300000, 'a').join()}}\n1. e4 *';
+        await tester.enterText(find.byType(TextField), content);
+        final verdict = find.text('1 line ready to import');
+        for (var i = 0; i < 200 && verdict.evaluate().isEmpty; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump();
+        }
+        expect(verdict, findsOneWidget);
+        await tester.enterText(find.byType(TextField), '');
+        await tester.pump();
+        expect(verdict, findsNothing);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
     testWidgets('Import stays dead until there are lines to import', (
       tester,
     ) async {

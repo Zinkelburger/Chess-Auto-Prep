@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:stockfish/stockfish.dart';
 import 'engine_connection.dart';
+import 'uci_handshake.dart';
 
 class StockfishPackageConnection implements EngineConnection {
   final Stockfish _engine;
@@ -33,38 +34,28 @@ class StockfishPackageConnection implements EngineConnection {
 
   @override
   Future<void> waitForReady() async {
+    if (_disposed) throw StateError('Engine disposed');
     if (_engine.state.value != StockfishState.ready) {
-      final completer = Completer<void>();
+      final ready = Completer<void>();
       void listener() {
-        if (_engine.state.value == StockfishState.ready) {
-          _engine.state.removeListener(listener);
-          completer.complete();
+        if (_engine.state.value == StockfishState.ready && !ready.isCompleted) {
+          ready.complete();
         }
       }
 
       _engine.state.addListener(listener);
-      await completer.future;
-    }
-
-    final uciOk = Completer<void>();
-    final readyOk = Completer<void>();
-    late StreamSubscription sub;
-    sub = stdout.listen((line) {
-      if (line.trim() == 'uciok' && !uciOk.isCompleted) {
-        uciOk.complete();
-      } else if (line.trim() == 'readyok' && !readyOk.isCompleted) {
-        readyOk.complete();
+      try {
+        await Future.any([
+          ready.future,
+          done.then<void>(
+            (_) => throw StateError('Engine closed during startup'),
+          ),
+        ]).timeout(const Duration(seconds: 10));
+      } finally {
+        _engine.state.removeListener(listener);
       }
-    });
-
-    sendCommand('uci');
-    await uciOk.future.timeout(const Duration(seconds: 10));
-
-    sendCommand('isready');
-    await readyOk.future.timeout(const Duration(seconds: 10));
-
-    await sub.cancel();
-    // Threads / Hash are configured by EvalWorker.init() after this returns.
+    }
+    await performUciHandshake(this);
   }
 
   @override
@@ -76,6 +67,7 @@ class StockfishPackageConnection implements EngineConnection {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    if (!_done.isCompleted) _done.complete();
     _engine.state.removeListener(_onEngineState);
     unawaited(_subscription.cancel());
     _engine.dispose();

@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
+import '../../utils/lru_map.dart';
 import 'package:path/path.dart' as p;
 import '../../utils/atomic_file.dart';
 import '../../utils/file_text_reader.dart';
@@ -41,7 +43,10 @@ class IOStorageService implements StorageService {
   /// navigation is what made the pickers feel slow; caching the count lets a
   /// re-entry skip the read entirely while a stat mismatch (including writes
   /// made outside this service) still forces a fresh count.
-  final Map<String, ({int size, int modifiedMs, int count})> _countCache = {};
+  final _countCache = LruMap<String, ({int size, int modifiedMs, int count})>(
+    maxEntries: 2048,
+  );
+  Future<void> _counting = Future.value();
   final FileMutationService _mutations = FileMutationService.instance;
 
   Future<Directory> _documentsRoot() async =>
@@ -72,7 +77,15 @@ class IOStorageService implements StorageService {
 
   /// Returns the game count for [file], reusing the cached value when the
   /// file's size and modified time are unchanged since it was last counted.
-  Future<int> _cachedGameCount(File file, FileStat stat) async {
+  Future<int> _cachedGameCount(File file, FileStat stat) {
+    // Bound whole-file reads across simultaneous listings, including listings
+    // of different directories. The tail never retains a failed operation.
+    final result = _counting.then((_) => _readGameCount(file, stat));
+    _counting = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return result;
+  }
+
+  Future<int> _readGameCount(File file, FileStat stat) async {
     final modifiedMs = stat.modified.millisecondsSinceEpoch;
     final cached = _countCache[file.path];
     if (cached != null &&
@@ -85,7 +98,9 @@ class IOStorageService implements StorageService {
     if (content == null) {
       throw FileSystemException('File disappeared while listing', file.path);
     }
-    final count = content.trim().isEmpty ? 0 : pgn.countPgnGamesFast(content);
+    final count = content.length < 256 * 1024
+        ? pgn.countPgnGamesFast(content)
+        : await Isolate.run(() => pgn.countPgnGamesFast(content));
     _countCache[file.path] = (
       size: stat.size,
       modifiedMs: modifiedMs,

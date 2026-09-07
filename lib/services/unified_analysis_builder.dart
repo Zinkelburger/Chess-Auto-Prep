@@ -7,6 +7,7 @@ import 'package:dartchess/dartchess.dart' hide File;
 
 import '../constants/chess_constants.dart';
 import '../utils/log.dart';
+import '../utils/isolate_task.dart';
 import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
 import '../utils/atomic_file.dart';
@@ -56,16 +57,15 @@ class UnifiedAnalysisBuilder {
     int maxDepth = 30,
     void Function(int current, int total)? onProgress,
   }) {
-    final pgnGames = PgnGame.parseMultiGamePgn(pgnList.join('\n\n'));
     final usernameLower = username.toLowerCase();
-    final total = pgnGames.length;
+    final total = pgnList.length;
     final progressInterval = (total / 100).ceil().clamp(1, 100);
     final acc = _ColorAccumulator();
 
     onProgress?.call(0, total);
 
-    for (var i = 0; i < pgnGames.length; i++) {
-      final game = pgnGames[i];
+    for (var i = 0; i < pgnList.length; i++) {
+      final game = PgnGame.parsePgn(pgnList[i]);
 
       bool isUserWhiteInGame;
       if (!strictPlayerMatching) {
@@ -112,9 +112,8 @@ class UnifiedAnalysisBuilder {
     int maxDepth = 30,
     void Function(int current, int total)? onProgress,
   }) {
-    final pgnGames = PgnGame.parseMultiGamePgn(pgnList.join('\n\n'));
     final usernameLower = username.toLowerCase();
-    final total = pgnGames.length;
+    final total = pgnList.length;
     final progressInterval = (total / 100).ceil().clamp(1, 100);
 
     final white = _ColorAccumulator();
@@ -122,8 +121,8 @@ class UnifiedAnalysisBuilder {
 
     onProgress?.call(0, total);
 
-    for (var i = 0; i < pgnGames.length; i++) {
-      final game = pgnGames[i];
+    for (var i = 0; i < pgnList.length; i++) {
+      final game = PgnGame.parsePgn(pgnList[i]);
       final detected = _detectUser(game, usernameLower);
       final colours = detected.white == detected.black
           ? const [true, false]
@@ -197,8 +196,10 @@ class UnifiedAnalysisBuilder {
     void Function(int current, int total)? onProgress,
     String? whiteCachePath,
     String? blackCachePath,
+    IsolateTask? task,
   }) {
     return _runWithProgress<AnalysisBundle, _BothColorsArgs>(
+      task: task,
       entryPoint: _bothColorsEntry,
       makeArgs: (sendPort) => (
         sendPort: sendPort,
@@ -222,8 +223,9 @@ class UnifiedAnalysisBuilder {
     required String pgnFilePath,
     required String whiteCachePath,
     required String blackCachePath,
+    IsolateTask? task,
   }) {
-    return Isolate.run<AnalysisBundle?>(() {
+    return (task ?? IsolateTask()).run<AnalysisBundle?>((_) {
       final pgnFile = File(pgnFilePath);
       if (!pgnFile.existsSync()) return null;
       final stat = pgnFile.statSync();
@@ -252,48 +254,27 @@ class UnifiedAnalysisBuilder {
   /// Spawn [entryPoint], forward `[current, total]` progress lists to
   /// [onProgress], and complete with the entry point's [Isolate.exit] value.
   static Future<R> _runWithProgress<R, A>({
-    required void Function(A) entryPoint,
+    required FutureOr<R> Function(A) entryPoint,
     required A Function(SendPort sendPort) makeArgs,
     void Function(int current, int total)? onProgress,
+    IsolateTask? task,
   }) async {
-    final receivePort = ReceivePort();
-    final errorPort = ReceivePort();
-
-    final isolate = await Isolate.spawn(
-      entryPoint,
-      makeArgs(receivePort.sendPort),
-      onError: errorPort.sendPort,
-    );
-
-    final completer = Completer<R>();
-
-    final errorSub = errorPort.listen((message) {
-      if (!completer.isCompleted) {
-        final desc = message is List ? message.first : message;
-        completer.completeError(Exception('Isolate error: $desc'));
-      }
-    });
-
-    final receiveSub = receivePort.listen((message) {
-      if (message is List) {
-        onProgress?.call(message[0] as int, message[1] as int);
-      } else if (message is R && !completer.isCompleted) {
-        completer.complete(message);
-      }
-    });
-
     try {
-      return await completer.future.timeout(const Duration(minutes: 5));
-    } finally {
-      await errorSub.cancel();
-      await receiveSub.cancel();
-      receivePort.close();
-      errorPort.close();
-      isolate.kill(priority: Isolate.immediate);
+      return await (task ?? IsolateTask()).run<R>(
+        _bindEntry(entryPoint, makeArgs),
+        onProgress: (message) {
+          final progress = message as List;
+          onProgress?.call(progress[0] as int, progress[1] as int);
+        },
+      );
+    } on RemoteError catch (error) {
+      throw Exception('Isolate error: $error');
     }
   }
 
-  static void _singleColorEntry(_SingleColorArgs args) {
+  static (PositionAnalysis, OpeningTree) _singleColorEntry(
+    _SingleColorArgs args,
+  ) {
     final result = build(
       pgnList: args.pgnList,
       username: args.username,
@@ -302,10 +283,10 @@ class UnifiedAnalysisBuilder {
       maxDepth: args.maxDepth,
       onProgress: (current, total) => args.sendPort.send([current, total]),
     );
-    Isolate.exit(args.sendPort, result);
+    return result;
   }
 
-  static Future<void> _bothColorsEntry(_BothColorsArgs args) async {
+  static Future<AnalysisBundle> _bothColorsEntry(_BothColorsArgs args) async {
     final pgnFile = File(args.pgnFilePath);
     final pgnList = splitPgnIntoGames(stripBom(await readTextFile(pgnFile)));
     if (pgnList.isEmpty) {
@@ -343,7 +324,7 @@ class UnifiedAnalysisBuilder {
       // Ignore; the next visit simply rebuilds.
     }
 
-    Isolate.exit(args.sendPort, bundle);
+    return bundle;
   }
 
   // ── Disk cache codec ─────────────────────────────────────────────────
@@ -544,3 +525,9 @@ class _ColorAccumulator {
     fenToGameIndices: fenToGameIndices,
   );
 }
+
+FutureOr<R> Function(SendPort) _bindEntry<R, A>(
+  FutureOr<R> Function(A) entryPoint,
+  A Function(SendPort) makeArgs,
+) =>
+    (port) => entryPoint(makeArgs(port));

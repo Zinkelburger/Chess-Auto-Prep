@@ -1,3 +1,4 @@
+import '../utils/isolate_task.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
@@ -50,16 +51,24 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
   List<({String white, String black})> _headerPairs = const [];
   PlayerNameMatchSummary? _matchSummary;
 
+  IsolateTask? _loadTask;
+  bool _reading = false;
+
   String? _error;
   String? _nameError;
 
   @override
   void dispose() {
+    _loadTask?.cancel();
     _nameController.dispose();
     super.dispose();
   }
 
   Future<void> _pickFiles() async {
+    if (_reading) return;
+    _loadTask?.cancel();
+    final task = _loadTask = IsolateTask();
+    setState(() => _reading = true);
     try {
       final files = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -67,19 +76,19 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
       );
       if (files.isEmpty) return;
 
-      final contents = <String>[];
-      final names = <String>[];
-      for (final file in files) {
-        final path = file.path;
-        if (path == null) continue;
-        contents.add(stripBom(await readTextFile(File(path))));
-        names.add(file.name);
-      }
-      if (contents.isEmpty) return;
-      if (!mounted) return;
-
-      final pgns = contents.join('\n\n');
-      final headerPairs = _extractHeaderPairs(pgns);
+      final paths = [
+        for (final file in files)
+          if (file.path != null) file.path!,
+      ];
+      final names = [
+        for (final file in files)
+          if (file.path != null) file.name,
+      ];
+      if (!mounted || task.isCancelled || paths.isEmpty) return;
+      final loaded = await task.compute(_loadFiles, paths);
+      if (!mounted || task.isCancelled) return;
+      final pgns = loaded.pgns;
+      final headerPairs = loaded.headers;
       setState(() {
         _pgns = pgns;
         _fileNames
@@ -91,15 +100,38 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
             ? 'No games found in the selected files.'
             : null;
         if (!_nameEdited) {
-          final guess = _guessPlayerName(pgns);
+          final guess = loaded.guessedName;
           if (guess != null) _nameController.text = guess;
         }
         _matchSummary = _computeMatchSummary();
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Could not read files: $e');
+      if (!task.isCancelled) {
+        setState(() => _error = 'Could not read files: $e');
+      }
+    } finally {
+      if (mounted && !task.isCancelled) setState(() => _reading = false);
     }
+  }
+
+  static ({
+    String pgns,
+    List<({String white, String black})> headers,
+    String? guessedName,
+  })
+  _loadFiles(List<String> paths) {
+    final content = StringBuffer();
+    for (final path in paths) {
+      if (content.isNotEmpty) content.write('\n\n');
+      content.write(stripBom(readTextFileSync(File(path))));
+    }
+    final pgns = content.toString();
+    return (
+      pgns: pgns,
+      headers: _extractHeaderPairs(pgns),
+      guessedName: _guessPlayerName(pgns),
+    );
   }
 
   static List<({String white, String black})> _extractHeaderPairs(String pgns) {
@@ -223,7 +255,7 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
-                onPressed: _pickFiles,
+                onPressed: _reading ? null : _pickFiles,
                 icon: const Icon(Icons.file_open, size: 18),
                 label: Text(
                   _fileNames.isEmpty
@@ -285,7 +317,10 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _confirm, child: const Text('Add player')),
+        FilledButton(
+          onPressed: _reading ? null : _confirm,
+          child: const Text('Add player'),
+        ),
       ],
     );
   }

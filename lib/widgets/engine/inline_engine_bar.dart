@@ -20,7 +20,7 @@ import '../../services/analysis_service.dart';
 import '../../services/eval_cache.dart';
 import '../../services/engine/engine_lifecycle.dart';
 import '../../services/engine/eval_worker.dart';
-import '../../services/engine/stockfish_connection_factory.dart';
+import '../../services/engine/engine_worker_slot.dart';
 import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
@@ -72,8 +72,12 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   /// Toggle engine on/off from outside (e.g. keyboard shortcut).
   /// Any mounted InlineEngineBar will pick up the change on next build.
   static void toggleEngineExternal() {
-    _engineEnabled = !_engineEnabled;
-    for (final cb in _externalToggleNotifier) {
+    _setEngineEnabled(!_engineEnabled);
+  }
+
+  static void _setEngineEnabled(bool value) {
+    _engineEnabled = value;
+    for (final cb in List<VoidCallback>.of(_externalToggleNotifier)) {
       cb();
     }
   }
@@ -95,8 +99,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   int _lastMultiPv = 0;
   int _lastInlineThreads = 0;
 
-  EvalWorker? _worker;
-  int _workerThreads = 0;
+  final _workerSlot = EngineWorkerSlot();
+  bool _modeActive = true;
+
+  bool get _isActive => widget.isActive && _modeActive;
 
   bool _gateLocked = EngineGate.isLocked;
 
@@ -114,7 +120,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _lastInlineThreads = _settings.inlineThreads;
     EngineLifecycle.instance.addListener(_onEngineGateChanged);
     _externalToggleNotifier.add(_onExternalToggle);
-    if (_engineEnabled && widget.isActive) {
+    if (_engineEnabled && _isActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _runDiscovery());
     }
   }
@@ -133,7 +139,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       setState(() => _isSearching = false);
     } else {
       setState(() {});
-      if (_engineEnabled && widget.isActive) unawaited(_runDiscovery());
+      if (_engineEnabled && _isActive) unawaited(_runDiscovery());
     }
   }
 
@@ -143,14 +149,39 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   @override
-  void didUpdateWidget(InlineEngineBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!_engineEnabled || !widget.isActive) return;
-
-    if (widget.fen != oldWidget.fen ||
-        (!oldWidget.isActive && widget.isActive)) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active = TickerMode.valuesOf(context).enabled;
+    if (_modeActive == active) return;
+    _modeActive = active;
+    if (!_isActive) {
+      _stopDiscovery();
+    } else if (_engineEnabled) {
       unawaited(_runDiscovery());
     }
+  }
+
+  @override
+  void didUpdateWidget(InlineEngineBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isActive) {
+      _stopDiscovery();
+      return;
+    }
+    if (_engineEnabled &&
+        (widget.fen != oldWidget.fen || !oldWidget.isActive)) {
+      unawaited(_runDiscovery());
+    }
+  }
+
+  void _stopDiscovery() {
+    _generation++;
+    _progressThrottle?.cancel();
+    _progressThrottle = null;
+    _pendingProgress = null;
+    _disposeWorker();
+    _lastAnalyzedFen = null;
+    _isSearching = false;
   }
 
   @override
@@ -178,11 +209,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _lastMultiPv = _settings.multiPv;
     _lastInlineThreads = _settings.inlineThreads;
 
-    if (_settings.inlineThreads != _workerThreads) {
-      _disposeWorker();
-    }
     _lastAnalyzedFen = null;
-    if (_engineEnabled && widget.isActive) {
+    if (_engineEnabled && _isActive) {
       unawaited(_runDiscovery());
     }
   }
@@ -217,40 +245,22 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         _disposeWorker();
       }
     });
-    if (_engineEnabled && widget.isActive) {
+    if (_engineEnabled && _isActive) {
       unawaited(_runDiscovery());
     }
   }
 
-  Future<EvalWorker?> _ensureWorker() async {
-    final wantThreads = _settings.inlineThreads;
-    if (_worker != null && _workerThreads == wantThreads) return _worker;
+  Future<EvalWorker?> _ensureWorker() => _workerSlot.ensure(
+    threads: _settings.inlineThreads,
+    hashMb: kPoolHashPerWorkerMb,
+  );
 
-    _disposeWorker();
-    if (!StockfishConnectionFactory.isAvailable) return null;
-
-    try {
-      final engine = await StockfishConnectionFactory.create();
-      if (engine == null) return null;
-      final w = EvalWorker(engine);
-      await w.init(hashMb: kPoolHashPerWorkerMb, threads: wantThreads);
-      _worker = w;
-      _workerThreads = wantThreads;
-      return w;
-    } catch (e) {
-      if (kDebugMode) debugPrint('[InlineEngine] Worker spawn failed: $e');
-      return null;
-    }
-  }
-
-  void _disposeWorker() {
-    _worker?.dispose();
-    _worker = null;
-    _workerThreads = 0;
-  }
+  void _disposeWorker() => _workerSlot.release();
 
   Future<void> _runDiscovery() async {
-    if (!mounted || !_engineEnabled || EngineGate.isLocked) return;
+    if (!mounted || !_isActive || !_engineEnabled || EngineGate.isLocked) {
+      return;
+    }
     if (widget.fen == _lastAnalyzedFen && _discovery.lines.isNotEmpty) return;
 
     final myGen = ++_generation;
@@ -344,7 +354,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                 value: _engineEnabled,
                 onChanged: (value) {
                   if (value && !EngineGate.ensureAvailable(context)) return;
-                  _toggleEngine(value);
+                  _setEngineEnabled(value);
                 },
               ),
             ),
