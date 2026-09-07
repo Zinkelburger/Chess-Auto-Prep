@@ -342,44 +342,10 @@ class _StudyScreenState extends State<StudyScreen> {
 
   /// Paste-in PGN import: every game becomes a chapter appended to the study.
   Future<void> _importPgn() async {
-    final controller = TextEditingController();
     final pgn = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Load from disk'),
-        content: SizedBox(
-          width: 460,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            minLines: 6,
-            maxLines: 14,
-            style: const TextStyle(
-              fontFamily: AppTextStyles.monoFamily,
-              fontSize: 12,
-            ),
-            decoration: const InputDecoration(
-              hintText:
-                  'Paste one or more games in PGN…\n\n'
-                  'Each game becomes a chapter.',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Import'),
-          ),
-        ],
-      ),
+      builder: (ctx) => const _PgnPasteDialog(),
     );
-    controller.dispose();
     if (pgn == null || pgn.trim().isEmpty) return;
     final added = await _study.importChapters(pgn);
     if (!mounted) return;
@@ -756,5 +722,61 @@ class _StudyScreenState extends State<StudyScreen> {
       emptyMessage: 'This study has no chapters yet.',
     );
     if (picked != null) _study.selectChapter(picked);
+  }
+}
+
+/// Paste-in PGN dialog. Owns its text controller so it is disposed with the
+/// route, not while the route is still animating out.
+class _PgnPasteDialog extends StatefulWidget {
+  const _PgnPasteDialog();
+
+  @override
+  State<_PgnPasteDialog> createState() => _PgnPasteDialogState();
+}
+
+class _PgnPasteDialogState extends State<_PgnPasteDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Load from disk'),
+      content: SizedBox(
+        width: 460,
+        child: TextField(
+          controller: _controller,
+          autofocus: true,
+          minLines: 6,
+          maxLines: 14,
+          style: const TextStyle(
+            fontFamily: AppTextStyles.monoFamily,
+            fontSize: 12,
+          ),
+          decoration: const InputDecoration(
+            hintText:
+                'Paste one or more games in PGN…\n\n'
+                'Each game becomes a chapter.',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('Import'),
+        ),
+      ],
+    );
   }
 }
