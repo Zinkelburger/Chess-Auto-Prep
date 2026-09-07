@@ -89,6 +89,14 @@ class PositionAnalysisActions {
   bool get hasPosition => _state?._currentFen != null;
   bool get canOpenGames => _state?.widget.analysisPgnPath != null;
 
+  /// The study "Add line to study…" should offer first — an opponent's prep
+  /// file — resolved (and created if needed) only when the flow runs.
+  Future<String?> Function()? preferredStudy;
+
+  /// Prefix for the suggested chapter name, e.g. `As White`: the colour the
+  /// user holds against this player, so a prep file's chapters sort by side.
+  String Function()? chapterPrefix;
+
   Future<void> addCurrentLineToStudy() async =>
       _state?._addCurrentLineToStudy();
 

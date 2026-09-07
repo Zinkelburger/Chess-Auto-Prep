@@ -17,6 +17,13 @@ import 'package:flutter/material.dart';
 import '../features/audit/models/audit_finding.dart';
 import '../features/audit/models/audit_result.dart';
 import '../features/holes/services/hole_hunt_config.dart';
+import '../features/opponents/models/person_record.dart';
+import '../features/opponents/widgets/opponent_actions.dart';
+import '../features/opponents/services/opponent_store.dart';
+import '../features/opponents/services/prep_context.dart';
+import '../features/opponents/services/repertoire_check.dart';
+import '../features/opponents/widgets/repertoire_check_dialog.dart';
+import '../features/opponents/widgets/tournament_screen.dart';
 import '../features/holes/services/hole_hunt_persistence.dart';
 import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/hole_hunt_config_dialog.dart';
@@ -47,6 +54,7 @@ import 'player_selection_screen.dart';
 part 'analysis_screen_engine.dart';
 part 'analysis_screen_holes.dart';
 part 'analysis_screen_tricks.dart';
+part 'analysis_screen_prep.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -66,6 +74,19 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   final PositionAnalysisActions _boardActions = PositionAnalysisActions();
 
   AnalysisPlayerInfo? _currentPlayer;
+
+  // ── Opponent prep (directory + tournament context) ────────────────
+  final OpponentStore _opponents = OpponentStore.instance;
+  late final OpponentActions _opponentActions = OpponentActions(
+    store: _opponents,
+    games: _gamesService,
+  );
+  PrepContext? _prep;
+
+  /// Board position requested from a dialog (the repertoire check); the
+  /// generation makes the same FEN requestable twice.
+  String? _navigateFen;
+  int _navigateGeneration = 0;
 
   /// Path to the current player's downloaded games PGN (enables the
   /// "Open Games in PGN Viewer" handoff).
@@ -131,6 +152,7 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   // Implemented by the concrete state; called from the extracted mixins.
   Future<void> _analyzeBothColors();
   Future<bool> _redownloadGames(int monthsBack);
+  Future<void> _selectPlayer(AnalysisPlayerInfo player);
 
   void _showError(String message) {
     unawaited(
@@ -152,10 +174,12 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
 }
 
 class _AnalysisScreenState extends _AnalysisScreenStateBase
-    with _EngineWeaknessMixin, _HoleHuntMixin, _TrickHuntMixin {
+    with _EngineWeaknessMixin, _HoleHuntMixin, _TrickHuntMixin, _PrepMixin {
   @override
   void initState() {
     super.initState();
+    unawaited(_opponents.ensureLoaded());
+    _opponents.addListener(_onOpponentsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _currentPlayer == null) {
         unawaited(_showPlayerSelection());
@@ -165,6 +189,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
 
   @override
   void dispose() {
+    _opponents.removeListener(_onOpponentsChanged);
     _evalService?.dispose();
     // The pending hunt futures notice the flag and release the engine.
     if (_isHunting) _holeService.cancel();
@@ -291,6 +316,16 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
               'by reach probability × net gain.',
         ),
         AppMenuEntry(
+          label: 'Check against my repertoire…',
+          icon: Icons.menu_book_outlined,
+          enabled: _openingTree != null && !_isAnalyzing,
+          onRun: () => unawaited(_runRepertoireCheck()),
+          hint:
+              'Walks this player\'s games on the displayed colour through the\n'
+              'book you designated for the other colour (My books on the\n'
+              'Tactics page) and lists the moves it has no answer to.',
+        ),
+        AppMenuEntry(
           label: 'Add line to study…',
           icon: Icons.menu_book_outlined,
           enabled: _boardActions.hasPosition,
@@ -308,6 +343,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           enabled: _boardActions.canOpenGames,
           onRun: _boardActions.openGamesInPgnViewer,
         ),
+        ..._prepMenuEntries(),
         AppMenuEntry(
           label: 'Choose a player…',
           icon: Icons.person_search,
@@ -461,6 +497,8 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       analysis: _positionAnalysis,
       openingTree: _openingTree,
       playerIsWhite: _playerIsWhite,
+      externalNavigateFen: _navigateFen,
+      externalNavigateGeneration: _navigateGeneration,
       isLoading: _isAnalyzing,
       onAnalyze: _analyzeBothColors,
       hasEvals: _hasEvals,
@@ -495,7 +533,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         : '';
     final base =
         '${p.gameCount} games · ${p.platformDisplayName} (${p.displayName})'
-        ' · ${p.rangeDescription}$dl';
+        ' · ${p.rangeDescription}$dl$_prepSubtitle';
     if (!_isAnalyzing) return base;
     if (_analysisTotal > 0) {
       return '$base · $_analysisPhase · $_analysisCurrent / $_analysisTotal games';
@@ -509,16 +547,22 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       MaterialPageRoute(builder: (_) => const PlayerSelectionScreen()),
     );
 
-    if (result != null && mounted) {
-      _cancelEvalAnalysis();
-      if (_isHunting) _cancelHoleHunt();
-      if (_isTrickHunting) _cancelTrickHunt();
-      setState(() {
-        _currentPlayer = result;
-        _resetAnalysisState();
-      });
-      await _analyzeBothColors();
-    }
+    if (result != null && mounted) await _selectPlayer(result);
+  }
+
+  /// Make [player] the analysed player: stop whatever is running for the
+  /// previous one, resolve their place in the opponents directory, build.
+  @override
+  Future<void> _selectPlayer(AnalysisPlayerInfo player) async {
+    _cancelEvalAnalysis();
+    if (_isHunting) _cancelHoleHunt();
+    if (_isTrickHunting) _cancelTrickHunt();
+    setState(() {
+      _currentPlayer = player;
+      _resetAnalysisState();
+      _resolvePrep();
+    });
+    await _analyzeBothColors();
   }
 
   /// Clear all per-player analysis state (both colours + evals + holes).

@@ -30,12 +30,18 @@ Future<void> runAddToStudyFlow(
   String pickerTitle = 'Add line to study',
   String viewActionLabel = 'View line',
   List<String>? viewSanLine,
+  Future<String?> Function()? preferredStudy,
 }) async {
+  // Resolved before the picker so it can be listed first (an opponent's
+  // prep file is created on first use, so this may write a file).
+  final preferredPath = await preferredStudy?.call();
+  if (!context.mounted) return;
   final result = await showDialog<AddToStudyResult>(
     context: context,
     builder: (_) => AddToStudyDialog(
       initialChapterName: suggestedChapterName,
       title: pickerTitle,
+      preferredPath: preferredPath,
     ),
   );
   if (result == null || !context.mounted) return;

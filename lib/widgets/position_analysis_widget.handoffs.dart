@@ -106,9 +106,13 @@ mixin _StudyHandoffMixin on _PositionAnalysisWidgetStateBase {
     MoveTree lineTree,
     String suggestedChapter,
   ) async {
+    final prefix = widget.actions?.chapterPrefix?.call();
     await runAddToStudyFlow(
       context,
-      suggestedChapterName: suggestedChapter,
+      suggestedChapterName: prefix == null
+          ? suggestedChapter
+          : '$prefix · $suggestedChapter',
+      preferredStudy: widget.actions?.preferredStudy,
       buildPgn: (chapterName) =>
           lineTree.toPgn(event: chapterName, result: '*'),
       viewSanLine: lineTree.sanSequenceAt(

@@ -101,10 +101,14 @@ void main() {
   ) async {
     await pumpPicker(tester, const []);
 
-    expect(find.text('No players yet'), findsOneWidget);
-    expect(find.text('Download a player’s games…'), findsOneWidget);
-    expect(find.text('Open PGN files…'), findsOneWidget);
-    expect(find.text('Add a whole tournament field…'), findsOneWidget);
+    expect(find.text('Which player?'), findsOneWidget);
+    expect(find.text('No players yet'), findsNothing);
+    expect(find.text('Online…'), findsOneWidget);
+    expect(find.text('From PGN files…'), findsOneWidget);
+    expect(
+      find.text('From a tournament field (experimental)…'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a saved player is listed with one add control, not three', (
@@ -124,9 +128,12 @@ void main() {
     // The three sources live behind it, worded exactly as on first run.
     await tester.tap(find.byKey(const Key('add-player-button')));
     await tester.pumpAndSettle();
-    expect(find.text('Download a player’s games…'), findsOneWidget);
-    expect(find.text('Open PGN files…'), findsOneWidget);
-    expect(find.text('Add a whole tournament field…'), findsOneWidget);
+    expect(find.text('Online…'), findsOneWidget);
+    expect(find.text('From PGN files…'), findsOneWidget);
+    expect(
+      find.text('From a tournament field (experimental)…'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('tapping a player pops the screen with it', (tester) async {
@@ -175,6 +182,6 @@ void main() {
 
     expect(service.deleted, ['chesscom_hikaru']);
     expect(find.text('hikaru'), findsNothing);
-    expect(find.text('No players yet'), findsOneWidget);
+    expect(find.text('Online…'), findsOneWidget);
   });
 }

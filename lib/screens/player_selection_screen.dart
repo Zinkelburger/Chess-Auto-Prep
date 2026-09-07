@@ -4,8 +4,8 @@ library;
 ///
 /// Pushed as a full-screen route from [AnalysisScreen]. One job: choose whose
 /// games to analyse. It lists every saved game-set — downloaded from an
-/// account, opened from PGN files, or pulled in as a tournament field — and
-/// pops with the chosen [AnalysisPlayerInfo].
+/// account, opened from PGN files, or belonging to someone in a tournament
+/// field — and pops with the chosen [AnalysisPlayerInfo].
 ///
 /// Adding a player goes through exactly one control: **Add player** in the
 /// app bar, whose menu names the three sources (see [AddPlayerSource]). On
@@ -30,7 +30,7 @@ import '../widgets/analysis/player_downloads.dart';
 import '../widgets/analysis_download_dialog.dart';
 import '../widgets/analysis_import_dialog.dart';
 import '../widgets/common/list_search_field.dart';
-import '../widgets/opponent_list_import_dialog.dart';
+import '../features/opponents/widgets/tournaments_screen.dart';
 
 class PlayerSelectionScreen extends StatefulWidget {
   const PlayerSelectionScreen({super.key, this.gamesService});
@@ -106,7 +106,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Choose a player'),
+        title: const Text('Which player?'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -180,34 +180,14 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
 
   /// Nothing saved yet. The three ways in are on the screen, not in a menu —
   /// a first-run user has no reason to open a menu they cannot see the point
-  /// of, and "no players" without a next step is a dead end.
+  /// of. The app bar already asks the question; the body is just the answer.
   Widget _buildFirstRun() {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'No players yet',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Add someone’s games — your own or an opponent’s — and the '
-                'app maps their openings, mistakes and the traps they walk '
-                'into.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.onSurfaceMuted),
-              ),
-              const SizedBox(height: 24),
-              AddPlayerSourceList(onSelected: _addPlayerFrom),
-            ],
-          ),
+          child: AddPlayerSourceList(onSelected: _addPlayerFrom),
         ),
       ),
     );
@@ -222,7 +202,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       case AddPlayerSource.pgnFiles:
         unawaited(_openPgnFiles());
       case AddPlayerSource.opponentList:
-        unawaited(_addTournamentField());
+        unawaited(_openTournaments());
     }
   }
 
@@ -297,14 +277,19 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     return replace == true && mounted;
   }
 
-  Future<void> _addTournamentField() async {
-    final request = await showDialog<OpponentImportRequest>(
-      context: context,
-      builder: (_) => const OpponentListImportDialog(),
+  /// The tournaments screen hands back a player when the user picks
+  /// "Analyse" on an opponent there; otherwise the list is just refreshed,
+  /// since games may have been downloaded meanwhile.
+  Future<void> _openTournaments() async {
+    final picked = await Navigator.of(context).push<AnalysisPlayerInfo>(
+      MaterialPageRoute(builder: (_) => const TournamentsScreen()),
     );
-    if (request == null || !mounted) return;
-    await _downloads.downloadList(context, request);
-    if (mounted) await _loadCachedPlayers();
+    if (!mounted) return;
+    if (picked != null) {
+      Navigator.of(context).pop(picked);
+      return;
+    }
+    await _loadCachedPlayers();
   }
 
   /// Seed the app-wide default username, but only when none is saved yet:
