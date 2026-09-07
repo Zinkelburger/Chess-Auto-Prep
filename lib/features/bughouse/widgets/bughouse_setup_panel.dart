@@ -63,7 +63,7 @@ class _BughouseSetupPanelState extends State<BughouseSetupPanel> {
           decoration: const InputDecoration(
             isDense: true,
             border: OutlineInputBorder(),
-            hintText: '<board A fen>|<board B fen>',
+            hintText: '<Board 1 FEN>|<Board 2 FEN>',
           ),
         ),
         const SizedBox(height: 6),

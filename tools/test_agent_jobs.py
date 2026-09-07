@@ -87,6 +87,8 @@ class JobTests(unittest.TestCase):
             first = jobs.profile_env(Path(directory) / 'first')
             second = jobs.profile_env(Path(directory) / 'second')
             self.assertNotEqual(first['XDG_CONFIG_HOME'], second['XDG_CONFIG_HOME'])
+            self.assertNotEqual(first['BUGHOUSE_DB_HOME'], second['BUGHOUSE_DB_HOME'])
+            self.assertTrue(Path(first['BUGHOUSE_DB_HOME']).is_relative_to(first['XDG_DATA_HOME']))
             self.assertEqual(first.get('HOME'), os.environ.get('HOME'))
             self.assertEqual(first['CHESS_AUTO_PREP_NEW_INSTANCE'], '1')
             docs = subprocess.check_output(['xdg-user-dir', 'DOCUMENTS'], env=first, text=True).strip()

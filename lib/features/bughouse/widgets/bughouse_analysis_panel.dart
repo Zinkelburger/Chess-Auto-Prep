@@ -480,7 +480,7 @@ class _LineRowState extends State<_LineRow> {
                                           if (steps[i].on(which)
                                               case final san?)
                                             _MoveToken(
-                                              seat: san == 'sit'
+                                              number: san == 'sit'
                                                   ? ''
                                                   : '${steps[i].before.board(which).fullmoves}${steps[i].before.board(which).turn == Side.white ? '.' : '...'}',
                                               san: san,
@@ -525,12 +525,10 @@ class _LineRowState extends State<_LineRow> {
   }
 }
 
-/// One seat's move in a line: the seat letter, muted, then the SAN — `A Nf3`,
-/// `D P@e5`, `C sit`. Dotted-underlined the way the app's other engine lines
-/// mark a move that can be clicked.
+/// A numbered move. Hover previews both boards; click plays through it.
 class _MoveToken extends StatelessWidget {
   const _MoveToken({
-    required this.seat,
+    required this.number,
     required this.san,
     required this.ink,
     required this.weight,
@@ -539,7 +537,7 @@ class _MoveToken extends StatelessWidget {
     required this.onTap,
   });
 
-  final String seat;
+  final String number;
   final String san;
   final Color ink;
   final FontWeight weight;
@@ -561,7 +559,7 @@ class _MoveToken extends StatelessWidget {
             TextSpan(
               children: [
                 TextSpan(
-                  text: '$seat ',
+                  text: '$number ',
                   style: AppTextStyles.monoDense.copyWith(
                     color: AppColors.onSurfaceMuted,
                   ),
@@ -712,6 +710,7 @@ class _EngineSection extends StatelessWidget {
             ),
           ),
           NumberStepper(
+            key: ValueKey('bughouse-setting-$label'),
             value: value,
             min: min,
             max: max,
@@ -727,7 +726,7 @@ class _EngineSection extends StatelessWidget {
         if (BughouseCpuLimit.supported)
           number(
             'CPU cores',
-            settings.cores,
+            settings.cores.clamp(1, BughouseCpuLimit.available),
             1,
             BughouseCpuLimit.available,
             (v) => controller.setEngineSettings(settings.copyWith(cores: v)),

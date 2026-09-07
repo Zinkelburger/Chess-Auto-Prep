@@ -2,8 +2,8 @@
 ///
 /// Unlike [ChessBoardWidget] there is no legality checking: tapping applies
 /// the palette tool (place/erase) and dragging moves any piece anywhere —
-/// dragging off the board removes it.  All state lives in
-/// [EditableBoard]; this widget is a pure view over it.
+/// dragging off the board removes it. Position changes are passed to the
+/// owning controller; this widget owns only the active drag.
 library;
 
 import 'package:dartchess/dartchess.dart';

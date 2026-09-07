@@ -37,12 +37,14 @@ class BughouseEngineSettings {
     );
   }
 
+  /// Maximum Linux analysis CPU affinity, within the parent CPU set.
+  final int cores;
+
   /// The `Hash` option, in MB — the search tree's memory.
   ///
   /// The engine's own default is 16 MB, which is small for an MCTS tree that
   /// gets thirty seconds a pass; 256 is the desktop default here. Raising it
   /// costs nothing but memory and is what "give the engine more room" means.
-  final int cores;
   final int hashMb;
 
   /// The `BatchSize` option: how many positions go to the network at once.
