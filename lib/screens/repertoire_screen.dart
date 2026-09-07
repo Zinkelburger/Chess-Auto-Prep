@@ -34,6 +34,7 @@ import '../widgets/generation/generation_lock_overlay.dart';
 import '../widgets/layout/board_zone.dart';
 import '../widgets/layout/bottom_pane.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
+import '../widgets/chapter_list_body.dart' show ChapterPick;
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';

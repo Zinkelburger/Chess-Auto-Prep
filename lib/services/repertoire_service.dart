@@ -20,6 +20,7 @@ import 'repertoire_color_inference.dart';
 import 'repertoire_line_ids.dart';
 import 'repertoire_pgn_text.dart';
 import 'storage/storage_factory.dart';
+import 'training/chapter_layout.dart' show ChapterSummary;
 import '../utils/chess_utils.dart';
 
 /// A game cut from a chapter file and parsed once: the parse tree, the raw
@@ -69,6 +70,41 @@ class RepertoireService {
         inferColorWhenUnknown: inferColorWhenUnknown,
       ),
     );
+  }
+
+  /// The course chapters a chapter file carries in its game headers — the
+  /// same grouping the trainer shows once the file is open (see
+  /// [detectHeaderChapters]) — with the trainable lines each holds, in file
+  /// order. Empty when the file is not chapter-titled.
+  ///
+  /// Headers only: nothing is replayed, so the chapter picker can list a
+  /// 3 MB course without paying for a parse. Model games are left out of the
+  /// counts because the trainer never drills them.
+  Future<List<ChapterSummary>> courseChaptersInFile(String filePath) async {
+    final content = await StorageFactory.instance.readRepertoirePgn(filePath);
+    if (content == null || content.trim().isEmpty) return const [];
+    return Isolate.run(() => RepertoireService().courseChaptersOf(content));
+  }
+
+  /// [courseChaptersInFile] over PGN text already in hand.
+  List<ChapterSummary> courseChaptersOf(String content) {
+    final headersPerGame = [
+      for (final game in pgn.splitPgnIntoGames(content))
+        pgn.extractHeaderBlock(game),
+    ];
+    final titles = detectHeaderChapters(headersPerGame);
+    if (titles == null) return const [];
+    final counts = <String, int>{};
+    for (var i = 0; i < titles.length; i++) {
+      final title = titles[i];
+      if (title == null) continue;
+      final trainable = isModelGameHeaders(headersPerGame[i]) ? 0 : 1;
+      counts[title] = (counts[title] ?? 0) + trainable;
+    }
+    return [
+      for (final entry in counts.entries)
+        ChapterSummary(name: entry.key, lineCount: entry.value),
+    ];
   }
 
   /// Parses repertoire PGN content and extracts trainable lines.

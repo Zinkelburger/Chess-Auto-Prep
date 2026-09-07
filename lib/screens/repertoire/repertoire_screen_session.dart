@@ -279,14 +279,16 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   }
 
   Future<void> _showRepertoireSelection() async {
-    final result = await Navigator.of(context).push<RepertoireMetadata>(
+    final pick = await Navigator.of(context).push<ChapterPick>(
       MaterialPageRoute(
         builder: (context) => const RepertoireSelectionScreen(),
       ),
     );
 
-    if (result != null && mounted) {
-      await _controller.setRepertoire(result);
+    // A course chapter picked inside a file opens that file: the outline
+    // already shows the chapters.
+    if (pick != null && mounted) {
+      await _controller.setRepertoire(pick.chapter);
     }
     _reclaimFocus();
   }
@@ -502,11 +504,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     if (current == null) return;
     final folder = _chapterStore.folderMetadata(current.filePath);
 
-    final chapter = await Navigator.of(context).push<RepertoireMetadata>(
+    final chapter = (await Navigator.of(context).push<ChapterPick>(
       MaterialPageRoute(
         builder: (_) => RepertoireChaptersScreen(repertoire: folder),
       ),
-    );
+    ))?.chapter;
 
     if (chapter != null && mounted && chapter.filePath != current.filePath) {
       await _controller.setRepertoire(chapter);

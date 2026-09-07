@@ -328,7 +328,12 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   // REPERTOIRE LOADING
   // ---------------------------------------------------------------------------
 
-  Future<void> loadRepertoire({String? startLineId}) async {
+  /// [startChapter] scopes the browser to one of the file's course chapters
+  /// as it opens — the chapter the user tapped in the picker.
+  Future<void> loadRepertoire({
+    String? startLineId,
+    String? startChapter,
+  }) async {
     if (repertoire == null) return;
     // Capture the token and the source flag up front: `sourceIsStudy` is a
     // shared mutable field a concurrent handoff can flip while we await, so
@@ -414,6 +419,10 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       _linearDone.clear();
       await chapterScope.resolveLayout(filePath, isStudy: loadIsStudy);
       if (generation != _loadGeneration) return;
+      if (startChapter != null && !loadIsStudy) {
+        await chapterScope.adoptChapter(startChapter, filePath: filePath);
+        if (generation != _loadGeneration) return;
+      }
       dueQueue = _buildQueue();
       notifyListeners();
 

@@ -1,7 +1,8 @@
 /// Chapter picker for a repertoire folder.
 ///
-/// Pushed after the user taps a repertoire; pops the chosen chapter's
-/// [RepertoireMetadata] (a `.pgn` file path) back to the caller.
+/// Pushed after the user taps a repertoire; pops the chosen [ChapterPick] —
+/// a chapter file, and the course chapter inside it when one was tapped —
+/// back to the caller.
 library;
 
 import 'package:flutter/material.dart';

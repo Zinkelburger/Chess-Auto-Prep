@@ -225,6 +225,23 @@ class ChapterScope {
     pendingPrompt = proposal;
   }
 
+  /// Scope to [chapter] as the file opens, because the user chose it by name
+  /// before the load (the chapter picker lists a course's chapters under its
+  /// file). Picking a chapter answers "sort into chapters?" — so a pending
+  /// prompt, an earlier "no", or grouping switched off all give way to the
+  /// detected layout, recorded for [filePath] the way the prompt's own "yes"
+  /// is. Returns whether [chapter] exists under the resulting grouping.
+  Future<bool> adoptChapter(String chapter, {required String? filePath}) async {
+    final layout = _detectedLayout;
+    if (layout != null && (pendingPrompt != null || !names.contains(chapter))) {
+      pendingPrompt = layout;
+      await answerPrompt(true, filePath: filePath);
+    }
+    if (!names.contains(chapter)) return false;
+    activeChapter = chapter;
+    return true;
+  }
+
   Future<void> _applyMode(ChapterGroupingMode mode) async {
     if (settings.chapterGrouping == mode) return;
     settings.chapterGrouping = mode;
