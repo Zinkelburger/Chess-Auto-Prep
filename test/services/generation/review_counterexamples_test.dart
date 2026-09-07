@@ -1,4 +1,13 @@
-// Review-only counterexamples. Assertions describe the intended invariants.
+/// Counterexamples from the 5 September 2026 expectimax review
+/// (`docs/maintenance/2026-09-05-expectimax-review.md`). Each asserts an
+/// invariant the implementation is *supposed* to hold and does not: they are
+/// the review's evidence, reproduced as code, and they fail on purpose.
+///
+/// Skipped rather than deleted, so the repair for each defect has a test
+/// waiting for it. Drop the `skip` on the one you are fixing.
+@Skip('Known failures: evidence for the expectimax review, not regressions.')
+library;
+
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
