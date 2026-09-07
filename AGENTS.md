@@ -84,7 +84,7 @@ Two layouts coexist. Both are intentional; the rule for choosing is:
 
 - **`lib/features/<name>/`** — everything owned by one feature, in
   `controllers/ models/ services/ widgets/`. Use this for new features and
-  when growing an existing one (`audit`, `browse`, `coverage`, `engine_tournament`,
+  when growing an existing one (`audit`, `browse`, `bughouse`, `coverage`, `databases`, `engine_tournament`,
   `eval_tree`, `games`, `holes`, `master_games`, `planner`, `repertoire`,
   `tactics`, `traps`, `tricks`).
 - **`lib/core/ models/ services/ widgets/`** — genuinely cross-cutting code
