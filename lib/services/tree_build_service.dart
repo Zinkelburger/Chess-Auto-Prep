@@ -3,8 +3,8 @@
 /// Stockfish expectimax delegates to PureTreeBuilder: exhaustive fixed-horizon
 /// search by default, or explicit approximate rolling four-ply lookahead. Both
 /// enumerate every legal own candidate before the engine-loss constraint and
-/// preserve the complete positive-support opponent policy. Master frequencies
-/// supply the in-book policy; Maia supplies off-book positions.
+/// preserve the complete positive-support Maia opponent policy. No game
+/// database contributes probabilities to Stockfish expectimax.
 ///
 /// The legacy frontier/expansion collaborators below still serve database
 /// exploration modes. Their heuristics do not run in Stockfish expectimax.

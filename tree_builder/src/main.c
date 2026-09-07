@@ -736,9 +736,9 @@ static void print_usage(const char *prog_name) {
     printf("  --max-eval-loss <cp> of the best are searched [default: 50].\n");
     printf("  Every positive-probability opponent move is searched; no novelty,\n");
     printf("  setup, mass cutoff, MultiPV cap, eval-window or confidence bonuses.\n");
-    printf("  -m, --masters         Target master practice [default], Maia off-book\n");
-    printf("  --maia-only           Deselect master targeting; Maia throughout\n");
-    printf("  --maia-model <path>   Maia model (required off-book)\n");
+    printf("  -m, --masters         Master practice for database modes only\n");
+    printf("  --maia-only           Maia throughout [always used by Stockfish expectimax]\n");
+    printf("  --maia-model <path>   Maia model (required for Stockfish expectimax)\n");
     printf("  --maia-elo <N>        Maia opponent rating [default: 2200]\n");
     printf("  Completed values evaluate the declared finite tree or committed policy and\n");
     printf("  evaluations, not calibrated human win rates. Cost is exponential.\n");
@@ -1719,6 +1719,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Stockfish expectimax has one opponent model, including when loading old CLI settings.
+    if (build_mode == BUILD_MODE_STOCKFISH_EXPECTIMAX) {
+        maia_only = true;
+        use_masters = false;
+    }
+
     /* Signal handlers */
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -1762,8 +1768,12 @@ int main(int argc, char *argv[]) {
     printf("╔══════════════════════════════════════════════════════════╗\n");
     printf("║            Chess Repertoire Builder v3.0                 ║\n");
     printf("║                                                          ║\n");
-    printf("║   Interleaved Lichess + Stockfish build                  ║\n");
-    printf("║   Engine-driven our-move selection, DB-driven opponent   ║\n");
+    if (build_mode == BUILD_MODE_STOCKFISH_EXPECTIMAX) {
+        printf("║   Stockfish + Maia expectimax                           ║\n");
+        printf("║   Maia supplies every opponent reply                    ║\n");
+    } else {
+        printf("║   Database repertoire builder                           ║\n");
+    }
     printf("╚══════════════════════════════════════════════════════════╝\n\n");
 
     printf("Configuration:\n");

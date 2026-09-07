@@ -43,29 +43,24 @@ reply-count preferences, or separate selection objectives.
 
 ## Opponent model
 
-**Target master opponents** is on by default and can be deselected on the main
-form. It means empirical move frequencies from the master-game source at each
-position where that source has legal observations. All positive-count legal
-moves are included and normalized by their total count. No independent engine
-reply is injected, and no Maia probability is added to a book distribution.
+**Pure and Fast use Stockfish + Maia only.** Stockfish supplies position
+estimates and the own-move loss constraint. Maia, at the displayed opponent
+rating, supplies every opponent position's move probabilities. The legal
+probabilities are normalized to sum to one; every positive-probability legal
+reply remains in the search. There are no master counts, database fallbacks,
+blends, probability-temperature changes, or hidden reply caps.
 
-Where no legal book observations exist, use Maia at the displayed opponent
-rating, normalized over its legal moves. With master targeting deselected,
-Maia supplies every opponent position. All positive-probability replies are
-searched, however rare. A missing/invalid Maia policy is an error, not a silent
-change to another population. A failed database query is also an error.
+A missing or invalid Maia policy is an error. It never triggers a switch to a
+game database. Master targeting and automatic downloads are unavailable for
+Stockfish expectimax, including when an old preset enables their legacy flags.
+The separate database build modes keep their own data workflows.
 
-The app uses its local master-game database; C/MCP uses the Lichess masters
-explorer. Its [query implementation](https://github.com/lichess-org/lila-openingexplorer/blob/master/src/api/query.rs) defaults to 12 moves; C explicitly requests up to 256 to cover all legal moves. These are different samples, so actual runs need not agree even with
-the same settings. The source is saved in the tree and cannot silently change
-on resume. Book counts describe observed practice, not every move a master
-might play: unobserved moves have zero probability while in book. This simple
-empirical assumption is deliberate and visible; there is no hidden smoothing
-parameter. Engine and Maia versions and evolving source data can also affect
-newly evaluated positions.
-
-If the app's master database is missing, the form explicitly explains that
-Maia will be used throughout and offers to download master games first.
+Saved trees record `opponent_book_source: "none"` and
+`use_master_games: false`. C also records `maia_only: true`. Earlier trees
+built with master probabilities cannot resume under this policy: start a fresh
+build. Existing Maia-only trees can continue with the same position, rating,
+evaluation settings and search method. Changes to the Maia or Stockfish model
+versions can still affect newly evaluated positions.
 
 ## Chess state and draw convention
 

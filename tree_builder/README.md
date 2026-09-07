@@ -1,3 +1,8 @@
+> Stockfish expectimax (Pure and Fast) now uses **Maia throughout**. Master
+> and Lichess flags apply only to separate database build modes; old settings
+> cannot re-enable master replies. Start a new build for an old master-based
+> tree. Maia must be available; there is no database fallback.
+
 # Standalone expectimax builder
 
 Both this C program and the Flutter app follow [the same Pure contract](../docs/ALGORITHM.md).

@@ -225,8 +225,11 @@ mixin _GenerationConfigIo
           .clamp(0, 4000),
       refutationLines: _refutationLines,
       alternativeLines: _alternativeLines,
-      useMasterGames: _useMasterGames,
-      downloadMasterGamesIfMissing: _downloadMasterGamesIfMissing,
+      useMasterGames:
+          _buildMode != BuildMode.stockfishExpectimax && _useMasterGames,
+      downloadMasterGamesIfMissing:
+          _buildMode != BuildMode.stockfishExpectimax &&
+          _downloadMasterGamesIfMissing,
       masterDepthBonusPlies:
           (int.tryParse(_masterDepthBonusCtrl.text.trim()) ?? 10).clamp(0, 40),
       masterPriorityWeight:

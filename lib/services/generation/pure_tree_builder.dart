@@ -8,7 +8,6 @@ import '../maia/maia_factory.dart';
 import 'build_run.dart';
 import 'eca_calculator.dart';
 import 'generation_config.dart';
-import '../master_games/master_games_db.dart' show BookMove;
 import 'pure_position.dart';
 
 class PureTreeBuilder {
@@ -17,9 +16,7 @@ class PureTreeBuilder {
 
   Future<void> build() async {
     final config = run.config;
-    final source = config.useMasterGames && run.masterBook != null
-        ? 'local-master-book'
-        : 'none';
+    const source = 'none';
     if (config.evalDepth < 1 ||
         config.maxPly < 1 ||
         config.maxPly > 64 ||
@@ -52,7 +49,6 @@ class PureTreeBuilder {
         'play_as_white',
         'eval_depth',
         'max_eval_loss_cp',
-        'use_master_games',
         'maia_elo',
       ]) {
         if (previous[key] != current[key]) {
@@ -145,10 +141,8 @@ class PureTreeBuilder {
       }
       final legal = pureLegalMoves(position);
       final ours = node.isWhiteToMove == config.playAsWhite;
-      final policy = ours
-          ? (probabilities: <String, double>{}, book: <String, BookMove>{})
-          : await _policy(node, legal);
-      final probabilities = policy.probabilities;
+      final policy = ours ? <String, double>{} : await _policy(node, legal);
+      final probabilities = policy;
       final moves = ours
           ? legal
           : legal.where((m) => probabilities[m]! > 0).toList();
@@ -173,14 +167,6 @@ class PureTreeBuilder {
           cumulativeProbability:
               node.cumulativeProbability * (ours ? 1 : probabilities[uci]!),
         )..historyAware = true;
-        final practice = policy.book[uci];
-        if (practice != null) {
-          candidate.whiteWins = practice.whiteWins;
-          candidate.blackWins = practice.blackWins;
-          candidate.draws = practice.draws;
-          candidate.totalGames = practice.games;
-          candidate.lastPlayedYear = practice.lastYear;
-        }
         candidate.terminalValue = pureTerminal(
           candidate,
           played.after,
@@ -234,36 +220,13 @@ class PureTreeBuilder {
     run.stats.sfSingleCalls++;
   }
 
-  Future<({Map<String, double> probabilities, Map<String, BookMove> book})>
-  _policy(BuildTreeNode node, List<String> legal) async {
-    final counts = <String, double>{for (final m in legal) m: 0};
-    final practice = <String, BookMove>{};
-    if (run.config.useMasterGames && run.masterBook != null) {
-      run.stats.masterBookQueries++;
-      final bookMoves = run.masterBook!(node.fen);
-      if (bookMoves.isNotEmpty) run.stats.masterBookHits++;
-      for (final move in bookMoves) {
-        if (move.games < 0) throw StateError('Invalid master game count');
-        if (counts.containsKey(move.uci)) {
-          counts[move.uci] = counts[move.uci]! + move.games;
-          practice[move.uci] = move;
-        }
-      }
-    }
-    final games = counts.values.fold(0.0, (a, b) => a + b);
-    // Masters are an explicit empirical policy; Maia supplies off-book
-    // positions only. No hidden mixture or population-changing temperature.
-    if (games > 0) {
-      return (
-        probabilities: counts.map((m, n) => MapEntry(m, n / games)),
-        book: practice,
-      );
-    }
+  Future<Map<String, double>> _policy(
+    BuildTreeNode node,
+    List<String> legal,
+  ) async {
     final maia = MaiaFactory.instance;
     if (!MaiaFactory.isAvailable || maia == null) {
-      throw StateError(
-        'No opponent policy here: Maia is required outside master practice.',
-      );
+      throw StateError('Maia is required for every opponent position.');
     }
     final result = await maia.evaluate(node.fen, run.config.maiaElo);
     run.stats.maiaEvals++;
@@ -277,9 +240,6 @@ class PureTreeBuilder {
     if (mass <= 0) {
       throw StateError('Opponent policy has no legal probability mass');
     }
-    return (
-      probabilities: policy.map((m, p) => MapEntry(m, p / mass)),
-      book: <String, BookMove>{},
-    );
+    return policy.map((m, p) => MapEntry(m, p / mass));
   }
 }

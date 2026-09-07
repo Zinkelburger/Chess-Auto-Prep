@@ -44,40 +44,22 @@ static bool evaluate(TreeNode *node, const TreeConfig *cfg) {
         cfg->stats->sf_single_calls++;
     return true;
 }
-static bool policy(TreeNode *node, const TreeConfig *cfg, LichessExplorer *explorer,
-                   PureMove *moves, int n, double *p, uint64_t stats[][3]) {
+static bool policy(TreeNode *node, const TreeConfig *cfg,
+                   PureMove *moves, int n, double *p) {
     double mass = 0;
-    if (cfg->use_masters && !cfg->maia_only && explorer) {
-        ExplorerResponse response = {0};
-        if (!lichess_explorer_query_masters(explorer, node->fen, &response))
-            return false;
-        for (size_t j = 0; j < response.move_count; j++)
-            for (int i = 0; i < n; i++)
-                if (strcmp(moves[i].uci, response.moves[j].uci) == 0) {
-                    double count = (double)response.moves[j].white_wins +
-                                   response.moves[j].black_wins + response.moves[j].draws;
-                    stats[i][0] += response.moves[j].white_wins;
-                    stats[i][1] += response.moves[j].black_wins;
-                    stats[i][2] += response.moves[j].draws;
-                    p[i] += count;
-                    mass += count;
-                }
-    }
-    if (mass == 0) {
-        MaiaResponse response = {0};
-        if (!cfg->maia || !maia_evaluate(cfg->maia, node->fen, cfg->maia_elo, &response) ||
-            !response.success)
-            return false;
-        for (int j = 0; j < response.move_count; j++)
-            for (int i = 0; i < n; i++)
-                if (strcmp(moves[i].uci, response.moves[j].uci) == 0) {
-                    double prob = response.moves[j].probability;
-                    if (!isfinite(prob) || prob < 0)
-                        return false;
-                    p[i] += prob;
-                    mass += prob;
-                }
-    }
+    MaiaResponse response = {0};
+    if (!cfg->maia || !maia_evaluate(cfg->maia, node->fen, cfg->maia_elo, &response) ||
+        !response.success)
+        return false;
+    for (int j = 0; j < response.move_count; j++)
+        for (int i = 0; i < n; i++)
+            if (strcmp(moves[i].uci, response.moves[j].uci) == 0) {
+                double prob = response.moves[j].probability;
+                if (!isfinite(prob) || prob < 0)
+                    return false;
+                p[i] += prob;
+                mass += prob;
+            }
     if (!(mass > 0) || !isfinite(mass))
         return false;
     for (int i = 0; i < n; i++)
@@ -96,7 +78,7 @@ bool pure_tree_build(Tree *tree, const char *fen, const TreeConfig *cfg,
         fprintf(stderr, "Legacy search tree: start a new Pure build.\n");
         return false;
     }
-    const char *source = cfg->use_masters && !cfg->maia_only ? "lichess-masters" : "none";
+    const char *source = "none";
     if (tree->root && tree->root->children_count &&
         (strcmp(tree->config.pure_book_source, source) != 0))
         return false;
@@ -105,9 +87,7 @@ bool pure_tree_build(Tree *tree, const char *fen, const TreeConfig *cfg,
          tree->config.play_as_white != cfg->play_as_white ||
          tree->config.eval_depth != cfg->eval_depth ||
          tree->config.max_eval_loss_cp != cfg->max_eval_loss_cp ||
-         (tree->config.use_masters && !tree->config.maia_only) !=
-             (cfg->use_masters && !cfg->maia_only) ||
-         tree->config.maia_only != cfg->maia_only || tree->config.maia_elo != cfg->maia_elo ||
+         tree->config.maia_elo != cfg->maia_elo ||
          tree->config.max_depth > cfg->max_depth || strcmp(tree->root->fen, fen) != 0)) {
         fprintf(stderr,
                 "Pure resume requires the same position and model; horizon may only increase.\n");
@@ -115,6 +95,8 @@ bool pure_tree_build(Tree *tree, const char *fen, const TreeConfig *cfg,
     }
     engine_pool_set_depth(cfg->engine_pool, cfg->eval_depth);
     tree->config = *cfg;
+    tree->config.use_masters = false;
+    tree->config.maia_only = true;
     snprintf(tree->config.pure_book_source, sizeof(tree->config.pure_book_source), "%s", source);
     if (!tree->root) {
         tree->root = node_create(fen, NULL, NULL, NULL);
@@ -167,8 +149,7 @@ static bool search_window(Tree *tree, TreeNode *root, const TreeConfig *cfg,
         if (!(node->explored && node->children_count)) {
             bool ours = node->is_white_to_move == cfg->play_as_white;
             double probs[PURE_MAX_MOVES] = {0};
-            uint64_t stats[PURE_MAX_MOVES][3] = {{0}};
-            if (!ours && !policy(node, cfg, explorer, moves, n, probs, stats)) {
+            if (!ours && !policy(node, cfg, moves, n, probs)) {
                 fprintf(stderr, "Opponent policy unavailable at %s\n", node->fen);
                 ok = false;
                 break;
@@ -193,7 +174,7 @@ static bool search_window(Tree *tree, TreeNode *root, const TreeConfig *cfg,
                 }
                 children[nc++] = child;
                 child->history_aware = true;
-                node_set_lichess_stats(child, stats[i][0], stats[i][1], stats[i][2]);
+
                 child->move_probability = ours ? 1 : probs[i];
                 child->cumulative_probability =
                     node->cumulative_probability * child->move_probability;

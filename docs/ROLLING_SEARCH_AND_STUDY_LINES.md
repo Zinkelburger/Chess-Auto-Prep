@@ -1,6 +1,8 @@
 # Fast search and study lines
 
-Pure remains the default and the reference algorithm. The optional **Fast — 4-ply lookahead** mode reduces repeated exploration of our alternatives.
+Pure remains the default and the reference algorithm. Both modes now use
+Stockfish evaluation and Maia-only opponent probabilities; master data is
+disconnected from expectimax. The optional **Fast — 4-ply lookahead** mode reduces repeated exploration of our alternatives.
 Both Dart and C implement it. Memorability belongs in the separate study plan;
 it never changes a search value, legal candidate set, or opponent probability.
 

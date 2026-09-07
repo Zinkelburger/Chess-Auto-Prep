@@ -289,27 +289,24 @@ void main() {
     });
   });
 
-  testWidgets('Pure exposes master targeting and removes preference switches', (
+  testWidgets('Pure is Maia-only even when reopening a master-enabled preset', (
     tester,
   ) async {
     final initial = await _throughForm(
       tester,
-      const TreeBuildConfig(startFen: _startFen, playAsWhite: true),
+      const TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: true,
+        useMasterGames: true,
+        downloadMasterGamesIfMissing: true,
+      ),
     );
-    expect(initial.useMasterGames, isTrue);
-    expect(find.text('Pure — full horizon'), findsOneWidget);
-    expect(find.text('Prefer novelties'), findsNothing);
-    expect(find.text('Your lines & structures (optional)'), findsNothing);
-    await tester.tap(find.text('Target master opponents'));
-    await tester.pumpAndSettle();
-    final state = tester.state<GenerationConfigFormState>(
-      find.byType(GenerationConfigForm),
-    );
-    expect(
-      state.toConfig(startFen: _startFen, playAsWhite: true).useMasterGames,
-      isFalse,
-    );
+    expect(initial.useMasterGames, isFalse);
+    expect(initial.downloadMasterGamesIfMissing, isFalse);
+    expect(find.text('Target master opponents'), findsNothing);
+    expect(find.textContaining('Download master games first'), findsNothing);
     expect(find.textContaining('Maia predicts every reply'), findsOneWidget);
+    expect(find.text('Prefer novelties'), findsNothing);
   });
 
   testWidgets(
@@ -324,6 +321,8 @@ void main() {
         ),
       );
       expect(result.isRollingSearch, isTrue);
+      expect(result.useMasterGames, isFalse);
+      expect(find.text('Target master opponents'), findsNothing);
       expect(find.text('Fast — 4-ply lookahead'), findsOneWidget);
       expect(find.textContaining('approximate policy'), findsOneWidget);
       final control = find.byKey(const ValueKey('generation-search-method'));

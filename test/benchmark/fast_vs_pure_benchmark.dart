@@ -15,7 +15,6 @@ import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/repertoire_selector.dart';
 import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';
-import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
 import 'package:chess_auto_prep/services/tree_build_service.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show fenAfterMoves;
 import 'package:flutter/foundation.dart';
@@ -34,7 +33,6 @@ const _plies = int.fromEnvironment('MAX_PLY', defaultValue: 6);
 const _depth = int.fromEnvironment('EVAL_DEPTH', defaultValue: 8);
 const _seconds = int.fromEnvironment('BUDGET_SECONDS', defaultValue: 90);
 const _loss = int.fromEnvironment('MAX_EVAL_LOSS', defaultValue: 40);
-const _database = String.fromEnvironment('MASTER_DB');
 
 class _Paths extends PathProviderPlatform with MockPlatformInterfaceMixin {
   _Paths(this.root);
@@ -69,9 +67,6 @@ void main() {
     PathProviderPlatform.instance = _Paths(output.path);
     SharedPreferences.setMockInitialValues({});
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-    final masterDb = _database.isEmpty
-        ? null
-        : MasterGamesDb.open(_database, readOnly: true);
     final sans = _moves.trim().isEmpty
         ? <String>[]
         : _moves.trim().split(RegExp(r'\s+'));
@@ -89,7 +84,7 @@ void main() {
       maxEvalLossCp: _loss,
       engineThreads: 1,
       maiaElo: 2200,
-      useMasterGames: masterDb != null,
+      useMasterGames: false,
       verifyFinal: false,
       enableChessDbApi: false,
       enableCdbDirect: false,
@@ -105,24 +100,11 @@ void main() {
       expect((await maia.evaluate(fen, 2200)).policy, isNotEmpty);
       await StockfishPool.instance.prepareForTreeBuild(1);
       startup.stop();
-      var bookHits = 0;
-      var bookMisses = 0;
-      List<BookMove> lookup(String fen) {
-        final moves = masterDb!.bookMoves(fen);
-        if (moves.isEmpty) {
-          bookMisses++;
-        } else {
-          bookHits++;
-        }
-        return moves;
-      }
-
       final service = TreeBuildService();
       final wall = Stopwatch()..start();
       var lastReport = 0;
       final tree = await service.build(
         config: config,
-        masterBook: masterDb == null ? null : lookup,
         isCancelled: () => false,
         finishNow: () => wall.elapsed.inSeconds >= _seconds,
         onProgress: (progress) {
@@ -172,8 +154,7 @@ void main() {
         'engine_calls':
             service.buildStats.sfSingleCalls +
             service.buildStats.sfMultipvCalls,
-        'master_book_hits': bookHits,
-        'master_book_misses': bookMisses,
+        'opponent_model': 'Maia throughout',
         'root_move': decisions[''],
         'root_value': tree.root.expectimaxValue,
         'root_lower': tree.root.valueLower,
@@ -190,7 +171,6 @@ void main() {
           ..remove('config'))}',
       );
     } finally {
-      masterDb?.close();
       StockfishPool.instance.dispose();
       MaiaFactory.instance?.dispose();
       debugDefaultTargetPlatformOverride = null;

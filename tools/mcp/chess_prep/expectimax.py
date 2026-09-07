@@ -617,8 +617,7 @@ def builder_argv(chain: dict, base: Path, position: dict, args: dict) -> list[st
     add("--max-eval-loss", "max_eval_loss", 40)
     add("--maia-elo", "maia_elo", 2200)
 
-    if args.get("use_master_games", True) is False:
-        argv.append("--maia-only")
+    argv.append("--maia-only")  # Legacy master arguments cannot change this policy.
 
     name = (args.get("name") or "").strip()
     if name:
@@ -766,7 +765,7 @@ def register_expectimax_tools(registry: Any) -> None:
             "fen": position["fen"],
             "color": "White" if position["color"] == "w" else "Black",
             "root_candidates": "every legal move, then the explicit engine-loss constraint",
-            "opponent_model": "masters with Maia off-book" if args.get("use_master_games", True) else "Maia throughout",
+            "opponent_model": "Maia throughout",
             "score_kind": "committed Fast policy estimate" if args.get("search") in ("fast", "rolling") else "expected-score estimate, not calibrated win probability",
             "search_method": "rolling" if args.get("search") in ("fast", "rolling") else "pure",
             "search_label": "Fast (4-ply, approximate)" if args.get("search") in ("fast", "rolling") else "Pure",
@@ -942,9 +941,7 @@ def register_expectimax_tools(registry: Any) -> None:
         "Start an expectimax build: pure (full horizon) or fast (approximate, "
         "four-ply lookahead at each own turn, committing only our next move). Scores every legal own move "
         "at fixed Stockfish depth, retains those within max_eval_loss, and explores "
-        "every positive-probability opponent reply. Default opponent: empirical "
-        "Lichess master-game counts, Maia off-book; deselect use_master_games for "
-        "Maia everywhere. Values are expected-score estimates, not calibrated "
+        "every positive-probability opponent reply. Opponent replies come only from Maia; master databases are not used. Values are expected-score estimates, not calibrated "
         "human win rates. Exponential cost: start with 4 plies. Interrupted trees "
         "are incomplete and resumable, not solved answers. Draws are immediately "
         "claimed at threefold/100 half-moves; repetition history starts at the root.",
@@ -971,7 +968,6 @@ def register_expectimax_tools(registry: Any) -> None:
                 ),
 
 
-                "use_master_games": _b("Target masters using empirical master replies with Maia off-book (default true). False uses Maia throughout."),
                 "maia_elo": _i("Strength Maia predicts for (default 2200)."),
 
 

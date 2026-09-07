@@ -28,11 +28,12 @@ mixin _GenerationConfigAdvanced
         ),
         AdvancedSection('Move choice', Icons.alt_route, _moveChoiceSection),
         AdvancedSection('Search tuning', Icons.tune, _searchBudgetSection),
-        AdvancedSection(
-          'Master games',
-          Icons.workspace_premium_outlined,
-          _masterGamesSection,
-        ),
+        if (_buildMode != BuildMode.stockfishExpectimax)
+          AdvancedSection(
+            'Master games',
+            Icons.workspace_premium_outlined,
+            _masterGamesSection,
+          ),
         AdvancedSection(
           'ChessDB book',
           Icons.menu_book_outlined,
@@ -84,9 +85,8 @@ mixin _GenerationConfigAdvanced
 
   List<Widget> _opponentModelSection(VoidCallback refresh) => [
     _caption(
-      'Pure uses all positive-probability replies. Master game frequencies '
-      'are used where available when Target master opponents is enabled; Maia '
-      'at the selected rating supplies off-book replies. No temperature or hidden mixture.',
+      'Pure and Fast use Maia at the selected rating for every opponent position, '
+      'normalized over legal moves. No database frequencies or hidden mixture.',
     ),
   ];
 

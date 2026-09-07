@@ -358,11 +358,9 @@ class TreeBuildConfig {
   final int dbMinGames;
 
   // ── Master games (TWIC) ──
-  /// Consult the local master-games database when it has games: opponent
-  /// replies come from titled-player practice (blended with Maia), model
-  /// games are real master games along the line, and a repertoire move that
-  /// beats what masters actually played is annotated "improves on … in
-  /// `<game>`".  Has no effect until the database is downloaded.
+  /// Enable local master-game data in database build modes, including model
+  /// games and annotations. Has no effect until the database is downloaded.
+  /// Stockfish expectimax always ignores this legacy setting.
   final bool useMasterGames;
 
   /// When [useMasterGames] is on but the database is empty, download it
@@ -718,6 +716,10 @@ class TreeBuildConfig {
   /// True while building a single-move-per-side mainline book.
   bool get isChessDbBook => buildMode == BuildMode.chessDbBook;
 
+  /// Master data is reserved for the separate database build modes.
+  bool get usesMasterGames =>
+      buildMode != BuildMode.stockfishExpectimax && useMasterGames;
+
   bool get isRollingSearch =>
       buildMode == BuildMode.stockfishExpectimax &&
       searchAlgorithm == SearchAlgorithm.rolling;
@@ -747,7 +749,7 @@ class TreeBuildConfig {
 
   /// Short label for the active build algorithm.
   String get buildModeLabel => switch (buildMode) {
-    BuildMode.stockfishExpectimax => 'Stockfish + expectimax',
+    BuildMode.stockfishExpectimax => 'Stockfish + Maia expectimax',
     BuildMode.maiaDbExplore => 'Maia DB explore',
     BuildMode.dbExplorer => 'DB Explorer',
     BuildMode.chessDbBook => 'ChessDB mainline book',
@@ -978,8 +980,9 @@ class TreeBuildConfig {
     'novelty_weight': noveltyWeight,
     'pgn_file_paths': pgnFilePaths,
     'db_min_games': dbMinGames,
-    'use_master_games': useMasterGames,
-    'download_master_games_if_missing': downloadMasterGamesIfMissing,
+    'use_master_games': usesMasterGames,
+    'download_master_games_if_missing':
+        usesMasterGames && downloadMasterGamesIfMissing,
     'master_min_games': masterMinGames,
     'master_min_move_games': masterMinMoveGames,
     'master_priority_weight': masterPriorityWeight,

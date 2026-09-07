@@ -6,7 +6,31 @@ all modeled opponent replies. It can save our alternative branches beyond
 that window, but does not make opponent branching cheap. At four plies or less,
 there is no shorter lookahead to exploit.
 
-## Measurements — 5 September 2026
+## Maia-only verification — 6 September 2026
+
+Pure and Fast now use Stockfish evaluations and Maia probabilities throughout.
+The build form has no master-targeting or download controls for expectimax.
+Legacy master-enabled presets and CLI flags cannot re-enable database access.
+
+- 732 focused Dart generation, form and session tests passed; analyzer and lint passed.
+- C checks passed: 30 Pure oracle trees, 12 rolling oracle policies, builder and
+  CLI regressions, including real Maia in both modes with legacy master flags.
+- 45 MCP tests and two benchmark reporting/storage checks passed.
+- A real Stockfish + Maia pawn-control smoke run (4 plies, engine depth 4)
+  completed in both modes: 852 nodes, Kf1, value 0.5416864443517625. Build times
+  were 5.050 seconds for Pure and 5.209 seconds for Fast. At this horizon both
+  perform the same search; this is a correctness smoke check, not evidence of
+  speedup at longer horizons.
+- The Pure and Fast forms were inspected in the headless app.
+
+![Fast with the Maia-only opponent model](images/maia-only-search.png)
+
+## Historical measurements — 5 September 2026
+
+These runs predate the Maia-only change. Their master-opening results describe
+the earlier master-book/Maia policy. The current harness uses Maia throughout;
+rerunning it does not reproduce that earlier opponent model. The pawn cases
+were already Maia-only.
 
 Stockfish 18, depth 8; Maia model and binary checksums and effective configs
 are preserved in the [measurement data](benchmarks/fast-pure-2026-09-05.json).
@@ -64,13 +88,12 @@ The historical `run_overnight.sh` name now dispatches a bounded, paired
 benchmark. It no longer invokes the retired Fast heuristics or old comparison
 metrics. Use `--case pawn-six --seconds 600` for a longer follow-up. Output
 must be a fresh directory; it refuses to reuse an individual run's storage.
-`--master-db` selects a read-only local master book. No network is used.
+No master database is required or opened. No network is used.
 
 Each run launches a fresh Flutter test process and Stockfish worker, with
 isolated app storage. It uses the production Dart `TreeBuildService`, fixed
-Stockfish depth 8, one engine thread, a 40 cp loss constraint, and master-game
-frequencies with Maia 2200 off-book. The book supplies legal game counts, not
-an independently fitted model of all masters. Model and process startup are
+Stockfish depth 8, one engine thread, a 40 cp loss constraint, and Maia 2200
+throughout. Model and process startup are
 measured separately and excluded from build time. Run order alternates by
 case. The cap is cooperative; an atomic operation can finish just after it.
 
@@ -94,15 +117,14 @@ They deliberately include positions in synthetic trees where committing to
 a short lookahead loses value. Fast's approximation is explicit in the form,
 result text and exported PGNs.
 
-The benchmark also checks that the master book is unchanged during the pair.
-Empty SQLite journal files do not count as data changes. Existing output is
-never overwritten. Its reporting and storage guards have an engine-free check:
+Existing output is never overwritten. Its reporting and storage guards have
+an engine-free check:
 
 ```sh
 scripts/ci.sh with -- python3 tools/experiments/fast_vs_pure/test_benchmark.py
 ```
 
-## Verification
+## Historical verification
 
 - 47 focused Dart tests passed, including the independent Pure and rolling
   oracles, legal expansions, configuration migration, and visible Fast label.

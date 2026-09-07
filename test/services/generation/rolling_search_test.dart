@@ -12,6 +12,8 @@ import 'package:chess_auto_prep/services/generation/line_extractor.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';
 import 'engine_fakes.dart';
+import 'package:chess_auto_prep/services/maia/maia_factory.dart';
+import 'package:chess_auto_prep/services/maia/maia_service.dart';
 import 'pure_tree_builder_test.dart' as harness;
 
 class _ZeroEngine extends FakeStockfishPool {
@@ -22,7 +24,23 @@ class _ZeroEngine extends FakeStockfishPool {
   }
 }
 
+class _TwoReplyMaia implements MaiaEvaluator {
+  @override
+  Future<void> initialize() async {}
+  @override
+  void dispose() {}
+  @override
+  Future<MaiaResult> evaluate(String fen, int elo) async => MaiaResult(
+    policy: {
+      for (final move in pureLegalMoves(tryParseFen(fen)!).take(2)) move: .5,
+    },
+    winProbability: .5,
+  );
+}
+
 void main() {
+  setUp(() => MaiaFactory.testOverride = _TwoReplyMaia());
+  tearDown(() => MaiaFactory.testOverride = null);
   test(
     'independent eight-ply oracle: committed choices and policy value, not full optimum',
     () {
@@ -103,9 +121,7 @@ void main() {
       );
       final tree = harness.treeAt(fen);
       final engine = _ZeroEngine();
-      book(String f) => pureLegalMoves(
-        tryParseFen(f)!,
-      ).take(2).map((m) => harness.bookMove(m, 1)).toList();
+      book(String f) => throw StateError('Fast must not query master data');
       await PureTreeBuilder(
         harness.runFor(config, tree, engine, book: book),
       ).build();
@@ -131,7 +147,7 @@ void main() {
   );
 
   test(
-    'real legal builder extends all book replies, resumes without early commitments',
+    'real legal builder extends all Maia replies, resumes without early commitments',
     () async {
       const fen = '8/8/8/8/8/4k3/P7/4K3 w - - 0 1';
       final config = harness.base.copyWith(
@@ -144,9 +160,7 @@ void main() {
       );
       final tree = harness.treeAt(fen);
       final engine = _ZeroEngine();
-      book(String f) => pureLegalMoves(
-        tryParseFen(f)!,
-      ).take(2).map((m) => harness.bookMove(m, 1)).toList();
+      book(String f) => throw StateError('Fast must not query master data');
       await PureTreeBuilder(
         harness.runFor(config.copyWith(maxNodes: 10), tree, engine, book: book),
       ).build();
@@ -173,9 +187,12 @@ void main() {
           expect(n.decisionHorizon, (n.ply + 4).clamp(0, config.maxPly));
           check(n.children.singleWhere((c) => c.isRepertoireMove));
         } else {
-          expect(n.children.length, book(n.fen).length);
+          expect(
+            n.children.length,
+            pureLegalMoves(tryParseFen(n.fen)!).take(2).length,
+          );
           for (final c in n.children) {
-            expect(c.totalGames, 1);
+            expect(c.totalGames, 0);
             check(c);
           }
         }

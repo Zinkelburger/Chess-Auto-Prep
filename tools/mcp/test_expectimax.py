@@ -193,7 +193,7 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("-d") + 1], "4")
         self.assertEqual(argv[argv.index("-t") + 1], "1")
         self.assertNotIn("--our-multipv", argv)
-        self.assertNotIn("--maia-only", argv)
+        self.assertIn("--maia-only", argv)
         self.assertEqual(argv[-1], "/runs/x/tree")
 
     def test_overrides_reach_the_command_line(self):
@@ -208,6 +208,10 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("-t") + 1], "4")
         self.assertNotIn("--our-multipv", argv)
         self.assertEqual(argv[argv.index("--maia-elo") + 1], "1800")
+
+    def test_legacy_master_argument_cannot_enable_a_database_policy(self):
+        argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"use_master_games": True})
+        self.assertIn("--maia-only", argv)
 
     def test_fast_names_the_rolling_algorithm(self):
         argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "fast"})

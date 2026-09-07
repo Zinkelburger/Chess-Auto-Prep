@@ -80,7 +80,7 @@ class GenerationSessionController extends ChangeNotifier
 
   /// The database to use for this run, or null when off/absent.
   MasterGamesDb? _masterDbFor(TreeBuildConfig config) {
-    if (!config.useMasterGames) return null;
+    if (!config.usesMasterGames) return null;
     final service = masterGames();
     if (!service.isAvailableForGeneration) return null;
     return service.db;
@@ -430,7 +430,7 @@ class GenerationSessionController extends ChangeNotifier
   /// exactly as it does today.  Does nothing when the database already has
   /// games or when the user declined the wait earlier this session.
   Future<void> _downloadMasterGamesPhase(TreeBuildConfig config) async {
-    if (!config.useMasterGames || !config.downloadMasterGamesIfMissing) return;
+    if (!config.usesMasterGames || !config.downloadMasterGamesIfMissing) return;
     if (_masterGamesDownloadDeclined || _cancelRequested) return;
     final service = masterGames();
     if (service.hasGames) return;

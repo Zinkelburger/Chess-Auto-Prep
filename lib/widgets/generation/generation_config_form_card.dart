@@ -44,26 +44,29 @@ mixin _GenerationConfigCard
 
   Widget _opponentSection() {
     return _cardSection('Opponent', leadingRule: false, [
-      _labeledCheckbox(
-        'Target master opponents',
-        _useMasterGames,
-        (v) => setState(() => _useMasterGames = v),
-        tooltip:
-            'Use master-game reply frequencies where available; Maia supplies off-book positions. Untick to use Maia throughout.',
-      ),
+      if (_buildMode != BuildMode.stockfishExpectimax)
+        _labeledCheckbox(
+          'Target master opponents',
+          _useMasterGames,
+          (v) => setState(() => _useMasterGames = v),
+          tooltip:
+              'Use master-game reply frequencies where available; Maia supplies off-book positions. Untick to use Maia throughout.',
+        ),
       _numField(
         _maiaEloCtrl,
         'Opponent rating (Elo)',
         defaultText: '2200',
         onEdited: () => setState(() {}),
         tooltip:
-            'Maia rating for off-book replies, or all replies when master opponents are disabled.',
+            'Maia predicts opponent replies at this rating in Pure and Fast search.',
       ),
       _caption(
         _buildMode == BuildMode.dbExplorer
             ? 'Opponent replies come from move frequencies in your PGN '
                   'files; this rating still drives annotations and trap '
                   'findability.'
+            : _buildMode == BuildMode.stockfishExpectimax
+            ? 'Maia predicts every reply at this rating. Stockfish evaluates positions; no game database is used.'
             : _useMasterGames
             ? 'Master-game frequencies where available; Maia at this rating off book. '
                   'If the master database is missing, replies come from Maia.'
@@ -83,6 +86,7 @@ mixin _GenerationConfigCard
   List<Widget> _masterGamesDownloadRow() {
     // Nullable watch: forms hosted without the app-level providers (widget
     // tests, previews) simply show no row.
+    if (_buildMode == BuildMode.stockfishExpectimax) return const [];
     final service = context.watch<MasterGamesService?>();
     if (service == null || !service.isLoaded) return const [];
     if (!_useMasterGames || service.hasGames) return const [];
@@ -217,7 +221,7 @@ mixin _GenerationConfigCard
           DropdownMenuItem(
             value: BuildMode.stockfishExpectimax,
             child: Text(
-              'Engine + human model (recommended)',
+              'Stockfish + Maia expectimax',
               style: TextStyle(fontSize: 13),
             ),
           ),
@@ -464,7 +468,7 @@ mixin _GenerationConfigCard
         kDefaultGenerationEvalDepth;
     final budget = int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0;
     final source = switch (_buildMode) {
-      BuildMode.stockfishExpectimax => 'engine + human model',
+      BuildMode.stockfishExpectimax => 'Stockfish + Maia',
       BuildMode.maiaDbExplore => 'database win rates',
       BuildMode.dbExplorer => 'your PGN files',
       BuildMode.chessDbBook => 'ChessDB mainlines',
@@ -475,7 +479,7 @@ mixin _GenerationConfigCard
       _searchAlgorithm == SearchAlgorithm.rolling
           ? 'Fast (4-ply, approximate)'
           : 'Pure search',
-      _useMasterGames
+      _buildMode != BuildMode.stockfishExpectimax && _useMasterGames
           ? 'master practice, Maia $elo off-book'
           : 'Maia $elo throughout',
       source,

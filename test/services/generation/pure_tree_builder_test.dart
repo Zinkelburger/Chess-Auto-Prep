@@ -156,49 +156,50 @@ void main() {
       );
     },
   );
+  test('legacy master targeting cannot alter the Maia policy', () async {
+    final fen = playUciMove(kStandardStartFen, 'e2e4')!;
+    final tree = treeAt(fen);
+    final pool = FakeStockfishPool();
+    final maia = FakeMaiaEvaluator({
+      fen: {'e7e5': .9, 'c7c5': .1},
+    });
+    MaiaFactory.testOverride = maia;
+    for (final m in ['e7e5', 'c7c5']) {
+      pool.stmCpByFen[playUciMove(fen, m)!] = 0;
+    }
+    final config = base.copyWith(
+      startFen: fen,
+      oppMaxChildren: 1,
+      oppMassTarget: .5,
+      maiaMinProb: .99,
+      minProbability: .99,
+    );
+    await PureTreeBuilder(
+      runFor(
+        config,
+        tree,
+        pool,
+        book: (_) => [bookMove('e7e5', 999999), bookMove('c7c5', 1)],
+      ),
+    ).build();
+    expect(tree.buildComplete, isTrue);
+    expect(maia.calls, isNotEmpty);
+    expect(tree.root.children, hasLength(2));
+    expect(
+      tree.root.children.firstWhere((c) => c.moveUci == 'c7c5').moveProbability,
+      closeTo(.1, 1e-15),
+    );
+    ExpectimaxCalculator(config: config).calculate(tree);
+    expect(tree.root.expectimaxValue, .5);
+    expect(tree.configSnapshot['use_master_games'], isFalse);
+    tree.configSnapshot['opponent_book_source'] = 'local-master-book';
+    await expectLater(
+      PureTreeBuilder(runFor(config, tree, pool)).build(),
+      throwsStateError,
+    );
+  });
   test(
-    'master policy keeps rare legal replies and does not inject independent Maia mass',
-    () async {
-      final fen = playUciMove(kStandardStartFen, 'e2e4')!;
-      final tree = treeAt(fen);
-      final pool = FakeStockfishPool();
-      final maia = FakeMaiaEvaluator({
-        fen: {'e7e5': .9, 'c7c5': .1},
-      });
-      MaiaFactory.testOverride = maia;
-      for (final m in ['e7e5', 'c7c5']) {
-        pool.stmCpByFen[playUciMove(fen, m)!] = 0;
-      }
-      final config = base.copyWith(
-        startFen: fen,
-        oppMaxChildren: 1,
-        oppMassTarget: .5,
-        maiaMinProb: .99,
-        minProbability: .99,
-      );
-      await PureTreeBuilder(
-        runFor(
-          config,
-          tree,
-          pool,
-          book: (_) => [bookMove('e7e5', 999999), bookMove('c7c5', 1)],
-        ),
-      ).build();
-      expect(tree.buildComplete, isTrue);
-      expect(maia.calls, isEmpty);
-      expect(tree.root.children, hasLength(2));
-      expect(
-        tree.root.children
-            .firstWhere((c) => c.moveUci == 'c7c5')
-            .moveProbability,
-        closeTo(.000001, 1e-15),
-      );
-      ExpectimaxCalculator(config: config).calculate(tree);
-      expect(tree.root.expectimaxValue, .5);
-    },
-  );
-  test(
-    'masters can be deselected; Maia is normalized over legal support',
+    'Maia is normalized over legal support without querying the database',
     () async {
       final fen = playUciMove(kStandardStartFen, 'e2e4')!;
       final tree = treeAt(fen);
@@ -211,7 +212,7 @@ void main() {
       }
       await PureTreeBuilder(
         runFor(
-          base.copyWith(startFen: fen, useMasterGames: false),
+          base.copyWith(startFen: fen, useMasterGames: true),
           tree,
           pool,
           book: (_) => throw StateError('must not query'),

@@ -108,6 +108,9 @@ int main(int argc, char **argv) {
     assert(tree->root->decision_horizon == 1);
     cfg.rolling_search = false;
     assert(!pure_tree_build(tree, fen, &cfg, NULL));
+    cfg.rolling_search = true;
+    snprintf(tree->config.pure_book_source, sizeof(tree->config.pure_book_source), "lichess-masters");
+    assert(!pure_tree_build(tree, fen, &cfg, NULL));
     tree_destroy(tree);
     engine_pool_destroy(pool);
     printf("Rolling: %d independent eight-ply policies, horizon failures, serialization and "
