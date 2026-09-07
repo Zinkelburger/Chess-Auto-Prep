@@ -1,8 +1,5 @@
-/// "Looks like a course export — sort it into chapters?"
-///
-/// Shown once per file when the trainer recognises a chapter layout in the
-/// PGN, with the chapter list it would produce so the answer is an informed
-/// one rather than a guess. Re-openable from the trainer header.
+/// An explicit preview of the trainer’s chapter grouping, opened from Material
+/// settings. Applying it changes the list layout without rewriting the PGN.
 library;
 
 import 'package:flutter/material.dart';
@@ -11,7 +8,7 @@ import '../../services/training/chapter_layout.dart';
 import '../../theme/app_colors.dart';
 
 /// Returns true to sort into chapters, false to keep one flat list, null if
-/// the dialog was dismissed (ask again next time).
+/// the dialog was dismissed without changing the grouping.
 Future<bool?> showChapterSetupDialog(
   BuildContext context, {
   required ChapterLayoutProposal proposal,
@@ -38,7 +35,7 @@ class _ChapterSetupDialog extends StatelessWidget {
     final chapters = proposal.chapters;
 
     return AlertDialog(
-      title: Text('Looks like ${proposal.formatLabel}'),
+      title: const Text('Preview chapter grouping'),
       // A *tight* width, not a max: [AlertDialog] wraps its content in an
       // [IntrinsicWidth], and asking a lazy viewport for its intrinsic width
       // throws ("RenderShrinkWrappingViewport does not support returning
@@ -56,7 +53,7 @@ class _ChapterSetupDialog extends StatelessWidget {
             Text(proposal.explanation, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 12),
             Text(
-              'Sort ${proposal.groupedLineCount} lines into these '
+              'Show ${proposal.groupedLineCount} lines under these '
               '${proposal.chapterCount} chapters?',
               style: theme.textTheme.titleSmall,
             ),
@@ -121,8 +118,8 @@ class _ChapterSetupDialog extends StatelessWidget {
             ],
             const SizedBox(height: 10),
             Text(
-              'You can change this any time from "Chapters…" above the line '
-              'list.',
+              'This changes the trainer’s list only, not the PGN file. You can '
+              'return here from Training settings → Material.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: AppColors.onSurfaceMuted,
               ),
