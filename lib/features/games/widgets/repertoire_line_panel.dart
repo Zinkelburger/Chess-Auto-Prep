@@ -323,7 +323,7 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
               Expanded(
                 child: Text(
                   lines.length == 1
-                      ? line.name
+                      ? line.qualifiedName
                       : '${lines.length} book lines reach move '
                             '$landingMoveNumber',
                   overflow: TextOverflow.ellipsis,
@@ -403,10 +403,11 @@ class _DivergenceNote extends StatelessWidget {
     final played = report.playedSan;
     if (played == null) return const SizedBox.shrink();
     final bookMove = _bookMoveAt(line, report.matchedPlies);
+    final who = report.byMe == true ? 'You' : 'They';
     final message = bookMove == null
-        ? 'You played ${formatMoveAtPly(report.matchedPlies, played)} — this '
+        ? '$who played ${formatMoveAtPly(report.matchedPlies, played)} — this '
               'line stops here.'
-        : 'You played ${formatMoveAtPly(report.matchedPlies, played)} — this '
+        : '$who played ${formatMoveAtPly(report.matchedPlies, played)} — this '
               'line plays ${formatMoveAtPly(report.matchedPlies, bookMove)}.';
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
@@ -429,12 +430,15 @@ class _DivergenceNote extends StatelessWidget {
   }
 }
 
-/// Every book line through the deviation point, as one row each.
+/// The book's answers at the deviation point, one row per distinct move.
 ///
 /// A dropdown hid the only thing worth comparing: the lines are identical up to
 /// the fork, so what distinguishes them is the move they play *at* it. That move
 /// is the label, with the line's name beside it — pick by the move, not by
-/// remembering which chapter name meant what.
+/// remembering which chapter name meant what. Lines that play the same move at
+/// the fork are one row (the longest of them stands for the rest, and the row
+/// says how many there are): a course has ninety lines through `1.e4 c6 2.d4
+/// d5` and every one of them plays `3.Nc3`.
 class _LineChoices extends StatelessWidget {
   const _LineChoices({
     required this.lines,
@@ -451,8 +455,22 @@ class _LineChoices extends StatelessWidget {
 
   final ValueChanged<int> onSelect;
 
+  /// Index of the first line (the longest, given the loader's order) for
+  /// each distinct fork move, in order of appearance, with how many lines
+  /// share it.
+  List<(int index, int count)> get _rows {
+    final byMove = <String?, (int, int)>{};
+    for (var i = 0; i < lines.length; i++) {
+      final move = _bookMoveAt(lines[i], splitPly);
+      final seen = byMove[move];
+      byMove[move] = seen == null ? (i, 1) : (seen.$1, seen.$2 + 1);
+    }
+    return byMove.values.toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final rows = _rows;
     return Container(
       constraints: const BoxConstraints(maxHeight: 108),
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
@@ -463,11 +481,12 @@ class _LineChoices extends StatelessWidget {
       child: ListView.builder(
         padding: EdgeInsets.zero,
         shrinkWrap: true,
-        itemCount: lines.length,
-        itemBuilder: (context, i) {
+        itemCount: rows.length,
+        itemBuilder: (context, r) {
+          final (i, count) = rows[r];
           final line = lines[i];
           final move = _bookMoveAt(line, splitPly);
-          final isSelected = i == selected;
+          final isSelected = _bookMoveAt(lines[selected], splitPly) == move;
           return InkWell(
             onTap: () => onSelect(i),
             child: Container(
@@ -492,7 +511,9 @@ class _LineChoices extends StatelessWidget {
                   ),
                   Expanded(
                     child: Text(
-                      line.name,
+                      count > 1
+                          ? '${line.qualifiedName} · $count lines'
+                          : line.qualifiedName,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.body.copyWith(
                         fontSize: 12,
@@ -537,6 +558,8 @@ class _ReportTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ply = report.matchedPlies;
+    String at(String san) => formatMoveAtPly(ply, san);
     final (icon, color, verdict) = switch (report) {
       DeviationReport(inBook: true) => (
         Icons.check_circle_outline,
@@ -546,18 +569,26 @@ class _ReportTile extends StatelessWidget {
       DeviationReport(bookEnded: true) => (
         Icons.more_horiz,
         AppColors.onSurfaceSoft,
-        'Prep ends at move ${report.moveNumber} — the game continued '
-            '${formatMoveAtPly(report.matchedPlies, report.playedSan!)}.',
+        'Book ends after ${report.pathSans.isEmpty ? 'the start' : formatMoveAtPly(ply - 1, report.pathSans.last)}'
+            ' — the game continued ${at(report.playedSan!)}.',
+      ),
+      DeviationReport(byMe: true) => (
+        Icons.warning_amber,
+        AppColors.warning,
+        'You left book at move ${report.moveNumber}: '
+            '${at(report.playedSan!)} instead of '
+            '${report.expectedSans.map(at).join(' / ')}.'
+            '${report.mentionedAlternative ? ' The book mentions ${at(report.playedSan!)} without recommending it.' : ''}',
       ),
       _ => (
-        report.byMe == true ? Icons.warning_amber : Icons.info_outline,
-        report.byMe == true ? AppColors.warning : AppColors.info,
-        '${report.byMe == true ? 'You' : 'They'} left book at move '
-            '${report.moveNumber}: '
-            '${formatMoveAtPly(report.matchedPlies, report.playedSan!)} '
-            'instead of ${report.expectedSans.join(' / ')}.',
+        Icons.info_outline,
+        AppColors.onSurfaceSoft,
+        'Not in your book: ${at(report.playedSan!)} at move '
+            '${report.moveNumber} — it covers '
+            '${report.expectedSans.map(at).join(' / ')}.',
       ),
     };
+    final place = report.lineName ?? report.chapterName;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -577,7 +608,7 @@ class _ReportTile extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  '$bookName · ${report.chapterName}',
+                  '$bookName · $place',
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.body.copyWith(
                     fontSize: 12,
@@ -615,6 +646,19 @@ class _ReportTile extends StatelessWidget {
             Text(
               formatNumberedSans(report.pathSans),
               style: AppTextStyles.mono.copyWith(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
+              ),
+            ),
+          ],
+          // The game got here by another order than the book writes: say
+          // so, or the movetext above looks like a different game.
+          if (report.gamePathSans case final gameOrder?) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Reached by transposition — you played '
+              '${formatNumberedSans(gameOrder)}.',
+              style: AppTextStyles.body.copyWith(
                 fontSize: 12,
                 color: AppColors.onSurfaceMuted,
               ),

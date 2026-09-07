@@ -171,6 +171,7 @@ class ChapterSplitter {
           name: name,
           isWhite: sideIsWhite,
           createdAt: DateTime.now(),
+          courseChapter: title,
         ),
         games: [for (final i in indices) games[i]],
         createOnly: true,

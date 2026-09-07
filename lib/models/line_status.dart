@@ -77,7 +77,7 @@ LineCounts countLines(
   int due = 0;
   int learned = 0;
   for (final line in lines) {
-    if (line.isModelGame) continue;
+    if (line.isModelGame || line.isCommentary) continue;
     switch (lineStatusOf(reviewMap[line.id])) {
       case LineStatus.untrained:
         untrained++;

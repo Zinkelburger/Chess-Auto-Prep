@@ -492,7 +492,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             Text(
-              line.isModelGame ? 'Model game' : status.label,
+              line.readOnlyLabel ?? status.label,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: AppColors.onSurfaceMuted,
               ),
@@ -503,7 +503,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                if (widget.onTrainLine != null && !line.isModelGame)
+                if (widget.onTrainLine != null && line.readOnlyLabel == null)
                   FilledButton.icon(
                     onPressed: () => _train(line),
                     icon: const Icon(Icons.school_outlined, size: 16),
@@ -600,7 +600,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
                         ),
                       ),
                       Text(
-                        line.isModelGame ? 'Model game' : status.label,
+                        line.readOnlyLabel ?? status.label,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: AppColors.onSurfaceMuted,
                         ),
@@ -608,7 +608,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
                     ],
                   ),
                 ),
-                if (widget.onTrainLine != null && !line.isModelGame)
+                if (widget.onTrainLine != null && line.readOnlyLabel == null)
                   TextButton.icon(
                     onPressed: () => _train(line),
                     icon: const Icon(Icons.school_outlined, size: 16),

@@ -188,7 +188,12 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final windowSettings = GamesWindowSettings.forTest();
     await windowSettings.set(
-      const GamesWindow(mode: GamesWindowMode.lastGames, games: 1, days: 2),
+      const GamesWindow(
+        mode: GamesWindowMode.lastGames,
+        games: 1,
+        days: 2,
+        bookCheckGames: 1,
+      ),
     );
     final library = _PgnLibrary(_threeGames);
     final controller = RecentGamesController(
@@ -278,7 +283,7 @@ void main() {
     // would be persisted but never applied to the visible list.
     await controller.setFilters(
       const GamesListFilters(speeds: {GameSpeed.blitz}),
-      window: const GamesWindow(games: 5),
+      window: const GamesWindow(games: 5, bookCheckGames: 5),
     );
     expect(library.calls, hasLength(1), reason: 'reload waits for the load');
 

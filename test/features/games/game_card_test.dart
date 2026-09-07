@@ -276,9 +276,9 @@ void main() {
 
       expect(find.byType(MomentsStrip), findsOneWidget);
       expect(find.text('2... d5'), findsOneWidget);
-      expect(find.text('They left book'), findsOneWidget);
+      expect(find.text('Not in book'), findsOneWidget);
       // The text column keeps what it had.
-      expect(find.text('Left book at move 2 (them)'), findsOneWidget);
+      expect(find.text('Not in book: 2... d5 (book 2... Nf6)'), findsOneWidget);
 
       await tester.tap(find.text('2... d5'));
       expect(opened?.ply, 4);
@@ -292,7 +292,7 @@ void main() {
         ..deviationComputed = true;
       await pumpCard(tester, game, width: 520);
       expect(find.byType(MomentsStrip), findsNothing);
-      expect(find.text('Left book at move 2 (them)'), findsOneWidget);
+      expect(find.text('Not in book: 2... d5 (book 2... Nf6)'), findsOneWidget);
     });
 
     testWidgets('no moments, no strip', (tester) async {

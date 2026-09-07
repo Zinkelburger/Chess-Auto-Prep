@@ -622,13 +622,8 @@ class _DeviationBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final who = report.byMe == true ? 'you' : 'opponent';
-    final message = report.bookEnded
-        // The prep ran out — nobody "left" it; invite extending instead.
-        ? 'Book ends at move ${report.moveNumber}: ${report.playedSan} is '
-              'past your prepared lines'
-        : 'Left book at move ${report.moveNumber} ($who): played '
-              '${report.playedSan} — book: ${report.expectedSans.join(' / ')}';
+    final place = report.lineName ?? report.chapterName;
+    final message = '${deviationVerdict(report)} · $place';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

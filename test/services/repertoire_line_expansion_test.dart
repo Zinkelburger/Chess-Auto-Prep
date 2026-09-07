@@ -6,6 +6,8 @@ import 'package:chess_auto_prep/services/repertoire_line_expansion.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+ExpandedPgn expanded(String pgn) => expandVariationsIntoLines(pgn);
+
 void main() {
   const study =
       '[Event "Caro-Kann: Advance"]\n'
@@ -45,6 +47,105 @@ void main() {
       ],
     );
     expect(lines.map((l) => l.id).toSet().length, 4, reason: 'distinct ids');
+  });
+
+  test('sidelines record the plies where they left the mainline', () {
+    final lines = RepertoireService().parseRepertoirePgn(
+      expandVariationsIntoLines(study).pgn,
+    );
+    expect(
+      lines[0].branchPlies,
+      isEmpty,
+      reason: 'the mainline branches nowhere',
+    );
+    // 5...Ne7 is the second child at ply 9; 4.Nc3 and 4.h4 at ply 6.
+    expect(lines[1].branchPlies, [9]);
+    expect(lines[2].branchPlies, [6]);
+    expect(lines[3].branchPlies, [6]);
+    expect(expanded(study).pgn, contains('[BranchPlies "6"]'));
+    // Who the bracket belonged to, read for each side: 4.Nc3 is White's
+    // alternative (commentary in a White book, coverage in a Black one).
+    expect(lines[2].firstBranchOnSide(white: true), 6);
+    expect(lines[2].firstBranchOnSide(white: false), isNull);
+    expect(lines[1].firstBranchOnSide(white: false), 9);
+  });
+
+  test('the branch label goes on the title header, not the chapter', () {
+    // An export with the chapter in [Black] and the line title in [White]:
+    // the sideline's label belongs on the title, or every sideline becomes
+    // a chapter of its own.
+    const pgn =
+        '[Event "?"]\n[White "Caro-Kann 4...Bf5 #1"]\n[Black "31) Caro-Kann"]\n'
+        '[Result "*"]\n\n1. e4 c6 2. d4 d5 3. Nc3 (3. e5 Bf5) 3... dxe4 *\n\n'
+        '[Event "?"]\n[White "Caro-Kann 4...Bf5 #2"]\n[Black "31) Caro-Kann"]\n'
+        '[Result "*"]\n\n1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Nxe4 *\n\n'
+        '[Event "?"]\n[White "French #1"]\n[Black "30) French"]\n'
+        '[Result "*"]\n\n1. e4 e6 *\n';
+    final lines = RepertoireService().parseRepertoirePgn(
+      expandVariationsIntoLines(pgn).pgn,
+    );
+    expect(lines.map((l) => l.chapter).toSet(), {
+      '31) Caro-Kann',
+      '30) French',
+    });
+    expect(lines[1].name, 'Caro-Kann 4...Bf5 #1 — 3.e5');
+  });
+
+  test('under an Event chapter the branch label goes on White', () {
+    const pgn =
+        '[Event "12. Fianchetto"]\n[White "9.Nd2 e6"]\n[Black "?"]\n'
+        '[Result "*"]\n\n1. d4 Nf6 2. c4 g6 3. g3 (3. Nc3 d5) 3... Bg7 *\n\n'
+        '[Event "12. Fianchetto"]\n[White "9.Qd3 a6"]\n[Black "?"]\n'
+        '[Result "*"]\n\n1. d4 Nf6 2. c4 g6 3. g3 Bg7 4. Bg2 *\n\n'
+        '[Event "33. Veresov"]\n[White "3.Bg5"]\n[Black "?"]\n'
+        '[Result "*"]\n\n1. d4 Nf6 2. Nc3 d5 *\n';
+    final lines = RepertoireService().parseRepertoirePgn(
+      expandVariationsIntoLines(pgn).pgn,
+    );
+    expect(lines.map((l) => l.chapter).toSet(), {
+      '12. Fianchetto',
+      '33. Veresov',
+    });
+    expect(lines[1].name, '9.Nd2 e6 — 3.Nc3');
+  });
+
+  test('the same line under two chapter titles is kept once', () {
+    // A course export that lists every line under every chapter.
+    const pgn =
+        '[Event "?"]\n[White "A"]\n[Black "Line 1"]\n[Result "*"]\n\n'
+        '1. e4 e5 *\n\n'
+        '[Event "?"]\n[White "A"]\n[Black "Line 2"]\n[Result "*"]\n\n'
+        '1. d4 d5 *\n\n'
+        '[Event "?"]\n[White "B"]\n[Black "Line 1"]\n[Result "*"]\n\n'
+        '1. e4  e5 *\n\n'
+        '[Event "?"]\n[White "B"]\n[Black "Line 2"]\n[Result "*"]\n\n'
+        '1. d4 d5 *\n';
+    final expanded = expandVariationsIntoLines(pgn);
+    expect(expanded.gameCount, 2);
+    final lines = RepertoireService().parseRepertoirePgn(expanded.pgn);
+    expect(lines.map((l) => l.headers['Black']), ['Line 1', 'Line 2']);
+    // The same moves under a different title are two lines.
+    const twoTitles =
+        '[Event "?"]\n[Black "Line 1"]\n[Result "*"]\n\n1. e4 e5 *\n\n'
+        '[Event "?"]\n[Black "Line 2"]\n[Result "*"]\n\n1. e4 e5 *\n';
+    expect(expandVariationsIntoLines(twoTitles).gameCount, 2);
+  });
+
+  test('a nested bracket records every branch on its path', () {
+    const nested =
+        '[Event "N"]\n[Result "*"]\n\n'
+        '1. e4 e5 (1... c5 2. Nf3 (2. c3 d5) 2... d6) 2. Nf3 *\n';
+    final lines = RepertoireService().parseRepertoirePgn(
+      expandVariationsIntoLines(nested).pgn,
+    );
+    expect(
+      [for (final l in lines) l.branchPlies],
+      [
+        <int>[],
+        [1],
+        [1, 2],
+      ],
+    );
   });
 
   test('only the mainline keeps the game\'s own id header', () {

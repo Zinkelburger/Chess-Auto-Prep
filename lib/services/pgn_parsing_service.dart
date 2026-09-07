@@ -567,6 +567,25 @@ String? extractRepertoireColor(String content) {
   return null;
 }
 
+/// The course chapter a split chapter file holds, from its `// Chapter:`
+/// preamble line (written by `ChapterSplitter`); null for any other file.
+/// Read the way [extractRepertoireColor] is: the preamble only.
+String? extractCourseChapter(String content) {
+  var lineStart = 0;
+  for (var i = 0; i < 20 && lineStart <= content.length; i++) {
+    var lineEnd = content.indexOf('\n', lineStart);
+    if (lineEnd < 0) lineEnd = content.length;
+    final line = content.substring(lineStart, lineEnd).trim();
+    lineStart = lineEnd + 1;
+    if (line.startsWith('// Chapter:')) {
+      final title = line.substring(11).trim();
+      return title.isEmpty ? null : title;
+    }
+    if (line.startsWith('[Event ')) break;
+  }
+  return null;
+}
+
 /// Strips a leading UTF-8 BOM if present.
 String stripBom(String s) => s.startsWith('\uFEFF') ? s.substring(1) : s;
 

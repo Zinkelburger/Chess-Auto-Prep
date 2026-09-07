@@ -90,15 +90,23 @@ GameMoment? _bookMoment(DeviationReport? report) {
   final title = formatMoveAtPly(report.matchedPlies, played);
   final String detail;
   final String tooltip;
+  final place = report.lineName ?? report.chapterName;
   if (report.bookEnded) {
     detail = 'Book ends here';
     tooltip =
-        'Your prep ends here — ${report.chapterName} has no moves past '
-        'this point.\nClick to see the game and the line side by side.';
-  } else {
-    detail = byMe ? 'You left book' : 'They left book';
+        'Your prep ends here — $place has no moves past this point.'
+        '\nClick to see the game and the line side by side.';
+  } else if (byMe) {
+    detail = 'You left book';
     tooltip =
-        'Played $played — book plays ${report.expectedSans.join(' / ')}.\n'
+        'You played $played — $place plays '
+        '${report.expectedSans.join(' / ')}.\n'
+        'Click to see the game and your line side by side.';
+  } else {
+    detail = 'Not in book';
+    tooltip =
+        'They played $played, which $place has no answer to — it covers '
+        '${report.expectedSans.join(' / ')}.\n'
         'Click to see the game and your line side by side.';
   }
   return GameMoment(

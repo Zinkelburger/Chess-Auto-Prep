@@ -69,7 +69,7 @@ void main() {
         // Lands after the deviating move, on the line tab.
         expect(m.ply, 5);
         expect(m.tab, PgnViewerTab.line);
-        expect(m.tooltip, contains('book plays exd5'));
+        expect(m.tooltip, contains('Alapin plays exd5'));
       },
     );
 
@@ -107,7 +107,7 @@ void main() {
         ),
       ).single;
       expect(m.byMe, isFalse);
-      expect(m.detail, 'They left book');
+      expect(m.detail, 'Not in book');
       expect(m.title, '2... d5');
       expect(m.wantedUcis, ['g8f6', 'e7e6']);
     });

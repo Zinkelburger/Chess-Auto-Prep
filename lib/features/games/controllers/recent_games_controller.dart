@@ -205,7 +205,9 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     final next = _windowSettings.window;
     if (next == _loadedWindow) return;
     final built = _builtWindow;
-    if (built != null && next.games <= built.games && next.days <= built.days) {
+    if (built != null &&
+        next.fetchGames <= built.fetchGames &&
+        next.days <= built.days) {
       // Both operands are within what the last load already built rows for,
       // so the toggle (or a shrink) is answered from memory: no fetch, no
       // cache re-parse, no isolate passes, no spinner.
@@ -215,6 +217,21 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
       return;
     }
     unawaited(refresh());
+  }
+
+  /// The games the opening-book check covers: the newest
+  /// [GamesWindow.bookCheckGames] per site, whatever mode the list is in.
+  /// A superset of [games] whenever the check window is the larger.
+  List<RecentGame> get bookCheckGames {
+    final cap = window.bookCheckGames;
+    final taken = <GamesPlatform, int>{};
+    final listed = _games.toSet();
+    return [
+      for (final g in _allGames)
+        if ((taken[g.platform] = (taken[g.platform] ?? 0) + 1) <= cap ||
+            listed.contains(g))
+          g,
+    ];
   }
 
   /// The active window's slice of [_allGames]. Mirrors [applySelection]'s
@@ -259,8 +276,11 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
       // re-running this whole pipeline. The game cap is per *site*, which is
       // what the label promises when only one account is configured — the
       // common case.
+      // The count slice is fetched to the book check's depth, not the
+      // review window's: the list shows the window, the book check reads
+      // the rest (see [bookCheckGames]).
       final countSelection = GameSelection(
-        maxGames: buildWindow.games,
+        maxGames: buildWindow.fetchGames,
         speeds: _filters.speeds,
       );
       final daySelection = GameSelection(
