@@ -19,6 +19,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../widgets/common/choice_field.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../controllers/bughouse_controller.dart';
@@ -477,18 +478,13 @@ class _Dropdown<T> extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       BughousePanelLabel(label),
-      DropdownButtonFormField<T>(
-        initialValue: value,
-        isDense: true,
-        style: AppTextStyles.body,
-        decoration: const InputDecoration(isDense: true),
+      ChoiceField<T>(
+        value: value,
         items: [
           for (final item in items)
-            DropdownMenuItem(value: item, child: Text(labelOf(item))),
+            ChoiceItem(value: item, label: labelOf(item)),
         ],
-        onChanged: (v) {
-          if (v != null) onChanged(v);
-        },
+        onChanged: onChanged,
       ),
     ],
   );

@@ -134,10 +134,24 @@ class EvalWorker {
     await engine.waitForReady();
     await _applyThreads(threads);
     engine.sendCommand('setoption name Hash value $hashMb');
+    _currentHashMb = hashMb;
     await _syncReady();
   }
 
   int _currentThreads = 1;
+  int _currentHashMb = 128;
+
+  /// Hash the worker was last configured with, MB.
+  int get hashMb => _currentHashMb;
+
+  /// Set Stockfish UCI Hash (skips if already at desired size). Call it
+  /// between searches: Stockfish clears its table on resize.
+  Future<void> setHash(int hashMb) async {
+    if (hashMb < 1 || _currentHashMb == hashMb) return;
+    engine.sendCommand('setoption name Hash value $hashMb');
+    _currentHashMb = hashMb;
+    await _syncReady();
+  }
 
   /// Dynamically set Stockfish UCI Threads (skips if already at desired count).
   Future<void> setThreads(int threads) async {

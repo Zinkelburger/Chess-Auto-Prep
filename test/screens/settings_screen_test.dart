@@ -33,14 +33,14 @@ void main() {
   ) async {
     await pumpSettings(tester, const Size(1280, 720));
     expect(find.text('Your chess usernames'), findsOneWidget);
-    expect(find.text('Bulk analysis workers'), findsNothing);
+    expect(find.text('CPU cores'), findsNothing);
     await tester.tap(find.text('Use a personal access token instead'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'unsaved-token');
 
     await tester.tap(find.byKey(const Key('settings-nav-2')));
     await tester.pumpAndSettle();
-    expect(find.text('Bulk analysis workers'), findsOneWidget);
+    expect(find.text('CPU cores'), findsOneWidget);
     expect(find.text('Your chess usernames'), findsNothing);
 
     await tester.tap(find.byKey(const Key('settings-nav-0')));
@@ -69,13 +69,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final workers = EngineSettings.instance.workers;
+    final cores = EngineSettings.instance.cores;
     await tester.tap(find.text('Reset settings…'));
     await tester.pumpAndSettle();
     expect(find.text('Reset Settings'), findsOneWidget);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    expect(EngineSettings.instance.workers, workers);
+    expect(EngineSettings.instance.cores, cores);
     expect(tester.takeException(), isNull);
   });
 
@@ -90,14 +90,20 @@ void main() {
         'About',
         'Accounts',
       ]) {
-        await tester.tap(find.byKey(const Key('settings-section-picker')));
+        // The picker is a text box: type part of the name, Enter takes the
+        // top match.
+        await tester.enterText(
+          find.byKey(const Key('settings-section-picker')),
+          section.substring(0, 3),
+        );
         await tester.pumpAndSettle();
-        await tester.tap(find.text(section).last);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: section);
         if (section == 'Engine') {
-          expect(find.text('Bulk analysis workers'), findsOneWidget);
-          expect(find.byType(SettingsStepperTile), findsNWidgets(2));
+          expect(find.text('CPU cores'), findsOneWidget);
+          expect(find.text('Memory per engine'), findsOneWidget);
+          expect(find.byType(SettingsStepperTile), findsNWidgets(3));
         }
       }
     },

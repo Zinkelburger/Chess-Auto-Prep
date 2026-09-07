@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../constants/engine_defaults.dart';
 import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
 import '../models/engine_settings.dart';
@@ -16,6 +17,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/system_info.dart';
+import '../widgets/common/choice_field.dart';
 import '../widgets/common/confirm_dialog.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
@@ -49,7 +51,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     (
       label: 'Engine',
       icon: Icons.tune,
-      description: 'Balance analysis speed with computer resources.',
+      description: 'How much of this computer Stockfish may use.',
     ),
     (
       label: 'Data',
@@ -120,27 +122,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: DropdownButtonFormField<int>(
+                  child: ChoiceField<int>(
                     key: const Key('settings-section-picker'),
-                    initialValue: _selected,
-                    decoration: const InputDecoration(
-                      labelText: 'Section',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
+                    label: 'Section',
+                    value: _selected,
                     items: [
                       for (var i = 0; i < _sections.length; i++)
-                        DropdownMenuItem(
+                        ChoiceItem(
                           value: i,
-                          child: Text(_sections[i].label),
+                          label: _sections[i].label,
+                          icon: _sections[i].icon,
                         ),
                     ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _selected = value);
-                    },
+                    onChanged: (value) => setState(() => _selected = value),
                   ),
                 ),
                 content,
@@ -299,43 +293,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ── Engine section ─────────────────────────────────────────────────────────
 
+  /// One number for CPU and one for memory. There used to be separate
+  /// "workers" and "threads" rows, which are the same cores spent two ways
+  /// (one process with N threads on the board, N processes reviewing games)
+  /// and read as two different things to anyone who is not a programmer.
   Widget _buildEngineSection(int cores) {
+    final peakMb = _engine.cores * _engine.hashMb;
     return SettingsGroup(
-      title: 'Engine power',
+      title: 'Stockfish',
       icon: Icons.bolt,
       // No on/off switch here on purpose: starting and stopping Stockfish is
       // an action you want to see the result of, so it lives on the ⚡ button
       // next to the board.
-      subtitle:
-          'Changes apply automatically. This computer has $cores logical cores.',
+      subtitle: 'Changes apply straight away. Type a number or use − and +.',
       children: [
         SettingsStepperTile(
-          label: 'Bulk analysis workers',
+          label: 'CPU cores',
           description:
-              'More workers process games faster. Fewer leave more resources for other apps.',
-          value: _engine.workers,
+              'This computer has $cores. Stockfish uses this many to analyse '
+              'the board and to review your games. Leave some free if you run '
+              'other programs at the same time.',
+          value: _engine.cores,
           min: 1,
           max: cores,
-          suffix: '/ $cores',
-          onChanged: (v) => _engine.workers = v,
+          suffix: 'of $cores',
+          onChanged: (v) => _engine.cores = v,
         ),
         SettingsStepperTile(
-          label: 'Board engine threads',
+          label: 'Memory per engine',
           description:
-              'CPU threads used to analyse the position on your board.',
-          value: _engine.inlineThreads,
-          min: 1,
-          max: cores,
-          suffix: '/ $cores',
-          onChanged: (v) => _engine.inlineThreads = v,
+              'RAM each Stockfish process keeps for positions it has already '
+              'searched. Reviewing games runs one process per core, so that '
+              'is up to $peakMb MB at once with the settings above.',
+          value: _engine.hashMb,
+          min: kMinHashMb,
+          max: kMaxHashMb,
+          step: 128,
+          suffix: 'MB',
+          onChanged: (v) => _engine.hashMb = v,
         ),
-        SettingsChoiceTile<int>(
+        SettingsStepperTile(
           label: 'Opponent rating',
-          description: 'Maia uses this rating to predict likely human replies.',
-          value: _engine.maiaElo.clamp(600, 2400) ~/ 100 * 100,
-          items: [
-            for (var elo = 600; elo <= 2400; elo += 100) (elo, '$elo Elo'),
-          ],
+          description:
+              'Maia predicts what a human of this rating would play. Set it '
+              'close to the opponents you actually face.',
+          value: _engine.maiaElo,
+          min: kMinMaiaElo,
+          max: kMaxMaiaElo,
+          step: 100,
+          suffix: 'Elo',
           onChanged: (v) => _engine.maiaElo = v,
         ),
       ],

@@ -68,22 +68,16 @@ class _RepertoireOptionsDialogState extends State<_RepertoireOptionsDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _sectionTitle('This repertoire'),
-            DropdownButtonFormField<bool>(
-              initialValue: _isWhite,
-              decoration: const InputDecoration(
-                labelText: 'Side you play',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: const [
-                DropdownMenuItem(value: true, child: Text('White')),
-                DropdownMenuItem(value: false, child: Text('Black')),
+            _fieldLabel('Side you play'),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: Text('White')),
+                ButtonSegment(value: false, label: Text('Black')),
               ],
-              onChanged: widget.sideChangeEnabled
-                  ? (v) {
-                      if (v == null) return;
-                      setState(() => _isWhite = v);
-                    }
+              selected: {_isWhite},
+              showSelectedIcon: false,
+              onSelectionChanged: widget.sideChangeEnabled
+                  ? (v) => setState(() => _isWhite = v.first)
                   : null,
             ),
             _caption(
@@ -94,21 +88,17 @@ class _RepertoireOptionsDialogState extends State<_RepertoireOptionsDialog> {
             ),
             const Divider(height: 28),
             _sectionTitle('Layout'),
-            DropdownButtonFormField<BoardSize>(
-              initialValue: _boardSize,
-              decoration: const InputDecoration(
-                labelText: 'Board size',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: [
+            _fieldLabel('Board size'),
+            SegmentedButton<BoardSize>(
+              segments: [
                 for (final size in BoardSize.values)
-                  DropdownMenuItem(value: size, child: Text(size.label)),
+                  ButtonSegment(value: size, label: Text(size.label)),
               ],
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() => _boardSize = v);
-                widget.onBoardSizeChanged(v);
+              selected: {_boardSize},
+              showSelectedIcon: false,
+              onSelectionChanged: (v) {
+                setState(() => _boardSize = v.first);
+                widget.onBoardSizeChanged(v.first);
               },
             ),
             _caption(
@@ -136,6 +126,13 @@ class _RepertoireOptionsDialogState extends State<_RepertoireOptionsDialog> {
       ],
     );
   }
+
+  /// Every option here shows all its choices at once, so a plain label
+  /// above the row is enough.
+  Widget _fieldLabel(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(text, style: AppTextStyles.muted),
+  );
 
   Widget _sectionTitle(String text) => Padding(
     padding: const EdgeInsets.only(bottom: 8),

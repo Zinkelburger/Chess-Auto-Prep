@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../models/engine_settings.dart';
 import '../../services/engine/stockfish_pool.dart';
 import '../../services/generation/generation_config.dart';
 import '../../theme/app_text_styles.dart';
@@ -41,7 +42,7 @@ class EngineResourcesSection extends StatelessWidget {
     final workers = StockfishPool.laneCountFor(clamped);
     final threadsPerWorker = StockfishPool.threadsPerLane(clamped, workers);
     final activeThreads = workers * threadsPerWorker;
-    final hashMb = workers * kPoolHashPerWorkerMb;
+    final hashMb = workers * EngineSettings.instance.hashMb;
     final scheme = Theme.of(context).colorScheme;
 
     return Container(
@@ -67,9 +68,9 @@ class EngineResourcesSection extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Your system has $cores logical core${cores == 1 ? '' : 's'}. '
-            'The number below is the total CPU budget. For bulk throughput, '
-            'the build divides it across independent Stockfish processes.',
+            'This computer has $cores CPU core${cores == 1 ? '' : 's'}. The '
+            'build splits the number below across separate Stockfish '
+            'processes so several positions are searched at once.',
             style: AppTextStyles.caption,
           ),
           const SizedBox(height: 10),
@@ -79,9 +80,7 @@ class EngineResourcesSection extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Tooltip(
-                message:
-                    'Stockfish UCI threads during tree build (1–$cores). '
-                    'MultiPV searches benefit strongly from multiple threads.',
+                message: 'CPU cores this build may use, 1 to $cores.',
                 child: SizedBox(
                   width: 210,
                   child: TextField(
@@ -91,7 +90,7 @@ class EngineResourcesSection extends StatelessWidget {
                       decimal: false,
                     ),
                     decoration: const InputDecoration(
-                      labelText: 'Engine threads',
+                      labelText: 'CPU cores for this build',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -105,8 +104,8 @@ class EngineResourcesSection extends StatelessWidget {
               ),
               _ConfigStatChip(
                 label:
-                    '$activeThreads of $clamped threads active · '
-                    '$hashMb MB hash + engine memory',
+                    '$activeThreads of $clamped cores in use · '
+                    '$hashMb MB RAM for search tables',
               ),
             ],
           ),

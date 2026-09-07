@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../constants/chess_constants.dart';
+import '../../../widgets/common/choice_field.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/fen_utils.dart';
@@ -420,27 +421,17 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
     final presetIndex = kTimeControlPresets.indexWhere(
       (p) => p.tc.label == _timeControl.label,
     );
-    return DropdownButtonFormField<int>(
+    return ChoiceField<int>(
       key: const ValueKey('new-tournament-time'),
-      initialValue: presetIndex < 0 ? null : presetIndex,
-      isDense: true,
-      isExpanded: true,
-      decoration: const InputDecoration(labelText: 'Time', isDense: true),
-      hint: Text(_timeControl.label),
+      label: 'Time',
+      value: presetIndex < 0 ? null : presetIndex,
+      hint: _timeControl.label,
       items: [
         for (var i = 0; i < kTimeControlPresets.length; i++)
-          DropdownMenuItem(
-            value: i,
-            child: Text(
-              kTimeControlPresets[i].label,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+          ChoiceItem(value: i, label: kTimeControlPresets[i].label),
       ],
-      onChanged: (index) {
-        if (index == null) return;
-        setState(() => _timeControl = kTimeControlPresets[index].tc);
-      },
+      onChanged: (index) =>
+          setState(() => _timeControl = kTimeControlPresets[index].tc),
     );
   }
 
@@ -485,25 +476,15 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                   child: Text('${i + 1}', style: AppTextStyles.muted),
                 ),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _participants[i],
-                    isDense: true,
-                    isExpanded: true,
-                    decoration: const InputDecoration(isDense: true),
+                  child: ChoiceField<String>(
+                    value: _participants[i],
+                    hint: 'Engine',
                     items: [
                       for (final engine in widget.engines)
-                        DropdownMenuItem(
-                          value: engine.id,
-                          child: Text(
-                            engine.name,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
+                        ChoiceItem(value: engine.id, label: engine.name),
                     ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _participants[i] = value);
-                    },
+                    onChanged: (value) =>
+                        setState(() => _participants[i] = value),
                   ),
                 ),
                 IconButton(

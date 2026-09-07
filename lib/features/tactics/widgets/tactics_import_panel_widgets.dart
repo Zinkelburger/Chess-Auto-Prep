@@ -56,18 +56,18 @@ class _SessionSettingsForm extends StatelessWidget {
               style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
             ),
             const SizedBox(width: 8),
-            DropdownButton<TacticsSessionOrder>(
-              value: settings.order,
-              isDense: true,
-              underline: const SizedBox(),
-              style: const TextStyle(fontSize: 13),
-              items: [
-                for (final entry in _orderLabels.entries)
-                  DropdownMenuItem(value: entry.key, child: Text(entry.value)),
-              ],
-              onChanged: (v) {
-                if (v != null) onChanged(settings.copyWith(order: v));
-              },
+            SizedBox(
+              width: 200,
+              child: ChoiceField<TacticsSessionOrder>(
+                value: settings.order,
+                compact: true,
+                style: const TextStyle(fontSize: 13),
+                items: [
+                  for (final entry in _orderLabels.entries)
+                    ChoiceItem(value: entry.key, label: entry.value),
+                ],
+                onChanged: (v) => onChanged(settings.copyWith(order: v)),
+              ),
             ),
           ],
         ),

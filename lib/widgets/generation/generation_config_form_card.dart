@@ -238,53 +238,36 @@ mixin _GenerationConfigCard
   Widget _outputSection() {
     final isDb = _buildMode == BuildMode.dbExplorer;
     return _cardSection('What to build', [
-      DropdownButtonFormField<BuildMode>(
-        initialValue: _buildMode,
-        decoration: const InputDecoration(
-          labelText: 'Build from',
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
+      ChoiceField<BuildMode>(
+        label: 'Build from',
+        value: _buildMode,
+        enabled: !widget.isGenerating,
+        style: const TextStyle(fontSize: 13),
         items: const [
-          DropdownMenuItem(
+          ChoiceItem(
             value: BuildMode.stockfishExpectimax,
-            child: Text(
-              'Engine + human model (recommended)',
-              style: TextStyle(fontSize: 13),
-            ),
+            label: 'Engine + human model (recommended)',
           ),
-          DropdownMenuItem(
+          ChoiceItem(
             value: BuildMode.maiaDbExplore,
-            child: Text(
-              'Database win rates (no engine)',
-              style: TextStyle(fontSize: 13),
-            ),
+            label: 'Database win rates (no engine)',
           ),
-          DropdownMenuItem(
+          ChoiceItem(
             value: BuildMode.chessDbBook,
-            child: Text(
-              'ChessDB mainline book',
-              style: TextStyle(fontSize: 13),
-            ),
+            label: 'ChessDB mainline book',
           ),
-          DropdownMenuItem(
-            value: BuildMode.dbExplorer,
-            child: Text('My PGN files', style: TextStyle(fontSize: 13)),
-          ),
+          ChoiceItem(value: BuildMode.dbExplorer, label: 'My PGN files'),
         ],
-        onChanged: widget.isGenerating
-            ? null
-            : (v) {
-                if (v == null) return;
-                setState(() {
-                  _buildMode = v;
-                  // A book spanning the whole encyclopedia wants chapters
-                  // cut by code, not by where it happens to branch. Set
-                  // here rather than derived from the mode so the checkbox
-                  // shows what will happen and can be turned back off.
-                  if (v == BuildMode.chessDbBook) _chaptersByEco = true;
-                });
-              },
+        onChanged: (v) {
+          setState(() {
+            _buildMode = v;
+            // A book spanning the whole encyclopedia wants chapters
+            // cut by code, not by where it happens to branch. Set
+            // here rather than derived from the mode so the checkbox
+            // shows what will happen and can be turned back off.
+            if (v == BuildMode.chessDbBook) _chaptersByEco = true;
+          });
+        },
       ),
       _caption(_buildModeDescription()),
       const SizedBox(height: 8),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../common/choice_field.dart';
 import '../../utils/app_shortcuts.dart';
 
 import '../../models/training_settings.dart';
@@ -196,20 +197,13 @@ class TrainingSettingsPanel extends StatelessWidget {
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
-          DropdownButtonFormField<ReviewOrder>(
-            initialValue: settings.reviewOrder,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: ReviewOrder.values
-                .map(
-                  (order) =>
-                      DropdownMenuItem(value: order, child: Text(order.label)),
-                )
-                .toList(),
+          ChoiceField<ReviewOrder>(
+            value: settings.reviewOrder,
+            items: [
+              for (final order in ReviewOrder.values)
+                ChoiceItem(value: order, label: order.label),
+            ],
             onChanged: (value) {
-              if (value == null) return;
               settings.reviewOrder = value;
               settings.saveSoon();
               onQueueSettingsChanged();
@@ -224,26 +218,17 @@ class TrainingSettingsPanel extends StatelessWidget {
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
-          DropdownButtonFormField<ChapterGroupingMode>(
-            initialValue: settings.chapterGrouping,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: ChapterGroupingMode.values
-                .map(
-                  (mode) => DropdownMenuItem(
-                    value: mode,
-                    child: Tooltip(
-                      message: mode.description,
-                      waitDuration: const Duration(milliseconds: 400),
-                      child: Text(mode.label),
-                    ),
-                  ),
-                )
-                .toList(),
+          ChoiceField<ChapterGroupingMode>(
+            value: settings.chapterGrouping,
+            items: [
+              for (final mode in ChapterGroupingMode.values)
+                ChoiceItem(
+                  value: mode,
+                  label: mode.label,
+                  subtitle: mode.description,
+                ),
+            ],
             onChanged: (value) {
-              if (value == null) return;
               settings.chapterGrouping = value;
               settings.saveSoon();
               onChapterSettingsChanged?.call();

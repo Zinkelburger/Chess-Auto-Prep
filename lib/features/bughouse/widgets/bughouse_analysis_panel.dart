@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../widgets/common/choice_field.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/copy_button.dart';
@@ -978,7 +979,7 @@ class _EngineSection extends StatelessWidget {
   }
 }
 
-/// One labelled dropdown, laid out so a column of them lines up.
+/// One labelled choice, laid out so a column of them lines up.
 class _Knob extends StatelessWidget {
   const _Knob({
     required this.label,
@@ -1010,26 +1011,14 @@ class _Knob extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: DropdownButtonFormField<int>(
-              initialValue: value,
-              isDense: true,
+            child: ChoiceField<int>(
+              value: value,
               style: AppTextStyles.mono,
-              decoration: const InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
-                ),
-              ),
               items: [
                 for (final choice in choices)
-                  DropdownMenuItem(
-                    value: choice,
-                    child: Text(format(choice), style: AppTextStyles.mono),
-                  ),
+                  ChoiceItem(value: choice, label: format(choice)),
               ],
-              onChanged: (v) => v == null ? null : onChanged(v),
+              onChanged: onChanged,
             ),
           ),
         ],

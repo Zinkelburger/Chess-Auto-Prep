@@ -452,28 +452,25 @@ class _ListToolbar extends StatelessWidget {
             const SizedBox(width: 8),
             const Icon(Icons.sort, size: 16, color: AppColors.onSurfaceMuted),
             const SizedBox(width: 6),
-            DropdownButton<LineSortMode>(
-              value: sortMode,
-              isDense: true,
-              underline: const SizedBox.shrink(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
-              ),
-              items: [
-                for (final mode in LineSortMode.values)
-                  DropdownMenuItem(
-                    value: mode,
-                    child: Tooltip(
-                      message: mode.description,
-                      waitDuration: const Duration(milliseconds: 400),
-                      child: Text(mode.label),
+            SizedBox(
+              width: 170,
+              child: ChoiceField<LineSortMode>(
+                value: sortMode,
+                compact: true,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurface,
+                ),
+                items: [
+                  for (final mode in LineSortMode.values)
+                    ChoiceItem(
+                      value: mode,
+                      label: mode.label,
+                      subtitle: mode.description,
                     ),
-                  ),
-              ],
-              onChanged: (mode) {
-                if (mode != null) onSortChanged!(mode);
-              },
+                ],
+                onChanged: onSortChanged!,
+              ),
             ),
           ],
         ],

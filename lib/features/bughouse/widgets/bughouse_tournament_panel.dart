@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import '../../../models/crosstable.dart';
 import '../../../models/game_outcome.dart';
 import '../../../services/crosstable_builder.dart';
+import '../../../widgets/common/choice_field.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/time_format.dart';
@@ -150,26 +151,19 @@ class _MatchPicker extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       );
     }
-    return DropdownButtonHideUnderline(
-      child: DropdownButton<String>(
-        isDense: true,
-        isExpanded: true,
-        value: selected.id,
-        style: AppTextStyles.body,
-        onChanged: (id) {
-          if (id != null) matches.select(id);
-        },
-        items: [
-          for (final match in matches.matches)
-            DropdownMenuItem(
-              value: match.id,
-              child: Text(
-                '${match.config.name} · ${match.openingScoreLabel}',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-        ],
-      ),
+    return ChoiceField<String>(
+      value: selected.id,
+      compact: true,
+      style: AppTextStyles.bodyStrong,
+      items: [
+        for (final match in matches.matches)
+          ChoiceItem(
+            value: match.id,
+            label: match.config.name,
+            subtitle: match.openingScoreLabel,
+          ),
+      ],
+      onChanged: matches.select,
     );
   }
 }

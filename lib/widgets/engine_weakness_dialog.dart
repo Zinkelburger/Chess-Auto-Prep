@@ -81,7 +81,7 @@ class _EngineWeaknessConfigDialogState
     _minGamesCtrl = TextEditingController(text: '3');
     _whiteCpCtrl = TextEditingController(text: '-50');
     _blackCpCtrl = TextEditingController(text: '100');
-    _workersCtrl = TextEditingController(text: '${settings.workers}');
+    _workersCtrl = TextEditingController(text: '${settings.cores}');
     _monthsCtrl = TextEditingController(
       text: '${widget.playerInfo?.monthsBack ?? 6}',
     );
@@ -106,7 +106,7 @@ class _EngineWeaknessConfigDialogState
         whiteCp: int.tryParse(_whiteCpCtrl.text) ?? -50,
         blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
         workers:
-            int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.workers,
+            int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.cores,
         redownload: _redownload,
         monthsBack: int.tryParse(_monthsCtrl.text) ?? 6,
       ),

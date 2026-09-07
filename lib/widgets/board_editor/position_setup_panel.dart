@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/board_editor_controller.dart';
+import '../common/choice_field.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/app_messages.dart';
 import '../copy_button.dart';
@@ -168,15 +169,18 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
               children: [
                 Text('En passant', style: theme.textTheme.labelLarge),
                 const SizedBox(width: 12),
-                DropdownButton<Square?>(
-                  value: _editor.epSquare,
-                  isDense: true,
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('none')),
-                    for (final sq in _editor.epCandidates)
-                      DropdownMenuItem(value: sq, child: Text(sq.name)),
-                  ],
-                  onChanged: _editor.setEpSquare,
+                SizedBox(
+                  width: 120,
+                  child: ChoiceField<Square?>(
+                    value: _editor.epSquare,
+                    compact: true,
+                    items: [
+                      const ChoiceItem(value: null, label: 'none'),
+                      for (final sq in _editor.epCandidates)
+                        ChoiceItem(value: sq, label: sq.name),
+                    ],
+                    onChanged: _editor.setEpSquare,
+                  ),
                 ),
               ],
             ),

@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Chess, Position;
 import 'package:flutter/material.dart';
 
 import '../../../models/repertoire_line.dart';
+import '../../../widgets/common/choice_field.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/chess_board_widget.dart';
@@ -343,21 +344,14 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
   }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      child: DropdownButton<int>(
+      child: ChoiceField<int>(
         value: value,
-        isExpanded: true,
-        isDense: true,
         style: AppTextStyles.body.copyWith(fontSize: 13),
         items: [
           for (var i = 0; i < labels.length; i++)
-            DropdownMenuItem(
-              value: i,
-              child: Text(labels[i], overflow: TextOverflow.ellipsis),
-            ),
+            ChoiceItem(value: i, label: labels[i]),
         ],
-        onChanged: (i) {
-          if (i != null) onChanged(i);
-        },
+        onChanged: onChanged,
       ),
     );
   }
