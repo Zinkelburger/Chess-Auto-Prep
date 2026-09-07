@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
+import 'package:chess_auto_prep/features/tactics/services/alternative_move_judge.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/features/tactics/controllers/tactics_session_controller.dart';
 import '../../../helpers/memory_tactics_database.dart';
@@ -598,6 +601,140 @@ void main() {
         queue[1].fen,
         reason: 'browse queue still walkable after an in-place edit',
       );
+    });
+  });
+
+  group('accept other winning moves', () {
+    const on = TacticsSessionSettings(
+      maxAgeDays: null,
+      acceptAlternatives: true,
+    );
+
+    TacticsSessionController sessionWith(
+      MemoryTacticsDatabase db,
+      AlternativeMoveJudge judge, {
+      TacticsSessionSettings settings = on,
+    }) {
+      final session = TacticsSessionController(
+        database: db,
+        alternativeJudge: judge,
+      )..autoAdvance = false;
+      session.setSessionSettings(settings, save: false);
+      session.selectPosition(db.positions.first);
+      return session;
+    }
+
+    test('a move the judge accepts solves the puzzle on that move', () async {
+      final db = MemoryTacticsDatabase();
+      db.positions.add(_samplePosition());
+      final asked = <AlternativeMoveQuery>[];
+      final verdict = Completer<bool>();
+      final session = sessionWith(db, (q) {
+        asked.add(q);
+        return verdict.future;
+      });
+
+      final update = session.processMoveAttempt(
+        moveUci: 'd2d4',
+        boardFen: db.positions.first.fen,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+
+      expect(
+        update?.applyMoveUci,
+        'd2d4',
+        reason: 'the move stays on the board',
+      );
+      expect(session.checkingAlternative, isTrue);
+      expect(session.inputLocked, isTrue);
+      expect(session.feedback, 'Checking…');
+      expect(asked.single.playedUci, 'd2d4');
+      expect(asked.single.bestToken, 'e4');
+      expect(
+        session.processMoveAttempt(
+          moveUci: 'g1f3',
+          boardFen: db.positions.first.fen,
+          schedule: _noopSchedule,
+          isMounted: () => true,
+        ),
+        isNull,
+        reason: 'no second move while the first is being judged',
+      );
+
+      verdict.complete(true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(session.checkingAlternative, isFalse);
+      expect(session.positionSolved, isTrue);
+      expect(session.feedback, 'Correct! d4 is just as good');
+      expect(
+        session.sessionOutcomes.values,
+        isEmpty,
+        reason: 'browse is unscored',
+      );
+    });
+
+    test('a move the judge rejects is simply incorrect', () async {
+      final db = MemoryTacticsDatabase();
+      db.positions.add(_samplePosition());
+      final session = sessionWith(db, (_) async => false);
+
+      session.processMoveAttempt(
+        moveUci: 'd2d4',
+        boardFen: db.positions.first.fen,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(session.positionSolved, isFalse);
+      expect(session.checkingAlternative, isFalse);
+      expect(session.feedback, 'Incorrect');
+      expect(session.attemptRecorded, isTrue);
+    });
+
+    test('with the option off the judge is never asked', () {
+      final db = MemoryTacticsDatabase();
+      db.positions.add(_samplePosition());
+      var asked = 0;
+      final session = sessionWith(db, (_) async {
+        asked++;
+        return true;
+      }, settings: _allTime);
+
+      session.processMoveAttempt(
+        moveUci: 'd2d4',
+        boardFen: db.positions.first.fen,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+
+      expect(asked, 0);
+      expect(session.feedback, 'Incorrect');
+    });
+
+    test('a verdict that arrives after a reset is dropped', () async {
+      final db = MemoryTacticsDatabase();
+      db.positions.add(_samplePosition());
+      final verdict = Completer<bool>();
+      final session = sessionWith(db, (_) => verdict.future);
+
+      session.processMoveAttempt(
+        moveUci: 'd2d4',
+        boardFen: db.positions.first.fen,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+      session.resetPuzzleState();
+      expect(session.checkingAlternative, isFalse);
+      expect(session.feedback, '');
+
+      verdict.complete(true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(session.positionSolved, isFalse, reason: 'stale verdict ignored');
+      expect(session.feedback, '');
     });
   });
 }

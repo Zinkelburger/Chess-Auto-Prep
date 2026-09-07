@@ -4,18 +4,22 @@ library;
 
 import 'dart:async';
 
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
+import '../models/board_display_settings.dart';
 import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
+import '../utils/san_display.dart';
 import '../utils/system_info.dart';
+import '../widgets/chess_board_widget.dart';
 import '../widgets/common/confirm_dialog.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
@@ -40,6 +44,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       label: 'Accounts',
       icon: Icons.person_outline,
       description: 'Your chess identities and connected services.',
+    ),
+    (
+      label: 'Display',
+      icon: Icons.grid_on_outlined,
+      description: 'How boards and moves are drawn, everywhere in the app.',
     ),
     (
       label: 'Repertoires',
@@ -95,8 +104,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ChessUsernamesSection(),
                     LichessLoginSection(),
                   ], compact),
-                  _page(1, const [MyRepertoiresSection()], compact),
-                  _page(2, [
+                  _page(1, [_buildDisplaySection()], compact),
+                  _page(2, const [MyRepertoiresSection()], compact),
+                  _page(3, [
                     _buildEngineSection(getLogicalCores()),
                     const SettingsGroup(
                       title: 'Looking for analysis settings?',
@@ -106,8 +116,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [],
                     ),
                   ], compact),
-                  _page(3, [_buildDatabasesSection()], compact),
-                  _page(4, [
+                  _page(4, [_buildDatabasesSection()], compact),
+                  _page(5, [
                     _buildAboutSection(),
                     _buildResetButton(),
                   ], compact),
@@ -297,6 +307,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ── Display section ────────────────────────────────────────────────────────
+
+  /// The two lila Display preferences a beginner asks for first: where the
+  /// coordinates are, and whether a knight is an N or a ♘. Global on purpose —
+  /// a board that is labelled in Tactics and bare in Study is two boards to
+  /// learn. The preview under the controls is live, so the choice is seen
+  /// before the screen is left.
+  Widget _buildDisplaySection() {
+    return ListenableBuilder(
+      listenable: BoardDisplaySettings.instance,
+      builder: (context, _) {
+        final display = BoardDisplaySettings.instance;
+        return SettingsGroup(
+          title: 'Board and moves',
+          icon: Icons.grid_on_outlined,
+          subtitle: 'Changes apply immediately, to every board and move list.',
+          children: [
+            SettingsChoiceTile<BoardCoordinates>(
+              label: 'Board coordinates',
+              description: 'Where the file letters and rank numbers go.',
+              value: display.coordinates,
+              items: const [
+                (BoardCoordinates.none, 'No'),
+                (BoardCoordinates.inside, 'Inside the board'),
+                (BoardCoordinates.outside, 'Outside the board'),
+                (BoardCoordinates.everySquare, 'Every square'),
+              ],
+              onChanged: (v) => unawaited(display.setCoordinates(v)),
+            ),
+            SettingsChoiceTile<PieceNotation>(
+              label: 'Piece notation',
+              description: 'How a piece is written in a move.',
+              value: display.pieceNotation,
+              items: const [
+                (PieceNotation.letters, 'Letters (KQRBN)'),
+                (PieceNotation.figurines, 'Figurines (♔♕♖♗♘)'),
+              ],
+              onChanged: (v) => unawaited(display.setPieceNotation(v)),
+            ),
+            const Divider(
+              height: 1,
+              indent: 20,
+              endIndent: 20,
+              color: AppColors.divider,
+            ),
+            _DisplayPreview(settings: display),
+          ],
+        );
+      },
+    );
+  }
+
   // ── Engine section ─────────────────────────────────────────────────────────
 
   Widget _buildEngineSection(int cores) {
@@ -418,13 +480,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context,
       title: 'Reset Settings',
       message:
-          'Reset all engine, analysis, and database settings to '
+          'Reset all engine, analysis, display, and database settings to '
           'factory defaults?',
       confirmLabel: 'Reset',
     );
     if (!confirmed) return;
     _engine.resetToDefaults();
     await EvalDatabaseSettings.instance.resetToDefaults();
+    await BoardDisplaySettings.instance.resetToDefaults();
     if (mounted) showAppSnackBar(context, 'Settings restored to defaults');
   }
 
@@ -433,7 +496,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: 'Restore defaults',
       icon: Icons.restore,
       subtitle:
-          'Reset engine, analysis and database preferences. Your accounts, games and repertoires are kept.',
+          'Reset engine, analysis, display and database preferences. Your accounts, games and repertoires are kept.',
       children: [
         Padding(
           padding: const EdgeInsets.all(20),
@@ -447,6 +510,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A board and a line of moves drawn with the current Display preferences.
+class _DisplayPreview extends StatelessWidget {
+  const _DisplayPreview({required this.settings});
+
+  final BoardDisplaySettings settings;
+
+  /// After 1.e4 e5 2.Nf3 Nc6 3.Bb5: a few pieces out, so the coordinates
+  /// have something to be read against.
+  static final Position _position = () {
+    Position pos = Chess.initial;
+    for (final san in const ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']) {
+      pos = pos.play(pos.parseSan(san)!);
+    }
+    return pos;
+  }();
+
+  static const _line = ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Bxc6', 'dxc6'];
+
+  @override
+  Widget build(BuildContext context) {
+    final figurines = settings.pieceNotation == PieceNotation.figurines;
+    final buffer = StringBuffer();
+    for (var i = 0; i < _line.length; i++) {
+      if (i.isEven) buffer.write('${i ~/ 2 + 1}. ');
+      buffer.write(figurines ? figurineSan(_line[i]) : _line[i]);
+      buffer.write(' ');
+    }
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 200,
+            height: 200,
+            child: ChessBoardWidget(
+              key: const Key('display-preview-board'),
+              position: _position,
+              enableUserMoves: false,
+              coordinates: settings.coordinates,
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Preview', style: AppTextStyles.bodyStrong),
+                const SizedBox(height: 8),
+                Text(
+                  buffer.toString().trimRight(),
+                  key: const Key('display-preview-line'),
+                  style: AppTextStyles.mono,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

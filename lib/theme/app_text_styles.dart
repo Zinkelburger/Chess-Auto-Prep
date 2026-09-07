@@ -30,6 +30,12 @@ abstract final class AppTextStyles {
   /// DejaVu on Linux and Windows resolves to nothing reliable.
   static const String monoFamily = 'SourceCodePro';
 
+  /// The chess figurines (♔♕♖♗♘♙ and their black twins) and nothing else — a
+  /// subset of Noto Sans Symbols 2. Installed as the theme's font fallback,
+  /// not a family anything is set in, so `♘f3` draws the glyph from here and
+  /// `f3` from whatever face the text is already in.
+  static const String figurineFamily = 'NotoSansSymbols2';
+
   /// Digits the same width everywhere, so ratings, evals and counts line up
   /// between rows without a mono face.
   static const List<FontFeature> tabularFigures = [
