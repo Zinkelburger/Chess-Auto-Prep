@@ -29,40 +29,93 @@ import 'package:flutter_test/flutter_test.dart';
 import 'engine_fakes.dart';
 import 'generation_test_helpers.dart';
 
-const config = TreeBuildConfig(startFen: kStandardStartFen,
-  playAsWhite: true, relativeEval: false, minEvalCp: -9999, maxEvalCp: 9999);
+const config = TreeBuildConfig(
+  startFen: kStandardStartFen,
+  playAsWhite: true,
+  relativeEval: false,
+  minEvalCp: -9999,
+  maxEvalCp: 9999,
+);
 
-BuildTreeNode root() => makeNode(fen: kStandardStartFen, san: '', ply: 0,
-  isWhiteToMove: true, evalCp: 0);
-BuildTreeNode child(BuildTreeNode p, String fen, String san, bool white, int cp) =>
-  makeNode(fen: fen, san: san, ply: p.ply + 1, isWhiteToMove: white,
-    evalCp: cp, parent: p);
+BuildTreeNode root() => makeNode(
+  fen: kStandardStartFen,
+  san: '',
+  ply: 0,
+  isWhiteToMove: true,
+  evalCp: 0,
+);
+BuildTreeNode child(
+  BuildTreeNode p,
+  String fen,
+  String san,
+  bool white,
+  int cp,
+) => makeNode(
+  fen: fen,
+  san: san,
+  ply: p.ply + 1,
+  isWhiteToMove: white,
+  evalCp: cp,
+  parent: p,
+);
 
 void main() {
   setUp(resetNodeIds);
   tearDown(() => MaiaFactory.testOverride = null);
-  test('PV injection must conserve opponent probability mass with book data', () async {
-    final node = makeNode(fen: kFenAfterE4, san: 'e4', ply: 1,
-      isWhiteToMove: false, evalCp: 0)..pvContinuationMove = 'e7e5';
-    MaiaFactory.testOverride = FakeMaiaEvaluator({
-      kFenAfterE4: {'c7c5': 0.5, 'e7e5': 0.5},
-    });
-    final tree = BuildTree(root: node)..registerNode(node);
-    final stats = BuildStats();
-    final run = BuildRun(config: config, tree: tree, fenMap: FenMap(),
-      pool: FakeStockfishPool(), evalResolver: TreeEvalResolver()..stats = stats,
-      stats: stats, runLog: RunDebugLog(), progress: TreeBuildProgressTracker(),
-      onProgress: (_) {}, cancel: BuildCancellation(), finishNow: () => false,
-      waitIfPaused: () async {}, nextNodeId: 1000,
-      masterBook: (fen) => fen == kFenAfterE4 ? [BookMove(
-        uci: 'c7c5', games: 3000, whiteWins: 0, draws: 3000, blackWins: 0,
-        averageElo: 2600, maxElo: 2700, lastYear: 2024,
-        topGameId: 1, recentGameId: 2)] : []);
-    await NodeExpander.forRun(run).expandOpponentMove(node, FrontierQueue(bestFirst: true));
-    expect(node.children, hasLength(2));
-    final mass = node.children.fold(0.0, (v, c) => v + c.moveProbability);
-    expect(mass, lessThanOrEqualTo(1.0));
-  });
+  test(
+    'PV injection must conserve opponent probability mass with book data',
+    () async {
+      final node = makeNode(
+        fen: kFenAfterE4,
+        san: 'e4',
+        ply: 1,
+        isWhiteToMove: false,
+        evalCp: 0,
+      )..pvContinuationMove = 'e7e5';
+      MaiaFactory.testOverride = FakeMaiaEvaluator({
+        kFenAfterE4: {'c7c5': 0.5, 'e7e5': 0.5},
+      });
+      final tree = BuildTree(root: node)..registerNode(node);
+      final stats = BuildStats();
+      final run = BuildRun(
+        config: config,
+        tree: tree,
+        fenMap: FenMap(),
+        pool: FakeStockfishPool(),
+        evalResolver: TreeEvalResolver()..stats = stats,
+        stats: stats,
+        runLog: RunDebugLog(),
+        progress: TreeBuildProgressTracker(),
+        onProgress: (_) {},
+        cancel: BuildCancellation(),
+        finishNow: () => false,
+        waitIfPaused: () async {},
+        nextNodeId: 1000,
+        masterBook: (fen) => fen == kFenAfterE4
+            ? [
+                BookMove(
+                  uci: 'c7c5',
+                  games: 3000,
+                  whiteWins: 0,
+                  draws: 3000,
+                  blackWins: 0,
+                  averageElo: 2600,
+                  maxElo: 2700,
+                  lastYear: 2024,
+                  topGameId: 1,
+                  recentGameId: 2,
+                ),
+              ]
+            : [],
+      );
+      await NodeExpander.forRun(
+        run,
+      ).expandOpponentMove(node, FrontierQueue(bestFirst: true));
+      expect(node.children, hasLength(2));
+      final mass = node.children.fold(0.0, (v, c) => v + c.moveProbability);
+      expect(mass, lessThanOrEqualTo(1.0));
+    },
+  );
   test('selected setup policy must equal the policy that was valued', () {
     final r = root();
     final e4 = child(r, kFenAfterE4, 'e4', false, -20);
@@ -76,35 +129,53 @@ void main() {
     expect(r.expectimaxValue, closeTo(d4.expectimaxValue, 1e-12));
   });
 
-  test('verification cannot certify an alternative using its shallow score', () async {
-    final r = root();
-    final e4 = child(r, kFenAfterE4, 'e4', false, -50)..isRepertoireMove = true;
-    final d4 = child(r, kFenAfterD4, 'd4', false, -30);
-    final pool = FakeStockfishPool()
-      ..stmCpByFen[e4.fen] = -48
-      ..stmCpByFen[d4.fen] = -200;
-    final tree = BuildTree(root: r);
-    final fm = FenMap()..populate(r);
-    final calc = ExpectimaxCalculator(config: config, fenMap: fm)..calculate(tree);
-    final report = await RepertoireVerifier(config: config, pool: pool)
-      .verify(tree, fenMap: fm, ecaCalc: calc);
-    expect(report.completed, isTrue);
-    expect(pool.evalCalls, contains(d4.fen), reason: 'Deep +200 beats chosen +48 by 152cp.');
-  });
+  test(
+    'verification cannot certify an alternative using its shallow score',
+    () async {
+      final r = root();
+      final e4 = child(r, kFenAfterE4, 'e4', false, -50)
+        ..isRepertoireMove = true;
+      final d4 = child(r, kFenAfterD4, 'd4', false, -30);
+      final pool = FakeStockfishPool()
+        ..stmCpByFen[e4.fen] = -48
+        ..stmCpByFen[d4.fen] = -200;
+      final tree = BuildTree(root: r);
+      final fm = FenMap()..populate(r);
+      final calc = ExpectimaxCalculator(config: config, fenMap: fm)
+        ..calculate(tree);
+      final report = await RepertoireVerifier(
+        config: config,
+        pool: pool,
+      ).verify(tree, fenMap: fm, ecaCalc: calc);
+      expect(report.completed, isTrue);
+      expect(
+        pool.evalCalls,
+        contains(d4.fen),
+        reason: 'Deep +200 beats chosen +48 by 152cp.',
+      );
+    },
+  );
 
-  test('successful verification must refresh values even without a demotion', () async {
-    final r = root();
-    final e4 = child(r, kFenAfterE4, 'e4', false, -50)..isRepertoireMove = true;
-    final pool = FakeStockfishPool()..stmCpByFen[e4.fen] = -200;
-    final tree = BuildTree(root: r);
-    final fm = FenMap()..populate(r);
-    final calc = ExpectimaxCalculator(config: config, fenMap: fm)..calculate(tree);
-    final report = await RepertoireVerifier(config: config, pool: pool)
-      .verify(tree, fenMap: fm, ecaCalc: calc);
-    expect(report.completed, isTrue);
-    expect(e4.engineEvalCp, -200);
-    expect(r.expectimaxValue, closeTo(winProbability(200), 1e-12));
-  });
+  test(
+    'successful verification must refresh values even without a demotion',
+    () async {
+      final r = root();
+      final e4 = child(r, kFenAfterE4, 'e4', false, -50)
+        ..isRepertoireMove = true;
+      final pool = FakeStockfishPool()..stmCpByFen[e4.fen] = -200;
+      final tree = BuildTree(root: r);
+      final fm = FenMap()..populate(r);
+      final calc = ExpectimaxCalculator(config: config, fenMap: fm)
+        ..calculate(tree);
+      final report = await RepertoireVerifier(
+        config: config,
+        pool: pool,
+      ).verify(tree, fenMap: fm, ecaCalc: calc);
+      expect(report.completed, isTrue);
+      expect(e4.engineEvalCp, -200);
+      expect(r.expectimaxValue, closeTo(winProbability(200), 1e-12));
+    },
+  );
 
   test('a forced bad opponent reply must retain its prepared answer', () {
     final r = root();
@@ -131,6 +202,7 @@ void main() {
       }
       return n;
     }
+
     final bAlias = line(r, ['g1f3', 'g8f6', 'g2g3', 'g7g6']);
     final b = line(r, ['g2g3', 'g8f6', 'g1f3', 'g7g6']);
     line(b, ['b2b3', 'b7b6']); // C alias

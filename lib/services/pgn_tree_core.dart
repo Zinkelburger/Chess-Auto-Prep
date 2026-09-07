@@ -386,7 +386,7 @@ void foldGamesIntoTree<T>({
   var anchoredSomething = true;
   while (chapters.isNotEmpty && anchoredSomething) {
     anchoredSomething = false;
-    for (var i = 0; i < chapters.length; ) {
+    for (var i = 0; i < chapters.length;) {
       final (game, start) = chapters[i];
       if (isReached(start)) {
         chapters.removeAt(i);

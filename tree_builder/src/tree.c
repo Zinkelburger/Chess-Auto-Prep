@@ -90,11 +90,29 @@ static double elapsed_ms(const struct timespec *start) {
 
 #define ROOT_MULTIPV_FLOOR 10
 
+/* The root widens the eval-loss gate for the same reason it widens MultiPV:
+ * the question at the root is "which of my options should I play", and the
+ * answer is the expectimax value, not the depth-16 centipawn gap.  A 40cp
+ * default is a repertoire filter -- correct away from the root, but at the
+ * root it routinely culls all ten MultiPV lines down to one (4.e5 in the
+ * Winawer beats 4.Nge2 by 48cp, so a 40cp gate leaves nothing to compare)
+ * and the build silently answers a different question than the one asked. */
+#define ROOT_EVAL_LOSS_FLOOR 150
+
 static int multipv_count_for_node(const TreeConfig *config, const TreeNode *node) {
     if (!config) return ROOT_MULTIPV_FLOOR;
     if (node && node->depth == 0 && config->our_multipv < ROOT_MULTIPV_FLOOR)
         return ROOT_MULTIPV_FLOOR;
     return config->our_multipv;
+}
+
+static int eval_loss_budget_for_node(const TreeConfig *config,
+                                     const TreeNode *node) {
+    if (!config) return ROOT_EVAL_LOSS_FLOOR;
+    if (node && node->depth == 0
+        && config->max_eval_loss_cp < ROOT_EVAL_LOSS_FLOOR)
+        return ROOT_EVAL_LOSS_FLOOR;
+    return config->max_eval_loss_cp;
 }
 
 
@@ -1337,7 +1355,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
     for (int pv = 0; pv < mpv.num_lines; pv++) {
         MultiPVLine *line = &mpv.lines[pv];
         if (line->move_uci[0] == '\0') continue;
-        if (best_cp - line->eval_cp > config->max_eval_loss_cp) continue;
+        if (best_cp - line->eval_cp > eval_loss_budget_for_node(config, node))
+            continue;
 
         char child_fen[MAX_FEN_LENGTH];
         if (!apply_uci(node->fen, line->move_uci, child_fen, MAX_FEN_LENGTH))
@@ -1432,7 +1451,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
 
             /* Same axis as best_cp (parent STM). */
             int our_cp = -child_cp_stm;
-            if (best_cp - our_cp > config->max_eval_loss_cp) continue;
+            if (best_cp - our_cp > eval_loss_budget_for_node(config, node))
+                continue;
 
             const char *san = tok;
             if (uci_to_san(node->fen, uci, our_san_buf,
@@ -2499,12 +2519,15 @@ void tree_print_stats(const Tree *tree) {
     printf("  Max depth: %d ply\n", tree->config.max_depth);
     {
         int root_multipv = multipv_count_for_node(&tree->config, tree->root);
-        if (root_multipv == tree->config.our_multipv) {
+        int root_loss = eval_loss_budget_for_node(&tree->config, tree->root);
+        if (root_multipv == tree->config.our_multipv
+            && root_loss == tree->config.max_eval_loss_cp) {
             printf("  Our MultiPV: %d (eval-loss filter %dcp)\n",
                    tree->config.our_multipv, tree->config.max_eval_loss_cp);
         } else {
-            printf("  Our MultiPV: root %d, others %d (eval-loss filter %dcp)\n",
-                   root_multipv, tree->config.our_multipv,
+            printf("  Our MultiPV: root %d (eval-loss %dcp), "
+                   "others %d (eval-loss %dcp)\n",
+                   root_multipv, root_loss, tree->config.our_multipv,
                    tree->config.max_eval_loss_cp);
         }
     }

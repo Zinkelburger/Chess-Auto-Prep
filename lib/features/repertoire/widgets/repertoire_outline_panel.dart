@@ -1018,14 +1018,16 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
   }
 
   Set<String> _chapterNamesIn(String folderPath) => {
-    for (final c in _c.outline?.findFolder(folderPath)?.chapters ??
-        const <OutlineChapter>[])
+    for (final c
+        in _c.outline?.findFolder(folderPath)?.chapters ??
+            const <OutlineChapter>[])
       c.name.toLowerCase(),
   };
 
   Set<String> _folderNamesIn(String parentPath) => {
-    for (final f in _c.outline?.findFolder(parentPath)?.folders ??
-        const <OutlineFolder>[])
+    for (final f
+        in _c.outline?.findFolder(parentPath)?.folders ??
+            const <OutlineFolder>[])
       f.name.toLowerCase(),
   };
 

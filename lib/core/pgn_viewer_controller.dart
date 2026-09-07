@@ -180,6 +180,7 @@ class PgnViewerController extends ChangeNotifier
   int _gameLoadEpoch = 0;
 
   bool _isCurrentLoad(int epoch) => isActive() && epoch == _loadEpoch;
+
   /// Text above the first game in the loaded file — a `;`/`%` banner, which
   /// is not a game and so is not in [allGames]. Held here because a write
   /// rewrites the file from [allGames] alone and would otherwise delete it.

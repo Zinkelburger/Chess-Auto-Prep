@@ -8,8 +8,8 @@
 /// panel, which now creates one rather than sending you away to make it — must
 /// write exactly the same thing. Hence one function instead of two copies.
 library;
-import 'dart:io';
 
+import 'dart:io';
 
 import '../features/repertoire/services/chapter_splitter.dart';
 import 'pgn_parsing_service.dart' as pgn;

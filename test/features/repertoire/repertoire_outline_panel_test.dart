@@ -258,7 +258,9 @@ void main() {
     expect(target, p.join(root, 'Advance.pgn'));
   });
 
-  testWidgets('a chapter rename with a slash is refused in the dialog', (tester) async {
+  testWidgets('a chapter rename with a slash is refused in the dialog', (
+    tester,
+  ) async {
     await pump(tester);
     final gesture = await tester.startGesture(
       tester.getCenter(find.text('Advance')),

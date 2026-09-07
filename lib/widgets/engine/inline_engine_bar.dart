@@ -253,10 +253,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     }
   }
 
-  Future<EvalWorker?> _ensureWorker() => _workerSlot.ensure(
-    threads: _settings.cores,
-    hashMb: _settings.hashMb,
-  );
+  Future<EvalWorker?> _ensureWorker() =>
+      _workerSlot.ensure(threads: _settings.cores, hashMb: _settings.hashMb);
 
   void _disposeWorker() => _workerSlot.release();
 

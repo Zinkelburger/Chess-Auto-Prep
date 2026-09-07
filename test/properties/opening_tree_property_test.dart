@@ -1038,7 +1038,8 @@ void main() {
       // anchor after chapter has been folded — whatever order they arrive in.
       const deepFen =
           'r1bqkb1r/ppp2ppp/2n2n2/3pp1N1/2B1P3/8/PPPP1PPP/RNBQK2R w KQkq - 0 5';
-      const deepChapter = '''
+      const deepChapter =
+          '''
 [Event "Deep chapter"]
 [White "Me"]
 [Black "Opponent"]
@@ -1062,11 +1063,9 @@ void main() {
           isNotNull,
           reason: 'a chapter of a chapter did not anchor',
         );
-        expect(
-          tree.root.children.keys,
-          ['e4'],
-          reason: 'something was grafted at the root',
-        );
+        expect(tree.root.children.keys, [
+          'e4',
+        ], reason: 'something was grafted at the root');
         expect(
           dumpTree(tree, ordered: false),
           expected,

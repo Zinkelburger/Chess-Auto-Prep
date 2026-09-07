@@ -149,7 +149,10 @@ void main() {
       // plies must get four, whatever the default happens to be.
       int depthOf(OpeningTreeNode node) => node.children.isEmpty
           ? 0
-          : 1 + node.children.values.map(depthOf).reduce((a, b) => a > b ? a : b);
+          : 1 +
+                node.children.values
+                    .map(depthOf)
+                    .reduce((a, b) => a > b ? a : b);
 
       final shallow = UnifiedAnalysisBuilder.buildBoth(
         pgnList: _pgnList,

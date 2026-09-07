@@ -74,7 +74,6 @@ class RepertoireGenerationTab extends StatefulWidget {
 }
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
-
   /// Ranking of the finished build's lines, rebuilt whenever the tree
   /// changes. Null until there is a completed tree to slice.
   RepertoireSlicer? _slicer;

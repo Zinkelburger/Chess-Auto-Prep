@@ -27,6 +27,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/safe_file_name.dart';
+import 'common/confirm_dialog.dart';
 import 'common/list_search_field.dart';
 import 'layout/empty_state_placeholder.dart';
 
@@ -301,7 +302,6 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline),
-                    color: AppColors.danger,
                     tooltip: 'Delete chapter',
                     onPressed: () => _deleteChapter(chapter),
                   ),
@@ -434,29 +434,14 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   }
 
   Future<void> _deleteChapter(RepertoireMetadata chapter) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Chapter'),
-        content: Text(
-          'Delete chapter "${chapter.name}"? Its file will be moved to '
-          'Chess Auto Prep recovery trash.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmAction(
+      context,
+      title: 'Delete chapter "${chapter.name}"?',
+      message: 'Its file will be moved to Chess Auto Prep recovery trash.',
+      confirmLabel: 'Delete',
     );
 
-    if (confirmed != true) return;
+    if (!confirmed) return;
 
     try {
       await StorageFactory.instance.deleteFile(chapter.filePath);

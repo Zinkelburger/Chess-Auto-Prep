@@ -202,7 +202,10 @@ typedef struct TreeConfig {
      *
      * Non-root our-move nodes use `our_multipv`.  The root widens to at
      * least 10 lines so opening prep can branch into more unusual first
-     * moves.  All lines within `max_eval_loss_cp` of the best are kept.
+     * moves, and widens `max_eval_loss_cp` to at least ROOT_EVAL_LOSS_FLOOR
+     * for the same reason: a repertoire-sized 40cp gate at the root culls
+     * the ten lines back down to one and there is nothing left to compare.
+     * Away from the root, all lines within `max_eval_loss_cp` are kept.
      * Natural pruning comes from `min_probability`, `max_depth`, and the
      * eval window.  No depth-based tapering beyond the root exception. */
     int our_multipv;                /* MultiPV count away from the root */
