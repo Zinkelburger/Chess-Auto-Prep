@@ -333,10 +333,22 @@ void main() {
       expect(engine.configurations.last.multiPv, 5);
     });
 
-    test('a stored value that is no longer offered falls back', () {
-      // Written by an older build: a dropdown with no matching item throws.
-      expect(BughouseEngineSettings.hashChoices, contains(256));
-      expect(BughouseEngineSettings.hashChoices, isNot(contains(17)));
+    test('a stored value outside its range is clamped, not refused', () {
+      // Written by hand or by an older build with different presets: the
+      // field takes any integer in range, so out-of-range is the only way a
+      // stored value can be wrong.
+      final low = BughouseEngineSettings.clamped(hashMb: 5, lines: 0);
+      expect(low.hashMb, BughouseEngineSettings.hashMin);
+      expect(low.lines, BughouseEngineSettings.linesMin);
+      final high = BughouseEngineSettings.clamped(
+        thinkSeconds: 99999,
+        batchSize: 4096,
+      );
+      expect(high.thinkSeconds, BughouseEngineSettings.thinkMax);
+      expect(high.batchSize, BughouseEngineSettings.batchMax);
+      // Anything in range — a preset or not — is kept as typed.
+      expect(BughouseEngineSettings.clamped(hashMb: 17).hashMb, 17);
+      expect(BughouseEngineSettings.clamped(), const BughouseEngineSettings());
     });
   });
 

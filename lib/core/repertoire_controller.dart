@@ -15,7 +15,6 @@ import '../models/move_tree.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
-import '../services/games_repertoire/draft_repertoire_writer.dart';
 import '../services/repertoire_line_expansion.dart';
 import '../services/repertoire_pgn_text.dart';
 import '../services/repertoire_service.dart';
@@ -446,53 +445,6 @@ class RepertoireController
     _tree.promoteVariation(target);
     _path = _pathForMoveSequence(cursorSans);
     _notifyStructureChanged();
-  }
-
-  /// Union of every repertoire line's mainline moves as a single [MoveTree] —
-  /// the "whole repertoire" view that draft diffing and merge planning need.
-  /// (The working [tree] is only the currently loaded line, so it must never
-  /// be used as a merge or comparison target.)
-  MoveTree buildRepertoireMoveTree() {
-    final out = MoveTree(startingFen: _tree.startingFen);
-    for (final line in _repertoireLines) {
-      var path = TreePath.empty;
-      for (final san in line.moves) {
-        final next = out.addMove(path, san);
-        if (next == null) break;
-        path = next;
-      }
-    }
-    return out;
-  }
-
-  /// Append draft [lines] (SAN sequences from the repertoire root) to the
-  /// repertoire file as titled PGN entries and reload. Lines ending on an
-  /// opponent move are marked as gaps (title + final-move comment — see
-  /// `draftLinesToPgnGames`) and counted in `needAnswer`. Returns zero counts
-  /// when there is nothing to add or no file is loaded.
-  Future<({int added, int needAnswer})> appendDraftLines(
-    List<List<String>> lines, {
-    required String sourceLabel,
-  }) async {
-    const nothing = (added: 0, needAnswer: 0);
-    if (lines.isEmpty || _currentRepertoire == null) return nothing;
-
-    final label = sourceLabel.replaceAll('"', '').trim();
-    final source = label.isEmpty ? 'my games' : label;
-    final content = draftLinesToPgnGames(
-      lines,
-      isWhite: _isRepertoireWhite,
-      titlePrefix: 'From my games ($source)',
-      startIndex: _repertoireLines.length,
-    );
-    if (content.isEmpty) return nothing;
-
-    final added = await importPgnContent(content);
-    if (added == 0) return nothing;
-    final gaps = lines
-        .where((l) => !lineEndsWithMyMove(l, isWhite: _isRepertoireWhite))
-        .length;
-    return (added: added, needAnswer: gaps);
   }
 
   /// Recursively promote a variation so it becomes the main line

@@ -51,17 +51,43 @@ void main() {
     expect(e4.needsBestLine, isFalse);
   });
 
+  // The exact text matters: it replaces the game in the reader's file. The
+  // spacing inside the braces and the trailing terminator are dartchess's
+  // `makePgn`, which `injectBestLines` now goes through so that a game's
+  // sidelines and opening comment survive the rewrite — the old mainline-only
+  // writer dropped both. Both are valid PGN and both round-trip: every
+  // `[%...]` reader here searches within the comment, so the inner spaces are
+  // immaterial, and `*` is the terminator this game's `[Result "*"]` implies.
   test('injectBestLines writes the line beside the existing score', () {
     final movetext = injectBestLines(_series, {
       8: ['Bxc6', 'dxc6'],
     });
     expect(
       movetext,
-      '1. e4 {[%eval 0.20,12]} e5 {[%eval 0.15,12]} '
-      '2. Nf3 {[%eval 0.25,12]} Nc6 {[%eval 0.20,12]} '
-      '3. Bb5 {[%eval 0.30,12]} a6 {[%eval 0.30,12]} '
-      '4. Ng5 {[%eval -6.00,12] [%pv Ba4,Nf6]} '
-      'Nf6 {[%eval -0.50,12] [%pv Bxc6,dxc6]}',
+      '1. e4 { [%eval 0.20,12] } e5 { [%eval 0.15,12] } '
+      '2. Nf3 { [%eval 0.25,12] } Nc6 { [%eval 0.20,12] } '
+      '3. Bb5 { [%eval 0.30,12] } a6 { [%eval 0.30,12] } '
+      '4. Ng5 { [%eval -6.00,12] [%pv Ba4,Nf6] } '
+      'Nf6 { [%eval -0.50,12] [%pv Bxc6,dxc6] } *',
+    );
+  });
+
+  test('a rewritten game keeps its sidelines and its opening comment', () {
+    const withExtras =
+        '$_header'
+        '{intro [%clk 0:05:00]} 1. e4 {[%eval 0.20,12]} (1. d4 d5) '
+        'e5 {[%eval 0.15,12]} 2. Nf3 {[%eval 0.25,12]} '
+        'Nc6 {[%eval -6.00,12]} *\n';
+    final movetext = injectBestLines(withExtras, {
+      4: ['Bb5', 'a6'],
+    });
+    expect(movetext, isNotNull);
+    expect(movetext, contains('[%pv Bb5,a6]'));
+    expect(movetext, contains('d4'), reason: 'the sideline survived');
+    expect(
+      movetext,
+      contains('[%clk 0:05:00]'),
+      reason: 'the game comment survived',
     );
   });
 

@@ -10,7 +10,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import 'movetext_primitives.dart' show GlyphButton;
 
@@ -45,15 +44,10 @@ class PgnAnnotationPanel extends StatefulWidget {
   final ValueChanged<int> onToggleNag;
   final ValueChanged<String> onCommentChanged;
 
-  /// Whether the target move carries the puzzle start/end marker. Only
-  /// meaningful when the matching toggle callback is non-null.
-  final bool puzzleStart;
-  final bool puzzleEnd;
-
-  /// Toggle the puzzle start/end marker on the target move. Null hides the
-  /// marker buttons (the host's surface doesn't train lines).
-  final VoidCallback? onTogglePuzzleStart;
-  final VoidCallback? onTogglePuzzleEnd;
+  /// Whether the glyph strip is live.  False when the target is a position
+  /// rather than a move (a chapter's start), which can carry a comment but
+  /// not a `!?`.
+  final bool glyphsEnabled;
 
   const PgnAnnotationPanel({
     super.key,
@@ -63,10 +57,7 @@ class PgnAnnotationPanel extends StatefulWidget {
     required this.comment,
     required this.onToggleNag,
     required this.onCommentChanged,
-    this.puzzleStart = false,
-    this.puzzleEnd = false,
-    this.onTogglePuzzleStart,
-    this.onTogglePuzzleEnd,
+    this.glyphsEnabled = true,
   });
 
   @override
@@ -147,26 +138,6 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
     });
   }
 
-  Widget _markerButton({
-    required IconData icon,
-    required String tooltip,
-    required bool active,
-    required VoidCallback? onTap,
-  }) {
-    return IconButton(
-      icon: Icon(
-        icon,
-        size: 16,
-        color: active ? AppColors.accent : AppColors.onSurfaceMuted,
-      ),
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      padding: EdgeInsets.zero,
-      onPressed: onTap,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -186,42 +157,20 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
         children: [
           // The glyph strip wraps instead of overflowing: the panel lives in
           // side panels the user can drag down to ~190px, where six glyphs
-          // plus the marker buttons no longer fit on one line.
-          Row(
+          // no longer fit on one line.
+          Wrap(
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: Wrap(
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    for (final nag in kMoveNags)
-                      GlyphButton(
-                        symbol: nag.symbol,
-                        name: nag.name,
-                        color: nag.color,
-                        isActive: widget.nags.contains(nag.id),
-                        onTap: enabled
-                            ? () => widget.onToggleNag(nag.id)
-                            : null,
-                      ),
-                  ],
-                ),
-              ),
-              if (widget.onTogglePuzzleStart != null)
-                _markerButton(
-                  icon: Icons.flag,
-                  tooltip:
-                      'Puzzle starts here — training auto-plays the earlier '
-                      'moves and quizzes from this one',
-                  active: widget.puzzleStart,
-                  onTap: enabled ? widget.onTogglePuzzleStart : null,
-                ),
-              if (widget.onTogglePuzzleEnd != null)
-                _markerButton(
-                  icon: Icons.sports_score,
-                  tooltip: 'Puzzle ends here — training stops after this move',
-                  active: widget.puzzleEnd,
-                  onTap: enabled ? widget.onTogglePuzzleEnd : null,
+              for (final nag in kMoveNags)
+                GlyphButton(
+                  symbol: nag.symbol,
+                  name: nag.name,
+                  color: nag.color,
+                  isActive: widget.nags.contains(nag.id),
+                  onTap: enabled && widget.glyphsEnabled
+                      ? () => widget.onToggleNag(nag.id)
+                      : null,
                 ),
             ],
           ),
@@ -237,7 +186,7 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
             decoration: InputDecoration(
               isDense: true,
               hintText: enabled
-                  ? 'Comment on ${widget.moveLabel}…  (C to type, Esc to leave)'
+                  ? 'Comment on ${widget.moveLabel}'
                   : 'Click or play a move to annotate it',
               hintStyle: AppTextStyles.caption,
               contentPadding: const EdgeInsets.symmetric(

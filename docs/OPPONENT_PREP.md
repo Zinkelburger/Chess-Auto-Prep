@@ -207,20 +207,48 @@ proposals are listed under `skipped` in the tool result.
 
 ## In the app
 
-**Player Analysis → Import Opponents**: choose the file or paste the JSON.
-The dialog previews the field (count, odds, skipped rows) before any network
-call. Each opponent becomes one player entry:
+**Player analysis → Choose a player → From a tournament field.** This is the
+sheet-and-docs the workflow used to live in, inside the app:
 
-- games are downloaded from **every** account listed and merged, so a person
-  with a chess.com and a lichess account is one tree, not two;
-- the entry is tagged with the event (`group`), searchable in the picker, and
-  shows the handles under the name;
-- re-download works (per account); the games live in the same cache as any
-  other player, so nothing else in Player Analysis is different.
+- **Tournaments** — one per event, past and present, newest first. A
+  tournament has a name, a date, a round count and a *field*.
+- **The sheet** (one tournament) — a row per opponent with the columns of the
+  spreadsheet it replaces: prepared ✓ · name · rating · USCF ID · Chess.com ·
+  Lichess · games saved · notes. Tapping a row analyses that person (their
+  games are downloaded first if none are saved). The row menu opens or trains
+  their prep file, refreshes their games, edits them, or removes them from the
+  field. The sheet menu imports an `opponents.json`, downloads everyone's
+  missing games, fills ratings from US Chess, trains every prep file in the
+  field as one session, and **saves the tournament as text** (Markdown: the
+  table, then each opponent's notes and prep lines).
+- **People** — the directory behind every sheet. A person is entered once
+  (name, USCF ID, handles, rating, notes) and listed in any number of
+  tournaments. The editor's **Look up** turns a US Chess ID into the name and
+  rating; **Find on US Chess** goes from a name to candidate IDs. Importing an
+  `opponents.json` matches its rows to existing people by USCF ID, then
+  handle, then name, and fills only their blanks.
+- **Prep file** — a study per person (`Prep – <Name>.pgn`), created on first
+  use with *As White* and *As Black* chapters. In Player analysis, "Add line
+  to study…" offers it first and names the chapter by the colour you hold.
+  One chapter per line, because the trainer drills chapters.
+- **In Player analysis**, an opponent opened from a sheet carries the
+  tournament as context: the subtitle reads `Spring Open 2026 · 3 of 12`, and
+  the menu adds *Open prep file*, *Prepared* (the tick on the sheet), *Next /
+  Previous opponent* and *Tournament sheet…*. **Check against my
+  repertoire…** works for any player: it walks their games on the displayed
+  colour through the book designated for the other colour (My books on the
+  Tactics page) and lists the moves it has no answer to, most played first;
+  tapping one moves the board there.
 
-Already-saved opponents are skipped unless "Re-download opponents already
-saved" is ticked. Failures are reported per person; a renamed account does
-not abandon the rest of the field.
+Files: `Documents/opponents/people.json` and
+`Documents/opponents/tournaments/<id>.json` (`chess-auto-prep/people@1`,
+`chess-auto-prep/tournament@1`). Both are small JSON the store rewrites whole;
+the text export is the human-readable copy.
+
+The older path still works: an `opponents.json` can also be imported
+straight into a sheet, and a game-set downloaded that way is the same
+game-set the sheet uses (one merged set per person, named
+`"Jane Doe; janed; jd_li"`, tagged with the event).
 
 ## Where the code lives
 
@@ -241,8 +269,10 @@ tools/mcp/test_opening_tree.py
 tools/mcp/requirements.txt   python-chess (opening-tree tools only)
 
 lib/services/opponent_list.dart              parser + OpponentEntry → AnalysisPlayerInfo
-lib/widgets/opponent_list_import_dialog.dart Player Analysis import dialog
-lib/screens/player_selection_screen.dart     batch download
+lib/features/opponents/                      tournaments, people, prep files, US Chess lookup,
+                                             repertoire check, text export (models/ services/ widgets/)
+lib/screens/analysis_screen_prep.dart        Player analysis: prep file, next opponent, repertoire check
+lib/screens/player_selection_screen.dart     the picker ("Which player?")
 lib/models/analysis_player_info.dart         accounts / group
 ```
 

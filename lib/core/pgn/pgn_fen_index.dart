@@ -6,7 +6,7 @@
 /// and delegates here, so existing call-sites are unchanged.
 library;
 
-import 'dart:isolate';
+import '../../utils/isolate_task.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -24,6 +24,7 @@ class PgnFenIndex {
 
   Map<String, List<int>>? _value;
   int _generation = 0;
+  IsolateTask? _task;
 
   /// Set when the PGN file was rewritten after [value] was persisted: the
   /// companion file's size/mtime stamp no longer matches, so it would be
@@ -34,15 +35,17 @@ class PgnFenIndex {
   /// Returns null while the index is being built.
   Map<String, List<int>>? get value => _value;
 
-  /// Drop the current index and invalidate any in-flight [build].
-  ///
-  /// Must be called when a new game collection replaces the old one:
-  /// otherwise the previous file's index stays in [value] (so consumers keep
-  /// slicing/classifying the new games with the old file's indices) and a
-  /// still-running build for the old file would pass its generation check
-  /// and clobber whatever [tryLoadPersisted] loads for the new one.
-  void reset() {
+  /// Stop unfinished work without dropping the index owed to a pending save.
+  void cancel() {
     _generation++;
+    _task?.cancel();
+  }
+
+  /// Drop the current index and invalidate work for the outgoing collection.
+  /// A still-running load/build must never install the old file's indices
+  /// against the new file's games.
+  void reset() {
+    cancel();
     _value = null;
     _stale = false;
   }
@@ -69,6 +72,8 @@ class PgnFenIndex {
   /// against the current file's stats. Leaves [value] null on any mismatch.
   Future<void> tryLoadPersisted(String pgnPath, int gameCount) async {
     final generation = _generation;
+    _task?.cancel();
+    final task = _task = IsolateTask();
     try {
       final storage = StorageFactory.instance;
       final stat = await storage.fileStat(pgnPath);
@@ -78,16 +83,19 @@ class PgnFenIndex {
       if (!await storage.fileExists(idxPath)) return;
       final data = await storage.readFile(idxPath);
       if (data == null || data.isEmpty) return;
-      final index = pgn.deserializeFenIndex(
-        data,
-        expectedGameCount: gameCount,
-        expectedFileSize: stat.size,
-        expectedModifiedMs: stat.modified.millisecondsSinceEpoch,
+      if (!isActive() || task.isCancelled || generation != _generation) return;
+      final index = await task.run(
+        (_) => pgn.deserializeFenIndex(
+          data,
+          expectedGameCount: gameCount,
+          expectedFileSize: stat.size,
+          expectedModifiedMs: stat.modified.millisecondsSinceEpoch,
+        ),
       );
       if (index == null) return;
       // A reset() (new file) may have happened during the reads above —
       // installing this index would hand the new file the old file's index.
-      if (generation != _generation) return;
+      if (!isActive() || task.isCancelled || generation != _generation) return;
       _value = index;
     } catch (_) {
       // Corrupt or unreadable — fall through to building from scratch.
@@ -103,8 +111,15 @@ class PgnFenIndex {
     final generation = ++_generation;
     _value = null;
 
-    final index = await Isolate.run(() => pgn.buildFenIndex(gameData));
-    if (!isActive() || generation != _generation) return;
+    _task?.cancel();
+    final task = _task = IsolateTask();
+    final Map<String, List<int>> index;
+    try {
+      index = await task.run((_) => pgn.buildFenIndex(gameData));
+    } on IsolateTaskCancelled {
+      return;
+    }
+    if (!isActive() || task.isCancelled || generation != _generation) return;
 
     _value = index;
     onChanged();
@@ -124,36 +139,39 @@ class PgnFenIndex {
     required String filePath,
     required int gameTotal,
   }) async {
-    // Guard against persisting an index that is inconsistent with [gameTotal]:
-    // the header records [gameTotal] as the game count, so any stored index
-    // outside `[0, gameTotal)` would produce a file that passes load-time
-    // validation yet points past `allGames`, crashing consumers with a
-    // RangeError. If the in-memory index and [gameTotal] disagree, skip the
-    // write rather than persist a corrupt companion file.
-    for (final indices in index.values) {
-      for (final i in indices) {
-        if (i < 0 || i >= gameTotal) {
-          debugPrint(
-            'Skipping FEN index persist: index $i out of range for '
-            '$gameTotal games (stale index vs. game set).',
-          );
-          return;
-        }
-      }
-    }
     try {
       final storage = StorageFactory.instance;
       final stat = await storage.fileStat(filePath);
       if (stat == null) return;
-      final data = pgn.serializeFenIndex(
-        index,
-        gameCount: gameTotal,
-        fileSize: stat.size,
-        modifiedMs: stat.modified.millisecondsSinceEpoch,
+      final data = await IsolateTask().run(
+        (_) => _serializeValidIndex(
+          index,
+          gameTotal,
+          stat.size,
+          stat.modified.millisecondsSinceEpoch,
+        ),
       );
+      if (data == null) return;
       await storage.writeFile('$filePath.fenidx', data);
     } catch (e) {
       debugPrint('Failed to persist FEN index: $e');
     }
   }
+}
+
+String? _serializeValidIndex(
+  Map<String, List<int>> index,
+  int gameCount,
+  int fileSize,
+  int modifiedMs,
+) {
+  for (final indices in index.values) {
+    if (indices.any((i) => i < 0 || i >= gameCount)) return null;
+  }
+  return pgn.serializeFenIndex(
+    index,
+    gameCount: gameCount,
+    fileSize: fileSize,
+    modifiedMs: modifiedMs,
+  );
 }

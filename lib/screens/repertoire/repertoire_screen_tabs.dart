@@ -18,45 +18,8 @@ mixin _RepertoireTabContent
   }
 
   /// The chapters-and-lines surface (compact: second tools tab; wide: the
-  /// outline column): normally the outline, the metrics browser when asked
-  /// for, and the Draft / Session surface while one of those runs.
+  /// outline column): the outline, or the metrics browser when asked for.
   Widget _buildSecondTabContent() {
-    if (_isBuildSessionActive) {
-      return BuildSessionPane(
-        session: _buildSession,
-        boardPreview: _boardPreview,
-        onOpenSettings: () => _buildLauncher.openSessionSettings(context),
-      );
-    }
-    if (_draftController.isBuilding) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                _draftController.progress,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    final draft = _draftController.draft;
-    if (draft != null) {
-      return DraftReviewPane(
-        draft: draft,
-        isWhite: _draftController.isWhite,
-        controller: _controller,
-        sourceLabel: _draftController.sourceLabel,
-        onClose: _draftController.close,
-        onSelectLine: (sans) => _controller.loadMoveSequence(sans),
-      );
-    }
     return _showLineMetrics ? _buildLineMetricsView() : _buildOutlinePanel();
   }
 
@@ -130,8 +93,36 @@ mixin _RepertoireTabContent
     );
   }
 
+  Widget _buildGenerateTabContent() {
+    return GeneratePositionPane(
+      fen: _controller.fen,
+      databaseName:
+          '${p.basename(p.dirname(_controller.currentRepertoire!.filePath))} / ${_controller.currentRepertoire!.name}',
+      generation: _generationController,
+      onGenerate: ({String? moveSan, required int plies, required int cores}) =>
+          _generationController.computeExpectimax(
+            ExpectimaxProbeTarget(
+              repertoireFilePath: _controller.currentRepertoire!.filePath,
+              repertoireStartFen: _controller.startingFen ?? kStandardStartFen,
+              movesFromStart: List.of(_controller.currentMoveSequence),
+              playAsWhite: _controller.isRepertoireWhite,
+              moveSan: moveSan,
+              plies: plies,
+              engineThreads: cores,
+            ),
+          ),
+      onPlayMove: _controller.playMove,
+      onHoverMove: (uci) => _boardPreview.setHoverArrow(
+        uci == null ? null : BoardAnnotation.arrowFromUci(uci),
+      ),
+      onPlanLines: () => unawaited(_openPlanner()),
+      onCutLines: () => unawaited(_openLineBuildDialog(cutOnly: true)),
+    );
+  }
+
   Widget _buildTreeTabContent() {
     return RepertoireTreePane(
+      sourceName: _controller.currentRepertoire?.name,
       tree: _controller.openingTree,
       repertoireLines: _controller.repertoireLines,
       currentMoveSequence: _controller.currentMoveSequence,
@@ -155,13 +146,7 @@ mixin _RepertoireTabContent
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InlineEngineBar(
-            // Follow the scratchpad while a session explores.
-            fen: _isBuildSessionActive
-                ? _buildSession.boardFen
-                : _controller.fen,
-            isActive: true,
-          ),
+          InlineEngineBar(fen: _controller.fen, isActive: true),
           const Divider(height: 1),
           InlineExpectimaxBar(
             controller: _controller,
@@ -171,7 +156,6 @@ mixin _RepertoireTabContent
             boardPreview: _boardPreview,
             coherenceResult: _generationController.coherenceService.result,
             generation: _generationController,
-            fenOverride: _isBuildSessionActive ? _buildSession.boardFen : null,
           ),
         ],
       ),
@@ -198,13 +182,7 @@ mixin _RepertoireTabContent
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: InlineEngineBar(
-                  // Follow the scratchpad while a session explores.
-                  fen: _isBuildSessionActive
-                      ? _buildSession.boardFen
-                      : _controller.fen,
-                  isActive: true,
-                ),
+                child: InlineEngineBar(fen: _controller.fen, isActive: true),
               ),
               VerticalDivider(
                 width: 1,
@@ -221,10 +199,6 @@ mixin _RepertoireTabContent
                   coherenceResult:
                       _generationController.coherenceService.result,
                   generation: _generationController,
-                  // Follow the scratchpad while a session explores.
-                  fenOverride: _isBuildSessionActive
-                      ? _buildSession.boardFen
-                      : null,
                 ),
               ),
             ],
@@ -247,7 +221,7 @@ mixin _RepertoireTabContent
       generationController: _generationController,
       auditController: _auditController,
       jobManager: _jobManager,
-      onOpenGenerationDialog: () => unawaited(_openGenerationDialog()),
+      onOpenGenerationDialog: () => unawaited(_openGenerateTab()),
       onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
       // Coverage is a fraction of master-game counts, so without the local
       // master book the run traverses the whole tree and reports "0.0%
@@ -442,7 +416,7 @@ mixin _RepertoireTabContent
       onStartTour: ({TrapLineInfo? startTrap}) =>
           _trapSession.openTour(startTrap: startTrap),
       onDiscoverTraps: _discoverTrapsFromRepertoire,
-      onOpenGeneration: _openGenerationDialog,
+      onOpenGeneration: _openGenerateTab,
     );
   }
 
@@ -451,7 +425,8 @@ mixin _RepertoireTabContent
     final tree = _controller.tree;
     final path = _controller.path;
     final children = path.isEmpty ? tree.roots : tree.nodeAt(path)?.children;
-    return {for (final c in (children ?? const [])) c.san};
+    if (children == null) return const {};
+    return {for (final c in children) c.san};
   }
 
   /// Echo the hovered explorer row on the board, the way Lichess arrows a

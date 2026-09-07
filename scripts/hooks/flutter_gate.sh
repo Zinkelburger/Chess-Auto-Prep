@@ -18,7 +18,7 @@ esac
 # `build_runner` are heavy: `dart run tools/run_engine_tournament.dart` or a
 # `dart run` inside tools/dart_api_test is a plain VM script, not a Flutter
 # build, and the docs tell agents to use those. Keep this list in step with
-# the "Local agent workflow" section of CLAUDE.md.
+# the bounded-command requirement in AGENTS.md.
 flutter_heavy='(^|[;&|[:space:]])([^[:space:];&|]*/)?flutter[[:space:]]+(test|analyze|run|build|drive|pub[[:space:]]+run[[:space:]]+build_runner)([[:space:]]|$)'
 dart_heavy='(^|[;&|[:space:]])([^[:space:];&|]*/)?dart[[:space:]]+(test|run[[:space:]]+build_runner|pub[[:space:]]+run[[:space:]]+build_runner)([[:space:]]|$)'
 if [[ "$cmd" =~ $flutter_heavy ]] || [[ "$cmd" =~ $dart_heavy ]] || [[ "$cmd" =~ (^|[;&|[:space:]])xvfb-run([[:space:]]|$) ]]; then

@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
+import '../common/number_stepper.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/app_shortcuts.dart';
@@ -23,8 +24,6 @@ class SolitaireSetupStrip extends StatelessWidget {
   final PgnViewerController controller;
 
   const SolitaireSetupStrip({super.key, required this.controller});
-
-  static const _delays = [0, 15, 30, 60, 90, 120];
 
   @override
   Widget build(BuildContext context) {
@@ -137,23 +136,16 @@ class SolitaireSetupStrip extends StatelessWidget {
                 tooltip:
                     'How long each move must be thought about before Reveal '
                     'unlocks. Hint unlocks at half that.',
-                child: DropdownButton<int>(
-                  value: _delays.contains(delay) ? delay : 60,
-                  isDense: true,
-                  style: AppTextStyles.caption.copyWith(color: AppColors.ink),
-                  underline: const SizedBox.shrink(),
-                  items: [
-                    for (final sec in _delays)
-                      DropdownMenuItem(
-                        value: sec,
-                        child: Text(sec == 0 ? 'No delay' : '$sec s'),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) {
-                      unawaited(controller.setSolitaireRevealDelay(v));
-                    }
-                  },
+                child: NumberStepper(
+                  value: delay,
+                  min: 0,
+                  max: 600,
+                  step: 15,
+                  suffix: 's',
+                  bordered: false,
+                  fieldWidth: 36,
+                  onChanged: (v) =>
+                      unawaited(controller.setSolitaireRevealDelay(v)),
                 ),
               ),
             ],

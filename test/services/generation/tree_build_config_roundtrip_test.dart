@@ -25,7 +25,7 @@ const String _startFen =
 /// would hit the parsers' `default:` fallback and look like a lost field, so
 /// each maps to a *different but valid* member of its own enum.
 const Map<String, String> _enumAlternatives = {
-  'search_algorithm': 'pure',
+  'search_algorithm': 'fast',
   'build_mode': 'dbExplorer',
   'selection_mode': 'engineOnly',
   'annotation_detail': 'none',

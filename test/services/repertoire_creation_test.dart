@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:chess_auto_prep/services/repertoire_creation.dart';
+import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 
 /// A temp directory standing in for the app's repertoires folder; everything
@@ -24,6 +25,9 @@ class _TempStorage implements StorageService {
   @override
   String chapterFilePath(String repertoireDirPath, String chapterName) =>
       p.join(repertoireDirPath, '$chapterName.pgn');
+
+  @override
+  Future<bool> fileExists(String path) async => File(path).existsSync();
 
   @override
   Future<void> writeFile(
@@ -121,6 +125,46 @@ void main() {
     },
   );
 
+  test('a course export is split into one chapter file per title', () async {
+    // Real file storage: the split reads the chapter back and writes the
+    // new ones beside it.
+    final io = IOStorageService(
+      documentsRoot: dir,
+      supportRoot: dir,
+      repertoiresRoot: dir,
+    );
+    String game(String chapter, String title, String moves) =>
+        '[Event "?"]\n[White "$chapter"]\n[Black "$title"]\n'
+        '[Result "*"]\n\n$moves *\n\n';
+    final created = await createRepertoire(
+      name: 'Course',
+      color: 'White',
+      chapterName: 'Course',
+      pgnContent:
+          '${game('1) Caro-Kann', 'Main #1', '1. e4 c6 2. d4 d5 3. Nc3')}'
+          '${game('1) Caro-Kann', 'Main #2', '1. e4 c6 2. d4 d5 3. Nc3 dxe4')}'
+          '${game('2) French', 'Winawer', '1. e4 e6 2. d4 d5 3. Nc3 Bb4')}',
+      storage: io,
+    );
+
+    expect(created.gameCount, 3);
+    expect(created.chapterPaths.map(p.basename), [
+      '1) Caro-Kann.pgn',
+      '2) French.pgn',
+    ]);
+    expect(created.chapterPath, endsWith('1) Caro-Kann.pgn'));
+    expect(
+      File(p.join(created.directoryPath, 'Course.pgn')).existsSync(),
+      isFalse,
+      reason: 'every line had a chapter, so the source file is gone',
+    );
+    final caro = File(created.chapterPath).readAsStringSync();
+    expect(caro, contains('// Color: White'));
+    expect(caro, contains('// Chapter: 1) Caro-Kann'));
+    expect(caro, contains('[Event "Main #1"]'), reason: 'the title is pinned');
+    expect('1. e4 c6'.allMatches(caro).length, 2);
+  });
+
   test('a study\'s variations are written as lines of their own', () async {
     final created = await createRepertoire(
       name: 'Study',
@@ -139,4 +183,26 @@ void main() {
     expect('[Event "'.allMatches(text).length, 2);
     expect(text, contains('[Event "Chapter 1 — 3.Nc3"]'));
   });
+  // Two names can sanitise to one folder ("Sicilian: Najdorf" and
+  // "Sicilian_ Najdorf"), so a caller's name check can pass for a chapter
+  // that already exists. Creating over it would replace someone's lines with
+  // a three-line header.
+  test(
+    'creating over an existing chapter refuses instead of writing',
+    () async {
+      await createRepertoire(name: 'Najdorf', color: 'Black', storage: storage);
+      final path = p.join(dir.path, 'Najdorf', 'Main.pgn');
+      File(path).writeAsStringSync('// Main\n// Color: Black\n\n1. e4 c5 *\n');
+
+      await expectLater(
+        createRepertoire(name: 'Najdorf', color: 'White', storage: storage),
+        throwsA(isA<RepertoireExistsException>()),
+      );
+      expect(
+        File(path).readAsStringSync(),
+        contains('1. e4 c5'),
+        reason: 'the lines that were there are still there',
+      );
+    },
+  );
 }

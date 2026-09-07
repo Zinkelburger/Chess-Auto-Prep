@@ -25,18 +25,19 @@ List<InlineSpan> _plainCommentSpans(
   String raw, {
   Position? anchorPos,
   int anchorPly = 0,
+  bool interactive = true,
 }) {
   final filtered = filterDisplayComment(raw);
   if (filtered.isEmpty) return const [];
   final proseStyle = PgnTextStyles.commentAt(0);
-  if (anchorPos != null && view.onPlayInlineLine != null) {
+  if (interactive && anchorPos != null && view.onPlayInlineLine != null) {
     return _buildProseSpans(view, filtered, anchorPos, anchorPly, proseStyle);
   }
   return [TextSpan(text: '$filtered ', style: proseStyle)];
 }
 
 /// Decide how to render a mainline-move comment: a flowing inline span list
-/// for short single-paragraph prose, or a bordered block for anything with
+/// for short single-paragraph prose, or a paragraph column for anything with
 /// embedded moves, Chessable markers, or multiple paragraphs. Recognizable
 /// book formatting is automatic; short ordinary comments stay plain prose.
 ({Widget? block, List<InlineSpan> spans}) _renderComment(
@@ -44,11 +45,13 @@ List<InlineSpan> _plainCommentSpans(
   String raw, {
   Position? anchorPos,
   int anchorPly = 0,
+  bool interactive = true,
 }) {
   // Explicit Chessable / Forward Chess markup is safe to recognize
   // automatically. The opt-in remains relevant for ambiguous double spaces
   // in ordinary PGNs, but a real header/quote/FEN marker should never be shown
   // as a raw wall of punctuation.
+  raw = normalizeCourseCommentSpacing(raw);
   final richFormatting = hasChessableFormatting(raw);
   if (!view.bookFormatting && !richFormatting) {
     final spans = _plainCommentSpans(
@@ -56,20 +59,8 @@ List<InlineSpan> _plainCommentSpans(
       raw,
       anchorPos: anchorPos,
       anchorPly: anchorPly,
+      interactive: interactive,
     );
-    // Long prose gets a reading surface even in ordinary PGNs. It remains one
-    // paragraph (no risky double-space interpretation), but the inset measure
-    // and leading keep course-sized explanations from merging with movetext.
-    if (filterDisplayComment(raw).length >= 180 && spans.isNotEmpty) {
-      return (
-        block: _proseContainer(
-          Text.rich(
-            TextSpan(style: PgnTextStyles.commentAt(0), children: spans),
-          ),
-        ),
-        spans: const [],
-      );
-    }
     return (block: null, spans: spans);
   }
   if (richFormatting) {
@@ -81,6 +72,7 @@ List<InlineSpan> _plainCommentSpans(
           segments,
           anchorPos: anchorPos,
           anchorPly: anchorPly,
+          interactive: interactive,
         ),
         spans: const [],
       );
@@ -99,6 +91,7 @@ List<InlineSpan> _plainCommentSpans(
         tokens,
         anchorPos: anchorPos,
         anchorPly: anchorPly,
+        interactive: interactive,
       ),
     );
   }
@@ -109,31 +102,16 @@ List<InlineSpan> _plainCommentSpans(
         tokens,
         anchorPos: anchorPos,
         anchorPly: anchorPly,
+        interactive: interactive,
       ),
     ),
     spans: const [],
   );
 }
 
-/// The bordered container used for block-style comments.
-Widget _proseContainer(Widget child) {
-  return Container(
-    width: double.infinity,
-    margin: const EdgeInsets.symmetric(vertical: 8),
-    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-    decoration: BoxDecoration(
-      color: AppColors.pgnCommentBlockBg,
-      borderRadius: BorderRadius.circular(8),
-      border: Border(
-        left: BorderSide(
-          color: AppColors.accent.withValues(alpha: 0.9),
-          width: 3,
-        ),
-      ),
-    ),
-    child: child,
-  );
-}
+/// Prose shares the document background at every length and nesting depth.
+Widget _proseContainer(Widget child) =>
+    SizedBox(width: double.infinity, child: child);
 
 /// Group tokens into paragraphs. A paragraph break occurs only between two
 /// consecutive prose tokens — moves (and prose adjacent to moves) flow inline
@@ -161,6 +139,7 @@ Widget _buildTokenParagraphs(
   List<CommentToken> tokens, {
   Position? anchorPos,
   int anchorPly = 0,
+  bool interactive = true,
 }) {
   final paragraphs = _splitParagraphs(tokens);
   if (paragraphs.length == 1) {
@@ -171,6 +150,7 @@ Widget _buildTokenParagraphs(
           paragraphs.first,
           anchorPos: anchorPos,
           anchorPly: anchorPly,
+          interactive: interactive,
         ),
       ),
     );
@@ -179,7 +159,7 @@ Widget _buildTokenParagraphs(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       for (int i = 0; i < paragraphs.length; i++) ...[
-        if (i > 0) const SizedBox(height: 8),
+        if (i > 0) const SizedBox(height: 15),
         Text.rich(
           TextSpan(
             children: _buildCommentTokenSpans(
@@ -187,6 +167,7 @@ Widget _buildTokenParagraphs(
               paragraphs[i],
               anchorPos: anchorPos,
               anchorPly: anchorPly,
+              interactive: interactive,
             ),
           ),
         ),
@@ -202,6 +183,7 @@ List<InlineSpan> _buildCommentTokenSpans(
   List<CommentToken> tokens, {
   Position? anchorPos,
   int anchorPly = 0,
+  bool interactive = true,
 }) {
   // Collect the moves of each run (in order) so a click can replay the line.
   final runMoves = <int, List<CommentMove>>{};
@@ -216,7 +198,7 @@ List<InlineSpan> _buildCommentTokenSpans(
     if (t is CommentProse) {
       // When we know the board at this comment, moves written inline in the
       // prose (e.g. "…Ndf6") are detected and made clickable if legal.
-      if (anchorPos != null && view.onPlayInlineLine != null) {
+      if (interactive && anchorPos != null && view.onPlayInlineLine != null) {
         spans.addAll(
           _buildProseSpans(view, t.text, anchorPos, anchorPly, proseStyle),
         );
@@ -224,28 +206,18 @@ List<InlineSpan> _buildCommentTokenSpans(
         spans.add(TextSpan(text: '${t.text} ', style: proseStyle));
       }
     } else if (t is CommentMove) {
-      spans.add(_buildCommentMoveSpan(view, t, runMoves[t.runId]!));
+      spans.add(
+        _buildCommentMoveSpan(
+          view,
+          t,
+          runMoves[t.runId]!,
+          interactive: interactive,
+        ),
+      );
     }
   }
   return spans;
 }
-
-/// Split a variation-node comment into flowing spans, inheriting the sideline's
-/// depth ink and size so an annotation recedes with the line it annotates.
-/// Unlike mainline comments these are non-interactive — we don't track a board
-/// position to anchor their moves to — so embedded moves render as plain text.
-List<InlineSpan> _variationCommentSpans(
-  PgnMovetextView view,
-  String rawComment,
-  int depth,
-) => [
-  ..._metricsSpans(rawComment, depth: depth),
-  ...commentProseSpans(
-    rawComment,
-    bookFormatting: view.bookFormatting,
-    style: PgnTextStyles.commentAt(depth),
-  ),
-];
 
 /// Split a prose string into flowing text + clickable chips for any word that
 /// parses as a *legal* SAN move from [anchorPos]. The legality check filters
@@ -329,8 +301,8 @@ WidgetSpan _buildProseMoveSpan(
           san,
           style: (isActive ? PgnTextStyles.currentMove : PgnTextStyles.move)
               .copyWith(
-                fontSize: 14,
-                height: 1.5,
+                fontSize: 16,
+                height: 1.72,
                 decoration: isActive ? null : TextDecoration.underline,
                 decorationColor: AppColors.onSurfaceMuted.withValues(
                   alpha: 0.5,
@@ -349,8 +321,10 @@ WidgetSpan _buildCommentMoveSpan(
   CommentMove move,
   List<CommentMove> run, {
   TextStyle? moveStyle,
+  bool interactive = true,
 }) {
-  final clickable = move.isClickable && view.onPlayInlineLine != null;
+  final clickable =
+      interactive && move.isClickable && view.onPlayInlineLine != null;
   final idxInRun = run.indexOf(move);
 
   // Is this the move the board is currently parked on, within the line being
@@ -405,8 +379,8 @@ WidgetSpan _buildCommentMoveSpan(
                         )
                       : baseMoveStyle)
                   .copyWith(
-                    fontSize: 14,
-                    height: 1.5,
+                    fontSize: 16,
+                    height: 1.72,
                     decoration: clickable && !isActiveMove
                         ? TextDecoration.underline
                         : null,
@@ -427,31 +401,20 @@ Widget _buildRichCommentBlock(
   List<RichSegment> segments, {
   Position? anchorPos,
   int anchorPly = 0,
+  bool interactive = true,
 }) {
-  return Container(
-    width: double.infinity,
-    margin: const EdgeInsets.symmetric(vertical: 6),
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: AppColors.pgnCommentBlockBg,
-      borderRadius: BorderRadius.circular(6),
-      border: Border(
-        left: BorderSide(
-          color: AppColors.pgnComment.withValues(alpha: 0.55),
-          width: 3,
-        ),
-      ),
-    ),
-    child: Column(
+  return _proseContainer(
+    Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (int i = 0; i < segments.length; i++) ...[
-          if (i > 0) const SizedBox(height: 6),
+          if (i > 0) const SizedBox(height: 15),
           _buildRichSegmentWidget(
             view,
             segments[i],
             anchorPos: anchorPos,
             anchorPly: anchorPly,
+            interactive: interactive,
           ),
         ],
       ],
@@ -464,6 +427,7 @@ Widget _buildRichSegmentWidget(
   RichSegment segment, {
   Position? anchorPos,
   int anchorPly = 0,
+  bool interactive = true,
 }) {
   switch (segment.type) {
     case RichSegmentType.header:
@@ -529,6 +493,7 @@ Widget _buildRichSegmentWidget(
         parseCommentTokens(segment.content),
         anchorPos: anchorPos,
         anchorPly: anchorPly,
+        interactive: interactive,
       );
   }
 }

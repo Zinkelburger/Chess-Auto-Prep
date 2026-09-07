@@ -1,10 +1,19 @@
 /// What four thousand people actually played from here.
 ///
-/// The engine's two blocks above this one say what is *good*; this one says
-/// what is *played*, out of 3.6 million FICS games. In bughouse that gap is
-/// wider than it is in chess — the archive is blitz played by four people at
-/// once, so a line the engine dislikes can still be the one you have to be
-/// ready for, and a line it loves can be one nobody has ever tried on you.
+/// The engine's panel says what is *good*; this one says what is *played*,
+/// out of 3.6 million FICS games. In bughouse that gap is wider than it is in
+/// chess — the archive is blitz played by four people at once, so a line the
+/// engine dislikes can still be the one you have to be ready for, and a line
+/// it loves can be one nobody has ever tried on you.
+///
+/// It is the same table as the Lichess opening explorer elsewhere in the app
+/// ([ExplorerMoveRow] and friends), with the FICS book as its data source and
+/// a seat letter before each move, because four people play. It opens under
+/// the two boards from the book icon on their strip, the way the repertoire
+/// builder's explorer opens from the book icon on its tree, and it is a fixed
+/// height whatever the position holds: twelve rows' worth, blank where the
+/// archive has fewer, so the boards above never move when a move changes how
+/// many continuations there are.
 ///
 /// It is the same table as the Lichess opening explorer elsewhere in the app
 /// ([ExplorerMoveRow] and friends), with the FICS book as its data source and

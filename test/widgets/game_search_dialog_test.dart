@@ -38,11 +38,8 @@ Widget _navBar({void Function(int)? onGoToGame}) => MaterialApp(
     body: GameNavBar(
       games: _games(),
       currentIndex: 0,
-      currentRating: 0,
       sortMode: GameSortMode.fileOrder,
       isAutoPlaying: false,
-      autoPlayDelaySec: 1,
-      autoNextGame: false,
       onGoToGame: onGoToGame,
     ),
   ),

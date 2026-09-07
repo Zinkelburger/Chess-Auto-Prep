@@ -60,6 +60,7 @@ TreeNode* node_create(const char *fen, const char *move_san,
     node->total_games = 0;
     
     /* No evaluations yet */
+    node->value_upper = 1;
     node->has_engine_eval = false;
     node->has_ease = false;
     node->maia_frequency = -1.0;

@@ -127,6 +127,23 @@ TreeBuildConfig config({
 );
 
 void main() {
+  test(
+    'Fast label retains rolling wire identity; legacy fast does not activate it',
+    () {
+      final current = TreeBuildConfig.fromJson(const {
+        'search_algorithm': 'rolling',
+      }, startFen: startFen);
+      expect(current.isRollingSearch, isTrue);
+      expect(current.searchAlgorithmLabel, 'Fast (4-ply, approximate)');
+      expect(current.toJson()['search_algorithm'], 'rolling');
+      final legacy = TreeBuildConfig.fromJson(const {
+        'search_algorithm': 'fast',
+      }, startFen: startFen);
+      expect(legacy.isRollingSearch, isFalse);
+      expect(legacy.searchAlgorithmLabel, contains('Pure'));
+    },
+  );
+
   test('new and legacy builds use one thread unless explicitly configured', () {
     const config = TreeBuildConfig(startFen: startFen, playAsWhite: true);
     expect(defaultEngineThreads(), 1);

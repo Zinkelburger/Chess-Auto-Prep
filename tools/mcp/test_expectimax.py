@@ -149,6 +149,22 @@ class RootTableTest(unittest.TestCase):
         self.assertIsNone(table["candidates"][-1]["expectimax"])
         self.assertIsNone(table["margin_over_second"])
 
+    def test_rolling_reports_committed_policy_without_comparing_unequal_depths(self):
+        chosen = _node("e4", 0.4, 0)
+        chosen["is_repertoire_move"] = True
+        data = _tree([_node("d4", 0.9, 0), chosen])
+        data["config"] = {"search_algorithm": "rolling"}
+        data["tree"].update(decision_horizon=4, decision_value=0.6)
+        table = ex.root_table(self._write(data))
+        self.assertEqual(table["best"], "e4")
+        self.assertEqual(table["candidates"][0]["move"], "e4")
+        self.assertIsNone(table["margin_over_second"])
+        self.assertEqual(table["decision_lookahead"]["value"], 0.6)
+        self.assertEqual(table["search_label"], "Fast (4-ply, approximate)")
+        self.assertEqual(table["search_method"], "rolling")
+        chosen["is_repertoire_move"] = False
+        self.assertIsNone(ex.root_table(self._write(data))["best"])
+
     def test_empty_root_says_so(self):
         with self.assertRaises(ToolError) as caught:
             ex.root_table(self._write(_tree([])))
@@ -174,9 +190,10 @@ class ArgvTest(unittest.TestCase):
         self.assertIn("-c", argv)
         self.assertEqual(argv[argv.index("-c") + 1], "b")
         self.assertEqual(argv[argv.index("-f") + 1], LONDON_FEN)
-        self.assertEqual(argv[argv.index("-d") + 1], "8")
+        self.assertEqual(argv[argv.index("-d") + 1], "4")
         self.assertEqual(argv[argv.index("-t") + 1], "1")
-        self.assertEqual(argv[argv.index("--our-multipv") + 1], "5")
+        self.assertNotIn("--our-multipv", argv)
+        self.assertIn("--maia-only", argv)
         self.assertEqual(argv[-1], "/runs/x/tree")
 
     def test_overrides_reach_the_command_line(self):
@@ -189,8 +206,23 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("-d") + 1], "10")
         self.assertEqual(argv[argv.index("-e") + 1], "20")
         self.assertEqual(argv[argv.index("-t") + 1], "4")
-        self.assertEqual(argv[argv.index("--our-multipv") + 1], "8")
+        self.assertNotIn("--our-multipv", argv)
         self.assertEqual(argv[argv.index("--maia-elo") + 1], "1800")
+
+    def test_legacy_master_argument_cannot_enable_a_database_policy(self):
+        argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"use_master_games": True})
+        self.assertIn("--maia-only", argv)
+
+    def test_fast_names_the_rolling_algorithm(self):
+        argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "fast"})
+        self.assertEqual(argv[argv.index("--search") + 1], "rolling")
+
+    def test_rolling_is_explicit_and_unknown_search_is_rejected(self):
+        argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "rolling"})
+        self.assertEqual(argv[argv.index("--search") + 1], "rolling")
+        self.assertIn("rolling", ex.argv_with_plies(argv, 10))
+        with self.assertRaises(ToolError):
+            ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "unknown"})
 
     def test_name_is_optional(self):
         chain, position = self._chain(), ex.resolve_position(LONDON)
@@ -220,6 +252,18 @@ class ArgvReuseTest(unittest.TestCase):
         self.assertEqual(out[out.index("-d") + 1], "12")
         self.assertEqual(out.count("-d"), 1)
         self.assertEqual(out[-1], "/runs/x/tree")
+
+    def test_threads_override_preserves_search_and_output(self):
+        for flag in ("-t", "--threads"):
+            original = ex.argv_with(self.ARGV, flag, "1", "--search", "rolling")
+            out = ex.argv_with_threads(original, 10)
+            self.assertEqual(out[out.index(flag) + 1], "10")
+            self.assertEqual(out[-1], self.ARGV[-1])
+            self.assertIn("rolling", out)
+            self.assertEqual(original[original.index(flag) + 1], "1")
+        self.assertEqual(ex.argv_with_threads(self.ARGV, 10)[-3:], ["-t", "10", self.ARGV[-1]])
+        with self.assertRaises(ToolError):
+            ex.argv_with_threads(self.ARGV, 0)
 
     def test_plies_override_when_there_was_no_depth_flag(self):
         out = ex.argv_with_plies(["/bin/tree_builder", "-c", "b", "/x"], 6)
@@ -419,6 +463,96 @@ class RegistrationTest(unittest.TestCase):
                 continue
             self.assertFalse(tool["inputSchema"]["additionalProperties"], name)
             self.assertTrue(tool["description"].strip(), name)
+
+
+class EngineShortlistTest(unittest.TestCase):
+    """Decoding Stockfish's root MultiPV out of a run's own cache.
+
+    The tree only builds candidates that survive the eval-loss gate, so the
+    shortlist is often the only place "how much worse was the move I meant
+    to play" is recorded. It is a convenience, so every way of failing to
+    read it has to return None rather than break a result.
+    """
+
+    FEN = "rnbqk1nr/ppp2ppp/4p3/3p4/1b1PP3/2N5/PPP2PPP/R1BQKBNR w KQkq - 2 4"
+    STRIDE = 45
+
+    def _write(self, directory: Path, rows, fen_key: str) -> None:
+        import sqlite3
+        import struct
+
+        blob = b""
+        for uci, cp in rows:
+            entry = bytearray(self.STRIDE)
+            entry[0 : len(uci)] = uci.encode()
+            entry[32:40] = struct.pack("<ii", cp, 16)
+            blob += bytes(entry)
+        con = sqlite3.connect(directory / "tree.db")
+        con.execute(
+            "CREATE TABLE multipv_cache (fen TEXT NOT NULL, depth INTEGER "
+            "NOT NULL, num_pvs INTEGER NOT NULL, num_lines INTEGER NOT NULL, "
+            "lines_blob BLOB, cached_at INTEGER, PRIMARY KEY (fen, depth, "
+            "num_pvs))"
+        )
+        con.execute(
+            "INSERT INTO multipv_cache VALUES (?, 16, ?, ?, ?, 0)",
+            (fen_key, len(rows), len(rows), blob),
+        )
+        con.commit()
+        con.close()
+
+    ROWS = [("e4e5", 71), ("e4d5", 29), ("g1e2", 23)]
+
+    def test_decodes_and_ranks_against_the_best(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            # The cache keys on the position, so the counters come off.
+            self._write(d, self.ROWS, " ".join(self.FEN.split()[:4]))
+            rows = ex.root_engine_shortlist(d, self.FEN)
+        self.assertEqual([r["move"] for r in rows], ["e5", "exd5", "Ne2"])
+        self.assertEqual([r["eval_cp"] for r in rows], [71, 29, 23])
+        self.assertEqual([r["cp_behind_best"] for r in rows], [0, -42, -48])
+
+    def test_a_full_fen_key_also_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, self.ROWS, self.FEN)
+            rows = ex.root_engine_shortlist(d, self.FEN)
+        self.assertEqual(len(rows), 3)
+
+    def test_a_position_the_cache_never_saw(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, self.ROWS, " ".join(self.FEN.split()[:4]))
+            self.assertIsNone(
+                ex.root_engine_shortlist(d, "8/8/8/8/8/8/8/K6k w - - 0 1")
+            )
+
+    def test_moves_that_are_not_legal_here_mean_a_bad_decode(self):
+        # A wrong stride yields moves that do not fit the position; half a
+        # table would read as a real ranking, so the whole thing is dropped.
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, [("a1a8", 10), ("h1h8", 5)],
+                        " ".join(self.FEN.split()[:4]))
+            self.assertIsNone(ex.root_engine_shortlist(d, self.FEN))
+
+    def test_no_database_and_no_fen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(ex.root_engine_shortlist(Path(tmp), self.FEN))
+            self.assertIsNone(ex.root_engine_shortlist(Path(tmp), None))
+
+
+class OnnxLinkTest(unittest.TestCase):
+    """A builder without ONNX Runtime ignores --maia-model and builds the
+    wrong tree, so it has to be caught before a run, not after."""
+
+    def test_a_binary_without_onnx_is_detected(self):
+        stockfish = os.environ.get("STOCKFISH_PATH") or "/bin/sh"
+        self.assertFalse(ex._links_onnxruntime(Path(stockfish), dict(os.environ)))
+
+    def test_a_missing_binary_does_not_raise(self):
+        ex._links_onnxruntime(Path("/nonexistent/builder"), dict(os.environ))
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart';
 import '../../utils/fen_utils.dart';
+import '../../utils/san_display.dart';
 import '../clickable_move_line.dart';
 import '../../models/merged_move.dart';
 
@@ -93,7 +94,7 @@ class EngineMoveRow extends StatelessWidget {
                       child: SizedBox(
                         width: moveWidth,
                         child: Text(
-                          move.san,
+                          displaySan(context, move.san),
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontFamily: AppTextStyles.monoFamily,

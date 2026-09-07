@@ -292,10 +292,11 @@ String formatEvalDisplay({
 String formatPackedEval(int cp, {int decimals = 1}) {
   final mate = cpToMate(cp);
   if (mate != null) return _formatMate(mate);
-  final v = cp / 100.0;
-  return v >= 0
-      ? '+${v.toStringAsFixed(decimals)}'
-      : v.toStringAsFixed(decimals);
+  // Round first, then choose the sign: -4 cp at one decimal is "0.0", not
+  // "-0.0", and a score that rounds to zero reads as level, "+0.0".
+  final text = (cp / 100.0).toStringAsFixed(decimals);
+  final negative = text.startsWith('-') && double.parse(text) != 0;
+  return negative ? text : '+${text.replaceFirst('-', '')}';
 }
 
 /// `#3`, `-#3`, or a bare `#`/`-#` when the distance is unknown.

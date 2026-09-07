@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
+import '../core/study_controller.dart';
 import '../core/repertoire_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../features/audit/controllers/audit_session_controller.dart';
@@ -30,10 +31,12 @@ import '../services/storage/storage_factory.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
+import '../features/generate/widgets/generate_position_pane.dart';
 import '../widgets/generation/generation_lock_overlay.dart';
 import '../widgets/layout/board_zone.dart';
 import '../widgets/layout/bottom_pane.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
+import '../widgets/chapter_list_body.dart' show ChapterPick;
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';
@@ -61,7 +64,8 @@ import '../features/traps/widgets/traps_tab_content.dart';
 import '../widgets/engine/floating_board_preview.dart';
 import '../features/repertoire/controllers/repertoire_layout_prefs.dart';
 import '../features/repertoire/services/chapter_store.dart';
-import '../features/repertoire/widgets/add_chapter_dialog.dart';
+import '../widgets/common/name_entry_dialog.dart';
+import '../features/repertoire/services/repertoire_outline_service.dart';
 import '../features/repertoire/widgets/build_config_screen.dart';
 import '../features/repertoire/widgets/repertoire_lines_side_panel.dart';
 import '../features/repertoire/widgets/repertoire_tree_pane.dart';
@@ -69,13 +73,7 @@ import '../features/repertoire/widgets/repertoire_database_pane.dart';
 import '../features/traps/controllers/trap_session_controller.dart';
 import '../features/traps/services/trap_line_builder.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
-import '../services/build_by_playing/build_by_playing_config.dart';
-import '../services/build_by_playing/build_by_playing_controller.dart';
-import '../services/games_repertoire/games_draft_controller.dart';
 import '../theme/app_colors.dart';
-import '../widgets/build_by_playing/build_session_board_bar.dart';
-import '../widgets/build_by_playing/build_session_pane.dart';
-import '../widgets/games_repertoire/draft_review_pane.dart';
 import '../widgets/layout/jobs_tab_content.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../models/board_annotation.dart';
@@ -83,7 +81,6 @@ import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show sanToUci;
 import 'repertoire_chapters_screen.dart';
 import 'repertoire_selection_screen.dart';
-import '../features/repertoire/controllers/build_launcher.dart';
 import '../features/repertoire/controllers/generation_notification_router.dart';
 import '../features/repertoire/controllers/audit_entry_router.dart';
 import '../features/repertoire/controllers/repertoire_outline_controller.dart';
@@ -139,6 +136,11 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// Guards against stacking a second copy of a config route when the same
   /// entry point is triggered twice (menu, shortcut, jobs panel).
   bool _configRouteOpen = false;
+
+  /// Whether the run that just finished was a board-side position generation.
+  /// One that was should leave the reader where they started it, so the Lines
+  /// surface is not pushed over the board they were generating from.
+  bool _lastRunWasPositionGeneration = false;
 
   final JobManager _jobManager = JobManager.instance;
 
@@ -205,21 +207,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// lines and PGN beside it.
   final RepertoireLayoutPrefs _layout = RepertoireLayoutPrefs();
 
-  // ── Build-from-games draft session (inline in the Lines/Draft tab) ──
-  final GamesDraftController _draftController = GamesDraftController();
-
-  bool get _isDraftActive => _draftController.isActive;
-
-  // ── Build-by-playing session (takes over the Lines/Draft tab) ──
-  late final BuildByPlayingController _buildSession;
-  bool _wasBuildSessionActive = false;
-
-  bool get _isBuildSessionActive => _buildSession.isActive;
-
-  /// Owns the build-from-games and build-by-playing launch flows
-  /// (form → config → controller); the screen only lends it a context.
-  late final BuildLauncher _buildLauncher;
-
   String? _lastRepertoireId;
 
   /// Reads and creates the chapters of the active repertoire folder.
@@ -261,21 +248,31 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// is what the breadcrumb title shows too.
   String get _configRouteTitle => _controller.currentRepertoire?.name ?? '';
 
-  /// Opens the generation config full-screen. The route closes itself once
-  /// the build starts; we then bring the Jobs pane forward so the progress
-  /// it kicked off is the first thing back on screen.
-  Future<void> _openGenerationDialog() async {
+  /// Reveal generation beside the board at its current position.
+  Future<void> _openGenerateTab() async {
+    if (_isCompactLayout) {
+      _toolsTabController.animateTo(4);
+    } else {
+      unawaited(_layout.setLinesPanelCollapsed(false));
+      _sidePanelTabController.animateTo(3);
+    }
+    _reclaimFocus();
+  }
+
+  /// Line planning and trimming use their own configuration route.
+  Future<void> _openLineBuildDialog({bool cutOnly = false}) async {
     if (_configRouteOpen) return;
     _configRouteOpen = true;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
-          title: 'Generate from here',
+          title: cutOnly ? 'Cut lines' : 'Build planned lines',
           startSignal: _generationController,
           hasStarted: () => _generationController.isGenerating,
           child: RepertoireGenerationTab(
             key: _generationTabKey,
+            cutOnly: cutOnly,
             fen: _controller.fen,
             isWhiteRepertoire: _controller.isRepertoireWhite,
             currentRepertoire: _controller.currentRepertoire,
@@ -285,12 +282,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
             existingLineMoves: [
               for (final line in _controller.repertoireLines) line.moves,
             ],
-            onLinesSaved: (lines) {
-              _controller.appendNewLines([
-                for (final l in lines)
-                  (moves: l.moves, title: l.title, pgn: l.pgn),
-              ]);
-            },
             onTrimLines: (droppedKeys) => _controller.deleteLines([
               for (final line in _controller.repertoireLines)
                 // Match on the same identity the export writes with, so a
@@ -298,6 +289,20 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
                 // the generated ones.
                 if (droppedKeys.contains(line.moves.join(' '))) line,
             ]),
+            onLinesSaved: (lines) {
+              _controller.appendNewLines([
+                for (final l in lines)
+                  (moves: l.moves, title: l.title, pgn: l.pgn),
+              ]);
+            },
+            onCreateStudy: (name, pgn) async {
+              final study = context.read<StudyController>();
+              final app = context.read<AppState>();
+              final path = await study.createStudyFromPgn(name, pgn);
+              if (!mounted) return;
+              Navigator.of(context).pop();
+              app.switchToStudyEdit(path: path);
+            },
           ),
         ),
       ),
@@ -361,7 +366,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   void _discoverTrapsFromRepertoire() {
     final path = _repertoireFilePath;
     if (path == null) return;
-    unawaited(_openGenerationDialog());
+    unawaited(_openLineBuildDialog());
     _seedGenerationWhenReady(pgnPaths: [path]);
   }
 
@@ -441,8 +446,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   void initState() {
     super.initState();
 
-    _toolsTabController = TabController(length: 3, vsync: this);
-    _sidePanelTabController = TabController(length: 3, vsync: this);
+    _toolsTabController = TabController(length: 5, vsync: this);
+    _sidePanelTabController = TabController(length: 4, vsync: this);
     _outline = RepertoireOutlineController(
       onActiveChapterMoved: _onActiveChapterMoved,
     );
@@ -453,21 +458,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     unawaited(_layout.load());
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
-    _buildSession = BuildByPlayingController(repertoire: _controller);
-    _buildSession.addListener(_onBuildSessionChanged);
-    unawaited(BuildByPlayingSettings.instance.loadFromPrefs());
-    _buildLauncher = BuildLauncher(
-      repertoire: _controller,
-      draft: _draftController,
-      session: _buildSession,
-      generation: _generationController,
-      appState: () => _appState ?? context.read<AppState>(),
-      showLinesSurface: _showLinesSurface,
-    );
     _generationController.addListener(_onGenerationChanged);
     _auditController.addListener(_onAuditChanged);
     _coverageController.addListener(_onCoverageChanged);
-    _draftController.addListener(_onDraftChanged);
     _trapSession.addListener(_onTrapsChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -535,9 +528,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   }
 
   Future<void> _seedGenerationAfterLoad(List<String> pgnPaths) async {
-    unawaited(_openGenerationDialog());
     await _controller.awaitLoaded();
     if (!mounted) return;
+    unawaited(_openLineBuildDialog());
     _seedGenerationWhenReady(pgnPaths: pgnPaths, autoStart: true);
   }
 
@@ -593,8 +586,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           _auditController.onRepertoireSwitching(_lastRepertoireId);
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
-          // A build-by-playing session must not survive a repertoire swap.
-          _buildSession.endSession();
           // Drop the old repertoire's trees now, then bring in whatever this
           // one saved — the last full build and every probe since.
           _generationController.clearTree();
@@ -763,7 +754,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _controller.loadMoveSequence(
       _commonPrefix(_controller.repertoireLines.map((l) => l.moves)),
     );
-    unawaited(_openGenerationDialog());
+    unawaited(_openGenerateTab());
   }
 
   /// The longest SAN prefix shared by every sequence; empty for no lines.
@@ -954,10 +945,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _planRunner.dispose();
     _focusNode.dispose();
     _boardPreview.dispose();
-    _draftController.removeListener(_onDraftChanged);
-    _draftController.dispose();
-    _buildSession.removeListener(_onBuildSessionChanged);
-    _buildSession.dispose();
     _coverageController.removeListener(_onCoverageChanged);
     _coverageController.dispose();
     _auditController.removeListener(_onAuditChanged);
@@ -1083,10 +1070,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         },
         onSelectRepertoire: _showRepertoireSelection,
         onTrainRepertoire: _trainRepertoire,
-        onOpenGeneration: _openGenerationDialog,
+        onOpenGeneration: _openGenerateTab,
         onPlanBuild: () => unawaited(_openPlanner()),
-        onBuildByPlaying: () => _buildLauncher.startBuildByPlaying(context),
-        onBuildFromGames: () => _buildLauncher.buildFromGames(context),
         onOpenAudit: _openAuditDialog,
         onImportPgn: _importPgn,
         trapNavigation: _buildTrapNavigation(),

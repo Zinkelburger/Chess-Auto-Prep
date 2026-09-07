@@ -1,6 +1,6 @@
 /// The opening-review aggregation: per-game deviation reports collapsing
-/// into one entry per distinct deviation point, mistakes and book ends kept
-/// apart, opponent deviations ignored.
+/// into one entry per distinct deviation point — my mistakes, the opponent
+/// moves the book lacks, and book ends kept apart.
 library;
 
 import 'package:chess_auto_prep/features/games/models/recent_game.dart';
@@ -148,22 +148,87 @@ void main() {
     expect(data.bookEnds.single.games, hasLength(2));
   });
 
-  test('opponent deviations and in-book games are excluded', () {
+  test('opponent moves the book lacks are gaps, grouped by move', () {
+    final gap = _report(
+      pathSans: ['e4', 'c5', 'Nf3'],
+      playedSan: 'a6',
+      byMe: false,
+      expectedSans: ['d6', 'Nc6', 'e6'],
+    );
     final data = aggregateOpeningReview([
+      _game(deviation: gap),
+      _game(deviation: gap),
       _game(
         deviation: _report(
-          pathSans: ['e4', 'c5'],
-          playedSan: 'h5',
+          pathSans: ['e4', 'c5', 'Nf3'],
+          playedSan: 'g6',
           byMe: false,
-          expectedSans: ['Nf3'],
+          expectedSans: ['d6', 'Nc6', 'e6'],
         ),
       ),
-      _game(deviation: _report(pathSans: ['e4', 'c5', 'Nf3'])),
-      _game(deviation: null),
     ]);
-    expect(data.isEmpty, isTrue);
-    expect(data.anyBookDesignated, isTrue);
+    expect(data.mistakes, isEmpty);
+    expect(data.gaps.map((e) => e.playedSan), ['a6', 'g6']);
+    expect(data.gaps.first.games, hasLength(2));
+    expect(data.gaps.first.isGap, isTrue);
+    expect(data.gaps.first.isBookEnd, isFalse);
+    expect(data.issueCount, 2);
+    expect(data.repeated().single.playedSan, 'a6');
   });
+
+  test('the verdict line names the fork move for each kind', () {
+    expect(
+      deviationVerdict(
+        _report(
+          pathSans: ['e4', 'c6', 'd4', 'd5'],
+          playedSan: 'e5',
+          byMe: true,
+          expectedSans: ['Nc3'],
+        ),
+      ),
+      'You left book: 3. e5 (book 3. Nc3)',
+    );
+    expect(
+      deviationVerdict(
+        _report(
+          pathSans: ['e4', 'c5', 'Nf3'],
+          playedSan: 'a6',
+          byMe: false,
+          expectedSans: ['d6', 'Nc6'],
+        ),
+      ),
+      'Not in book: 2... a6 (book 2... d6 / 2... Nc6)',
+    );
+    expect(
+      deviationVerdict(
+        _report(pathSans: ['e4', 'c5', 'Nf3', 'd6'], playedSan: 'd4'),
+      ),
+      'Book ends after 2... d6',
+    );
+    expect(deviationVerdict(_report(pathSans: ['e4'])), isNull);
+  });
+
+  test(
+    'in-book games are excluded; an opponent move is a gap, not a mistake',
+    () {
+      final data = aggregateOpeningReview([
+        _game(
+          deviation: _report(
+            pathSans: ['e4', 'c5'],
+            playedSan: 'h5',
+            byMe: false,
+            expectedSans: ['Nf3'],
+          ),
+        ),
+        _game(deviation: _report(pathSans: ['e4', 'c5', 'Nf3'])),
+        _game(deviation: null),
+      ]);
+      expect(data.mistakes, isEmpty);
+      expect(data.bookEnds, isEmpty);
+      expect(data.gaps.single.playedSan, 'h5');
+      expect(data.anyBookDesignated, isTrue);
+    },
+  );
 
   test('anyBookDesignated is false only when no game had a book', () {
     final none = aggregateOpeningReview([

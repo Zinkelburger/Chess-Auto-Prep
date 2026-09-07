@@ -4,22 +4,28 @@ import 'package:chess_auto_prep/services/asked_questions_store.dart';
 import 'package:chess_auto_prep/services/training/chapter_scope.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// [ChapterScope] carries the chapter grouping/scoping logic that used to sit
 /// inline in TrainingSessionController. It reads its inputs through suppliers
 /// so the owner can swap `settings`/`lines` wholesale without desyncing it.
 
-RepertoireLine line(String name, {String? chapter, bool isModelGame = false}) =>
-    RepertoireLine(
-      id: name,
-      name: name,
-      moves: const ['e4'],
-      color: 'white',
-      startPosition: Chess.initial,
-      fullPgn: '',
-      chapter: chapter,
-      isModelGame: isModelGame,
-    );
+RepertoireLine line(
+  String name, {
+  String? chapter,
+  bool isModelGame = false,
+  Map<String, String> headers = const {},
+}) => RepertoireLine(
+  id: name,
+  name: name,
+  moves: const ['e4'],
+  color: 'white',
+  startPosition: Chess.initial,
+  fullPgn: '',
+  chapter: chapter,
+  isModelGame: isModelGame,
+  headers: headers,
+);
 
 /// Scope over a mutable settings/lines pair the test can reassign, mirroring
 /// how the controller replaces both when a new file loads.
@@ -41,6 +47,21 @@ void main() {
   late TrainingSettings settings;
 
   setUp(() => settings = TrainingSettings());
+
+  group('trainable lines', () {
+    test('model games and our-side alternatives are read, not drilled', () {
+      final (:scope, setLines: _) = scopeOver(settings, [
+        line('main'),
+        line('game', isModelGame: true),
+        // A bracket at White's move (ply 0) in a White chapter: the author's
+        // mentioned-only alternative.
+        line('mentioned', headers: const {'BranchPlies': '0'}),
+        // A bracket at Black's move is coverage, and trains.
+        line('answer', headers: const {'BranchPlies': '1'}),
+      ]);
+      expect(scope.lines.map((l) => l.name), ['main', 'answer']);
+    });
+  });
 
   group('chapterOf', () {
     test('off mode groups nothing', () {
@@ -203,6 +224,85 @@ void main() {
       final s = scopeOver(settings, const []).scope;
       expect(s.canOffer, isFalse);
       expect(s.reopenPrompt(), isFalse);
+      expect(s.pendingPrompt, isNull);
+    });
+  });
+
+  group('adoptChapter', () {
+    // A course-shaped file: two chapters, one with several lines.
+    final course = [
+      line('a', chapter: 'Intro'),
+      line('b', chapter: 'Intro'),
+      line('c', chapter: 'Exchange'),
+      line('d', chapter: 'Exchange'),
+    ];
+
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('scopes to the chapter when grouping is already on', () async {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, course).scope;
+      expect(await s.adoptChapter('Exchange', filePath: null), isTrue);
+      expect(s.activeChapter, 'Exchange');
+      expect(s.scopedLines.map((l) => l.id), ['c', 'd']);
+    });
+
+    test('a pending "sort into chapters?" prompt is answered yes', () async {
+      settings.chapterGrouping = ChapterGroupingMode.off;
+      final s = scopeOver(settings, course).scope;
+      // What resolveLayout does once the file is parsed, minus the disk.
+      s.onSettingsChanged();
+      s.reopenPrompt();
+      expect(s.pendingPrompt, isNotNull);
+
+      expect(await s.adoptChapter('Intro', filePath: null), isTrue);
+      expect(s.pendingPrompt, isNull, reason: 'picking a chapter answers it');
+      expect(settings.chapterGrouping, ChapterGroupingMode.auto);
+      expect(s.activeChapter, 'Intro');
+    });
+
+    test(
+      'a pending prompt is answered even when grouping is already on',
+      () async {
+        // The default setting groups by header, so the chapter exists before
+        // the file's question is answered — the prompt must still not show.
+        settings.chapterGrouping = ChapterGroupingMode.auto;
+        final s = scopeOver(settings, course).scope;
+        s.onSettingsChanged();
+        s.reopenPrompt();
+        expect(s.pendingPrompt, isNotNull);
+
+        expect(await s.adoptChapter('Intro', filePath: null), isTrue);
+        expect(s.pendingPrompt, isNull);
+        expect(s.activeChapter, 'Intro');
+      },
+    );
+
+    test('an earlier "keep one flat list" gives way', () async {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, course).scope;
+      s.onSettingsChanged();
+      s.declined = true;
+      expect(s.names, isEmpty);
+
+      expect(await s.adoptChapter('Intro', filePath: null), isTrue);
+      expect(s.declined, isFalse);
+      expect(s.activeChapter, 'Intro');
+    });
+
+    test('an unknown chapter leaves the scope alone', () async {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, course).scope;
+      expect(await s.adoptChapter('Tarrasch', filePath: null), isFalse);
+      expect(s.activeChapter, isNull);
+    });
+
+    test('a flat file cannot be scoped', () async {
+      settings.chapterGrouping = ChapterGroupingMode.auto;
+      final s = scopeOver(settings, [line('a'), line('b')]).scope;
+      s.onSettingsChanged();
+      expect(await s.adoptChapter('Intro', filePath: null), isFalse);
+      expect(s.activeChapter, isNull);
       expect(s.pendingPrompt, isNull);
     });
   });

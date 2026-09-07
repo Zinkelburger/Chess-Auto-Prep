@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
+import '../common/choice_field.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../services/pgn_tree_core.dart'
@@ -92,56 +93,33 @@ class HeaderFilters extends StatelessWidget {
             children: [
               SizedBox(
                 width: 120,
-                child: DropdownButtonFormField<String>(
-                  initialValue: f.field,
-                  isDense: true,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    border: OutlineInputBorder(),
-                  ),
-                  items: kHeaderFieldOptions
-                      .map(
-                        (s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(s, style: const TextStyle(fontSize: 12)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => controller.setHeaderField(index, v!),
+                child: ChoiceField<String>(
+                  value: f.field,
+                  style: const TextStyle(fontSize: 12),
+                  items: [
+                    for (final s in kHeaderFieldOptions)
+                      ChoiceItem(value: s, label: s),
+                  ],
+                  onChanged: (v) => controller.setHeaderField(index, v),
                 ),
               ),
               const SizedBox(width: 6),
               SizedBox(
                 width: 120,
-                child: DropdownButtonFormField<MatchMode>(
-                  initialValue: f.mode,
-                  isDense: true,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    border: OutlineInputBorder(),
-                  ),
-                  items: availableModes
-                      .map(
-                        (m) => DropdownMenuItem(
-                          value: m,
-                          child: Text(
-                            matchModeLabel(m, numeric: isNumericField(f.field)),
-                            style: const TextStyle(fontSize: 12),
-                          ),
+                child: ChoiceField<MatchMode>(
+                  value: f.mode,
+                  style: const TextStyle(fontSize: 12),
+                  items: [
+                    for (final m in availableModes)
+                      ChoiceItem(
+                        value: m,
+                        label: matchModeLabel(
+                          m,
+                          numeric: isNumericField(f.field),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (v) => controller.setHeaderMode(index, v!),
+                      ),
+                  ],
+                  onChanged: (v) => controller.setHeaderMode(index, v),
                 ),
               ),
               const SizedBox(width: 6),

@@ -107,7 +107,7 @@ mixin _RepertoireGenerationMixin on State<PgnViewerScreen> {
   /// Overwrite the raw-games sidecar and open the existing repertoire in
   /// DB Explorer mode with auto-start.
   Future<void> _seedExistingRepertoire({
-    required dynamic storage,
+    required StorageService storage,
     required String safeName,
     required String repertoirePath,
   }) async {

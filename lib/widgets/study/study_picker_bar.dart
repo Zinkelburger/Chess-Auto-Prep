@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/study_controller.dart';
 import '../../utils/app_messages.dart';
+import 'study_name_dialog.dart' show sanitizeStudyName;
 
 class StudyPickerBar extends StatefulWidget {
   const StudyPickerBar({
@@ -20,6 +21,7 @@ class StudyPickerBar extends StatefulWidget {
     required this.onImportUrl,
     required this.onImportPgn,
     required this.onExportPgn,
+    required this.onSaveAs,
     required this.onDeleteStudy,
   });
 
@@ -30,6 +32,7 @@ class StudyPickerBar extends StatefulWidget {
   final VoidCallback onImportUrl;
   final VoidCallback onImportPgn;
   final VoidCallback onExportPgn;
+  final VoidCallback onSaveAs;
   final VoidCallback onDeleteStudy;
 
   @override
@@ -58,10 +61,7 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
   Future<void> _commitNameEdit() async {
     if (!_editingName) return;
     setState(() => _editingName = false);
-    final safe = _nameEditController.text
-        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .trim();
+    final safe = sanitizeStudyName(_nameEditController.text);
     if (safe.isEmpty || safe == widget.study.doc.name) return;
     try {
       await widget.study.renameStudy(safe);
@@ -161,6 +161,8 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
                 widget.onImportPgn();
               case 'export':
                 widget.onExportPgn();
+              case 'saveAs':
+                widget.onSaveAs();
               case 'delete':
                 widget.onDeleteStudy();
             }
@@ -172,12 +174,16 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
             ),
             const PopupMenuItem(
               value: 'import',
-              child: Text('Load from disk…'),
+              child: Text('Import PGN file as chapters…'),
             ),
             if (current.filePath != null) ...[
               const PopupMenuItem(
                 value: 'export',
                 child: Text('Copy study PGN'),
+              ),
+              const PopupMenuItem(
+                value: 'saveAs',
+                child: Text('Save study PGN as…'),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(

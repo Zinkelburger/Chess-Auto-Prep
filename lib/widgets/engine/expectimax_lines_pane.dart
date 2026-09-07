@@ -26,6 +26,7 @@ import '../../services/expectimax_line_service.dart';
 import '../../services/generation/eca_calculator.dart';
 import '../../services/generation/fen_map.dart';
 import '../../services/generation/generation_config.dart';
+import '../common/number_stepper.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart' show fenAfterMoves, formatPackedEval;
@@ -36,8 +37,10 @@ import 'expectimax_probe_hooks.dart';
 import 'floating_board_preview.dart';
 import '../../utils/fen_utils.dart';
 
-/// Depths the pane offers for a probe, in half-moves.
-const List<int> kExpectimaxProbePlyChoices = [6, 8, 10, 12, 16, 20, 24];
+/// Probe depth the pane accepts, in half-moves. Deeper probes cost more
+/// engine time per node; past 40 nothing finishes in one sitting.
+const int kExpectimaxProbeMinPlies = 2;
+const int kExpectimaxProbeMaxPlies = 40;
 
 class ExpectimaxLinesPane extends StatefulWidget {
   final String fen;
@@ -90,9 +93,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   @override
   void initState() {
     super.initState();
-    if (!kExpectimaxProbePlyChoices.contains(_probePlies)) {
-      _probePlies = EvalDatabaseSettings.defaultExpectimaxProbePlies;
-    }
+    _probePlies = _probePlies.clamp(
+      kExpectimaxProbeMinPlies,
+      kExpectimaxProbeMaxPlies,
+    );
     _recompute();
   }
 
@@ -159,8 +163,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     }
   }
 
-  void _setProbePlies(int? plies) {
-    if (plies == null) return;
+  void _setProbePlies(int plies) {
     setState(() => _probePlies = plies);
     unawaited(EvalDatabaseSettings.instance.setExpectimaxProbePlies(plies));
   }
@@ -202,15 +205,14 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   Widget _probeDepthPicker() {
     return Tooltip(
       message: 'How many half-moves a probe explores below its position.',
-      child: DropdownButton<int>(
+      child: NumberStepper(
         value: _probePlies,
-        isDense: true,
-        underline: const SizedBox.shrink(),
-        style: AppTextStyles.caption,
-        items: [
-          for (final plies in kExpectimaxProbePlyChoices)
-            DropdownMenuItem(value: plies, child: Text('$plies half-moves')),
-        ],
+        min: kExpectimaxProbeMinPlies,
+        max: kExpectimaxProbeMaxPlies,
+        step: 2,
+        suffix: 'half-moves',
+        bordered: false,
+        fieldWidth: 36,
         onChanged: _setProbePlies,
       ),
     );
@@ -676,26 +678,20 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           const Spacer(),
           Tooltip(
             message: 'How far each line continues past the current position',
-            child: DropdownButton<int>(
+            child: NumberStepper(
               value: _maxPlies,
-              items: [4, 8, 12, 16, 20]
-                  .map(
-                    (v) => DropdownMenuItem(
-                      value: v,
-                      child: Text('+$v half-moves'),
-                    ),
-                  )
-                  .toList(),
+              min: 2,
+              max: 40,
+              step: 2,
+              suffix: 'half-moves',
+              bordered: false,
+              fieldWidth: 36,
               onChanged: (v) {
-                if (v != null) {
-                  setState(() {
-                    _maxPlies = v;
-                    _recompute();
-                  });
-                }
+                setState(() {
+                  _maxPlies = v;
+                  _recompute();
+                });
               },
-              isDense: true,
-              underline: const SizedBox.shrink(),
             ),
           ),
         ],

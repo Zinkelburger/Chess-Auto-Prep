@@ -1,8 +1,8 @@
 /// Pure Stockfish worker pool — spawns workers, provides acquire/release.
 ///
 /// No analysis orchestration, no UI concerns, no dynamic RAM budgeting.
-/// Workers use a fixed [kPoolHashPerWorkerMb] MB hash and a single thread
-/// each.
+/// Workers take [EngineSettings.hashMb] of hash each and a single thread
+/// unless a build asks for more.
 ///
 /// Used by [AnalysisService] for interactive analysis and by
 /// [TreeBuildService] for generation-mode evaluation.
@@ -15,15 +15,13 @@ import 'package:flutter/foundation.dart';
 import '../../models/analysis/discovery_result.dart';
 import '../../models/engine_settings.dart';
 import 'engine_interrupt.dart';
+import 'engine_connection.dart';
 import 'eval_worker.dart';
 import 'stockfish_connection_factory.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
 export 'eval_worker.dart' show EvalResult, EvalWorker;
 export '../../models/analysis/discovery_result.dart';
-
-/// Fixed hash per worker in MB.  128 MB gives comfortable headroom up to ~depth 25.
-const int kPoolHashPerWorkerMb = 128;
 
 class StockfishPool {
   // ── Singleton ───────────────────────────────────────────────────────────
@@ -32,9 +30,15 @@ class StockfishPool {
 
   /// Create an independent instance (unit tests only).
   @visibleForTesting
-  StockfishPool.fresh() : this._();
+  StockfishPool.fresh({Future<EngineConnection?> Function()? createConnection})
+    : _createConnection = createConnection ?? StockfishConnectionFactory.create;
 
-  StockfishPool._();
+  StockfishPool._() : _createConnection = StockfishConnectionFactory.create;
+
+  final Future<EngineConnection?> Function() _createConnection;
+  Future<void> _provisioning = Future.value();
+  int _generation = 0;
+  final Set<EvalWorker> _starting = {};
 
   // ── State ───────────────────────────────────────────────────────────────
   final List<EvalWorker> _workers = [];
@@ -72,22 +76,64 @@ class StockfishPool {
   /// [threadsPerWorker] sets Stockfish UCI Threads on each worker (MultiPV
   /// searches benefit strongly from >1 thread).  Existing workers are
   /// reconfigured when [threadsPerWorker] differs from the current value.
-  Future<void> ensureWorkers([int? count, int? threadsPerWorker]) async {
+  Future<void> ensureWorkers([int? count, int? threadsPerWorker]) {
+    final generation = _generation;
+    final pending = _provisioning.then((_) async {
+      if (generation != _generation) return;
+      await _ensureWorkers(count, threadsPerWorker, generation);
+    });
+    _provisioning = pending.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return pending;
+  }
+
+  Future<void> _ensureWorkers(
+    int? count,
+    int? threadsPerWorker,
+    int generation,
+  ) async {
     if (!StockfishConnectionFactory.isAvailable) return;
 
     if (threadsPerWorker != null && threadsPerWorker > 0) {
       _threadsPerWorker = threadsPerWorker;
     }
 
-    final target = count ?? EngineSettings.instance.workers;
+    // Zero is a real request — callers that must not start an engine pass it
+    // (the tactics import's `maxCores: 0`), so the floor here is 0, not 1.
+    final target = (count ?? EngineSettings.instance.cores).clamp(
+      0,
+      EngineSettings.systemCores,
+    );
     _targetCount = target;
     while (_workers.length < target) {
       final w = await _spawnOne(_workers.length);
       if (w == null) break;
+      if (generation != _generation) {
+        w.dispose();
+        return;
+      }
       _watchWorker(w);
       _workers.add(w);
-      _free.add(w);
+      if (_waiters.isNotEmpty) {
+        _busy.add(w);
+        _waiters.removeAt(0).complete(w);
+      } else {
+        _free.add(w);
+      }
     }
+
+    if (generation != _generation) return;
+
+    // The memory setting may have moved since a worker was spawned. Idle
+    // workers pick it up here; a busy one keeps its table until it is next
+    // between searches (a resize mid-search is not allowed by UCI).
+    final hashMb = EngineSettings.instance.hashMb;
+    await Future.wait([
+      for (final w in _free)
+        if (w.hashMb != hashMb) w.setHash(hashMb),
+    ]);
 
     if (_workers.isNotEmpty &&
         _threadsPerWorker > 1 &&
@@ -98,7 +144,7 @@ class StockfishPool {
     if (kDebugMode && _workers.isNotEmpty) {
       log.i(
         '[Pool] ${_workers.length} workers ready '
-        '($kPoolHashPerWorkerMb MB hash, '
+        '(${EngineSettings.instance.hashMb} MB hash, '
         '$_threadsPerWorker thread(s) each)',
       );
     }
@@ -119,7 +165,7 @@ class StockfishPool {
   /// UCI Threads.  A fixed-depth search scales sub-linearly with threads
   /// (lazy SMP), while N single-thread workers on N different positions
   /// scale nearly linearly, so for the same CPU the build gets several times
-  /// the throughput.  How many lanes: [EngineSettings.workers], capped by the
+  /// the throughput.  How many lanes: [EngineSettings.cores], capped by the
   /// budget so a 4-thread budget never spawns 8 workers; any threads left
   /// over after that split go to each worker (a 12-thread budget on a
   /// 4-worker setting gives 4 workers × 3 threads).
@@ -137,7 +183,7 @@ class StockfishPool {
   /// worker count, clamped to the budget and to at least one.
   static int laneCountFor(int threadBudget, {int? workers}) {
     final budget = threadBudget < 1 ? 1 : threadBudget;
-    final want = workers ?? EngineSettings.instance.workers;
+    final want = workers ?? EngineSettings.instance.cores;
     return want.clamp(1, budget);
   }
 
@@ -150,18 +196,30 @@ class StockfishPool {
   }
 
   Future<EvalWorker?> _spawnOne(int index) async {
+    final generation = _generation;
+    EvalWorker? worker;
     try {
-      final engine = await StockfishConnectionFactory.create();
+      final engine = await _createConnection();
       if (engine == null) return null;
-      final worker = EvalWorker(engine);
-      await worker.init(
-        hashMb: kPoolHashPerWorkerMb,
-        threads: _threadsPerWorker,
-      );
+      if (generation != _generation) {
+        engine.dispose();
+        return null;
+      }
+      worker = EvalWorker(engine);
+      _starting.add(worker);
+      await worker
+          .init(
+            hashMb: EngineSettings.instance.hashMb,
+            threads: _threadsPerWorker,
+          )
+          .timeout(const Duration(seconds: 15));
       return worker;
     } catch (e) {
+      worker?.dispose();
       if (kDebugMode) log.e('[Pool] Worker #$index spawn failed: $e');
       return null;
+    } finally {
+      _starting.remove(worker);
     }
   }
 
@@ -396,17 +454,7 @@ class StockfishPool {
       log.e('[Pool] Worker died; respawning');
     }
     if (_workers.length >= _targetCount) return;
-    final replacement = await _spawnOne(_workers.length);
-    if (replacement == null) return;
-    _watchWorker(replacement);
-    _workers.add(replacement);
-    if (_waiters.isNotEmpty) {
-      final next = _waiters.removeAt(0);
-      _busy.add(replacement);
-      if (!next.isCompleted) next.complete(replacement);
-    } else {
-      _free.add(replacement);
-    }
+    await ensureWorkers(_targetCount);
   }
 
   /// Set the provisioned worker count without spawning anything, so a test
@@ -424,6 +472,11 @@ class StockfishPool {
   }
 
   void _disposeAllWorkers() {
+    _generation++;
+    for (final worker in _starting) {
+      worker.dispose();
+    }
+    _starting.clear();
     for (final w in _workers) {
       w.dispose();
     }

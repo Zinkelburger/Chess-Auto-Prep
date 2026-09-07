@@ -942,27 +942,42 @@ List<CommentToken> parseCommentTokens(String text) {
 // Movetext serialization
 // ---------------------------------------------------------------------------
 
-/// Serialize a flat list of [PgnNodeData] moves into PGN movetext with
-/// move numbers, NAGs, and inline `{comment}` braces.
+/// A whole parsed game as PGN movetext: the mainline **and** every variation,
+/// with NAGs, comments, and the game's own opening comment, headers stripped
+/// so the caller can splice it back under the game's existing header block.
 ///
-/// Assumes the game starts with White's move 1 (full games from the standard
-/// start). Appends [result] (e.g. `1-0`) unless it is null or `*`.
-/// Delegates numbering to the shared [buildNumberedMovetext].
-String buildMovetext(List<PgnNodeData> moves, {String? result}) {
-  final text = buildNumberedMovetext(
-    [for (final m in moves) m.san],
-    suffix: (i) {
-      final move = moves[i];
-      final buf = StringBuffer();
-      for (final nag in move.nags ?? const <int>[]) {
-        buf.write(' \$$nag');
-      }
-      for (final c in move.comments ?? const <String>[]) {
-        if (c.isNotEmpty) buf.write(' {$c}');
-      }
-      return buf.toString();
+/// This is the **only** serializer for a game that was parsed from text, and
+/// the one anything that rewrites a game the reader owns must use. There used
+/// to be a second one that took a flat `List<PgnNodeData>` — which cannot
+/// carry a variation, a game comment or a `[FEN]` start — and storing its
+/// output deleted every sideline and the game's opening comment, machine
+/// tokens included, from the reader's own file. It is gone rather than
+/// documented: a lossy writer beside a lossless one, both feeding the same
+/// sink, is the shape of that bug. A caller that genuinely holds only a flat
+/// move list it built itself (a puzzle solution, a downloaded game's plies)
+/// wants [buildNumberedMovetext].
+///
+/// Serialization is dartchess's own `makePgn`, which is why this takes the
+/// tree rather than a list: variations, `{}` escaping and the numbering that
+/// [fen] implies all come from there rather than from a second writer here.
+/// [result] is written as the game terminator (`*` when absent).
+String buildGameMovetext({
+  required PgnNode<PgnNodeData> moves,
+  List<String> comments = const [],
+  String? fen,
+  String? result,
+}) {
+  final game = PgnGame<PgnNodeData>(
+    headers: {
+      if (fen != null && fen.isNotEmpty) 'FEN': fen,
+      // Never empty, so `makePgn` always writes a header block and the
+      // blank line below is always the movetext boundary.
+      'Result': (result == null || result.isEmpty) ? '*' : result,
     },
+    moves: moves,
+    comments: comments,
   );
-  if (result == null || result == '*') return text;
-  return text.isEmpty ? result : '$text $result';
+  final text = game.makePgn();
+  final blankLine = text.indexOf('\n\n');
+  return (blankLine < 0 ? text : text.substring(blankLine + 2)).trim();
 }

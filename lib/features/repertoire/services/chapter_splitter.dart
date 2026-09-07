@@ -20,7 +20,8 @@
 ///     downstream.
 ///  2. **Progress is keyed by file path.** Review schedules and per-move
 ///     progress carry `repertoireId` = the chapter's path, so they are
-///     re-pointed at the new files in the same operation.
+///     re-pointed at the new files in the same operation (see
+///     [ReviewProgressRepointer], which a line move uses too).
 ///
 /// Destinations are written before the source is touched, so an interrupted
 /// split can leave a duplicate but never a lost line.
@@ -30,15 +31,13 @@ import 'package:path/path.dart' as p;
 
 import '../../../models/repertoire_line.dart'
     show kModelGameResultTag, kModelGameWhiteTag;
-import '../../../models/repertoire_move_progress.dart';
-import '../../../models/repertoire_review_entry.dart';
 import '../../../services/pgn_parsing_service.dart' as pgn;
-import '../../../services/repertoire_line_ids.dart';
 import '../../../services/repertoire_review_service.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
 import 'chapter_store.dart';
+import 'review_progress_repointer.dart';
 
 /// What a split did, for the toast and for the caller to follow the active
 /// chapter.
@@ -76,13 +75,18 @@ class ChapterSplitter {
     StorageService? storage,
     RepertoireService? repertoire,
     RepertoireReviewService? review,
+    ReviewProgressRepointer? repointer,
   }) : _storage = storage ?? StorageFactory.instance,
        _repertoire = repertoire ?? RepertoireService(),
-       _review = review ?? RepertoireReviewService(storage: storage);
+       _repointer =
+           repointer ??
+           ReviewProgressRepointer(
+             review: review ?? RepertoireReviewService(storage: storage),
+           );
 
   final StorageService _storage;
   final RepertoireService _repertoire;
-  final RepertoireReviewService _review;
+  final ReviewProgressRepointer _repointer;
 
   /// Splits [chapterPath] into one file per `[White]` chapter title, in the
   /// folder it already lives in.
@@ -167,6 +171,7 @@ class ChapterSplitter {
           name: name,
           isWhite: sideIsWhite,
           createdAt: DateTime.now(),
+          courseChapter: title,
         ),
         games: [for (final i in indices) games[i]],
         createOnly: true,
@@ -197,7 +202,7 @@ class ChapterSplitter {
       );
     }
 
-    await _repointProgress(from: chapterPath, movedIdsByPath: movedIdsByPath);
+    await _repointer.repoint(from: chapterPath, movedIdsByPath: movedIdsByPath);
 
     return ChapterSplitResult(
       createdPaths: createdPaths,
@@ -256,12 +261,6 @@ class ChapterSplitter {
   }
 
   // ── Pinning ────────────────────────────────────────────────────────────
-
-  static final _idHeader = RegExp(
-    '^\\[(${RepertoireLineIds.headerKeys.join('|')})\\s+"',
-    multiLine: true,
-    caseSensitive: false,
-  );
 
   static final _modelGameHeader = RegExp(
     '^\\[($kModelGameWhiteTag|$kModelGameResultTag)\\s+"',
@@ -324,74 +323,7 @@ class ChapterSplitter {
           ? text.replaceFirst(_eventHeader, title)
           : '$title\n$text';
     }
-    if (id != null && !_idHeader.hasMatch(text)) {
-      text = _insertAfterEvent(text, '[LineID "$id"]');
-    }
+    if (id != null) text = ReviewProgressRepointer.pinLineId(text, id);
     return text;
-  }
-
-  // ── Progress ───────────────────────────────────────────────────────────
-
-  /// Re-points review schedules and per-move progress from [from] at the
-  /// chapter each line landed in. Without this a split reads as 900 lines
-  /// deleted and 900 new ones, and every due date is lost.
-  Future<void> _repointProgress({
-    required String from,
-    required Map<String, Set<String>> movedIdsByPath,
-  }) async {
-    final newPathById = <String, String>{
-      for (final entry in movedIdsByPath.entries)
-        for (final id in entry.value) id: entry.key,
-    };
-    if (newPathById.isEmpty) return;
-
-    final entries = await _review.loadAll();
-    var changed = false;
-    final rewritten = <RepertoireReviewEntry>[];
-    for (final e in entries) {
-      final to = e.repertoireId == from ? newPathById[e.lineId] : null;
-      if (to == null) {
-        rewritten.add(e);
-        continue;
-      }
-      changed = true;
-      rewritten.add(
-        RepertoireReviewEntry(
-          repertoireId: to,
-          lineId: e.lineId,
-          lineName: e.lineName,
-          difficulty: e.difficulty,
-          intervalDays: e.intervalDays,
-          dueDateUtc: e.dueDateUtc,
-          lastRating: e.lastRating,
-          lastReviewedUtc: e.lastReviewedUtc,
-          passCount: e.passCount,
-          failCount: e.failCount,
-        ),
-      );
-    }
-    if (changed) await _review.saveAll(rewritten);
-
-    final progress = await _review.loadMoveProgress();
-    var progressChanged = false;
-    final movedProgress = <RepertoireMoveProgress>[];
-    for (final mp in progress) {
-      final to = mp.repertoireId == from ? newPathById[mp.lineId] : null;
-      if (to == null) {
-        movedProgress.add(mp);
-        continue;
-      }
-      progressChanged = true;
-      movedProgress.add(
-        RepertoireMoveProgress(
-          repertoireId: to,
-          lineId: mp.lineId,
-          moveIndex: mp.moveIndex,
-          correctStreak: mp.correctStreak,
-          learned: mp.learned,
-        ),
-      );
-    }
-    if (progressChanged) await _review.saveMoveProgress(movedProgress);
   }
 }

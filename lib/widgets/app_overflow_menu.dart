@@ -20,6 +20,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_text_styles.dart';
 import 'info_hint.dart';
 
@@ -122,6 +123,7 @@ class AppOverflowMenu extends StatelessWidget {
         icon: const Icon(Icons.more_vert, size: 20),
         tooltip: tooltip,
         enabled: enabled,
+        popUpAnimationStyle: AppMotion.menuAnimation,
         onSelected: (i) => rows[i].onRun(),
         itemBuilder: (_) => items,
       );
@@ -131,6 +133,7 @@ class AppOverflowMenu extends StatelessWidget {
       enabled: enabled,
       position: PopupMenuPosition.under,
       padding: EdgeInsets.zero,
+      popUpAnimationStyle: AppMotion.menuAnimation,
       onSelected: (i) => rows[i].onRun(),
       itemBuilder: (_) => items,
       child: anchor,

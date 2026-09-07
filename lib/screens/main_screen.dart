@@ -10,6 +10,7 @@ import '../services/games_library/games_library_service.dart'
     show GamesPlatform;
 import '../features/tactics/services/tactics_import_coordinator.dart';
 import '../features/tactics/controllers/tactics_session_controller.dart';
+import '../features/tactics/services/alternative_move_judge.dart';
 import '../features/tactics/services/tactics_database.dart';
 import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
@@ -172,11 +173,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         // Skip [inactive]: alt-tab and dialogs fire it without meaning the
         // user left the app.
         if (_appBackgrounded) return;
-        _appBackgrounded = true;
+        setState(() => _appBackgrounded = true);
         unawaited(EngineLifecycle.instance.suspend());
       case AppLifecycleState.resumed:
         if (!_appBackgrounded) return;
-        _appBackgrounded = false;
+        setState(() => _appBackgrounded = false);
         // A request may have been written while the window was away, and the
         // directory watch does not fire for events during that time on every
         // platform.
@@ -235,10 +236,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           index: _supportedModes.indexOf(activeMode),
           children: [
             for (final mode in _supportedModes)
-              _modeViews[mode] ??
-                  (mode == activeMode
-                      ? const _ModeLoadingView()
-                      : const SizedBox.shrink()),
+              TickerMode(
+                enabled: mode == activeMode && !_appBackgrounded,
+                child:
+                    _modeViews[mode] ??
+                    (mode == activeMode
+                        ? const _ModeLoadingView()
+                        : const SizedBox.shrink()),
+              ),
           ],
         ),
       ),
@@ -317,8 +322,12 @@ class _TacticsModeView extends StatelessWidget {
           create: (_) => TacticsDatabase(),
         ),
         ChangeNotifierProvider<TacticsSessionController>(
-          create: (ctx) =>
-              TacticsSessionController(database: ctx.read<TacticsDatabase>()),
+          create: (ctx) => TacticsSessionController(
+            database: ctx.read<TacticsDatabase>(),
+            // "Accept other winning moves" asks Stockfish about a move
+            // that is not the stored answer; the session option gates it.
+            alternativeJudge: EngineAlternativeJudge().judge,
+          ),
         ),
         ChangeNotifierProvider<TacticsImportCoordinator>(
           create: (ctx) =>

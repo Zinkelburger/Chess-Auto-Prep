@@ -114,10 +114,10 @@ void main() {
   });
 
   group('selection under the anchored window', () {
-    test('a Black gambit tree selects nothing under the raw window', () {
+    test('a raw eval window cannot suppress the required gambit answer', () {
       // Documents the failure mode: root at -57 for us, floor 0.
       const raw = TreeBuildConfig(startFen: _kRootFen, playAsWhite: false);
-      expect(_selectedCount(_blackGambitTree(), raw), 0);
+      expect(_selectedCount(_blackGambitTree(), raw), 1);
     });
 
     test('the same tree selects its reply under the anchored window', () {

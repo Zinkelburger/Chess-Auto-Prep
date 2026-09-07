@@ -19,10 +19,20 @@
 ///   chapters build the same lines.
 /// - **Depth.** Past [maxPly] or out of book the walk always cuts.
 ///
+/// **Walking your own games** ([PlanBasis.ownGames]) keeps every rule above
+/// but swaps the book for the user's games as the thing being walked: a
+/// position is a question when they reached it in at least [ownFloor] games
+/// (their move: which of the moves they played stays; the opponent's move:
+/// which of the replies they met get set up), and the walk stops — asking
+/// first — where their games thin out. Book and Maia still fill the columns,
+/// so a move they never tried can still be added at any question. This is
+/// "turn my games into a repertoire", one decision at a time.
+///
 /// Every decision is a snapshot on a stack, so "back" is exact.
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -57,6 +67,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     required this.source,
     required this.isWhite,
     this.knowledge = PlanKnowledge.empty,
+    this.basis = PlanBasis.book,
     this.elo = 1800,
     this.minShare = 0.05,
     this.chapterShare = 0.03,
@@ -68,7 +79,17 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
   final PlanDataSource source;
   final bool isWhite;
   PlanKnowledge knowledge;
+  PlanBasis basis;
   int elo;
+
+  /// Walking own games: a position is a question when at least this many of
+  /// the user's games reached it. Resolved at [start] from the games at the
+  /// root — [chapterShare] of them, never fewer than [minOwnGames].
+  int get ownFloor => _ownFloor;
+  int _ownFloor = minOwnGames;
+  static const int minOwnGames = 3;
+
+  bool get _walksOwnGames => basis == PlanBasis.ownGames;
 
   /// Coverage floor: opponent replies below this share are the engine's
   /// business, not the plan's.
@@ -152,6 +173,11 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     decisions.clear();
     _step = null;
     _phase = PlanPhase.walking;
+    if (_walksOwnGames) {
+      final rootFen = _fenAfter(rootMoves);
+      final rootGames = rootFen == null ? 0 : knowledge.ownGamesAt(rootFen);
+      _ownFloor = math.max(minOwnGames, (rootGames * chapterShare).round());
+    }
     // The root is the first chapter; everything belongs to it until the
     // mass splits into another named system.
     await _chapterFor(rootMoves);
@@ -223,7 +249,9 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     if (step == null || step.kind != PlanStepKind.theirMove) return;
     _pushHistory();
     final splitSans = split.toList();
-    final shareOf = {for (final c in step.candidates) c.san: c.share ?? 0.0};
+    final shareOf = {
+      for (final c in step.candidates) c.san: _reachShare(c) ?? 0.0,
+    };
     for (final san in splitSans.reversed) {
       final child = [...step.moves, san];
       _setReach(child, reachOf(step.moves) * (shareOf[san] ?? 0.0));
@@ -354,19 +382,28 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     }
     _seenFen.putIfAbsent(key, () => List.of(path));
 
-    final score = await source.tabiyaScore(path);
+    if (_walksOwnGames) {
+      // Own games: a question wherever enough of them reached this position;
+      // where they thin out the walk stops — asking first, never silently.
+      if (knowledge.ownGamesAt(fen) < _ownFloor && !isManual(path)) {
+        await _openLeafConfirm(path, fen);
+        return true;
+      }
+    } else {
+      final score = await source.tabiyaScore(path);
 
-    if (score < tabiyaThreshold && !isManual(path)) {
-      // The book does not fork here. For the opponent's move that is not the
-      // last word: two replies can both be common and lead to different
-      // systems (7.Bxf6 vs 7.Bh4 in the QGD — a capture and a retreat, two
-      // structures) while the book lists lines under only one of them. Ask
-      // Maia, and treat that as a fork too.
-      if (!ourMove && await _isStructuralFork(fen, path)) return false;
-      // Otherwise the walk *would* stop here — but never silently: show the
-      // position and let the user confirm, or keep setting up.
-      await _openLeafConfirm(path, fen);
-      return true;
+      if (score < tabiyaThreshold && !isManual(path)) {
+        // The book does not fork here. For the opponent's move that is not
+        // the last word: two replies can both be common and lead to
+        // different systems (7.Bxf6 vs 7.Bh4 in the QGD — a capture and a
+        // retreat, two structures) while the book lists lines under only one
+        // of them. Ask Maia, and treat that as a fork too.
+        if (!ourMove && await _isStructuralFork(fen, path)) return false;
+        // Otherwise the walk *would* stop here — but never silently: show
+        // the position and let the user confirm, or keep setting up.
+        await _openLeafConfirm(path, fen);
+        return true;
+      }
     }
 
     if (ourMove) {
@@ -434,6 +471,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
       preselected: const {},
       reachProb: reachOf(path),
       transposesTo: earlier,
+      ownGames: knowledge.ownGamesAt(fen),
     );
     notifyListeners();
   }
@@ -476,6 +514,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
       positionName: name,
       preselected: const {},
       reachProb: reachOf(path),
+      ownGames: knowledge.ownGamesAt(fen),
     );
     notifyListeners();
   }
@@ -570,6 +609,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
       positionName: name,
       preselected: const {},
       reachProb: reachOf(path),
+      ownGames: knowledge.ownGamesAt(fen),
     );
     notifyListeners();
 
@@ -582,6 +622,19 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     if (epoch != _epoch || _step == null || _step!.moves != path) return;
 
     candidates = _overlayKnowledge(candidates, fen, ourMove);
+    if (_walksOwnGames) {
+      // What the user actually played comes first, most often on top; the
+      // moves they never tried follow in the sources' order.
+      final ownCounts = knowledge.ownCountsAt(fen);
+      final indexed = candidates.indexed.toList();
+      indexed.sort((a, b) {
+        final ca = ownCounts[a.$2.san] ?? 0;
+        final cb = ownCounts[b.$2.san] ?? 0;
+        if (ca != cb) return cb.compareTo(ca);
+        return a.$1.compareTo(b.$1);
+      });
+      candidates = [for (final e in indexed) e.$2];
+    }
     final pre = <String>{};
     if (ourMove) {
       // One move at our own turn: the chapter's move if it has one, else the
@@ -589,12 +642,22 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
       final inChapters = candidates.where((c) => c.inChapters);
       if (inChapters.isNotEmpty) {
         pre.add(inChapters.first.san);
+      } else if (_walksOwnGames) {
+        // Walking their games: the move they played most is the default.
+        final own = candidates.where((c) => (c.ownGames ?? 0) > 0);
+        if (own.isNotEmpty) pre.add(own.first.san);
       } else {
         // Their own most-played move, when they have played here enough.
         final own = candidates
             .where((c) => (c.ownGames ?? 0) >= 5 && (c.ownShare ?? 0) >= 0.4)
             .toList();
         if (own.isNotEmpty) pre.add(own.first.san);
+      }
+    } else if (_walksOwnGames) {
+      // Every reply met often enough to be a question of its own.
+      final ownCounts = knowledge.ownCountsAt(fen);
+      for (final c in candidates) {
+        if ((ownCounts[c.san] ?? 0) >= _ownFloor) pre.add(c.san);
       }
     } else {
       for (final c in candidates) {
@@ -638,11 +701,12 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
       }),
     );
     if (epoch != _epoch || isDisposed) return;
-    final missing = (_step?.moves == path ? _step!.candidates : const [])
-        .where((c) => c.evalCp == null)
-        .take(engineFillLimit)
-        .map((c) => c.san)
-        .toList();
+    final missing =
+        (_step?.moves == path ? _step!.candidates : const <PlanCandidate>[])
+            .where((c) => c.evalCp == null)
+            .take(engineFillLimit)
+            .map((c) => c.san)
+            .toList();
     for (final san in missing) {
       if (epoch != _epoch || isDisposed) return;
       if (_step == null || _step!.moves != path) return;
@@ -714,8 +778,25 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
         );
       }
     }
+    // Likewise anything that actually happened in their games (an offbeat
+    // move of theirs, a reply Maia rates below its cut-off).
+    for (final san in knowledge.ownCountsAt(fen).keys) {
+      if (seen.add(san)) {
+        final own = ourMove
+            ? knowledge.ownMoveAt(fen, san)
+            : knowledge.ownReplyAt(fen, san);
+        out.add(
+          PlanCandidate(san: san, ownShare: own?.share, ownGames: own?.games),
+        );
+      }
+    }
     return out;
   }
+
+  /// The share an opponent reply multiplies the reach by: their share of
+  /// the user's own games when walking those, Maia's otherwise.
+  double? _reachShare(PlanCandidate c) =>
+      _walksOwnGames ? (c.ownShare ?? c.share) : c.share;
 
   static String familyOf(String? bookName) {
     if (bookName == null || bookName.isEmpty) return 'Repertoire';

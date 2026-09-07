@@ -10,6 +10,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import '../../../utils/fen_utils.dart';
+import '../services/alternative_move_judge.dart';
 import '../services/tactics_database.dart';
 import '../services/tactics_engine.dart';
 import '../../../utils/safe_change_notifier.dart';
@@ -111,12 +112,18 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   TacticsSessionController({
     TacticsDatabase? database,
     TacticsEngine? engine,
+    this.alternativeJudge,
     this._panel,
   }) : database = database ?? TacticsDatabase(),
        engine = engine ?? TacticsEngine();
 
   final TacticsDatabase database;
   final TacticsEngine engine;
+
+  /// Asked about a move that is not the stored answer when
+  /// [TacticsSessionSettings.acceptAlternatives] is on. Null means the
+  /// option has no engine behind it and a non-matching move is simply wrong.
+  AlternativeMoveJudge? alternativeJudge;
 
   TacticsPanelHooks? _panel;
 
@@ -162,6 +169,16 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   int currentMoveIndex = 0;
   String? currentTacticFen;
   bool waitingForOpponent = false;
+
+  /// True while [alternativeJudge] is deciding about the move on the board.
+  bool checkingAlternative = false;
+
+  /// Invalidates a verdict that arrives after the puzzle moved on.
+  int _judgeToken = 0;
+
+  /// Whether a new move must wait: the opponent is replying, or the engine is
+  /// still judging the last one. Both leave the board mid-story.
+  bool get inputLocked => waitingForOpponent || checkingAlternative;
 
   /// Per-puzzle outcomes for the current (or just-finished) session, keyed
   /// by FEN in the order the puzzles were shown.  Cleared when a new session
@@ -283,6 +300,8 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
     currentMoveIndex = 0;
     currentTacticFen = position.fen;
     waitingForOpponent = false;
+    checkingAlternative = false;
+    _judgeToken++;
 
     notifyListeners();
 
@@ -405,6 +424,8 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
     currentMoveIndex = 0;
     currentTacticFen = currentPosition!.fen;
     waitingForOpponent = false;
+    checkingAlternative = false;
+    _judgeToken++;
     notifyListeners();
     return TacticsPositionSetup(
       fen: currentPosition!.fen,
@@ -466,7 +487,7 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
     required TacticsIsMounted isMounted,
   }) {
     if (currentPosition == null) return null;
-    if (positionSolved || waitingForOpponent) return null;
+    if (positionSolved || inputLocked) return null;
 
     final fen = currentTacticFen ?? currentPosition!.fen;
     if (normalizeFen(boardFen) != normalizeFen(fen)) return null;
@@ -491,6 +512,24 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
       return TacticsBoardUpdate(applyMoveUci: moveUci);
     }
 
+    final judge = alternativeJudge;
+    if (judge != null &&
+        sessionSettings.acceptAlternatives &&
+        currentMoveIndex < currentPosition!.correctLine.length) {
+      _judgeAlternative(
+        judge,
+        AlternativeMoveQuery(
+          fen: fen,
+          playedUci: moveUci,
+          bestToken: currentPosition!.correctLine[currentMoveIndex],
+        ),
+        timeTaken: timeTaken,
+        schedule: schedule,
+        isMounted: isMounted,
+      );
+      return TacticsBoardUpdate(applyMoveUci: moveUci);
+    }
+
     _handleIncorrectMove(
       timeTaken,
       moveUci: moveUci,
@@ -498,6 +537,67 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
       isMounted: isMounted,
     );
     return TacticsBoardUpdate(applyMoveUci: moveUci);
+  }
+
+  /// The move stays on the board and the panel says "Checking…" until the
+  /// engine answers. A verdict for a puzzle that has since been reset or
+  /// left is dropped; a `true` finishes the tactic on the move played, since
+  /// the stored continuation no longer applies.
+  void _judgeAlternative(
+    AlternativeMoveJudge judge,
+    AlternativeMoveQuery query, {
+    required double timeTaken,
+    required TacticsSchedule schedule,
+    required TacticsIsMounted isMounted,
+  }) {
+    checkingAlternative = true;
+    feedback = 'Checking…';
+    notifyListeners();
+    final token = ++_judgeToken;
+
+    void settle(bool accepted) {
+      if (!isMounted() || token != _judgeToken || currentPosition == null) {
+        return;
+      }
+      checkingAlternative = false;
+      if (!accepted) {
+        _handleIncorrectMove(
+          timeTaken,
+          moveUci: query.playedUci,
+          schedule: schedule,
+          isMounted: isMounted,
+        );
+        return;
+      }
+      String? playedSan;
+      try {
+        final pos = Chess.fromSetup(Setup.parseFen(query.fen));
+        final move = Move.parse(query.playedUci);
+        if (move != null) {
+          final (after, san) = pos.makeSan(move);
+          currentTacticFen = after.fen;
+          playedSan = san;
+        }
+      } catch (e) {
+        debugPrint('[TacticsSession] FEN advance after alternative failed: $e');
+      }
+      currentMoveIndex = currentPosition!.correctLine.length;
+      _completeTactic(timeTaken, schedule: schedule, isMounted: isMounted);
+      if (playedSan != null) {
+        feedback = 'Correct! $playedSan is just as good';
+        notifyListeners();
+      }
+    }
+
+    unawaited(
+      judge(query).then(
+        settle,
+        onError: (Object e) {
+          debugPrint('[TacticsSession] Alternative check failed: $e');
+          settle(false);
+        },
+      ),
+    );
   }
 
   void _handleCorrectMove(

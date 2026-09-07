@@ -71,20 +71,12 @@ mixin _RepertoireLayout
     );
   }
 
-  /// The left column: the outline (or, while one runs, the build-by-playing
-  /// session / games draft that is adding lines to it), collapsible to a
-  /// strip.
+  /// The left column: the outline, collapsible to a strip.
   Widget _buildOutlineSidePanel(double width) {
     if (_layout.outlinePanelCollapsed) {
-      final surface = _isBuildSessionActive
-          ? RepertoireLinesSurface.session
-          : _isDraftActive
-          ? RepertoireLinesSurface.draft
-          : RepertoireLinesSurface.lines;
       return RepertoireLinesSidePanel(
         collapsed: true,
         width: width,
-        surface: surface,
         lineCount: _controller.repertoireLines.length,
         tabController: _sidePanelTabController,
         tabs: const [],
@@ -112,7 +104,6 @@ mixin _RepertoireLayout
     return RepertoireLinesSidePanel(
       collapsed: _layout.linesPanelCollapsed,
       width: width,
-      surface: RepertoireLinesSurface.lines,
       lineCount: _controller.repertoireLines.length,
       tabController: _sidePanelTabController,
       tabs: const [
@@ -122,6 +113,10 @@ mixin _RepertoireLayout
           child: Text('Database', style: TextStyle(fontSize: 12)),
         ),
         Tab(height: 30, child: Text('Tree', style: TextStyle(fontSize: 12))),
+        Tab(
+          height: 30,
+          child: Text('Generate', style: TextStyle(fontSize: 12)),
+        ),
       ],
       stripLabel: 'Analysis',
       hideTooltip: 'Hide analysis panel',
@@ -131,6 +126,7 @@ mixin _RepertoireLayout
         _cursorScoped((_) => _buildEngineTabContent()),
         _cursorScoped((_) => _buildDatabaseTabContent()),
         _cursorScoped((_) => _buildTreeTabContent()),
+        _cursorScoped((_) => _buildGenerateTabContent()),
       ],
     );
   }
@@ -155,10 +151,6 @@ mixin _RepertoireLayout
         }
       },
       onCollapseBottomPane: () {
-        if (_buildSession.phase == BuildByPlayingPhase.exploring) {
-          _buildSession.backToDecisionPoint();
-          return true;
-        }
         if (_trapSession.closeTour()) return true;
         if (!_bottomPane.isCollapsed) {
           _closeBottomPane();
@@ -234,9 +226,7 @@ mixin _RepertoireLayout
           child: _cursorScoped(
             (_) => BoardZone(
               boardPreview: _boardPreview,
-              fen: _isBuildSessionActive
-                  ? _buildSession.boardFen
-                  : (_ephemeralPreview?.fen ?? _controller.fen),
+              fen: _ephemeralPreview?.fen ?? _controller.fen,
               positionFromFen: _positionFromFen,
               boardFlipped: _boardFlipped,
               onMove: _handleMove,
@@ -244,7 +234,6 @@ mixin _RepertoireLayout
             ),
           ),
         ),
-        if (_isBuildSessionActive) BuildSessionBoardBar(session: _buildSession),
         if (_ephemeralPreview != null)
           EphemeralFindingBar(
             finding: _ephemeralPreview!.finding,
@@ -269,6 +258,8 @@ mixin _RepertoireLayout
               _cursorScoped((_) => _buildPgnTabWithEngines()),
               _cursorScoped((_) => _buildSecondTabContent()),
               _cursorScoped((_) => _buildTreeTabContent()),
+              _cursorScoped((_) => _buildDatabaseTabContent()),
+              _cursorScoped((_) => _buildGenerateTabContent()),
             ],
           ),
         ),
@@ -297,7 +288,14 @@ mixin _RepertoireLayout
   Widget _buildToolsTabBar() {
     return TabBar(
       controller: _toolsTabController,
-      tabs: [_buildPgnTabLabel(), _buildLinesTabLabel(), _buildTreeTabLabel()],
+      isScrollable: true,
+      tabs: [
+        _buildPgnTabLabel(),
+        _buildLinesTabLabel(),
+        _buildTreeTabLabel(),
+        const Tab(text: 'Database'),
+        const Tab(text: 'Generate'),
+      ],
       labelPadding: const EdgeInsets.symmetric(horizontal: 12),
       indicatorSize: TabBarIndicatorSize.label,
       dividerHeight: 1,
@@ -307,11 +305,7 @@ mixin _RepertoireLayout
   Widget _buildPgnTabLabel() => const RepertoirePgnTabLabel();
 
   Widget _buildLinesTabLabel() {
-    return RepertoireLinesTabLabel(
-      isBuildSessionActive: _isBuildSessionActive,
-      isDraftActive: _isDraftActive,
-      hasTraps: _trapSession.hasTraps,
-    );
+    return RepertoireLinesTabLabel(hasTraps: _trapSession.hasTraps);
   }
 
   Widget _buildTreeTabLabel() => const RepertoireTreeTabLabel();
@@ -321,7 +315,7 @@ mixin _RepertoireLayout
       onGoToStart: () => _controller.loadMoveSequence([]),
       onGoBack: _sessionAwareGoBack,
       onGoForward: _sessionAwareGoForward,
-      onGenerateFromHere: _openGenerationDialog,
+      onGenerateFromHere: _openGenerateTab,
       onFlipBoard: () => setState(() => _boardFlipped = !_boardFlipped),
       // Compact stacks the board above the tools, so there is no width to
       // trade and the control would do nothing.

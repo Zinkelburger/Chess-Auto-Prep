@@ -79,12 +79,13 @@ class GameReviewSummary {
   /// named one number and silently dropped the other two.
   String get breakdown {
     if (clean) return 'Analyzed: no blunders, mistakes or inaccuracies. 🎉';
-    return 'Analyzed: ${_counted(blunders, 'blunder')}, '
-        '${_counted(mistakes, 'mistake')}, '
-        '${_counted(inaccuracies, 'inaccuracy')}.';
+    return 'Analyzed: ${counted(blunders, 'blunder')}, '
+        '${counted(mistakes, 'mistake')}, '
+        '${counted(inaccuracies, 'inaccuracy')}.';
   }
 
-  static String _counted(int n, String word) {
+  /// "1 blunder", "2 mistakes", "3 inaccuracies".
+  static String counted(int n, String word) {
     if (n == 1) return '1 $word';
     final plural = word == 'inaccuracy' ? 'inaccuracies' : '${word}s';
     return '$n $plural';

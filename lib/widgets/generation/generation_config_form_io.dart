@@ -4,6 +4,9 @@ mixin _GenerationConfigIo
     on _GenerationConfigFormStateBase, _GenerationConfigDescriptions {
   void _applyInitialConfig(TreeBuildConfig config) {
     _seedConfig = config;
+    _searchAlgorithm = config.isRollingSearch
+        ? SearchAlgorithm.rolling
+        : SearchAlgorithm.pure;
     _cutoffCtrl.text = (config.minProbability * 100).toString();
     _maxPlyCtrl.text = config.maxPly.toString();
     _engineDepthCtrl.text = config.evalDepth.toString();
@@ -27,7 +30,6 @@ mixin _GenerationConfigIo
     _setupMovesCtrl.text = config.setupMoves;
     _setupToleranceCtrl.text = config.setupToleranceCp.toString();
     _memorabilityToleranceCtrl.text = config.memorabilityToleranceCp.toString();
-    _searchAlgorithm = config.searchAlgorithm;
     _timeBudgetCtrl.text = config.timeBudgetMinutes.toString();
     _wideOpening = config.openingWidthPlies > 0;
     _verifyFinal = config.verifyFinal;
@@ -175,7 +177,7 @@ mixin _GenerationConfigIo
         _cutoffCtrl.text,
         fallbackPercent: 0.01,
       ),
-      maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 20,
+      maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 4,
       buildMode: _buildMode,
       // The sources panel keeps its files across a trip through another
       // build source; only db-explorer builds may consume them.
@@ -223,8 +225,11 @@ mixin _GenerationConfigIo
           .clamp(0, 4000),
       refutationLines: _refutationLines,
       alternativeLines: _alternativeLines,
-      useMasterGames: _useMasterGames,
-      downloadMasterGamesIfMissing: _downloadMasterGamesIfMissing,
+      useMasterGames:
+          _buildMode != BuildMode.stockfishExpectimax && _useMasterGames,
+      downloadMasterGamesIfMissing:
+          _buildMode != BuildMode.stockfishExpectimax &&
+          _downloadMasterGamesIfMissing,
       masterDepthBonusPlies:
           (int.tryParse(_masterDepthBonusCtrl.text.trim()) ?? 10).clamp(0, 40),
       masterPriorityWeight:
@@ -302,7 +307,21 @@ mixin _GenerationConfigIo
     );
 
     return _evalSources.applyTo(
-      config,
+      _buildMode != BuildMode.stockfishExpectimax
+          ? config
+          : config.copyWith(
+              noveltyWeight: 0,
+              leafConfidence: 1,
+              memorabilityToleranceCp: 0,
+              setupMoves: '',
+              skeletonPlan: const SkeletonPlan(),
+              replyWindowCp: 0,
+              oppPolicyTemperature: 1,
+              masterPriorityWeight: 0,
+              masterDepthBonusPlies: 0,
+              selectionMode: SelectionMode.expectimax,
+              engineTailPlies: 0,
+            ),
       databases: EvalDatabaseSettings.instance,
       cdbDirectAvailable: _cdbDirectAvailable,
       engineEvalDepth: evalDepth,

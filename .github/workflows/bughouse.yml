@@ -29,6 +29,9 @@ name: Bughouse engine
 
 on:
   push:
+    branches:
+      - main
+      - backup/local-main
     tags:
       - 'v*'
     paths:

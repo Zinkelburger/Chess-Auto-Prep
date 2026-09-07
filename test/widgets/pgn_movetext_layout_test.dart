@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_reading_passage.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 
 void main() {
@@ -68,6 +69,36 @@ void main() {
     expect(find.textContaining('1...', findRichText: true), findsOneWidget);
     expect(find.textContaining('note', findRichText: true), findsOneWidget);
   });
+
+  testWidgets(
+    'a before-move comment stays outside the pinned move explanation',
+    (tester) async {
+      await pumpMovetext(
+        tester,
+        moveHistory: [
+          PgnNodeData(
+            san: 'e4',
+            startingComments: ['Before the move.'],
+            comments: ['After the move.'],
+          ),
+        ],
+      );
+      expect(
+        find.ancestor(
+          of: find.textContaining('Before the move.', findRichText: true),
+          matching: find.byType(PgnReadingPassage),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.ancestor(
+          of: find.textContaining('After the move.', findRichText: true),
+          matching: find.byType(PgnReadingPassage),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('black move after variation keeps 1... prefix', (tester) async {
     await pumpMovetext(
@@ -206,7 +237,47 @@ void main() {
     );
   });
 
-  testWidgets('long plain comments receive a dedicated reading surface', (
+  testWidgets('variation arrow shares the real move row and folds its prose', (
+    tester,
+  ) async {
+    final root = MoveNode(san: 'b5', fen: 'f1', comment: 'Queenside space.');
+    await pumpMovetext(
+      tester,
+      moveHistory: [PgnNodeData(san: 'e4')],
+      variationsByPly: {
+        1: [root],
+      },
+    );
+
+    final arrow = find.byKey(ValueKey('pgn-branch-${root.id}'));
+    final move = find.text('b5', findRichText: true);
+    expect(move, findsOneWidget);
+    expect(find.text('1... b5'), findsNothing);
+    expect(
+      (tester.getCenter(arrow).dy - tester.getCenter(move).dy).abs(),
+      lessThan(8),
+    );
+    expect(tester.getRect(arrow).right, lessThan(tester.getRect(move).left));
+
+    await tester.tap(arrow);
+    await tester.pump();
+    expect(
+      find.textContaining('Queenside space.', findRichText: true),
+      findsNothing,
+    );
+    expect(find.textContaining('1... b5', findRichText: true), findsOneWidget);
+
+    await tester.tap(arrow);
+    await tester.pump();
+    expect(move, findsOneWidget);
+    expect(find.text('1... b5'), findsNothing);
+    expect(
+      find.textContaining('Queenside space.', findRichText: true),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('long plain comments remain in the continuous reading passage', (
     tester,
   ) async {
     final longComment = List.filled(
@@ -222,7 +293,7 @@ void main() {
     );
     expect(text, findsOneWidget);
     expect(
-      find.ancestor(of: text, matching: find.byType(Container)),
+      find.ancestor(of: text, matching: find.byType(PgnReadingPassage)),
       findsWidgets,
     );
   });
@@ -308,9 +379,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('dxc4', findRichText: true), findsNothing);
-    expect(find.textContaining('1 more line'), findsOneWidget);
+    expect(find.byKey(ValueKey('pgn-branch-${dxc4.id}')), findsOneWidget);
 
-    await tester.tap(find.textContaining('1 more line'));
+    await tester.tap(find.byKey(ValueKey('pgn-branch-${dxc4.id}')));
     await tester.pump();
 
     expect(find.text('dxc4', findRichText: true), findsOneWidget);

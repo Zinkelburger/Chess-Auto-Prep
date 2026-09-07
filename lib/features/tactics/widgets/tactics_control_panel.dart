@@ -253,14 +253,16 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
         _focusNode.requestFocus();
       }
 
-      // Refocus move input when opponent finishes moving in multi-move puzzles.
+      // Refocus move input when the opponent finishes moving in a multi-move
+      // puzzle, or when the engine has finished judging a move and the
+      // answer was "not this one" — either way it is the user's turn again.
       if (_wasWaitingForOpponent &&
-          !_session.waitingForOpponent &&
+          !_session.inputLocked &&
           !_session.positionSolved &&
           !_session.showSolution) {
         TacticsControlPanel.moveInputKey.currentState?.focus();
       }
-      _wasWaitingForOpponent = _session.waitingForOpponent;
+      _wasWaitingForOpponent = _session.inputLocked;
 
       setState(() {});
     }
@@ -456,6 +458,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
                   engine: _session.engine,
                   currentMoveIndex: _session.currentMoveIndex,
                   positionSolved: _session.positionSolved,
+                  attempted: _session.attemptRecorded,
                   isAtStartingPosition: isAtStartingPosition,
                   showSolution: _session.showSolution,
                   feedback: _session.feedback,

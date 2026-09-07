@@ -44,22 +44,33 @@ mixin _GenerationConfigCard
 
   Widget _opponentSection() {
     return _cardSection('Opponent', leadingRule: false, [
+      if (_buildMode != BuildMode.stockfishExpectimax)
+        _labeledCheckbox(
+          'Target master opponents',
+          _useMasterGames,
+          (v) => setState(() => _useMasterGames = v),
+          tooltip:
+              'Use master-game reply frequencies where available; Maia supplies off-book positions. Untick to use Maia throughout.',
+        ),
       _numField(
         _maiaEloCtrl,
         'Opponent rating (Elo)',
         defaultText: '2200',
         onEdited: () => setState(() {}),
         tooltip:
-            'The rating the opponent model plays at — every reply likelihood '
-            'comes from this number. Set it to the rating you actually face.',
+            'Maia predicts opponent replies at this rating in Pure and Fast search.',
       ),
       _caption(
         _buildMode == BuildMode.dbExplorer
             ? 'Opponent replies come from move frequencies in your PGN '
                   'files; this rating still drives annotations and trap '
                   'findability.'
-            : 'Replies are predicted by Maia at this rating. For frequencies '
-                  'from real games, build from a PGN database instead.',
+            : _buildMode == BuildMode.stockfishExpectimax
+            ? 'Maia predicts every reply at this rating. Stockfish evaluates positions; no game database is used.'
+            : _useMasterGames
+            ? 'Master-game frequencies where available; Maia at this rating off book. '
+                  'If the master database is missing, replies come from Maia.'
+            : 'Maia predicts every reply at this rating. Master-game frequencies are disabled.',
       ),
       // Master practice is what turns predicted replies into moves titled
       // players actually chose, so the offer to fetch it belongs beside the
@@ -75,6 +86,7 @@ mixin _GenerationConfigCard
   List<Widget> _masterGamesDownloadRow() {
     // Nullable watch: forms hosted without the app-level providers (widget
     // tests, previews) simply show no row.
+    if (_buildMode == BuildMode.stockfishExpectimax) return const [];
     final service = context.watch<MasterGamesService?>();
     if (service == null || !service.isLoaded) return const [];
     if (!_useMasterGames || service.hasGames) return const [];
@@ -114,65 +126,42 @@ mixin _GenerationConfigCard
 
   // ── Search ──────────────────────────────────────────────────────────────
 
-  /// Coverage-floor phrase for the Fast caption, live from the Advanced
-  /// field; 0 or unparsable falls back to the generic wording.
-  String _coverageFloorPhrase() {
-    final floor = double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0;
-    if (floor <= 0 || floor > 1) {
-      return 'every covered reply still gets an answer';
-    }
-    final pct = (floor * 1000).roundToDouble() / 10;
-    final pctText = pct == pct.roundToDouble()
-        ? pct.round().toString()
-        : pct.toStringAsFixed(1);
-    return 'every reply seen more than $pctText% of the time still gets '
-        'an answer';
-  }
-
-  String _searchAlgorithmCaption() {
-    final budget = int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0;
-    return switch (_searchAlgorithm) {
-      SearchAlgorithm.fast =>
-        budget > 0
-            ? 'Expands the most likely positions first and stops after '
-                  '$budget minute${budget == 1 ? '' : 's'}. Rare side lines '
-                  'get a narrower search; ${_coverageFloorPhrase()}.'
-            : 'Expands the most likely positions first and searches rare '
-                  'side lines more narrowly. Set a time limit below to make '
-                  'it stop early instead of finishing the whole tree.',
-      SearchAlgorithm.pure =>
-        budget > 0
-            ? 'Searches every position level by level at the full candidate '
-                  'width — but with a time limit it stops mid-breadth and '
-                  'leaves every line equally shallow. Fast makes far '
-                  'better use of a time limit.'
-            : 'Level by level, every position at the full candidate width '
-                  'and the eval window set under Advanced — no extra '
-                  'narrowing for rare lines. Much slower.',
-    };
-  }
+  /// The model assumptions belong beside the visible search controls.
+  String _searchAlgorithmCaption() =>
+      _searchAlgorithm == SearchAlgorithm.rolling
+      ? 'At each of our turns, compare candidates with 4 plies of lookahead, commit the best move, '
+            'then extend every modeled opponent reply. Earlier choices stay committed. '
+            'This can miss ideas beyond the window; it is an approximate policy, not a full-depth optimum. '
+            'At 4 plies or less it does as much lookahead as Pure; longer preparation can still be expensive. '
+            'The same engine-loss limit and draw convention as Pure apply.'
+      : 'Pure finite-horizon search: start with 4 plies; each extra ply can multiply work. All legal candidates, '
+            'one opponent model, no heuristic bonuses. A budget-limited result is incomplete. '
+            'Scores are engine-derived expected-score estimates, not calibrated win percentages. '
+            'The model assumes immediate claims at threefold repetition or 50 moves; '
+            'repetition history begins at the supplied starting position.';
 
   Widget _searchSection() {
     return _cardSection('Search', [
-      SegmentedButton<SearchAlgorithm>(
-        segments: const [
-          ButtonSegment(
-            value: SearchAlgorithm.fast,
-            label: Text('Fast (recommended)', style: TextStyle(fontSize: 12)),
-            icon: Icon(Icons.bolt, size: 16),
-          ),
-          ButtonSegment(
-            value: SearchAlgorithm.pure,
-            label: Text('Pure', style: TextStyle(fontSize: 12)),
-            icon: Icon(Icons.all_inclusive, size: 16),
-          ),
-        ],
-        selected: {_searchAlgorithm},
-        showSelectedIcon: false,
-        onSelectionChanged: widget.isGenerating
-            ? null
-            : (sel) => setState(() => _searchAlgorithm = sel.first),
-      ),
+      if (_buildMode == BuildMode.stockfishExpectimax)
+        DropdownButtonFormField<SearchAlgorithm>(
+          key: const ValueKey('generation-search-method'),
+          initialValue: _searchAlgorithm,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Search method'),
+          items: const [
+            DropdownMenuItem(
+              value: SearchAlgorithm.pure,
+              child: Text('Pure — full horizon'),
+            ),
+            DropdownMenuItem(
+              value: SearchAlgorithm.rolling,
+              child: Text('Fast — 4-ply lookahead'),
+            ),
+          ],
+          onChanged: (value) {
+            if (value != null) setState(() => _searchAlgorithm = value);
+          },
+        ),
       _caption(_searchAlgorithmCaption()),
       const SizedBox(height: 10),
       Wrap(
@@ -197,25 +186,9 @@ mixin _GenerationConfigCard
           _numField(
             _maxPlyCtrl,
             'Max line length (half-moves)',
-            defaultText: '20',
-            onEdited: () => setState(() {}),
-            tooltip: 'How deep lines are allowed to grow.',
-          ),
-          _numField(
-            _multipvCtrl,
-            'Candidate moves per position',
             defaultText: '4',
             onEdited: () => setState(() {}),
-            enabled:
-                _buildMode != BuildMode.dbExplorer &&
-                _buildMode != BuildMode.chessDbBook,
-            disabledReason: _buildMode == BuildMode.chessDbBook
-                ? 'ChessDB plays one move per position in this build source'
-                : 'Your PGN files decide the candidate moves in this mode',
-            tooltip:
-                'How many of your candidate moves are considered at each '
-                'position — engine MultiPV lines, or top Maia moves in '
-                'database mode.',
+            tooltip: 'How deep lines are allowed to grow.',
           ),
           _numField(
             _timeBudgetCtrl,
@@ -223,10 +196,9 @@ mixin _GenerationConfigCard
             defaultText: '0',
             onEdited: () => setState(() {}),
             tooltip:
-                '0 = no limit. Otherwise the build stops expanding when time '
-                'runs out, still answers every covered reply, and can be '
-                'resumed later. Enrichment and verification run afterwards and '
-                'are not counted against it.',
+                '0 = no limit. An in-flight evaluation may finish after this limit. '
+                'Search stops between atomic expansions and marks the search incomplete. '
+                'It can be resumed. Output enrichment is outside this budget.',
           ),
         ],
       ),
@@ -238,65 +210,39 @@ mixin _GenerationConfigCard
   Widget _outputSection() {
     final isDb = _buildMode == BuildMode.dbExplorer;
     return _cardSection('What to build', [
-      DropdownButtonFormField<BuildMode>(
-        initialValue: _buildMode,
-        decoration: const InputDecoration(
-          labelText: 'Build from',
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
+      ChoiceField<BuildMode>(
+        label: 'Build from',
+        value: _buildMode,
+        enabled: !widget.isGenerating,
+        style: const TextStyle(fontSize: 13),
         items: const [
-          DropdownMenuItem(
+          ChoiceItem(
             value: BuildMode.stockfishExpectimax,
-            child: Text(
-              'Engine + human model (recommended)',
-              style: TextStyle(fontSize: 13),
-            ),
+            label: 'Engine + human model (recommended)',
           ),
-          DropdownMenuItem(
+          ChoiceItem(
             value: BuildMode.maiaDbExplore,
-            child: Text(
-              'Database win rates (no engine)',
-              style: TextStyle(fontSize: 13),
-            ),
+            label: 'Database win rates (no engine)',
           ),
-          DropdownMenuItem(
+          ChoiceItem(
             value: BuildMode.chessDbBook,
-            child: Text(
-              'ChessDB mainline book',
-              style: TextStyle(fontSize: 13),
-            ),
+            label: 'ChessDB mainline book',
           ),
-          DropdownMenuItem(
-            value: BuildMode.dbExplorer,
-            child: Text('My PGN files', style: TextStyle(fontSize: 13)),
-          ),
+          ChoiceItem(value: BuildMode.dbExplorer, label: 'My PGN files'),
         ],
-        onChanged: widget.isGenerating
-            ? null
-            : (v) {
-                if (v == null) return;
-                setState(() {
-                  _buildMode = v;
-                  // A book spanning the whole encyclopedia wants chapters
-                  // cut by code, not by where it happens to branch. Set
-                  // here rather than derived from the mode so the checkbox
-                  // shows what will happen and can be turned back off.
-                  if (v == BuildMode.chessDbBook) _chaptersByEco = true;
-                });
-              },
+        onChanged: (v) {
+          setState(() {
+            _buildMode = v;
+            // A book spanning the whole encyclopedia wants chapters
+            // cut by code, not by where it happens to branch. Set
+            // here rather than derived from the mode so the checkbox
+            // shows what will happen and can be turned back off.
+            if (v == BuildMode.chessDbBook) _chaptersByEco = true;
+          });
+        },
       ),
       _caption(_buildModeDescription()),
       const SizedBox(height: 8),
-      _labeledCheckbox(
-        'Prefer novelties',
-        _preferNovelties,
-        (v) => setState(() => _preferNovelties = v),
-        tooltip:
-            'Boosts sound-but-rare moves so opponents leave their preparation '
-            'sooner. While on, the Natural-move tolerance (Advanced → Move '
-            'choice) is ignored.',
-      ),
       _labeledCheckbox(
         'Only traps',
         _trapsOnly,
@@ -505,7 +451,7 @@ mixin _GenerationConfigCard
         kDefaultGenerationEvalDepth;
     final budget = int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0;
     final source = switch (_buildMode) {
-      BuildMode.stockfishExpectimax => 'engine + human model',
+      BuildMode.stockfishExpectimax => 'Stockfish + Maia',
       BuildMode.maiaDbExplore => 'database win rates',
       BuildMode.dbExplorer => 'your PGN files',
       BuildMode.chessDbBook => 'ChessDB mainlines',
@@ -513,17 +459,21 @@ mixin _GenerationConfigCard
     final parts = [
       // Whose repertoire this is decides every move in it, so it leads.
       widget.playAsWhite ? 'As White' : 'As Black',
-      _searchAlgorithm == SearchAlgorithm.fast ? 'Fast search' : 'Pure search',
-      'vs ~$elo',
+      _searchAlgorithm == SearchAlgorithm.rolling
+          ? 'Fast (4-ply, approximate)'
+          : 'Pure search',
+      _buildMode != BuildMode.stockfishExpectimax && _useMasterGames
+          ? 'master practice, Maia $elo off-book'
+          : 'Maia $elo throughout',
       source,
       '$ply half-moves deep',
       if (_usesEngineDepth) 'engine depth $depth',
-      _selectionModeLabel(
-        _effectiveSelectionMode,
-      ).replaceAll(' (recommended)', '').toLowerCase(),
-      if (_preferNovelties) 'novelties',
+      'expected-score objective',
       if (_trapsOnly) 'traps only',
-      if (_verifyFinal && !_noVerifyMode) 'verified',
+      if (_buildMode != BuildMode.stockfishExpectimax &&
+          _verifyFinal &&
+          !_noVerifyMode)
+        're-evaluated',
       if (budget > 0) 'stops after ${budget}m',
     ];
     return parts.join(' · ');
@@ -532,8 +482,8 @@ mixin _GenerationConfigCard
   Widget _summary() {
     return Tooltip(
       message:
-          'What this build will do. The move-choice rule and verification '
-          'are set under Advanced…',
+          'What this build will do. Engine-loss limits and resource settings '
+          'are under Advanced…',
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

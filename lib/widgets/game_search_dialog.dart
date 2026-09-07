@@ -390,7 +390,6 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
     final white = entry.white;
     final black = entry.black;
     final secondary = entry.secondary;
-    final rating = entry.rating;
     final courseHeadline = black == '?' || black == white ? white : black;
     final courseSecondary = black == '?' || black == white
         ? secondary
@@ -458,15 +457,6 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
               ],
             ),
           ),
-          if (rating > 0)
-            Text(
-              '★' * rating,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.starAccent,
-                letterSpacing: -1,
-              ),
-            ),
         ],
       ),
     );

@@ -134,28 +134,37 @@ class OpeningTreeBuilder {
 
     if (onProgress != null) onProgress(0, total);
 
-    for (final pgnText in pgnList) {
-      final trimmed = pgnText.trim();
-      if (trimmed.isNotEmpty) {
-        try {
-          addGame(
-            tree,
-            PgnGame.parsePgn(trimmed),
-            usernameLower: usernameLower,
-            userIsWhite: userIsWhite,
-            maxDepth: maxDepth,
-            strictPlayerMatching: strictPlayerMatching,
-          );
-        } catch (_) {
-          skipped++;
+    // Chapters go in after the games that reach their start position, so the
+    // tree does not depend on the order the collection happens to be sorted
+    // in; see [foldGamesIntoTree]. The start position is read from the raw
+    // text, so a big collection is still parsed one game at a time.
+    foldGamesIntoTree<String>(
+      games: pgnList,
+      startPositionOf: _startPositionOfText,
+      isReached: (position) => treeReachesPosition(tree, position),
+      fold: (pgnText) {
+        final trimmed = pgnText.trim();
+        if (trimmed.isNotEmpty) {
+          try {
+            addGame(
+              tree,
+              PgnGame.parsePgn(trimmed),
+              usernameLower: usernameLower,
+              userIsWhite: userIsWhite,
+              maxDepth: maxDepth,
+              strictPlayerMatching: strictPlayerMatching,
+            );
+          } catch (_) {
+            skipped++;
+          }
         }
-      }
-      processed++;
-      if (onProgress != null &&
-          (processed == total || processed % 25 == 0 || processed == 1)) {
-        onProgress(processed, total);
-      }
-    }
+        processed++;
+        if (onProgress != null &&
+            (processed == total || processed % 25 == 0 || processed == 1)) {
+          onProgress(processed, total);
+        }
+      },
+    );
 
     if (skipped > 0) {
       // ignore: avoid_print
@@ -167,10 +176,52 @@ class OpeningTreeBuilder {
     return tree.toTransferJson();
   }
 
+  /// Fold a whole batch of parsed games into [tree], in an order that does
+  /// not depend on the order they arrived in — see [foldGamesIntoTree].
+  ///
+  /// Prefer this to a loop over [addGame] whenever the caller has all its
+  /// games in hand: folding a `[FEN]` chapter before the game that reaches
+  /// its start position grafts it at the root instead of anchoring it, and
+  /// the graft is never revisited.
+  static void addGames(
+    OpeningTree tree,
+    Iterable<PgnGame<PgnNodeData>> games, {
+    required String usernameLower,
+    required bool? userIsWhite,
+    required int maxDepth,
+    required bool strictPlayerMatching,
+    void Function(PgnGame<PgnNodeData> game, Object error)? onError,
+  }) {
+    foldGamesIntoTree<PgnGame<PgnNodeData>>(
+      games: games,
+      startPositionOf: _startPositionOf,
+      isReached: (position) => treeReachesPosition(tree, position),
+      fold: (game) {
+        try {
+          addGame(
+            tree,
+            game,
+            usernameLower: usernameLower,
+            userIsWhite: userIsWhite,
+            maxDepth: maxDepth,
+            strictPlayerMatching: strictPlayerMatching,
+          );
+        } catch (e) {
+          if (onError == null) rethrow;
+          onError(game, e);
+        }
+      },
+    );
+  }
+
   /// Fold one parsed [game] into [tree] under the builder's attribution
   /// rules.  Public so a caller that has already parsed its games (the
   /// repertoire loader parses each game once for lines *and* tree) can grow
   /// a tree without re-serialising and re-parsing them.
+  ///
+  /// Folding a batch one call at a time re-introduces the ordering problem
+  /// [addGames] exists to avoid; use [addGames] when the games are all in
+  /// hand.
   static void addGame(
     OpeningTree tree,
     PgnGame<PgnNodeData> game, {
@@ -225,6 +276,25 @@ class OpeningTreeBuilder {
   static Position? _startPositionOf(PgnGame<PgnNodeData> game) {
     final fen = game.headers['FEN']?.trim();
     if (fen == null || fen.isEmpty) return null;
+    return tryParseFen(expandFen(fen));
+  }
+
+  /// [_startPositionOf] read straight off the PGN text, so a batch can be
+  /// ordered without parsing every game up front (a big collection is parsed
+  /// one game at a time, and holding every parse would cost far more than the
+  /// text itself).
+  ///
+  /// A `[FEN "…"]` that turns out to be inside a comment only defers the game
+  /// to the second pass, where its start position resolves to the root and it
+  /// is folded straight away.
+  static Position? _startPositionOfText(String pgnText) {
+    const tag = '[FEN "';
+    final start = pgnText.indexOf(tag);
+    if (start < 0) return null;
+    final end = pgnText.indexOf('"]', start + tag.length);
+    if (end < 0) return null;
+    final fen = pgnText.substring(start + tag.length, end).trim();
+    if (fen.isEmpty) return null;
     return tryParseFen(expandFen(fen));
   }
 }

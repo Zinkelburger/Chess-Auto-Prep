@@ -12,7 +12,7 @@ import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_eval.dart';
 import '../models/bughouse_state.dart';
-import 'bughouse_book_panel.dart';
+import 'bughouse_number_field.dart';
 import 'bughouse_panel_section.dart';
 
 /// What the engine thinks, kept running.
@@ -29,6 +29,13 @@ import 'bughouse_panel_section.dart';
 /// for theirs. Read down a column and you see your own candidate moves; read
 /// across a row and you see the pair that go together. Written as running text
 /// — which is what this panel used to do — neither reading is available.
+///
+/// Nothing on the panel changes size as the engine reports. Every block that
+/// lists lines or candidates reserves its slots up front — as many rows as the
+/// engine is asked for, each a fixed height — and fills them as results
+/// arrive. Before this, the first pass added rows, the next pass's rows were
+/// longer, a superseded search took rows away, and every one of those moved
+/// everything below it under the pointer.
 ///
 /// The rules that shape a bughouse search (which seat we hold, where we stand
 /// on the clock, whether we may sit) and the engine's own knobs are real
@@ -93,13 +100,6 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel> {
               _TeamLines(controller: controller, analysis: controller.ours),
               const SizedBox(height: 16),
               _TeamLines(controller: controller, analysis: controller.theirs),
-              // The engine's two blocks say what is good; the archive says
-              // what is played. In that order, because this is an engine pane
-              // — and absent without comment on a machine with no book.
-              if (controller.hasBook) ...[
-                const SizedBox(height: 16),
-                BughouseBookPanel(controller: controller),
-              ],
               if (controller.scenarios.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 _ScenarioTable(controller: controller),
@@ -200,31 +200,46 @@ class _PlayerCandidateCard extends StatelessWidget {
             ),
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 8),
-          if (candidates.isEmpty)
-            Text(
-              controller.analysisEnabled ? 'Finding moves…' : 'Analysis paused',
-              style: AppTextStyles.muted,
-            )
-          else
-            Wrap(
-              spacing: 5,
-              runSpacing: 5,
-              children: [
-                for (final candidate in candidates)
-                  _CandidateChip(
-                    key: ValueKey(
-                      'bughouse-candidate-${which.name}-${candidate.move}',
-                    ),
-                    controller: controller,
-                    candidate: candidate,
-                  ),
-              ],
+          const SizedBox(height: 6),
+          // One slot per candidate the engine can report, filled top down and
+          // blank below that, so the card is the same height before the first
+          // result, after it, and with the search paused.
+          for (var i = 0; i < slots; i++)
+            SizedBox(
+              height: _CandidateChip.height,
+              child: i < candidates.length
+                  ? Align(
+                      alignment: Alignment.centerLeft,
+                      child: _CandidateChip(
+                        key: ValueKey(
+                          'bughouse-candidate-${which.name}-${candidates[i].move}',
+                        ),
+                        controller: controller,
+                        candidate: candidates[i],
+                      ),
+                    )
+                  : i == 0
+                  ? Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        controller.analysisEnabled
+                            ? 'Finding moves…'
+                            : 'Analysis paused',
+                        style: AppTextStyles.muted,
+                      ),
+                    )
+                  : null,
             ),
         ],
       ),
     );
   }
+
+  /// How many candidates the card can hold: one per ranked line the engine
+  /// is asked for, and never more than three — the shortlist a player reads.
+  int get slots => controller.shortlistSize.clamp(1, maxCandidates);
+
+  static const int maxCandidates = 3;
 
   List<_Candidate> _candidates(BughouseTeamAnalysis analysis) {
     final infos = analysis.lines.isNotEmpty
@@ -242,7 +257,7 @@ class _PlayerCandidateCard extends StatelessWidget {
         eval: controller.evalOf(info, team: analysis.team).label,
         step: steps.first,
       ));
-      if (result.length == 3) break;
+      if (result.length == maxCandidates) break;
     }
 
     // A bestmove can arrive before the engine's first complete info block.
@@ -283,6 +298,9 @@ class _CandidateChip extends StatefulWidget {
   final BughouseController controller;
   final _Candidate candidate;
 
+  /// The slot a chip sits in: the chip itself plus the gap to the next one.
+  static const double height = 30;
+
   @override
   State<_CandidateChip> createState() => _CandidateChipState();
 }
@@ -315,7 +333,7 @@ class _CandidateChipState extends State<_CandidateChip> {
           onTap: () =>
               widget.controller.playJoint(widget.candidate.step.action),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
             decoration: BoxDecoration(
               color: AppColors.surfaceElevated,
               border: Border.all(color: AppColors.outline),
@@ -494,6 +512,49 @@ class _TeamLines extends StatelessWidget {
         ? analysis.lines
         : [?analysis.latest];
 
+    // What goes in the slots: the ranked lines, or the engine's first word
+    // before any `info` — a `bestmove` with no line behind it is still worth
+    // a row.
+    final lines = <Widget>[
+      for (var i = 0; i < rows.length; i++)
+        if (rows[i].pv.isNotEmpty)
+          _LineRow(
+            // Keyed by content, so a row whose line changes under the
+            // pointer is a new row: the pointer leaves the old one and
+            // enters the new, instead of the old highlight outliving it.
+            key: ValueKey('${analysis.team.name}:$i:${rows[i].pv}'),
+            controller: controller,
+            team: analysis.team,
+            steps: controller.describePv(rows[i], team: analysis.team),
+            label: controller.evalOf(rows[i], team: analysis.team).label,
+            primary: i == 0,
+          ),
+      if (rows.every((r) => r.pv.isEmpty) && analysis.best != null)
+        _LineRow(
+          key: ValueKey('${analysis.team.name}:best:${analysis.best}'),
+          controller: controller,
+          team: analysis.team,
+          steps: controller.describePv(
+            BughouseInfo(
+              depth: 0,
+              scoreCp: 0,
+              nodes: 0,
+              nps: 0,
+              timeMs: 0,
+              pv: [analysis.best!],
+            ),
+            team: analysis.team,
+          ),
+          label: '—',
+          primary: true,
+        ),
+    ];
+    final String? message = !onMove
+        ? 'Nothing to move — both boards are the other team\'s.'
+        : lines.isEmpty
+        ? 'Thinking…'
+        : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -516,49 +577,21 @@ class _TeamLines extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        if (!onMove)
-          const Text(
-            'Nothing to move — both boards are the other team\'s.',
-            style: AppTextStyles.muted,
-          )
-        else if (rows.isEmpty && analysis.best == null)
-          const Text('Thinking…', style: AppTextStyles.muted)
-        else ...[
-          for (var i = 0; i < rows.length; i++)
-            if (rows[i].pv.isNotEmpty)
-              _LineRow(
-                // Keyed by content, so a row whose line changes under the
-                // pointer is a new row: the pointer leaves the old one and
-                // enters the new, instead of the old highlight outliving it.
-                key: ValueKey('${analysis.team.name}:$i:${rows[i].pv}'),
-                controller: controller,
-                team: analysis.team,
-                steps: controller.describePv(rows[i], team: analysis.team),
-                label: controller.evalOf(rows[i], team: analysis.team).label,
-                primary: i == 0,
-              ),
-          // A `bestmove` with no line behind it — the engine's first word
-          // before any `info` — is still worth a row.
-          if (rows.every((r) => r.pv.isEmpty) && analysis.best != null)
-            _LineRow(
-              key: ValueKey('${analysis.team.name}:best:${analysis.best}'),
-              controller: controller,
-              team: analysis.team,
-              steps: controller.describePv(
-                BughouseInfo(
-                  depth: 0,
-                  scoreCp: 0,
-                  nodes: 0,
-                  nps: 0,
-                  timeMs: 0,
-                  pv: [analysis.best!],
-                ),
-                team: analysis.team,
-              ),
-              label: '—',
-              primary: true,
-            ),
-        ],
+        // As many slots as lines the engine is asked for, every one the same
+        // height, whether or not there is a line to put in it yet.
+        for (var i = 0; i < controller.shortlistSize; i++)
+          SizedBox(
+            key: ValueKey('bughouse-line-slot-${analysis.team.name}-$i'),
+            height: _LineRow.height,
+            child: i < lines.length
+                ? lines[i]
+                : i == 0 && message != null
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 3, 4, 0),
+                    child: Text(message, style: AppTextStyles.muted),
+                  )
+                : null,
+          ),
       ],
     );
   }
@@ -593,6 +626,11 @@ class _LineRow extends StatefulWidget {
 
   /// The line the search settled on, drawn heavier than the ones it beat.
   final bool primary;
+
+  /// Two lines of moves, and then the line is cut off — the way every
+  /// engine pane cuts a long variation rather than growing to hold it. Fixed
+  /// so the slot it sits in is the same height empty or full.
+  static const double height = 44;
 
   @override
   State<_LineRow> createState() => _LineRowState();
@@ -653,6 +691,7 @@ class _LineRowState extends State<_LineRow> {
             ? null
             : () => _controller.playLine(steps, throughPly: 0),
         child: Container(
+          height: _LineRow.height,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
           decoration: BoxDecoration(
             color: _lit ? AppColors.hoverOverlay : Colors.transparent,
@@ -683,7 +722,12 @@ class _LineRowState extends State<_LineRow> {
                           color: AppColors.onSurfaceMuted,
                         ),
                       )
+                    // Clipped at the row's height rather than wrapped to
+                    // whatever the line needs; the moves past the cut are
+                    // still played by clicking the last visible one and
+                    // stepping forward.
                     : Wrap(
+                        clipBehavior: Clip.hardEdge,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         runSpacing: 2,
                         children: [
@@ -900,10 +944,19 @@ class _TableRules extends StatelessWidget {
 }
 
 /// How hard the engine works, and what it is working with.
+///
+/// Four numbers you type and one you read. The one you read is the core
+/// count: Hivemind fixes its search workers at build time and gives ONNX
+/// Runtime every remaining core, so it already uses the whole machine and
+/// has no thread option to set — the honest thing is to say what it is
+/// doing where a person would look for the control.
 class _EngineSection extends StatelessWidget {
   const _EngineSection({required this.controller});
 
   final BughouseController controller;
+
+  /// Wide enough for "Think up to", the longest label in the column.
+  static const double labelWidth = 84;
 
   @override
   Widget build(BuildContext context) {
@@ -915,125 +968,86 @@ class _EngineSection extends StatelessWidget {
       summary:
           '${settings.hashMb} MB · batch ${settings.batchSize} · '
           '${settings.lines} line${settings.lines == 1 ? '' : 's'} · '
-          '${settings.thinkSeconds}s a pass',
+          'up to ${settings.thinkSeconds}s a pass',
       children: [
-        _Knob(
+        BughouseNumberField(
+          key: const Key('bughouse-engine-hash'),
           label: 'Memory',
+          unit: 'MB',
           hint: 'The search tree\'s hash table.',
           value: settings.hashMb,
-          choices: BughouseEngineSettings.hashChoices,
-          format: (v) => '$v MB',
+          min: BughouseEngineSettings.hashMin,
+          max: BughouseEngineSettings.hashMax,
+          labelWidth: _EngineSection.labelWidth,
           onChanged: (v) =>
               controller.setEngineSettings(settings.copyWith(hashMb: v)),
         ),
-        _Knob(
-          label: 'Batch',
-          hint:
-              'Positions sent to the network at once. Larger keeps more of '
-              'the CPU busy per evaluation and raises nodes per second; it '
-              'also makes the search coarser.',
-          value: settings.batchSize,
-          choices: BughouseEngineSettings.batchChoices,
-          format: (v) => '$v',
-          onChanged: (v) =>
-              controller.setEngineSettings(settings.copyWith(batchSize: v)),
-        ),
-        _Knob(
+        BughouseNumberField(
+          key: const Key('bughouse-engine-lines'),
           label: 'Lines',
-          hint: 'How many ranked moves each pass reports.',
+          hint: 'How many ranked lines each pass reports.',
           value: settings.lines,
-          choices: BughouseEngineSettings.lineChoices,
-          format: (v) => '$v',
+          min: BughouseEngineSettings.linesMin,
+          max: BughouseEngineSettings.linesMax,
+          labelWidth: _EngineSection.labelWidth,
           onChanged: (v) =>
               controller.setEngineSettings(settings.copyWith(lines: v)),
         ),
-        _Knob(
-          label: 'Think',
+        BughouseNumberField(
+          key: const Key('bughouse-engine-think'),
+          label: 'Think up to',
+          unit: 's a pass',
           hint:
-              'The longest one pass runs for. The engine has no "go infinite", '
-              'so thinking is built from passes that each run longer than the '
-              'last; this is where that stops.',
+              'The engine keeps thinking for as long as the position is on '
+              'screen. It works in passes that each run longer than the last; '
+              'this is the longest a pass gets.',
           value: settings.thinkSeconds,
-          choices: BughouseEngineSettings.thinkChoices,
-          format: (v) => '${v}s',
+          min: BughouseEngineSettings.thinkMin,
+          max: BughouseEngineSettings.thinkMax,
+          labelWidth: _EngineSection.labelWidth,
           onChanged: (v) =>
               controller.setEngineSettings(settings.copyWith(thinkSeconds: v)),
         ),
-        const SizedBox(height: 8),
-        // There is no core count to set: the engine does not advertise a
-        // `Threads` option and ignores one if it is sent, fixing its worker
-        // count at build time. So this reports what it chose rather than
-        // pretending to control it — the batch above is the knob that actually
-        // changes how much work reaches the CPU.
-        Text(
-          detail.isEmpty
-              ? 'The engine reports its worker and thread counts once it is '
-                    'running; it has no setting for them.'
-              : '${controller.backendLabel} · $detail. The worker and thread '
-                    'counts are fixed by the engine build.',
-          style: AppTextStyles.caption,
+        BughouseNumberField(
+          key: const Key('bughouse-engine-batch'),
+          label: 'Batch',
+          hint:
+              'Positions sent to the network at once. Larger is faster and '
+              'coarser.',
+          value: settings.batchSize,
+          min: BughouseEngineSettings.batchMin,
+          max: BughouseEngineSettings.batchMax,
+          labelWidth: _EngineSection.labelWidth,
+          onChanged: (v) =>
+              controller.setEngineSettings(settings.copyWith(batchSize: v)),
         ),
-      ],
-    );
-  }
-}
-
-/// One labelled dropdown, laid out so a column of them lines up.
-class _Knob extends StatelessWidget {
-  const _Knob({
-    required this.label,
-    required this.hint,
-    required this.value,
-    required this.choices,
-    required this.format,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String hint;
-  final int value;
-  final List<int> choices;
-  final String Function(int) format;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 72,
-            child: Tooltip(
-              message: hint,
-              child: Text(label, style: AppTextStyles.muted),
-            ),
-          ),
-          Expanded(
-            child: DropdownButtonFormField<int>(
-              initialValue: value,
-              isDense: true,
-              style: AppTextStyles.mono,
-              decoration: const InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(
+                width: _EngineSection.labelWidth,
+                child: Tooltip(
+                  message:
+                      'The engine has no thread setting: its worker count is '
+                      'fixed by the build and the rest of the cores go to the '
+                      'network.',
+                  child: Text('Cores', style: AppTextStyles.muted),
                 ),
               ),
-              items: [
-                for (final choice in choices)
-                  DropdownMenuItem(
-                    value: choice,
-                    child: Text(format(choice), style: AppTextStyles.mono),
-                  ),
-              ],
-              onChanged: (v) => v == null ? null : onChanged(v),
-            ),
+              Expanded(
+                child: Text(
+                  detail.isEmpty
+                      ? 'Reported once the engine is running'
+                      : '$detail · every core, fixed by the engine',
+                  style: AppTextStyles.caption,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

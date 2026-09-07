@@ -1,0 +1,317 @@
+{
+  "date": "2026-09-05",
+  "engine_identity": {
+    "stockfish": {
+      "sha256": "6b087694916228c905a5e14db74cca8c7e5643602226af1fa5d42353c455b9f9",
+      "bytes": 112933248
+    },
+    "maia": {
+      "sha256": "405bf76c15727dad8728b352c06a8f3c1b80fb2760e8d666b32485c63d75b856",
+      "bytes": 45683686
+    }
+  },
+  "engine_name": "Stockfish 18",
+  "master_games": 1920172,
+  "master_database_bytes": 2135433216,
+  "initial_90_second_pairs": {
+    "pawn-control": {
+      "pure": {
+        "algorithm": "pure",
+        "config": {
+          "search_algorithm": "pure",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 4,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 90,
+        "startup_ms": 4135,
+        "build_ms": 18851,
+        "complete": true,
+        "nodes": 860,
+        "engine_calls": 855,
+        "master_book_hits": 0,
+        "master_book_misses": 110,
+        "root_move": "e1f1",
+        "root_value": 0.5532322387363345,
+        "root_lower": 0.5532322387363345,
+        "root_upper": 0.5532322387363345,
+        "start_fen": "8/8/8/8/8/4k3/P7/4K3 w - - 0 1"
+      },
+      "fast": {
+        "algorithm": "fast",
+        "config": {
+          "search_algorithm": "rolling",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 4,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 90,
+        "startup_ms": 3535,
+        "build_ms": 19834,
+        "complete": true,
+        "nodes": 860,
+        "engine_calls": 861,
+        "master_book_hits": 0,
+        "master_book_misses": 110,
+        "root_move": "e1f1",
+        "root_value": 0.5532322387363345,
+        "root_lower": 0.5532322387363345,
+        "root_upper": 0.5532322387363345,
+        "start_fen": "8/8/8/8/8/4k3/P7/4K3 w - - 0 1"
+      }
+    },
+    "pawn-six": {
+      "fast": {
+        "algorithm": "fast",
+        "config": {
+          "search_algorithm": "rolling",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 6,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 90,
+        "startup_ms": 3281,
+        "build_ms": 73368,
+        "complete": true,
+        "nodes": 11029,
+        "engine_calls": 11314,
+        "master_book_hits": 0,
+        "master_book_misses": 1354,
+        "root_move": "e1f1",
+        "root_value": 0.7557256838995513,
+        "root_lower": 0.7557256838995513,
+        "root_upper": 0.7557256838995513,
+        "start_fen": "8/8/8/8/8/4k3/P7/4K3 w - - 0 1"
+      },
+      "pure": {
+        "algorithm": "pure",
+        "config": {
+          "search_algorithm": "pure",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 6,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 90,
+        "startup_ms": 3204,
+        "build_ms": 90031,
+        "complete": false,
+        "nodes": 14445,
+        "engine_calls": 5010,
+        "master_book_hits": 0,
+        "master_book_misses": 1513,
+        "root_move": "e1f1",
+        "root_value": 0.5506757249660453,
+        "root_lower": 0.0,
+        "root_upper": 1.0,
+        "start_fen": "8/8/8/8/8/4k3/P7/4K3 w - - 0 1"
+      }
+    },
+    "italian-six": {
+      "pure": {
+        "algorithm": "pure",
+        "config": {
+          "search_algorithm": "pure",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 6,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 90,
+        "startup_ms": 3289,
+        "build_ms": 90006,
+        "complete": false,
+        "nodes": 4237,
+        "engine_calls": 8217,
+        "master_book_hits": 127,
+        "master_book_misses": 81,
+        "root_move": "b1c3",
+        "root_value": 0.500912753296701,
+        "root_lower": 0.0,
+        "root_upper": 1.0,
+        "start_fen": "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+      },
+      "fast": {
+        "algorithm": "fast",
+        "config": {
+          "search_algorithm": "rolling",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 6,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 90,
+        "startup_ms": 2881,
+        "build_ms": 90018,
+        "complete": false,
+        "nodes": 3909,
+        "engine_calls": 8136,
+        "master_book_hits": 127,
+        "master_book_misses": 81,
+        "root_move": "b1c3",
+        "root_value": 0.5171464039281279,
+        "root_lower": 0.0,
+        "root_upper": 0.9999999999999999,
+        "start_fen": "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+      }
+    },
+    "qgd-six": {
+      "fast": {
+        "algorithm": "fast",
+        "config": {
+          "search_algorithm": "rolling",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 6,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 90,
+        "startup_ms": 3043,
+        "build_ms": 90018,
+        "complete": false,
+        "nodes": 7129,
+        "engine_calls": 5481,
+        "master_book_hits": 241,
+        "master_book_misses": 169,
+        "root_move": null,
+        "root_value": 0.5,
+        "root_lower": 0.0,
+        "root_upper": 1.0,
+        "start_fen": "rnbqkb1r/ppp2ppp/4pn2/3p4/2PP4/2N5/PP2PPPP/R1BQKBNR w KQkq - 2 4"
+      },
+      "pure": {
+        "algorithm": "pure",
+        "config": {
+          "search_algorithm": "pure",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 6,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 90,
+        "startup_ms": 3043,
+        "build_ms": 90010,
+        "complete": false,
+        "nodes": 7465,
+        "engine_calls": 6337,
+        "master_book_hits": 241,
+        "master_book_misses": 169,
+        "root_move": "c1f4",
+        "root_value": 0.5031299423074548,
+        "root_lower": 0.0,
+        "root_upper": 1.0,
+        "start_fen": "rnbqkb1r/ppp2ppp/4pn2/3p4/2PP4/2N5/PP2PPPP/R1BQKBNR w KQkq - 2 4"
+      }
+    }
+  },
+  "completed_600_second_followup": {
+    "pawn-six": {
+      "pure": {
+        "algorithm": "pure",
+        "start_fen": "8/8/8/8/8/4k3/P7/4K3 w - - 0 1",
+        "config": {
+          "search_algorithm": "pure",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 6,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 600,
+        "startup_ms": 3336,
+        "build_ms": 188354,
+        "complete": true,
+        "nodes": 30945,
+        "engine_calls": 31390,
+        "master_book_hits": 0,
+        "master_book_misses": 3815,
+        "root_move": "e1d1",
+        "root_value": 0.7644489897698279,
+        "root_lower": 0.7644489897698279,
+        "root_upper": 0.7644489897698279
+      },
+      "fast": {
+        "algorithm": "fast",
+        "start_fen": "8/8/8/8/8/4k3/P7/4K3 w - - 0 1",
+        "config": {
+          "search_algorithm": "rolling",
+          "algorithm_version": 3,
+          "opponent_book_source": "local-master-book",
+          "play_as_white": true,
+          "max_depth": 6,
+          "eval_depth": 8,
+          "engine_threads": 1,
+          "max_eval_loss_cp": 40,
+          "use_master_games": true,
+          "maia_elo": 2200
+        },
+        "budget_seconds": 600,
+        "startup_ms": 3129,
+        "build_ms": 89882,
+        "complete": true,
+        "nodes": 11029,
+        "engine_calls": 11314,
+        "master_book_hits": 0,
+        "master_book_misses": 1354,
+        "root_move": "e1f1",
+        "root_value": 0.7557256838995513,
+        "root_lower": 0.7557256838995513,
+        "root_upper": 0.7557256838995513
+      }
+    }
+  },
+  "book_fingerprint": {
+    "/home/anbernal/.local/share/com.example.chess_auto_prep/master_games.db": [
+      2135433216,
+      1788576275912819720
+    ]
+  },
+  "followup_note": "The empty-WAL metadata check paused after Fast. It was corrected and Pure ran cold with the same parameters. Main database unchanged, WAL empty."
+}

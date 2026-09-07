@@ -1,9 +1,12 @@
 /// Repertoire selection screen
 /// Full-screen push that wraps [RepertoireListBody] with its own Scaffold.
+/// Pops a [ChapterPick]: the chosen chapter file, plus the course chapter
+/// inside it when the user tapped one.
 library;
 
 import 'package:flutter/material.dart';
 
+import '../widgets/chapter_list_body.dart' show ChapterPick;
 import '../widgets/repertoire_list_body.dart';
 
 class RepertoireSelectionScreen extends StatelessWidget {
@@ -24,7 +27,11 @@ class RepertoireSelectionScreen extends StatelessWidget {
         ],
       ),
       body: RepertoireListBody(
-        onSelected: (repertoire) => Navigator.of(context).pop(repertoire),
+        onSelected: (chapter) =>
+            Navigator.of(context).pop(ChapterPick(chapter)),
+        onCourseChapterSelected: (chapter, courseChapter) => Navigator.of(
+          context,
+        ).pop(ChapterPick(chapter, courseChapter: courseChapter)),
       ),
     );
   }

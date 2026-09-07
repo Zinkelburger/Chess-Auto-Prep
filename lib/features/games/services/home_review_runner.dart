@@ -131,7 +131,7 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
 
   /// How much of the machine this review is allowed to use, for the block
   /// that says so out loud.
-  int get cores => _engine.workers;
+  int get cores => _engine.cores;
   int get depth => _mining.depth;
 
   @override
@@ -344,7 +344,7 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
           maxGames: window.gameLimit,
           since: window.cutoffFrom(DateTime.now()),
           depth: _mining.depth,
-          cores: _engine.workers,
+          cores: _engine.cores,
         ),
       );
       // Written whether or not the pass finished: every game it did get to

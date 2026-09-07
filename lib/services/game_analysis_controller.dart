@@ -354,7 +354,15 @@ String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
     written = true;
   }
   if (!written) return null;
-  return buildMovetext(mainline, result: parsed.headers['Result']);
+  // The whole tree, not `mainline`: this text replaces the game in the
+  // reader's file, so the sidelines and the game's opening comment it also
+  // parsed have to come back out with it.
+  return buildGameMovetext(
+    moves: parsed.moves,
+    comments: parsed.comments,
+    fen: parsed.headers['FEN'],
+    result: parsed.headers['Result'],
+  );
 }
 
 class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
@@ -801,8 +809,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       }
 
       if (runIsCurrent() && onAnnotatedMovetext != null) {
-        final annotated = _rebuildMovetext(mainline, parsed.headers['Result']);
-        onAnnotatedMovetext(annotated);
+        onAnnotatedMovetext(_rebuildMovetext(parsed));
       }
       if (runIsCurrent()) onComplete?.call();
     } catch (e, st) {
@@ -877,8 +884,20 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  String _rebuildMovetext(List<PgnNodeData> mainline, String? result) =>
-      buildMovetext(mainline, result: result);
+  /// The analyzed game as movetext, for the caller to store.
+  ///
+  /// [game] itself, not its mainline: the pass writes `[%eval]`/`[%pv]` onto
+  /// the tree's own nodes, and this text goes on to *replace* the game in the
+  /// reader's file (`PgnViewerController.persistMoveCommentsFor`). Serializing
+  /// the mainline alone deleted every variation and the game's opening
+  /// comment from that file. Same writer as the comment editor's
+  /// `ViewerGameModel.buildAnnotatedMovetext`, which lands in the same slot.
+  String _rebuildMovetext(PgnGame<PgnNodeData> game) => buildGameMovetext(
+    moves: game.moves,
+    comments: game.comments,
+    fen: game.headers['FEN'],
+    result: game.headers['Result'],
+  );
 
   void cancel() {
     _generation++;

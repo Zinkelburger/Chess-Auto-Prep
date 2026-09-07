@@ -202,3 +202,77 @@ bool san_to_uci(const char *fen, const char *san_input,
     chess_array_cleanup(&moves);
     return found;
 }
+
+/* Pure search's chesslib adapter. Kept in this TU because the old
+ * chess_logic and chesslib headers both define ChessPosition. */
+#include "pure_search.h"
+#include <stdio.h>
+static void pure_normalize_ep(ChessPosition *pos, const ChessArray *moves) {
+    if (pos->ep < 0) return;
+    bool captures = false;
+    for (size_t i=0; i<moves->size; i++) {
+        ChessMove m = *(const ChessMove*)chess_array_elem(moves,i);
+        int from=chess_move_from(m), to=chess_move_to(m);
+        if (piece_type(pos->piece[from])==1 && pos->piece[to]==CHESS_PIECE_NONE &&
+            chess_square_file(from)!=chess_square_file(to)) captures=true;
+    }
+    if (!captures) pos->ep=CHESS_FILE_INVALID;
+}
+bool pure_position_key(const char *fen, char key[128]) {
+    ChessPosition pos;
+    if (!chess_fen_load(fen,&pos)) return false;
+    ChessArray moves; chess_array_init(&moves,sizeof(ChessMove));
+    chess_generate_init(); chess_generate_moves(&pos,&moves);
+    pure_normalize_ep(&pos,&moves); chess_array_cleanup(&moves);
+    chess_fen_save(&pos,key);
+    int spaces=0;
+    for(char *p=key; *p; p++) if(*p==' ' && ++spaces==4) { *p=0; break; }
+    return true;
+}
+static bool pure_insufficient(const ChessPosition *pos) {
+    int minors=0, knights=0, bishop_color=-1;
+    bool same=true;
+    for(int sq=0;sq<64;sq++) {
+        int p=piece_type(pos->piece[sq]);
+        if(p==1 || p==4 || p==5) return false;
+        if(p==2) { minors++; knights++; }
+        if(p==3) {
+            minors++;
+            int color=(sq/8+sq%8)%2;
+            if(bishop_color>=0 && bishop_color!=color) same=false;
+            bishop_color=color;
+        }
+    }
+    return minors<=1 || (knights==0 && same);
+}
+int pure_legal(const char *fen, PureMove *out, int *terminal) {
+    ChessPosition pos;
+    chess_generate_init();
+    if(!chess_fen_load(fen,&pos)) return -1;
+    ChessArray moves; chess_array_init(&moves,sizeof(ChessMove));
+    chess_generate_moves(&pos,&moves);
+    *terminal=-1;
+    if(moves.size==0) *terminal=chess_position_is_check(&pos) ?
+        (pos.to_move==CHESS_COLOR_WHITE?2:1) : 0;
+    else if(pos.fifty>=100 || pure_insufficient(&pos)) *terminal=0;
+    int n=(int)moves.size;
+    if(n>PURE_MAX_MOVES) { chess_array_cleanup(&moves); return -1; }
+    for(int i=0;i<n;i++) {
+        ChessMove m=*(const ChessMove*)chess_array_elem(&moves,i);
+        chessmove_to_uci_str(m,out[i].uci);
+        if(!uci_to_san(fen,out[i].uci,out[i].san,sizeof(out[i].san))) { chess_array_cleanup(&moves); return -1; }
+        ChessPosition child=pos;
+        bool reset=piece_type(pos.piece[chess_move_from(m)])==1 || chess_position_move_is_capture(&pos,m);
+        chess_position_make_move(&child,m);
+        /* chesslib resets its counter on castling-right changes; FIDE does not. */
+        child.fifty=reset?0:pos.fifty+1;
+        chess_fen_save(&child,out[i].fen);
+    }
+    chess_array_cleanup(&moves);
+    /* Identical deterministic order in the Dart implementation. */
+    for(int i=1;i<n;i++) { PureMove m=out[i]; int j=i;
+        while(j>0 && strcmp(out[j-1].uci,m.uci)>0) {out[j]=out[j-1];j--;}
+        out[j]=m;
+    }
+    return n;
+}

@@ -32,7 +32,6 @@ Future<List<String>> _pump(
   required PgnViewerWidgetController controller,
   String pgn = _annotatedPgn,
   bool editMode = false,
-  bool preferFocusedReading = false,
   int initialMainLineIndex = 0,
 }) async {
   final emissions = <String>[];
@@ -47,7 +46,6 @@ Future<List<String>> _pump(
             controller: controller,
             onCommentsChanged: emissions.add,
             editMode: editMode,
-            preferFocusedReading: preferFocusedReading,
             initialMainLineIndex: initialMainLineIndex,
           ),
         ),
@@ -127,13 +125,12 @@ void main() {
   });
 
   testWidgets(
-    'course note panel shows the current note and repairs glued moves',
+    'one continuous document repairs glued moves without duplicating notes',
     (tester) async {
       final c = PgnViewerWidgetController();
       await _pump(
         tester,
         controller: c,
-        preferFocusedReading: true,
         pgn:
             '[Event "?"]\n'
             '[White "Quickstarter Guide"]\n'
@@ -142,16 +139,17 @@ void main() {
             '1. e4 {We are ready against1.e4and can play1...e5next.} e5 *',
       );
 
-      // The note panel sits under the full movetext, so both are on screen.
-      expect(find.text('Start'), findsOneWidget);
-      expect(find.text('0 / 2'), findsOneWidget);
+      // The document is the only home for the explanation.
+      expect(find.text('No annotation for this position'), findsNothing);
       expect(find.byType(PgnMovetextView), findsOneWidget);
 
       c.goForward();
       await tester.pumpAndSettle();
-      expect(find.text('1. e4'), findsOneWidget);
       expect(
-        find.text('We are ready against 1.e4 and can play 1...e5 next.'),
+        find.textContaining(
+          'We are ready against 1.e4 and can play',
+          findRichText: true,
+        ),
         findsOneWidget,
       );
     },

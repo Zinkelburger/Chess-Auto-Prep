@@ -20,6 +20,7 @@ import 'repertoire_color_inference.dart';
 import 'repertoire_line_ids.dart';
 import 'repertoire_pgn_text.dart';
 import 'storage/storage_factory.dart';
+import 'training/chapter_layout.dart' show ChapterSummary;
 import '../utils/chess_utils.dart';
 
 /// A game cut from a chapter file and parsed once: the parse tree, the raw
@@ -71,6 +72,41 @@ class RepertoireService {
     );
   }
 
+  /// The course chapters a chapter file carries in its game headers — the
+  /// same grouping the trainer shows once the file is open (see
+  /// [detectHeaderChapters]) — with the trainable lines each holds, in file
+  /// order. Empty when the file is not chapter-titled.
+  ///
+  /// Headers only: nothing is replayed, so the chapter picker can list a
+  /// 3 MB course without paying for a parse. Model games are left out of the
+  /// counts because the trainer never drills them.
+  Future<List<ChapterSummary>> courseChaptersInFile(String filePath) async {
+    final content = await StorageFactory.instance.readRepertoirePgn(filePath);
+    if (content == null || content.trim().isEmpty) return const [];
+    return Isolate.run(() => RepertoireService().courseChaptersOf(content));
+  }
+
+  /// [courseChaptersInFile] over PGN text already in hand.
+  List<ChapterSummary> courseChaptersOf(String content) {
+    final headersPerGame = [
+      for (final game in pgn.splitPgnIntoGames(content))
+        pgn.extractHeaderBlock(game),
+    ];
+    final titles = detectHeaderChapters(headersPerGame);
+    if (titles == null) return const [];
+    final counts = <String, int>{};
+    for (var i = 0; i < titles.length; i++) {
+      final title = titles[i];
+      if (title == null) continue;
+      final trainable = isModelGameHeaders(headersPerGame[i]) ? 0 : 1;
+      counts[title] = (counts[title] ?? 0) + trainable;
+    }
+    return [
+      for (final entry in counts.entries)
+        ChapterSummary(name: entry.key, lineCount: entry.value),
+    ];
+  }
+
   /// Parses repertoire PGN content and extracts trainable lines.
   ///
   /// [trainingColor] ('white' or 'black') is used when the caller already
@@ -100,6 +136,7 @@ class RepertoireService {
     return linesFromParsedGames(
       parseGames(pgn.splitPgnIntoGames(pgnContent)),
       declaredColor: declaredColor,
+      courseChapter: pgn.extractCourseChapter(pgnContent),
       colorFromStartingSide: colorFromStartingSide,
       inferColorWhenUnknown: inferColorWhenUnknown,
     );
@@ -132,23 +169,36 @@ class RepertoireService {
   List<RepertoireLine> linesFromParsedGames(
     List<ParsedRepertoireGame> parsedGames, {
     required String? declaredColor,
+    String? courseChapter,
     bool colorFromStartingSide = false,
     bool inferColorWhenUnknown = false,
   }) {
     final lines = <RepertoireLine>[];
     final resolvedColor = declaredColor ?? 'white';
 
-    // Chapter titles are a whole-file property (do the [White] headers group
-    // the games?), so games are parsed before any line is built.
-    final chapterTitles = detectHeaderChapters([
-      for (final p in parsedGames) p.game.headers,
-    ]);
+    // Chapter titles are a whole-file property (does one of the player
+    // headers group the games?), so games are parsed before any line is
+    // built.
+    //
+    // A file that *is* one course chapter (`// Chapter:` in its preamble,
+    // see `extractCourseChapter`) skips the search: its lines' titles
+    // repeat enough to look like chapters of their own, and the split that
+    // made it already pinned every line's name into [Event].
+    final headersPerGame = [for (final p in parsedGames) p.game.headers];
+    final chapterKey = courseChapter != null
+        ? null
+        : chapterHeaderKey(headersPerGame);
+    final chapterTitles = chapterKey == null
+        ? null
+        : detectHeaderChapters(headersPerGame, key: chapterKey);
+    final titleKey = titleHeaderKeyFor(chapterKey);
+    final isCourse = chapterTitles != null || courseChapter != null;
 
     for (int i = 0; i < parsedGames.length; i++) {
       final game = parsedGames[i].game;
       final gameText = parsedGames[i].text;
       final gameIndex = parsedGames[i].index;
-      final chapter = chapterTitles?[i];
+      final chapter = courseChapter ?? chapterTitles?[i];
 
       try {
         // One walk of the mainline serves the moves, the comments and the
@@ -184,10 +234,21 @@ class RepertoireService {
             : resolvedColor;
 
         // Chapter-titled games (Chessable exports) name the variation in the
-        // [Black] header; everything else keeps the Opening/Event naming.
-        final variationTitle = (game.headers['Black'] ?? '').trim();
+        // player header the chapter is not in; everything else keeps the
+        // Opening/Event naming.
+        var variationTitle = (game.headers[titleKey] ?? '').trim();
+        // With the chapter in [Event] the title spans both player headers:
+        // the variation in [White], a sub-variation in [Black] when there
+        // is one ("Fianchetto 9.Nd2 e6 — 10.Rb1 #11").
+        if (chapterKey == 'Event') {
+          final sub = (game.headers['Black'] ?? '').trim();
+          if (variationTitle.isNotEmpty &&
+              !ignoredTitles.contains(sub.toLowerCase())) {
+            variationTitle = '$variationTitle — $sub';
+          }
+        }
         final lineName =
-            chapter != null &&
+            chapterTitles != null &&
                 variationTitle.isNotEmpty &&
                 variationTitle != '?'
             ? variationTitle
@@ -216,8 +277,9 @@ class RepertoireService {
             // the same way this app marks its own model games.
             isModelGame:
                 isModelGameHeaders(game.headers) ||
-                (chapterTitles != null &&
-                    (game.headers['Result'] ?? '*').trim() != '*'),
+                (isCourse &&
+                    ((game.headers['Result'] ?? '*').trim() != '*' ||
+                        _modelGamesChapter.hasMatch(chapter ?? ''))),
             gameIndex: gameIndex,
           ),
         );
@@ -337,32 +399,113 @@ class RepertoireService {
   /// session touches, and never larger than the on-disk repertoire.
   static final Map<String, _CachedLineIds> _lineIdCache = {};
 
+  /// A course's "Model Games" chapter: whole games shown as illustration.
+  /// Course exports give them `[Result "*"]` like every other game, so the
+  /// title is the only thing that says they are not repertoire lines.
+  static final RegExp _modelGamesChapter = RegExp(
+    r'\bmodel\s*games?\b',
+    caseSensitive: false,
+  );
+
+  /// Headers a course export has been seen to carry its chapter titles in.
+  static const List<String> chapterHeaderCandidates = [
+    'White',
+    'Black',
+    'Event',
+  ];
+
+  /// Placeholder values that are never a chapter or line title.
+  static const Set<String> ignoredTitles = {
+    '',
+    '?',
+    'me',
+    'opponent',
+    'white',
+    'black',
+    'n.n.',
+  };
+
+  /// Which header carries the chapter titles of a chapter-titled export —
+  /// `White`, `Black` or `Event` — or null when none groups the games.
+  ///
+  /// Course exports disagree: most put the chapter in [White] and the
+  /// variation title in [Black]; some do the reverse; one puts the chapter
+  /// in [Event] with the title split over [White] and [Black]. The chapter
+  /// header is the one whose values come in the fewest contiguous *runs*
+  /// (a course lists a chapter's lines together, so its chapter header
+  /// changes forty-odd times in a thousand games while a title header
+  /// changes on nearly every one). Counting distinct values instead broke on
+  /// an export whose titles repeat across chapters. White breaks a tie.
+  String? chapterHeaderKey(List<Map<String, String>> headersPerGame) {
+    String? best;
+    var bestRuns = 1 << 30;
+    for (final key in chapterHeaderCandidates) {
+      final titles = _chapterTitles(headersPerGame, key);
+      if (titles == null) continue;
+      final runs = _runs(titles);
+      if (runs < bestRuns) {
+        best = key;
+        bestRuns = runs;
+      }
+    }
+    return best;
+  }
+
+  /// The header that titles a line when [chapterKey] carries the chapter:
+  /// the other player header, or [White] under an [Event] chapter. [Black]
+  /// when the file has no chapter structure — this app's own exports put the
+  /// variation title there.
+  static String titleHeaderKeyFor(String? chapterKey) => switch (chapterKey) {
+    'Black' => 'White',
+    'Event' => 'White',
+    _ => 'Black',
+  };
+
+  /// How many contiguous groups of equal values [titles] falls into.
+  static int _runs(List<String?> titles) {
+    var runs = 0;
+    String? previous;
+    var first = true;
+    for (final title in titles) {
+      if (first || title != previous) runs++;
+      first = false;
+      previous = title;
+    }
+    return runs;
+  }
+
   /// Detects chapter titles carried in game headers, the way Chessable
-  /// course exports encode them: every game titles its chapter in [White]
-  /// and its variation in [Black], with [Result] always "*".
+  /// course exports encode them: every game titles its chapter in one player
+  /// header ([key], usually [White]) and its variation in the other, with
+  /// [Result] always "*".
   ///
   /// Returns one chapter name (or null) per game, or null when the file does
   /// not look chapter-titled. The guards keep real-game collections (decisive
   /// results, player names) and this app's own exports ([White "Me"],
-  /// [Result "1-0"]) from producing bogus chapters.
+  /// [Result "1-0"]) from producing bogus chapters. Callers that do not know
+  /// the key should ask [chapterHeaderKey] first.
   List<String?>? detectHeaderChapters(
-    List<Map<String, String>> headersPerGame,
-  ) {
-    const ignoredTitles = {'', '?', 'me', 'opponent', 'white', 'black', 'n.n.'};
+    List<Map<String, String>> headersPerGame, {
+    String key = 'White',
+  }) => _chapterTitles(headersPerGame, key);
 
+  List<String?>? _chapterTitles(
+    List<Map<String, String>> headersPerGame,
+    String key,
+  ) {
     var titled = 0;
     var selfDescribed = false;
     final counts = <String, int>{};
     final chapters = <String?>[];
     for (final headers in headersPerGame) {
-      final white = (headers['White'] ?? '').trim();
+      final title = (headers[key] ?? '').trim();
       final result = (headers['Result'] ?? '*').trim();
       final isChapterTitle =
-          result == '*' && !ignoredTitles.contains(white.toLowerCase());
-      chapters.add(isChapterTitle ? white : null);
+          result == '*' && !ignoredTitles.contains(title.toLowerCase());
+      chapters.add(isChapterTitle ? title : null);
       if (isChapterTitle) {
         titled++;
-        counts[white] = (counts[white] ?? 0) + 1;
+        counts[title] = (counts[title] ?? 0) + 1;
       }
       selfDescribed = selfDescribed || isModelGameHeaders(headers);
     }
@@ -441,8 +584,14 @@ class RepertoireService {
   String _generateLineName(PgnGame game, List<String> mainline, int index) {
     final event = game.headers['Event'] ?? '';
     final opening = game.headers['Opening'] ?? '';
+    // A study chapter (Lichess export or a study written here) says its own
+    // name; its Event is "Study: Chapter", which would repeat the study on
+    // every line.
+    final chapterName = game.headers['ChapterName']?.trim() ?? '';
 
-    if (opening.isNotEmpty && opening != '?') {
+    if (chapterName.isNotEmpty) {
+      return chapterName;
+    } else if (opening.isNotEmpty && opening != '?') {
       return opening;
     } else if (event.isNotEmpty &&
         event != '?' &&
@@ -767,6 +916,144 @@ class RepertoireService {
     if (text == null) return false;
     await appendGameTexts(toPath, [text]);
     return deleteGameAt(fromPath, gameIndex);
+  }
+
+  /// The games at [gameIndexes] of [filePath] as `(index, text)`, in file
+  /// order, skipping indexes the file does not have. Null when the file is
+  /// missing.
+  Future<List<({int index, String text})>?> readGameTextsAt(
+    String filePath,
+    Set<int> gameIndexes,
+  ) async {
+    final document = await readPgnDocument(filePath);
+    if (document == null) return null;
+    return [
+      for (var i = 0; i < document.games.length; i++)
+        if (gameIndexes.contains(i)) (index: i, text: document.games[i]),
+    ];
+  }
+
+  /// Inserts each of [games] so that it ends up at its `index` — the indexes
+  /// are the *final* positions, applied in ascending order, and clamped to the
+  /// end of the file. Inserting `(2, a), (5, b)` into a six-game file puts
+  /// `a` third and `b` sixth.
+  ///
+  /// That contract is what makes a deletion undoable exactly: removing the
+  /// games at a set of indexes and inserting them back at the same indexes
+  /// restores the file, however scattered the set was. Creates the file when
+  /// it does not exist.
+  Future<void> insertGameTextsAt(
+    String filePath,
+    List<({int index, String text})> games,
+  ) async {
+    if (games.isEmpty) return;
+    final file = io.File(filePath);
+    final existed = await file.exists();
+    final content = existed ? await readTextFile(file) : '';
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    final result = List<String>.from(document.games);
+    final sorted = [...games]..sort((a, b) => a.index.compareTo(b.index));
+    for (final g in sorted) {
+      final at = g.index.clamp(0, result.length);
+      result.insert(at, g.text.trim());
+    }
+    await writeTextFileAtomically(
+      file,
+      reassemblePgnDocument(document.preamble, result),
+      createOnly: !existed,
+      expectedContent: existed ? content : null,
+    );
+  }
+
+  /// Moves the games at [gameIndexes] of [fromPath] into [toPath], keeping
+  /// their relative order, and returns the indexes they now occupy there
+  /// (ascending; empty when none of them existed).
+  ///
+  /// Where they land: as one block starting at [toIndex] — "before the game
+  /// that is at [toIndex] now" — or at the end when it is null; or, with
+  /// [toIndexes], at exactly those final positions (see [insertGameTextsAt]),
+  /// which is how a move is undone.
+  ///
+  /// Within one file this is a reorder and a single write. Across files the
+  /// destination is written before the source, so a failure between the two
+  /// can leave a duplicate but never a lost line. [transform] rewrites each
+  /// moved game's text on the way (the caller pins the line id with it).
+  Future<List<int>> moveGamesTo({
+    required String fromPath,
+    required Set<int> gameIndexes,
+    required String toPath,
+    int? toIndex,
+    List<int>? toIndexes,
+    String Function(int index, String text)? transform,
+  }) async {
+    assert(toIndex == null || toIndexes == null);
+    final source = await readPgnDocument(fromPath);
+    if (source == null) return const [];
+    final moving = <int>[];
+    final texts = <String>[];
+    final remaining = <String>[];
+    for (var i = 0; i < source.games.length; i++) {
+      if (gameIndexes.contains(i)) {
+        moving.add(i);
+        texts.add(transform?.call(i, source.games[i]) ?? source.games[i]);
+      } else {
+        remaining.add(source.games[i]);
+      }
+    }
+    if (moving.isEmpty) return const [];
+    assert(toIndexes == null || toIndexes.length == moving.length);
+
+    if (p.equals(fromPath, toPath)) {
+      // "Before the game at toIndex" is measured in the old numbering; the
+      // games taken out above it shift the slot down.
+      final finals = toIndexes != null
+          ? ([...toIndexes]..sort())
+          : _block(
+              toIndex == null
+                  ? remaining.length
+                  : toIndex - moving.where((i) => i < toIndex).length,
+              moving.length,
+              remaining.length,
+            );
+      for (var k = 0; k < finals.length; k++) {
+        remaining.insert(finals[k].clamp(0, remaining.length), texts[k]);
+      }
+      await writePgnDocument(
+        fromPath,
+        preamble: source.preamble,
+        games: remaining,
+        expectedContent: source.originalContent,
+      );
+      return finals;
+    }
+
+    final destination = await readPgnDocument(toPath);
+    final destinationLength = destination?.games.length ?? 0;
+    final finals = toIndexes != null
+        ? ([...toIndexes]..sort())
+        : _block(
+            toIndex ?? destinationLength,
+            moving.length,
+            destinationLength,
+          );
+    await insertGameTextsAt(toPath, [
+      for (var k = 0; k < finals.length; k++)
+        (index: finals[k], text: texts[k]),
+    ]);
+    await writePgnDocument(
+      fromPath,
+      preamble: source.preamble,
+      games: remaining,
+      expectedContent: source.originalContent,
+    );
+    return finals;
+  }
+
+  /// [count] consecutive indexes from [start], clamped so the block fits
+  /// after [length] existing games.
+  static List<int> _block(int start, int count, int length) {
+    final from = start.clamp(0, length);
+    return [for (var k = 0; k < count; k++) from + k];
   }
 
   /// Writes spaced-repetition metadata into PGN headers for a specific line.

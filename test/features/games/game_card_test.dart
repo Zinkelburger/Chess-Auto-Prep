@@ -8,6 +8,8 @@ import 'package:chess_auto_prep/features/games/services/game_moments.dart';
 import 'package:chess_auto_prep/features/games/services/game_review_summary.dart';
 import 'package:chess_auto_prep/features/games/widgets/game_card.dart';
 import 'package:chess_auto_prep/features/games/widgets/repertoire_line_panel.dart';
+import 'package:chess_auto_prep/services/game_analysis_controller.dart'
+    show MoveClassification;
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
 import 'package:flutter/material.dart';
@@ -276,9 +278,9 @@ void main() {
 
       expect(find.byType(MomentsStrip), findsOneWidget);
       expect(find.text('2... d5'), findsOneWidget);
-      expect(find.text('They left book'), findsOneWidget);
+      expect(find.text('Not in book'), findsOneWidget);
       // The text column keeps what it had.
-      expect(find.text('Left book at move 2 (them)'), findsOneWidget);
+      expect(find.text('Not in book: 2... d5 (book 2... Nf6)'), findsOneWidget);
 
       await tester.tap(find.text('2... d5'));
       expect(opened?.ply, 4);
@@ -292,7 +294,7 @@ void main() {
         ..deviationComputed = true;
       await pumpCard(tester, game, width: 520);
       expect(find.byType(MomentsStrip), findsNothing);
-      expect(find.text('Left book at move 2 (them)'), findsOneWidget);
+      expect(find.text('Not in book: 2... d5 (book 2... Nf6)'), findsOneWidget);
     });
 
     testWidgets('no moments, no strip', (tester) async {
@@ -303,9 +305,136 @@ void main() {
       expect(find.byType(MomentsStrip), findsNothing);
     });
 
-    test('stripFits needs the board, the text column and one moment', () {
-      expect(GameCard.stripFits(500), isFalse);
-      expect(GameCard.stripFits(600), isTrue);
+    testWidgets('the strip is never wider than five moments', (tester) async {
+      tester.view.physicalSize = const Size(2000, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final summary = GameReviewSummary(
+        blunders: 0,
+        mistakes: 0,
+        inaccuracies: 7,
+        moments: [
+          for (var ply = 1; ply <= 7; ply++)
+            ReviewMoment(
+              ply: ply,
+              san: 'e4',
+              fenBefore:
+                  'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+              classification: MoveClassification.inaccuracy,
+            ),
+        ],
+      );
+      final game = _game(summary: summary);
+      await pumpCard(tester, game, width: 1800);
+
+      final strip = tester.getSize(find.byType(MomentsStrip));
+      expect(strip.width, GameCard.stripWidth);
+      expect(find.byType(MomentTile), findsNWidgets(5));
+      // The text column got the slack, not a sixth board.
+      expect(find.byType(ReviewCounts), findsOneWidget);
+      expect(find.text('7 inaccuracies'), findsOneWidget);
+    });
+
+    test('stripFits needs the board, the text, the counts and one moment', () {
+      expect(GameCard.stripFits(600), isFalse);
+      expect(GameCard.stripFits(800), isTrue);
+    });
+
+    test('the strip only ever shows whole boards', () {
+      // Room for one and a half boards: one board, the half goes to the text.
+      const oneAndAHalf =
+          GameCard.boardSize +
+          16 +
+          GameCard.bodyWidth +
+          24 +
+          GameCard.reviewWidth +
+          24 +
+          GameCard.momentSize * 1.5;
+      expect(GameCard.stripWidthFor(oneAndAHalf), GameCard.momentSize);
+      expect(GameCard.stripWidthFor(3000), GameCard.stripWidth);
+    });
+  });
+
+  group('ReviewCounts', () {
+    testWidgets('spells each count out, worst first', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: GameCard.reviewWidth,
+              child: ReviewCounts(
+                game: _game(
+                  summary: const GameReviewSummary(
+                    blunders: 1,
+                    mistakes: 2,
+                    inaccuracies: 0,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('1 blunder'), findsOneWidget);
+      expect(find.text('2 mistakes'), findsOneWidget);
+      expect(find.text('0 inaccuracies'), findsOneWidget);
+      final blunder = tester.getTopLeft(find.text('1 blunder'));
+      final inaccuracy = tester.getTopLeft(find.text('0 inaccuracies'));
+      expect(blunder.dy, lessThan(inaccuracy.dy));
+    });
+
+    testWidgets('an unreviewed game says so instead of showing zeros', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: GameCard.reviewWidth,
+              child: ReviewCounts(game: _game()),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Not reviewed yet'), findsOneWidget);
+      expect(find.textContaining('blunder'), findsNothing);
+    });
+
+    testWidgets('a wide card carries the counts beside the text, not inline', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final game = _game(
+        summary: const GameReviewSummary(
+          blunders: 1,
+          mistakes: 0,
+          inaccuracies: 0,
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 900,
+                child: GameCard(
+                  game: game,
+                  onOpen: () {},
+                  onOpenAnalysis: () {},
+                  onOpenLine: () {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(find.byType(ReviewCounts), findsOneWidget);
+      expect(find.byType(MistakeCounts), findsNothing);
+      expect(find.text('1 blunder'), findsOneWidget);
     });
   });
 }

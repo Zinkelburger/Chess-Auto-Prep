@@ -7,6 +7,10 @@
 /// move itself: each SAN is played in the position it occurs in and reduced to
 /// standard UCI, so any legal spelling of a move produces the same key.
 ///
+/// Positions get a key too: the FEN without its move counters, so a position
+/// reached by two move orders is one key. That is what lets the walker and
+/// the book pane treat a transposition as being in book.
+///
 /// Pure and synchronous; the deviation walker builds its tries with these and
 /// the review's book pane matches lines with them.
 library;
@@ -38,6 +42,31 @@ List<String> moveKeysFromStart(List<String> sans, {Position? start}) {
   return keys;
 }
 
+/// A position as the book keys it: the FEN without its move counters, so
+/// the same position reached by two orders is one key.
+String positionKey(Position position) {
+  final fen = position.fen;
+  var cut = fen.length;
+  for (var fields = 0; fields < 2 && cut > 0; fields++) {
+    cut = fen.lastIndexOf(' ', cut - 1);
+  }
+  return cut > 0 ? fen.substring(0, cut) : fen;
+}
+
+/// Position keys after each of [sans] played in order from [start]. Stops at
+/// the first move that does not parse, like [moveKeysFromStart].
+List<String> positionKeysFromStart(List<String> sans, {Position? start}) {
+  var pos = start ?? Chess.initial;
+  final keys = <String>[];
+  for (final san in sans) {
+    final move = pos.parseSan(san);
+    if (move == null) break;
+    pos = pos.play(move);
+    keys.add(positionKey(pos));
+  }
+  return keys;
+}
+
 /// Whether some root-to-leaf path of [root] — the mainline or any variation —
 /// begins with [keys], playing from [start].
 bool pgnTreeReaches(
@@ -52,6 +81,28 @@ bool pgnTreeReaches(
       if (move == null) continue;
       if (moveToStandardUci(pos, move) != keys[depth]) continue;
       if (walk(child, pos.play(move), depth + 1)) return true;
+    }
+    return false;
+  }
+
+  return walk(root, start ?? Chess.initial, 0);
+}
+
+/// Whether some path of [root] — the mainline or any variation — reaches the
+/// position keyed [targetKey] (see `positionKey`) after exactly [depth]
+/// plies, playing from [start].
+bool pgnTreeReachesPosition(
+  PgnNode<PgnNodeData> root,
+  String targetKey,
+  int depth, {
+  Position? start,
+}) {
+  bool walk(PgnNode<PgnNodeData> node, Position pos, int ply) {
+    if (ply == depth) return positionKey(pos) == targetKey;
+    for (final child in node.children) {
+      final move = pos.parseSan(child.data.san);
+      if (move == null) continue;
+      if (walk(child, pos.play(move), ply + 1)) return true;
     }
     return false;
   }

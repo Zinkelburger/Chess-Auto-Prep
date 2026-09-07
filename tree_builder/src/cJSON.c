@@ -171,44 +171,32 @@ static const char *parse_string(cJSON *item, const char *str) {
 }
 
 static const char *parse_number(cJSON *item, const char *num) {
-    double n = 0;
-    int sign = 1;
-    int scale = 0;
-    int subscale = 0;
-    int signsubscale = 1;
-    
-    if (*num == '-') { sign = -1; num++; }
+    const char *start = num;
+    if (*num == '-') num++;
     if (*num == '0') num++;
-    
-    if (*num >= '1' && *num <= '9') {
-        do {
-            n = n * 10.0 + (*num++ - '0');
-        } while (*num >= '0' && *num <= '9');
-    }
-    
-    if (*num == '.' && num[1] >= '0' && num[1] <= '9') {
+    else if (*num >= '1' && *num <= '9') {
+        do { num++; } while (*num >= '0' && *num <= '9');
+    } else return NULL;
+    if (*num == '.') {
         num++;
-        do {
-            n = n * 10.0 + (*num++ - '0');
-            scale--;
-        } while (*num >= '0' && *num <= '9');
+        if (*num < '0' || *num > '9') return NULL;
+        do { num++; } while (*num >= '0' && *num <= '9');
     }
-    
     if (*num == 'e' || *num == 'E') {
         num++;
-        if (*num == '+') num++;
-        else if (*num == '-') { signsubscale = -1; num++; }
-        while (*num >= '0' && *num <= '9') {
-            subscale = subscale * 10 + (*num++ - '0');
-        }
+        if (*num == '+' || *num == '-') num++;
+        if (*num < '0' || *num > '9') return NULL;
+        do { num++; } while (*num >= '0' && *num <= '9');
     }
-    
-    n = sign * n * pow(10.0, scale + subscale * signsubscale);
-    
+    /* The hand-rolled decimal accumulator rounded probabilities again on
+     * every reload, despite printing 17 digits. Let libc round once. This
+     * standalone program retains the default C numeric locale. */
+    char *end;
+    const double n = strtod(start, &end);
+    if (end != num || !isfinite(n)) return NULL;
     item->valuedouble = n;
-    item->valueint = (int)n;
+    item->valueint = n >= INT_MAX ? INT_MAX : n <= INT_MIN ? INT_MIN : (int)n;
     item->type = cJSON_Number;
-    
     return num;
 }
 
@@ -365,7 +353,7 @@ static void print_number(const cJSON *item, printbuffer *p) {
     } else if (d == (double)item->valueint) {
         p->offset += sprintf(p->buffer + p->offset, "%d", item->valueint);
     } else {
-        p->offset += sprintf(p->buffer + p->offset, "%g", d);
+        p->offset += sprintf(p->buffer + p->offset, "%.17g", d);
     }
 }
 

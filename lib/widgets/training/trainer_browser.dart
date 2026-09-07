@@ -17,6 +17,7 @@ import '../../models/line_status.dart';
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
 import '../../theme/app_colors.dart';
+import '../common/choice_field.dart';
 import '../../theme/app_text_styles.dart';
 import '../common/list_search_field.dart';
 
@@ -102,22 +103,6 @@ class TrainerBrowser extends StatefulWidget {
   final Future<void> Function(Set<String> checkedLineIds, Set<String> scope)?
   onApplyLearnedSelection;
 
-  /// Re-opens the "sort into chapters?" prompt.
-  final VoidCallback? onOpenChapterSetup;
-
-  /// Side the loaded file trains, or null when the question doesn't apply
-  /// (a study, where each chapter has its own solver). Shown as a header
-  /// control rather than buried in settings: a course export declares no
-  /// colour, so this is a guess the user has to be able to see and correct —
-  /// getting it wrong quizzes them on the opponent's moves, every line.
-  final bool? playingWhite;
-
-  /// Opens the "which side does this file train?" chooser.
-  final VoidCallback? onChangePlayingSide;
-
-  /// Opens the trainer settings.
-  final VoidCallback? onOpenSettings;
-
   /// Whether the uncommented intro auto-plays (dims those moves in the row
   /// preview, since they are shown rather than quizzed).
   final bool introEnabled;
@@ -143,10 +128,6 @@ class TrainerBrowser extends StatefulWidget {
     this.onPreviewLine,
     this.onReadLines,
     this.onApplyLearnedSelection,
-    this.onOpenChapterSetup,
-    this.playingWhite,
-    this.onChangePlayingSide,
-    this.onOpenSettings,
     this.introEnabled = false,
     this.dense = false,
   });
@@ -309,10 +290,6 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
               : () => widget.onReadLines!(visible),
           learnBatchSize: widget.learnBatchSize,
           reviewBatchSize: widget.reviewBatchSize,
-          onOpenChapterSetup: _selecting ? null : widget.onOpenChapterSetup,
-          playingWhite: widget.playingWhite,
-          onChangePlayingSide: _selecting ? null : widget.onChangePlayingSide,
-          onOpenSettings: _selecting ? null : widget.onOpenSettings,
         ),
         const Divider(height: 1),
         _ListToolbar(

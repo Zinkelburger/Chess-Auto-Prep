@@ -1,7 +1,8 @@
 /// Naming imported chapters.
 ///
-/// A study stores each chapter's name in its `[Event]` tag, so renaming a
-/// chapter on import means rewriting that header before the PGN hits disk.
+/// A study reads each chapter's name from `[ChapterName]`, else `[Event]`
+/// (see `StudyChapter.nameFromHeaders`), so renaming a downloaded game on
+/// import means rewriting its `[Event]` before the PGN hits disk.
 /// Downloaded games rarely arrive usefully named — every game in a
 /// chessgames.com collection repeats the *tournament* in `[Event]` — so each
 /// import path derives a name and stamps it in here.

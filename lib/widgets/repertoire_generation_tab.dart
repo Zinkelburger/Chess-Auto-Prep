@@ -15,8 +15,9 @@ import 'package:path/path.dart' as p;
 import '../core/generation_session_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/repertoire_metadata.dart';
-import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
+import 'generation/training_plan_card.dart';
+import '../services/generation/fen_map.dart';
 import '../services/generation/repertoire_slice.dart';
 import '../services/generation/tree_serialization.dart';
 import '../services/storage/storage_factory.dart';
@@ -29,6 +30,12 @@ import 'starting_position_card.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
+  final bool cutOnly;
+
+  /// Removes the repertoire lines whose move-sequence keys are given, and
+  /// reports how many went. Null when the host cannot edit the file, which
+  /// hides the size control rather than offering a button that cannot work.
+  final Future<int> Function(Set<String> droppedKeys)? onTrimLines;
   final bool isWhiteRepertoire;
   final RepertoireMetadata? currentRepertoire;
   final List<String> currentMoveSequence;
@@ -44,13 +51,12 @@ class RepertoireGenerationTab extends StatefulWidget {
   /// export can skip the ones a previous build already wrote.
   final Iterable<List<String>> existingLineMoves;
 
-  /// Removes the repertoire lines whose move-sequence keys are given, and
-  /// reports how many went. Null when the host cannot edit the file, which
-  /// hides the size control rather than offering a button that cannot work.
-  final Future<int> Function(Set<String> droppedKeys)? onTrimLines;
+  final Future<void> Function(String name, String pgn)? onCreateStudy;
 
   const RepertoireGenerationTab({
     super.key,
+    this.cutOnly = false,
+    this.onTrimLines,
     required this.fen,
     required this.isWhiteRepertoire,
     required this.currentRepertoire,
@@ -59,7 +65,7 @@ class RepertoireGenerationTab extends StatefulWidget {
     required this.onLinesSaved,
     required this.generationController,
     this.existingLineMoves = const [],
-    this.onTrimLines,
+    this.onCreateStudy,
   });
 
   @override
@@ -68,12 +74,6 @@ class RepertoireGenerationTab extends StatefulWidget {
 }
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
-  final GlobalKey<GenerationConfigFormState> _configFormKey =
-      GlobalKey<GenerationConfigFormState>();
-  final ScrollController _scrollCtrl = ScrollController();
-
-  BuildTree? _savedPartialTree;
-
   /// Ranking of the finished build's lines, rebuilt whenever the tree
   /// changes. Null until there is a completed tree to slice.
   RepertoireSlicer? _slicer;
@@ -96,6 +96,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   /// True while the post-frame ranking of a newly finished tree is pending.
   bool _ranking = false;
+
+  final GlobalKey<GenerationConfigFormState> _configFormKey =
+      GlobalKey<GenerationConfigFormState>();
+  final ScrollController _scrollCtrl = ScrollController();
+
+  BuildTree? _savedPartialTree;
 
   @override
   void initState() {
@@ -330,6 +336,28 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       listenable: widget.generationController,
       builder: (context, _) {
         final ctrl = widget.generationController;
+        if (widget.cutOnly) {
+          final cards = _buildSliceCard(ctrl);
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Choose how many generated lines to keep. Saved analysis stays available.',
+                ),
+                ...cards,
+                if (_slicer == null && !_ranking)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: Text(
+                      'No generated lines to cut in this chapter. Plan and save lines first.',
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }
         final statusText = ctrl.isGenerating
             ? ctrl.progress.status
             : ctrl.lastRunSummary;
@@ -352,6 +380,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildStartingPositionBanner(context),
+                          const SizedBox(height: 6),
+                          // What this screen runs, in one line: the planner
+                          // asks questions first; this one just searches.
+                          const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              'Runs the tree search from this position — Fast '
+                              'or Pure, under Search — and saves the lines it '
+                              'finds into this chapter.',
+                              style: AppTextStyles.caption,
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           GenerationConfigForm(
                             key: _configFormKey,
@@ -364,7 +404,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                             const SizedBox(height: 8),
                             _buildPartialTreeCard(_savedPartialTree!),
                           ],
-                          if (!ctrl.isGenerating) ...[..._buildSliceCard(ctrl)],
+                          if (!ctrl.isGenerating) ...[..._buildStudyCard(ctrl)],
                         ],
                       ),
                     ),
@@ -432,6 +472,27 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   int? _formMaxPly() {
     final text = _configFormKey.currentState?.maxPlyText;
     return text == null ? null : int.tryParse(text.trim());
+  }
+
+  List<Widget> _buildStudyCard(GenerationSessionController ctrl) {
+    final tree = ctrl.generatedTree;
+    final config = ctrl.generatedTreeConfig;
+    final create = widget.onCreateStudy;
+    if (tree == null ||
+        config == null ||
+        create == null ||
+        ctrl.isExpectimaxProbe) {
+      return const [];
+    }
+    return [
+      TrainingPlanCard(
+        key: ObjectKey(tree),
+        tree: tree,
+        config: config,
+        name: widget.currentRepertoire?.name ?? 'Repertoire',
+        onCreateStudy: create,
+      ),
+    ];
   }
 
   // ── Repertoire size ────────────────────────────────────────────────────

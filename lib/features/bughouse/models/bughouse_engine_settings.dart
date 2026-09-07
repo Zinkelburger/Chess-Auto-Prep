@@ -8,12 +8,15 @@ import '../../../utils/log.dart';
 /// Asked of the binary rather than assumed. `uci` advertises `Hash`,
 /// `BatchSize`, `MultiPV`, `Ponder` and a row of MCTS tuning permilles
 /// alongside the three bughouse rule options — and, importantly, it does
-/// **not** advertise `Threads`. The worker count is fixed by the build (it
-/// reports `workers 4 intra-op threads 5` here and silently ignores
-/// `setoption name Threads`), so there is no core count to offer. The panel
-/// reports what the engine chose instead of showing a slider that does
-/// nothing; `BatchSize` is the knob that genuinely changes how much work goes
-/// to the CPU at once, and it is the one offered in its place.
+/// **not** advertise `Threads`. The worker count is a compile-time constant
+/// of the build (four search workers) and the engine hands every remaining
+/// core to ONNX Runtime as intra-op threads, so it already uses the whole
+/// machine and there is no core count to offer. The panel reports what the
+/// engine chose instead of showing a control that does nothing.
+///
+/// Each value is a free integer inside a range rather than one of a fixed
+/// list of choices: the ranges are the engine's own (`Hash` 1–33554432 MB,
+/// `BatchSize` 1–1024, `MultiPV` 1–500), narrowed to what a desktop can use.
 @immutable
 class BughouseEngineSettings {
   const BughouseEngineSettings({
@@ -22,6 +25,27 @@ class BughouseEngineSettings {
     this.lines = 3,
     this.thinkSeconds = 30,
   });
+
+  /// Reads whatever was stored, clamping each value into its range, so a
+  /// value written by hand or by an older build can never leave the panel
+  /// with a number it will not accept.
+  factory BughouseEngineSettings.clamped({
+    int? hashMb,
+    int? batchSize,
+    int? lines,
+    int? thinkSeconds,
+  }) {
+    const fallback = BughouseEngineSettings();
+    return BughouseEngineSettings(
+      hashMb: (hashMb ?? fallback.hashMb).clamp(hashMin, hashMax),
+      batchSize: (batchSize ?? fallback.batchSize).clamp(batchMin, batchMax),
+      lines: (lines ?? fallback.lines).clamp(linesMin, linesMax),
+      thinkSeconds: (thinkSeconds ?? fallback.thinkSeconds).clamp(
+        thinkMin,
+        thinkMax,
+      ),
+    );
+  }
 
   /// The `Hash` option, in MB — the search tree's memory.
   ///
@@ -45,13 +69,18 @@ class BughouseEngineSettings {
   /// Hivemind has no `go infinite`, so "keeps thinking" is built from passes
   /// that each think longer than the last (see the controller's pump). This is
   /// where that doubling stops, and it is the honest form of "how hard should
-  /// the engine work" for an engine with no depth limit to set.
+  /// the engine work" for an engine with no depth limit to set. The passes
+  /// themselves never stop.
   final int thinkSeconds;
 
-  static const List<int> hashChoices = [16, 64, 256, 512, 1024, 2048, 4096];
-  static const List<int> batchChoices = [1, 4, 8, 16, 32, 64, 128, 256];
-  static const List<int> lineChoices = [1, 2, 3, 4, 5];
-  static const List<int> thinkChoices = [5, 10, 30, 60, 120];
+  static const int hashMin = 16;
+  static const int hashMax = 65536;
+  static const int batchMin = 1;
+  static const int batchMax = 1024;
+  static const int linesMin = 1;
+  static const int linesMax = 10;
+  static const int thinkMin = 1;
+  static const int thinkMax = 3600;
 
   BughouseEngineSettings copyWith({
     int? hashMb,
@@ -91,26 +120,17 @@ class BughouseEngineSettings {
   /// Reads the saved settings. A broken preference store costs the user their
   /// knobs, not the pane, so any failure falls back to the defaults.
   static Future<BughouseEngineSettings> load() async {
-    const fallback = BughouseEngineSettings();
     try {
       final prefs = await SharedPreferences.getInstance();
-      return BughouseEngineSettings(
-        hashMb: _pick(prefs.getInt(_hashKey), hashChoices, fallback.hashMb),
-        batchSize: _pick(
-          prefs.getInt(_batchKey),
-          batchChoices,
-          fallback.batchSize,
-        ),
-        lines: _pick(prefs.getInt(_linesKey), lineChoices, fallback.lines),
-        thinkSeconds: _pick(
-          prefs.getInt(_thinkKey),
-          thinkChoices,
-          fallback.thinkSeconds,
-        ),
+      return BughouseEngineSettings.clamped(
+        hashMb: prefs.getInt(_hashKey),
+        batchSize: prefs.getInt(_batchKey),
+        lines: prefs.getInt(_linesKey),
+        thinkSeconds: prefs.getInt(_thinkKey),
       );
     } catch (e) {
       log.w('Could not read the bughouse engine settings: $e');
-      return fallback;
+      return const BughouseEngineSettings();
     }
   }
 
@@ -125,10 +145,4 @@ class BughouseEngineSettings {
       log.w('Could not save the bughouse engine settings: $e');
     }
   }
-
-  /// A stored value only counts when it is still one of the offered choices —
-  /// otherwise a value written by an older build leaves a dropdown with no
-  /// matching item, which throws rather than degrading.
-  static int _pick(int? stored, List<int> choices, int fallback) =>
-      stored != null && choices.contains(stored) ? stored : fallback;
 }

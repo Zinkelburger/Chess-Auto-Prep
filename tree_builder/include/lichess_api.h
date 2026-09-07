@@ -13,7 +13,7 @@
 #include <stddef.h>
 
 /* Maximum moves returned from explorer */
-#define MAX_EXPLORER_MOVES 64
+#define MAX_EXPLORER_MOVES 256
 
 /* Maximum UCI/SAN move length */
 #define MAX_API_MOVE_LENGTH 16

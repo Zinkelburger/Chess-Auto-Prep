@@ -25,6 +25,7 @@ const _blackAreaFill = AppColors.chartAreaBlack;
 
 class GameAnalysisChart extends StatefulWidget {
   final List<MoveEval> evals;
+  final double height;
   final double startWinChance;
   final int? currentPly; // highlighted ply
   final ValueChanged<int>? onPlySelected;
@@ -32,6 +33,7 @@ class GameAnalysisChart extends StatefulWidget {
   const GameAnalysisChart({
     super.key,
     required this.evals,
+    this.height = 180,
     this.startWinChance = 0.0,
     this.currentPly,
     this.onPlySelected,
@@ -123,7 +125,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
     return Padding(
       padding: const EdgeInsets.only(left: 4, right: 12, top: 8, bottom: 4),
       child: SizedBox(
-        height: 180,
+        height: widget.height,
         child: LayoutBuilder(
           builder: (context, constraints) {
             _availableWidth = constraints.maxWidth;

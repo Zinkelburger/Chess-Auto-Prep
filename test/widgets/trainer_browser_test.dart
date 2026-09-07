@@ -189,25 +189,25 @@ void main() {
       expect(previewed?.id, 'M');
     });
 
-    testWidgets('the side the file trains is a header control', (tester) async {
-      var opened = 0;
+    testWidgets('the browser focuses on practice, not configuration', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _wrap(
           TrainerBrowser(
             title: 'Vigorito QGD',
+            subtitle: 'You play Black',
             lines: [_line('A')],
             reviewMap: const {},
             ungroupedChapter: _ungrouped,
             onTrainLine: (_) {},
-            playingWhite: false,
-            onChangePlayingSide: () => opened++,
           ),
         ),
       );
-
-      expect(find.text('Black Repertoire'), findsOneWidget);
-      await tester.tap(find.text('Black Repertoire'));
-      expect(opened, 1);
+      expect(find.text('You play Black'), findsOneWidget);
+      expect(find.text('Black Repertoire'), findsNothing);
+      expect(find.text('Chapters…'), findsNothing);
+      expect(find.byIcon(Icons.settings_outlined), findsNothing);
     });
 
     testWidgets('a due line enables Review and says when it fell due', (

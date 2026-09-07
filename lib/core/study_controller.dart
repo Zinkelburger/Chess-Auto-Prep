@@ -18,7 +18,7 @@ import 'move_navigation.dart';
 import '../models/repertoire_metadata.dart';
 import '../models/study_document.dart';
 import '../services/pgn_parsing_service.dart'
-    show splitPgnIntoGames, extractHeaders, stripBom;
+    show splitPgnIntoGames, extractHeaders, stripBom, countPgnGames;
 import '../services/storage/storage_factory.dart';
 import '../services/storage/study_naming.dart';
 import '../utils/atomic_file.dart';
@@ -47,7 +47,16 @@ class StudyController extends ChangeNotifier
   Future<bool> _saveTail = Future.value(true);
   bool get dirty => _dirty;
 
-  bool flipped = false;
+  /// Whether the board shows Black at the bottom.  Follows the chapter's
+  /// [StudyChapter.orientation] whenever a chapter opens; "Flip board" turns
+  /// it for this sitting only, "Edit chapter" changes what is saved.
+  bool get flipped => _flipped;
+  bool _flipped = false;
+
+  void _faceChapterOrientation() {
+    if (_doc.chapters.isEmpty) return;
+    _flipped = chapter.orientation == Side.black;
+  }
 
   /// Bumped whenever the active document is (re)assigned — [openStudy],
   /// [newStudy], [deleteStudy].  [openStudy] decodes off the UI isolate, so
@@ -96,6 +105,7 @@ class StudyController extends ChangeNotifier
     saveError = null;
     _chapterIndex = 0;
     _path = TreePath.empty;
+    _faceChapterOrientation();
     _dirty = false;
     await refreshStudyList();
   }
@@ -131,26 +141,38 @@ class StudyController extends ChangeNotifier
     String chapterName,
     String pgn,
   ) async {
-    // Carry the source headers along (StarRating, White/Black, …) so a
-    // chapter written by the puzzle creator or "Add line to study" keeps
-    // them across the in-memory round-trip (Event/FEN/SetUp are regenerated
-    // by StudyChapter.toPgn).
-    final chapter = StudyChapter(
-      name: chapterName,
-      headers: extractHeaders(pgn),
-      tree: MoveTree.fromPgn(pgn),
-    );
+    await addChaptersToStudyFile(path, [
+      StudyChapter.fromGameText(pgn, name: chapterName),
+    ]);
+  }
+
+  /// Append a selection in one write, preserving the open study's unsaved edits.
+  /// Returns the first new chapter's index, even when chapter names repeat.
+  Future<int> addChaptersToStudyFile(
+    String path,
+    List<StudyChapter> chapters,
+  ) async {
+    if (chapters.isEmpty) throw ArgumentError('Choose at least one game');
+    final int firstIndex;
     if (_doc.filePath == path) {
-      _doc.chapters.add(chapter);
+      firstIndex = _doc.chapters.length;
+      _doc.chapters.addAll(chapters);
       _markDirty();
       if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
     } else {
       final storage = StorageFactory.instance;
       final existed = await storage.fileExists(path);
       final existing = existed ? (await storage.readFile(path) ?? '') : '';
+      firstIndex = countPgnGames(existing);
+      final additions = chapters
+          .map(
+            (chapter) =>
+                chapter.toPgn(studyName: p.basenameWithoutExtension(path)),
+          )
+          .join('\n\n');
       final content = existing.trimRight().isEmpty
-          ? chapter.toPgn()
-          : '${existing.trimRight()}\n\n${chapter.toPgn()}';
+          ? additions
+          : '${existing.trimRight()}\n\n$additions';
       await storage.writeFile(
         path,
         content,
@@ -159,6 +181,7 @@ class StudyController extends ChangeNotifier
       );
     }
     await refreshStudyList();
+    return firstIndex;
   }
 
   Future<void> openStudy(String path) async {
@@ -186,7 +209,12 @@ class StudyController extends ChangeNotifier
           StudyChapter(
             name: c.name,
             headers: c.headers,
+            // The copy carries the chapter's opening note with it, so this
+            // snapshot is what the next autosave writes back intact.
             tree: c.tree.copyWithFreshIds(),
+            // Already resolved from the file's tags, which [headers] no
+            // longer carries.
+            orientation: c.orientation,
           ),
       ],
     );
@@ -194,6 +222,7 @@ class StudyController extends ChangeNotifier
     saveError = null;
     _chapterIndex = 0;
     _path = TreePath.empty;
+    _faceChapterOrientation();
     _dirty = false;
     notifyListeners();
   }
@@ -228,10 +257,15 @@ class StudyController extends ChangeNotifier
       saveError = null;
       _chapterIndex = 0;
       _path = TreePath.empty;
+      _faceChapterOrientation();
       _dirty = false;
     }
     await refreshStudyList();
   }
+
+  /// One chapter as a PGN game, tagged the way Lichess exports chapters.
+  String chapterPgn(int index) =>
+      _doc.chapters[index].toPgn(studyName: _doc.name);
 
   /// Whole-file atomic rewrite (storage layer writes tmp + rename).
   Future<bool> _save() {
@@ -310,6 +344,7 @@ class StudyController extends ChangeNotifier
     if (index < 0 || index >= _doc.chapters.length) return;
     _chapterIndex = index;
     _path = TreePath.empty;
+    _faceChapterOrientation();
     notifyListeners();
   }
 
@@ -329,50 +364,126 @@ class StudyController extends ChangeNotifier
     _markDirty();
   }
 
-  void addChapter(String name, {String? startingFen}) {
-    _doc.chapters.add(StudyChapter(name: name, startingFen: startingFen));
+  /// Name for a chapter added without one: "Chapter N" past the last.
+  String nextChapterName() => 'Chapter ${_doc.chapters.length + 1}';
+
+  void addChapter(String name, {String? startingFen, Side? orientation}) {
+    _doc.chapters.add(
+      StudyChapter(
+        name: name.trim().isEmpty ? nextChapterName() : name.trim(),
+        startingFen: startingFen,
+        orientation: orientation,
+      ),
+    );
     _chapterIndex = _doc.chapters.length - 1;
     _path = TreePath.empty;
+    _faceChapterOrientation();
     _markDirty();
   }
 
   /// Append every game in [pgn] as a new chapter (Lichess-style PGN import).
-  /// Each game's `[Event]` becomes the chapter name; `[FEN]` starting
-  /// positions and comments are preserved. Returns the number of chapters
-  /// added (0 when [pgn] holds no parseable games), selecting the first new
-  /// chapter and persisting immediately.
-  Future<int> importChapters(String pgn) async {
+  /// Chapter names come from the `[ChapterName]` / `[Event]` tags (see
+  /// [StudyChapter.nameFromHeaders]) unless [name] is given, which names a
+  /// single game outright and numbers several.  [orientation] overrides the
+  /// file's `[Orientation]` tags.  `[FEN]` starting positions and comments
+  /// are preserved.  Returns the number of chapters added (0 when [pgn] holds
+  /// no parseable games), selecting the first new chapter and persisting
+  /// immediately.
+  Future<int> importChapters(
+    String pgn, {
+    String? name,
+    Side? orientation,
+  }) async {
     // Off-isolate for the same reason as [openStudy]; ids re-minted on adopt.
     final games = await compute(_parseChapterTreesEntry, pgn);
-    final firstNewIndex = _doc.chapters.length;
-    int added = 0;
-    for (final (headers, tree) in games) {
+    final usable = [
       // Skip fragments that are neither a game nor a headered stub.
-      if (tree.isEmpty && headers.isEmpty) continue;
-      final name = headers['Event']?.trim().isNotEmpty == true
-          ? headers['Event']!
-          : 'Chapter ${_doc.chapters.length + 1}';
+      for (final game in games)
+        if (!(game.$2.isEmpty && game.$1.isEmpty)) game,
+    ];
+    final firstNewIndex = _doc.chapters.length;
+    final givenName = name?.trim();
+    for (final (i, (headers, tree)) in usable.indexed) {
+      final chapterName = givenName == null || givenName.isEmpty
+          ? StudyChapter.nameFromHeaders(
+              headers,
+              fallback: nextChapterName(),
+              studyName: _doc.name,
+            )
+          : usable.length == 1
+          ? givenName
+          : '$givenName ${i + 1}';
       _doc.chapters.add(
         StudyChapter(
-          name: name,
+          name: chapterName,
           headers: headers,
           tree: tree.copyWithFreshIds(),
+          orientation: orientation,
         ),
       );
-      added++;
     }
-    if (added > 0) {
+    if (usable.isNotEmpty) {
       _chapterIndex = firstNewIndex;
       _path = TreePath.empty;
+      _faceChapterOrientation();
       _markDirty();
-      if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
+      // Only a study with a file can fail to reach one. A study that has not
+      // been saved yet has nowhere to write, which is not an import error —
+      // the chapters are in the document either way.
+      if (_doc.filePath != null && !await flushSave()) {
+        throw StateError(saveError ?? 'Study not saved');
+      }
     }
-    return added;
+    return usable.length;
   }
 
-  void renameChapter(int index, String name) {
+  /// Change a chapter's name, orientation and/or preserved PGN tags — the
+  /// Lichess "Edit chapter" dialog.  Owned tags in [headers] are ignored
+  /// (they are regenerated on save).  Changing the open chapter's
+  /// orientation turns the board at once.
+  void updateChapter(
+    int index, {
+    String? name,
+    Side? orientation,
+    Map<String, String>? headers,
+  }) {
     if (index < 0 || index >= _doc.chapters.length) return;
-    _doc.chapters[index].name = name;
+    final target = _doc.chapters[index];
+    final trimmed = name?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) target.name = trimmed;
+    if (orientation != null) target.orientation = orientation;
+    if (headers != null) {
+      target.headers
+        ..clear()
+        ..addAll({
+          for (final entry in headers.entries)
+            if (!StudyChapter.ownedHeaders.contains(entry.key.trim()) &&
+                entry.key.trim().isNotEmpty)
+              entry.key.trim(): entry.value,
+        });
+    }
+    if (index == _chapterIndex) _faceChapterOrientation();
+    _markDirty();
+  }
+
+  void renameChapter(int index, String name) =>
+      updateChapter(index, name: name);
+
+  /// Remove every comment, glyph and drawn shape from a chapter, keeping
+  /// the moves.
+  void clearChapterAnnotations(int index) {
+    if (index < 0 || index >= _doc.chapters.length) return;
+    _doc.chapters[index].tree.clearAnnotations();
+    _markDirty();
+  }
+
+  /// Remove every sideline from a chapter, keeping the mainline.  A cursor
+  /// parked on a deleted sideline retreats to its last mainline ancestor.
+  void clearChapterVariations(int index) {
+    if (index < 0 || index >= _doc.chapters.length) return;
+    final sanLine = index == _chapterIndex ? tree.sanSequenceAt(_path) : null;
+    _doc.chapters[index].tree.clearVariations();
+    if (sanLine != null) _reanchorCursor(sanLine);
     _markDirty();
   }
 
@@ -384,6 +495,10 @@ class StudyController extends ChangeNotifier
       name: old.name,
       headers: Map<String, String>.from(old.headers),
       startingFen: fen,
+      // The moves belonged to the old position; the chapter's own note did
+      // not, so it stays.
+      intro: old.intro,
+      orientation: old.orientation,
     );
     _path = TreePath.empty;
     _markDirty();
@@ -400,6 +515,7 @@ class StudyController extends ChangeNotifier
       _chapterIndex = _doc.chapters.length - 1;
     }
     _path = TreePath.empty;
+    _faceChapterOrientation();
     _markDirty();
   }
 
@@ -415,7 +531,7 @@ class StudyController extends ChangeNotifier
   }
 
   void toggleFlipped() {
-    flipped = !flipped;
+    _flipped = !_flipped;
     notifyListeners();
   }
 
@@ -444,15 +560,14 @@ class StudyController extends ChangeNotifier
     _markDirty();
   }
 
-  /// Comment stored on the node at the cursor, annotation tokens and all.
+  /// Comment at the cursor, annotation tokens and all — the chapter's
+  /// introduction ([MoveTree.rootComment]) when the cursor is on the start
+  /// position.
   ///
   /// Board shapes (`[%cal]`/`[%csl]` arrows and circles) live in here, so the
   /// study screen reads and rewrites this rather than keeping shapes in a
   /// parallel structure that a PGN round-trip would drop.
-  String? get cursorComment => tree.nodeAt(_path)?.comment;
-
-  /// Whether the cursor is on a move (the root has no node to annotate).
-  bool get cursorHasNode => _path.isNotEmpty && tree.nodeAt(_path) != null;
+  String? get cursorComment => tree.commentAt(_path);
 
   void toggleNag(TreePath path, int nagId) {
     tree.toggleNag(path, nagId);
@@ -521,9 +636,13 @@ class StudyController extends ChangeNotifier
 // Trees crossing the isolate boundary carry foreign node ids — adopt them
 // only via [MoveTree.copyWithFreshIds].
 
+/// One record per game: its headers, its tree, and the note it opens with.
+/// The intro travels with the rest because a chapter that arrives without it
+/// is a chapter whose note the next autosave deletes.
 List<(Map<String, String>, MoveTree)> _parseChapterTreesEntry(String pgn) {
   final games = splitPgnIntoGames(stripBom(pgn));
   return [
+    // The tree carries the chapter's opening note itself (MoveTree.rootComment).
     for (final gameText in games)
       (extractHeaders(gameText), MoveTree.fromPgn(gameText)),
   ];

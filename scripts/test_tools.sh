@@ -7,6 +7,9 @@ cd "$ROOT"
 
 TESTS=(
   tools/test_agent_jobs.py
+  tools/test_agent_worktree.py
+  tools/test_agent_rules.py
+  tools/test_agent_integrate.py
   tools/test_file_mutation_lint.py
   tools/verify_maia_model.py
   tools/test_vc_redist.py

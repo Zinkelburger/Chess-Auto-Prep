@@ -13,25 +13,20 @@ import 'package:flutter/material.dart';
 import '../../core/study_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import 'study_chapter_actions.dart';
 
 class StudyChapterSidebar extends StatefulWidget {
   final StudyController study;
 
   /// Chapter actions that need the screen's dialogs.
   final VoidCallback onAddChapter;
-  final VoidCallback onAddChapterFromPosition;
-  final ValueChanged<int> onRenameChapter;
-  final ValueChanged<int> onSetStartingPosition;
-  final ValueChanged<int> onDeleteChapter;
+  final StudyChapterActions actions;
 
   const StudyChapterSidebar({
     super.key,
     required this.study,
     required this.onAddChapter,
-    required this.onAddChapterFromPosition,
-    required this.onRenameChapter,
-    required this.onSetStartingPosition,
-    required this.onDeleteChapter,
+    required this.actions,
   });
 
   @override
@@ -191,33 +186,14 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                 ),
         ),
         const Divider(height: 1),
-        Row(
-          children: [
-            Expanded(
-              child: TextButton.icon(
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text(
-                  'New chapter',
-                  style: TextStyle(fontSize: 12),
-                ),
-                style: TextButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                ),
-                onPressed: widget.onAddChapter,
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.dashboard_customize_outlined, size: 16),
-              tooltip: 'New chapter from a custom position…',
-              visualDensity: VisualDensity.compact,
-              onPressed: widget.onAddChapterFromPosition,
-            ),
-            const SizedBox(width: 4),
-          ],
+        TextButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('New chapter', style: TextStyle(fontSize: 12)),
+          style: TextButton.styleFrom(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          onPressed: widget.onAddChapter,
         ),
       ],
     );
@@ -274,7 +250,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                 padding: const EdgeInsets.only(left: 6),
                 child: Text(result, style: AppTextStyles.caption),
               ),
-            PopupMenuButton<String>(
+            PopupMenuButton<ChapterAction>(
               icon: Icon(
                 Icons.settings,
                 size: 14,
@@ -284,25 +260,10 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
               ),
               tooltip: 'Chapter actions',
               padding: EdgeInsets.zero,
-              onSelected: (action) {
-                switch (action) {
-                  case 'rename':
-                    widget.onRenameChapter(index);
-                  case 'position':
-                    widget.onSetStartingPosition(index);
-                  case 'delete':
-                    widget.onDeleteChapter(index);
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'rename', child: Text('Rename chapter…')),
-                PopupMenuItem(
-                  value: 'position',
-                  child: Text('Set starting position…'),
-                ),
-                PopupMenuDivider(),
-                PopupMenuItem(value: 'delete', child: Text('Delete chapter…')),
-              ],
+              onSelected: (action) => widget.actions.run(action, index),
+              itemBuilder: (_) => StudyChapterActions.menuItems(
+                canDelete: widget.study.doc.chapters.length > 1,
+              ),
             ),
           ],
         ),

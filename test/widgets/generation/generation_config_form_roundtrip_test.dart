@@ -289,8 +289,60 @@ void main() {
     });
   });
 
+  testWidgets('Pure is Maia-only even when reopening a master-enabled preset', (
+    tester,
+  ) async {
+    final initial = await _throughForm(
+      tester,
+      const TreeBuildConfig(
+        startFen: _startFen,
+        playAsWhite: true,
+        useMasterGames: true,
+        downloadMasterGamesIfMissing: true,
+      ),
+    );
+    expect(initial.useMasterGames, isFalse);
+    expect(initial.downloadMasterGamesIfMissing, isFalse);
+    expect(find.text('Target master opponents'), findsNothing);
+    expect(find.textContaining('Download master games first'), findsNothing);
+    expect(find.textContaining('Maia predicts every reply'), findsOneWidget);
+    expect(find.text('Prefer novelties'), findsNothing);
+  });
+
+  testWidgets(
+    'Fast is labeled clearly, survives reopening and can be deselected',
+    (tester) async {
+      final result = await _throughForm(
+        tester,
+        const TreeBuildConfig(
+          startFen: _startFen,
+          playAsWhite: true,
+          searchAlgorithm: SearchAlgorithm.rolling,
+        ),
+      );
+      expect(result.isRollingSearch, isTrue);
+      expect(result.useMasterGames, isFalse);
+      expect(find.text('Target master opponents'), findsNothing);
+      expect(find.text('Fast — 4-ply lookahead'), findsOneWidget);
+      expect(find.textContaining('approximate policy'), findsOneWidget);
+      final control = find.byKey(const ValueKey('generation-search-method'));
+      await tester.ensureVisible(control);
+      await tester.tap(control);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pure — full horizon').last);
+      await tester.pumpAndSettle();
+      final state = tester.state<GenerationConfigFormState>(
+        find.byType(GenerationConfigForm),
+      );
+      expect(
+        state.toConfig(startFen: _startFen, playAsWhite: true).isRollingSearch,
+        isFalse,
+      );
+    },
+  );
+
   group('the deliberate transforms', () {
-    testWidgets('the checkbox-backed knobs keep a seed\'s own value', (
+    testWidgets('Pure clears retired novelty weights from presets', (
       tester,
     ) async {
       // Any positive width means "wide opening on"; the checkbox says
@@ -304,7 +356,7 @@ void main() {
       );
       final wideResult = await _throughForm(tester, wide);
       expect(wideResult.openingWidthPlies, 10);
-      expect(wideResult.noveltyWeight, 25);
+      expect(wideResult.noveltyWeight, 0);
 
       const narrow = TreeBuildConfig(
         startFen: _startFen,
@@ -355,32 +407,33 @@ void main() {
       expect(config.maxEvalCp, 200);
     });
 
-    testWidgets('novelties zero the memorability tolerance, and only then', (
-      tester,
-    ) async {
-      const withNovelties = TreeBuildConfig(
-        startFen: _startFen,
-        playAsWhite: true,
-        noveltyWeight: 60,
-        memorabilityToleranceCp: 40,
-      );
-      expect(
-        (await _throughForm(tester, withNovelties)).memorabilityToleranceCp,
-        0,
-      );
+    testWidgets(
+      'Pure clears memorability regardless of legacy novelty settings',
+      (tester) async {
+        const withNovelties = TreeBuildConfig(
+          startFen: _startFen,
+          playAsWhite: true,
+          noveltyWeight: 60,
+          memorabilityToleranceCp: 40,
+        );
+        expect(
+          (await _throughForm(tester, withNovelties)).memorabilityToleranceCp,
+          0,
+        );
 
-      const without = TreeBuildConfig(
-        startFen: _startFen,
-        playAsWhite: true,
-        noveltyWeight: 0,
-        memorabilityToleranceCp: 40,
-      );
-      expect(
-        (await _throughForm(tester, without)).memorabilityToleranceCp,
-        40,
-        reason: 'the tolerance is only ignored while novelties are on',
-      );
-    });
+        const without = TreeBuildConfig(
+          startFen: _startFen,
+          playAsWhite: true,
+          noveltyWeight: 0,
+          memorabilityToleranceCp: 40,
+        );
+        expect(
+          (await _throughForm(tester, without)).memorabilityToleranceCp,
+          0,
+          reason: 'Pure has no memorability preference',
+        );
+      },
+    );
 
     testWidgets('PGN paths are kept in db-explorer mode and cleared outside', (
       tester,
@@ -426,7 +479,7 @@ void main() {
       expect(result.rootReplyExclude, isEmpty);
     });
 
-    testWidgets('a skeleton plan survives structurally', (tester) async {
+    testWidgets('Pure clears skeleton overrides', (tester) async {
       // Built through fromLines because that is the shape the card holds:
       // it edits the source text and re-parses, so a plan with no source
       // lines has nothing to load back.
@@ -442,8 +495,8 @@ void main() {
 
       final result = await _throughForm(tester, seed, playAsWhite: false);
 
-      expect(result.skeletonPlan.nodes.length, plan.nodes.length);
-      expect(result.skeletonPlan.features.length, 1);
+      expect(result.skeletonPlan.nodes, isEmpty);
+      expect(result.skeletonPlan.features, isEmpty);
     });
   });
 
@@ -485,7 +538,7 @@ void main() {
       // to prune every position a centipawn below the start.
       expect(config.minEvalCp, -100);
       expect(config.maxEvalCp, 200);
-      expect(config.maxPly, 20);
+      expect(config.maxPly, 4);
       // ...and the fields with no control fall back to the constructor's.
       expect(config.maxNodes, 0);
       expect(config.masterMinGames, 3);

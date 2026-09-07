@@ -9,10 +9,12 @@ import 'core/app_state.dart';
 import 'core/study_controller.dart';
 import 'features/bughouse/services/bughouse_bundle.dart';
 import 'debug/agent_driver.dart';
+import 'models/board_display_settings.dart';
 import 'models/engine_settings.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
+import 'theme/app_motion.dart';
 import 'theme/app_text_styles.dart';
 
 import 'services/default_pgn_service.dart';
@@ -67,6 +69,7 @@ Future<void> _initializeApp() async {
   await Future.wait([
     EngineSettings.instance.loadFromPrefs(),
     EvalDatabaseSettings.instance.load(),
+    BoardDisplaySettings.instance.load(),
     EngineLifecycle.instance.loadPersistedState(),
     _resolveOptionalModes(),
   ]);
@@ -202,72 +205,82 @@ class ChessAutoPrepApp extends StatelessWidget {
           create: (_) => StudyController(),
         ),
       ],
-      child: MaterialApp(
-        title: 'Chess Auto Prep',
-        theme: ThemeData(
-          colorScheme: const ColorScheme.dark(
-            surface: AppColors.surface,
-            onSurface: AppColors.ink,
-            primary: AppColors.ink,
-            onPrimary: AppColors.surface,
-            primaryContainer: AppColors.surfaceContainer,
-            onPrimaryContainer: AppColors.ink,
-            secondary: AppColors.surfaceHighlight,
-            onSecondary: AppColors.ink,
-            tertiary: AppColors.expectimax,
-            onTertiary: AppColors.surface,
-            error: AppColors.danger,
-            onError: AppColors.ink,
-          ),
-          scaffoldBackgroundColor: AppColors.surface,
-          fontFamily: AppTextStyles.uiFamily,
-          dividerColor: AppColors.divider,
-          textTheme: AppTextStyles.materialTextTheme(),
-          appBarTheme: const AppBarTheme(
-            backgroundColor: AppColors.surfaceElevated,
-            foregroundColor: AppColors.ink,
-          ),
-          elevatedButtonTheme: ElevatedButtonThemeData(
-            style: ElevatedButton.styleFrom(
+      // Boards and move lists read the Display preferences through this scope
+      // so a change in Settings repaints them in place.
+      child: DisplaySettingsScope(
+        settings: BoardDisplaySettings.instance,
+        child: MaterialApp(
+          title: 'Chess Auto Prep',
+          theme: ThemeData(
+            colorScheme: const ColorScheme.dark(
+              surface: AppColors.surface,
+              onSurface: AppColors.ink,
+              primary: AppColors.ink,
+              onPrimary: AppColors.surface,
+              primaryContainer: AppColors.surfaceContainer,
+              onPrimaryContainer: AppColors.ink,
+              secondary: AppColors.surfaceHighlight,
+              onSecondary: AppColors.ink,
+              tertiary: AppColors.expectimax,
+              onTertiary: AppColors.surface,
+              error: AppColors.danger,
+              onError: AppColors.ink,
+            ),
+            scaffoldBackgroundColor: AppColors.surface,
+            fontFamily: AppTextStyles.uiFamily,
+            dividerColor: AppColors.divider,
+            // The figurine face only has the chess glyphs, so it is a fallback:
+            // ♘ comes from it, every other character from Inter or the mono face.
+            textTheme: AppTextStyles.materialTextTheme().apply(
+              fontFamilyFallback: const [AppTextStyles.figurineFamily],
+            ),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: AppColors.surfaceElevated,
               foregroundColor: AppColors.ink,
-              backgroundColor: AppColors.buttonSurface,
             ),
-          ),
-          textButtonTheme: TextButtonThemeData(
-            style: TextButton.styleFrom(foregroundColor: AppColors.ink),
-          ),
-          outlinedButtonTheme: OutlinedButtonThemeData(
-            style: OutlinedButton.styleFrom(foregroundColor: AppColors.ink),
-          ),
-          filledButtonTheme: FilledButtonThemeData(
-            style: FilledButton.styleFrom(
-              foregroundColor: AppColors.ink,
-              backgroundColor: AppColors.buttonSurface,
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                foregroundColor: AppColors.ink,
+                backgroundColor: AppColors.buttonSurface,
+              ),
             ),
-          ),
-          snackBarTheme: SnackBarThemeData(
-            backgroundColor: AppColors.surfaceInset,
-            contentTextStyle: AppTextStyles.body.copyWith(fontSize: 15),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(foregroundColor: AppColors.ink),
             ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(foregroundColor: AppColors.ink),
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(
+                foregroundColor: AppColors.ink,
+                backgroundColor: AppColors.buttonSurface,
+              ),
+            ),
+            snackBarTheme: SnackBarThemeData(
+              backgroundColor: AppColors.surfaceInset,
+              contentTextStyle: AppTextStyles.body.copyWith(fontSize: 15),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            pageTransitionsTheme: AppMotion.pageTransitions,
+            useMaterial3: true,
           ),
-          useMaterial3: true,
+          // Keep the semantics tree empty unless explicitly enabled —
+          // GNOME's accessibility bus can enable Flutter's semantics tree
+          // and then assert every frame on our recognizer-per-span movetext
+          // (flutter/flutter#169214). Pass --dart-define=ENABLE_SEMANTICS=true
+          // to re-enable when testing a Flutter pin that includes the fix.
+          builder: (context, child) {
+            final wrapped = EscapeToPopScope(child: child!);
+            const enableSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
+            if (enableSemantics) return wrapped;
+            return ExcludeSemantics(child: wrapped);
+          },
+          home: const MainScreen(),
+          debugShowCheckedModeBanner: false,
         ),
-        // Keep the semantics tree empty unless explicitly enabled —
-        // GNOME's accessibility bus can enable Flutter's semantics tree
-        // and then assert every frame on our recognizer-per-span movetext
-        // (flutter/flutter#169214). Pass --dart-define=ENABLE_SEMANTICS=true
-        // to re-enable when testing a Flutter pin that includes the fix.
-        builder: (context, child) {
-          final wrapped = EscapeToPopScope(child: child!);
-          const enableSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
-          if (enableSemantics) return wrapped;
-          return ExcludeSemantics(child: wrapped);
-        },
-        home: const MainScreen(),
-        debugShowCheckedModeBanner: false,
       ),
     );
   }

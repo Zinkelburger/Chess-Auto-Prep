@@ -120,7 +120,7 @@ void main() {
     expect(_selected(tree, config), ['d5']);
   });
 
-  test('transfer bias picks ...c5 from the skeleton at 2.Nf3', () {
+  test('retired transfer bias leaves the expectimax winner at 2.Nf3', () {
     // c5 and d5 both sound (within 50cp); default pick is d5. Skeleton played
     // ...c5 after 2.c4 (4 squares away) → transfer overrides to c5.
     final tree = nf3Tree(c5Cp: 10, d5Cp: 10);
@@ -128,7 +128,7 @@ void main() {
       startFen: _start,
       playAsWhite: false,
     ).copyWith(skeletonPlan: benkoPlan());
-    expect(_selected(tree, config), ['c5']);
+    expect(_selected(tree, config), ['d5']);
   });
 
   test('transfer does not override when the transfer move is unsound', () {
@@ -161,7 +161,7 @@ void main() {
     expect(_selected(tree, config), ['d5']);
   });
 
-  test('structure veto drops ...d5 (pawn on d5) in favour of ...c5', () {
+  test('retired structure veto cannot drop the expectimax winner', () {
     // Both sound and NO transfer targets (empty node list) — only the veto
     // acts. ...d5 puts a black pawn on d5 → vetoed → c5 chosen.
     final tree = nf3Tree(c5Cp: 10, d5Cp: 25); // d5 better by eval
@@ -171,6 +171,6 @@ void main() {
             features: [PawnOnSquare(square: 'd5')],
           ),
         );
-    expect(_selected(tree, config), ['c5']);
+    expect(_selected(tree, config), ['d5']);
   });
 }

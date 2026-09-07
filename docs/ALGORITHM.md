@@ -1,390 +1,140 @@
-# Expectimax Pipeline & Algorithm Reference
+# Pure expectimax contract
 
-## Overview
+The Dart app and standalone C builder now use the same finite-horizon search
+rules. `stockfishExpectimax` defaults to Pure. The optional
+[Fast mode (four-ply lookahead)](ROLLING_SEARCH_AND_STUDY_LINES.md) uses the same local
+model with approximate receding lookahead. Legacy Fast is retired; an old Fast
+setting cannot activate heuristic pruning. This document defines Pure. Database exploration and the ChessDB mainline book remain
+separate build sources.
 
-Chess Auto-Prep builds repertoire trees using a best-first expectimax algorithm that combines engine evaluation, human move prediction (Maia), and database statistics to produce practical repertoire recommendations.
+## What is optimized
 
-This document describes the **Flutter/Dart** generation pipeline in `lib/`. The native C `tree_builder` CLI (including `--resume`, `cli_args` persistence, db-explorer PGN ingest, and default thread count) is documented in [`tree_builder/ALGORITHM.md`](../tree_builder/ALGORITHM.md) and summarized under **External & non-Flutter components** in [`COMPONENT_MAP.md`](COMPONENT_MAP.md).
+Choose a fixed repertoire side, a horizon H in half-moves from the supplied
+root, an engine depth D, a maximum engine loss L in centipawns, and an opponent
+policy. The default horizon is 4 plies. A larger horizon is exponentially more
+expensive, even with just a few plies of preparation.
 
-## Pipeline Stages
+For each of our positions, enumerate **every legal move**, including all four
+promotions. Evaluate each resulting position at depth D, using the repertoire
+side's perspective. Retain every move whose evaluation is at least best − L.
+These fixed-depth evaluations are immutable during expansion and backup.
+Neither MultiPV width nor book popularity determines our candidate set.
 
-### 1. Candidate Generation
-
-For each position in the BFS frontier:
-
-**Our moves (configurable source):**
-- **Maia (default):** Top-N moves ranked by Maia's predicted human probability. Ships with Flutter, no engine needed. Configured via `EngineSettings.candidateSourceOur`.
-- **Stockfish:** MultiPV top-N moves by engine evaluation. Configured via `EngineSettings.stockfishTopN`.
-
-**Opponent moves:**
-- **Maia:** moves weighted by Maia's predicted probability. This is the source for every build mode except DB Explorer.
-- **PGN database (`BuildMode.dbExplorer`):** moves weighted by actual frequency in the user's own game files, Dirichlet-smoothed with Maia where coverage is thin.
-
-The Lichess Explorer was a third source. It no longer is: `ProbabilityService`'s fetch is mothballed app-wide and returned null unconditionally, so the "Lichess database" option silently fell back to Maia while claiming real frequencies. The dead branch has been removed from the pipeline and the option from the form; `useLichessDb` / `useMasters` / `speeds` / `ratingRange` / `minGames` / `maiaOnly` on `TreeBuildConfig` are inert and kept only for the audit/holes/tricks features that still construct configs with them.
-
-### 2. Evaluation Resolution (Eval Chain)
-
-Evaluations are resolved through a multi-source chain, stopping at the first hit:
-
-1. **Session cache** — in-memory hash of previously evaluated positions
-2. **Local eval DB** (ChessDB direct file) — pre-downloaded centipawn evaluations
-3. **Stockfish** — local engine evaluation at configured depth
-
-Depth is configurable via `TreeBuildConfig.evalDepth` (default 14).
-
-### 3. Frontier Tree Build (best-first by default)
+For a complete tree, the recurrence is:
 
 ```
-start_fen
-  └── our_move_1 (Maia top candidate)
-  │     └── opp_response_1 (by DB frequency)
-  │     └── opp_response_2
-  └── our_move_2
-        └── ...
+V(terminal) = 1 for our win, 0.5 for a draw, 0 for our loss
+V(horizon)  = U(fixed-depth engine evaluation from our perspective)
+V(our turn) = max V(child) over the admitted legal candidates
+V(opponent) = sum policy(move | position) * V(child)
 ```
 
-**Frontier discipline (`bestFirst`, default on):** the build queue is a
-max-heap on `searchPriority` — the node's reach probability (product of
-opponent move probabilities along its path), discounted at non-incumbent
-our-move alternatives. Popping always expands the frontier node that matters
-most to the final repertoire, which makes the build an **anytime algorithm**:
-at any node budget the tree is concentrated on the likeliest opponent lines,
-and likely lines get searched deeper than rare sidelines. `bestFirst: false`
-restores classic FIFO level-order BFS.
+`U(cp) = 1 / (1 + exp(-0.00368208 * cp))`; packed mate scores with magnitude
+above 9000 saturate to 0 or 1. This is a bounded **expected-score estimate**,
+not a calibrated human win probability. The engine-loss constraint and leaf
+utility depend on Stockfish's estimates. Search correctness does not prove
+that those estimates, the opponent model, or the resulting move are objectively
+correct chess. Stockfish itself remains a selective engine search.
 
-**Asymmetric our-move expansion (`ourAltDiscount`, default 0.25):** at an
-our-move node the incumbent candidate (best eval at expansion time) inherits
-the parent's priority; every alternative is multiplied by the discount, so
-alternatives stay shallow unless the mainline budget runs out. Scheduling
-only — `searchPriority` never feeds expectimax or selection.
+The selected move uses exactly the same scorer as the maximizing backup.
+Ties use engine evaluation, then UCI, then SAN. There are no novelty bonuses,
+confidence blends, setup preferences, memorability bonuses, skeleton overrides,
+reply-count preferences, or separate selection objectives.
 
-**Opponent probability smoothing (`maiaPriorGames` = λ, default 30):** DB
-frequencies are blended with Maia's policy as a Dirichlet prior:
-`p = (count + λ·maiaP) / (N + λ)`. With thousands of games the data
-dominates; at N = 0 this degrades continuously to pure Maia — replacing the
-old hard DB→Maia fallback cliff. Maia-only moves absent from the DB get
-prior-only mass. Skipped (saving the inference) when N ≥ 100λ. λ = 0
-disables smoothing.
+## Opponent model
 
-**Coverage guarantee (`coverMinProb`, default 0.05 — no silent holes):**
-probability cutoffs decide how *deep* a line is searched, never whether a
-popular reply *exists*.  Any opponent reply whose LOCAL (per-position)
-smoothed probability clears the floor is forced into the tree even when its
-reach probability is below `minProbability` or the mass/children budgets are
-exhausted; the resulting our-turn node gets a **coverage-only expansion**
-(one evaluated answer, no subtree).  An end-of-build sweep then answers any
-remaining dangling our-turn leaf above the floor and removes the rest, so
-the invariant holds: *no exported line ever ends on an unanswered opponent
-move* — uncovered mass returns honestly to the expectimax tail term.
-Selection and line extraction honor coverage-floored children below
-`minProbability`.  0 disables (legacy behavior).
+**Pure and Fast use Stockfish + Maia only.** Stockfish supplies position
+estimates and the own-move loss constraint. Maia, at the displayed opponent
+rating, supplies every opponent position's move probabilities. The legal
+probabilities are normalized to sum to one; every positive-probability legal
+reply remains in the search. There are no master counts, database fallbacks,
+blends, probability-temperature changes, or hidden reply caps.
 
-**Pruning rules:**
-- `minProbability` (default 0.02): branches with cumulative probability below this threshold are not explored (also applied to `searchPriority` in best-first mode); overridden for existence by the coverage floor above
-- `maxEvalLossCp` (default 80): our moves losing more than 80cp vs best are pruned
-- `maxPly`: configurable tree depth (plies from root); our-turn leaves at the cap still receive a coverage answer one ply deeper
-- `maxNodes`: hard cap on total tree nodes — with best-first this is the natural budget knob; the tree is always best-for-its-size (coverage answers are exempt)
+A missing or invalid Maia policy is an error. It never triggers a switch to a
+game database. Master targeting and automatic downloads are unavailable for
+Stockfish expectimax, including when an old preset enables their legacy flags.
+The separate database build modes keep their own data workflows.
 
-### 3b. Final Verification Pass (`verifyFinal`, default on)
+Saved trees record `opponent_book_source: "none"` and
+`use_master_games: false`. C also records `maia_only: true`. Earlier trees
+built with master probabilities cannot resume under this policy: start a fresh
+build. Maia-only trees with `maia_policy_version: 1` can continue with the same position, rating,
+evaluation settings and search method. Changes to the Maia or Stockfish model
+versions can still affect newly evaluated positions. Older inference versions
+require a fresh build; see [parallel search and Maia repeatability](PARALLEL_EXPECTIMAX.md).
 
-After selection, every chosen repertoire move is re-evaluated by Stockfish
-at `verifyDepth` (0 = auto: `evalDepth + 6`, at least 20).  A move whose
-deep eval loses more than `maxEvalLossCp` against the best deep-checked
-sibling is **demoted**: the deep evals are written back into the tree,
-expectimax and selection re-run, and the new spine is re-verified (up to 3
-passes).  The exported repertoire therefore carries a guarantee: *no
-selected move loses more than the threshold at the verification depth* —
-instead of trusting the shallower build-time evals.  Verification changes
-evals and selection only; it never adds or removes nodes, so the coverage
-guarantee is preserved.  Implemented in
-`lib/services/generation/repertoire_verifier.dart` (Dart) and
-`repertoire_verify()` in `tree_builder/src/repertoire.c` (C,
-`--verify`/`--no-verify`/`--verify-depth`).
+## Chess state and draw convention
 
-### 3c. Preferred Setup — Consistency Bias (`setupMoves`, off by default)
+Each node retains its full path from the root. Identical piece placements can
+have different remaining horizons, half-move clocks, or repetition histories;
+Pure never borrows their backed-up values or merges their policies by FEN.
+Starting a new search from an old Pure subtree rebuilds it with the new history.
 
-The user can name the SAN moves of a system to play whenever it's sound
-(e.g. `Be3 Qd2 f3 O-O-O h4 Nh3` for the 150 Attack vs the Pirc).  Two
-mechanisms consume it:
+Checkmate and stalemate are exact terminals. Insufficient material is detected
+by the chess rules implementation. The model assumes both players immediately
+claim a draw at the third occurrence or 100 half-moves, with checkmate taking
+precedence. Repetition keys include side to move, castling rights, and legal
+en-passant availability. History before the supplied root is unknown.
 
-1. **Candidate injection** (build): quiet system moves are often missing
-   from Maia/MultiPV top-N, so any *legal* setup move is evaluated and
-   added as a candidate — subject to the normal `maxEvalLossCp` window.
-   Moves already played (or not legal) are skipped automatically, which
-   gives move-order flexibility for free.
-2. **Selection tie-break**: within `setupToleranceCp` (default 30,
-   clamped to `maxEvalLossCp`) of the best child eval, a setup move is
-   preferred over the plain expectimax pick; among several qualifying
-   setup moves, the one with the best expectimax value wins.
+This is an explicit draw-claim convention, not full modeling of optional or
+prospective draw claims. General dead positions beyond recognized insufficient
+material, arbitrary game history before a FEN, and tablebase proofs are outside
+this model. “100% correct chess” would require those inputs and additional rules.
 
-Expectimax values are never modified — the bias only constrains the
-argmax, exactly like `maxEvalLossCp` already does.  So when the opponent
-makes consistency expensive (e.g. ...Ng4 hitting the Be3 bishop), every
-setup continuation falls outside the tolerance and selection deviates to
-the engine's answer; where the setup is fine, it's played.  The
-verification pass deep-checks setup moves like any other selection.
-Implemented in `lib/services/generation/setup_bias.dart` +
-`RepertoireSelector._applySetupBias` (Dart) and `setup_moves_contain` /
-`score_our_move_children` in `tree_builder/src/tree.c` (C, `--setup`,
-`--setup-tolerance`).
+## Completion, budgets, and resume
 
-### 4. Ease Calculation
+An expansion is committed atomically: first construct its complete action set
+and evaluations, then attach it to the tree. Cancellation, time limits, or a
+node budget never leave a partial probability distribution or partial legal
+candidate enumeration. A node budget may leave some allowance unused when the
+next complete expansion cannot fit. An in-flight engine evaluation may finish
+after a requested time limit.
 
-**`myEase` (our moves, 0.0–1.0):**
-How natural our chosen move is for a human to find. Computed from Maia's predicted probability for the move:
-- If Maia says we'd play this move 80% of the time → myEase ≈ 0.80
-- Only reasonable move (>200cp gap to 2nd best) → myEase = 1.0
-- Engine-best but Maia-unlikely (<15%) → clamped to 0.5 max
+Unresolved frontier values are provisional. Their bounds are [0,1]; exact
+terminals and evaluated horizon leaves have equal bounds. Bounds propagate by
+max at our nodes and probability-weighted sum at opponent nodes. They bound
+the defined finite model, not Stockfish error or real-world playing strength.
+An incomplete result is labeled as such and does not claim its leader is solved.
 
-**`ease` (opponent positions, 0.0–1.0):**
-How easy it is for the opponent to find a good move at this position. Lower ease = opponent struggles more = better for us.
+Resume requires the same root, repertoire side, engine depth, engine-loss
+limit, opponent rating, master-target setting, and book source. The horizon can
+increase, but cannot shrink. Already expanded policies/evaluations are retained;
+new frontier queries use the currently available engine/model/data. For a
+uniform fresh comparison after changing any of these sources, start a new run.
+Legacy heuristic trees must be rebuilt. Legacy files remain readable for review;
+cyclic history-free value dependencies are rejected instead of iterated an
+arbitrary number of times.
 
-**`positionQuality` (unified, 0.0–1.0):**
-- Our nodes: `positionQuality = myEase` (best repertoire child)
-- Opponent nodes: `positionQuality = 1 - ease`
+## Export and verification
 
-### 5. Expectimax Calculation
+Export follows the maximizing policy and every positive-probability opponent
+reply. Pure paths are not folded by FEN or discarded by diversity, cumulative
+probability, or absolute evaluation windows. Optional output products such as
+trap-only collections and extra explanatory variations remain output choices;
+they are not the tree's optimized policy. Engine tails are disabled for Pure.
 
-Minimax with probabilistic opponent moves:
+There is no separate deep-verification pass for Pure. To strengthen evaluation,
+rebuild at the desired engine depth, so all legal moves are admitted or rejected
+at that depth. The legacy verifier re-evaluates its entire saved tree, commits
+only a completed pass, and always recomputes values and selection. It can only
+check saved candidates; it cannot recover moves a legacy build omitted.
 
-```
-V(our_node) = max over our children of V(child)
-V(opp_node) = Σ P(child) × V(child)  for all opponent children
-V(leaf)     = winProbability(evalCp)
-```
+## Implementation and checks
 
-`P(child)` is the Maia/DB frequency of the opponent's move. The result `V` is displayed as "% win" (practical win rate given human opponents).
+- Dart: `pure_position.dart`, `pure_tree_builder.dart`, `eca_calculator.dart`,
+  `repertoire_selector.dart` under `lib/services/generation/`.
+- C: `tree_builder/src/pure_search.c`; chesslib adapter in `san_convert.c`.
+- Both use the v4 tree wire format with `history_aware`, terminal values,
+  lower/upper bounds, and `algorithm_version: 3` in configuration.
+- C JSON uses 17 significant digits so saved probabilities survive round trips.
+- Shared fixture: 30 independently solved trees, both colors, chance nodes,
+  constrained max nodes, exact terminals, and deterministic policy checks.
+- Dart tests cover legal action enumeration, master/Maia support, tiny replies,
+  cancellation/budget behavior, resume restrictions, promotion and repetition.
+- C tests exercise the same oracle, legal-move fixtures, and the real builder
+  through a deterministic UCI process. Run `make test-pure` in `tree_builder/`.
 
-### 5b. Opponent mistakes are already in `V`
-
-There is deliberately **no** separate opponent-mistake weight. Expectimax
-already prices a line by how opponents actually play it: an opponent node is
-the probability-weighted average of where its children land, so a line the
-opponent goes wrong in scores higher *because* the wrong moves lead to
-positions that are better for us, weighted by how often they are chosen.
-
-A second knob scaling the argmax by accumulated centipawn loss double-counted
-that, and because the value it read (`cplValue`) was computed in a later pass
-than the propagation that consumed it, the boost tilted *selection* without
-tilting the values selection was compared against — a node's stored `V`
-described a move the repertoire did not play. Both the knob and the
-propagation were removed.
-
-`localCpl` — the probability-weighted centipawn loss at a single opponent
-node, relative to their best move — is still computed and is still shown in
-the eval tree. It is a diagnostic, not an input to selection.
-
-### 6. Line Quality (Playability)
-
-**Geometric mean** of `positionQuality` across ALL nodes in a line (both sides):
-
-```
-lineQuality = exp(mean(log(clamp(q, 0.01, 1.0))))
-```
-
-Where `q` = `positionQuality` at each node. This correctly penalizes:
-- Lines where our moves are hard to find (low myEase)
-- Lines where opponent moves are easy to find (high ease → low 1-ease)
-
-**Hard moves (bottleneck):** The position with the minimum `positionQuality` in a line, excluding the root position (not a move) and the first ply where it is our turn (opening choice). Surfaced with a warning when quality < 0.3. When the bottleneck falls on an opponent-move position, the label reads "easy for opponent" instead of "hard move."
-
-### 7. Trap Detection
-
-A position is a "trap" when:
-- It's the opponent's turn
-- A popular opponent move (high DB frequency or Maia probability) is significantly worse than the best move
-- `trapScore = popularMoveProb × evalDiff / 1000`
-
-After identifying a trap, the extractor also records the **refutation move** — our best reply after the opponent plays the popular blunder (repertoire move preferred, otherwise highest-eval child).
-
-Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line queries.
-
-### 8. Coverage Suggestion
-
-`CoverageSuggestionService` identifies gaps in repertoire coverage:
-1. Collect gaps: unaccounted opponent moves + too-shallow leaves
-2. Resolve: walk tree to find continuations
-3. Score: weighted combination of coverage impact, eval, ease, trap potential
-4. Select: greedy set-cover to reach target coverage %
-
-### 9. Coherence Analysis
-
-`CoherenceService` uses FP-Growth to find frequent move patterns across repertoire lines, identifying structural consistency. Lines sharing common strategic motifs cluster together; outliers may need review.
-
-## Configurable Parameters
-
-| Parameter | Default | Location | Description |
-|-----------|---------|----------|-------------|
-| `depth` | 15 | EngineSettings | Stockfish eval depth |
-| `easeDepth` | 15 | EngineSettings | Ease sub-evaluation depth |
-| `evalDepth` | 14 | TreeBuildConfig | Tree build eval depth |
-| `candidateSourceOur` | `maia` | EngineSettings | Our candidate source |
-| `candidateSourceOpp` | `maia` | EngineSettings | Opponent candidate source |
-| `stockfishTopN` | 3 | EngineSettings | Stockfish MultiPV count |
-| `minProbability` | 0.02 | TreeBuildConfig | Pruning probability threshold |
-| `maxEvalLossCp` | 80 | TreeBuildConfig | Max eval loss for our moves |
-| `bestFirst` | `true` | TreeBuildConfig | Priority frontier (anytime) vs FIFO BFS |
-| `ourAltDiscount` | 0.25 | TreeBuildConfig | Priority multiplier for non-incumbent our moves |
-| `maiaPriorGames` | 30 | TreeBuildConfig | Dirichlet λ blending DB frequencies with Maia |
-| `coverMinProb` | 0.05 | TreeBuildConfig | No-silent-holes floor on local opponent-reply probability |
-| `verifyFinal` | `true` | TreeBuildConfig | Deep re-check of selected repertoire moves after selection |
-| `verifyDepth` | 0 (auto) | TreeBuildConfig | Verification depth; 0 = max(evalDepth + 6, 20) |
-| `setupMoves` | `''` | TreeBuildConfig | Preferred-setup SAN list (consistency bias); empty = off |
-| `setupToleranceCp` | 30 | TreeBuildConfig | Max eval loss for a setup move to be preferred |
-| `selectionMode` | `expectimax` | TreeBuildConfig | `expectimax`, `engineOnly`, `dbWinRateOnly` |
-| `noveltyWeight` | 0 | TreeBuildConfig | 0–100 boost for rarely played sound moves |
-| `maiaElo` | 2200 | EngineSettings | Maia model ELO level |
-| `annotationDetail` | `full` | TreeBuildConfig | Per-move PGN annotation level: `none` / `likelihood` / `full` |
-| `organizeIntoChapters` | `true` | TreeBuildConfig | Cut the export into named chapters at branch points |
-| `maxLinesPerChapter` | 40 | TreeBuildConfig | Split a chapter bigger than this at its next branch point |
-| `minLinesPerChapter` | 5 | TreeBuildConfig | Branches below this join the "rare sidelines" chapter |
-| `modelGameCount` | 6 | TreeBuildConfig | Model games appended as a final chapter (needs a PGN database) |
-| `modelGameMinElo` | 2200 | TreeBuildConfig | Rating floor for a model game; unrated games stay eligible |
-| `refutationLines` | `true` | TreeBuildConfig | Show the engine's punishment of a reply that ends a line won |
-| `alternativeLines` | `true` | TreeBuildConfig | Show the engine's answer to a natural move the book leaves out |
-| `lineMinNewShare` | 0.25 | TreeBuildConfig | Share of a line's decisions that must be new to the book; 0 = off |
-| `lineMaxOverlap` | 0.7 | TreeBuildConfig | Largest decision-set Jaccard a line may share with any kept line; 1 = off |
-| `lineMaxFoldPlies` | 6 | TreeBuildConfig | Longest sideline a fold may write before the line is dropped instead |
-
-### 9b. Line Ranking and the Diversity Bar (Phase 3)
-
-Extraction hands the pruner every root-to-leaf line.
-`LinePruner.rank` orders them by **greedy weighted set cover** over the
-*decisions* each teaches — a `LineCoverageUnit` keyed by the canonical FEN of
-the position faced plus the UCI played in it, valued at that position's reach
-probability scaled up for an only-move.  Two lines share a unit whenever they
-put you in front of the same choice, so a transposition is recognised as the
-same idea however it was reached.  The greedy runs to exhaustion and the
-*order* is the answer to "which lines matter most"; how many to keep is chosen
-afterwards on the Generate tab, against a live count.
-
-**"Teaches something new" is not a high enough bar.**  Set cover admits a line
-the moment it carries one uncovered unit.  Measured on the 40k-node Benko
-build, that gave 519 lines from 753 extracted, and the *median* kept line
-shared 12 of its 14 plies with another kept line, had 6 of its 7 decisions
-taught elsewhere, and differed from its nearest twin only in the last move or
-two — 90% of the book was a tail-only variant of something already in it.
-
-Two counted tests close that gap:
-
-- `lineMinNewShare` — at least this share of a line's decisions must be ones
-  no kept line teaches (against the book as a whole).
-- `lineMaxOverlap` — a cap on the decision-set Jaccard against any *single*
-  kept line.  The ladder is coarse because lines are short: for two
-  seven-decision lines, sharing six scores 0.75 and sharing five scores 0.56,
-  so 0.7 means "differ by more than one decision".
-
-Both count decisions and neither weighs them, which is deliberate.  A
-value-weighted floor was tried and is structurally broken: unit value is reach
-probability, so a line's value is dominated by the first two or three
-decisions — precisely the ones every sibling shares — and once the first pick
-covers them a 10% floor keeps 11 lines out of 753.  Reach value answers "how
-much does this line matter", not "how much of it is new".
-
-**A line that fails the bar is folded, not dropped.**  It still teaches a
-decision nothing else does; it is just not worth its own chapter entry to say
-so.  So it is attached to the kept line it shares the longest move prefix
-with, and the export writes it as a PGN variation hanging off the ply where
-the two part (repeating the host's last move when the fold *continues* the
-host rather than diverging from it).  A fold whose sideline would run longer
-than `lineMaxFoldPlies` is a second line written inside the first, so that one
-is dropped.  At the defaults the Benko build gives **197 mainlines + 321
-folded sidelines, nothing dropped**, and tail-only twins fall from 90% to 12%.
-
-A line whose every decision is already in the document — as a mainline or as
-a sideline — is suppressed rather than folded again.  Rejecting a line does
-not mark its decisions covered (marginal value is measured against mainlines,
-and crediting a sideline there would let a fold pay for a mainline), so
-without that check each near-identical sibling wins a round with the *same*
-uncovered decision and gets its own fold: the first cut of this wrote
-`11. Qc2 Nxa6` seven times into one game, once per unplayed White 12th move.
-
-Coverage is therefore reported twice: `coverageAt` counts mainlines only —
-what training will quiz — and `answeredCoverageAt` adds the folded sidelines,
-which is what the file answers if you read it.  Without a bar the two are
-identical.
-
-### 10. Course Composition (Phase 3.5)
-
-Extraction produces a flat list of root-to-leaf lines ranked by reach
-probability, which is unreadable as study material.  `course/` re-imposes
-structure:
-
-1. **Chapters** are cut at the branch points where the repertoire actually
-   divides, descending until each chapter holds between `minLinesPerChapter`
-   and `maxLinesPerChapter` lines.  Branches too small to justify a chapter
-   are swept into one "rare sidelines" bucket, ordered last.  Chapters are
-   ordered by total reach probability — a course opens with what you will
-   actually face.
-2. **Names** come from the bundled ECO book (`OpeningBookService`), resolved
-   as the *deepest* book position a chapter's prefix passes through, so
-   transpositions name correctly.  Segments shared by every chapter are
-   stripped (the course title already states the opening); collisions are
-   broken with the defining move, e.g. `King's Knight Opening (2...Nc6)`.
-3. **Model games** are database games that follow the *selected* repertoire —
-   every one of our moves is the move the repertoire teaches — ranked by
-   follow depth, then result from our side, then rating, and round-robined
-   across variations so the selection spans chapters rather than repeating
-   one line.  They are appended as a trailing chapter, and marked with
-   `ModelGame*` tags so the trainer and the deviation walker treat them as
-   illustration rather than as lines of your own.
-
-   The candidate pool is the frequency scan's retained games
-   (`TopGamesReservoir`), which admits by rating.  Retention therefore runs
-   deeper than the statistics (`maxPly` would cut a model game off in the
-   opening), applies `modelGameMinElo`, and is sized well above
-   `modelGameCount` — most of a database's strongest games never enter this
-   repertoire at all.  When nothing qualifies the run says so rather than
-   quietly omitting the chapter.
-4. **Refutations** answer the lines that end because the opponent's move left
-   us winning.  The build stops there — there is nothing left to prepare —
-   which leaves the export ending on the mistake with no answer.  For each
-   such position (deduplicated, capped) Stockfish is asked for its principal
-   variation at the verification depth, and the first few moves are written as
-   a sideline on the losing move: `3... Nxe4 (3... Nxe4 4. Nxe4 d5 5. Bxd5)`.
-   The mainline is untouched, so nothing new becomes trainable.
-5. **Refuted alternatives** answer the other question — "why isn't the natural
-   move here?"  The tree cannot: our children all sit inside the eval-loss
-   window, so a refuted move of ours was never a child, and their rejected
-   tries fall below the Maia candidate floor.  So the pass brings its own move
-   source (Maia's policy at that position, or the game database when Maia is
-   unavailable), skips every move the tree already holds, and searches the
-   position after each candidate.  A move is written only when it costs the
-   side that plays it at least `RefutationProber.minLossCp` (150cp) — as an
-   alternative sideline marked `?`/`?!` with a `[%loss]` token, e.g.
-   `1. e4 (1. f3? e5 2. g4 Qh4#)`.  Candidates that turn out to be playable
-   are dropped: claiming a good move is refuted would be worse than silence.
-
-Both engine passes are capped (`maxProbes`, `maxAlternativeSites`,
-`maxAlternativeProbes`), deduplicated by position, and best-effort — a missing
-engine, a missing move source, a cancelled run or a failed search costs
-variations and never the export.
-
-Encoding follows published course exports and this app's own reader
-(`RepertoireService.detectHeaderChapters`): `[White]` names the chapter,
-`[Black]` names the variation, `[Result]` stays `"*"`.  Each line remains its
-own PGN game, so training, browsing and per-line statistics are unchanged.
-
-## Key Source Files
-
-- `lib/services/generation/tree_my_ease.dart` — myEase, positionQuality, linePlayability
-- `lib/services/generation/eca_calculator.dart` — expectimax calculation + CPL value propagation
-- `lib/services/generation/trap_extractor.dart` — whole-tree trap line extraction
-- `lib/services/tree_build_service.dart` — frontier tree building
-- `lib/services/generation/frontier_queue.dart` — best-first/FIFO frontier
-- `lib/services/generation/opponent_prior.dart` — λ-smoothing with Maia prior
-- `lib/services/generation/repertoire_verifier.dart` — final deep-verification pass
-- `lib/services/generation/setup_bias.dart` — preferred-setup parsing/matching
-- `lib/services/expectimax_line_service.dart` — reads stored expectimax values into lines for the Expectimax pane (no computation)
-- `lib/features/browse/services/candidate_service.dart` — candidate move generation
-- `lib/features/traps/services/trap_index_service.dart` — trap indexing and lookup
-- `lib/features/coverage/services/coverage_suggestion_service.dart` — coverage gap suggestions
-- `lib/services/coherence_service.dart` — FP-Growth coherence analysis
-- `lib/features/eval_tree/services/eval_tree_line_metrics.dart` — line quality metrics
-- `lib/core/generated_repertoire.dart` — single derived bundle (tree + FenMap + snapshot + traps)
-- `lib/services/generation/line_extractor.dart` — the valued tree walked into lines, transpositions merged
-- `lib/services/generation/line_pruner.dart` — greedy set cover, the diversity bar, and folding
-- `lib/services/generation/repertoire_slice.dart` — re-cutting a finished build's ranking without rebuilding
-- `lib/services/generation/course/` — chapter planning, ECO naming, model-game selection, PGN composition
-- `lib/services/generation/export/` — the single PGN emitter and the per-move annotation model
-- `lib/services/generation/pgn_freq_map.dart` / `pgn_freq_parser.dart` / `pgn_freq_cache.dart` — human-practice statistics from a PGN database
+Correctness-preserving speedups can follow: reusable fixed-depth evaluations,
+parallel evaluation, and rigorous bounded chance-node pruning. Rolling is
+explicitly approximate and tested against this reference. Study selection and
+exercise boundaries are a separate, reversible output layer.

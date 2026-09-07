@@ -770,7 +770,7 @@ void main() {
       _base
           .copyWith(buildMode: BuildMode.stockfishExpectimax, verifyFinal: true)
           .runsVerification,
-      isTrue,
+      isFalse,
     );
   });
 

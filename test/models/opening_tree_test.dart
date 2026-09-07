@@ -1,3 +1,4 @@
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
@@ -551,6 +552,118 @@ void main() {
       expect(const ReachEstimate(0.0004, 3).percentLabel, equals('<0.1'));
       expect(const ReachEstimate(0.345, 2).percentLabel, equals('34.5'));
       expect(const ReachEstimate(0.0, 0).percentLabel, equals('0.0'));
+    });
+  });
+
+  group('PositionGroup statistics', () {
+    late OpeningTreeNode groupRoot;
+
+    OpeningTreeNode child(String san) =>
+        groupRoot.getOrCreateChild(san, '$san/fen b KQkq - 0 1');
+
+    setUp(() {
+      groupRoot = OpeningTreeNode(move: '', fen: 'start w KQkq - 0 1');
+    });
+
+    test('an unfinished line counts toward frequency but carries no WDL', () {
+      // Course and repertoire lines arrive as `*`; painting them as draws is
+      // what the null result exists to prevent.
+      final unfinished = child('a')..updateStats(null);
+      final group = PositionGroup([unfinished]);
+      expect(group.gamesPlayed, 1);
+      expect(group.hasWdl, isFalse);
+      expect(group.wins + group.losses + group.draws, 0);
+    });
+
+    test('any single kind of result is enough to have a WDL', () {
+      final won = child('a')..updateStats(1.0);
+      final lost = child('b')..updateStats(0.0);
+      final drawn = child('c')..updateStats(0.5);
+      expect(PositionGroup([won]).hasWdl, isTrue, reason: 'a win is a result');
+      expect(
+        PositionGroup([lost]).hasWdl,
+        isTrue,
+        reason: 'a loss is a result',
+      );
+      expect(
+        PositionGroup([drawn]).hasWdl,
+        isTrue,
+        reason: 'a draw is a result',
+      );
+    });
+
+    test('winRate is defined at zero games and at one', () {
+      final unplayed = child('a');
+      expect(PositionGroup([unplayed]).gamesPlayed, 0);
+      expect(
+        PositionGroup([unplayed]).winRate,
+        0.0,
+        reason: 'no games must not divide by zero',
+      );
+
+      final won = child('b')..updateStats(1.0);
+      expect(PositionGroup([won]).winRate, 1.0);
+      expect(PositionGroup([won]).winRatePercent, 100.0);
+
+      final drawn = child('c')..updateStats(0.5);
+      expect(PositionGroup([drawn]).winRate, 0.5);
+    });
+  });
+
+  group('custom start positions', () {
+    test('a line is replayed on the FEN it is anchored to', () {
+      // The FEN is neither indexed nor the standard start. `Ke2` is legal
+      // there and illegal from the initial position, so replaying on the
+      // wrong board loses the whole line.
+      const endgame = '4k3/8/8/8/8/4P3/8/4K3 w - - 0 1';
+      final tree = OpeningTree();
+      expect(tree.fenToNodes.containsKey(normalizeFen(endgame)), isFalse);
+
+      tree.appendLineFromFen(endgame, ['Ke2', 'Ke7']);
+
+      expect(
+        tree.root.children.keys,
+        contains('Ke2'),
+        reason: 'the moves must be replayed on the anchored board',
+      );
+      expect(tree.root.children['Ke2']!.children.keys, contains('Ke7'));
+    });
+
+    test('a promotion that transposes into the book is offered', () {
+      // The book holds only the position *after* a8=Q, so the promotion can
+      // only be found by playing every legal move from the position before it
+      // and matching the resulting FEN. A pawn on the seventh has to expand
+      // into its four promotions for that to work; a plain push to the eighth
+      // produces an illegal board and matches nothing.
+      const beforePromotion = '8/P5k1/8/8/8/8/8/K7 w - - 0 1';
+      const afterPromotion = 'Q7/6k1/8/8/8/8/8/K7 b - - 0 1';
+      final tree = OpeningTree(
+        root: OpeningTreeNode(move: '', fen: afterPromotion),
+      );
+
+      final continuations = tree.continuationsAt(beforePromotion);
+      final promotion = continuations.where((c) => c.move == 'a8=Q');
+      expect(
+        promotion,
+        isNotEmpty,
+        reason: 'a8=Q reaches a position the book already has',
+      );
+      expect(promotion.first.viaTransposition, isTrue);
+
+      final position = Chess.fromSetup(Setup.parseFen(beforePromotion));
+      for (final continuation in continuations) {
+        final move = position.parseSan(continuation.move);
+        expect(
+          move,
+          isNotNull,
+          reason: '${continuation.move} is offered but is not legal here',
+        );
+        expect(
+          normalizeFen(position.play(move!).fen),
+          normalizeFen(continuation.fen),
+          reason: '${continuation.move} does not land where it says',
+        );
+      }
     });
   });
 }

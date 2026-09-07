@@ -21,6 +21,7 @@ import '../services/default_pgn_service.dart';
 import '../services/pgn_document_patch.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
+import '../services/pgn_parsing_service.dart' show movetextStart;
 import '../services/storage/storage_factory.dart';
 import 'pgn/pgn_viewer_handle.dart';
 import 'pgn/solitaire_controller.dart';
@@ -180,6 +181,12 @@ class PgnViewerController extends ChangeNotifier
 
   bool _isCurrentLoad(int epoch) => isActive() && epoch == _loadEpoch;
 
+  /// Text above the first game in the loaded file — a `;`/`%` banner, which
+  /// is not a game and so is not in [allGames]. Held here because a write
+  /// rewrites the file from [allGames] alone and would otherwise delete it.
+  @override
+  String collectionPreamble = '';
+
   /// FEN the next [PgnViewerWidget] mount should park on (tree position after
   /// a games-at-position click, or the game cursor after leaving the tree).
   @override
@@ -321,6 +328,7 @@ class PgnViewerController extends ChangeNotifier
 
   @override
   void dispose() {
+    _fenIndex.cancel();
     _autoPlay.dispose();
     _solitaireSession.dispose();
     // A comment typed in the last 300 ms and a stale FEN-index stamp both
@@ -384,6 +392,7 @@ class PgnViewerController extends ChangeNotifier
     required String? path,
     required List<PgnGameEntry> entries,
     required Perspective newPerspective,
+    String preamble = '',
   }) {
     // Settle the outgoing collection's debts (a pending metadata write, a
     // stale FEN-index stamp) before its path and games are replaced; the
@@ -396,6 +405,7 @@ class PgnViewerController extends ChangeNotifier
     loadedFileModified = null;
     allGames = entries;
     adoptPersistedGames(entries);
+    collectionPreamble = preamble;
     _detectProtagonist(entries);
     filteredGames = List.of(entries);
     hasActiveFilters = false;
@@ -409,6 +419,7 @@ class PgnViewerController extends ChangeNotifier
     perspective = newPerspective;
     _viewerTree.resetForNewFile();
     clearScreenOnlyMovetext();
+    clearEditedGames();
   }
 
   /// The perspective a freshly loaded collection should open in.
@@ -497,6 +508,7 @@ class PgnViewerController extends ChangeNotifier
         path: path,
         entries: entries,
         newPerspective: _perspectiveFor(entries),
+        preamble: pgnCollectionPreamble(content),
       );
       loadedFileModified = modified?.modified;
       notifyListeners();

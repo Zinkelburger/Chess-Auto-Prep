@@ -205,7 +205,9 @@ class CourseBuilder {
     TreeBuildConfig config,
   ) => enrichment.run<EngineTail>(
     EnrichmentPass.engineTails,
-    enabled: config.engineTailPlies > 0,
+    enabled:
+        config.buildMode != BuildMode.stockfishExpectimax &&
+        config.engineTailPlies > 0,
     status: (done, total) =>
         'Phase 3.7: Extending cut-off lines with engine play '
         '($done of $total) at depth ${config.resolvedEngineTailDepth}...',

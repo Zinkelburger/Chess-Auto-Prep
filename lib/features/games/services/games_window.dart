@@ -37,6 +37,7 @@ class GamesWindow {
     this.mode = GamesWindowMode.lastGames,
     this.games = defaultGames,
     this.days = defaultDays,
+    this.bookCheckGames = defaultBookCheckGames,
   });
 
   /// A short list of recent games is what "how am I doing lately" actually
@@ -46,6 +47,12 @@ class GamesWindow {
   /// The day alternative is meant for "since I last sat down", not an
   /// archive, so it starts at two days rather than a fortnight.
   static const int defaultDays = 2;
+
+  /// The book check reads further back than the review: an opening leak
+  /// shows itself over hundreds of games, not twenty, and checking a game
+  /// against the books costs nothing next to analysing it. Bounded by the
+  /// games cache, which keeps a thousand per site.
+  static const int defaultBookCheckGames = 200;
 
   static const int maxGames = 1000;
   static const int maxDays = 3650;
@@ -59,7 +66,20 @@ class GamesWindow {
   /// day one (so `1` = today, `2` = today and yesterday).
   final int days;
 
+  /// Games per site the opening-book check covers, whatever [mode] is.
+  /// Never smaller than the review window: the games on screen are always
+  /// checked.
+  final int bookCheckGames;
+
   bool get isGameCount => mode == GamesWindowMode.lastGames;
+
+  /// Games per site to have in hand so both the review window and the book
+  /// check are served: the larger of the two counts.
+  int get fetchGames => bookCheckGames > games ? bookCheckGames : games;
+
+  /// "last 200 games" — the book check's own window, for its labels.
+  String get bookCheckLabel =>
+      'last $bookCheckGames ${bookCheckGames == 1 ? 'game' : 'games'}';
 
   /// Game cap for a fetch/selection, or null in day mode (there the day
   /// window is the only limit the user asked for).
@@ -81,22 +101,28 @@ class GamesWindow {
       ? 'last $games ${games == 1 ? 'game' : 'games'}'
       : 'last $days ${days == 1 ? 'day' : 'days'}';
 
-  GamesWindow copyWith({GamesWindowMode? mode, int? games, int? days}) =>
-      GamesWindow(
-        mode: mode ?? this.mode,
-        games: (games ?? this.games).clamp(1, maxGames),
-        days: (days ?? this.days).clamp(1, maxDays),
-      );
+  GamesWindow copyWith({
+    GamesWindowMode? mode,
+    int? games,
+    int? days,
+    int? bookCheckGames,
+  }) => GamesWindow(
+    mode: mode ?? this.mode,
+    games: (games ?? this.games).clamp(1, maxGames),
+    days: (days ?? this.days).clamp(1, maxDays),
+    bookCheckGames: (bookCheckGames ?? this.bookCheckGames).clamp(1, maxGames),
+  );
 
   @override
   bool operator ==(Object other) =>
       other is GamesWindow &&
       other.mode == mode &&
       other.games == games &&
-      other.days == days;
+      other.days == days &&
+      other.bookCheckGames == bookCheckGames;
 
   @override
-  int get hashCode => Object.hash(mode, games, days);
+  int get hashCode => Object.hash(mode, games, days, bookCheckGames);
 
   @override
   String toString() => 'GamesWindow($label)';
@@ -117,6 +143,7 @@ class GamesWindowSettings extends ChangeNotifier with SafeChangeNotifier {
   static const _keyMode = 'games_window.mode';
   static const _keyGames = 'games_window.games';
   static const _keyDays = 'games_window.days';
+  static const _keyBookCheck = 'games_window.book_check_games';
 
   GamesWindow _window = const GamesWindow();
   bool _loaded = false;
@@ -139,6 +166,8 @@ class GamesWindowSettings extends ChangeNotifier with SafeChangeNotifier {
       mode: GamesWindowMode.fromStorage(prefs.getString(_keyMode)),
       games: prefs.getInt(_keyGames) ?? GamesWindow.defaultGames,
       days: prefs.getInt(_keyDays) ?? GamesWindow.defaultDays,
+      bookCheckGames:
+          prefs.getInt(_keyBookCheck) ?? GamesWindow.defaultBookCheckGames,
     );
     _loaded = true;
     _loading = null;
@@ -154,5 +183,6 @@ class GamesWindowSettings extends ChangeNotifier with SafeChangeNotifier {
     await prefs.setString(_keyMode, window.mode.name);
     await prefs.setInt(_keyGames, window.games);
     await prefs.setInt(_keyDays, window.days);
+    await prefs.setInt(_keyBookCheck, window.bookCheckGames);
   }
 }

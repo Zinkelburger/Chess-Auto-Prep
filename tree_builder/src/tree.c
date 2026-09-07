@@ -49,6 +49,7 @@
 #include "chess_logic.h"
 #include "san_convert.h"
 #include "engine_pool.h"
+#include "pure_search.h"
 #include "database.h"
 #include "maia.h"
 #include "lichess_eval_db.h"
@@ -89,11 +90,29 @@ static double elapsed_ms(const struct timespec *start) {
 
 #define ROOT_MULTIPV_FLOOR 10
 
+/* The root widens the eval-loss gate for the same reason it widens MultiPV:
+ * the question at the root is "which of my options should I play", and the
+ * answer is the expectimax value, not the depth-16 centipawn gap.  A 40cp
+ * default is a repertoire filter -- correct away from the root, but at the
+ * root it routinely culls all ten MultiPV lines down to one (4.e5 in the
+ * Winawer beats 4.Nge2 by 48cp, so a 40cp gate leaves nothing to compare)
+ * and the build silently answers a different question than the one asked. */
+#define ROOT_EVAL_LOSS_FLOOR 150
+
 static int multipv_count_for_node(const TreeConfig *config, const TreeNode *node) {
     if (!config) return ROOT_MULTIPV_FLOOR;
     if (node && node->depth == 0 && config->our_multipv < ROOT_MULTIPV_FLOOR)
         return ROOT_MULTIPV_FLOOR;
     return config->our_multipv;
+}
+
+static int eval_loss_budget_for_node(const TreeConfig *config,
+                                     const TreeNode *node) {
+    if (!config) return ROOT_EVAL_LOSS_FLOOR;
+    if (node && node->depth == 0
+        && config->max_eval_loss_cp < ROOT_EVAL_LOSS_FLOOR)
+        return ROOT_EVAL_LOSS_FLOOR;
+    return config->max_eval_loss_cp;
 }
 
 
@@ -131,10 +150,10 @@ TreeConfig tree_config_default(void) {
         .play_as_white = true,
         .build_mode = BUILD_MODE_STOCKFISH_EXPECTIMAX,
         .min_probability = 0.0001,
-        .max_depth = 20,
+        .max_depth = 4,
         .max_nodes = 0,
 
-        .best_first = true,
+        .best_first = false,
         .our_alt_discount = 0.25,
         .maia_prior_games = 30.0,
         .cover_min_prob = 0.05,
@@ -158,12 +177,12 @@ TreeConfig tree_config_default(void) {
         .rating_range = "2000,2200,2500",
         .speeds = "blitz,rapid,classical",
         .min_games = 10,
-        .use_masters = false,
+        .use_masters = true,
 
         .maia = NULL,
         .maia_elo = 2200,
         .maia_min_prob = 0.05,
-        .maia_only = true,  /* default matches main.c and docs; fall back
+        .maia_only = false,  /* default matches main.c and docs; fall back
                                to Lichess only if caller explicitly opts in */
         .populate_maia_frequency = true,  /* default on for back-compat;
                                              main.c turns this off when
@@ -1336,7 +1355,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
     for (int pv = 0; pv < mpv.num_lines; pv++) {
         MultiPVLine *line = &mpv.lines[pv];
         if (line->move_uci[0] == '\0') continue;
-        if (best_cp - line->eval_cp > config->max_eval_loss_cp) continue;
+        if (best_cp - line->eval_cp > eval_loss_budget_for_node(config, node))
+            continue;
 
         char child_fen[MAX_FEN_LENGTH];
         if (!apply_uci(node->fen, line->move_uci, child_fen, MAX_FEN_LENGTH))
@@ -1431,7 +1451,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
 
             /* Same axis as best_cp (parent STM). */
             int our_cp = -child_cp_stm;
-            if (best_cp - our_cp > config->max_eval_loss_cp) continue;
+            if (best_cp - our_cp > eval_loss_budget_for_node(config, node))
+                continue;
 
             const char *san = tok;
             if (uci_to_san(node->fen, uci, our_san_buf,
@@ -1948,31 +1969,6 @@ static void build_process_node(Tree *tree, TreeNode *node,
 }
 
 
-/* ── Preferred-setup matching ────────────────────────────────────────────
- * Candidate SANs are matched against the space/comma-separated setup list
- * ignoring check/mate/annotation suffixes on either side. */
-
-static bool san_matches_token(const char *san, const char *tok,
-                              size_t tok_len) {
-    size_t san_len = strlen(san);
-    while (san_len > 0 && strchr("+#!?", san[san_len - 1])) san_len--;
-    while (tok_len > 0 && strchr("+#!?", tok[tok_len - 1])) tok_len--;
-    return san_len == tok_len && strncmp(san, tok, san_len) == 0;
-}
-
-static bool setup_moves_contain(const char *setup_moves, const char *san) {
-    if (!setup_moves || !setup_moves[0] || !san || !san[0]) return false;
-    const char *p = setup_moves;
-    while (*p) {
-        while (*p == ' ' || *p == ',') p++;
-        if (!*p) break;
-        const char *start = p;
-        while (*p && *p != ' ' && *p != ',') p++;
-        if (san_matches_token(san, start, (size_t)(p - start))) return true;
-    }
-    return false;
-}
-
 static void remove_child_at(TreeNode *parent, size_t idx);
 
 /* ── Coverage sweep: no silent holes ─────────────────────────────────────
@@ -2093,6 +2089,7 @@ void tree_coverage_sweep(Tree *tree, const TreeConfig *config,
 bool tree_build(Tree *tree, const char *start_fen,
                 const TreeConfig *config, LichessExplorer *explorer) {
     if (!tree || !start_fen) return false;
+    if (config->build_mode == BUILD_MODE_STOCKFISH_EXPECTIMAX) return pure_tree_build(tree,start_fen,config,explorer);
     if (!explorer && !config->maia_only) return false;
     if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE) {
         if (!config->maia) {
@@ -2407,325 +2404,14 @@ double win_probability(int cp) {
     return 1.0 / (1.0 + exp(-EVAL_TO_WP_K * (double)cp));
 }
 
-/**
- * Leaf value used in the expectimax pass.
- *
- * Blends the engine's win-probability estimate with a neutral prior
- * (0.5 = "we don't know who's winning") using `leaf_confidence`:
- *
- *     V = leaf_conf · wp(eval_for_us) + (1 − leaf_conf) · 0.5
- *
- * At leaf_conf = 1.0 (the default) this is just wp(eval) — full trust in
- * the engine's verdict.  At smaller leaf_conf the value is pulled toward
- * 0.5, which is what an honest "I haven't expanded this position" estimate
- * should look like.  The previous form `leaf_conf · wp(eval)` biased
- * unexplored leaves toward 0 (certain loss), which is categorically the
- * wrong direction for an uncertainty discount.
- *
- * If the node has no engine eval at all (shouldn't happen post-build) we
- * return 0.5 for the same reason: "unknown" is the correct fallback, not
- * "certain loss".
- */
-static double leaf_value(const TreeNode *node,
-                         const RepertoireConfig *config) {
-    double lc = config->leaf_confidence;
-    if (lc < 0.0) lc = 0.0;
-    if (lc > 1.0) lc = 1.0;
-
-    if (!node->has_engine_eval)
-        return 0.5;  /* neutral prior when we have nothing else */
-
-    int cp_us = node_eval_for_us(node, config->play_as_white);
-    return lc * win_probability(cp_us) + (1.0 - lc) * 0.5;
+/* Compatibility entry points; Pure owns the scorer and dependency order. */
+int score_our_move_children(TreeNode *node,const struct RepertoireConfig *config,ScoredChild *out) {
+    return pure_pick(node,config,out);
+}
+size_t tree_calculate_expectimax(Tree *tree,const struct RepertoireConfig *config) {
+    return pure_backup(tree,config);
 }
 
-
-/** Compute local_cpl at opponent-move nodes (display/diagnostics only). */
-static void compute_local_cpl(TreeNode *node) {
-    if (!node || node->children_count == 0) return;
-
-    int best_opp_cp = 100000;
-    bool has_any = false;
-    for (size_t i = 0; i < node->children_count; i++) {
-        if (!node->children[i]->has_engine_eval) continue;
-        if (node->children[i]->engine_eval_cp < best_opp_cp)
-            best_opp_cp = node->children[i]->engine_eval_cp;
-        has_any = true;
-    }
-    if (!has_any) return;
-
-    double sum = 0.0;
-    for (size_t i = 0; i < node->children_count; i++) {
-        TreeNode *child = node->children[i];
-        if (!child->has_engine_eval) continue;
-        if (child->move_probability < 0.01) continue;
-        int delta = child->engine_eval_cp - best_opp_cp;
-        if (delta < 0) delta = 0;
-        sum += child->move_probability * (double)delta;
-    }
-    node->local_cpl = sum;
-}
-
-
-/** Novelty-adjusted V for move selection at an our-move node.
- *  novelty_weight = 0 (default) → returns V unchanged.  Otherwise
- *  boosts rarely-played moves proportionally.  Lichess game counts
- *  are preferred; Maia frequency is the fallback. */
-static double adjusted_v_for_selection(const TreeNode *parent,
-                                        const TreeNode *child,
-                                        double nw) {
-    double v = child->expectimax_value;
-    if (nw <= 0.0) return v;
-
-    double novelty = 0.0;
-    if (parent->total_games > 0 && child->total_games > 0) {
-        novelty = 1.0 - (double)child->total_games
-                        / (double)parent->total_games;
-    } else if (child->maia_frequency >= 0.0) {
-        novelty = 1.0 - child->maia_frequency;
-    }
-    if (novelty < 0.0) novelty = 0.0;
-    return v * (1.0 + nw * novelty);
-}
-
-/**
- * At an our-move node, pick the child with the highest expectimax_value
- * among candidates passing the eval-loss filter.
- *
- * Falls back to all children if none pass.  Under the default pipeline
- * every child already passed the same `max_eval_loss_cp` gate at build
- * time, so the filter is usually a no-op and the fallback is only
- * reached if the selection-phase config uses a stricter threshold.
- *
- * Returns the number of children that passed the eval-loss filter.
- */
-int score_our_move_children(TreeNode *node,
-                            const struct RepertoireConfig *config,
-                            ScoredChild *best_out) {
-    if (!node || !config || !best_out) return 0;
-
-    best_out->child = NULL;
-    best_out->expectimax_value = -1.0;
-
-    /* Find best eval among children for the eval-loss filter. */
-    int best_child_cp = -100000;
-    for (size_t i = 0; i < node->children_count; i++) {
-        if (!node->children[i]->has_engine_eval) continue;
-        int cp_us = node_eval_for_us(node->children[i], config->play_as_white);
-        if (cp_us > best_child_cp) best_child_cp = cp_us;
-    }
-
-    double nw = config->novelty_weight / 100.0;
-
-    int passing = 0;
-    double best_filtered_v = -1.0;
-    TreeNode *best_filtered = NULL;
-    double best_any_v = -1.0;
-    TreeNode *best_any = NULL;
-
-    for (size_t i = 0; i < node->children_count; i++) {
-        TreeNode *child = node->children[i];
-        if (!child->has_expectimax) continue;
-
-        double v = adjusted_v_for_selection(node, child, nw);
-
-        if (v > best_any_v) {
-            best_any_v = v;
-            best_any = child;
-        }
-
-        int cp_us = node_eval_for_us(child, config->play_as_white);
-        if (cp_us < best_child_cp - config->max_eval_loss_cp) continue;
-        passing++;
-
-        if (v > best_filtered_v) {
-            best_filtered_v = v;
-            best_filtered = child;
-        }
-    }
-
-    TreeNode *winner = best_filtered ? best_filtered : best_any;
-
-    /* Preferred-setup tie-break: within setup_tolerance_cp (clamped to
-     * max_eval_loss_cp) of the best child eval, prefer a move that
-     * advances the user's system.  Expectimax values are untouched — the
-     * bias only constrains the argmax, so when consistency would cost
-     * real eval no setup move qualifies and the normal winner stands. */
-    if (winner && config->setup_moves[0] && best_child_cp > -100000 &&
-        !setup_moves_contain(config->setup_moves, winner->move_san)) {
-        int tol = config->setup_tolerance_cp < config->max_eval_loss_cp
-                  ? config->setup_tolerance_cp
-                  : config->max_eval_loss_cp;
-        TreeNode *setup_pick = NULL;
-        double best_score = -2.0;
-        for (size_t i = 0; i < node->children_count; i++) {
-            TreeNode *child = node->children[i];
-            if (!child->has_engine_eval) continue;
-            if (!setup_moves_contain(config->setup_moves, child->move_san))
-                continue;
-            int cp_us = node_eval_for_us(child, config->play_as_white);
-            if (cp_us < best_child_cp - tol) continue;
-            /* Among qualifying setup moves, keep the objective's favorite. */
-            double score = child->has_expectimax
-                ? child->expectimax_value
-                : cp_us / 10000.0;
-            if (score > best_score) {
-                best_score = score;
-                setup_pick = child;
-            }
-        }
-        if (setup_pick) winner = setup_pick;
-    }
-
-    best_out->child = winner;
-    best_out->expectimax_value = winner ? winner->expectimax_value : -1.0;
-    return passing;
-}
-
-
-static size_t calculate_expectimax_recursive(TreeNode *node,
-                                              const RepertoireConfig *config) {
-    if (!node) return 0;
-    size_t count = 0;
-
-    /* Post-order: recurse children first */
-    for (size_t i = 0; i < node->children_count; i++)
-        count += calculate_expectimax_recursive(node->children[i], config);
-
-    bool is_our_move = (node->is_white_to_move == config->play_as_white);
-
-    /* Compute local_cpl for display (only meaningful at opponent-move nodes) */
-    if (!is_our_move && node->children_count > 0)
-        compute_local_cpl(node);
-
-    /* Compute subtree_depth and subtree_opp_plies for diagnostics */
-    if (node->children_count == 0) {
-        node->subtree_depth = 0;
-        node->subtree_opp_plies = 0;
-    } else {
-        int max_sd = 0;
-        int max_opp = 0;
-        for (size_t i = 0; i < node->children_count; i++) {
-            int sd = node->children[i]->subtree_depth + 1;
-            if (sd > max_sd) max_sd = sd;
-
-            int opp = node->children[i]->subtree_opp_plies;
-            if (!is_our_move) opp += 1;
-            if (opp > max_opp) max_opp = opp;
-        }
-        node->subtree_depth = max_sd;
-        node->subtree_opp_plies = max_opp;
-    }
-
-    /* Transposition leaves: borrow V from the canonical node (the one
-       in the equivalence ring that has children).  Must happen BEFORE
-       the leaf case so we don't compute V = wp(eval) and then overwrite. */
-    if (node->children_count == 0 && node->next_equivalent) {
-        TreeNode *equiv = node->next_equivalent;
-        while (equiv != node) {
-            if (equiv->has_expectimax && equiv->children_count > 0) {
-                node->expectimax_value = equiv->expectimax_value;
-                node->local_cpl = equiv->local_cpl;
-                node->subtree_depth = equiv->subtree_depth;
-                node->subtree_opp_plies = equiv->subtree_opp_plies;
-                node->has_expectimax = true;
-                count++;
-                return count;
-            }
-            if (!equiv->next_equivalent || equiv->next_equivalent == node)
-                break;
-            equiv = equiv->next_equivalent;
-        }
-    }
-
-    if (node->children_count == 0) {
-        /* Leaf: V = leaf_value(node) — see leaf_value() for the formula. */
-        node->expectimax_value = leaf_value(node, config);
-
-    } else if (is_our_move) {
-        /* Our move: V = max(V_child) among eval-loss-filtered candidates.
-         * If no child scored (shouldn't normally happen — post-order
-         * guarantees children have has_expectimax set), fall back to the
-         * leaf value for this node rather than asserting V=0 (certain
-         * loss), which would be a worse lie than "we don't know". */
-        ScoredChild best;
-        score_our_move_children(node, config, &best);
-        node->expectimax_value = best.child
-            ? best.expectimax_value
-            : leaf_value(node, config);
-
-    } else {
-        /* Opponent move — proper expectimax with a tail term for
-         * uncovered probability mass.
-         *
-         *   V_opp = Σ pᵢ · V(childᵢ)  +  (1 − Σ pᵢ) · V_tail
-         *
-         * pᵢ are raw (not renormalized) covered probabilities.
-         * V_tail is our win probability if the opponent plays a move
-         * we didn't model.  Since Stockfish's eval at THIS node is
-         * by definition the value after best opponent play, and rare
-         * human moves are on average ≥ that (worse for opponent),
-         * wp(eval_for_us) is a principled — and slightly conservative
-         * — estimate.  leaf_value() applies the same uncertainty blend
-         * toward 0.5 that it applies to any other unexplored leaf, so
-         * the tail term honours leaf_confidence without double-counting
-         * the bias. */
-        double covered = 0.0;
-        double v = 0.0;
-        for (size_t i = 0; i < node->children_count; i++) {
-            TreeNode *child = node->children[i];
-            if (!child->has_expectimax) continue;
-            covered += child->move_probability;
-            v += child->move_probability * child->expectimax_value;
-        }
-
-        /* Clamp covered to [0, 1] against float drift / data noise. */
-        if (covered > 1.0) covered = 1.0;
-        if (covered < 0.0) covered = 0.0;
-
-        double tail = 1.0 - covered;
-        if (tail > 0.0) {
-            /* V_tail = leaf value at this node.  leaf_value() returns
-             * the 0.5 neutral prior if this node somehow has no engine
-             * eval, so the tail term always contributes something
-             * reasonable rather than silently dropping to 0. */
-            v += tail * leaf_value(node, config);
-        }
-
-        node->expectimax_value = v;
-    }
-
-    node->has_expectimax = true;
-    count++;
-    return count;
-}
-
-size_t tree_calculate_expectimax(Tree *tree, const struct RepertoireConfig *config) {
-    if (!tree || !tree->root || !config) return 0;
-
-    /* Two-pass expectimax.
-     *
-     * The transposition-leaf borrow rule in calculate_expectimax_recursive
-     * copies V from the canonical (the equivalent node that has children).
-     * In a single post-order DFS this only works if the canonical is
-     * processed before any of its transposition leaves — which is true
-     * whenever build-time DFS and expectimax DFS visit subtrees in the
-     * same order, but is NOT guaranteed after a load-from-JSON or if a
-     * later session reorders children.
-     *
-     * Fix: run the recursion twice.  Pass 1 gives every canonical a
-     * correct has_expectimax flag (their subtrees don't depend on
-     * transposition leaves, only the other way around).  Pass 2 fully
-     * overwrites every node's V, so any transposition leaf that fell
-     * back to leaf_value in pass 1 now finds its canonical ready and
-     * the corrected value propagates up through its ancestors.
-     *
-     * Total cost is 2·O(n) — still linear in tree size, and dominated
-     * by the build phase's Stockfish/Maia inferences by many orders of
-     * magnitude. */
-    calculate_expectimax_recursive(tree->root, config);
-    return calculate_expectimax_recursive(tree->root, config);
-}
 
 
 /* ========== Probability recalculation ========== */
@@ -2833,12 +2519,15 @@ void tree_print_stats(const Tree *tree) {
     printf("  Max depth: %d ply\n", tree->config.max_depth);
     {
         int root_multipv = multipv_count_for_node(&tree->config, tree->root);
-        if (root_multipv == tree->config.our_multipv) {
+        int root_loss = eval_loss_budget_for_node(&tree->config, tree->root);
+        if (root_multipv == tree->config.our_multipv
+            && root_loss == tree->config.max_eval_loss_cp) {
             printf("  Our MultiPV: %d (eval-loss filter %dcp)\n",
                    tree->config.our_multipv, tree->config.max_eval_loss_cp);
         } else {
-            printf("  Our MultiPV: root %d, others %d (eval-loss filter %dcp)\n",
-                   root_multipv, tree->config.our_multipv,
+            printf("  Our MultiPV: root %d (eval-loss %dcp), "
+                   "others %d (eval-loss %dcp)\n",
+                   root_multipv, root_loss, tree->config.our_multipv,
                    tree->config.max_eval_loss_cp);
         }
     }

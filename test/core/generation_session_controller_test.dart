@@ -325,6 +325,7 @@ void main() {
             startFen: kStandardStartFen,
             playAsWhite: true,
             downloadMasterGamesIfMissing: download,
+            buildMode: BuildMode.maiaDbExplore,
           ),
           repertoireFilePath: '${tmp.path}/rep.pgn',
           buildRootFen: kStandardStartFen,
@@ -388,32 +389,36 @@ void main() {
       controller.dispose();
     });
 
-    test('with the download unticked the run never parks', () async {
-      final svc = await emptyService();
-      final controller = GenerationSessionController()..masterGames = () => svc;
+    test(
+      'Stockfish expectimax skips master downloads even when a legacy preset enables them',
+      () async {
+        final svc = await emptyService();
+        final controller = GenerationSessionController()
+          ..masterGames = () => svc;
 
-      // Refused for an unrelated reason (a resume from another position), so
-      // the pipeline stops before the engine — what matters is that it did
-      // not stop on the download first.
-      final request = GenerationRequest(
-        config: const TreeBuildConfig(
-          startFen: kStandardStartFen,
-          playAsWhite: true,
-          downloadMasterGamesIfMissing: false,
-        ),
-        repertoireFilePath: '${tmp.path}/rep.pgn',
-        buildRootFen: kStandardStartFen,
-        lineMovePrefix: const [],
-        repertoireStartFen: kStandardStartFen,
-        onLinesSaved: (_) {},
-        existingTree: _smallTree(rootFen: _fenAfterE4),
-      );
-      await controller.startBuild(request);
+        // Refused for an unrelated reason (a resume from another position), so
+        // the pipeline stops before the engine — what matters is that it did
+        // not stop on the download first.
+        final request = GenerationRequest(
+          config: const TreeBuildConfig(
+            startFen: kStandardStartFen,
+            playAsWhite: true,
+            downloadMasterGamesIfMissing: true,
+          ),
+          repertoireFilePath: '${tmp.path}/rep.pgn',
+          buildRootFen: kStandardStartFen,
+          lineMovePrefix: const [],
+          repertoireStartFen: kStandardStartFen,
+          onLinesSaved: (_) {},
+          existingTree: _smallTree(rootFen: _fenAfterE4),
+        );
+        await controller.startBuild(request);
 
-      expect(controller.lastError, contains('Cannot resume'));
-      expect(controller.isAwaitingMasterGames, isFalse);
-      expect(svc.isSyncing, isFalse, reason: 'no download was started');
-      controller.dispose();
-    });
+        expect(controller.lastError, contains('Cannot resume'));
+        expect(controller.isAwaitingMasterGames, isFalse);
+        expect(svc.isSyncing, isFalse, reason: 'no download was started');
+        controller.dispose();
+      },
+    );
   });
 }

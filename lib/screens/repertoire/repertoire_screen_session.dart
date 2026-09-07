@@ -26,38 +26,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     _toolsTabController.animateTo(0);
   }
 
-  /// While a build-by-playing session is active, ←/→ navigate the scratchpad
-  /// (no-ops outside exploration) instead of the repertoire cursor — moving
-  /// the cursor away from a decision point would pause the session.
-  void _sessionAwareGoBack() {
-    if (_isBuildSessionActive) {
-      _buildSession.scratchGoBack();
-      return;
-    }
-    _controller.goBack();
-  }
+  void _sessionAwareGoBack() => _controller.goBack();
 
-  void _sessionAwareGoForward() {
-    if (_isBuildSessionActive) {
-      _buildSession.scratchGoForward();
-      return;
-    }
-    _controller.goForward();
-  }
+  void _sessionAwareGoForward() => _controller.goForward();
 
   Future<void> _performUndo() async {
-    if (_isBuildSessionActive) {
-      final undone = await _buildSession.undoLastCommit();
-      if (undone && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Undid last committed move'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
-    }
     if (!_controller.writer.canUndo) return;
     try {
       final undone = await _controller.writer.undo();
@@ -128,6 +101,9 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   void _onGenerationChanged() {
     if (!mounted) return;
     final ctrl = _generationController;
+    if (ctrl.isGenerating) {
+      _lastRunWasPositionGeneration = ctrl.isExpectimaxProbe;
+    }
 
     if (ctrl.isGenerating && ctrl.currentJob == null) {
       final probe = ctrl.isExpectimaxProbe;
@@ -169,7 +145,9 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
           fallbackFilePath: _controller.currentRepertoire?.filePath,
         ),
       );
-      if (actions.justFinished) _showLinesSurface();
+      if (actions.justFinished && !_lastRunWasPositionGeneration) {
+        _showLinesSurface();
+      }
     }
 
     if (actions.shouldCoalesceRebuild) {
@@ -191,22 +169,6 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
 
   void _onCoverageChanged() {
     if (!mounted) return;
-    setState(() {});
-  }
-
-  void _onBuildSessionChanged() {
-    if (!mounted) return;
-    setState(() {});
-    if (_buildSession.isActive && !_wasBuildSessionActive) {
-      _showLinesSurface();
-    }
-    _wasBuildSessionActive = _buildSession.isActive;
-  }
-
-  void _onDraftChanged() {
-    if (!mounted) return;
-    // A draft opening from any entry point should always be visible.
-    if (_draftController.isActive) _showLinesSurface();
     setState(() {});
   }
 
@@ -279,14 +241,16 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   }
 
   Future<void> _showRepertoireSelection() async {
-    final result = await Navigator.of(context).push<RepertoireMetadata>(
+    final pick = await Navigator.of(context).push<ChapterPick>(
       MaterialPageRoute(
         builder: (context) => const RepertoireSelectionScreen(),
       ),
     );
 
-    if (result != null && mounted) {
-      await _controller.setRepertoire(result);
+    // A course chapter picked inside a file opens that file: the outline
+    // already shows the chapters.
+    if (pick != null && mounted) {
+      await _controller.setRepertoire(pick.chapter);
     }
     _reclaimFocus();
   }
@@ -316,12 +280,6 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   /// Handle moves from the chessboard - board has already made the move and gives us rich info
   void _handleMove(CompletedMove move) {
     if (!mounted) return;
-    if (_isBuildSessionActive) {
-      // Session moves are scratchpad exploration (or ignored while the
-      // opponent thinks) — never direct repertoire-tree edits.
-      _buildSession.handleBoardMove(move.san);
-      return;
-    }
     _controller.playMove(move.san);
   }
 
@@ -502,11 +460,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     if (current == null) return;
     final folder = _chapterStore.folderMetadata(current.filePath);
 
-    final chapter = await Navigator.of(context).push<RepertoireMetadata>(
+    final chapter = (await Navigator.of(context).push<ChapterPick>(
       MaterialPageRoute(
         builder: (_) => RepertoireChaptersScreen(repertoire: folder),
       ),
-    );
+    ))?.chapter;
 
     if (chapter != null && mounted && chapter.filePath != current.filePath) {
       await _controller.setRepertoire(chapter);
@@ -530,9 +488,19 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     final current = _controller.currentRepertoire;
     if (current == null) return;
 
-    final name = await showAddChapterDialog(
+    final taken = {for (final c in _chapters) c.name.toLowerCase()};
+    final name = await showNameEntryDialog(
       context,
-      existingNames: _chapters.map((c) => c.name),
+      title: 'New chapter',
+      fieldLabel: 'Chapter name',
+      confirmLabel: 'Create',
+      prompt: 'Name this chapter (e.g. a variation or system):',
+      allowUnchanged: true,
+      validate: (name) =>
+          RepertoireOutlineService.validateName(name) ??
+          (taken.contains(name.toLowerCase())
+              ? 'A chapter named "$name" already exists.'
+              : null),
     );
     if (name == null || !mounted) return;
 

@@ -81,15 +81,47 @@ class TacticsImportService {
 
   final TacticsDatabase _database;
 
+  /// The engine pool this run evaluates on — the app-wide singleton in
+  /// production, a scripted fake in tests. Injectable because everything
+  /// [_analyzeGameParallel] decides (which swings become puzzles, which
+  /// searches are skipped, what the annotated movetext says) is otherwise
+  /// only reachable by starting real Stockfish processes.
+  @visibleForTesting
+  StockfishPool pool = StockfishPool.instance;
+
   /// Whether to skip games that have already been analyzed
   bool skipAnalyzedGames = true;
 
   bool _cancelled = false;
 
+  /// Whether [beginRun] has opened a run on this service.
+  bool _runOpen = false;
+
+  /// Open a run. From this moment a [cancel] sticks: nothing clears the flag
+  /// again for the life of this service.
+  ///
+  /// The public entry points call this themselves, so a caller that simply
+  /// awaits one needs nothing extra. A caller that becomes *cancellable
+  /// before* it reaches an entry point calls it first — the tactics
+  /// coordinator publishes its job and lights the Pause button synchronously,
+  /// then awaits [initialize] (a file read plus an off-isolate decode) before
+  /// it ever reaches [reviewFetchedGames]. Clearing the flag inside the entry
+  /// point threw away every pause raised in that gap, and because the
+  /// coordinator keeps `isCancelling` set once clicked, it also left the run
+  /// uncancellable for the rest of its life.
+  ///
+  /// Idempotent for exactly that reason. The invariant: **a cancel raised at
+  /// any point after the user can see the Pause button is honoured.**
+  void beginRun() {
+    if (_runOpen) return;
+    _runOpen = true;
+    _cancelled = false;
+  }
+
   /// Signal the current import to stop after the current game finishes.
   void cancel() {
     _cancelled = true;
-    StockfishPool.instance.stopAll();
+    pool.stopAll();
   }
 
   /// Whether the last import/resume run was cancelled via [cancel].
@@ -97,8 +129,7 @@ class TacticsImportService {
 
   /// Check if engine-based analysis is available on this platform
   bool get isAnalysisAvailable =>
-      StockfishPool.instance.workerCount > 0 ||
-      parallel.isParallelAnalysisAvailable;
+      pool.workerCount > 0 || parallel.isParallelAnalysisAvailable;
 
   /// Whether parallel multi-core analysis is available (desktop only).
   static bool get isParallelAvailable => parallel.isParallelAnalysisAvailable;
@@ -186,7 +217,7 @@ class TacticsImportService {
     GameReviewedCallback? onGameReviewed,
     GameAnnotatedCallback? onGameAnnotated,
   }) async {
-    _cancelled = false;
+    beginRun();
     final store = await GameStoreService.instance.open();
     final stored = store.list(GameCollections.tactics);
     if (stored.isEmpty) {
@@ -296,7 +327,7 @@ class TacticsImportService {
     GameReviewedCallback? onGameReviewed,
     GameAnnotatedCallback? onGameAnnotated,
   }) async {
-    _cancelled = false;
+    beginRun();
     await _savePgns(pgnContent);
     return _processGames(
       pgnContent,
@@ -333,7 +364,7 @@ class TacticsImportService {
     GameReviewedCallback? onGameReviewed,
     GameAnnotatedCallback? onGameAnnotated,
   }) async {
-    _cancelled = false;
+    beginRun();
     final params = <String, String>{
       'evals': 'false',
       // Clocks feed the tempo flaw tags (low-clock/hasty/unrushed).
@@ -405,7 +436,7 @@ class TacticsImportService {
     GameReviewedCallback? onGameReviewed,
     GameAnnotatedCallback? onGameAnnotated,
   }) async {
-    _cancelled = false;
+    beginRun();
     // null = no game-count limit: the since window is the only limit. Only
     // the countless "latest N games" mode falls back to a default.
     final int? targetGames = maxGames ?? (since != null ? null : 10);
@@ -660,8 +691,8 @@ class TacticsImportService {
     }
 
     // ── Ensure the shared pool has enough workers ─────────────
-    final pool = StockfishPool.instance;
-    final targetWorkers = maxCores ?? EngineSettings.instance.workers;
+    final pool = this.pool;
+    final targetWorkers = maxCores ?? EngineSettings.instance.cores;
     await pool.ensureWorkers(targetWorkers);
 
     if (pool.workerCount == 0) {
@@ -760,6 +791,19 @@ class TacticsImportService {
           if (annotated != null) {
             onGameAnnotated?.call(outcome.dedupKey, annotated);
           }
+          // Inside the null check on purpose. A null outcome is *not* a
+          // reviewed game: [_analyzeGameParallel] returns null when neither
+          // PGN header matches [username] — the game is not mine — and when
+          // the run was cancelled partway. Marking either analyzed is
+          // permanent and only `clearAnalyzedGames` undoes it, so one import
+          // run under a typo'd or since-changed username used to write off
+          // the whole library: correcting the username afterwards never
+          // looked at those games again.
+          //
+          // A game that *is* mine but yielded no puzzle still returns an
+          // outcome (with an empty [positions]), so "reviewed, nothing wrong"
+          // is still recorded and is never analyzed twice.
+          await _database.markGameAnalyzed(gameId);
         }
       } catch (e) {
         if (_cancelled) break;
@@ -790,7 +834,11 @@ class TacticsImportService {
     }
     return (
       positions: positions,
-      gamesAnalyzed: gameTasks.length,
+      // What this run got through, not what it set out to do: the loop
+      // breaks on cancel, and a game whose analysis threw is not reviewed
+      // either. [resumeStoredPgns] sums these across two batches, and the
+      // caller uses the total to decide whether anything was looked at.
+      gamesAnalyzed: completedGames,
       gamesSkipped: skippedCount,
     );
   }

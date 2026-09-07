@@ -7,6 +7,12 @@
 /// the paths themselves.
 library;
 
+/// What the walk is a walk *of*: the opening book (ECO tabiyas decide where
+/// to ask) or the user's own games (every position they reached often enough
+/// is a question). The evidence columns are the same either way; the basis
+/// decides where the walk stops and what comes pre-ticked.
+enum PlanBasis { book, ownGames }
+
 /// One move the user could make (our-move fork) or one reply to cover
 /// (their-move node), with whatever evidence the sources returned.
 class PlanCandidate {
@@ -136,6 +142,10 @@ class PlanStep {
   /// For [PlanStepKind.transposition]: the move order that got here first.
   final List<String>? transposesTo;
 
+  /// How many of the user's own games reached this position (0 when none
+  /// were read). Shown on the card when the walk is of their games.
+  final int ownGames;
+
   const PlanStep({
     required this.moves,
     required this.kind,
@@ -146,6 +156,7 @@ class PlanStep {
     required this.preselected,
     this.reachProb = 1.0,
     this.transposesTo,
+    this.ownGames = 0,
   });
 
   PlanStep copyWith({
@@ -162,6 +173,7 @@ class PlanStep {
     preselected: preselected ?? this.preselected,
     reachProb: reachProb,
     transposesTo: transposesTo,
+    ownGames: ownGames,
   );
 }
 

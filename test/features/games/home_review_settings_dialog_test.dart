@@ -112,7 +112,7 @@ void main() {
     final closed = await open(tester);
     // It is the first thing in the dialog: which games, before how hard the
     // engine works on them.
-    expect(find.text('How many games to download'), findsOneWidget);
+    expect(find.text('How many games to analyse'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('window-games-field')), '35');
     await tester.pump();

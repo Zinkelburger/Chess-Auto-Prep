@@ -172,6 +172,30 @@ class BughouseLineControls extends StatelessWidget {
           onPressed: history.canGoBack ? controller.undo : null,
         ),
         _CopyTableMenu(controller: controller),
+        // Belongs to the boards, not to the window: it clears the two boards
+        // and nothing else, so it sits on the strip that is theirs.
+        _NavButton(
+          icon: Icons.restart_alt,
+          tooltip: 'New game',
+          onPressed: controller.newGame,
+        ),
+        const SizedBox(width: 12),
+        // The FICS database, opened the way Lichess opens its explorer — a
+        // book beside the board, the table under it. Disabled rather than
+        // hidden on a machine without the database, so the strip never
+        // changes shape.
+        _NavButton(
+          key: const Key('bughouse-book-toggle'),
+          icon: controller.bookOpen
+              ? Icons.menu_book
+              : Icons.menu_book_outlined,
+          tooltip: !controller.hasBook
+              ? 'No FICS bughouse database on this machine'
+              : controller.bookOpen
+              ? 'Hide the FICS bughouse database'
+              : 'Show the FICS bughouse database',
+          onPressed: controller.hasBook ? controller.toggleBook : null,
+        ),
       ],
     );
   }
@@ -244,6 +268,7 @@ class _CopyTableMenu extends StatelessWidget {
 
 class _NavButton extends StatelessWidget {
   const _NavButton({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.onPressed,

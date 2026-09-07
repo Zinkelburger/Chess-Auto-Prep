@@ -7,6 +7,7 @@ import 'package:dartchess/dartchess.dart' hide File;
 
 import '../constants/chess_constants.dart';
 import '../utils/log.dart';
+import '../utils/isolate_task.dart';
 import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
 import '../utils/atomic_file.dart';
@@ -56,47 +57,57 @@ class UnifiedAnalysisBuilder {
     int maxDepth = 30,
     void Function(int current, int total)? onProgress,
   }) {
-    final pgnGames = PgnGame.parseMultiGamePgn(pgnList.join('\n\n'));
     final usernameLower = username.toLowerCase();
+    final pgnGames = PgnGame.parseMultiGamePgn(pgnList.join('\n\n'));
     final total = pgnGames.length;
     final progressInterval = (total / 100).ceil().clamp(1, 100);
     final acc = _ColorAccumulator();
 
     onProgress?.call(0, total);
 
-    for (var i = 0; i < pgnGames.length; i++) {
-      final game = pgnGames[i];
+    // Games that start mid-board (a `[FEN]` header) go in after the games
+    // that reach their start position, so the analysis tree does not depend
+    // on the order the collection arrived in; see [foldGamesIntoTree].
+    var processed = 0;
+    foldGamesIntoTree<int>(
+      games: Iterable<int>.generate(pgnGames.length),
+      startPositionOf: (i) => _customStartOf(pgnGames[i]),
+      isReached: (position) => treeReachesPosition(acc.tree, position),
+      fold: (i) {
+        final game = pgnGames[i];
 
-      bool isUserWhiteInGame;
-      if (!strictPlayerMatching) {
-        isUserWhiteInGame = isWhite;
-      } else {
-        final detected = _detectUser(game, usernameLower);
-        if (detected.white && !detected.black) {
-          isUserWhiteInGame = true;
-        } else if (detected.black && !detected.white) {
-          isUserWhiteInGame = false;
-        } else {
+        bool isUserWhiteInGame;
+        if (!strictPlayerMatching) {
           isUserWhiteInGame = isWhite;
+        } else {
+          final detected = _detectUser(game, usernameLower);
+          if (detected.white && !detected.black) {
+            isUserWhiteInGame = true;
+          } else if (detected.black && !detected.white) {
+            isUserWhiteInGame = false;
+          } else {
+            isUserWhiteInGame = isWhite;
+          }
         }
-      }
 
-      if (isUserWhiteInGame == isWhite) {
-        _walkMainline(
-          game: game,
-          gameIndex: i,
-          acc: acc,
-          isUserWhite: isUserWhiteInGame,
-          userResult: _userResult(game, isUserWhiteInGame),
-          maxDepth: maxDepth,
-        );
-      }
+        if (isUserWhiteInGame == isWhite) {
+          _walkMainline(
+            game: game,
+            gameIndex: i,
+            acc: acc,
+            isUserWhite: isUserWhiteInGame,
+            userResult: _userResult(game, isUserWhiteInGame),
+            maxDepth: maxDepth,
+          );
+        }
 
-      if (onProgress != null &&
-          ((i + 1) % progressInterval == 0 || i == total - 1)) {
-        onProgress(i + 1, total);
-      }
-    }
+        processed++;
+        if (onProgress != null &&
+            (processed % progressInterval == 0 || processed == total)) {
+          onProgress(processed, total);
+        }
+      },
+    );
 
     final games = pgnList.map(GameInfo.fromPgn).toList();
     return (acc.toAnalysis(games), acc.tree);
@@ -112,8 +123,8 @@ class UnifiedAnalysisBuilder {
     int maxDepth = 30,
     void Function(int current, int total)? onProgress,
   }) {
-    final pgnGames = PgnGame.parseMultiGamePgn(pgnList.join('\n\n'));
     final usernameLower = username.toLowerCase();
+    final pgnGames = PgnGame.parseMultiGamePgn(pgnList.join('\n\n'));
     final total = pgnGames.length;
     final progressInterval = (total / 100).ceil().clamp(1, 100);
 
@@ -122,29 +133,41 @@ class UnifiedAnalysisBuilder {
 
     onProgress?.call(0, total);
 
-    for (var i = 0; i < pgnGames.length; i++) {
-      final game = pgnGames[i];
-      final detected = _detectUser(game, usernameLower);
-      final colours = detected.white == detected.black
-          ? const [true, false]
-          : [detected.white];
+    var processed = 0;
+    foldGamesIntoTree<int>(
+      games: Iterable<int>.generate(pgnGames.length),
+      startPositionOf: (i) => _customStartOf(pgnGames[i]),
+      // Either colour's tree standing on the position is enough: a chapter
+      // anchors in the tree it is walked into, and a game is walked into at
+      // least one of them.
+      isReached: (position) =>
+          treeReachesPosition(white.tree, position) ||
+          treeReachesPosition(black.tree, position),
+      fold: (i) {
+        final game = pgnGames[i];
+        final detected = _detectUser(game, usernameLower);
+        final colours = detected.white == detected.black
+            ? const [true, false]
+            : [detected.white];
 
-      for (final asWhite in colours) {
-        _walkMainline(
-          game: game,
-          gameIndex: i,
-          acc: asWhite ? white : black,
-          isUserWhite: asWhite,
-          userResult: _userResult(game, asWhite),
-          maxDepth: maxDepth,
-        );
-      }
+        for (final asWhite in colours) {
+          _walkMainline(
+            game: game,
+            gameIndex: i,
+            acc: asWhite ? white : black,
+            isUserWhite: asWhite,
+            userResult: _userResult(game, asWhite),
+            maxDepth: maxDepth,
+          );
+        }
 
-      if (onProgress != null &&
-          ((i + 1) % progressInterval == 0 || i == total - 1)) {
-        onProgress(i + 1, total);
-      }
-    }
+        processed++;
+        if (onProgress != null &&
+            (processed % progressInterval == 0 || processed == total)) {
+          onProgress(processed, total);
+        }
+      },
+    );
 
     // One shared GameInfo list: indices are positions in [pgnList], the same
     // for both colours.
@@ -197,8 +220,10 @@ class UnifiedAnalysisBuilder {
     void Function(int current, int total)? onProgress,
     String? whiteCachePath,
     String? blackCachePath,
+    IsolateTask? task,
   }) {
     return _runWithProgress<AnalysisBundle, _BothColorsArgs>(
+      task: task,
       entryPoint: _bothColorsEntry,
       makeArgs: (sendPort) => (
         sendPort: sendPort,
@@ -222,8 +247,9 @@ class UnifiedAnalysisBuilder {
     required String pgnFilePath,
     required String whiteCachePath,
     required String blackCachePath,
+    IsolateTask? task,
   }) {
-    return Isolate.run<AnalysisBundle?>(() {
+    return (task ?? IsolateTask()).run<AnalysisBundle?>((_) {
       final pgnFile = File(pgnFilePath);
       if (!pgnFile.existsSync()) return null;
       final stat = pgnFile.statSync();
@@ -252,48 +278,27 @@ class UnifiedAnalysisBuilder {
   /// Spawn [entryPoint], forward `[current, total]` progress lists to
   /// [onProgress], and complete with the entry point's [Isolate.exit] value.
   static Future<R> _runWithProgress<R, A>({
-    required void Function(A) entryPoint,
+    required FutureOr<R> Function(A) entryPoint,
     required A Function(SendPort sendPort) makeArgs,
     void Function(int current, int total)? onProgress,
+    IsolateTask? task,
   }) async {
-    final receivePort = ReceivePort();
-    final errorPort = ReceivePort();
-
-    final isolate = await Isolate.spawn(
-      entryPoint,
-      makeArgs(receivePort.sendPort),
-      onError: errorPort.sendPort,
-    );
-
-    final completer = Completer<R>();
-
-    final errorSub = errorPort.listen((message) {
-      if (!completer.isCompleted) {
-        final desc = message is List ? message.first : message;
-        completer.completeError(Exception('Isolate error: $desc'));
-      }
-    });
-
-    final receiveSub = receivePort.listen((message) {
-      if (message is List) {
-        onProgress?.call(message[0] as int, message[1] as int);
-      } else if (message is R && !completer.isCompleted) {
-        completer.complete(message);
-      }
-    });
-
     try {
-      return await completer.future.timeout(const Duration(minutes: 5));
-    } finally {
-      await errorSub.cancel();
-      await receiveSub.cancel();
-      receivePort.close();
-      errorPort.close();
-      isolate.kill(priority: Isolate.immediate);
+      return await (task ?? IsolateTask()).run<R>(
+        _bindEntry(entryPoint, makeArgs),
+        onProgress: (message) {
+          final progress = message as List;
+          onProgress?.call(progress[0] as int, progress[1] as int);
+        },
+      );
+    } on RemoteError catch (error) {
+      throw Exception('Isolate error: $error');
     }
   }
 
-  static void _singleColorEntry(_SingleColorArgs args) {
+  static (PositionAnalysis, OpeningTree) _singleColorEntry(
+    _SingleColorArgs args,
+  ) {
     final result = build(
       pgnList: args.pgnList,
       username: args.username,
@@ -302,10 +307,10 @@ class UnifiedAnalysisBuilder {
       maxDepth: args.maxDepth,
       onProgress: (current, total) => args.sendPort.send([current, total]),
     );
-    Isolate.exit(args.sendPort, result);
+    return result;
   }
 
-  static Future<void> _bothColorsEntry(_BothColorsArgs args) async {
+  static Future<AnalysisBundle> _bothColorsEntry(_BothColorsArgs args) async {
     final pgnFile = File(args.pgnFilePath);
     final pgnList = splitPgnIntoGames(stripBom(await readTextFile(pgnFile)));
     if (pgnList.isEmpty) {
@@ -343,7 +348,7 @@ class UnifiedAnalysisBuilder {
       // Ignore; the next visit simply rebuilds.
     }
 
-    Isolate.exit(args.sendPort, bundle);
+    return bundle;
   }
 
   // ── Disk cache codec ─────────────────────────────────────────────────
@@ -429,6 +434,21 @@ class UnifiedAnalysisBuilder {
   /// Game result from the user's perspective (1 win / 0.5 draw / 0 loss).
   static double _userResult(PgnGame<PgnNodeData> game, bool isUserWhite) =>
       resultForUser(game.headers['Result'] ?? '*', isUserWhite);
+
+  /// The position a game starts from when it is not the standard start —
+  /// what [foldGamesIntoTree] orders the batch by. Null for a game that
+  /// starts where the tree does, and for a `[FEN]` header too malformed to
+  /// read (which [_walkMainline] then rejects exactly as it did before).
+  static Position? _customStartOf(PgnGame<PgnNodeData> game) {
+    final fen = game.headers['FEN']?.trim();
+    if (fen == null || fen.isEmpty) return null;
+    if (normalizeFen(fen) == normalizeFen(kStandardStartFen)) return null;
+    try {
+      return Chess.fromSetup(Setup.parseFen(expandFen(fen)));
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Walk the game's mainline once, updating [acc]'s tree and FEN map.
   ///
@@ -544,3 +564,9 @@ class _ColorAccumulator {
     fenToGameIndices: fenToGameIndices,
   );
 }
+
+FutureOr<R> Function(SendPort) _bindEntry<R, A>(
+  FutureOr<R> Function(A) entryPoint,
+  A Function(SendPort) makeArgs,
+) =>
+    (port) => entryPoint(makeArgs(port));

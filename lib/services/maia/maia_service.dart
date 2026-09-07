@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:onnxruntime/onnxruntime.dart';
 import '../eval_cache.dart';
 import 'maia_tensor.dart';
+import 'maia_session.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
 class MaiaResult {
@@ -50,7 +51,7 @@ class MaiaService {
       // thread-safe across isolates).
       final address = await Isolate.run(() {
         OrtEnv.instance.init();
-        return OrtSession.fromBuffer(bytes, OrtSessionOptions()).address;
+        return createMaiaSession(bytes);
       });
       _session = OrtSession.fromAddress(address);
       _isInitialized = true;

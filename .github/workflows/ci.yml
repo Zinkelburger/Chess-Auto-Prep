@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - main
+      - backup/local-main
   pull_request:
   workflow_dispatch:
   workflow_call:
@@ -52,6 +53,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+
+      - name: Check agent rule references
+        run: python3 scripts/sync_agent_rules.py --check
 
       - run: python -m pip install -r tools/mcp/requirements.txt
 

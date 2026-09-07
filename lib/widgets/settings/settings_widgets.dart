@@ -6,10 +6,11 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../common/choice_field.dart';
+import '../common/number_stepper.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Section header with icon, title, optional subtitle
@@ -298,7 +299,8 @@ class SettingsSliderTile extends StatelessWidget {
 
 /// A numeric setting as a stepper rather than a slider. A slider reads as a
 /// scrollbar, hides the value until you drag it, and makes "one more core"
-/// a pixel-accuracy problem; −/+ says the number out loud and moves by one.
+/// a pixel-accuracy problem; −/+ says the number out loud and moves by one,
+/// and the number itself is a text box for when the target is far away.
 class SettingsStepperTile extends StatelessWidget {
   final String label;
 
@@ -333,7 +335,7 @@ class SettingsStepperTile extends StatelessWidget {
     return SettingsValueRow(
       label: label,
       description: description,
-      control: _StepperControl(
+      control: NumberStepper(
         value: clamped,
         min: min,
         max: max,
@@ -345,78 +347,14 @@ class SettingsStepperTile extends StatelessWidget {
   }
 }
 
-class _StepperControl extends StatelessWidget {
-  const _StepperControl({
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.step,
-    required this.suffix,
-    required this.onChanged,
-  });
-
-  final int value;
-  final int min;
-  final int max;
-  final int step;
-  final String? suffix;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.divider),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.remove, size: 18),
-            tooltip: 'Less',
-            visualDensity: VisualDensity.compact,
-            onPressed: value > min
-                ? () => onChanged((value - step).clamp(min, max))
-                : null,
-          ),
-          // Fixed width so the −/+ pair doesn't shuffle as digits are added.
-          SizedBox(
-            width: suffix == null ? 44 : 96,
-            child: Text(
-              suffix == null ? '$value' : '$value $suffix',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                fontFamily: AppTextStyles.monoFamily,
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.add, size: 18),
-            tooltip: 'More',
-            visualDensity: VisualDensity.compact,
-            onPressed: value < max
-                ? () => onChanged((value + step).clamp(min, max))
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A setting picked from a short list: name and explanation left, dropdown
-/// right. Same row shape as [SettingsStepperTile] so a settings card scans as
-/// one column of names with one column of controls.
+/// A labelled preference that stacks its control below the copy in narrow panes.
+/// A labelled preference whose value is one of a list — the settings-panel
+/// wrapper around [ChoiceField].
+///
+/// It used to hold a `DropdownButton`. It does not any more: a settings list
+/// is exactly the case [ChoiceField] exists for, so the choice can be typed
+/// at instead of hunted for in a menu.
 class SettingsChoiceTile<T> extends StatelessWidget {
-  final String label;
-  final String? description;
-  final T value;
-  final List<(T, String)> items;
-  final ValueChanged<T> onChanged;
-
   const SettingsChoiceTile({
     super.key,
     required this.label,
@@ -426,34 +364,36 @@ class SettingsChoiceTile<T> extends StatelessWidget {
     required this.onChanged,
   });
 
+  final String label;
+  final String? description;
+  final T value;
+
+  /// `(value, label)` pairs, in the order they should be offered.
+  final List<(T, String)> items;
+
+  final ValueChanged<T> onChanged;
+
   @override
-  Widget build(BuildContext context) {
-    return SettingsValueRow(
-      label: label,
-      description: description,
-      control: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: AppColors.divider),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: DropdownButton<T>(
-          value: value,
-          underline: const SizedBox.shrink(),
-          style: AppTextStyles.body,
-          items: items
-              .map((e) => DropdownMenuItem(value: e.$1, child: Text(e.$2)))
-              .toList(),
-          onChanged: (v) {
-            if (v != null) onChanged(v);
-          },
-        ),
+  Widget build(BuildContext context) => SettingsValueRow(
+    label: label,
+    description: description,
+    // Bounded: in the wide layout [SettingsValueRow] puts the control in a
+    // Row, and a text field — which is what a ChoiceField is — has no width of
+    // its own there. The `DropdownButton` this replaced sized itself.
+    control: SizedBox(
+      width: 240,
+      child: ChoiceField<T>(
+        value: value,
+        items: [
+          for (final (itemValue, itemLabel) in items)
+            ChoiceItem<T>(value: itemValue, label: itemLabel),
+        ],
+        onChanged: onChanged,
       ),
-    );
-  }
+    ),
+  );
 }
 
-/// A labelled preference that stacks its control below the copy in narrow panes.
 class SettingsValueRow extends StatelessWidget {
   const SettingsValueRow({
     super.key,
@@ -523,7 +463,7 @@ class _LabelBlock extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Integer stepper (compact +/- with text field)
+// Integer grid (label + compact typeable stepper, several per row)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class SettingsIntSpec {
@@ -557,59 +497,18 @@ class SettingsIntGrid extends StatelessWidget {
       runSpacing: 0,
       children: [
         for (final f in fields)
-          SizedBox(width: 150, child: _CompactIntField(spec: f)),
+          SizedBox(width: 176, child: _CompactIntField(spec: f)),
       ],
     );
   }
 }
 
-class _CompactIntField extends StatefulWidget {
+class _CompactIntField extends StatelessWidget {
   final SettingsIntSpec spec;
   const _CompactIntField({required this.spec});
 
   @override
-  State<_CompactIntField> createState() => _CompactIntFieldState();
-}
-
-class _CompactIntFieldState extends State<_CompactIntField> {
-  late final TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController(text: '${widget.spec.value}');
-  }
-
-  @override
-  void didUpdateWidget(_CompactIntField old) {
-    super.didUpdateWidget(old);
-    if (old.spec.value != widget.spec.value && !_ctrl.text.contains('.')) {
-      final sel = _ctrl.selection;
-      _ctrl.text = '${widget.spec.value}';
-      if (sel.isValid && sel.end <= _ctrl.text.length) {
-        _ctrl.selection = sel;
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final n = int.tryParse(_ctrl.text);
-    if (n != null) {
-      widget.spec.onChanged(n.clamp(widget.spec.min, widget.spec.max));
-    } else {
-      _ctrl.text = '${widget.spec.value}';
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final spec = widget.spec;
     final field = Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
@@ -617,92 +516,20 @@ class _CompactIntFieldState extends State<_CompactIntField> {
           Expanded(
             child: Text(spec.label, style: const TextStyle(fontSize: 12)),
           ),
-          IconButton(
-            icon: const Icon(Icons.remove, size: 18),
-            onPressed: spec.value > spec.min
-                ? () => spec.onChanged(
-                    (spec.value - spec.step).clamp(spec.min, spec.max),
-                  )
-                : null,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-          ),
-          SizedBox(
-            width: 40,
-            child: TextField(
-              controller: _ctrl,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(vertical: 6),
-              ),
-              onSubmitted: (_) => _submit(),
-              onEditingComplete: _submit,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.add, size: 18),
-            onPressed: spec.value < spec.max
-                ? () => spec.onChanged(
-                    (spec.value + spec.step).clamp(spec.min, spec.max),
-                  )
-                : null,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          NumberStepper(
+            value: spec.value,
+            min: spec.min,
+            max: spec.max,
+            step: spec.step,
+            onChanged: spec.onChanged,
+            fieldWidth: 40,
+            bordered: false,
           ),
         ],
       ),
     );
     if (spec.tooltip == null) return field;
     return Tooltip(message: spec.tooltip!, child: field);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Labeled dropdown
-// ═══════════════════════════════════════════════════════════════════════════════
-
-class SettingsDropdown<T> extends StatelessWidget {
-  final String label;
-  final String? tooltip;
-  final T value;
-  final List<(T, String)> items;
-  final ValueChanged<T?> onChanged;
-
-  const SettingsDropdown({
-    super.key,
-    required this.label,
-    this.tooltip,
-    required this.value,
-    required this.items,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final field = DropdownButtonFormField<T>(
-      initialValue: value,
-      isExpanded: true,
-      isDense: true,
-      style: const TextStyle(fontSize: 13),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(fontSize: 12),
-        border: const OutlineInputBorder(),
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      ),
-      items: items
-          .map((e) => DropdownMenuItem(value: e.$1, child: Text(e.$2)))
-          .toList(),
-      onChanged: onChanged,
-    );
-    if (tooltip == null) return field;
-    return Tooltip(message: tooltip!, child: field);
   }
 }
 

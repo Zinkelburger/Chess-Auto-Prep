@@ -283,7 +283,9 @@ void main() {
 
     test('missing keys fall back to documented defaults', () {
       final cfg = TreeBuildConfig.fromJson(const {}, startFen: 'x');
-      expect(cfg.maxPly, 20);
+      // The Pure rebuild made an exhaustive search the default, and an
+      // exhaustive search is shallow: 4 ply, not the old sampling depth of 20.
+      expect(cfg.maxPly, 4);
       expect(cfg.maxNodes, 0);
       expect(cfg.ourMultipv, 4);
       expect(cfg.oppMaxChildren, 4);

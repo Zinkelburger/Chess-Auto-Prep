@@ -37,6 +37,7 @@ const _base = TreeBuildConfig(
   startFen: kStandardStartFen,
   playAsWhite: true,
   relativeEval: false,
+  searchAlgorithm: SearchAlgorithm.fast,
 );
 
 BuildRun _makeRun({

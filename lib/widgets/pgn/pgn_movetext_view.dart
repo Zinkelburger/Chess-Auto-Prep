@@ -1,11 +1,8 @@
 /// Movetext rendering for the PGN viewer.
 ///
-/// Renders the mainline + sideline variations + inline/prose comments as a
-/// flowing `Wrap` of `Text.rich` / `RichText`, plus the inline comment editor
-/// (right-click → Comment). Extracted from `pgn_viewer_widget.dart`
-/// as a pure leaf view: it takes the move history, the per-ply variation tree,
-/// the current navigation/edit state, and callbacks — it owns no state of its
-/// own (the inline editor keeps its own [TextEditingController]).
+/// Renders mainline and sideline moves as a continuous annotated document.
+/// The host owns board navigation; this view owns disclosure state and keeps
+/// every explanation in its original place in the PGN.
 library;
 
 import '../../utils/pgn_nags.dart';
@@ -21,7 +18,9 @@ import '../../services/game_analysis_controller.dart'
 import '../../theme/app_colors.dart';
 import '../../theme/pgn_text_styles.dart';
 import 'comment_editor.dart';
-import 'comment_prose_spans.dart';
+import '../../utils/course_comment_spacing.dart';
+import 'pgn_reading_pane.dart';
+import 'pgn_reading_passage.dart';
 import 'movetext_primitives.dart' show MoveChip;
 import '../../utils/chess_utils.dart'
     show coordsAtPly, formatEvalDisplay, isNullMoveSan;
@@ -70,6 +69,8 @@ final _kHoverDecoration = BoxDecoration(
 class PgnMovetextView extends StatefulWidget {
   /// The parsed game (for game-level comments before any move).
   final PgnGame? game;
+  final PgnReadingBranch? readingScope;
+  final bool expandAll;
 
   /// Mainline moves in display order.
   final List<PgnNodeData> moveHistory;
@@ -122,7 +123,7 @@ class PgnMovetextView extends StatefulWidget {
   /// Null when no session is running.
   final SolitaireReveal? reveal;
 
-  /// Attached to the current mainline move so the host can scroll it into view.
+  /// Attached to the current move or annotated passage, including sidelines.
   final Key? currentMoveKey;
 
   /// Preview an inline analysis line embedded in a comment: navigate the board
@@ -152,6 +153,8 @@ class PgnMovetextView extends StatefulWidget {
   const PgnMovetextView({
     super.key,
     required this.game,
+    this.readingScope,
+    this.expandAll = false,
     required this.moveHistory,
     required this.variationsByPly,
     required this.mainLineIndex,
@@ -179,19 +182,38 @@ class PgnMovetextView extends StatefulWidget {
 }
 
 class _PgnMovetextViewState extends State<PgnMovetextView> {
-  /// Ids of branch nodes whose folded deep sidelines the reader has opened.
-  /// Keyed by [MoveNode.id], which is stable for the session.
-  final Set<int> _expandedBranches = <int>{};
+  final Map<int, bool> _branchVisibility = {};
 
   void _toggleBranch(int id) {
-    setState(() {
-      if (!_expandedBranches.remove(id)) _expandedBranches.add(id);
-    });
+    setState(() => _branchVisibility[id] = !(_branchVisibility[id] ?? true));
+  }
+
+  @override
+  void didUpdateWidget(PgnMovetextView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.expandAll != widget.expandAll ||
+        oldWidget.game != widget.game) {
+      _branchVisibility.clear();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final view = widget;
+    if (view.readingScope case final scope?) {
+      return _buildVariationDocument(
+        view,
+        scope.root,
+        ply: scope.ply,
+        branchPly: scope.branchPly,
+        depth: 0,
+        branchVisibility: _branchVisibility,
+        onToggleBranch: _toggleBranch,
+        nodeVisible: view.reveal == null
+            ? null
+            : (node) => view.reveal!.isNodeVisible(node, scope.branchPly),
+      );
+    }
     if (view.moveHistory.isEmpty &&
         view.variationsByPly.isEmpty &&
         (view.game == null || view.game!.comments.isEmpty)) {
@@ -315,13 +337,13 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         nodeVisible: reveal == null
             ? null
             : (node) => reveal.isNodeVisible(node, ply),
-        expandedBranches: _expandedBranches,
+        branchVisibility: _branchVisibility,
         onToggleBranch: _toggleBranch,
       );
       if (rows.isEmpty) return;
       emitFullWidthRow(
         Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
-        vertical: 6,
+        vertical: 0,
       );
     }
 
@@ -357,6 +379,10 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
 
       final moveData = view.moveHistory[i];
       final san = moveData.san;
+      final annotated = (moveData.comments ?? const <String>[]).any(
+        (c) => filterDisplayComment(c).isNotEmpty,
+      );
+      if (annotated) flushSpans();
 
       // Render startingComments (comments before the move)
       if (moveData.startingComments != null &&
@@ -365,6 +391,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           emitComment(sc, anchorPos: _posAt(prefix, i), anchorPly: i);
         }
       }
+
+      final passageStart = children.length;
 
       // Skip rendering null-move SAN (ChessBase `--` / `Z0`) but still show
       // comments and any sidelines that branch after the pass.
@@ -407,8 +435,11 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       // The current move keeps the mainline's weight and size; only the pill
       // changes, so navigating never reflows the wrapped movetext.
       final moveStyle = isCurrentMove
-          ? PgnTextStyles.moveAt(0).copyWith(color: AppColors.pgnMoveCurrentFg)
-          : PgnTextStyles.moveAt(0);
+          ? PgnTextStyles.moveAt(
+              0,
+              quiet: !annotated,
+            ).copyWith(color: AppColors.pgnMoveCurrentFg)
+          : PgnTextStyles.moveAt(0, quiet: !annotated);
 
       // Build SAN + NAG text (always shown — annotations survive view mode).
       // Every NAG, not just the six editable quality glyphs: `⩲`, `∞`, `→` and
@@ -418,7 +449,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       final currentDecoration = BoxDecoration(
         color: AppColors.pgnMoveCurrentBg,
         borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: AppColors.pgnMoveCurrent, width: 1),
+        border: Border.all(color: Colors.transparent, width: 1),
       );
 
       spans.add(
@@ -437,7 +468,9 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             hoverDecoration: isCurrentMove
                 ? currentDecoration
                 : _kHoverDecoration,
-            containerKey: isCurrentMove ? view.currentMoveKey : null,
+            containerKey: isCurrentMove && !annotated
+                ? view.currentMoveKey
+                : null,
             behavior: HitTestBehavior.opaque,
             onTap: () => view.onMainLineMoveClicked(i),
             onSecondaryTapDown: (details) =>
@@ -478,6 +511,19 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         if (note != null) emitBestLine(note, i);
       }
 
+      if (annotated) {
+        flushSpans();
+        final passage = children.sublist(passageStart);
+        children.removeRange(passageStart, children.length);
+        children.add(
+          PgnReadingPassage(
+            key: isCurrentMove ? view.currentMoveKey : null,
+            active: isCurrentMove,
+            children: passage,
+          ),
+        );
+      }
+
       // Variations branch *after* the move at index i (ply = i + 1). In
       // solitaire, only ephemeral attempts show at the un-guessed frontier.
       final ply = i + 1;
@@ -496,8 +542,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
 
     flushSpans();
 
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: children,
     );
   }

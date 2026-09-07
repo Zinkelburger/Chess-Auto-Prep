@@ -45,7 +45,10 @@ class ChapterScope {
   /// games included to show what the opening is played for — and being asked
   /// to reproduce forty moves of somebody else's game is not training, so
   /// they are filtered out here rather than in the file: browsing and study
-  /// still show them.
+  /// still show them. The author's mentioned-only alternatives for our own
+  /// side (`RepertoireLine.isCommentary`) are left out for the same reason:
+  /// drilling "3.e5, which I do not cover" as a line is drilling the wrong
+  /// move.
   ///
   /// Filtered once per source list: the owner replaces its list wholesale on
   /// load, so the list's identity is the cache key, and every read during a
@@ -56,7 +59,7 @@ class ChapterScope {
     if (cached != null && identical(cached.source, source)) return cached.lines;
     final filtered = List<RepertoireLine>.unmodifiable([
       for (final line in source)
-        if (!line.isModelGame) line,
+        if (!line.isModelGame && !line.isCommentary) line,
     ]);
     _trainable = (source: source, lines: filtered);
     return filtered;
@@ -223,6 +226,23 @@ class ChapterScope {
       return;
     }
     pendingPrompt = proposal;
+  }
+
+  /// Scope to [chapter] as the file opens, because the user chose it by name
+  /// before the load (the chapter picker lists a course's chapters under its
+  /// file). Picking a chapter answers "sort into chapters?" — so a pending
+  /// prompt, an earlier "no", or grouping switched off all give way to the
+  /// detected layout, recorded for [filePath] the way the prompt's own "yes"
+  /// is. Returns whether [chapter] exists under the resulting grouping.
+  Future<bool> adoptChapter(String chapter, {required String? filePath}) async {
+    final layout = _detectedLayout;
+    if (layout != null && (pendingPrompt != null || !names.contains(chapter))) {
+      pendingPrompt = layout;
+      await answerPrompt(true, filePath: filePath);
+    }
+    if (!names.contains(chapter)) return false;
+    activeChapter = chapter;
+    return true;
   }
 
   Future<void> _applyMode(ChapterGroupingMode mode) async {

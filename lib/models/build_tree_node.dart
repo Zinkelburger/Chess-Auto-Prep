@@ -50,6 +50,22 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// Engine evaluation in centipawns (side-to-move perspective).
   int? engineEvalCp;
 
+  /// Version-2 search stores full paths: never borrow another history's value.
+  /// Rolling search commits this UCI after a complete short lookahead.
+  /// The decision estimate is retained separately from the final policy value.
+  String committedMoveUci = '';
+  int decisionHorizon = 0;
+  double? decisionValue;
+
+  bool historyAware = false;
+
+  /// Exact terminal utility for our side (including immediate draw claims).
+  double? terminalValue;
+
+  /// Bounds from unexpanded search, not confidence in the engine/model.
+  double valueLower = 0;
+  double valueUpper = 1;
+
   /// Local probability of this move being played (0.0–1.0).
   /// For our-move children this is 1.0 (we choose what to play).
   double moveProbability;
@@ -106,7 +122,7 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// Expected centipawn loss by the opponent at this node (display only).
   double localCpl = 0.0;
 
-  /// Practical win probability in [0, 1], computed via expectimax.
+  /// Bounded expected-score estimate, not a calibrated human win probability.
   double expectimaxValue = 0.0;
 
   /// Max ply count below this node (0 for leaves).

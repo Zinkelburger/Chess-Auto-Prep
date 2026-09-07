@@ -46,25 +46,28 @@ _LoadedGames _loadGamesInIsolate(
   final lines = service.linesFromParsedGames(
     parsed,
     declaredColor: args.isWhite ? 'white' : 'black',
+    courseChapter: pgn.extractCourseChapter(text),
   );
 
   final tree = OpeningTree();
-  for (final game in parsed) {
-    // A game with no moves is not a line and was never counted before.
-    if (game.game.moves.children.isEmpty) continue;
-    try {
-      OpeningTreeBuilder.addGame(
-        tree,
-        game.game,
-        usernameLower: '',
-        userIsWhite: args.isWhite,
-        maxDepth: args.maxDepth,
-        strictPlayerMatching: false,
-      );
-    } catch (e) {
-      debugPrint('Skipping game ${game.index} in the opening tree: $e');
-    }
-  }
+  // A game with no moves is not a line and was never counted before.
+  // `addGames`, not a loop over `addGame`: a chapter that starts from a
+  // `[FEN]` header has to be folded after whatever reaches that position, or
+  // it is grafted at the root and the file's chapter order decides the tree.
+  OpeningTreeBuilder.addGames(
+    tree,
+    parsed
+        .where((game) => game.game.moves.children.isNotEmpty)
+        .map((game) => game.game),
+    usernameLower: '',
+    userIsWhite: args.isWhite,
+    maxDepth: args.maxDepth,
+    strictPlayerMatching: false,
+    onError: (game, e) {
+      final index = parsed.firstWhere((p) => identical(p.game, game)).index;
+      debugPrint('Skipping game $index in the opening tree: $e');
+    },
+  );
 
   return (tree: tree.toTransferJson(), lines: lines);
 }

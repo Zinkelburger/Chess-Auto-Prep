@@ -13,8 +13,6 @@ Future<void> _pump(
   bool generationLocked = false,
   VoidCallback? onPlanBuild,
   VoidCallback? onGenerate,
-  VoidCallback? onBuildByPlaying,
-  VoidCallback? onBuildFromGames,
   VoidCallback? onImportPgn,
 }) async {
   tester.view.physicalSize = const Size(1600, 900);
@@ -39,8 +37,6 @@ Future<void> _pump(
             onOpenAudit: onOpenAudit,
             onPlanBuild: onPlanBuild,
             onOpenGeneration: onGenerate,
-            onBuildByPlaying: onBuildByPlaying,
-            onBuildFromGames: onBuildFromGames,
             onImportPgn: onImportPgn,
             isWhiteRepertoire: true,
             onOpenRepertoireOptions: () {},
@@ -94,26 +90,29 @@ void main() {
   });
 
   group('Actions menu', () {
-    testWidgets('groups its rows under Add lines, Train and Check', (
+    testWidgets('groups its rows under Generate, Import, Train and Check', (
       tester,
     ) async {
       await _pump(
         tester,
         onPlanBuild: () {},
         onGenerate: () {},
-        onBuildByPlaying: () {},
-        onBuildFromGames: () {},
         onImportPgn: () {},
         onTrain: () {},
         onOpenAudit: () {},
       );
       await _openActions(tester);
 
-      expect(find.text('ADD LINES'), findsOneWidget);
+      expect(find.text('GENERATE'), findsOneWidget);
       expect(find.text('Plan the lines…'), findsOneWidget);
       expect(find.text('Generate from here…'), findsOneWidget);
-      expect(find.text('Play the moves myself…'), findsOneWidget);
-      expect(find.text('From my games…'), findsOneWidget);
+      // Both folded into the planner: moves played on the board at a
+      // question, and the "My games" walk.
+      expect(find.text('Play the moves myself…'), findsNothing);
+      expect(find.text('From my games…'), findsNothing);
+      expect(find.text('ADD LINES'), findsNothing);
+
+      expect(find.text('IMPORT'), findsOneWidget);
       // File and paste are one entry: the dialog it opens offers both.
       expect(find.text('From a PGN…'), findsOneWidget);
       expect(find.text('Paste PGN…'), findsNothing);
@@ -134,9 +133,9 @@ void main() {
       await _pump(tester, onPlanBuild: () {}, onGenerate: () {});
       await _openActions(tester);
 
-      expect(find.text('ADD LINES'), findsOneWidget);
+      expect(find.text('GENERATE'), findsOneWidget);
       expect(find.text('Plan the lines…'), findsOneWidget);
-      expect(find.text('From my games…'), findsNothing);
+      expect(find.text('IMPORT'), findsNothing);
       expect(find.text('TRAIN'), findsNothing);
       expect(find.text('CHECK'), findsNothing);
     });
@@ -146,13 +145,13 @@ void main() {
       await _pump(
         tester,
         onPlanBuild: () => ran.add('plan'),
-        onBuildByPlaying: () => ran.add('play'),
+        onGenerate: () => ran.add('generate'),
         onTrain: () => ran.add('train'),
         onOpenAudit: () => ran.add('audit'),
       );
 
       await _openActions(tester);
-      await tester.tap(find.text('Play the moves myself…'));
+      await tester.tap(find.text('Generate from here…'));
       await tester.pumpAndSettle();
       await _openActions(tester);
       await tester.tap(find.text('Train this chapter'));
@@ -161,7 +160,7 @@ void main() {
       await tester.tap(find.text('Audit for gaps…'));
       await tester.pumpAndSettle();
 
-      expect(ran, ['play', 'train', 'audit']);
+      expect(ran, ['generate', 'train', 'audit']);
     });
 
     testWidgets('Train waits while a build runs; adding lines does not', (

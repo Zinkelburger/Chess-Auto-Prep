@@ -45,30 +45,19 @@ enum BuildMode {
   chessDbBook,
 }
 
-// ── Search algorithm (frontier discipline + pruning preset) ─────────────
+// ── Search algorithm ───────────────────────────────────────────────────
 
-/// How the Phase 1 frontier is ordered and how aggressively rare lines are
-/// pruned.  Expectimax valuation (Phase 2) is identical in both — the
-/// algorithm only shapes which nodes exist in the tree.
+/// Pure is exhaustive; the UI calls the approximate rolling method Fast.
+/// Keep their serialized identities stable: the old `fast` enum member belongs
+/// to retired heuristics and still dispatches to Pure for Stockfish builds.
 enum SearchAlgorithm {
-  /// "Full": level-order BFS, every candidate at full MultiPV and the full
-  /// eval window.  NOT literally exhaustive — the configured floors
-  /// ([TreeBuildConfig.minProbability], [TreeBuildConfig.maxPly], the eval
-  /// window, opponent fan-out caps) still apply; what it drops is the
-  /// *extra* narrowing Fast applies to rarely-reached positions.
+  /// Exhaustive finite-horizon construction with an explicit safety constraint.
   pure,
 
-  /// "Fast": best-first (highest reach-priority node expands next) plus
-  /// pruning that spends less effort on rarely-reached positions: our-move
-  /// alternatives below the priority floor are skipped, MultiPV and the
-  /// eval-loss window shrink in cold subtrees, and opponent fan-out is
-  /// capped harder.  The coverage floor ([TreeBuildConfig.coverMinProb])
-  /// is always honored, so Fast never creates silent holes.
-  ///
-  /// The pruning is what makes it faster; the best-first *order* only pays
-  /// off when the run stops early — which is what
-  /// [TreeBuildConfig.timeBudgetMinutes] is for.  With no budget and no
-  /// manual Stop, Fast and Pure expand the same node set minus the pruning.
+  /// User-facing Fast: four-ply lookahead, then commit our next move.
+  rolling,
+
+  /// Retired for stockfishExpectimax. Does not activate approximate search.
   fast,
 }
 
@@ -369,11 +358,9 @@ class TreeBuildConfig {
   final int dbMinGames;
 
   // ── Master games (TWIC) ──
-  /// Consult the local master-games database when it has games: opponent
-  /// replies come from titled-player practice (blended with Maia), model
-  /// games are real master games along the line, and a repertoire move that
-  /// beats what masters actually played is annotated "improves on … in
-  /// `<game>`".  Has no effect until the database is downloaded.
+  /// Enable local master-game data in database build modes, including model
+  /// games and annotations. Has no effect until the database is downloaded.
+  /// Stockfish expectimax always ignores this legacy setting.
   final bool useMasterGames;
 
   /// When [useMasterGames] is on but the database is empty, download it
@@ -515,10 +502,10 @@ class TreeBuildConfig {
     required this.startFen,
     required this.playAsWhite,
     this.minProbability = 0.0001,
-    this.maxPly = 20,
+    this.maxPly = 4,
     this.maxNodes = 0,
     this.timeBudgetMinutes = 0,
-    this.searchAlgorithm = SearchAlgorithm.fast,
+    this.searchAlgorithm = SearchAlgorithm.pure,
     this.ourAltDiscount = 0.25,
     this.fastAltGapCp = 30,
     this.openingWidthPlies = 3,
@@ -601,7 +588,7 @@ class TreeBuildConfig {
       startFen: startFen,
       playAsWhite: json['play_as_white'] as bool? ?? true,
       minProbability: (json['min_probability'] as num?)?.toDouble() ?? 0.0001,
-      maxPly: (json['max_depth'] as num?)?.toInt() ?? 20,
+      maxPly: (json['max_depth'] as num?)?.toInt() ?? 4,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
       timeBudgetMinutes: (json['time_budget_minutes'] as num?)?.toInt() ?? 0,
       searchAlgorithm: _parseSearchAlgorithm(
@@ -729,13 +716,27 @@ class TreeBuildConfig {
   /// True while building a single-move-per-side mainline book.
   bool get isChessDbBook => buildMode == BuildMode.chessDbBook;
 
+  /// Master data is reserved for the separate database build modes.
+  bool get usesMasterGames =>
+      buildMode != BuildMode.stockfishExpectimax && useMasterGames;
+
+  bool get isRollingSearch =>
+      buildMode == BuildMode.stockfishExpectimax &&
+      searchAlgorithm == SearchAlgorithm.rolling;
+
+  static const rollingLookaheadPlies = 4;
+
   /// Whether Phase 2.5 has anything to re-check.
   ///
   /// The ChessDB book never verifies. Its moves are the database's, and
   /// re-ranking them by a local search at verification depth would quietly
   /// substitute Stockfish's opinion for ChessDB's — which is the one thing
   /// this mode exists not to do.
-  bool get runsVerification => verifyFinal && needsStockfish && !isChessDbBook;
+  bool get runsVerification =>
+      verifyFinal &&
+      needsStockfish &&
+      !isChessDbBook &&
+      buildMode != BuildMode.stockfishExpectimax;
 
   /// Ply cap for the off-book mainline tail, never below [maxPly].
   int get resolvedBookTailMaxPly =>
@@ -748,7 +749,7 @@ class TreeBuildConfig {
 
   /// Short label for the active build algorithm.
   String get buildModeLabel => switch (buildMode) {
-    BuildMode.stockfishExpectimax => 'Stockfish + expectimax',
+    BuildMode.stockfishExpectimax => 'Stockfish + Maia expectimax',
     BuildMode.maiaDbExplore => 'Maia DB explore',
     BuildMode.dbExplorer => 'DB Explorer',
     BuildMode.chessDbBook => 'ChessDB mainline book',
@@ -758,7 +759,12 @@ class TreeBuildConfig {
   String get summaryLabel {
     final parts = <String>[
       buildModeLabel,
-      searchAlgorithm == SearchAlgorithm.pure ? 'Pure' : 'Fast',
+      isRollingSearch
+          ? 'Fast (4-ply, approximate)'
+          : buildMode == BuildMode.stockfishExpectimax ||
+                searchAlgorithm == SearchAlgorithm.pure
+          ? 'Pure'
+          : 'Legacy Fast',
       '${maxPly}ply',
     ];
     if (usesStockfish) {
@@ -887,7 +893,8 @@ class TreeBuildConfig {
   /// Short label for the frontier/pruning algorithm.
   String get searchAlgorithmLabel => switch (searchAlgorithm) {
     SearchAlgorithm.pure => 'Pure search',
-    SearchAlgorithm.fast => 'Fast search',
+    SearchAlgorithm.rolling => 'Fast (4-ply, approximate)',
+    SearchAlgorithm.fast => 'Pure search (legacy Fast setting)',
   };
 
   /// Convert a white-perspective centipawn score to "our" perspective.
@@ -973,8 +980,9 @@ class TreeBuildConfig {
     'novelty_weight': noveltyWeight,
     'pgn_file_paths': pgnFilePaths,
     'db_min_games': dbMinGames,
-    'use_master_games': useMasterGames,
-    'download_master_games_if_missing': downloadMasterGamesIfMissing,
+    'use_master_games': usesMasterGames,
+    'download_master_games_if_missing':
+        usesMasterGames && downloadMasterGamesIfMissing,
     'master_min_games': masterMinGames,
     'master_min_move_games': masterMinMoveGames,
     'master_priority_weight': masterPriorityWeight,
@@ -1227,6 +1235,8 @@ SearchAlgorithm _parseSearchAlgorithm(String? value, {bool? legacyBestFirst}) {
   switch (value) {
     case 'pure':
       return SearchAlgorithm.pure;
+    case 'rolling':
+      return SearchAlgorithm.rolling;
     case 'fast':
       return SearchAlgorithm.fast;
   }

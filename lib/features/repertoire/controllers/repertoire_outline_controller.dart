@@ -21,10 +21,20 @@ import '../models/repertoire_outline.dart';
 import '../services/repertoire_outline_service.dart';
 
 /// Result of an edit, for the panel to toast. [error] set means refused.
+///
+/// A successful edit that is worth a word carries a [message] ("Moved 3
+/// lines to Sidelines"), and one that can be taken back carries [undo] — the
+/// panel shows it as the toast's action. Undo is itself an edit, so it
+/// returns an outcome too; it does not offer a redo.
 class OutlineEditOutcome {
   final String? error;
-  const OutlineEditOutcome.ok() : error = null;
-  const OutlineEditOutcome.failed(this.error);
+  final String? message;
+  final Future<OutlineEditOutcome> Function()? undo;
+
+  const OutlineEditOutcome.ok() : error = null, message = null, undo = null;
+  const OutlineEditOutcome.done({this.message, this.undo}) : error = null;
+  const OutlineEditOutcome.failed(this.error) : message = null, undo = null;
+
   bool get ok => error == null;
 }
 
@@ -219,11 +229,13 @@ class RepertoireOutlineController extends ChangeNotifier
 
   // ── Edits ──────────────────────────────────────────────────────────────
 
-  Future<OutlineEditOutcome> _edit(Future<void> Function() body) async {
+  Future<OutlineEditOutcome> _edit(
+    Future<OutlineEditOutcome> Function() body,
+  ) async {
     try {
-      await body();
+      final outcome = await body();
       await refresh();
-      return const OutlineEditOutcome.ok();
+      return outcome;
     } on OutlineEditException catch (e) {
       return OutlineEditOutcome.failed(e.message);
     } catch (e) {
@@ -243,6 +255,61 @@ class RepertoireOutlineController extends ChangeNotifier
     );
     _expanded.add(folderPath);
     _openChapters.add(chapter.path);
+    return const OutlineEditOutcome.ok();
+  });
+
+  /// A new chapter in [folderPath] holding the lines at [gameIndexes] of
+  /// [fromChapterPath] — what dropping lines on a folder makes. Undo moves
+  /// the lines back and removes the chapter.
+  Future<OutlineEditOutcome> createChapterWithLines({
+    required String folderPath,
+    required String name,
+    required String fromChapterPath,
+    required Set<int> gameIndexes,
+  }) => _edit(() async {
+    final chapter = await _service.createChapter(
+      folderPath: folderPath,
+      name: name,
+      isWhite: _isWhite,
+    );
+    _expanded.add(folderPath);
+    _openChapters.add(chapter.path);
+    final moved = await _moveLinesNoted(
+      fromChapterPath: fromChapterPath,
+      gameIndexes: gameIndexes,
+      toChapterPath: chapter.path,
+    );
+    if (moved == null) {
+      throw const OutlineEditException('Those lines are no longer there.');
+    }
+    final count = moved.landed.length;
+    return OutlineEditOutcome.done(
+      message:
+          'Made "${chapter.name}" from $count line${count == 1 ? '' : 's'}.',
+      undo: () => _edit(() async {
+        // Only what was moved in is there, unless lines were added since;
+        // then the chapter stays, emptied of the ones that came from here.
+        final untouched =
+            (_outline?.findChapter(chapter.path)?.lineCount ?? 0) ==
+            moved.landed.length;
+        await _service.moveLines(
+          fromChapterPath: chapter.path,
+          gameIndexes: moved.landed.toSet(),
+          toChapterPath: fromChapterPath,
+          toIndexes: moved.origin,
+        );
+        if (untouched) {
+          await _service.deleteChapter(chapter.path);
+          _openChapters.remove(chapter.path);
+          if (_isActive(chapter.path)) {
+            _activeChapterPath = fromChapterPath;
+            onActiveChapterMoved?.call(fromChapterPath);
+          }
+        }
+        _noteChapterChanged(fromChapterPath);
+        return const OutlineEditOutcome.done(message: 'Moved the lines back.');
+      }),
+    );
   });
 
   Future<OutlineEditOutcome> createFolder({
@@ -256,6 +323,7 @@ class RepertoireOutlineController extends ChangeNotifier
     _expanded
       ..add(parentPath)
       ..add(path);
+    return const OutlineEditOutcome.ok();
   });
 
   Future<OutlineEditOutcome> renameChapter(
@@ -265,31 +333,51 @@ class RepertoireOutlineController extends ChangeNotifier
     final newPath = await _service.renameChapter(chapterPath, newName);
     _followActive(chapterPath, newPath);
     if (_openChapters.remove(chapterPath)) _openChapters.add(newPath);
+    return const OutlineEditOutcome.ok();
   });
 
   Future<OutlineEditOutcome> renameFolder(String folderPath, String newName) =>
       _edit(() async {
         final newPath = await _service.renameFolder(folderPath, newName);
         _rekeyFolderState(folderPath, newPath);
+        return const OutlineEditOutcome.ok();
       });
 
   Future<OutlineEditOutcome> moveChapter(
     String chapterPath,
-    String targetFolderPath,
-  ) => _edit(() async {
+    String targetFolderPath, {
+    bool undoable = true,
+  }) => _edit(() async {
+    final from = p.dirname(chapterPath);
     final newPath = await _service.moveChapter(chapterPath, targetFolderPath);
     _followActive(chapterPath, newPath);
     if (_openChapters.remove(chapterPath)) _openChapters.add(newPath);
     _expanded.add(targetFolderPath);
+    if (!undoable) return const OutlineEditOutcome.ok();
+    return OutlineEditOutcome.done(
+      message:
+          'Moved "${p.basenameWithoutExtension(chapterPath)}" to '
+          '${_folderLabel(targetFolderPath)}.',
+      undo: () => moveChapter(newPath, from, undoable: false),
+    );
   });
 
   Future<OutlineEditOutcome> moveFolder(
     String folderPath,
-    String targetFolderPath,
-  ) => _edit(() async {
+    String targetFolderPath, {
+    bool undoable = true,
+  }) => _edit(() async {
+    final from = p.dirname(folderPath);
     final newPath = await _service.moveFolder(folderPath, targetFolderPath);
     _rekeyFolderState(folderPath, newPath);
     _expanded.add(targetFolderPath);
+    if (!undoable) return const OutlineEditOutcome.ok();
+    return OutlineEditOutcome.done(
+      message:
+          'Moved "${p.basename(folderPath)}" to '
+          '${_folderLabel(targetFolderPath)}.',
+      undo: () => moveFolder(newPath, from, undoable: false),
+    );
   });
 
   /// Promotes a chapter file's `[White]` course chapters to real chapter
@@ -310,6 +398,7 @@ class RepertoireOutlineController extends ChangeNotifier
           _activeChapterPath = successor;
           onActiveChapterMoved?.call(successor);
         }
+        return const OutlineEditOutcome.ok();
       });
 
   Future<OutlineEditOutcome> deleteChapter(String chapterPath) =>
@@ -320,6 +409,7 @@ class RepertoireOutlineController extends ChangeNotifier
           _activeChapterPath = null;
           onActiveChapterMoved?.call(null);
         }
+        return const OutlineEditOutcome.ok();
       });
 
   Future<OutlineEditOutcome> deleteFolder(String folderPath) => _edit(() async {
@@ -333,24 +423,68 @@ class RepertoireOutlineController extends ChangeNotifier
       _activeChapterPath = null;
       onActiveChapterMoved?.call(null);
     }
+    return const OutlineEditOutcome.ok();
   });
 
   Future<OutlineEditOutcome> moveLine({
     required String fromChapterPath,
     required int gameIndex,
     required String toChapterPath,
+  }) => moveLines(
+    fromChapterPath: fromChapterPath,
+    gameIndexes: {gameIndex},
+    toChapterPath: toChapterPath,
+  );
+
+  /// Moves the lines at [gameIndexes] into [toChapterPath] — before the line
+  /// now at [toIndex], or at the end — or reorders them when it is the same
+  /// chapter. Undo puts every line back at the index it had.
+  Future<OutlineEditOutcome> moveLines({
+    required String fromChapterPath,
+    required Set<int> gameIndexes,
+    required String toChapterPath,
+    int? toIndex,
   }) => _edit(() async {
-    final ok = await _service.moveLine(
+    final names = _lineNames(fromChapterPath, gameIndexes);
+    final moved = await _moveLinesNoted(
       fromChapterPath: fromChapterPath,
-      gameIndex: gameIndex,
+      gameIndexes: gameIndexes,
       toChapterPath: toChapterPath,
+      toIndex: toIndex,
     );
-    if (!ok) throw const OutlineEditException('That line is no longer there.');
-    _openChapters.add(toChapterPath);
-    // The active chapter's file changed under the screen; it must reload.
-    if (_isActive(fromChapterPath) || _isActive(toChapterPath)) {
-      onActiveChapterMoved?.call(_activeChapterPath);
+    if (moved == null) {
+      throw const OutlineEditException('That line is no longer there.');
     }
+    final sameFile = p.equals(fromChapterPath, toChapterPath);
+    // Dropped back where it was: nothing to say, nothing to undo.
+    if (sameFile && listEquals(moved.origin, moved.landed)) {
+      return const OutlineEditOutcome.ok();
+    }
+    final what = names.length == 1
+        ? '"${names.first}"'
+        : '${moved.landed.length} lines';
+    return OutlineEditOutcome.done(
+      message: sameFile
+          ? 'Reordered $what.'
+          : 'Moved $what to "${p.basenameWithoutExtension(toChapterPath)}".',
+      undo: () => _edit(() async {
+        final back = await _service.moveLines(
+          fromChapterPath: toChapterPath,
+          gameIndexes: moved.landed.toSet(),
+          toChapterPath: fromChapterPath,
+          toIndexes: moved.origin,
+        );
+        if (back.isEmpty) {
+          throw const OutlineEditException('Those lines are no longer there.');
+        }
+        _openChapters.add(fromChapterPath);
+        _noteChapterChanged(fromChapterPath);
+        _noteChapterChanged(toChapterPath);
+        return OutlineEditOutcome.done(
+          message: sameFile ? 'Put $what back.' : 'Moved $what back.',
+        );
+      }),
+    );
   });
 
   Future<OutlineEditOutcome> renameLine(
@@ -367,22 +501,88 @@ class RepertoireOutlineController extends ChangeNotifier
       newName.trim(),
     );
     if (!ok) throw const OutlineEditException('That line is no longer there.');
-    if (_isActive(chapterPath)) onActiveChapterMoved?.call(_activeChapterPath);
+    _noteChapterChanged(chapterPath);
+    return const OutlineEditOutcome.ok();
   });
 
-  Future<OutlineEditOutcome> deleteLine(
+  Future<OutlineEditOutcome> deleteLine(String chapterPath, int gameIndex) =>
+      deleteLines(chapterPath, {gameIndex});
+
+  /// Deletes the lines at [gameIndexes]. Undo restores each at its index.
+  Future<OutlineEditOutcome> deleteLines(
     String chapterPath,
-    int gameIndex,
+    Set<int> gameIndexes,
   ) => _edit(() async {
-    final ok = await _service.deleteLine(chapterPath, gameIndex);
-    if (!ok) throw const OutlineEditException('That line is no longer there.');
-    if (_isActive(chapterPath)) onActiveChapterMoved?.call(_activeChapterPath);
+    final names = _lineNames(chapterPath, gameIndexes);
+    final removed = await _service.deleteLines(chapterPath, gameIndexes);
+    if (removed.isEmpty) {
+      throw const OutlineEditException('That line is no longer there.');
+    }
+    _noteChapterChanged(chapterPath);
+    final what = names.length == 1
+        ? '"${names.first}"'
+        : '${removed.length} lines';
+    return OutlineEditOutcome.done(
+      message: 'Deleted $what.',
+      undo: () => _edit(() async {
+        await _service.restoreLines(chapterPath, removed);
+        _openChapters.add(chapterPath);
+        _noteChapterChanged(chapterPath);
+        return OutlineEditOutcome.done(message: 'Restored $what.');
+      }),
+    );
   });
+
+  /// [RepertoireOutlineService.moveLines] plus the bookkeeping every move
+  /// shares: the indexes the lines came from (what undo needs), the
+  /// destination unfolded, and the screen told when its file changed. Null
+  /// when none of the lines existed.
+  Future<({List<int> origin, List<int> landed})?> _moveLinesNoted({
+    required String fromChapterPath,
+    required Set<int> gameIndexes,
+    required String toChapterPath,
+    int? toIndex,
+  }) async {
+    final landed = await _service.moveLines(
+      fromChapterPath: fromChapterPath,
+      gameIndexes: gameIndexes,
+      toChapterPath: toChapterPath,
+      toIndex: toIndex,
+    );
+    if (landed.isEmpty) return null;
+    _openChapters.add(toChapterPath);
+    _noteChapterChanged(fromChapterPath);
+    _noteChapterChanged(toChapterPath);
+    return (origin: gameIndexes.toList()..sort(), landed: landed);
+  }
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
   bool _isActive(String chapterPath) =>
       _activeChapterPath != null && p.equals(_activeChapterPath!, chapterPath);
+
+  /// The active chapter's file changed under the screen; it must reload.
+  void _noteChapterChanged(String chapterPath) {
+    if (_isActive(chapterPath)) onActiveChapterMoved?.call(_activeChapterPath);
+  }
+
+  /// Names of the lines at [gameIndexes] as the outline last saw them, for
+  /// a toast; an unknown line is named by its number.
+  List<String> _lineNames(String chapterPath, Set<int> gameIndexes) {
+    final lines = _outline?.findChapter(chapterPath)?.lines;
+    return [
+      for (final i in gameIndexes.toList()..sort())
+        lines != null && i >= 0 && i < lines.length
+            ? lines[i].name
+            : 'line ${i + 1}',
+    ];
+  }
+
+  /// How a toast names a folder: "top level" for the repertoire itself.
+  String _folderLabel(String folderPath) =>
+      _rootPath != null && p.equals(folderPath, _rootPath!)
+      ? 'the top level'
+      : '"${p.basename(folderPath)}"';
 
   void _followActive(String oldPath, String newPath) {
     if (_isActive(oldPath) && !p.equals(oldPath, newPath)) {

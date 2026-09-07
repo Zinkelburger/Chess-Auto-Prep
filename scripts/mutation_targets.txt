@@ -1,0 +1,37 @@
+# Mutation-testing targets: `lib file|test file|extra tests to confirm against`
+#
+# These are deliberately the files that ALREADY look well tested — high line
+# coverage and a dedicated test file. A survivor here is the interesting kind:
+# the line runs, and nothing would notice if it were wrong.
+#
+# The THIRD field matters. The cheap pass runs only the second field, because
+# a campaign is dozens of test runs and the Flutter lock is machine-wide. But
+# almost every file below is exercised by more than its same-named test — at
+# the time of writing `line_extractor.dart` was imported by fifteen other test
+# files — so a mutant that file misses may well be caught next door. Survivors
+# are re-run against the third field before being reported, otherwise the score
+# is a lower bound and it sends people to write tests that already exist.
+lib/services/generation/tree_prune.dart|test/services/generation/tree_prune_test.dart|test/services/generation
+lib/features/tricks/services/trick_scoring.dart|test/features/tricks/trick_scoring_test.dart|test/features/tricks
+lib/services/fp_growth.dart|test/services/fp_growth_test.dart|test/services/coherence_service_test.dart test/features/coverage
+lib/services/crosstable_builder.dart|test/features/engine_tournament/crosstable_builder_test.dart|test/features/engine_tournament
+lib/services/repertoire_pgn_text.dart|test/services/repertoire_pgn_text_test.dart|
+lib/services/generation/line_extractor.dart|test/services/generation/line_extractor_test.dart test/services/generation/line_extractor_transposition_test.dart|test/services/generation
+lib/services/generation/export/move_annotation.dart|test/services/generation/export/move_annotation_test.dart|test/services/generation/export test/utils/move_metrics_test.dart
+lib/services/unified_analysis_builder.dart|test/services/unified_analysis_builder_test.dart|test/services/pgn_tree_core_test.dart
+lib/services/games_library/game_filter.dart|test/services/games_library/game_filter_test.dart|test/services/games_library test/features/games
+lib/services/generation/course/course_composer.dart|test/services/generation/course/course_composer_test.dart|test/services/generation/course
+lib/services/training/review_progress_store.dart|test/services/training/review_progress_store_test.dart|test/services/training
+lib/services/game_store/game_store.dart|test/services/game_store/game_store_test.dart|test/services/game_store test/services/storage/sqlite_recovery_test.dart
+lib/services/generation/skeleton_plan.dart|test/services/generation/skeleton_plan_test.dart|test/services/generation
+lib/features/eval_tree/services/eval_tree_layout_engine.dart|test/features/eval_tree/eval_tree_layout_engine_test.dart|test/features/eval_tree
+lib/services/generation/frontier_queue.dart|test/services/generation/frontier_queue_test.dart|test/services/generation
+# The PGN/tree core. Added after the first sweep: these carry the app's central
+# domain logic, all sit above 90% line coverage, and none had been measured.
+lib/services/pgn_parsing_service.dart|test/services/pgn_parsing_service_test.dart|test/properties/pgn_property_test.dart test/services/pgn_tree_core_test.dart test/services/pgn_sanitization_test.dart test/services/slice_filter_bounds_test.dart test/services/mainline_lexer_test.dart
+lib/models/opening_tree.dart|test/models/opening_tree_test.dart|test/properties/opening_tree_property_test.dart
+lib/models/move_tree.dart|test/models/move_tree_test.dart|test/core
+lib/utils/pgn_comment_utils.dart|test/utils/pgn_comment_utils_test.dart|test/properties/pgn_property_test.dart test/utils
+lib/services/generation/node_expander.dart|test/services/generation/node_expander_test.dart|test/services/generation
+lib/features/tactics/services/tactics_pgn_codec.dart|test/features/tactics/services/tactics_pgn_codec_test.dart|test/features/tactics
+lib/services/generation/tree_serialization.dart|test/services/generation/tree_serialization_test.dart|test/services/generation

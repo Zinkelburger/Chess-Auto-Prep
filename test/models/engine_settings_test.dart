@@ -13,13 +13,22 @@ void main() {
   });
 
   group('EngineSettings defaults', () {
-    test('new and reset settings use one worker and one inline thread', () {
+    test('new and reset settings use one core and the default hash', () {
       final fresh = EngineSettings.fresh();
       addTearDown(fresh.dispose);
-      expect(fresh.workers, 1);
-      expect(fresh.inlineThreads, 1);
-      expect(settings.workers, 1);
-      expect(settings.inlineThreads, 1);
+      expect(fresh.cores, 1);
+      expect(fresh.hashMb, kDefaultHashMb);
+      expect(settings.cores, 1);
+      expect(settings.hashMb, kDefaultHashMb);
+    });
+
+    test('hashMb clamps to its range instead of rejecting', () {
+      settings.hashMb = 4;
+      expect(settings.hashMb, kMinHashMb);
+      settings.hashMb = 1 << 20;
+      expect(settings.hashMb, kMaxHashMb);
+      settings.hashMb = 512;
+      expect(settings.hashMb, 512);
     });
 
     test('depth defaults to kDefaultDepth', () {
@@ -92,17 +101,31 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'engine_settings.depth': 25,
         'engine_settings.multi_pv': 5,
-        'engine_settings.workers': EngineSettings.systemCores,
-        'engine_settings.inline_threads': EngineSettings.systemCores,
+        'engine_settings.cores': EngineSettings.systemCores,
+        'engine_settings.hash_mb': 256,
       });
 
       await settings.loadFromPrefs();
 
       expect(settings.depth, 25);
       expect(settings.multiPv, 5);
-      expect(settings.workers, EngineSettings.systemCores);
-      expect(settings.inlineThreads, EngineSettings.systemCores);
+      expect(settings.cores, EngineSettings.systemCores);
+      expect(settings.hashMb, 256);
     });
+
+    test(
+      'loadFromPrefs keeps the larger of the old workers/threads pair',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'engine_settings.workers': 1,
+          'engine_settings.inline_threads': EngineSettings.systemCores,
+        });
+
+        await settings.loadFromPrefs();
+
+        expect(settings.cores, EngineSettings.systemCores);
+      },
+    );
 
     test('loadFromPrefs uses defaults for missing keys', () async {
       SharedPreferences.setMockInitialValues({});
@@ -111,8 +134,8 @@ void main() {
 
       expect(settings.depth, kDefaultDepth);
       expect(settings.multiPv, kDefaultMultiPv);
-      expect(settings.workers, 1);
-      expect(settings.inlineThreads, 1);
+      expect(settings.cores, 1);
+      expect(settings.hashMb, kDefaultHashMb);
     });
   });
 }

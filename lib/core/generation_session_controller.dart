@@ -80,7 +80,7 @@ class GenerationSessionController extends ChangeNotifier
 
   /// The database to use for this run, or null when off/absent.
   MasterGamesDb? _masterDbFor(TreeBuildConfig config) {
-    if (!config.useMasterGames) return null;
+    if (!config.usesMasterGames) return null;
     final service = masterGames();
     if (!service.isAvailableForGeneration) return null;
     return service.db;
@@ -430,7 +430,7 @@ class GenerationSessionController extends ChangeNotifier
   /// exactly as it does today.  Does nothing when the database already has
   /// games or when the user declined the wait earlier this session.
   Future<void> _downloadMasterGamesPhase(TreeBuildConfig config) async {
-    if (!config.useMasterGames || !config.downloadMasterGamesIfMissing) return;
+    if (!config.usesMasterGames || !config.downloadMasterGamesIfMissing) return;
     if (_masterGamesDownloadDeclined || _cancelRequested) return;
     final service = masterGames();
     if (service.hasGames) return;
@@ -1043,11 +1043,15 @@ class GenerationSessionController extends ChangeNotifier
               'not written again.'
         : '';
     lastRunSummary =
-        'Complete in $elapsedLabel: ${tree.totalNodes} nodes, '
+        '${tree.buildComplete ? 'Complete' : 'Incomplete search'} in $elapsedLabel: ${tree.totalNodes} nodes, '
         '${analysis.selectedCount} repertoire moves, '
         '${extracted.lines.length} lines$pruneNote'
         '${_courseNote()}.$duplicateNote${extracted.trapsOnlyNote}'
         '$lastModelGameNote';
+    if (tree.root.historyAware) {
+      lastRunSummary +=
+          ' ${config.isRollingSearch ? 'Fast policy estimate (approximate)' : 'Expected-score estimate'}: ${tree.root.expectimaxValue.toStringAsFixed(4)}; bounds [${tree.root.valueLower.toStringAsFixed(4)}, ${tree.root.valueUpper.toStringAsFixed(4)}].';
+    }
     if (config.isChessDbBook) {
       lastRunSummary = '$lastRunSummary ${_bookSourceNote()}';
     }
@@ -1463,10 +1467,14 @@ class GenerationSessionController extends ChangeNotifier
     if (playedPlies != moves.length) {
       return 'Could not play ${moves.join(' ')} from the repertoire start.';
     }
-    if (_databasePath != null &&
+    if (_databasePath == null ||
         !p.equals(_databasePath!, target.repertoireFilePath)) {
-      // The bundle belongs to another file; never merge across repertoires.
-      clearTree();
+      // Generate can be opened immediately after selecting a chapter. Wait
+      // for its saved analysis before adding a probe, so a fast click cannot
+      // replace a database whose background load has not finished yet.
+      await loadSavedTreeFor(target.repertoireFilePath);
+      if (isDisposed) return 'Generation was closed.';
+      if (_isGenerating) return 'A generation is already running.';
     }
 
     final base =
@@ -1481,6 +1489,13 @@ class GenerationSessionController extends ChangeNotifier
       startFen: fen,
       playAsWhite: target.playAsWhite,
       maxPly: target.plies,
+      // Coverage answers and master extensions belong to line planning.
+      // A position search observes the depth the user asked for.
+      coverMinProb: 0,
+      masterDepthBonusPlies: 0,
+      engineThreads: target.engineThreads == null
+          ? null
+          : clampEngineThreads(target.engineThreads!),
       timeBudgetMinutes: 0,
       buildMode: BuildMode.stockfishExpectimax,
       pgnFilePaths: const [],

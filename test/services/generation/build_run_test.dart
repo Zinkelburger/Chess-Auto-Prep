@@ -18,6 +18,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'engine_fakes.dart';
 import 'generation_test_helpers.dart';
 
+class _LimitedPool extends FakeStockfishPool {
+  _LimitedPool() : super(workers: 8);
+  @override
+  int get concurrencyLimit => 2;
+}
+
 const _config = TreeBuildConfig(
   startFen: kStandardStartFen,
   playAsWhite: true,
@@ -208,6 +214,15 @@ void main() {
   });
 
   group('expansionLanes', () {
+    test('leftover engines cannot exceed the active build worker limit', () {
+      expect(
+        _run(
+          config: _config.copyWith(engineThreads: 8),
+          pool: _LimitedPool(),
+        ).expansionLanes,
+        2,
+      );
+    });
     test('one per worker under the thread budget, one without an engine', () {
       expect(
         _run(pool: FakeStockfishPool(workers: 4)).expansionLanes,

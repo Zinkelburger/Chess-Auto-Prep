@@ -261,6 +261,8 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
       // The count after import, not the file's: a study's variations are
       // written as lines of their own.
       _say(done(created.gameCount));
+    } on RepertoireExistsException {
+      _say(AppMessages.repertoireExists(name), isError: true);
     } catch (e) {
       debugPrint('Create repertoire failed: $e');
       _say(AppMessages.createRepertoireFailed, isError: true);

@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart' show Chess, Position;
 import 'package:flutter/material.dart';
 
 import '../../../models/repertoire_line.dart';
+import '../../../widgets/common/choice_field.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/chess_board_widget.dart';
@@ -54,6 +55,7 @@ class OpeningReviewDetailDialog extends StatefulWidget {
     required this.games,
     required this.bookEnd,
     required this.loadLines,
+    this.byMe = true,
     this.flipped = false,
     this.onEditInBuilder,
     this.onOpenGame,
@@ -65,6 +67,7 @@ class OpeningReviewDetailDialog extends StatefulWidget {
     required OpeningReviewEntry entry,
     required bool bookEnd,
     required List<ReviewGameSource> games,
+    bool byMe = true,
     bool flipped = false,
     VoidCallback? onEditInBuilder,
     ValueChanged<int>? onOpenGame,
@@ -73,12 +76,13 @@ class OpeningReviewDetailDialog extends StatefulWidget {
   }) {
     return OpeningReviewDetailDialog(
       key: key,
-      chapterName: entry.chapterName,
+      chapterName: entry.placeName,
       matchedPlies: entry.matchedPlies,
       playedDisplay: entry.playedDisplay,
       expectedDisplay: entry.expectedDisplay,
       games: games,
       bookEnd: bookEnd,
+      byMe: byMe,
       flipped: flipped,
       onEditInBuilder: onEditInBuilder,
       onOpenGame: onOpenGame,
@@ -99,6 +103,10 @@ class OpeningReviewDetailDialog extends StatefulWidget {
 
   /// Whether the prep simply ran out here (as opposed to a wrong move).
   final bool bookEnd;
+
+  /// Whether the deviating move was mine; false for an opponent's move the
+  /// book has no answer to.
+  final bool byMe;
 
   /// Board orientation: true when the reviewing player had Black.
   final bool flipped;
@@ -188,7 +196,10 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
   Widget _buildHeader(BuildContext context) {
     final subtitle = widget.bookEnd
         ? 'Your book ends here — the game continued ${widget.playedDisplay}.'
-        : 'You played ${widget.playedDisplay} — book plays '
+        : widget.byMe
+        ? 'You played ${widget.playedDisplay} — book plays '
+              '${widget.expectedDisplay}.'
+        : 'They played ${widget.playedDisplay} — book covers '
               '${widget.expectedDisplay}.';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
@@ -343,21 +354,14 @@ class _OpeningReviewDetailDialogState extends State<OpeningReviewDetailDialog> {
   }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      child: DropdownButton<int>(
+      child: ChoiceField<int>(
         value: value,
-        isExpanded: true,
-        isDense: true,
         style: AppTextStyles.body.copyWith(fontSize: 13),
         items: [
           for (var i = 0; i < labels.length; i++)
-            DropdownMenuItem(
-              value: i,
-              child: Text(labels[i], overflow: TextOverflow.ellipsis),
-            ),
+            ChoiceItem(value: i, label: labels[i]),
         ],
-        onChanged: (i) {
-          if (i != null) onChanged(i);
-        },
+        onChanged: onChanged,
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -28,6 +29,64 @@ void main() {
       ),
     );
   }
+
+  testWidgets(
+    'large generated trees prepare in an isolate and publish their selection',
+    (tester) async {
+      final tree = makeEvalTreeTestTree()..totalNodes = 1001;
+      final selected = Completer<EvalTreePositionSelection>();
+      await tester.pumpWidget(
+        buildHarness(
+          child: EvalTreeTab(
+            currentRepertoire: _testRepertoire,
+            isWhiteRepertoire: true,
+            generatedTree: tree,
+            treeResetCounter: 0,
+            onPositionSelected: (value) {
+              if (!selected.isCompleted) selected.complete(value);
+            },
+          ),
+        ),
+      );
+      // Real isolate events need wall time; widget continuations need the
+      // test binding's microtasks and frames pumped as well.
+      for (var i = 0; i < 200 && !selected.isCompleted; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      expect(selected.isCompleted, isTrue);
+      expect((await selected.future).fen, tree.root.fen);
+      await tester.pumpAndSettle();
+      expect(find.text('EXP EASE'), findsOneWidget);
+    },
+  );
+
+  testWidgets('clearing a tree invalidates an unfinished preparation', (
+    tester,
+  ) async {
+    final tree = makeEvalTreeTestTree()..totalNodes = 1001;
+    var selections = 0;
+    Widget tab(int reset) => buildHarness(
+      child: EvalTreeTab(
+        currentRepertoire: _testRepertoire,
+        isWhiteRepertoire: true,
+        generatedTree: tree,
+        treeResetCounter: reset,
+        onPositionSelected: (_) => selections++,
+      ),
+    );
+    await tester.pumpWidget(tab(0));
+    await tester.pumpWidget(tab(1));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    expect(selections, 0);
+    expect(find.text('EXP EASE'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('tapping a candidate row navigates into that line', (
     WidgetTester tester,

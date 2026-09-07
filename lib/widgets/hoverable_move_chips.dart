@@ -15,6 +15,7 @@ import '../core/board_preview_controller.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/chess_utils.dart' show fenAfterMoves;
+import '../utils/san_display.dart';
 
 /// Compact inline move text with optional hover board preview.
 class HoverableMoveChips extends StatefulWidget {
@@ -141,7 +142,7 @@ class _HoverableMoveChipsState extends State<HoverableMoveChips> {
       }
       spans.add(
         TextSpan(
-          text: moves[i],
+          text: displaySan(context, moves[i]),
           style: TextStyle(
             fontSize: widget.fontSize,
             fontFamily: AppTextStyles.monoFamily,

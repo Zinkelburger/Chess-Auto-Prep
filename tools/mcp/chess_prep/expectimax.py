@@ -39,6 +39,8 @@ import json
 import os
 import shutil
 import signal
+import sqlite3
+import struct
 import subprocess
 import sys
 import time
@@ -64,13 +66,8 @@ ENGINES_DIR = REPO_ROOT / "assets" / "executables"
 #: `make` on a cold tree_builder is ~40 s; give it room.
 BUILD_TIMEOUT = 900.0
 
-#: Scoring a saved tree (`--build-now`) re-verifies the selected moves with a
-#: deeper search, so it is not instant.
+#: Re-exporting a large saved tree still needs a bounded process timeout.
 SCORE_TIMEOUT = 900.0
-
-#: The builder always gives the root at least this many candidates, whatever
-#: `multipv` says (src/main.c: `root_multipv = our_multipv < 10 ? 10 : ...`).
-ROOT_MULTIPV_FLOOR = 10
 
 
 # ── Locations ──────────────────────────────────────────────────────────────
@@ -218,6 +215,28 @@ def build_env(lib: Path) -> dict:
     return env
 
 
+def _links_onnxruntime(binary: Path, env: dict) -> bool:
+    """Whether `binary` was actually compiled against ONNX Runtime.
+
+    The builder degrades to the Lichess API when it cannot load the Maia
+    model, and a binary compiled without ONNX cannot load it at all -- so a
+    stale build turns an explicitly Maia-only run into a Lichess run that
+    then dies on the first 401.  `ldd` is the cheap way to tell the two
+    apart before we spend ten minutes finding out.
+    """
+    try:
+        out = subprocess.run(  # noqa: S603 - fixed argv, our own binary
+            ["ldd", str(binary)],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return True  # No ldd (or it hung): assume fine rather than rebuild.
+    return "libonnxruntime" in (out.stdout or "")
+
+
 def prepare_toolchain(rebuild: bool = False) -> dict:
     """Everything a run needs, compiling the builder on first use."""
     if not BUILDER_DIR.is_dir():
@@ -232,10 +251,22 @@ def prepare_toolchain(rebuild: bool = False) -> dict:
     lib = _link_farm()
     env = build_env(lib)
 
+    # A binary that predates the ONNX link farm is worse than a missing one:
+    # it runs, ignores --maia-model, and quietly builds the wrong tree.
+    stale = BUILDER_BIN.is_file() and not _links_onnxruntime(BUILDER_BIN, env)
+
     built = False
-    if rebuild or not BUILDER_BIN.is_file():
+    if rebuild or stale or not BUILDER_BIN.is_file():
         jobs = str(max(1, (os.cpu_count() or 2) // 2))
         try:
+            if stale:
+                subprocess.run(  # noqa: S603 - our own Makefile
+                    ["make", "clean"],
+                    cwd=str(BUILDER_DIR),
+                    env=env,
+                    capture_output=True,
+                    timeout=BUILD_TIMEOUT,
+                )
             result = subprocess.run(  # noqa: S603 - our own Makefile
                 ["make", "-j", jobs],
                 cwd=str(BUILDER_DIR),
@@ -254,6 +285,16 @@ def prepare_toolchain(rebuild: bool = False) -> dict:
             tail = "\n".join((result.stderr or result.stdout).strip().splitlines()[-12:])
             raise ToolError(f"Building tree_builder failed:\n{tail}")
         built = True
+
+    # Refuse rather than fall back: every caller of this module asks for a
+    # Maia-only tree, and the Lichess path needs a token we do not have.
+    if not _links_onnxruntime(BUILDER_BIN, env):
+        raise ToolError(
+            f"{BUILDER_BIN} has no ONNX Runtime support, so it cannot load "
+            "Maia and would silently build a Lichess tree instead. Rebuild "
+            f"it with `make -C {BUILDER_DIR}` after making libonnxruntime "
+            f"visible (the link farm at {lib} does this)."
+        )
 
     return {
         "builder": BUILDER_BIN,
@@ -513,6 +554,74 @@ def _subtree_size(node: dict) -> int:
     return 1 + sum(_subtree_size(c) for c in node.get("children") or [])
 
 
+
+def root_engine_shortlist(directory: Path, fen: str | None) -> list[dict] | None:
+    """Stockfish's own MultiPV at the root, straight out of the run's cache.
+
+    The tree only builds the candidates that survive the eval-loss gate, so
+    the ranking can legitimately come back with one row. The engine still
+    looked at ten, and "how much worse is the move I was going to play"
+    is the question that follows every such answer -- so hand it over with
+    the result instead of making the caller decode `multipv_cache` by hand.
+
+    Returns None whenever the cache cannot be read or decoded: this is a
+    convenience on top of the real answer, never a reason to fail a result.
+    """
+    if not fen:
+        return None
+    db = directory / f"{BASE}.db"
+    if not db.is_file():
+        return None
+    try:
+        import chess
+    except ImportError:
+        return None
+
+    # The cache keys on the position, not the game: it stores the first four
+    # FEN fields, so the halfmove/fullmove counters have to come off first.
+    key = " ".join(fen.split()[:4])
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            row = con.execute(
+                "SELECT num_lines, lines_blob FROM multipv_cache "
+                "WHERE fen IN (?, ?) ORDER BY num_pvs DESC, depth DESC LIMIT 1",
+                (key, fen),
+            ).fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+    if not row or not row[1]:
+        return None
+
+    count, blob = int(row[0]), row[1]
+    if count <= 0 or len(blob) < count * 40:
+        return None
+    stride = len(blob) // count
+
+    board = chess.Board(fen)
+    out: list[dict] = []
+    for i in range(count):
+        entry = blob[i * stride : (i + 1) * stride]
+        try:
+            uci = entry[0:16].split(b"\0")[0].decode("ascii")
+            cp, depth = struct.unpack("<ii", entry[32:40])
+            move = chess.Move.from_uci(uci)
+        except (UnicodeDecodeError, struct.error, ValueError):
+            return None
+        if move not in board.legal_moves:
+            return None  # Stride guessed wrong; a partial table would mislead.
+        out.append({"move": board.san(move), "eval_cp": cp, "depth": depth})
+    if not out:
+        return None
+
+    best = out[0]["eval_cp"]
+    for r in out:
+        r["cp_behind_best"] = r["eval_cp"] - best
+    return out
+
+
 def root_table(tree_path: Path) -> dict:
     """The ranking: every candidate at the root with its expectimax value.
 
@@ -531,6 +640,7 @@ def root_table(tree_path: Path) -> dict:
     if not isinstance(root, dict):
         raise ToolError(f"{tree_path.name} has no tree in it yet.")
 
+    rolling = (data.get("config") or {}).get("search_algorithm") == "rolling"
     children = root.get("children") or []
     if not children:
         raise ToolError(
@@ -545,22 +655,34 @@ def root_table(tree_path: Path) -> dict:
         rows.append(
             {
                 "move": child.get("move_san") or child.get("move_uci"),
-                "expectimax": round(value, 4) if value is not None else None,
+                "expectimax": value,
+                "selected": child.get("is_repertoire_move", False),
+                "bounds": [child.get("value_lower", 0), child.get("value_upper", 1)],
                 "eval_cp": child.get("engine_eval_cp"),
                 "nodes": _subtree_size(child),
                 "max_ply": max(plies),
                 "avg_leaf_ply": round(sum(plies) / len(plies), 2),
             }
         )
-    rows.sort(key=lambda r: (r["expectimax"] is None, -(r["expectimax"] or 0)))
+    if rolling:
+        rows.sort(key=lambda r: (not r["selected"], r["move"]))
+    else:
+        rows.sort(key=lambda r: (r["expectimax"] is None, -(r["expectimax"] or 0)))
 
     scored = [r for r in rows if r["expectimax"] is not None]
     margin = None
-    if len(scored) >= 2:
+    if not rolling and len(scored) >= 2:
         margin = round(scored[0]["expectimax"] - scored[1]["expectimax"], 4)
 
     return {
-        "best": scored[0]["move"] if scored else None,
+        "best": next((r["move"] for r in rows if r["selected"]), scored[0]["move"] if scored and not rolling else None),
+        "score_kind": "committed Fast policy estimate (approximate search)" if rolling else "expected-score estimate",
+        "search_method": "rolling" if rolling else "pure",
+        "search_label": "Fast (4-ply, approximate)" if rolling else "Pure",
+        "decision_lookahead": {"horizon": root.get("decision_horizon"), "value": root.get("decision_value")} if rolling else None,
+        "candidate_comparison": "Uncommitted siblings were not extended to the same final horizon; do not rank by these values." if rolling else "Common finite-horizon objective",
+        "result_status": ("complete approximate policy" if rolling else "complete") if data.get("build_complete") else "incomplete: provisional preparation",
+        "root_bounds": [root.get("value_lower", 0), root.get("value_upper", 1)],
         "margin_over_second": margin,
         "root_expectimax": (
             round(root["expectimax_value"], 4)
@@ -597,16 +719,19 @@ def builder_argv(chain: dict, base: Path, position: dict, args: dict) -> list[st
         if value is not None:
             argv.extend([flag, str(value)])
 
-    add("-d", "plies", 8)
+    method = args.get("search", "pure")
+    if method == "fast":
+        method = "rolling"  # Keep the versioned saved-tree identity.
+    if method not in ("pure", "rolling"):
+        raise ToolError("search must be pure or fast (rolling is an alias)")
+    argv.extend(["--search", method])
+    add("-d", "plies", 4)
     add("-e", "eval_depth", 16)
     add("-t", "threads", 1)
-    add("-p", "min_probability", 0.01, float)
-    add("--our-multipv", "multipv", 5)
     add("--max-eval-loss", "max_eval_loss", 40)
-    add("--opp-max-children", "opp_max_children", 3)
-    add("--opp-mass", "opp_mass", 0.85, float)
     add("--maia-elo", "maia_elo", 2200)
-    add("--maia-min-prob", "maia_min_prob", 0.08, float)
+
+    argv.append("--maia-only")  # Legacy master arguments cannot change this policy.
 
     name = (args.get("name") or "").strip()
     if name:
@@ -626,6 +751,17 @@ def argv_with_plies(argv: list[str], plies: int) -> list[str]:
         out[out.index("-d") + 1] = str(plies)
         return out
     return argv_with(out, "-d", str(plies))
+
+
+def argv_with_threads(argv: list[str], threads: int) -> list[str]:
+    if threads < 1:
+        raise ToolError("threads must be positive")
+    out = list(argv)
+    for flag in ("-t", "--threads"):
+        if flag in out:
+            out[out.index(flag) + 1] = str(threads)
+            return out
+    return argv_with(out, "-t", str(threads))
 
 
 def _slug(text: str) -> str:
@@ -747,15 +883,18 @@ def register_expectimax_tools(registry: Any) -> None:
         }
         _write_run(directory, state)
 
-        multipv = int(args.get("multipv") or 5)
         return {
             "started": True,
             "id": directory.name,
             "line": position["line"],
             "fen": position["fen"],
             "color": "White" if position["color"] == "w" else "Black",
-            "root_candidates": max(ROOT_MULTIPV_FLOOR, multipv),
-            "plies": int(args.get("plies") or 8),
+            "root_candidates": "every legal move, then the explicit engine-loss constraint",
+            "opponent_model": "Maia throughout",
+            "score_kind": "committed Fast policy estimate" if args.get("search") in ("fast", "rolling") else "expected-score estimate, not calibrated win probability",
+            "search_method": "rolling" if args.get("search") in ("fast", "rolling") else "pure",
+            "search_label": "Fast (4-ply, approximate)" if args.get("search") in ("fast", "rolling") else "Pure",
+            "plies": int(args.get("plies") or 4),
             "directory": str(directory),
             "log": str(log_path),
             "pid": process.pid,
@@ -850,6 +989,9 @@ def register_expectimax_tools(registry: Any) -> None:
             table = _score(directory, state, prepare_toolchain())
             scored = True
         position = state.get("position") or {}
+        shortlist = root_engine_shortlist(directory, position.get("fen"))
+        if shortlist and len(shortlist) > len(table.get("candidates") or []):
+            table["engine_shortlist"] = shortlist
         table.update(
             {
                 "id": directory.name,
@@ -866,7 +1008,10 @@ def register_expectimax_tools(registry: Any) -> None:
                     "move; eval_cp is Stockfish after the move from White's "
                     "side, so lower is better for Black. Uneven nodes/"
                     "avg_leaf_ply across candidates means the build was "
-                    "stopped early — resume it before trusting close calls."
+                    "stopped early — resume it before trusting close calls. "
+                    "engine_shortlist, when present, is Stockfish's own "
+                    "MultiPV at the root: what the engine thought of the "
+                    "candidates the tree did not build out."
                 ),
             }
         )
@@ -892,6 +1037,8 @@ def register_expectimax_tools(registry: Any) -> None:
         argv = _build_argv(directory, state, chain)
         if args.get("plies") is not None:
             argv = argv_with_plies(argv, int(args["plies"]))
+        if args.get("threads") is not None:
+            argv = argv_with_threads(argv, int(args["threads"]))
 
         log_path = directory / LOG_FILE
         try:
@@ -924,16 +1071,13 @@ def register_expectimax_tools(registry: Any) -> None:
 
     registry._add(
         "expectimax_run",
-        "Start an expectimax opening-tree build and return immediately. Maia "
-        "supplies the opponent's replies with probabilities, Stockfish the "
-        "evaluations, and folding the tree back gives each candidate a "
-        "practical win probability rather than a centipawn score — which is "
-        "the number you want when several moves are objectively equal. Give "
-        "it a move list ('1. d4 Nf6 2. Nf3 g6') or a FEN. The root always "
-        f"gets at least {ROOT_MULTIPV_FLOOR} candidates, so it answers 'which "
-        "of my many options here' directly. Builds take tens of minutes; they "
-        "are breadth-first and resumable, so stopping early still gives a "
-        "usable answer.",
+        "Start an expectimax build: pure (full horizon) or fast (approximate, "
+        "four-ply lookahead at each own turn, committing only our next move). Scores every legal own move "
+        "at fixed Stockfish depth, retains those within max_eval_loss, and explores "
+        "every positive-probability opponent reply. Opponent replies come only from Maia; master databases are not used. Values are expected-score estimates, not calibrated "
+        "human win rates. Exponential cost: start with 4 plies. Interrupted trees "
+        "are incomplete and resumable, not solved answers. Draws are immediately "
+        "claimed at threefold/100 half-moves; repetition history starts at the root.",
         _obj(
             {
                 "moves": _s(
@@ -947,31 +1091,19 @@ def register_expectimax_tools(registry: Any) -> None:
                     "ending on Black's move is White to move."
                 ),
                 "name": _s("Label for the run and the PGN headers."),
-                "plies": _i("Depth in half-moves (default 8)."),
+                "search": _s("pure (default) or fast (rolling is a compatibility alias). Fast commits short-lookahead choices; it is not a full-horizon optimum."),
+                "plies": _i("Preparation length in half-moves, 1–64 (default 4). Fast still branches on every modeled opponent reply."),
                 "eval_depth": _i("Stockfish search depth per node (default 16)."),
-                "multipv": _i(
-                    "Candidates at our non-root moves (default 5). The root "
-                    f"always gets at least {ROOT_MULTIPV_FLOOR}."
-                ),
+
                 "max_eval_loss": _i(
                     "Drop our candidates worse than the best by this many "
-                    "centipawns (default 40)."
+                    "centipawns (default 40), including at the root in Pure and Fast."
                 ),
-                "opp_max_children": _i(
-                    "Maia replies kept per opponent move (default 3)."
-                ),
-                "opp_mass": _n(
-                    "Probability mass to cover per opponent move (default "
-                    "0.85)."
-                ),
+
+
                 "maia_elo": _i("Strength Maia predicts for (default 2200)."),
-                "maia_min_prob": _n(
-                    "Ignore Maia replies below this probability (default 0.08)."
-                ),
-                "min_probability": _n(
-                    "Stop exploring a line below this cumulative probability "
-                    "(default 0.01)."
-                ),
+
+
                 "threads": _i(
                     "Parallel Stockfish engines (default 1; increase to use more CPU)."
                 ),
@@ -1027,13 +1159,14 @@ def register_expectimax_tools(registry: Any) -> None:
 
     registry._add(
         "expectimax_resume",
-        "Carry on building a stopped run, optionally to a greater depth. Every "
+        "Carry on building a stopped run, optionally with more workers or a greater depth. Every "
         "evaluation already computed is cached, so resuming is much cheaper "
         "than starting over.",
         _obj(
             {
                 "id": _s("Run id (default: the most recent)."),
                 "plies": _i("New depth in half-moves (default: as before)."),
+                "threads": _i("Parallel Stockfish workers (default: as before)."),
             }
         ),
         expectimax_resume,

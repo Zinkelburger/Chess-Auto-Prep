@@ -2,10 +2,15 @@
 ///
 /// Three columns — the plan so far, the board (with engine and database
 /// under it so the user can look around), and the current question — over
-/// four phases: Start (where does this begin, what to prefill from), Choices
-/// (the walk), Plan (review the chapters), then hand-off to [PlanRunner],
-/// which creates the chapters and builds them while the user is back in the
-/// builder watching the outline fill in.
+/// four phases: Start (where does this begin, and is the walk of the book or
+/// of the user's own games), Choices (the walk), Plan (review the chapters),
+/// then hand-off to [PlanRunner], which creates the chapters and builds them
+/// while the user is back in the builder watching the outline fill in.
+///
+/// "My games" is the planner's answer to *turn my games into a repertoire*:
+/// the same questions, asked at the positions the user actually reached,
+/// with what they played pre-ticked — so the repertoire is theirs, decision
+/// by decision, rather than a dump of every line they ever played.
 library;
 
 import 'dart:async';
@@ -109,9 +114,15 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
   );
   final List<String> _redo = [];
   final FocusNode _keys = FocusNode(debugLabel: 'planner-keys');
-  bool _useOwnGames = true;
-  String? _ownGamesNote;
+  PlanBasis _basis = PlanBasis.book;
   bool _preparing = false;
+
+  /// The user's games as this colour, read once when the screen opens so the
+  /// start card can say how many there are before anything is chosen. Null
+  /// until read; the counts are empty when there are no accounts or games.
+  late final Future<PlanKnowledge> _ownGames = _readOwnGames();
+  int? _ownGamesCount;
+  String? _ownGamesNote;
 
   // Walk-phase state.
   final Set<String> _selected = {};
@@ -131,6 +142,13 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
   void initState() {
     super.initState();
     _plan.addListener(_onPlanChanged);
+    // The read starts now; the start card repaints when it lands (always a
+    // later microtask, so never from inside initState).
+    unawaited(
+      _ownGames.then((_) {
+        if (mounted) setState(() {});
+      }),
+    );
   }
 
   @override
@@ -170,9 +188,11 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
   // ── Phase transitions ──────────────────────────────────────────────────
 
   Future<void> _begin() async {
+    if (_basis == PlanBasis.ownGames && (_ownGamesCount ?? 0) == 0) return;
     setState(() => _preparing = true);
     _plan.elo = widget.defaultElo;
     _plan.minShare = kPlanMinShare;
+    _plan.basis = _basis;
     _plan.knowledge = await _buildKnowledge();
     if (!mounted) return;
     setState(() => _preparing = false);
@@ -184,14 +204,19 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
       for (final c in widget.outline?.allChapters ?? const <OutlineChapter>[])
         for (final l in c.lines ?? const <OutlineLine>[]) l.moves,
     ];
-    var knowledge = PlanKnowledge(
+    final own = await _ownGames;
+    return own.copyWith(
       chapterMoves: PlanKnowledge.countOurMovesInLines(
         lines,
         isWhite: widget.isWhite,
       ),
     );
-    if (!_useOwnGames) return knowledge;
+  }
 
+  /// Count the user's moves and their opponents' replies across every
+  /// account in Settings. Fills [_ownGamesCount] and [_ownGamesNote] for the
+  /// start card; the caller repaints.
+  Future<PlanKnowledge> _readOwnGames() async {
     final accounts = <(String, String)>[
       if ((widget.chesscomUsername ?? '').isNotEmpty)
         ('chesscom', widget.chesscomUsername!),
@@ -217,14 +242,16 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         // Missing cache is not an error; the column just stays empty.
       }
     }
-    _ownGamesNote = accounts.isEmpty
-        ? 'No accounts in Settings, so nothing to read.'
+    final colour = widget.isWhite ? 'White' : 'Black';
+    final note = accounts.isEmpty
+        ? 'No accounts in Settings, so there are no games to walk.'
         : totalGames == 0
-        ? 'No games of yours as ${widget.isWhite ? 'White' : 'Black'} in '
-              'Player Analysis yet.'
-        : 'Read $totalGames of your games as '
-              '${widget.isWhite ? 'White' : 'Black'}.';
-    return knowledge.copyWith(ownMoves: moves, ownReplies: replies);
+        ? 'No games of yours as $colour in Player Analysis yet.'
+        : '$totalGames of your games as $colour. Every position you reached '
+              'often enough is a question, with what you played pre-ticked.';
+    _ownGamesCount = totalGames;
+    _ownGamesNote = note;
+    return PlanKnowledge(ownMoves: moves, ownReplies: replies);
   }
 
   static void _merge(MoveCounts into, MoveCounts from) {
@@ -337,7 +364,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     }
     if (_plan.phase == PlanPhase.start) {
       if (event.logicalKey == LogicalKeyboardKey.enter) {
-        if (!_preparing) unawaited(_begin());
+        if (!_preparing && _canBegin) unawaited(_begin());
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -828,32 +855,47 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             border: OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 8),
-        // Lives here rather than on the review card: the games are read once,
-        // when the walk starts, and they decide which replies come
-        // pre-ticked. By review time the answer has already been used.
-        CheckboxListTile(
-          value: _useOwnGames,
-          onChanged: _preparing
-              ? null
-              : (v) => setState(() => _useOwnGames = v ?? false),
-          controlAffinity: ListTileControlAffinity.leading,
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text(
-            'Prefer lines I play in my games',
-            style: TextStyle(fontSize: 13),
-          ),
-          subtitle: _ownGamesNote == null
-              ? null
-              : Text(_ownGamesNote!, style: AppTextStyles.caption),
+        const SizedBox(height: 20),
+        const Text(
+          'What should the questions walk?',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
+        const SizedBox(height: 8),
+        // Two walks, not a preference: the book asks at its tabiyas; your
+        // games ask at every position you actually reached, so answering
+        // them all turns your games into a repertoire.
+        SegmentedButton<PlanBasis>(
+          segments: const [
+            ButtonSegment(
+              value: PlanBasis.book,
+              label: Text('Opening book', style: TextStyle(fontSize: 12)),
+            ),
+            ButtonSegment(
+              value: PlanBasis.ownGames,
+              label: Text('My games', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+          selected: {_basis},
+          showSelectedIcon: false,
+          onSelectionChanged: _preparing
+              ? null
+              : (sel) => setState(() => _basis = sel.first),
+        ),
+        const SizedBox(height: 6),
+        Text(switch (_basis) {
+          PlanBasis.book =>
+            'Asks where the opening book forks: which of the main systems '
+                'you play, and which of the opponent\'s moves get a line.',
+          PlanBasis.ownGames => _ownGamesNote ?? 'Reading your games…',
+        }, style: AppTextStyles.caption),
         const SizedBox(height: 16),
         Row(
           children: [
             const Spacer(),
             FilledButton.icon(
-              onPressed: _preparing ? null : () => unawaited(_begin()),
+              onPressed: _preparing || !_canBegin
+                  ? null
+                  : () => unawaited(_begin()),
               icon: _preparing
                   ? const SizedBox(
                       width: 14,
@@ -861,13 +903,16 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.arrow_forward, size: 18),
-              label: Text(_preparing ? 'Reading your games…' : 'Next'),
+              label: Text(_preparing ? 'Preparing…' : 'Next'),
             ),
           ],
         ),
       ],
     );
   }
+
+  /// Walking the book needs nothing; walking your games needs some.
+  bool get _canBegin => _basis == PlanBasis.book || (_ownGamesCount ?? 0) > 0;
 
   /// White's first move — the same four for both colours: a Black repertoire
   /// is organised by what White does, and the user plays Black's reply on the
@@ -910,6 +955,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         : ours
         ? 'Pick your move — click a row or play it on the board. Enter '
               'continues, Backspace goes back.'
+        : _plan.basis == PlanBasis.ownGames
+        ? 'Ticked replies are set up as their own lines — the ones you met '
+              'in ${_plan.ownFloor} games or more come ticked. Play a move on '
+              'the board to add a reply.'
         : 'Ticked replies are set up as their own lines; a big new system '
               'becomes its own chapter. Play a move on the board to add a '
               'reply.';
@@ -922,18 +971,34 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Both sides flex: the games walk adds "N of your games" to the
+              // right-hand label, and a long line name on the left, so a Row
+              // of two intrinsic Texts overflows a narrow card.
               Row(
                 children: [
-                  Text(
-                    step.positionName ?? _movesLabel(step.moves),
-                    style: AppTextStyles.caption,
+                  Flexible(
+                    child: Text(
+                      step.positionName ?? _movesLabel(step.moves),
+                      style: AppTextStyles.caption,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const Spacer(),
-                  Text(
-                    ours
-                        ? '${whiteToMove ? 'White' : 'Black'} (you) to move'
-                        : 'Opponent to move',
-                    style: AppTextStyles.caption,
+                  const SizedBox(width: 12),
+                  // Expanded, not Flexible: it takes the rest of the row so
+                  // the label stays hard right, as the Spacer used to keep it.
+                  Expanded(
+                    child: Text(
+                      [
+                        if (_plan.basis == PlanBasis.ownGames)
+                          '${step.ownGames} of your games',
+                        ours
+                            ? '${whiteToMove ? 'White' : 'Black'} (you) to move'
+                            : 'Opponent to move',
+                      ].join(' · '),
+                      style: AppTextStyles.caption,
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -1109,9 +1174,15 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'No more ECO codes from here. ${ours ? 'You' : 'Your opponent'} to '
-            'move · ${(step.reachProb * 100).toStringAsFixed(step.reachProb >= 0.1 ? 0 : 1)}% '
-            'of games reach this.',
+            _plan.basis == PlanBasis.ownGames
+                ? 'Your games thin out here: ${step.ownGames} of them '
+                      '${step.ownGames == 1 ? 'reaches' : 'reach'} this, '
+                      'fewer than the ${_plan.ownFloor} a question needs. '
+                      '${ours ? 'You' : 'Your opponent'} to move.'
+                : 'No more ECO codes from here. '
+                      '${ours ? 'You' : 'Your opponent'} to move · '
+                      '${(step.reachProb * 100).toStringAsFixed(step.reachProb >= 0.1 ? 0 : 1)}% '
+                      'of games reach this.',
             style: AppTextStyles.caption,
           ),
           const SizedBox(height: 16),

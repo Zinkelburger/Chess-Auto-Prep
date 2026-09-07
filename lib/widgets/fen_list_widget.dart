@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 
 import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
+import 'common/choice_field.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
@@ -238,25 +239,15 @@ class _FenListWidgetState extends State<FenListWidget>
               const Text('Sort by:', style: TextStyle(fontSize: 12)),
               const SizedBox(width: 8),
               Expanded(
-                child: DropdownButton<String>(
+                child: ChoiceField<String>(
                   value: _sortBy,
-                  isExpanded: true,
-                  items: _sortMap.keys
-                      .map(
-                        (key) => DropdownMenuItem(
-                          value: key,
-                          child: Text(
-                            key,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _sortBy = value);
-                    }
-                  },
+                  compact: true,
+                  style: const TextStyle(fontSize: 12),
+                  items: [
+                    for (final key in _sortMap.keys)
+                      ChoiceItem(value: key, label: key),
+                  ],
+                  onChanged: (value) => setState(() => _sortBy = value),
                 ),
               ),
             ],

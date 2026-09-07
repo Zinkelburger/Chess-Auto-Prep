@@ -95,7 +95,12 @@ class EvalWorker {
       },
       onDone: () => _handleDeath(),
     );
-    unawaited(engine.done.then((_) => _handleDeath()));
+    unawaited(
+      engine.done.then(
+        (_) => _handleDeath(),
+        onError: (Object error) => _handleDeath(error),
+      ),
+    );
   }
 
   void _handleDeath([Object? error]) {
@@ -110,16 +115,33 @@ class EvalWorker {
       _discoveryCompleter!.completeError(err);
     }
     _discoveryCompleter = null;
+    _discoveryOnProgress = null;
     _failReadyQueue(err);
+    engine.dispose();
     onDied?.call();
   }
 
   /// Send `isready` and wait for the matching `readyok`.
   Future<void> _syncReady() {
+    if (_disposed || _dead) {
+      return Future.error(StateError('Worker unavailable'));
+    }
     final c = Completer<void>();
     _readyQueue.add(c);
-    engine.sendCommand('isready');
-    return c.future;
+    try {
+      engine.sendCommand('isready');
+    } catch (error) {
+      _readyQueue.remove(c);
+      c.completeError(error);
+    }
+    return c.future.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        final error = TimeoutException('Stockfish did not answer isready');
+        _handleDeath(error);
+        throw error;
+      },
+    );
   }
 
   void _failReadyQueue(Object error) {
@@ -132,12 +154,27 @@ class EvalWorker {
 
   Future<void> init({int hashMb = 128, int threads = 1}) async {
     await engine.waitForReady();
+    if (_disposed || _dead) throw StateError('Worker unavailable');
     await _applyThreads(threads);
     engine.sendCommand('setoption name Hash value $hashMb');
+    _currentHashMb = hashMb;
     await _syncReady();
   }
 
   int _currentThreads = 1;
+  int _currentHashMb = 128;
+
+  /// Hash the worker was last configured with, MB.
+  int get hashMb => _currentHashMb;
+
+  /// Set Stockfish UCI Hash (skips if already at desired size). Call it
+  /// between searches: Stockfish clears its table on resize.
+  Future<void> setHash(int hashMb) async {
+    if (hashMb < 1 || _currentHashMb == hashMb) return;
+    engine.sendCommand('setoption name Hash value $hashMb');
+    _currentHashMb = hashMb;
+    await _syncReady();
+  }
 
   /// Dynamically set Stockfish UCI Threads (skips if already at desired count).
   Future<void> setThreads(int threads) async {
@@ -167,6 +204,7 @@ class EvalWorker {
     void Function(DiscoveryResult)? onProgress,
   }) async {
     stop();
+    final generation = _stopGen;
 
     _discoveryIsWhiteToMove = isWhiteToMove;
     _discoveryLines.clear();
@@ -177,6 +215,10 @@ class EvalWorker {
 
     engine.sendCommand('setoption name MultiPV value $multiPv');
     await _syncReady();
+
+    if (_disposed || _dead || generation != _stopGen) {
+      throw StateError('Discovery cancelled');
+    }
 
     // Set up completer AFTER readyok drains any stale bestmove from stop()
     _discoveryCompleter = Completer<DiscoveryResult>();
@@ -190,10 +232,13 @@ class EvalWorker {
 
     final result = await _discoveryCompleter!.future;
 
+    if (_disposed || _dead || generation != _stopGen) {
+      throw StateError('Discovery cancelled');
+    }
     // Reset to single PV for subsequent evals
     engine.sendCommand('setoption name MultiPV value 1');
     await _syncReady();
-    _discoveryOnProgress = null;
+    if (generation == _stopGen) _discoveryOnProgress = null;
 
     return result;
   }
@@ -233,7 +278,11 @@ class EvalWorker {
 
   void stop() {
     _stopGen++;
-    engine.sendCommand('stop');
+    try {
+      engine.sendCommand('stop');
+    } catch (_) {
+      // Cleanup must still complete awaiters when the process pipe is closed.
+    }
     if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
       _evalCompleter!.completeError(StateError('Eval stopped'));
       _evalCompleter = null;

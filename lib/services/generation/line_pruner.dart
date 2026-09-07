@@ -109,11 +109,14 @@ class LineDiversity {
   static const off = LineDiversity();
 
   /// The bar this build asked for.
-  factory LineDiversity.fromConfig(TreeBuildConfig config) => LineDiversity(
-    minNewShare: config.lineMinNewShare,
-    maxOverlap: config.lineMaxOverlap,
-    maxFoldPlies: config.lineMaxFoldPlies,
-  );
+  factory LineDiversity.fromConfig(TreeBuildConfig config) =>
+      config.buildMode == BuildMode.stockfishExpectimax
+      ? LineDiversity.off
+      : LineDiversity(
+          minNewShare: config.lineMinNewShare,
+          maxOverlap: config.lineMaxOverlap,
+          maxFoldPlies: config.lineMaxFoldPlies,
+        );
 
   bool get isActive => minNewShare > 0.0 || maxOverlap < 1.0;
 

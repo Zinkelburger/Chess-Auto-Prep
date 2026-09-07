@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/utils/log.dart';
 
 import 'engine_connection.dart';
+import 'uci_handshake.dart';
 import 'stockfish_bundle.dart';
 
 class ProcessConnection implements EngineConnection {
@@ -19,8 +20,13 @@ class ProcessConnection implements EngineConnection {
 
   static Future<ProcessConnection> create() async {
     final connection = ProcessConnection._();
-    await connection._init();
-    return connection;
+    try {
+      await connection._init();
+      return connection;
+    } catch (_) {
+      connection.dispose();
+      rethrow;
+    }
   }
 
   /// Resolve the Stockfish binary path, extracting from assets if needed.
@@ -45,13 +51,12 @@ class ProcessConnection implements EngineConnection {
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen((line) {
-            if (!_isDisposed) {
-              _stdoutController.add(line);
-            }
-          });
+            if (!_isDisposed) _stdoutController.add(line);
+          }, onError: _reportError);
 
       // Drain stderr to prevent buffer fill-up that can stall the process.
-      unawaited(_process!.stderr.drain<void>());
+      unawaited(_process!.stderr.drain<void>().catchError(_reportError));
+      unawaited(_process!.stdin.done.then<void>((_) {}, onError: _reportError));
 
       unawaited(
         _process!.exitCode.then((code) {
@@ -70,6 +75,12 @@ class ProcessConnection implements EngineConnection {
     }
   }
 
+  void _reportError(Object error) {
+    if (!_isDisposed && !_stdoutController.isClosed) {
+      _stdoutController.addError(error);
+    }
+  }
+
   @override
   Stream<String> get stdout => _stdoutController.stream;
 
@@ -77,31 +88,7 @@ class ProcessConnection implements EngineConnection {
   Future<void> get done => _done.future;
 
   @override
-  Future<void> waitForReady() async {
-    // UCI handshake only — callers configure Hash / Threads themselves.
-    // Previously this set Hash 512 + multi-thread, causing every process
-    // (including pool workers that only need 16 MB) to briefly allocate
-    // 512 MB of RAM that the OS may never reclaim.
-    final uciOk = Completer<void>();
-    final readyOk = Completer<void>();
-    late StreamSubscription sub;
-
-    sub = stdout.listen((line) {
-      if (line.trim() == 'uciok' && !uciOk.isCompleted) {
-        uciOk.complete();
-      } else if (line.trim() == 'readyok' && !readyOk.isCompleted) {
-        readyOk.complete();
-      }
-    });
-
-    sendCommand('uci');
-    await uciOk.future.timeout(const Duration(seconds: 10));
-
-    sendCommand('isready');
-    await readyOk.future.timeout(const Duration(seconds: 10));
-
-    await sub.cancel();
-  }
+  Future<void> waitForReady() => performUciHandshake(this);
 
   @override
   void sendCommand(String command) {
@@ -114,6 +101,7 @@ class ProcessConnection implements EngineConnection {
   void dispose() {
     if (_isDisposed) return; // idempotent
     _isDisposed = true;
+    if (!_done.isCompleted) _done.complete();
     unawaited(_processSubscription?.cancel());
 
     final proc = _process;

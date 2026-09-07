@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Focused local checks. Full PR checks remain in .github/workflows/ci.yml.
+# Focused local checks. Full batch checks run in .github/workflows/ci.yml.
 # ci.sh [analyze|lint|format|test [FILES/OPTIONS...]|tools|integration|full]
 # ci.sh with -- COMMAND... runs any heavy command under the same limits.
 set -uo pipefail
@@ -27,8 +27,7 @@ run_step() {
         echo "lint: layering violation (core/models/services/utils importing widgets/screens)"; bad=1
       fi
       local feat
-      feat=$(grep -rlE "import '.*(widgets/|screens/)" lib/features/*/controllers lib/features/*/services lib/features/*/models 2>/dev/null \
-        | grep -v 'features/repertoire/controllers/build_launcher.dart' || true)
+      feat=$(grep -rlE "import '.*(widgets/|screens/)" lib/features/*/controllers lib/features/*/services lib/features/*/models 2>/dev/null || true)
       if [[ -n "$feat" ]]; then
         echo "$feat"; echo "lint: feature non-widget layer importing widgets/screens"; bad=1
       fi
@@ -36,6 +35,9 @@ run_step() {
         echo "lint: fontSize below the 12px floor"; bad=1
       fi
       if ! python3 scripts/check_file_mutations.py; then
+        bad=1
+      fi
+      if ! python3 scripts/sync_agent_rules.py --check; then
         bad=1
       fi
       return $bad
