@@ -31,6 +31,7 @@ typedef SliceApplyCallback =
 class PgnSliceDialog extends StatefulWidget {
   final List<GameRecord> allGames;
   final String currentFen;
+  final String? collectionName;
   final SliceApplyCallback onApply;
 
   /// Pre‑populate the dialog from a previously saved config.
@@ -49,6 +50,7 @@ class PgnSliceDialog extends StatefulWidget {
     required this.currentFen,
     required this.onApply,
     this.initialConfig,
+    this.collectionName,
     this.fenIndex,
     this.presets = const [],
   });
@@ -60,6 +62,12 @@ class PgnSliceDialog extends StatefulWidget {
 class _PgnSliceDialogState extends State<PgnSliceDialog> {
   List<int> _matchingIndices = [];
   bool _computing = false;
+  bool _showPreview = false;
+  String? _scheduledConfig;
+
+  bool get _hasFilters => !_filters.buildConfig().isEmpty;
+  bool get _invalid =>
+      _filters.positionParse.error != null || _filters.sequenceError != null;
 
   late final SliceFilterController _filters;
 
@@ -71,7 +79,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     super.initState();
     _filters = SliceFilterController(initialConfig: widget.initialConfig);
     _filters.addListener(_onFiltersChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _recompute());
+    _onFiltersChanged();
   }
 
   @override
@@ -82,20 +90,29 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   }
 
   void _onFiltersChanged() {
-    // While the sequence input is invalid, keep the last valid results.
-    if (_filters.sequenceError != null) return;
-    _scheduleRecompute();
-  }
-
-  void _scheduleRecompute() {
+    if (!mounted) return;
+    final config = _filters.buildConfig().toJsonString();
+    // Invalidate old results immediately, including during the typing delay.
+    if (config == _scheduledConfig && !_invalid) return;
+    _scheduledConfig = _invalid ? null : config;
     _recomputeDebounce?.cancel();
-    _recomputeDebounce = Timer(const Duration(milliseconds: 300), _recompute);
+    final generation = ++_computeGeneration;
+    setState(() {
+      _computing = !_invalid && _hasFilters;
+      if (!_hasFilters) {
+        _showPreview = false;
+        _matchingIndices = List.generate(widget.allGames.length, (i) => i);
+      }
+    });
+    if (_invalid || !_hasFilters) return;
+    _recomputeDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () => _recompute(generation),
+    );
   }
 
-  void _recompute() {
-    final generation = ++_computeGeneration;
-    setState(() => _computing = true);
-
+  void _recompute(int generation) {
+    if (!mounted) return;
     unawaited(
       pgn
           .computeSliceMatches(
@@ -117,8 +134,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   }
 
   void _reset() {
-    setState(() => _matchingIndices = []);
-    // reset() notifies, which schedules the recompute.
+    if (!mounted) return;
     _filters.reset();
   }
 
@@ -156,7 +172,11 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                     preset.filter.field,
                     preset.filter.value,
                   ),
-                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                 ),
             ],
           ),
@@ -168,7 +188,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   @override
   Widget build(BuildContext context) {
     final viewport = MediaQuery.sizeOf(context);
-    final width = math.min(1040.0, viewport.width - 48);
+    final width = math.min(_showPreview ? 1100.0 : 720.0, viewport.width - 48);
     final height = math.min(680.0, viewport.height - 48);
     return Dialog(
       insetPadding: const EdgeInsets.all(24),
@@ -183,13 +203,14 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  if (constraints.maxWidth < 820) {
+                  if (!_showPreview) return _buildFilterColumn();
+                  if (constraints.maxWidth < 960) {
                     return _buildCompactWorkspace();
                   }
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(width: 390, child: _buildFilterColumn()),
+                      SizedBox(width: 480, child: _buildFilterColumn()),
                       const VerticalDivider(width: 1),
                       Expanded(child: _buildPreviewColumn()),
                     ],
@@ -225,17 +246,27 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Explore collection',
+                  'Filter games',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Shape ${widget.allGames.length} games into a readable set. '
-                  'Results update as you type.',
+                  '${widget.collectionName ?? 'This collection'} · ${widget.allGames.length} games',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.onSurfaceMuted,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _hasFilters
+                      ? 'Filter for: ${_filters.buildConfig().chipLabels.join(' · ')}'
+                      : 'Filter for: choose a player, date, result, or position.',
+                  style: AppTextStyles.body,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -265,17 +296,46 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
           _buildQuickPresets(),
           const SizedBox(height: 20),
         ],
-        PositionFilter(controller: _filters, currentFen: widget.currentFen),
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 16),
-          child: Divider(height: 1),
-        ),
-        SequenceFilter(controller: _filters),
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 16),
-          child: Divider(height: 1),
-        ),
         HeaderFilters(controller: _filters, games: widget.allGames),
+        const SizedBox(height: 20),
+        PositionFilter(controller: _filters, currentFen: widget.currentFen),
+        const SizedBox(height: 16),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          initiallyExpanded: _filters.hasSequenceFilter,
+          title: const Text('Advanced', style: AppTextStyles.body),
+          subtitle: const Text(
+            'Match a move sequence',
+            style: AppTextStyles.caption,
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 16),
+              child: SequenceFilter(controller: _filters),
+            ),
+          ],
+        ),
+        if (_hasFilters) ...[
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.standard,
+              minimumSize: const Size(0, 44),
+            ),
+            onPressed: () {
+              if (!mounted) return;
+              setState(() => _showPreview = !_showPreview);
+            },
+            icon: Icon(
+              _showPreview
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+            ),
+            label: Text(
+              _showPreview ? 'Hide preview' : 'Preview matching games',
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -287,13 +347,12 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Live preview',
+            'Matching games',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 3),
           const Text(
-            'Scan players and openings, search within the matches, or hover '
-            'the moves. Saving as a study makes every game its own chapter.',
+            'Games that match all your filters.',
             style: AppTextStyles.caption,
           ),
           const SizedBox(height: 12),
@@ -324,7 +383,9 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   }
 
   Widget _buildFooter() {
-    final countLabel = _computing
+    final countLabel = _invalid
+        ? 'Check filters'
+        : _computing
         ? (_matchingIndices.isEmpty ? 'Finding games…' : 'Updating…')
         : 'Show ${_matchingIndices.length} game${_matchingIndices.length == 1 ? '' : 's'}';
     return Container(
@@ -336,9 +397,13 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
       child: Row(
         children: [
           TextButton.icon(
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.standard,
+              minimumSize: const Size(0, 44),
+            ),
             onPressed: _reset,
             icon: const Icon(Icons.restart_alt, size: 18),
-            label: const Text('Start over'),
+            label: const Text('Clear filters'),
           ),
           const Spacer(),
           TextButton(
@@ -347,7 +412,12 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
           ),
           const SizedBox(width: 8),
           FilledButton.icon(
-            onPressed: !_computing && _matchingIndices.isNotEmpty
+            style: FilledButton.styleFrom(
+              visualDensity: VisualDensity.standard,
+              minimumSize: const Size(0, 44),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+            ),
+            onPressed: !_invalid && !_computing && _matchingIndices.isNotEmpty
                 ? () {
                     widget.onApply(_matchingIndices, _filters.buildConfig());
                     Navigator.pop(context);

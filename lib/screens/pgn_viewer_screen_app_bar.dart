@@ -41,22 +41,38 @@ mixin _AppBarBuildersMixin
         : p.basenameWithoutExtension(_controller.filePath!);
     return AppBar(
       titleSpacing: 16,
-      title: AppBarTitleWithTrail(title: _buildOpenPgnMenuButton(fileName)),
-      actions: [
-        if (loaded && !_controller.isSolitaireMode)
-          Tooltip(
-            message: _controller.hasActiveFilters
-                ? _controller.activeSliceConfig.chipLabels.join(' · ')
-                : 'Filter by player, date, result, or position',
-            child: TextButton(
-              onPressed: _openSliceDialog,
-              child: Text(
-                _controller.hasActiveFilters
-                    ? 'Filters · ${_controller.filteredGames.length}/${_controller.allGames.length}'
-                    : 'Filter games',
-              ),
+      title: Row(
+        children: [
+          Flexible(
+            child: AppBarTitleWithTrail(
+              title: _buildOpenPgnMenuButton(fileName),
             ),
           ),
+          if (loaded && !_controller.isSolitaireMode) ...[
+            const SizedBox(width: 12),
+            Tooltip(
+              message: _controller.hasActiveFilters
+                  ? _controller.activeSliceConfig.chipLabels.join(' · ')
+                  : 'Filter by player, date, result, or position',
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.standard,
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+                onPressed: _openSliceDialog,
+                icon: const Icon(Icons.filter_list, size: 20),
+                label: Text(
+                  _controller.hasActiveFilters
+                      ? 'Filters · ${_controller.filteredGames.length}/${_controller.allGames.length}'
+                      : 'Filter games',
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
         if (hasGame)
           if (_viewingStudy)
             TextButton(onPressed: _editInStudy, child: const Text('Edit study'))

@@ -675,6 +675,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       showDialog(
         context: context,
         builder: (ctx) => PgnSliceDialog(
+          collectionName: _controller.filePath == null
+              ? 'Pasted games'
+              : p.basename(_controller.filePath!),
           allGames: _controller.allGames
               .map((g) => (headers: g.headers, pgnText: g.pgnText))
               .toList(),

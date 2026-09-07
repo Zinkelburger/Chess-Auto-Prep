@@ -503,7 +503,7 @@ PgnSourcesPanel (lib/widgets/pgn_sources_panel.dart)
 
 Used by:
 - `RepertoireGenerationTab` (DB Explorer mode) — replaces `_buildPgnFilePickerSection()`
-- `PgnSliceDialog._buildResultsPreview()` — now embeds `LinesPreviewPanel` with hover board
+- `PgnSliceDialog` — optional matching-games preview embeds `LinesPreviewPanel` with hover board
 - `LineItemRow._MovesPreview` — upgraded to `HoverableMoveChips` for hover board on lines browser
 
 ---
@@ -1010,9 +1010,9 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `lines_preview_panel.dart` | **Browseable line list** — fuzzy search, virtualized scrolling, `HoverableMoveChips` per row with `FloatingBoardPreview` on hover; shows full-panel loading spinner while `computing` (replaces stale count + list); used in slice dialog and inline slice editor |
 | `hoverable_move_chips.dart` | **Inline move chips with hover board preview** — renders SAN moves as compact chips, computes FEN on hover, triggers `BoardPreviewController.setPreview`; shared by `LinesPreviewPanel`, `LineItemRow`, PGN Viewer |
 | `slice/position_filter.dart` | Shared position filter widget (FEN/SAN input + Apply/Clear + "Board position" chip); uses `PositionPreviewIcon` for hover board preview |
-| `slice/header_filters.dart` | Shared header filters widget (dynamic field/mode/value rows) |
+| `slice/header_filters.dart` | Shared header filters widget (labelled field/mode selectors above full-width values; 44px add/remove controls) |
 | `slice/sequence_filter.dart` | Shared move sequence filter widget ([gap]-separated groups) |
-| `pgn_slice_dialog.dart` | Slice dataset dialog (position, sequence, header filters) | Default header row starts as Date ≥ (changeable field/mode like other rows); live preview via `LinesPreviewPanel` with hover board; skips recompute when effective filters unchanged, on empty filter rows, or 300ms-debounced header typing; accepts optional `fenIndex` for O(1) position filtering |
+| `pgn_slice_dialog.dart` | Game filter dialog, opened beside the collection name at the top left | Shows the collection name and a live “Filter for” summary; roomy game-detail and position controls, move sequences under Advanced. Default header row starts as Date ≥. Preview is opt-in after filters are set; clearing filters hides it. Skips unchanged effective filters and debounces edits by 300ms; Apply waits for current results and valid position/sequence input. Accepts optional `fenIndex` for O(1) position filtering |
 | `position_preview_icon.dart` | **Shared hover-preview widget** — eye icon that shows a floating 200×200 board overlay on hover via `bestEffortPositionFromInput`; supports FEN, SAN, and `[gap]`-separated sequences; used by `PositionFilter` and `PgnSliceDialog` |
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Weakness detail dialog |

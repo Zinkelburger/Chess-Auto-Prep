@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/widgets/common/choice_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -15,6 +16,7 @@ void main() {
     String? picked = value;
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.linux),
         home: Scaffold(
           body: StatefulBuilder(
             // The other box sits above the field: the open list hangs
@@ -133,6 +135,7 @@ void main() {
   testWidgets('a disabled field neither opens nor changes', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.linux),
         home: Scaffold(
           body: ChoiceField<String>(
             key: const Key('field'),
@@ -148,4 +151,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Sicilian Defence'), findsNothing);
   });
+
+  testWidgets('mouse arrow opens a stable list and supports repeated clicks', (
+    tester,
+  ) async {
+    await pump(tester, value: 'french');
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.down(tester.getCenter(find.byTooltip('Show all')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await mouse.up();
+    await tester.pumpAndSettle();
+    expect(find.text('Sicilian Defence'), findsOneWidget);
+    await mouse.down(tester.getCenter(find.text('Sicilian Defence')));
+    await tester.pump(const Duration(milliseconds: 100));
+    await mouse.up();
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<ChoiceField<String>>(find.byKey(const Key('field'))).value,
+      'sicilian',
+    );
+    await tester.tap(find.byTooltip('Show all'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pirc Defence'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close list'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pirc Defence'), findsNothing);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.all());
 }
