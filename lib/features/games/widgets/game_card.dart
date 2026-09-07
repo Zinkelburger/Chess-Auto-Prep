@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../services/game_analysis_controller.dart'
@@ -8,6 +10,7 @@ import '../../../theme/app_text_styles.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
 import '../models/recent_game.dart';
 import '../services/game_moments.dart';
+import '../services/game_review_summary.dart';
 import '../services/opening_review.dart'
     show deviationVerdict, formatNumberedSans;
 
@@ -28,12 +31,16 @@ import '../services/opening_review.dart'
 /// repeat them; it read as clutter on every row and said nothing the words
 /// beside it didn't already say.
 ///
-/// Wide cards grow a strip of *moments* to the right of the text — the
-/// position where the game left the book and each of my mistakes, as small
-/// boards with the move drawn on them (see [GameMoment]). The text used to be
-/// all there was, and on any window past about 1100px more than half of
-/// every card was empty. The strip scrolls sideways on its own; the board and
-/// the text never move.
+/// Wide cards add two more columns to the right of the text: the review's
+/// verdict as three labelled counts — "1 blunder / 2 mistakes / 0
+/// inaccuracies" — and a strip of *moments*: the position where the game left
+/// the book and each of my mistakes, as small boards with the move drawn on
+/// them (see [GameMoment]). The counts used to sit in the top line as three
+/// bare digits, and the strip used to take every pixel the window had, so a
+/// wide window showed a row of nine boards and a card that was mostly
+/// thumbnails. Now the strip is at most [visibleMoments] boards wide and
+/// scrolls sideways for the rest; the text column takes what is left, so it
+/// is the opening name that gets the room, not a tenth thumbnail.
 class GameCard extends StatelessWidget {
   const GameCard({
     super.key,
@@ -55,9 +62,17 @@ class GameCard extends StatelessWidget {
   /// pixel ratio, so this size carries no sharpness ceiling of its own.
   static const double boardSize = 144;
 
-  /// Width the text column keeps once the strip appears. Everything in it
-  /// fits comfortably at this width; the strip takes what is left.
-  static const double bodyWidth = 300;
+  /// Least width the text column keeps once the other columns appear. It
+  /// grows from here: whatever the review block and the strip do not need
+  /// goes to the text, which is where a long opening name wants it. Low
+  /// enough that a 1280px window with the side panel open still gets two
+  /// moments; the player lines fit at this width, the opening name wraps to
+  /// an ellipsis either way.
+  static const double bodyWidth = 260;
+
+  /// Width of the labelled counts. "0 inaccuracies" and "Not reviewed yet"
+  /// both fit on one line at this width.
+  static const double reviewWidth = 140;
 
   /// Board edge of one moment in the strip. Smaller than the final-position
   /// board: this one is not for recognising the position but for seeing the
@@ -65,12 +80,24 @@ class GameCard extends StatelessWidget {
   /// board, two caption lines and the scrollbar fit in [boardSize].
   static const double momentSize = 100;
 
-  /// Space between the three visual regions of a card. The moment boards are
-  /// a second, denser piece of visual information, so they need a little more
-  /// separation from the game summary than the summary needs from the main
-  /// board.
+  /// Gap between two moments in the strip.
+  static const double momentGap = 8;
+
+  /// How many moments the strip shows without scrolling. Every card that
+  /// has room reserves exactly this width, so the strips line up down the
+  /// list; a game with more moments scrolls, one with fewer leaves the
+  /// rest of its strip empty.
+  static const int visibleMoments = 5;
+
+  /// Width of a full strip: [visibleMoments] boards and the gaps between.
+  static const double stripWidth =
+      visibleMoments * momentSize + (visibleMoments - 1) * momentGap;
+
+  /// Space between the visual regions of a card. The moment boards are a
+  /// second, denser piece of visual information, so they need a little more
+  /// separation than the summary needs from the main board.
   static const double _boardBodyGap = 16;
-  static const double _bodyMomentsGap = 24;
+  static const double _columnGap = 24;
 
   final RecentGame game;
 
@@ -86,11 +113,32 @@ class GameCard extends StatelessWidget {
   /// Open the game at one of its moments. Null hides the strip.
   final void Function(GameMoment moment)? onOpenMoment;
 
-  /// Whether a card [width] wide (inside its padding) has room for the strip:
-  /// the board, the text at its fixed width, and at least one moment.
+  static const double _reviewNeeds =
+      boardSize + _boardBodyGap + bodyWidth + _columnGap + reviewWidth;
+
+  /// Whether a card [width] wide (inside its padding) has room for the
+  /// labelled counts beside the text. Below this the counts fold back into
+  /// the top line as three digits.
+  static bool reviewFits(double width) => width >= _reviewNeeds;
+
+  /// Whether a card [width] wide has room for the strip as well: the board,
+  /// the text at its least width, the counts, and at least one moment.
   static bool stripFits(double width) =>
-      width >=
-      boardSize + _boardBodyGap + bodyWidth + _bodyMomentsGap + momentSize;
+      width >= _reviewNeeds + _columnGap + momentSize;
+
+  /// How wide the strip is on a card [width] wide: [visibleMoments] boards
+  /// when they fit, otherwise as many whole boards as the leftover holds
+  /// once the text has its least width. Whole boards, not the leftover
+  /// itself: a strip cut through the middle of a board looked broken rather
+  /// than scrollable. The slack goes to the text column.
+  static double stripWidthFor(double width) {
+    final room = width - _reviewNeeds - _columnGap;
+    final boards = math.min(
+      visibleMoments,
+      ((room + momentGap) / (momentSize + momentGap)).floor(),
+    );
+    return boards * momentSize + (boards - 1) * momentGap;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,11 +158,16 @@ class GameCard extends StatelessWidget {
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
+                final width = constraints.maxWidth;
                 final moments = onOpenMoment == null
                     ? const <GameMoment>[]
                     : game.moments;
-                final showStrip =
-                    moments.isNotEmpty && stripFits(constraints.maxWidth);
+                final showReview = reviewFits(width);
+                // The strip's column is reserved whenever it fits, moments
+                // or not, so the counts sit at the same x on every card. A
+                // card with nothing to show there leaves the space empty
+                // rather than sliding its counts to the right edge.
+                final reserveStrip = onOpenMoment != null && stripFits(width);
                 return Row(
                   // Centred, not top-aligned: the board is taller than the
                   // text beside it, and pinning that text to the top left a
@@ -123,17 +176,25 @@ class GameCard extends StatelessWidget {
                   children: [
                     _buildBoard(),
                     const SizedBox(width: _boardBodyGap),
-                    if (!showStrip)
-                      Expanded(child: _buildBody(context))
-                    else ...[
-                      SizedBox(width: bodyWidth, child: _buildBody(context)),
-                      const SizedBox(width: _bodyMomentsGap),
-                      Expanded(
-                        child: MomentsStrip(
-                          moments: moments,
-                          flipped: game.meWhite == false,
-                          onOpen: onOpenMoment!,
-                        ),
+                    Expanded(child: _buildBody(inlineCounts: !showReview)),
+                    if (showReview) ...[
+                      const SizedBox(width: _columnGap),
+                      SizedBox(
+                        width: reviewWidth,
+                        child: ReviewCounts(game: game, onOpen: onOpenAnalysis),
+                      ),
+                    ],
+                    if (reserveStrip) ...[
+                      const SizedBox(width: _columnGap),
+                      SizedBox(
+                        width: stripWidthFor(width),
+                        child: moments.isEmpty
+                            ? null
+                            : MomentsStrip(
+                                moments: moments,
+                                flipped: game.meWhite == false,
+                                onOpen: onOpenMoment!,
+                              ),
                       ),
                     ],
                   ],
@@ -178,12 +239,14 @@ class GameCard extends StatelessWidget {
     );
   }
 
-  Widget _buildBody(BuildContext context) {
+  /// [inlineCounts] puts the three-digit mistake counts in the top line, for
+  /// cards too narrow to carry the labelled block beside the text.
+  Widget _buildBody({required bool inlineCounts}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildTopLine(),
+        _buildTopLine(inlineCounts: inlineCounts),
         const SizedBox(height: 3),
         _PlayerLine(
           name: game.white,
@@ -207,9 +270,8 @@ class GameCard extends StatelessWidget {
     );
   }
 
-  /// Speed, time control, date — plus the two things the review produces
-  /// (mistake counts) and the way out to the site.
-  Widget _buildTopLine() {
+  /// Speed, time control, date — and, on a narrow card, the mistake counts.
+  Widget _buildTopLine({required bool inlineCounts}) {
     return Row(
       children: [
         Icon(
@@ -232,8 +294,10 @@ class GameCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        MistakeCounts(game: game, onOpen: onOpenAnalysis),
+        if (inlineCounts) ...[
+          const SizedBox(width: 8),
+          MistakeCounts(game: game, onOpen: onOpenAnalysis),
+        ],
       ],
     );
   }
@@ -249,10 +313,7 @@ class GameCard extends StatelessWidget {
             opening,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.body.copyWith(
-              fontSize: 13,
-              color: AppColors.ink,
-            ),
+            style: AppTextStyles.body,
           ),
         if (moves.isNotEmpty)
           Text(
@@ -279,10 +340,11 @@ class GameCard extends StatelessWidget {
 }
 
 /// My mistake counts for one game, as three numbers: inaccuracies, mistakes,
-/// blunders. A "2 blunders" phrase told you the worst category and hid the
-/// rest; "1 2 0" is the whole game at a glance and takes less width. Zero
-/// counts stay visible but dim — the columns have to line up between rows for
-/// the numbers to be scannable at all.
+/// blunders. This is the narrow-card form; a card with room shows the same
+/// counts with their words ([ReviewCounts]). A "2 blunders" phrase told you
+/// the worst category and hid the rest; "1 2 0" is the whole game at a glance
+/// and takes less width. Zero counts stay visible but dim — the columns have
+/// to line up between rows for the numbers to be scannable at all.
 ///
 /// Severity is carried by hue — blue inaccuracy, amber mistake, red blunder —
 /// because those three colours mean exactly that on every chess site the user
@@ -349,6 +411,105 @@ class MistakeCounts extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// The review's verdict, spelled out: "1 blunder / 2 mistakes / 0
+/// inaccuracies", worst first, one line each. The three bare digits in the
+/// top line were the same information, but they read as a code — you had to
+/// know that the order was inaccuracy, mistake, blunder and that the hues
+/// said which was which. With the word beside each number nothing needs
+/// decoding, and the block is the same height on every card, so a list
+/// scans as a column. Rows at zero stay in place, dimmed.
+///
+/// Severity is still carried by hue — a dot beside each count in the same
+/// blue, amber and red the strip's arrows use — because those three colours
+/// mean exactly that on every chess site the user has ever used. The words
+/// themselves stay in one ink.
+class ReviewCounts extends StatelessWidget {
+  const ReviewCounts({super.key, required this.game, this.onOpen});
+
+  final RecentGame game;
+
+  /// Opens the game's engine review. Null renders the counts as plain text.
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = game.summary;
+    if (summary == null) {
+      final unknownSide = game.meWhite == null;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            unknownSide ? 'Not your game' : 'Not reviewed yet',
+            style: AppTextStyles.muted,
+          ),
+          Text(
+            unknownSide
+                ? 'Could not tell which side you played'
+                : 'Press play to review your games',
+            maxLines: 2,
+            style: AppTextStyles.caption,
+          ),
+        ],
+      );
+    }
+    final rows = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _row(summary.blunders, 'blunder', AppColors.mistakeBlunder),
+        _row(summary.mistakes, 'mistake', AppColors.mistakeMistake),
+        _row(summary.inaccuracies, 'inaccuracy', AppColors.mistakeInaccuracy),
+      ],
+    );
+    return Tooltip(
+      message: onOpen == null
+          ? summary.breakdown
+          : '${summary.breakdown}\nClick to open the game analysis.',
+      child: onOpen == null
+          ? rows
+          : InkWell(
+              onTap: onOpen,
+              borderRadius: BorderRadius.circular(4),
+              child: rows,
+            ),
+    );
+  }
+
+  Widget _row(int count, String word, Color color) {
+    final any = count > 0;
+    final ink = any ? AppColors.ink : AppColors.onSurfaceDisabled;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: any ? color : AppColors.onSurfaceDisabled,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              GameReviewSummary.counted(count, word),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.body.copyWith(
+                fontWeight: any ? FontWeight.w600 : FontWeight.w400,
+                color: ink,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PlayerLine extends StatelessWidget {
@@ -515,9 +676,11 @@ class _DeviationLine extends StatelessWidget {
 /// The moments of one game as a row of small boards, scrolling sideways.
 ///
 /// Every moment is here, in game order, so scrolling right reads as playing
-/// through the game; there is no "+N" and no cap. The scrollbar belongs to
-/// the strip and stays visible whenever there is more to the right — on a
-/// desktop a hidden overflow is the same as a cap. A plain wheel over the
+/// through the game; there is no "+N" and nothing is dropped. What is capped
+/// is the *width* — [GameCard.visibleMoments] boards — so the strip never
+/// swallows the card. The scrollbar belongs to the strip and stays visible
+/// whenever there is more to the right — on a desktop a hidden overflow is
+/// the same as a cap. A plain wheel over the
 /// strip still scrolls the games list (a horizontal list ignores vertical
 /// wheel deltas); a horizontal swipe or the bar moves the strip.
 class MomentsStrip extends StatefulWidget {
@@ -560,7 +723,7 @@ class _MomentsStripState extends State<MomentsStrip> {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.only(bottom: 8),
           itemCount: widget.moments.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          separatorBuilder: (_, _) => const SizedBox(width: GameCard.momentGap),
           itemBuilder: (context, index) {
             final moment = widget.moments[index];
             return MomentTile(
