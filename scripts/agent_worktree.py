@@ -10,9 +10,15 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 WORKFLOW_FILES = (
-    'AGENTS.md', 'CLAUDE.md', '.cursor/rules/agent-workflow.mdc',
+    'AGENTS.md', 'CLAUDE.md', 'scripts/sync_agent_rules.py',
+    'docs/agents/README.md', 'docs/agents/dart.md', 'docs/agents/ui.md',
+    'docs/agents/documentation.md', 'docs/agents/tooling.md', 'docs/agents/git.md',
+    '.cursor/rules/dart.mdc', '.cursor/rules/ui.mdc',
+    '.cursor/rules/documentation.mdc', '.claude/rules/dart.md',
+    '.claude/rules/ui.md', '.claude/rules/documentation.md',
     '.claude/settings.json', '.claude/commands/doctor.md',
     '.claude/commands/drive.md', '.claude/commands/gate.md',
+    '.claude/commands/run-skill-generator.md',
     '.agents/skills/run-chess-auto-prep/SKILL.md',
     '.agents/skills/run-chess-auto-prep/driver.py',
     '.claude/skills/run-chess-auto-prep/SKILL.md',
@@ -22,7 +28,16 @@ WORKFLOW_FILES = (
     'scripts/hooks/flutter_gate.sh', 'scripts/test_tools.sh',
     'scripts/check_coverage.sh', 'scripts/health_log.sh',
     'scripts/oom_containment.sh', 'tools/test_agent_jobs.py',
-    'tools/test_agent_worktree.py',
+    'tools/test_agent_worktree.py', 'tools/test_agent_rules.py',
+)
+
+# Remove superseded rules when preparing older worktrees, but only if clean.
+RETIRED_WORKFLOW_FILES = (
+    '.cursor/rules/agent-workflow.mdc',
+    '.cursor/rules/app-documentation.mdc',
+    '.cursor/rules/cross-platform-paths.mdc',
+    '.cursor/rules/flutter-mounted-guard.mdc',
+    '.cursor/rules/shortcut-tooltips.mdc',
 )
 
 TEMPORARY_ROOT = Path('/tmp')
@@ -132,6 +147,18 @@ def sync_workflow(target: Path, source: Path):
     """Carry the current launcher into new worktrees, preserving local edits."""
     if target.resolve() == source.resolve():
         return
+    for relative in RETIRED_WORKFLOW_FILES:
+        dst = target / relative
+        if (source / relative).exists() or not dst.is_file():
+            continue
+        tracked = git_optional_text(target, 'ls-files', '--', relative)
+        clean = subprocess.run(
+            ['git', 'diff', '--quiet', 'HEAD', '--', relative], cwd=target,
+        ).returncode == 0
+        if tracked and clean:
+            dst.unlink()
+        else:
+            print(f'Kept locally modified retired rule: {dst}')
     for relative in WORKFLOW_FILES:
         src, dst = source / relative, target / relative
         if not src.is_file() or (dst.is_file() and src.read_bytes() == dst.read_bytes()):

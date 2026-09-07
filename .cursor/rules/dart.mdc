@@ -1,0 +1,7 @@
+---
+description: Dart code conventions
+globs: **/*.dart
+alwaysApply: false
+---
+
+@docs/agents/dart.md

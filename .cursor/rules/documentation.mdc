@@ -1,0 +1,7 @@
+---
+description: App documentation changes
+globs: docs/**/*.md
+alwaysApply: false
+---
+
+@docs/agents/documentation.md

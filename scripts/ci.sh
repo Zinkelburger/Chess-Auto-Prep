@@ -37,6 +37,9 @@ run_step() {
       if ! python3 scripts/check_file_mutations.py; then
         bad=1
       fi
+      if ! python3 scripts/sync_agent_rules.py --check; then
+        bad=1
+      fi
       return $bad
       ;;
     analyze)

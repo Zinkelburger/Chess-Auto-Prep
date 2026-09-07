@@ -81,6 +81,38 @@ class AgentWorktreeTests(unittest.TestCase):
             Path('/tmp/disposable-preview'), None,
         )
 
+    def test_prepare_migrates_rules_and_preserves_local_changes(self):
+        with tempfile.TemporaryDirectory(dir=ROOT.parent) as temp:
+            checkout, _ = self.make_repository(Path(temp))
+            retired = agent_worktree.RETIRED_WORKFLOW_FILES
+            for relative in retired:
+                path = checkout / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('old rule\n')
+            (checkout / 'AGENTS.md').write_text('old root policy\n')
+            run(checkout, 'add', '.')
+            run(checkout, 'commit', '-m', 'old guidance')
+            # Preserve both unstaged and staged edits, and untracked rules.
+            for relative in retired[:2]:
+                (checkout / relative).write_text('user edit\n')
+            run(checkout, 'add', retired[1])
+            run(checkout, 'rm', '--cached', retired[2])
+
+            agent_worktree.sync_workflow(checkout, ROOT)
+
+            for relative in retired[:2]:
+                self.assertEqual((checkout / relative).read_text(), 'user edit\n')
+            self.assertTrue((checkout / retired[2]).is_file())
+            for relative in retired[3:]:
+                self.assertFalse((checkout / relative).exists())
+            for relative in ('AGENTS.md', 'CLAUDE.md', 'scripts/sync_agent_rules.py'):
+                self.assertEqual((checkout / relative).read_bytes(),
+                                 (ROOT / relative).read_bytes())
+            for pattern in ('docs/agents/*.md', '.claude/rules/*.md', '.cursor/rules/*.mdc'):
+                for source in ROOT.glob(pattern):
+                    self.assertEqual((checkout / source.relative_to(ROOT)).read_bytes(),
+                                     source.read_bytes())
+
 
 if __name__ == '__main__':
     unittest.main()
