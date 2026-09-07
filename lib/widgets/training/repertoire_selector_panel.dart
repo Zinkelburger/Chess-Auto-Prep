@@ -11,6 +11,10 @@ class RepertoireSelectorPanel extends StatelessWidget {
   final VoidCallback onSelectRepertoire;
   final VoidCallback? onStartTraining;
 
+  /// Opens the loaded repertoire in the Builder. Shown beside the error so an
+  /// empty repertoire has a way forward other than picking a different one.
+  final VoidCallback? onOpenInBuilder;
+
   const RepertoireSelectorPanel({
     super.key,
     required this.isLoading,
@@ -19,6 +23,7 @@ class RepertoireSelectorPanel extends StatelessWidget {
     required this.canStartTraining,
     required this.onSelectRepertoire,
     this.onStartTraining,
+    this.onOpenInBuilder,
   });
 
   @override
@@ -45,9 +50,27 @@ class RepertoireSelectorPanel extends StatelessWidget {
             const SizedBox(height: 12),
             Text(error!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
-            FilledButton(
-              onPressed: onSelectRepertoire,
-              child: const Text('Select Repertoire'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                if (onOpenInBuilder != null)
+                  FilledButton(
+                    onPressed: onOpenInBuilder,
+                    child: const Text('Add lines in Repertoire Builder'),
+                  ),
+                if (onOpenInBuilder != null)
+                  OutlinedButton(
+                    onPressed: onSelectRepertoire,
+                    child: const Text('Select Repertoire'),
+                  )
+                else
+                  FilledButton(
+                    onPressed: onSelectRepertoire,
+                    child: const Text('Select Repertoire'),
+                  ),
+              ],
             ),
           ],
         ),

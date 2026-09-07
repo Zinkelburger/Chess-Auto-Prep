@@ -39,6 +39,8 @@ import json
 import os
 import shutil
 import signal
+import sqlite3
+import struct
 import subprocess
 import sys
 import time
@@ -213,6 +215,28 @@ def build_env(lib: Path) -> dict:
     return env
 
 
+def _links_onnxruntime(binary: Path, env: dict) -> bool:
+    """Whether `binary` was actually compiled against ONNX Runtime.
+
+    The builder degrades to the Lichess API when it cannot load the Maia
+    model, and a binary compiled without ONNX cannot load it at all -- so a
+    stale build turns an explicitly Maia-only run into a Lichess run that
+    then dies on the first 401.  `ldd` is the cheap way to tell the two
+    apart before we spend ten minutes finding out.
+    """
+    try:
+        out = subprocess.run(  # noqa: S603 - fixed argv, our own binary
+            ["ldd", str(binary)],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return True  # No ldd (or it hung): assume fine rather than rebuild.
+    return "libonnxruntime" in (out.stdout or "")
+
+
 def prepare_toolchain(rebuild: bool = False) -> dict:
     """Everything a run needs, compiling the builder on first use."""
     if not BUILDER_DIR.is_dir():
@@ -227,10 +251,22 @@ def prepare_toolchain(rebuild: bool = False) -> dict:
     lib = _link_farm()
     env = build_env(lib)
 
+    # A binary that predates the ONNX link farm is worse than a missing one:
+    # it runs, ignores --maia-model, and quietly builds the wrong tree.
+    stale = BUILDER_BIN.is_file() and not _links_onnxruntime(BUILDER_BIN, env)
+
     built = False
-    if rebuild or not BUILDER_BIN.is_file():
+    if rebuild or stale or not BUILDER_BIN.is_file():
         jobs = str(max(1, (os.cpu_count() or 2) // 2))
         try:
+            if stale:
+                subprocess.run(  # noqa: S603 - our own Makefile
+                    ["make", "clean"],
+                    cwd=str(BUILDER_DIR),
+                    env=env,
+                    capture_output=True,
+                    timeout=BUILD_TIMEOUT,
+                )
             result = subprocess.run(  # noqa: S603 - our own Makefile
                 ["make", "-j", jobs],
                 cwd=str(BUILDER_DIR),
@@ -249,6 +285,16 @@ def prepare_toolchain(rebuild: bool = False) -> dict:
             tail = "\n".join((result.stderr or result.stdout).strip().splitlines()[-12:])
             raise ToolError(f"Building tree_builder failed:\n{tail}")
         built = True
+
+    # Refuse rather than fall back: every caller of this module asks for a
+    # Maia-only tree, and the Lichess path needs a token we do not have.
+    if not _links_onnxruntime(BUILDER_BIN, env):
+        raise ToolError(
+            f"{BUILDER_BIN} has no ONNX Runtime support, so it cannot load "
+            "Maia and would silently build a Lichess tree instead. Rebuild "
+            f"it with `make -C {BUILDER_DIR}` after making libonnxruntime "
+            f"visible (the link farm at {lib} does this)."
+        )
 
     return {
         "builder": BUILDER_BIN,
@@ -506,6 +552,74 @@ def _leaf_plies(node: dict) -> list[int]:
 
 def _subtree_size(node: dict) -> int:
     return 1 + sum(_subtree_size(c) for c in node.get("children") or [])
+
+
+
+def root_engine_shortlist(directory: Path, fen: str | None) -> list[dict] | None:
+    """Stockfish's own MultiPV at the root, straight out of the run's cache.
+
+    The tree only builds the candidates that survive the eval-loss gate, so
+    the ranking can legitimately come back with one row. The engine still
+    looked at ten, and "how much worse is the move I was going to play"
+    is the question that follows every such answer -- so hand it over with
+    the result instead of making the caller decode `multipv_cache` by hand.
+
+    Returns None whenever the cache cannot be read or decoded: this is a
+    convenience on top of the real answer, never a reason to fail a result.
+    """
+    if not fen:
+        return None
+    db = directory / f"{BASE}.db"
+    if not db.is_file():
+        return None
+    try:
+        import chess
+    except ImportError:
+        return None
+
+    # The cache keys on the position, not the game: it stores the first four
+    # FEN fields, so the halfmove/fullmove counters have to come off first.
+    key = " ".join(fen.split()[:4])
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            row = con.execute(
+                "SELECT num_lines, lines_blob FROM multipv_cache "
+                "WHERE fen IN (?, ?) ORDER BY num_pvs DESC, depth DESC LIMIT 1",
+                (key, fen),
+            ).fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+    if not row or not row[1]:
+        return None
+
+    count, blob = int(row[0]), row[1]
+    if count <= 0 or len(blob) < count * 40:
+        return None
+    stride = len(blob) // count
+
+    board = chess.Board(fen)
+    out: list[dict] = []
+    for i in range(count):
+        entry = blob[i * stride : (i + 1) * stride]
+        try:
+            uci = entry[0:16].split(b"\0")[0].decode("ascii")
+            cp, depth = struct.unpack("<ii", entry[32:40])
+            move = chess.Move.from_uci(uci)
+        except (UnicodeDecodeError, struct.error, ValueError):
+            return None
+        if move not in board.legal_moves:
+            return None  # Stride guessed wrong; a partial table would mislead.
+        out.append({"move": board.san(move), "eval_cp": cp, "depth": depth})
+    if not out:
+        return None
+
+    best = out[0]["eval_cp"]
+    for r in out:
+        r["cp_behind_best"] = r["eval_cp"] - best
+    return out
 
 
 def root_table(tree_path: Path) -> dict:
@@ -875,6 +989,9 @@ def register_expectimax_tools(registry: Any) -> None:
             table = _score(directory, state, prepare_toolchain())
             scored = True
         position = state.get("position") or {}
+        shortlist = root_engine_shortlist(directory, position.get("fen"))
+        if shortlist and len(shortlist) > len(table.get("candidates") or []):
+            table["engine_shortlist"] = shortlist
         table.update(
             {
                 "id": directory.name,
@@ -891,7 +1008,10 @@ def register_expectimax_tools(registry: Any) -> None:
                     "move; eval_cp is Stockfish after the move from White's "
                     "side, so lower is better for Black. Uneven nodes/"
                     "avg_leaf_ply across candidates means the build was "
-                    "stopped early — resume it before trusting close calls."
+                    "stopped early — resume it before trusting close calls. "
+                    "engine_shortlist, when present, is Stockfish's own "
+                    "MultiPV at the root: what the engine thought of the "
+                    "candidates the tree did not build out."
                 ),
             }
         )
@@ -977,7 +1097,9 @@ def register_expectimax_tools(registry: Any) -> None:
 
                 "max_eval_loss": _i(
                     "Drop our candidates worse than the best by this many "
-                    "centipawns (default 40)."
+                    "centipawns (default 40). The root ignores anything "
+                    "below 150 so the candidates it reports stay "
+                    "comparable — a 40cp gate there routinely leaves one."
                 ),
 
 

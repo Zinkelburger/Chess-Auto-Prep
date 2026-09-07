@@ -484,6 +484,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
         hasLines: _training.lines.isNotEmpty,
         canStartTraining: false,
         onSelectRepertoire: _selectRepertoire,
+        // Studies are edited in the Study editor, not the Builder.
+        onOpenInBuilder:
+            _training.repertoire != null && !_training.sourceIsStudy
+            ? _openInBuilder
+            : null,
       );
     }
 
