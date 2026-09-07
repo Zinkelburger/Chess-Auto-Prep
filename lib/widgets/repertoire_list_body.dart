@@ -1,4 +1,4 @@
-/// Embeddable repertoire list with create / rename / delete actions.
+/// Embeddable repertoire list with import / rename / delete actions.
 ///
 /// Used both inside [RepertoireSelectionScreen] (full-screen push) and inline
 /// in screens that need a repertoire before they can function (Builder, Trainer).
@@ -9,11 +9,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:path/path.dart' as p;
-
 import '../models/repertoire_metadata.dart';
 import '../screens/repertoire_chapters_screen.dart';
-import '../services/repertoire_creation.dart';
+import '../features/repertoire/widgets/repertoire_import_dialog.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
@@ -22,7 +20,6 @@ import '../utils/safe_file_name.dart';
 import '../utils/time_format.dart';
 import 'common/list_search_field.dart';
 import 'layout/empty_state_placeholder.dart';
-import 'pgn_import_dialog.dart';
 
 class RepertoireListBody extends StatefulWidget {
   /// Called with the chosen *chapter*'s metadata (a `.pgn` file path). A
@@ -127,10 +124,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       );
     }
 
-    // Empty and non-empty share the toolbar: "New repertoire" and
-    // "Load from disk…" are exactly what a first-time user needs, and the
-    // toolbar must not rearrange itself the moment the first repertoire
-    // exists.
+    // Keep the import action in the same place for empty and populated lists.
     if (_repertoires.isEmpty && _studies.isEmpty) {
       return Column(
         children: [
@@ -140,8 +134,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
             child: EmptyStatePlaceholder(
               icon: Icons.library_books,
               title: 'No repertoires yet',
-              subtitle:
-                  'Start one from scratch, or import a PGN you already have.',
+              subtitle: 'Import a PGN file to start training your repertoire.',
             ),
           ),
         ],
@@ -183,9 +176,6 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     );
   }
 
-  /// Search plus the two ways a repertoire comes into existence, both spelled
-  /// out. Loading a PGN used to be a chip hidden inside the create dialog, so
-  /// the app's most common starting point looked unsupported.
   Widget _buildToolbar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -199,39 +189,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           ),
           const SizedBox(width: 12),
           FilledButton.icon(
-            onPressed: () => _showCreateDialog(),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('New repertoire'),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: _importFromPgn,
+            onPressed: _importRepertoire,
             icon: const Icon(Icons.upload_file, size: 18),
-            label: const Text('Import PGN…'),
+            label: const Text('Import repertoire'),
           ),
         ],
       ),
-    );
-  }
-
-  /// Import-first path: bring in the PGN, then name it. The create dialog
-  /// opens with the PGN already attached and — for a file — its own name
-  /// filled in.
-  Future<void> _importFromPgn() async {
-    final result = await showPgnImportDialog(context, confirmLabel: 'Continue');
-    if (result == null || !mounted) return;
-
-    final color = await inferImportColor(result.pgnContent);
-    if (!mounted) return;
-
-    final fileName = result.fileName;
-    await _showCreateDialog(
-      initialImport: result,
-      initialName: fileName == null
-          ? null
-          : p.basenameWithoutExtension(fileName),
-      initialFileName: fileName,
-      initialColor: color,
     );
   }
 
@@ -395,188 +358,20 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     }
   }
 
-  // ── Create / Delete / Rename ──────────────────────────────────────────
-
-  Future<void> _showCreateDialog({
-    PgnImportResult? initialImport,
-    String? initialName,
-    String? initialFileName,
-    String? initialColor,
-  }) async {
-    final nameController = TextEditingController(text: initialName ?? '');
-    // An imported file's own move tree names the side far more reliably than
-    // "White by default" does, and the choice made here is written into the
-    // chapter's `// Color:` header, which outranks every later guess.
-    String selectedColor = initialColor ?? 'White';
-    bool colorFromFile = initialColor != null;
-    String? nameError;
-    PgnImportResult? importResult = initialImport;
-
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Create New Repertoire'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Enter a name for your new repertoire:'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'Repertoire Name',
-                  errorText: nameError,
-                ),
-                autofocus: true,
-                onChanged: (_) {
-                  if (nameError != null) setState(() => nameError = null);
-                },
-              ),
-              const SizedBox(height: 16),
-              const Text('Choose your color:'),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'White',
-                    label: Text('White'),
-                    icon: Icon(Icons.circle_outlined, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: 'Black',
-                    label: Text('Black'),
-                    icon: Icon(Icons.circle, size: 16),
-                  ),
-                ],
-                selected: {selectedColor},
-                onSelectionChanged: (Set<String> newSelection) {
-                  setState(() {
-                    selectedColor = newSelection.first;
-                    colorFromFile = false;
-                  });
-                },
-              ),
-              if (colorFromFile) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Read from the moves in the file you picked.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.onSurfaceMuted,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              _InlinePgnAttach(
-                importResult: importResult,
-                initialFileName: initialFileName,
-                onChanged: (result, suggestedColor) {
-                  setState(() {
-                    importResult = result;
-                    if (suggestedColor != null) {
-                      selectedColor = suggestedColor;
-                      colorFromFile = true;
-                    } else if (result == null) {
-                      colorFromFile = false;
-                    }
-                  });
-                  if (result != null && nameController.text.trim().isEmpty) {
-                    nameController.text = 'Imported Repertoire';
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = nameController.text.trim();
-                final unsafeName = validateSafeFileName(name);
-                if (unsafeName != null) {
-                  setState(() => nameError = unsafeName);
-                  return;
-                }
-                final exists = _repertoires.any(
-                  (r) => r.name.toLowerCase() == name.toLowerCase(),
-                );
-                if (exists) {
-                  setState(
-                    () =>
-                        nameError = 'A repertoire named "$name" already exists',
-                  );
-                  return;
-                }
-                Navigator.of(context).pop({
-                  'name': name,
-                  'color': selectedColor,
-                  'pgn': importResult,
-                });
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        ),
+  Future<void> _importRepertoire() async {
+    final created = await showRepertoireImportDialog(
+      context,
+      existingNames: _repertoires.map((r) => r.name).toList(),
+    );
+    if (created == null || !mounted) return;
+    widget.onSelected(
+      RepertoireMetadata(
+        filePath: created.chapterPath,
+        name: 'Main',
+        gameCount: created.gameCount,
+        lastModified: DateTime.now(),
       ),
     );
-
-    nameController.dispose();
-
-    if (result != null) {
-      await _createRepertoire(
-        result['name']! as String,
-        result['color']! as String,
-        pgnImport: result['pgn'] as PgnImportResult?,
-      );
-    }
-  }
-
-  Future<void> _createRepertoire(
-    String name,
-    String color, {
-    PgnImportResult? pgnImport,
-  }) async {
-    try {
-      if (_repertoires.any((r) => r.name.toLowerCase() == name.toLowerCase())) {
-        if (mounted) {
-          showAppSnackBar(context, AppMessages.repertoireExists(name));
-        }
-        return;
-      }
-
-      // New repertoires start with a single "Main" chapter; imported PGN lands
-      // there. Additional chapters are added from the chapter list. The
-      // designation panel creates them the same way — see [createRepertoire].
-      final created = await createRepertoire(
-        name: name,
-        color: color,
-        pgnContent: pgnImport?.pgnContent,
-        gameCount: pgnImport?.gameCount ?? 0,
-      );
-
-      if (mounted) {
-        widget.onSelected(
-          RepertoireMetadata(
-            filePath: created.chapterPath,
-            name: 'Main',
-            gameCount: created.gameCount,
-            lastModified: DateTime.now(),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Create repertoire failed: $e');
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          AppMessages.createRepertoireFailed,
-          isError: true,
-        );
-      }
-    }
   }
 
   Future<void> _deleteRepertoire(RepertoireMetadata repertoire) async {
@@ -656,179 +451,5 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
         }
       }
     }
-  }
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-String _truncateFilename(String name, {int maxLength = 24}) {
-  if (name.length <= maxLength) return name;
-  final ext = p.extension(name);
-  final base = p.basenameWithoutExtension(name);
-  final available = maxLength - ext.length - 1;
-  if (available < 4) return '${name.substring(0, maxLength - 1)}\u2026';
-  return '${base.substring(0, available)}\u2026$ext';
-}
-
-class _InlinePgnAttach extends StatefulWidget {
-  final PgnImportResult? importResult;
-
-  /// Name of a file already attached by the import-first path, so the chip
-  /// shows what was picked instead of an empty "Import PGN".
-  final String? initialFileName;
-
-  /// The attached PGN, plus the side its moves suggest ('White'/'Black', or
-  /// null when the file does not say clearly enough to move the picker).
-  final void Function(PgnImportResult? result, String? suggestedColor)
-  onChanged;
-
-  const _InlinePgnAttach({
-    required this.importResult,
-    required this.onChanged,
-    this.initialFileName,
-  });
-
-  @override
-  State<_InlinePgnAttach> createState() => _InlinePgnAttachState();
-}
-
-class _InlinePgnAttachState extends State<_InlinePgnAttach> {
-  String? _fileName;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _fileName = widget.initialFileName;
-  }
-
-  /// Opens the same import window as everywhere else, so a repertoire can be
-  /// started from pasted moves and not only from a file on disk.
-  Future<void> _openImport() async {
-    final result = await showPgnImportDialog(context, confirmLabel: 'Attach');
-    if (result == null || !mounted) return;
-
-    final color = await inferImportColor(result.pgnContent);
-    if (!mounted) return;
-
-    setState(() {
-      _fileName = result.fileName ?? 'Pasted PGN';
-      _error = null;
-    });
-    widget.onChanged(result, color);
-  }
-
-  void _clear() {
-    setState(() {
-      _fileName = null;
-      _error = null;
-    });
-    widget.onChanged(null, null);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            GestureDetector(
-              onTap: _openImport,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.upload_file,
-                      size: 15,
-                      color: cs.onPrimaryContainer,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      'Import PGN',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onPrimaryContainer,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (widget.importResult != null && _fileName != null) ...[
-              const SizedBox(width: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 200),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.description,
-                        size: 13,
-                        color: cs.onPrimaryContainer,
-                      ),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          _truncateFilename(_fileName!),
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: cs.onPrimaryContainer,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      GestureDetector(
-                        onTap: _clear,
-                        child: Icon(
-                          Icons.close,
-                          size: 13,
-                          color: cs.onPrimaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.warning_amber, size: 13, color: cs.error),
-              const SizedBox(width: 5),
-              Text(_error!, style: TextStyle(fontSize: 12, color: cs.error)),
-            ],
-          ),
-        ],
-      ],
-    );
   }
 }
