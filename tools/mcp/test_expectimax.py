@@ -421,5 +421,95 @@ class RegistrationTest(unittest.TestCase):
             self.assertTrue(tool["description"].strip(), name)
 
 
+class EngineShortlistTest(unittest.TestCase):
+    """Decoding Stockfish's root MultiPV out of a run's own cache.
+
+    The tree only builds candidates that survive the eval-loss gate, so the
+    shortlist is often the only place "how much worse was the move I meant
+    to play" is recorded. It is a convenience, so every way of failing to
+    read it has to return None rather than break a result.
+    """
+
+    FEN = "rnbqk1nr/ppp2ppp/4p3/3p4/1b1PP3/2N5/PPP2PPP/R1BQKBNR w KQkq - 2 4"
+    STRIDE = 45
+
+    def _write(self, directory: Path, rows, fen_key: str) -> None:
+        import sqlite3
+        import struct
+
+        blob = b""
+        for uci, cp in rows:
+            entry = bytearray(self.STRIDE)
+            entry[0 : len(uci)] = uci.encode()
+            entry[32:40] = struct.pack("<ii", cp, 16)
+            blob += bytes(entry)
+        con = sqlite3.connect(directory / "tree.db")
+        con.execute(
+            "CREATE TABLE multipv_cache (fen TEXT NOT NULL, depth INTEGER "
+            "NOT NULL, num_pvs INTEGER NOT NULL, num_lines INTEGER NOT NULL, "
+            "lines_blob BLOB, cached_at INTEGER, PRIMARY KEY (fen, depth, "
+            "num_pvs))"
+        )
+        con.execute(
+            "INSERT INTO multipv_cache VALUES (?, 16, ?, ?, ?, 0)",
+            (fen_key, len(rows), len(rows), blob),
+        )
+        con.commit()
+        con.close()
+
+    ROWS = [("e4e5", 71), ("e4d5", 29), ("g1e2", 23)]
+
+    def test_decodes_and_ranks_against_the_best(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            # The cache keys on the position, so the counters come off.
+            self._write(d, self.ROWS, " ".join(self.FEN.split()[:4]))
+            rows = ex.root_engine_shortlist(d, self.FEN)
+        self.assertEqual([r["move"] for r in rows], ["e5", "exd5", "Ne2"])
+        self.assertEqual([r["eval_cp"] for r in rows], [71, 29, 23])
+        self.assertEqual([r["cp_behind_best"] for r in rows], [0, -42, -48])
+
+    def test_a_full_fen_key_also_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, self.ROWS, self.FEN)
+            rows = ex.root_engine_shortlist(d, self.FEN)
+        self.assertEqual(len(rows), 3)
+
+    def test_a_position_the_cache_never_saw(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, self.ROWS, " ".join(self.FEN.split()[:4]))
+            self.assertIsNone(
+                ex.root_engine_shortlist(d, "8/8/8/8/8/8/8/K6k w - - 0 1")
+            )
+
+    def test_moves_that_are_not_legal_here_mean_a_bad_decode(self):
+        # A wrong stride yields moves that do not fit the position; half a
+        # table would read as a real ranking, so the whole thing is dropped.
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            self._write(d, [("a1a8", 10), ("h1h8", 5)],
+                        " ".join(self.FEN.split()[:4]))
+            self.assertIsNone(ex.root_engine_shortlist(d, self.FEN))
+
+    def test_no_database_and_no_fen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(ex.root_engine_shortlist(Path(tmp), self.FEN))
+            self.assertIsNone(ex.root_engine_shortlist(Path(tmp), None))
+
+
+class OnnxLinkTest(unittest.TestCase):
+    """A builder without ONNX Runtime ignores --maia-model and builds the
+    wrong tree, so it has to be caught before a run, not after."""
+
+    def test_a_binary_without_onnx_is_detected(self):
+        stockfish = os.environ.get("STOCKFISH_PATH") or "/bin/sh"
+        self.assertFalse(ex._links_onnxruntime(Path(stockfish), dict(os.environ)))
+
+    def test_a_missing_binary_does_not_raise(self):
+        ex._links_onnxruntime(Path("/nonexistent/builder"), dict(os.environ))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
