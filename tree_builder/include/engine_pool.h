@@ -161,6 +161,11 @@ int engine_pool_evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
                                 void (*progress_callback)(int completed, int total, void *ud),
                                 void *user_data);
 
+/** Evaluate independent positions with one UCI thread each, using the pool's
+ * workers concurrently. Used by Pure/Fast to keep evaluation settings fixed
+ * even for batches smaller than the worker count. Waits for every job. */
+int engine_pool_evaluate_batch_single_thread(EnginePool *pool, EvalJob *jobs, int num_jobs);
+
 /**
  * Set the search depth for subsequent evaluations
  * 

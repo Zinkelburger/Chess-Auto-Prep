@@ -19,7 +19,7 @@
 #define MAX_MOVE_LENGTH 16
 
 /* Maximum number of children per node */
-#define MAX_CHILDREN 64
+#define MAX_CHILDREN 256
 
 /* Initial children array capacity */
 #define INITIAL_CHILDREN_CAPACITY 8
@@ -60,6 +60,14 @@ typedef struct TreeNode {
     
     /* Engine evaluation */
     int engine_eval_cp;                 /* Engine evaluation in centipawns */
+    char committed_move_uci[MAX_MOVE_LENGTH];
+    int decision_horizon;
+    double decision_value;
+    bool history_aware;
+    bool terminal_known;
+    double terminal_value;
+    double value_lower, value_upper;
+    unsigned char value_visit;
     bool has_engine_eval;               /* Whether engine eval is available */
     
     /* Ease metric (calculated from move probabilities + eval) */
@@ -94,23 +102,9 @@ typedef struct TreeNode {
     double opponent_ease;               /* Ease score from opponent's perspective */
     double trap_score;                  /* How often opponents play suboptimal here */
     
-    /* Expectimax value propagation.
-     *
-     * local_cpl:  expected centipawn loss by the side to move at THIS node
-     *             (display/diagnostics only, not used in scoring).
-     *
-     * expectimax_value:  practical win probability in [0, 1], computed
-     *                    bottom-up via expectimax:
-     *                    - Leaves:    leaf_conf · wp(eval_for_us)
-     *                                 + (1 − leaf_conf) · 0.5
-     *                                 (blends engine eval with a neutral
-     *                                 0.5 prior; leaf_conf = 1.0 ⇒ pure
-     *                                 wp(eval); leaf_conf = 0.0 ⇒ pure 0.5)
-     *                    - Opp nodes: Σ pᵢ·V(childᵢ) + (1−Σpᵢ)·V_tail,
-     *                                 with V_tail = leaf_value(this node)
-     *                    - Our nodes: max(V_child) among eval-loss-filtered
-     *                                 candidates (novelty-weighted if enabled)
-     */
+    /* Bounded expected-score estimate. Terminal/horizon leaf utility, max
+     * over eligible own moves, expectation over the full opponent policy.
+     * local_cpl remains a legacy diagnostic, never part of the objective. */
     double local_cpl;
     double expectimax_value;
     int    subtree_depth;               /* Max ply below this node (0 for leaves) */

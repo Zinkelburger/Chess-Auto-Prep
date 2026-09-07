@@ -373,6 +373,7 @@ void main() {
       const config = TreeBuildConfig(
         startFen: kStandardStartFen,
         playAsWhite: true,
+        buildMode: BuildMode.dbExplorer,
         lineMinNewShare: 0.4,
         lineMaxOverlap: 0.55,
         lineMaxFoldPlies: 3,

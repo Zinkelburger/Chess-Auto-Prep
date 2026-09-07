@@ -1,16 +1,5 @@
-/**
- * repertoire.h - Automatic Repertoire Generation
- * 
- * Algorithms for traversing the move tree and selecting optimal
- * repertoire lines based on:
- * - Expectimax values (practical win probability from opponent mistakes)
- * - Engine evaluation (objective quality)
- * - Win rates from Lichess database
- * - Move probabilities (focus on likely lines)
- * 
- * The core insight: we want positions where opponents frequently
- * play suboptimal moves, giving us a practical edge beyond the
- * raw engine evaluation.
+/** Repertoire extraction follows the same maximizing policy as Pure backup.
+ * Values are expected-score estimates, not calibrated human win rates.
  */
 
 #ifndef REPERTOIRE_H
@@ -38,6 +27,7 @@ typedef struct {
  */
 typedef struct RepertoireConfig {
     bool play_as_white;             /* Are we building for White or Black? */
+    bool rolling_search;           /* Fixed four-ply receding lookahead. */
     int max_depth;                  /* Maximum depth to explore (ply) */
     double min_probability;         /* Stop exploring below this cumul. probability */
     int min_games;                  /* Minimum games to consider a line */

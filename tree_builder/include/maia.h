@@ -21,7 +21,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define MAIA_MAX_MOVES 128
+#define MAIA_MAX_MOVES 256
 
 typedef struct MaiaContext MaiaContext;
 

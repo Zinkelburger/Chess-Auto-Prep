@@ -27,6 +27,17 @@ BuildTree extractRebasedSubtree(
   BuildTreeNode source, {
   required bool playAsWhite,
 }) {
+  if (source.historyAware) {
+    final root = BuildTreeNode(
+      fen: source.fen,
+      moveSan: '',
+      moveUci: '',
+      ply: 0,
+      isWhiteToMove: source.isWhiteToMove,
+      nodeId: 1,
+    );
+    return BuildTree(root: root, totalNodes: 1)..registerNode(root);
+  }
   var nextNodeId = 1;
   var nodeCount = 0;
 
@@ -56,6 +67,10 @@ BuildTree extractRebasedSubtree(
       cumulativeProbability: cumP,
     );
     node
+      ..historyAware = old.historyAware
+      ..terminalValue = old.terminalValue
+      ..valueLower = old.valueLower
+      ..valueUpper = old.valueUpper
       ..engineEvalCp = old.engineEvalCp
       ..explored = old.explored
       ..pruneReason = old.pruneReason

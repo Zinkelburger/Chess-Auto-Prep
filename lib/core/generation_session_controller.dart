@@ -80,7 +80,7 @@ class GenerationSessionController extends ChangeNotifier
 
   /// The database to use for this run, or null when off/absent.
   MasterGamesDb? _masterDbFor(TreeBuildConfig config) {
-    if (!config.useMasterGames) return null;
+    if (!config.usesMasterGames) return null;
     final service = masterGames();
     if (!service.isAvailableForGeneration) return null;
     return service.db;
@@ -430,7 +430,7 @@ class GenerationSessionController extends ChangeNotifier
   /// exactly as it does today.  Does nothing when the database already has
   /// games or when the user declined the wait earlier this session.
   Future<void> _downloadMasterGamesPhase(TreeBuildConfig config) async {
-    if (!config.useMasterGames || !config.downloadMasterGamesIfMissing) return;
+    if (!config.usesMasterGames || !config.downloadMasterGamesIfMissing) return;
     if (_masterGamesDownloadDeclined || _cancelRequested) return;
     final service = masterGames();
     if (service.hasGames) return;
@@ -1043,11 +1043,15 @@ class GenerationSessionController extends ChangeNotifier
               'not written again.'
         : '';
     lastRunSummary =
-        'Complete in $elapsedLabel: ${tree.totalNodes} nodes, '
+        '${tree.buildComplete ? 'Complete' : 'Incomplete search'} in $elapsedLabel: ${tree.totalNodes} nodes, '
         '${analysis.selectedCount} repertoire moves, '
         '${extracted.lines.length} lines$pruneNote'
         '${_courseNote()}.$duplicateNote${extracted.trapsOnlyNote}'
         '$lastModelGameNote';
+    if (tree.root.historyAware) {
+      lastRunSummary +=
+          ' ${config.isRollingSearch ? 'Fast policy estimate (approximate)' : 'Expected-score estimate'}: ${tree.root.expectimaxValue.toStringAsFixed(4)}; bounds [${tree.root.valueLower.toStringAsFixed(4)}, ${tree.root.valueUpper.toStringAsFixed(4)}].';
+    }
     if (config.isChessDbBook) {
       lastRunSummary = '$lastRunSummary ${_bookSourceNote()}';
     }

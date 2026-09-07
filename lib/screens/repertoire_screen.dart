@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
+import '../core/study_controller.dart';
 import '../core/repertoire_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../features/audit/controllers/audit_session_controller.dart';
@@ -282,13 +283,14 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
                   (moves: l.moves, title: l.title, pgn: l.pgn),
               ]);
             },
-            onTrimLines: (droppedKeys) => _controller.deleteLines([
-              for (final line in _controller.repertoireLines)
-                // Match on the same identity the export writes with, so a
-                // line the user added by hand is never caught by a cut of
-                // the generated ones.
-                if (droppedKeys.contains(line.moves.join(' '))) line,
-            ]),
+            onCreateStudy: (name, pgn) async {
+              final study = context.read<StudyController>();
+              final app = context.read<AppState>();
+              final path = await study.createStudyFromPgn(name, pgn);
+              if (!mounted) return;
+              Navigator.of(context).pop();
+              app.switchToStudyEdit(path: path);
+            },
           ),
         ),
       ),

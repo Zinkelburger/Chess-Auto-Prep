@@ -126,7 +126,8 @@ class BuildRun {
   int get expansionLanes {
     if (!config.usesStockfish) return 1;
     final budget = math.max(1, config.resolvedEngineThreads);
-    return pool.workerCount.clamp(1, budget);
+    // A previous consumer may have spawned more workers than this build owns.
+    return pool.concurrencyLimit.clamp(1, budget);
   }
 
   // ── Positions ───────────────────────────────────────────────────────────
@@ -366,6 +367,16 @@ class BuildRun {
     if (position != null) _rememberPosition(child.nodeId, position);
     _countNode(child.ply, 1);
     return child;
+  }
+
+  /// Attach a fully evaluated Pure candidate only after its atomic expansion
+  /// has finished. Detached candidates never enter progress or saved trees.
+  void attachPureChild(BuildTreeNode parent, BuildTreeNode child) {
+    parent.children.add(child);
+    tree.registerNode(child);
+    tree.totalNodes++;
+    if (child.ply > tree.maxPlyReached) tree.maxPlyReached = child.ply;
+    _countNode(child.ply, 1);
   }
 
   /// Mark [node] fully processed.  Every `explored = true` in the build goes

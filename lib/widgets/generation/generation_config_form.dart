@@ -102,7 +102,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
         _outputSection(),
         _searchSection(),
         const Divider(height: 24),
-        _skeletonSection(),
+        if (_buildMode != BuildMode.stockfishExpectimax) _skeletonSection(),
         const Divider(height: 24),
         Row(
           children: [
@@ -118,41 +118,45 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
         const SizedBox(height: 8),
         _summary(),
         const SizedBox(height: 8),
-        InkWell(
-          onTap: () => setState(() => _showEvalSources = !_showEvalSources),
-          child: Row(
-            children: [
-              Icon(
-                _showEvalSources ? Icons.expand_less : Icons.expand_more,
-                size: 20,
-                color: AppColors.onSurfaceSoft,
-              ),
-              const SizedBox(width: 4),
-              const Text(
-                'Evaluation databases (optional)',
-                style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
-              ),
-              const SizedBox(width: 4),
-              Tooltip(
-                message: _cdbDirectAvailable
-                    ? 'Optional eval lookup chain before Stockfish:\n'
-                          'project cache → ChessDB dump → ChessDB slice → '
-                          'Lichess evals → ChessDB API → engine.\n'
-                          'Download either local database from inside this '
-                          'pane.'
-                    : 'Optional eval lookup chain before Stockfish:\n'
-                          'project cache → ChessDB slice → Lichess evals → '
-                          'ChessDB API → engine.',
-                child: const Icon(
-                  Icons.info_outline,
-                  size: 16,
-                  color: AppColors.onSurfaceMuted,
+        if (_buildMode != BuildMode.stockfishExpectimax)
+          InkWell(
+            onTap: () => setState(() => _showEvalSources = !_showEvalSources),
+            child: Row(
+              children: [
+                Icon(
+                  _showEvalSources ? Icons.expand_less : Icons.expand_more,
+                  size: 20,
+                  color: AppColors.onSurfaceSoft,
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                const Text(
+                  'Evaluation databases (optional)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.onSurfaceSoft,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: _cdbDirectAvailable
+                      ? 'Optional eval lookup chain before Stockfish:\n'
+                            'project cache → ChessDB dump → ChessDB slice → '
+                            'Lichess evals → ChessDB API → engine.\n'
+                            'Download either local database from inside this '
+                            'pane.'
+                      : 'Optional eval lookup chain before Stockfish:\n'
+                            'project cache → ChessDB slice → Lichess evals → '
+                            'ChessDB API → engine.',
+                  child: const Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        if (_showEvalSources)
+        if (_buildMode != BuildMode.stockfishExpectimax && _showEvalSources)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: EvalSourcesSection(

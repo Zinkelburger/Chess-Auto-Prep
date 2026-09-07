@@ -1,51 +1,16 @@
-# Chess Opening Tree Builder
+> Stockfish expectimax (Pure and Fast) now uses **Maia throughout**. Master
+> and Lichess flags apply only to separate database build modes; old settings
+> cannot re-enable master replies. Start a new build for an old master-based
+> tree. Maia must be available; there is no database fallback.
 
-> **This is a standalone C program, not part of the Flutter app.**
->
-> It is the original prototype and the reference implementation of the
-> expectimax tree-building algorithm. The Flutter app has since **ported this
-> algorithm to Dart** (`lib/services/tree_build_service.dart`,
-> `lib/services/generation/`) — that Dart code is what actually runs when you
-> click Generate in the app. Nothing here is compiled into or invoked by the
-> app at runtime.
->
-> It is kept for two reasons:
->
-> 1. **Reference/prototyping.** New algorithm ideas are cheaper to try in C
->    first, and `ALGORITHM.md` here is the canonical write-up of the method the
->    Dart port follows. When the two disagree about intent, this is the spec.
-> 2. **It still hosts the local ChessDB (cdbdirect) build.** This part *is*
->    live: `make setup-cdbdirect` builds the TerarkDB reader into
->    `tree_builder/deps/install/`, which `run_with_cdbdirect.sh` puts on the
->    library path for the Flutter app, and which
->    `packages/cdbdirect_flutter_libs` compiles against. See
->    [CDBDIRECT_SETUP.md](CDBDIRECT_SETUP.md).
->
-> So: **the C tree builder itself is optional**; the cdbdirect setup in this
-> directory is not, if you want the local 1 TB ChessDB dump to work.
+# Standalone expectimax builder
 
-A C CLI tool that builds chess opening repertoires by interleaving a
-human-move source (pure Maia by default, or pure Lichess with `--lichess`)
-with Stockfish evaluation. Branches are pruned inline by the eval window,
-producing a focused repertoire tree with evaluations on every node.
+Both this C program and the Flutter app follow [the same Pure contract](../docs/ALGORITHM.md).
+The C program is also what the chess-prep MCP expectimax tools launch.
 
-## Architecture
-
-**Single interleaved BFS (FIFO queue)** — no separate build/eval/discovery stages:
-
-- **Our-move nodes**: Stockfish MultiPV (constant count at every depth) →
-  eval-loss filter → (optional Lichess enrichment for SAN/win rates) → enqueue children
-- **Opponent-move nodes**: one source only — pure Maia (default) OR pure
-  Lichess (`--lichess`). Probabilities are kept raw; the missing mass is
-  accounted for by an eval-based tail term during expectimax. Children are enqueued breadth-first.
-- **No depth-based tapering** — branching budgets (`our_multipv`,
-  `opp_mass_target`, `opp_max_children`) are constant at every ply.
-  Tapering would silently bias the MAX/CHANCE operators; depth pruning
-  is instead handled by `min_probability`, `max_depth`, and the eval
-  window.
-- **Eval-window pruning** at every node — stop exploring when positions
-  leave `[min_eval, max_eval]`
-- **All evals cached** in SQLite for instant resume
+Pure searches every legal candidate within the explicit engine-loss constraint
+and every positive-probability opponent reply. No novelty/setup bonuses, MultiPV
+caps, probability cutoffs, or separate deep-verification promise.
 
 ## Requirements
 
@@ -82,147 +47,32 @@ The executable will be at `bin/tree_builder`.
 
 ## Usage
 
-```bash
-./bin/tree_builder [options] <name>
+Pure is the default. Add `--search fast` for approximate repeated four-ply
+lookahead: commit our next move, retain every modeled opponent reply, and repeat.
+See [the design and tradeoffs](../docs/ROLLING_SEARCH_AND_STUDY_LINES.md).
+
+
+Start small: branching is exponential. A four-ply tree can still be expensive.
+
+```
+./bin/tree_builder -c w -d 4 -e 16 --max-eval-loss 50 \
+  --maia-model /path/to/maia3_simplified.onnx -S /path/to/stockfish output
 ```
 
-The `<name>` argument is the base name for all output files:
+Master targeting is on by default: Lichess master-game frequencies in book,
+Maia off-book. Add `--maia-only` to use Maia throughout. `--maia-elo` controls
+the predicted opponent rating. The app's local book is a different data source.
 
-| File | Purpose |
-|------|---------|
-| `<name>.pgn` | Repertoire lines (primary output) |
-| `<name>.tree.json` | Tree state for resumption |
-| `<name>.db` | Cached evals and explorer data |
+Output includes `output.pgn`, `output.tree.json`, and the cache database.
+`--resume` continues a compatible saved Pure tree. Change engine depth, safety
+limit, opponent model, or root by starting a new build. Legacy trees remain
+readable but cannot be resumed as Pure. An interrupted search is incomplete;
+its current move ordering is provisional and its value bounds are reported.
 
-### Core Options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `-f, --fen <FEN>` | Starting position FEN | Standard starting position |
-| `-c, --color <w\|b>` | Play as white or black | required |
-| `-p, --probability <P>` | Min probability threshold | 0.0001 (0.01%) |
-| `-d, --ply <N>` | Max tree depth in ply (half-moves) | 20 |
-| `-e, --eval-depth <N>` | Stockfish search depth | 20 |
-| `-t, --threads <N>` | Parallel Stockfish engines | half of online CPUs (min 1) |
-| `-S, --stockfish <path>` | Stockfish binary path | auto-detect |
-| `-n, --name <name>` | Repertoire name (shown in PGN headers) | |
-| `--build-now` | Use existing partial tree as-is, skip to repertoire generation | |
-| `--skip-build` | Skip tree building entirely (requires existing complete tree) | |
-| `--resume` | Restore all CLI flags from `<name>.db` (explicit flags override) | |
-| `-v, --verbose` | Verbose progress | |
-
-### Our-Move Candidates (Engine-Driven)
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--our-multipv <N>` | MultiPV count at every depth (constant) | 5 |
-| `--max-eval-loss <cp>` | Skip candidates worse than best by this | 50 |
-
-### Opponent Responses (single source — Maia OR Lichess)
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--opp-max-children <N>` | Max opponent responses | 6 |
-| `--opp-mass <0-1>` | Mass target at every depth (constant) | 0.95 |
-| `--maia-only` | Pure Maia for opponent moves (no Lichess) | on |
-| `--lichess` | Pure Lichess for opponent moves (no Maia) | off |
-| `-g, --min-games <N>` | Min games per move (Lichess) | 10 |
-| `-r, --ratings <R>` | Rating buckets | 2000,2200,2500 |
-| `-s, --speeds <S>` | Time controls | blitz,rapid,classical |
-| `--maia-model <path>` | Path to `maia3_simplified.onnx` | auto-detect |
-| `--maia-elo <N>` | Elo for Maia predictions | 2200 |
-| `--maia-min-prob <P>` | Skip Maia moves below this probability | 0.05 |
-
-### Eval Window
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--min-eval <cp>` | Stop if our eval below this | Color-dependent |
-| `--max-eval <cp>` | Stop if our eval above this | Color-dependent |
-| `--relative` | Make thresholds relative to root eval | off |
-
-### Examples
-
-Build a Black repertoire with verbose output:
-```bash
-./bin/tree_builder -c b -e 20 -t 4 -v -n "Modern Benoni" modern_benoni
-```
-
-Build from a custom FEN:
-```bash
-./bin/tree_builder -c w --opp-max-children 4 \
-  -f "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" \
-  e4_repertoire
-```
-
-Resume an interrupted build (same flags as the previous run):
-```bash
-./bin/tree_builder SicilianKan --resume
-```
-
-Override a single setting while resuming:
-```bash
-./bin/tree_builder SicilianKan --resume --threads 8
-```
-
-Resume without `--resume` (must pass `-c` and other flags manually):
-```bash
-./bin/tree_builder -c b -v modern_benoni  # resumes from modern_benoni.tree.json
-```
-
-Use a partial tree as-is (skip building, go straight to repertoire generation):
-```bash
-./bin/tree_builder -c b --build-now modern_benoni
-```
-
-Resume to a specific depth, then stop:
-```bash
-./bin/tree_builder -c b --ply 8 modern_benoni  # resumes, stops at ply 8
-```
-
-> **Tip:** Because the build is BFS (breadth-first), stopping early still gives
-> you a complete tree at the shallower plies. You can always run `--build-now`
-> on a partial tree to get repertoire lines from whatever depth you've reached
-> so far, or resume later with a higher `--ply` to go deeper.
-
-## API (Library Usage)
-
-```c
-#include "tree.h"
-#include "lichess_api.h"
-#include "engine_pool.h"
-#include "serialization.h"
-
-int main() {
-    EnginePool *pool = engine_pool_create("./stockfish", 4, 20, 1);
-    LichessExplorer *explorer = lichess_explorer_create();
-    lichess_explorer_set_ratings(explorer, "2000,2200,2500");
-
-    Tree *tree = tree_create();
-    TreeConfig config = tree_config_default();
-    config.play_as_white = true;
-    config.engine_pool = pool;
-    config.maia_only = false;  // this example uses Lichess for opponent moves
-    config.min_probability = 0.001;
-    tree_config_set_color_defaults(&config);
-
-    tree_build(tree, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-               &config, explorer);
-
-    SerializationOptions opts = serialization_options_default();
-    tree_save(tree, "output.tree.json", &opts);
-
-    tree_destroy(tree);
-    lichess_explorer_destroy(explorer);
-    engine_pool_destroy(pool);
-    return 0;
-}
-```
-
-## Algorithm Details
-
-See [ALGORITHM.md](ALGORITHM.md) for the full algorithm design document
-including expectimax math, parameter explanations, and data flow diagrams.
+`make test-pure` checks production backup against the shared independently
+solved fixtures and runs the builder against a deterministic UCI oracle. It
+also works with `NO_MAIA=1`. The Makefile tracks header dependencies and build
+flags, so switching between Maia-enabled and offline builds recompiles objects.
 
 ## License
 

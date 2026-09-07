@@ -1,213 +1,221 @@
-/// Expectimax value propagation for [BuildTree].
-///
-/// Bottom-up post-order DFS that computes a practical win probability V
-/// at every node.  Ports the C tree builder's
-/// `calculate_expectimax_recursive`.
+/// Bellman backups for the declared opponent policy and engine-loss constraint.
+/// Values are expected-score proxies; they are not calibrated human win rates.
 library;
 
 import '../../models/build_tree_node.dart';
 import '../../utils/ease_utils.dart' show winProbability;
-import '../../utils/eval_constants.dart';
 import '../../utils/findability.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
-import 'node_selection.dart';
 import 'trap_score.dart';
 
 class ExpectimaxCalculator {
   final TreeBuildConfig config;
   final FenMap? fenMap;
-
   ExpectimaxCalculator({required this.config, this.fenMap});
 
-  /// Run expectimax calculation on the full tree. Returns the count of nodes
-  /// that received a value.
-  ///
-  /// Two-pass expectimax (matches C `tree_calculate_expectimax`): the first
-  /// pass gives every canonical node a correct value; the second pass ensures
-  /// transposition leaves that were visited before their canonical in pass 1
-  /// now find the canonical ready and propagate the corrected value upward.
   int calculate(BuildTree tree) {
-    _expectimaxRecursive(tree.root);
-    return _expectimaxRecursive(tree.root);
-  }
-
-  /// Leaf value: blend engine win probability toward a neutral 0.5 prior
-  /// using `leafConfidence`.  Matches C `leaf_value()`.
-  ///
-  ///   V = lc * wp(eval_for_us) + (1 - lc) * 0.5
-  ///
-  /// Returns 0.5 (neutral/"unknown") when no engine eval is available.
-  double _leafValue(BuildTreeNode node) {
-    if (!node.hasEngineEval) return 0.5;
-    final lc = config.leafConfidence.clamp(0.0, 1.0);
-    final cpUs = node.evalForUs(config.playAsWhite);
-    return lc * winProbability(cpUs) + (1.0 - lc) * 0.5;
-  }
-
-  int _expectimaxRecursive(BuildTreeNode node) {
-    int count = 0;
-
-    for (final child in node.children) {
-      count += _expectimaxRecursive(child);
-    }
-
-    final isOurMove = node.isWhiteToMove == config.playAsWhite;
-
-    if (!isOurMove && node.children.isNotEmpty) {
-      _computeLocalCpl(node);
-    }
-
-    // Subtree ply count + opponent plies (diagnostics)
-    if (node.children.isEmpty) {
-      node.subtreePly = 0;
-      node.subtreeOppPlies = 0;
-    } else {
-      int maxPly = 0;
-      int maxOpp = 0;
-      for (final child in node.children) {
-        final childPly = child.subtreePly + 1;
-        if (childPly > maxPly) maxPly = childPly;
-
-        int opp = child.subtreeOppPlies;
-        if (!isOurMove) opp += 1;
-        if (opp > maxOpp) maxOpp = opp;
-      }
-      node.subtreePly = maxPly;
-      node.subtreeOppPlies = maxOpp;
-    }
-
-    // Transposition leaves: borrow V from canonical node
-    if (node.children.isEmpty && fenMap != null) {
-      final canonical = fenMap!.getCanonical(node.fen);
-      if (canonical != null &&
-          canonical != node &&
-          canonical.hasExpectimax &&
-          canonical.children.isNotEmpty) {
-        node.expectimaxValue = canonical.expectimaxValue;
-        node.localCpl = canonical.localCpl;
-        node.subtreePly = canonical.subtreePly;
-        node.subtreeOppPlies = canonical.subtreeOppPlies;
-        node.hasExpectimax = true;
-        count++;
-        return count;
+    if (tree.root.historyAware) {
+      final saved = tree.configSnapshot;
+      if (((saved['search_algorithm'] == 'rolling') !=
+              config.isRollingSearch) ||
+          (saved['play_as_white'] != null &&
+              saved['play_as_white'] != config.playAsWhite) ||
+          (saved['max_depth'] != null && saved['max_depth'] != config.maxPly) ||
+          (saved['max_eval_loss_cp'] != null &&
+              saved['max_eval_loss_cp'] != config.maxEvalLossCp)) {
+        throw StateError(
+          'Pure values require the saved search model; rebuild after changing it.',
+        );
       }
     }
-
-    if (node.children.isEmpty) {
-      node.expectimaxValue = _leafValue(node);
-    } else if (isOurMove) {
-      final best = scoreOurMoveChildren(node);
-      node.expectimaxValue = best?.expectimaxValue ?? _leafValue(node);
-    } else {
-      // Opponent move — raw probabilities with tail term for uncovered mass.
-      //   V = Σ p_i · V(child_i)  +  (1 − Σ p_i) · leaf_value(this)
-      double covered = 0.0;
-      double v = 0.0;
-      for (final child in node.children) {
-        if (!child.hasExpectimax) continue;
-        covered += child.moveProbability;
-        v += child.moveProbability * child.expectimaxValue;
-      }
-
-      if (covered > 1.0) covered = 1.0;
-      if (covered < 0.0) covered = 0.0;
-
-      final tail = 1.0 - covered;
-      if (tail > 0.0) {
-        v += tail * _leafValue(node);
-      }
-
-      node.expectimaxValue = v;
-    }
-
-    node.hasExpectimax = true;
-    count++;
-    return count;
-  }
-
-  /// Local CPL: probability-weighted centipawn loss relative to the
-  /// opponent's best available move (display only).
-  void _computeLocalCpl(BuildTreeNode node) {
-    if (node.children.isEmpty) return;
-
-    int bestOppCp = kBestEvalCp;
-    bool hasAny = false;
-    for (final child in node.children) {
-      if (!child.hasEngineEval) continue;
-      if (child.engineEvalCp! < bestOppCp) bestOppCp = child.engineEvalCp!;
-      hasAny = true;
-    }
-    if (!hasAny) return;
-
-    double sum = 0.0;
-    for (final child in node.children) {
-      if (!child.hasEngineEval) continue;
-      if (child.moveProbability < kNegligibleMoveProb) continue;
-      int delta = child.engineEvalCp! - bestOppCp;
-      if (delta < 0) delta = 0;
-      sum += child.moveProbability * delta.toDouble();
-    }
-    node.localCpl = sum;
-  }
-
-  /// Pick the child with the highest expectimax value among candidates
-  /// passing the eval-loss filter, with the optional novelty boost.  Falls
-  /// back to all children if none pass.
-  ///
-  /// Novelty boost (matches C `score_our_move_children`):
-  ///   novelty = 1 - child.totalGames/parent.totalGames (if both have games)
-  ///           = 1 - child.maiaFrequency (if Maia data available)
-  ///   v_adj = v * (1 + nw * novelty)
-  /// The stored expectimax_value uses the *unboosted* child V.
-  ///
-  /// There is deliberately no second boost for "opponents blunder in this
-  /// subtree".  Expectimax already counts that: an opponent node is the
-  /// probability-weighted average of where its children land, so a line the
-  /// opponent goes wrong in scores higher *because* the wrong moves lead to
-  /// better positions for us.  A separate weight on top double-counted the
-  /// same effect, and because it read a value computed in a later pass it
-  /// tilted selection without tilting the values selection was compared
-  /// against.
-  ScoredChild? scoreOurMoveChildren(BuildTreeNode node) {
-    if (node.children.isEmpty) return null;
-
-    final nw = config.noveltyWeight / 100.0;
-
-    final bestChild = pickChildByValue(
-      node.children,
-      playAsWhite: config.playAsWhite,
-      maxEvalLossCp: config.maxEvalLossCp,
-      eligible: (child) => child.hasExpectimax,
-      value: (child) => _noveltyAdjustedValue(node, child, nw),
-    );
-
-    if (bestChild == null) return null;
-    return ScoredChild(
-      child: bestChild,
-      expectimaxValue: bestChild.expectimaxValue,
+    return _calculate(
+      tree.root,
+      config.maxPly,
+      fixedPolicy: config.isRollingSearch,
     );
   }
 
-  /// [child]'s expectimax value scaled by a novelty boost when [nw] > 0.
-  ///   novelty = 1 - child.totalGames/parent.totalGames (if both have games)
-  ///           = 1 - child.maiaFrequency (if Maia data available)
-  ///   v_adj   = v * (1 + nw * novelty)
-  double _noveltyAdjustedValue(
-    BuildTreeNode parent,
-    BuildTreeNode child,
-    double nw,
-  ) {
-    double v = child.expectimaxValue;
-    if (nw <= 0.0) return v;
-    double novelty = 0.0;
-    if (parent.totalGames > 0 && child.totalGames > 0) {
-      novelty = 1.0 - child.totalGames / parent.totalGames;
-    } else if (child.maiaFrequency >= 0.0) {
-      novelty = 1.0 - child.maiaFrequency;
+  /// Freeze a completed local decision. Its comparison value is kept for
+  /// audit; later evaluation of the committed policy cannot replace it.
+  void commitWindow(BuildTreeNode node, int horizon) {
+    calculateWindow(node, horizon);
+    final winner = scoreOurMoveChildren(node, respectCommitment: false);
+    if (winner == null || node.valueLower != node.valueUpper) {
+      throw StateError('Fast needs a completed lookahead before committing');
     }
-    if (novelty < 0.0) novelty = 0.0;
-    return v * (1.0 + nw * novelty);
+    node.committedMoveUci = winner.child.moveUci;
+    node.decisionHorizon = horizon;
+    node.decisionValue = winner.expectimaxValue;
+  }
+
+  /// Evaluate a complete local window before committing a Rolling decision.
+  int calculateWindow(BuildTreeNode root, int horizon) =>
+      _calculate(root, horizon, fixedPolicy: false);
+
+  int _calculate(BuildTreeNode root, int horizon, {required bool fixedPolicy}) {
+    final done = <BuildTreeNode>{};
+    final active = <BuildTreeNode>{};
+    void visit(BuildTreeNode node) {
+      if (done.contains(node)) return;
+      final terminal = node.terminalValue;
+      if (terminal != null &&
+          (!terminal.isFinite || terminal < 0 || terminal > 1)) {
+        throw StateError('Invalid terminal utility');
+      }
+      if (!active.add(node)) {
+        throw StateError('History-free cyclic tree: rebuild with Pure search.');
+      }
+      final resolved = resolveTransposition(node, fenMap);
+      if (!identical(node, resolved)) {
+        visit(resolved);
+        node.expectimaxValue = resolved.expectimaxValue;
+        node.valueLower = resolved.valueLower;
+        node.valueUpper = resolved.valueUpper;
+        node.subtreePly = resolved.subtreePly;
+        node.subtreeOppPlies = resolved.subtreeOppPlies;
+      } else {
+        final atHorizon = node.historyAware && node.ply >= horizon;
+        if (!atHorizon && node.terminalValue == null) {
+          for (final c in node.children) {
+            visit(c);
+          }
+        }
+        node.subtreePly = 0;
+        node.subtreeOppPlies = 0;
+        final ours = node.isWhiteToMove == config.playAsWhite;
+        for (final c in node.children) {
+          if (c.subtreePly + 1 > node.subtreePly) {
+            node.subtreePly = c.subtreePly + 1;
+          }
+          final opp = c.subtreeOppPlies + (ours ? 0 : 1);
+          if (opp > node.subtreeOppPlies) node.subtreeOppPlies = opp;
+        }
+        if (node.terminalValue != null ||
+            node.children.isEmpty ||
+            atHorizon ||
+            (fixedPolicy && ours && node.committedMoveUci.isEmpty)) {
+          final value =
+              node.terminalValue ??
+              (node.hasEngineEval
+                  ? winProbability(node.evalForUs(config.playAsWhite))
+                  : 0.5);
+          node.expectimaxValue = value;
+          final exact =
+              node.terminalValue != null ||
+              (node.hasEngineEval &&
+                  (!node.historyAware || node.ply >= horizon));
+          node.valueLower = exact ? value : 0;
+          node.valueUpper = exact ? value : 1;
+        } else if (ours) {
+          final candidates = eligibleChildren(
+            node,
+            respectCommitment: fixedPolicy,
+          );
+          final winner = scoreOurMoveChildren(
+            node,
+            respectCommitment: fixedPolicy,
+          )!;
+          node.expectimaxValue = winner.expectimaxValue;
+          node.valueLower = candidates
+              .map((c) => c.valueLower)
+              .reduce((a, b) => a > b ? a : b);
+          node.valueUpper = candidates
+              .map((c) => c.valueUpper)
+              .reduce((a, b) => a > b ? a : b);
+        } else {
+          var mass = 0.0, value = 0.0, lower = 0.0, upper = 0.0;
+          for (final c in node.children) {
+            final p = c.moveProbability;
+            if (!p.isFinite || p < 0 || p > 1) {
+              throw StateError('Invalid opponent probability');
+            }
+            mass += p;
+            value += p * c.expectimaxValue;
+            lower += p * c.valueLower;
+            upper += p * c.valueUpper;
+          }
+          if (mass > 1 + 1e-9) {
+            throw StateError('Opponent probability mass exceeds one: $mass');
+          }
+          if (node.historyAware && node.explored && (mass - 1).abs() > 1e-9) {
+            throw StateError(
+              'Pure opponent expansion must contain its complete policy',
+            );
+          }
+          final missing = node.historyAware && node.explored
+              ? 0.0
+              : (1 - mass).clamp(0.0, 1.0);
+          value +=
+              missing *
+              (node.hasEngineEval
+                  ? winProbability(node.evalForUs(config.playAsWhite))
+                  : 0.5);
+          node.expectimaxValue = value.clamp(0.0, 1.0);
+          node.valueLower = lower.clamp(0.0, 1.0);
+          node.valueUpper = (upper + missing).clamp(0.0, 1.0);
+        }
+      }
+      node.hasExpectimax = true;
+      active.remove(node);
+      done.add(node);
+    }
+
+    visit(root);
+    return done.length;
+  }
+
+  /// New Pure trees have already scored every legal move before applying
+  /// this constraint. Legacy trees are evaluated only over their saved set.
+  List<BuildTreeNode> eligibleChildren(
+    BuildTreeNode node, {
+    bool respectCommitment = true,
+  }) {
+    if (respectCommitment && node.committedMoveUci.isNotEmpty) {
+      final committed = node.children
+          .where((c) => c.moveUci == node.committedMoveUci)
+          .toList();
+      if (committed.length != 1 || !committed.single.hasExpectimax) {
+        throw StateError('Invalid saved Fast commitment');
+      }
+      return committed;
+    }
+    final valued = node.children.where((c) => c.hasExpectimax).toList();
+    final evaluated = valued.where((c) => c.hasEngineEval).toList();
+    if (evaluated.isEmpty) return valued;
+    final best = evaluated
+        .map((c) => c.evalForUs(config.playAsWhite))
+        .reduce((a, b) => a > b ? a : b);
+    return evaluated
+        .where(
+          (c) => c.evalForUs(config.playAsWhite) >= best - config.maxEvalLossCp,
+        )
+        .toList();
+  }
+
+  ScoredChild? scoreOurMoveChildren(
+    BuildTreeNode node, {
+    bool respectCommitment = true,
+  }) {
+    final candidates =
+        eligibleChildren(node, respectCommitment: respectCommitment)
+          ..sort((a, b) {
+            var order = b.expectimaxValue.compareTo(a.expectimaxValue);
+            if (order == 0) {
+              order = b
+                  .evalForUs(config.playAsWhite)
+                  .compareTo(a.evalForUs(config.playAsWhite));
+            }
+            if (order == 0) order = a.moveUci.compareTo(b.moveUci);
+            if (order == 0) order = a.moveSan.compareTo(b.moveSan);
+            return order;
+          });
+    return candidates.isEmpty
+        ? null
+        : ScoredChild(
+            child: candidates.first,
+            expectimaxValue: candidates.first.expectimaxValue,
+          );
   }
 
   /// Compute trap scores on opponent-move nodes throughout the tree.

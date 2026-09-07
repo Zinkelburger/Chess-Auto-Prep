@@ -201,7 +201,9 @@ class FenMap {
 /// Follow a transposition link if [node] is a childless leaf whose FEN
 /// has a canonical expansion with children elsewhere in the tree.
 BuildTreeNode resolveTransposition(BuildTreeNode node, FenMap? fenMap) {
-  if (node.children.isNotEmpty || fenMap == null) return node;
+  if (node.historyAware || node.children.isNotEmpty || fenMap == null) {
+    return node;
+  }
   final canonical = fenMap.getCanonical(node.fen);
   if (canonical != null && canonical != node && canonical.children.isNotEmpty) {
     return canonical;

@@ -37,6 +37,9 @@ class FakeStockfishPool extends StockfishPool {
   @override
   int get workerCount => workers;
 
+  @override
+  int get concurrencyLimit => workers;
+
   /// STM-relative mate distance returned by [evaluateFen], keyed by FEN.
   /// A FEN scripted here reports `scoreMate` with `scoreCp` null, the way
   /// Stockfish announces a forced mate — the case that separates code

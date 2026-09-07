@@ -149,6 +149,22 @@ class RootTableTest(unittest.TestCase):
         self.assertIsNone(table["candidates"][-1]["expectimax"])
         self.assertIsNone(table["margin_over_second"])
 
+    def test_rolling_reports_committed_policy_without_comparing_unequal_depths(self):
+        chosen = _node("e4", 0.4, 0)
+        chosen["is_repertoire_move"] = True
+        data = _tree([_node("d4", 0.9, 0), chosen])
+        data["config"] = {"search_algorithm": "rolling"}
+        data["tree"].update(decision_horizon=4, decision_value=0.6)
+        table = ex.root_table(self._write(data))
+        self.assertEqual(table["best"], "e4")
+        self.assertEqual(table["candidates"][0]["move"], "e4")
+        self.assertIsNone(table["margin_over_second"])
+        self.assertEqual(table["decision_lookahead"]["value"], 0.6)
+        self.assertEqual(table["search_label"], "Fast (4-ply, approximate)")
+        self.assertEqual(table["search_method"], "rolling")
+        chosen["is_repertoire_move"] = False
+        self.assertIsNone(ex.root_table(self._write(data))["best"])
+
     def test_empty_root_says_so(self):
         with self.assertRaises(ToolError) as caught:
             ex.root_table(self._write(_tree([])))
@@ -174,9 +190,10 @@ class ArgvTest(unittest.TestCase):
         self.assertIn("-c", argv)
         self.assertEqual(argv[argv.index("-c") + 1], "b")
         self.assertEqual(argv[argv.index("-f") + 1], LONDON_FEN)
-        self.assertEqual(argv[argv.index("-d") + 1], "8")
+        self.assertEqual(argv[argv.index("-d") + 1], "4")
         self.assertEqual(argv[argv.index("-t") + 1], "1")
-        self.assertEqual(argv[argv.index("--our-multipv") + 1], "5")
+        self.assertNotIn("--our-multipv", argv)
+        self.assertIn("--maia-only", argv)
         self.assertEqual(argv[-1], "/runs/x/tree")
 
     def test_overrides_reach_the_command_line(self):
@@ -189,8 +206,23 @@ class ArgvTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("-d") + 1], "10")
         self.assertEqual(argv[argv.index("-e") + 1], "20")
         self.assertEqual(argv[argv.index("-t") + 1], "4")
-        self.assertEqual(argv[argv.index("--our-multipv") + 1], "8")
+        self.assertNotIn("--our-multipv", argv)
         self.assertEqual(argv[argv.index("--maia-elo") + 1], "1800")
+
+    def test_legacy_master_argument_cannot_enable_a_database_policy(self):
+        argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"use_master_games": True})
+        self.assertIn("--maia-only", argv)
+
+    def test_fast_names_the_rolling_algorithm(self):
+        argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "fast"})
+        self.assertEqual(argv[argv.index("--search") + 1], "rolling")
+
+    def test_rolling_is_explicit_and_unknown_search_is_rejected(self):
+        argv = ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "rolling"})
+        self.assertEqual(argv[argv.index("--search") + 1], "rolling")
+        self.assertIn("rolling", ex.argv_with_plies(argv, 10))
+        with self.assertRaises(ToolError):
+            ex.builder_argv(self._chain(), Path("/x"), ex.resolve_position(LONDON), {"search": "unknown"})
 
     def test_name_is_optional(self):
         chain, position = self._chain(), ex.resolve_position(LONDON)
@@ -220,6 +252,18 @@ class ArgvReuseTest(unittest.TestCase):
         self.assertEqual(out[out.index("-d") + 1], "12")
         self.assertEqual(out.count("-d"), 1)
         self.assertEqual(out[-1], "/runs/x/tree")
+
+    def test_threads_override_preserves_search_and_output(self):
+        for flag in ("-t", "--threads"):
+            original = ex.argv_with(self.ARGV, flag, "1", "--search", "rolling")
+            out = ex.argv_with_threads(original, 10)
+            self.assertEqual(out[out.index(flag) + 1], "10")
+            self.assertEqual(out[-1], self.ARGV[-1])
+            self.assertIn("rolling", out)
+            self.assertEqual(original[original.index(flag) + 1], "1")
+        self.assertEqual(ex.argv_with_threads(self.ARGV, 10)[-3:], ["-t", "10", self.ARGV[-1]])
+        with self.assertRaises(ToolError):
+            ex.argv_with_threads(self.ARGV, 0)
 
     def test_plies_override_when_there_was_no_depth_flag(self):
         out = ex.argv_with_plies(["/bin/tree_builder", "-c", "b", "/x"], 6)
