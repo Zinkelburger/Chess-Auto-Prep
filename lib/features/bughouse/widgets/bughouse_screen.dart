@@ -33,6 +33,7 @@ import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_state.dart';
 import 'bughouse_analysis_panel.dart';
 import 'bughouse_board_card.dart';
+import 'bughouse_book_panel.dart';
 import 'bughouse_move_list.dart';
 import 'bughouse_setup_panel.dart';
 import 'bughouse_tournament_panel.dart';
@@ -91,15 +92,7 @@ class _BughouseScreenState extends State<BughouseScreen> {
         builder: (context, controller, _) => Scaffold(
           appBar: AppBar(
             title: const AppBreadcrumbTrail(),
-            actions: [
-              TextButton.icon(
-                icon: const Icon(Icons.restart_alt, size: 16),
-                label: const Text('New game'),
-                onPressed: controller.newGame,
-              ),
-              const AppModeSwitcher(),
-              const AppSettingsButton(),
-            ],
+            actions: const [AppModeSwitcher(), AppSettingsButton()],
           ),
           body: CallbackShortcuts(
             bindings: {
@@ -132,13 +125,22 @@ class _BughouseScreenState extends State<BughouseScreen> {
               focusNode: _keys,
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  // A match panel carries a games table and a crosstable, so
-                  // it is given more room than an engine pane needs. The
-                  // boards are capped at 400 each anyway, so on a wide window
-                  // this costs them nothing.
-                  final panelWidth = controller.mode == BughouseMode.tournament
-                      ? 540.0
-                      : 400.0;
+                  // A tournament panel carries a games table and a
+                  // crosstable, so it needs more room than an engine pane.
+                  // Whenever the boards can still be drawn at full size the
+                  // engine pane gets that width too, so switching modes
+                  // never resizes the boards; only on a window too narrow
+                  // for both does the engine pane give the boards the room.
+                  const wide = 540.0;
+                  const narrow = 400.0;
+                  final boardsFitBeside =
+                      constraints.maxWidth - 24 - 16 - wide >=
+                      _Boards.pairWidthAtFullSize;
+                  final panelWidth =
+                      controller.mode == BughouseMode.tournament ||
+                          boardsFitBeside
+                      ? wide
+                      : narrow;
                   // Below this the two boards plus a panel stop fitting side by
                   // side, and stacking beats shrinking all three.
                   final stacked = constraints.maxWidth < 720 + panelWidth;
@@ -245,6 +247,9 @@ class _Boards extends StatelessWidget {
       4 +
       36;
 
+  /// Both boards at their cap, and the gap between them.
+  static const double pairWidthAtFullSize = _maxBoardWidth * 2 + _gap;
+
   /// The largest board that fits both ways.
   static double fit({required double width, required double height}) {
     final byWidth = (width - _gap) / 2;
@@ -275,6 +280,16 @@ class _Boards extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         BughouseLineControls(controller: controller),
+        // The archive, under the pair, at a fixed height. The boards are not
+        // resized to make room for it: the column scrolls if the window is
+        // short, and the boards stay where they were.
+        if (controller.bookOpen) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: boardWidth * 2 + _gap,
+            child: BughouseBookPanel(controller: controller),
+          ),
+        ],
       ],
     );
   }
@@ -296,24 +311,26 @@ class _SidePanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Reading the engine is what the pane is for; setting a position
-            // up is a thing you do once, and running a match is a thing you
-            // set going and leave. So the three are a switch in the corner
+            // up is a thing you do once, and running a tournament is a thing
+            // you set going and leave. So the three are a switch in the corner
             // rather than the first control on the panel, and the score keeps
             // the top of the column.
             Row(
               children: [
                 Expanded(
+                  // Short, because the two switches beside it are not: the
+                  // eyebrow wrapping onto a second line moved the score.
                   child: Text(switch (mode) {
-                    BughouseMode.setup => 'EDITING THE POSITION',
-                    BughouseMode.tournament => 'MATCHES',
-                    BughouseMode.play => 'ENGINE ANALYSIS',
+                    BughouseMode.setup => 'EDIT POSITION',
+                    BughouseMode.tournament => 'ENGINE TOURNAMENT',
+                    BughouseMode.play => 'ANALYSIS',
                   }, style: AppTextStyles.eyebrow),
                 ),
                 _ModeButton(
                   controller: controller,
                   mode: BughouseMode.tournament,
                   icon: Icons.emoji_events_outlined,
-                  label: 'Matches',
+                  label: 'Engine tournament',
                 ),
                 _ModeButton(
                   controller: controller,

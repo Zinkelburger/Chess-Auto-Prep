@@ -33,6 +33,7 @@ abstract final class ExplorerColumns {
   static const double share = 40;
   static const double gap = 10;
   static const double rowHeight = 26;
+  static const double headerHeight = 22;
   static const double barHeight = 18;
   static const EdgeInsets padding = EdgeInsets.symmetric(horizontal: 10);
 }
@@ -323,7 +324,7 @@ class ExplorerTableHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 22,
+      height: ExplorerColumns.headerHeight,
       padding: ExplorerColumns.padding,
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.divider)),
