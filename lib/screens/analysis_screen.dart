@@ -9,6 +9,7 @@ library;
 /// Layout: toolbar row  ➜  three-panel [PositionAnalysisWidget].
 
 import 'dart:async';
+import '../utils/isolate_task.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -187,9 +188,12 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     });
   }
 
+  IsolateTask? _analysisTask;
+
   @override
   void dispose() {
     _opponents.removeListener(_onOpponentsChanged);
+    _analysisTask?.cancel();
     _evalService?.dispose();
     // The pending hunt futures notice the flag and release the engine.
     if (_isHunting) _holeService.cancel();
@@ -567,6 +571,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
 
   /// Clear all per-player analysis state (both colours + evals + holes).
   void _resetAnalysisState() {
+    _analysisTask?.cancel();
     _analysisPgnPath = null;
     _positionAnalysis = null;
     _openingTree = null;
@@ -605,6 +610,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     if (!player.canRedownload) return false;
 
     _cancelEvalAnalysis();
+    _analysisTask?.cancel();
 
     final progress = ValueNotifier<String>('Downloading games…');
 
@@ -706,6 +712,11 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     final player = _currentPlayer;
     if (player == null) return;
 
+    _analysisTask?.cancel();
+    final task = _analysisTask = IsolateTask();
+    bool isCurrent() =>
+        mounted && !task.isCancelled && identical(_analysisTask, task);
+
     setState(() {
       _isAnalyzing = true;
       _analysisPhase = 'Loading games';
@@ -718,13 +729,14 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         player.platform,
         player.username,
       );
+      if (!isCurrent()) return;
       if (corpus == null) throw StateError('Player games are not available.');
       final pgnPath = corpus.pgnPath;
       final whiteCachePath = corpus.cachePath('white_analysis.json');
       final blackCachePath = corpus.cachePath('black_analysis.json');
 
       if (!await File(pgnPath).exists()) {
-        if (mounted) {
+        if (isCurrent()) {
           _showError(
             'No games found. Please re-download games for this player.',
           );
@@ -732,11 +744,12 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         }
         return;
       }
-      if (!mounted || _currentPlayer != player) return;
+      if (!isCurrent()) return;
       _analysisPgnPath = pgnPath;
 
       // Fast path: both colours restored from the stat-validated disk cache.
       var bundle = await UnifiedAnalysisBuilder.loadCachedBundle(
+        task: task,
         pgnFilePath: pgnPath,
         whiteCachePath: whiteCachePath,
         blackCachePath: blackCachePath,
@@ -744,14 +757,18 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
 
       // Slow path: one isolate reads the file and builds both colours in a
       // single pass, persisting the cache for next time.
+      if (!isCurrent()) return;
       if (bundle == null) {
-        if (mounted) {
+        if (isCurrent()) {
           setState(() => _analysisPhase = 'Analyzing games');
         }
         bundle = await UnifiedAnalysisBuilder.buildBothInIsolate(
+          task: task,
           pgnFilePath: pgnPath,
           username: player.username,
-          onProgress: _onBuildProgress,
+          onProgress: (current, total) {
+            if (isCurrent()) _onBuildProgress(current, total);
+          },
           whiteCachePath: whiteCachePath,
           blackCachePath: blackCachePath,
         );
@@ -760,7 +777,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       // Guard: the user may have selected a different player while the
       // (possibly minutes-long) build ran — installing this bundle would
       // show the old player's data under the new player's name.
-      if (!mounted || _currentPlayer != player) return;
+      if (!isCurrent()) return;
       if (await _gamesService.corpusFingerprint(
             player.platform,
             player.username,
@@ -770,7 +787,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           'Player games changed while the tree was built. Reopen this player.',
         );
       }
-      if (!mounted || _currentPlayer != player) return;
+      if (!isCurrent()) return;
       final result = bundle;
       setState(() {
         _analysisFingerprint = corpus.fingerprint;
@@ -789,12 +806,14 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       // Merge previously computed engine evals into the displayed analysis,
       // and restore any saved hole/trick reports.
       await _loadEngineEvals();
+      if (!isCurrent()) return;
       await _loadHolesReports();
+      if (!isCurrent()) return;
       await _loadTricksReports();
       final warning = _gamesService.storageWarning;
       if (mounted && warning != null) _showError(warning);
     } catch (e) {
-      if (mounted) {
+      if (isCurrent()) {
         _showError('Failed to analyze positions: $e');
         setState(() {
           _isAnalyzing = false;

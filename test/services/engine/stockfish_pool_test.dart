@@ -4,6 +4,8 @@ library;
 import 'dart:async';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
+import 'package:chess_auto_prep/services/engine/engine_worker_slot.dart';
+import 'package:chess_auto_prep/services/engine/uci_handshake.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -19,8 +21,17 @@ class _FakeConnection implements EngineConnection {
   @override
   Future<void> get done => _done.future;
 
+  Completer<void>? readyGate;
+  bool failReady = false;
+  bool answerReady = true;
+  bool failStop = false;
+  bool get hasListener => _stdout.hasListener;
+
   @override
-  Future<void> waitForReady() async {}
+  Future<void> waitForReady() async {
+    if (failReady) throw StateError('Handshake failed');
+    await readyGate?.future;
+  }
 
   /// When set, every `go` is answered with this cp and a bestmove on the
   /// next microtask, so batches complete without a test scripting each one.
@@ -29,7 +40,8 @@ class _FakeConnection implements EngineConnection {
   @override
   void sendCommand(String command) {
     commands.add(command);
-    if (command == 'isready') {
+    if (command == 'stop' && failStop) throw StateError('Pipe closed');
+    if (command == 'isready' && answerReady) {
       scheduleMicrotask(() {
         if (!_stdout.isClosed) _stdout.add('readyok');
       });
@@ -42,7 +54,7 @@ class _FakeConnection implements EngineConnection {
   }
 
   void completeEval({int cp = 12}) {
-    _stdout.add('info depth 8 score cp $cp pv e2e4');
+    _stdout.add('info depth 8 multipv 1 score cp $cp pv e2e4');
     _stdout.add('bestmove e2e4');
   }
 
@@ -61,6 +73,129 @@ class _FakeConnection implements EngineConnection {
 }
 
 void main() {
+  test('worker slot shares startup and releases a late connection', () async {
+    final created = Completer<EngineConnection?>();
+    var calls = 0;
+    final slot = EngineWorkerSlot(
+      createConnection: () {
+        calls++;
+        return created.future;
+      },
+    );
+    final first = slot.ensure(threads: 1);
+    final second = slot.ensure(threads: 1);
+    expect(identical(first, second), isTrue);
+    expect(calls, 1);
+    slot.release();
+    final connection = _FakeConnection();
+    created.complete(connection);
+    expect(await first, isNull);
+    expect(connection.disposed, isTrue);
+  });
+
+  test('worker slot disposes failed initialization and can retry', () async {
+    final failed = _FakeConnection()..failReady = true;
+    final healthy = _FakeConnection();
+    var calls = 0;
+    final slot = EngineWorkerSlot(
+      createConnection: () async => calls++ == 0 ? failed : healthy,
+    );
+    await expectLater(slot.ensure(threads: 1), throwsStateError);
+    expect(failed.disposed, isTrue);
+    expect(await slot.ensure(threads: 1), isNotNull);
+    slot.release();
+    expect(healthy.disposed, isTrue);
+  });
+
+  test(
+    'pool coalesces overlapping provisioning and does not revive after suspend',
+    () async {
+      final gate = Completer<void>();
+      final conn = _FakeConnection()..readyGate = gate;
+      var calls = 0;
+      final pool = StockfishPool.fresh(
+        createConnection: () async {
+          calls++;
+          return conn;
+        },
+      );
+      final first = pool.ensureWorkers(1);
+      final second = pool.ensureWorkers(1);
+      await Future<void>.delayed(Duration.zero);
+      expect(calls, 1);
+      pool.suspend();
+      expect(conn.disposed, isTrue);
+      gate.complete();
+      await Future.wait([first, second]);
+      expect(pool.workerCount, 0);
+      expect(calls, 1);
+    },
+  );
+
+  test(
+    'worker slot retries a factory that throws before returning a future',
+    () async {
+      final conn = _FakeConnection();
+      var calls = 0;
+      final slot = EngineWorkerSlot(
+        createConnection: () {
+          if (calls++ == 0) throw StateError('Creation failed');
+          return Future.value(conn);
+        },
+      );
+      await expectLater(slot.ensure(threads: 1), throwsStateError);
+      expect(await slot.ensure(threads: 1), isNotNull);
+      slot.release();
+    },
+  );
+
+  test('broken stop pipe does not abort disposal', () async {
+    final conn = _FakeConnection()..failStop = true;
+    final worker = EvalWorker(conn);
+    await worker.init();
+    worker.dispose();
+    expect(conn.disposed, isTrue);
+    await expectLater(worker.evaluateFen('unused', 8), throwsStateError);
+  });
+
+  test('pool startup failure disposes its process', () async {
+    final conn = _FakeConnection()..failReady = true;
+    final pool = StockfishPool.fresh(createConnection: () async => conn);
+    await pool.ensureWorkers(1);
+    expect(pool.workerCount, 0);
+    expect(conn.disposed, isTrue);
+    pool.dispose();
+  });
+
+  test('overlapping discoveries do not overwrite the newer awaiter', () async {
+    final conn = _FakeConnection()..autoAnswerCp = 12;
+    final worker = EvalWorker(conn);
+    await worker.init();
+    const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    final old = worker.runDiscovery(fen, 8, 1, true);
+    final cancelled = expectLater(old, throwsStateError);
+    final current = worker.runDiscovery(fen, 8, 1, true);
+    await cancelled;
+    expect((await current).lines, isNotEmpty);
+    expect(conn.commands.where((c) => c.startsWith('go ')), hasLength(1));
+    worker.dispose();
+  });
+
+  test('UCI timeout and stream errors remove the handshake listener', () async {
+    final conn = _FakeConnection();
+    await expectLater(
+      performUciHandshake(conn, timeout: const Duration(milliseconds: 10)),
+      throwsA(isA<TimeoutException>()),
+    );
+    expect(conn.hasListener, isFalse);
+    final pending = performUciHandshake(conn);
+    final failed = expectLater(pending, throwsStateError);
+    conn.crash();
+    await failed;
+    expect(conn.hasListener, isFalse);
+    conn.dispose();
+  });
+
   test('stopAll aborts an in-flight evaluateFen', () async {
     final conn = _FakeConnection();
     final pool = StockfishPool.fresh();

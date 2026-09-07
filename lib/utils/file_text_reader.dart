@@ -7,6 +7,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'pgn_compression.dart';
 
@@ -18,7 +19,14 @@ class TextDecodeResult {
 }
 
 Future<String> readTextFile(File file) async {
-  return decodeTextBytes(maybeGunzip(await file.readAsBytes()));
+  final bytes = await file.readAsBytes();
+  // Decompression and text decoding are CPU work even after an async read.
+  // A small gzip can expand to a large library, so always offload gzip.
+  final compressed = bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
+  if (compressed || bytes.length >= 256 * 1024) {
+    return Isolate.run(() => decodeTextBytes(maybeGunzip(bytes)));
+  }
+  return decodeTextBytes(bytes);
 }
 
 String readTextFileSync(File file) {

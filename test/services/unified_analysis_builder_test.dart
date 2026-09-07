@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
@@ -290,13 +291,22 @@ void main() {
         final blackCachePath = '${tempDir.path}/black_analysis.json';
         await File(pgnPath).writeAsString(_pgnList.join('\n\n'));
 
+        final uiOnlyPort = ReceivePort();
+        addTearDown(uiOnlyPort.close);
+        var progressCalls = 0;
         final built = await UnifiedAnalysisBuilder.buildBothInIsolate(
+          onProgress: (current, total) {
+            // A UI callback may close over unsendable state. It must stay here.
+            expect(uiOnlyPort.sendPort, isA<SendPort>());
+            progressCalls++;
+          },
           pgnFilePath: pgnPath,
           username: 'TestUser',
           whiteCachePath: whiteCachePath,
           blackCachePath: blackCachePath,
         );
 
+        expect(progressCalls, greaterThan(0));
         expect(File(whiteCachePath).existsSync(), isTrue);
         expect(File(blackCachePath).existsSync(), isTrue);
 

@@ -172,11 +172,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         // Skip [inactive]: alt-tab and dialogs fire it without meaning the
         // user left the app.
         if (_appBackgrounded) return;
-        _appBackgrounded = true;
+        setState(() => _appBackgrounded = true);
         unawaited(EngineLifecycle.instance.suspend());
       case AppLifecycleState.resumed:
         if (!_appBackgrounded) return;
-        _appBackgrounded = false;
+        setState(() => _appBackgrounded = false);
         // A request may have been written while the window was away, and the
         // directory watch does not fire for events during that time on every
         // platform.
@@ -235,10 +235,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           index: _supportedModes.indexOf(activeMode),
           children: [
             for (final mode in _supportedModes)
-              _modeViews[mode] ??
-                  (mode == activeMode
-                      ? const _ModeLoadingView()
-                      : const SizedBox.shrink()),
+              TickerMode(
+                enabled: mode == activeMode && !_appBackgrounded,
+                child:
+                    _modeViews[mode] ??
+                    (mode == activeMode
+                        ? const _ModeLoadingView()
+                        : const SizedBox.shrink()),
+              ),
           ],
         ),
       ),

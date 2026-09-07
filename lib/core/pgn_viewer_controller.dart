@@ -327,6 +327,7 @@ class PgnViewerController extends ChangeNotifier
 
   @override
   void dispose() {
+    _fenIndex.cancel();
     _autoPlay.dispose();
     _solitaireSession.dispose();
     // A comment typed in the last 300 ms and a stale FEN-index stamp both

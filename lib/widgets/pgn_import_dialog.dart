@@ -6,6 +6,8 @@
 library;
 
 import 'dart:isolate';
+import 'dart:async';
+import '../utils/isolate_task.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -94,7 +96,9 @@ Future<PickedPgnImport?> pickPgnImport() async {
       return const PickedPgnImport(error: 'Could not read that file.');
     }
 
-    final count = pgn.countPgnGames(content);
+    final count = content.length < 256 * 1024
+        ? pgn.countPgnGames(content)
+        : await Isolate.run(() => pgn.countPgnGames(content));
     final name = picked.name;
     if (count == 0) {
       return PickedPgnImport(error: 'No lines found in $name.', fileName: name);
@@ -146,20 +150,27 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
   String? _error;
   String? _fileName;
 
-  /// What the picked file held, so typing over it drops the file name rather
-  /// than attributing hand-edited text to a file that no longer matches.
+  /// File contents stay out of the editable text layout. Pasting replaces them.
   String? _loadedContent;
   bool _reading = false;
+  IsolateTask? _countTask;
+  int _inputGeneration = 0;
+
+  String get _content => _loadedContent ?? _controller.text;
 
   @override
   void dispose() {
+    _countTask?.cancel();
     _controller.dispose();
     _focus.dispose();
     super.dispose();
   }
 
-  void _recount() {
-    final text = _controller.text.trim();
+  Future<void> _recount() async {
+    _countTask?.cancel();
+    final task = _countTask = IsolateTask();
+    final text = _content;
+    setState(() => _gameCount = 0);
     if (text.isEmpty) {
       setState(() {
         _gameCount = 0;
@@ -169,12 +180,16 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
     }
 
     try {
-      final count = pgn.countPgnGames(text);
+      final count = text.length < 256 * 1024
+          ? pgn.countPgnGames(text)
+          : await task.compute(pgn.countPgnGames, text);
+      if (!mounted || task.isCancelled) return;
       setState(() {
         _gameCount = count;
         _error = count == 0 ? 'No lines found in that PGN.' : null;
       });
     } catch (e) {
+      if (!mounted || task.isCancelled) return;
       setState(() {
         _gameCount = 0;
         _error = 'Could not parse that PGN: $e';
@@ -183,6 +198,7 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
   }
 
   Future<void> _pickFile() async {
+    final generation = ++_inputGeneration;
     setState(() => _reading = true);
     try {
       final file = await FilePicker.pickFile(
@@ -190,18 +206,22 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
         allowedExtensions: ['pgn', 'txt'],
       );
       if (file == null) {
-        if (mounted) setState(() => _reading = false);
+        if (mounted && generation == _inputGeneration) {
+          setState(() => _reading = false);
+        }
         return;
       }
 
       final path = file.path;
       if (path == null) {
-        if (mounted) setState(() => _reading = false);
+        if (mounted && generation == _inputGeneration) {
+          setState(() => _reading = false);
+        }
         return;
       }
 
       final content = await StorageFactory.instance.readFile(path);
-      if (!mounted) return;
+      if (!mounted || generation != _inputGeneration) return;
       if (content == null) {
         setState(() {
           _reading = false;
@@ -209,15 +229,15 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
         });
         return;
       }
-      _controller.text = content;
+      _controller.clear();
       setState(() {
         _fileName = file.name;
         _loadedContent = content;
         _reading = false;
       });
-      _recount();
+      await _recount();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _inputGeneration) return;
       setState(() {
         _reading = false;
         _error = 'Could not read file: $e';
@@ -228,8 +248,11 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
   /// Drops the loaded file and empties the box, so a mis-picked file is one
   /// click away from gone rather than something to select-all over.
   void _clear() {
+    _inputGeneration++;
+    _countTask?.cancel();
     _controller.clear();
     setState(() {
+      _reading = false;
       _fileName = null;
       _loadedContent = null;
       _error = null;
@@ -239,7 +262,7 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
   }
 
   void _confirm() {
-    final text = _controller.text.trim();
+    final text = _content.trim();
     if (text.isEmpty || _gameCount == 0) return;
 
     Navigator.of(context).pop(
@@ -254,7 +277,7 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final hasText = _controller.text.trim().isNotEmpty;
+    final hasText = _content.isNotEmpty;
 
     return AlertDialog(
       titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
@@ -313,6 +336,9 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
                 fontSize: 12,
               ),
               decoration: InputDecoration(
+                hintText: _fileName == null
+                    ? null
+                    : 'File selected. Paste text to replace it.',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -320,11 +346,13 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
                 isDense: true,
               ),
               onChanged: (value) {
+                _inputGeneration++;
+                _reading = false;
                 if (_fileName != null && value != _loadedContent) {
                   _fileName = null;
                   _loadedContent = null;
                 }
-                _recount();
+                unawaited(_recount());
               },
             ),
             SizedBox(
@@ -347,7 +375,7 @@ class _PgnImportDialogState extends State<_PgnImportDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _gameCount > 0 ? _confirm : null,
+          onPressed: !_reading && _gameCount > 0 ? _confirm : null,
           child: Text(widget.confirmLabel),
         ),
       ],

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'dart:isolate';
+import '../../../utils/isolate_task.dart';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -73,7 +73,8 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     with AutomaticKeepAliveClientMixin {
   final EvalTreeController _controller = EvalTreeController();
 
-  BuildTree? _tree;
+  int? _maxPly;
+  IsolateTask? _loadTask;
   EvalTreeSnapshot? _snapshot;
   EvalTreeLineMetricsCache? _metricsCache;
 
@@ -151,12 +152,13 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     if (!identical(oldWidget.generatedTree, widget.generatedTree) &&
         widget.generatedTree != null) {
       _dismissed = false;
-      _setTree(widget.generatedTree!, resetView: true);
+      unawaited(_setTree(widget.generatedTree!, resetView: true));
     }
   }
 
   @override
   void dispose() {
+    _loadTask?.cancel();
     widget.onControllerReady?.call(null);
     _controller.removeListener(_handleControllerChanged);
     _controller.dispose();
@@ -260,7 +262,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
   }
 
   Widget _buildSummaryBar(BuildContext context, EvalTreeSnapshot snapshot) {
-    final maxPly = _tree?.maxPlyReached ?? snapshot.root.subtreePly;
+    final maxPly = _maxPly ?? snapshot.root.subtreePly;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -350,7 +352,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
 
   void _restoreInitialTree() {
     if (widget.generatedTree != null) {
-      _setTree(widget.generatedTree!, resetView: true);
+      unawaited(_setTree(widget.generatedTree!, resetView: true));
       return;
     }
     if (_dismissed) return;
@@ -359,46 +361,38 @@ class _EvalTreeTabState extends State<EvalTreeTab>
 
   Future<void> _reloadFromFile({bool autoLoad = false}) async {
     final path = _treePath();
-    if (path == null || path.isEmpty) {
-      return;
-    }
-
-    if (!isEvalTreeFileAccessSupported) {
-      if (mounted) {
-        setState(() {
-          _error = evalTreeFileAccessUnsupportedReason;
-        });
+    if (path == null || path.isEmpty) return;
+    _loadTask?.cancel();
+    final task = _loadTask = IsolateTask();
+    final playAsWhite = widget.isWhiteRepertoire;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      if (!isEvalTreeFileAccessSupported) {
+        throw UnsupportedError(evalTreeFileAccessUnsupportedReason);
       }
-      return;
-    }
-
-    if (!await evalTreeFileExists(path)) {
-      if (mounted) {
+      if (!await evalTreeFileExists(path)) {
+        if (!mounted || task.isCancelled) return;
         setState(() {
+          _isLoading = false;
           _error = autoLoad
               ? 'No saved tree file found for this repertoire yet.'
               : 'No tree file found. Generate a tree first.';
         });
+        return;
       }
-      return;
-    }
-
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-    }
-
-    try {
       final json = await readEvalTreeFile(path);
-      // Deserialize off the UI isolate: opening a large eval tree used to
-      // freeze the frame on jsonDecode + recursive node building.
-      final tree = await Isolate.run(() => deserializeTree(json));
-      if (!mounted) return;
-      _setTree(tree, resetView: true);
+      if (!mounted || task.isCancelled) return;
+      final prepared = await task.compute(_prepareSavedTree, (
+        json,
+        playAsWhite,
+      ));
+      if (!mounted || task.isCancelled) return;
+      _installTree(prepared, resetView: true);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || task.isCancelled) return;
       setState(() {
         _isLoading = false;
         _error = 'Failed to load tree: $error';
@@ -406,25 +400,49 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     }
   }
 
-  void _setTree(BuildTree tree, {required bool resetView}) {
-    final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
-      tree,
-      playAsWhite: widget.isWhiteRepertoire,
-    );
-    final metricsCache = EvalTreeLineMetricsCache.fromSnapshot(snapshot);
+  Future<void> _setTree(BuildTree tree, {required bool resetView}) async {
+    _loadTask?.cancel();
+    final task = _loadTask = IsolateTask();
+    final playAsWhite = widget.isWhiteRepertoire;
+    setState(() => _isLoading = true);
+    try {
+      // Small generated trees fit within a frame. Large trees prepare all
+      // derived data in one isolate and return only what this view uses.
+      final prepared = tree.totalNodes <= 1000
+          ? _prepareTree(tree, playAsWhite)
+          : await task.compute(_prepareGeneratedTree, (tree, playAsWhite));
+      if (!mounted || task.isCancelled) return;
+      _installTree(prepared, resetView: resetView);
+    } catch (error) {
+      if (!mounted || task.isCancelled) return;
+      setState(() {
+        _isLoading = false;
+        _error = 'Failed to prepare tree: $error';
+        debugPrint(_error);
+      });
+    }
+  }
+
+  void _installTree(_PreparedTree prepared, {required bool resetView}) {
     setState(() {
-      _tree = tree;
-      _snapshot = snapshot;
-      _metricsCache = metricsCache;
+      _maxPly = prepared.maxPly;
+      _snapshot = prepared.snapshot;
+      _metricsCache = prepared.metrics;
+      _sizeCache = null;
+      _frameMemo = null;
+      _lastNotifiedNodeId = null;
       _isLoading = false;
       _error = null;
     });
-    _controller.loadSnapshot(snapshot, resetView: resetView);
+    _controller.loadSnapshot(prepared.snapshot, resetView: resetView);
   }
 
   void _clearTreeState() {
+    _loadTask?.cancel();
     setState(() {
-      _tree = null;
+      _maxPly = null;
+      _sizeCache = null;
+      _frameMemo = null;
       _snapshot = null;
       _metricsCache = null;
       _isLoading = false;
@@ -507,3 +525,27 @@ class _FrameMemo {
   final _FrameKey key;
   final EvalTreeLayoutFrame frame;
 }
+
+typedef _PreparedTree = ({
+  EvalTreeSnapshot snapshot,
+  EvalTreeLineMetricsCache metrics,
+  int maxPly,
+});
+
+_PreparedTree _prepareTree(BuildTree tree, bool playAsWhite) {
+  final snapshot = EvalTreeSnapshotAdapter.fromBuildTree(
+    tree,
+    playAsWhite: playAsWhite,
+  );
+  return (
+    snapshot: snapshot,
+    metrics: EvalTreeLineMetricsCache.fromSnapshot(snapshot),
+    maxPly: tree.maxPlyReached,
+  );
+}
+
+_PreparedTree _prepareSavedTree((String, bool) input) =>
+    _prepareTree(deserializeTree(input.$1), input.$2);
+
+_PreparedTree _prepareGeneratedTree((BuildTree, bool) input) =>
+    _prepareTree(input.$1, input.$2);
