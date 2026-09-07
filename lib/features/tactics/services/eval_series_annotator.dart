@@ -30,7 +30,7 @@ class PlyEval {
   final int depth;
 }
 
-/// [moveNodes] with each ply's score written onto it, rendered as movetext —
+/// [game] with each ply's score written onto its moves, rendered as movetext —
 /// or null when too many plies went unscored for a reader to accept the game
 /// as analyzed.
 ///
@@ -49,14 +49,20 @@ class PlyEval {
 /// no line behind it.
 ///
 /// The budget is checked before anything is written, so a game that does not
-/// clear it leaves [moveNodes] untouched rather than half-annotated.
+/// clear it leaves [game] untouched rather than half-annotated.
+///
+/// The whole game goes in and the whole game comes out: this text *replaces*
+/// the stored game in the games cache, so serializing the mainline alone
+/// would delete any sideline and the game's own opening comment from it, and
+/// would renumber a game that starts from a `[FEN]`. That is the bug
+/// [buildGameMovetext] exists to make unrepresentable — see its doc comment.
 String? annotateMovetextWithEvals({
-  required List<PgnNodeData> moveNodes,
+  required PgnGame<PgnNodeData> game,
   required List<PlyEval?> plyEvals,
   required bool lastPlyIsCheckmate,
-  required String result,
   List<List<String>?> plyPvs = const [],
 }) {
+  final moveNodes = game.moves.mainline().toList();
   if (moveNodes.isEmpty) return null;
 
   var missing = 0;
@@ -91,5 +97,10 @@ String? annotateMovetextWithEvals({
       node.comments = [comment];
     }
   }
-  return buildMovetext(moveNodes, result: result);
+  return buildGameMovetext(
+    moves: game.moves,
+    comments: game.comments,
+    fen: game.headers['FEN'],
+    result: game.headers['Result'],
+  );
 }

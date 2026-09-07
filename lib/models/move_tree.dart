@@ -131,6 +131,16 @@ class MoveNode implements MoveTreeNodeView {
   Position? _position;
 
   String? comment;
+
+  /// Comment written *before* this move rather than after it — PGN's
+  /// "starting comment", which is where a study's prose introduction to a
+  /// variation lives (`( { why this line } 1. c4 c5 )`). Kept separate from
+  /// [comment] because the two land in different places on the way back out,
+  /// and folding one into the other moves the reader's note onto the wrong
+  /// side of the move. Dropping it — which this model used to do — deleted
+  /// that note from the file on the next autosave.
+  String? startingComment;
+
   List<int>? nags;
 
   /// Stable identity for this node within a session. Used by the analysis
@@ -153,6 +163,7 @@ class MoveNode implements MoveTreeNodeView {
     required this.fen,
     Position? position,
     this.comment,
+    this.startingComment,
     this.nags,
     this.isEphemeral = false,
     List<MoveNode>? children,
@@ -260,6 +271,7 @@ class MoveTree {
     fen: node.fen,
     position: node._position,
     comment: node.comment,
+    startingComment: node.startingComment,
     nags: node.nags,
     isEphemeral: node.isEphemeral,
     children: node.children.map(_copyNodeWithFreshId).toList(),
@@ -537,6 +549,7 @@ class MoveTree {
       final afterPos = playSanOrNullMove(parentPosition, san);
       if (afterPos == null) continue;
       final comment = node.data.comments?.join(' ');
+      final startingComment = node.data.startingComments?.join(' ');
       final nags = node.data.nags?.toList();
       result.add(
         MoveNode(
@@ -545,6 +558,10 @@ class MoveTree {
           position: afterPos,
           comment: (comment != null && comment.trim().isNotEmpty)
               ? comment.trim()
+              : null,
+          startingComment:
+              (startingComment != null && startingComment.trim().isNotEmpty)
+              ? startingComment.trim()
               : null,
           nags: nags,
           children: _convertDartchessNodes(node.children, afterPos),
@@ -569,6 +586,7 @@ class MoveTree {
 
     final main = siblings[0];
 
+    _writeStartingComment(buffer, main);
     if (isWhite) {
       buffer.write('$moveNumber. ');
     } else if (isFirstMove) {
@@ -583,6 +601,7 @@ class MoveTree {
 
     for (int i = 1; i < siblings.length; i++) {
       buffer.write('(');
+      _writeStartingComment(buffer, siblings[i]);
       if (isWhite) {
         buffer.write('$moveNumber. ');
       } else {
@@ -612,6 +631,15 @@ class MoveTree {
       isWhite ? moveNumber : moveNumber + 1,
       !isWhite,
     );
+  }
+
+  /// Write the note that belongs *before* a move, brace and all. A move that
+  /// has none writes nothing, so the movetext is unchanged for the common
+  /// case.
+  static void _writeStartingComment(StringBuffer buffer, MoveNode node) {
+    final starting = node.startingComment;
+    if (starting == null || starting.isEmpty) return;
+    buffer.write('{${_sanitizeComment(starting)}} ');
   }
 
   /// Write `$N` NAG tokens (PGN standard) so annotations survive a round-trip.

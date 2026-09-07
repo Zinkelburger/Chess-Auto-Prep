@@ -1,6 +1,30 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  language:
+    # Implicit dynamic is how a typed field access silently becomes an
+    # unchecked call: an untyped `const []` fallback or a `dynamic` parameter
+    # poisons everything downstream of it and the analyzer says nothing.
+    # Turning this on cost four fixes across 189k lines — see the four sites
+    # touched in the same commit — and it stays on.
+    strict-casts: true
+
+  errors:
+    # `scripts/ci.sh analyze` fails on any `error •` or `warning •` line, so a
+    # rule promoted here is genuinely enforced; a rule left at `info` is only
+    # advice, and this repo already carries dozens of unheeded infos. Every
+    # rule below had ZERO violations when it was promoted, so this is a
+    # ratchet against regressions, not a cleanup backlog.
+    always_declare_return_types: warning
+    avoid_type_to_string: warning
+    close_sinks: warning
+    collection_methods_unrelated_type: warning
+    invalid_case_patterns: warning
+    literal_only_boolean_expressions: warning
+    test_types_in_equals: warning
+    throw_in_finally: warning
+    unnecessary_statements: warning
+
   exclude:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
@@ -26,3 +50,28 @@ linter:
     - unawaited_futures
     - discarded_futures
     - use_build_context_synchronously
+
+    # Correctness. All promoted to `warning` above, all at zero violations.
+    - always_declare_return_types
+    - avoid_type_to_string
+    - close_sinks
+    - collection_methods_unrelated_type
+    - invalid_case_patterns
+    - literal_only_boolean_expressions
+    - test_types_in_equals
+    - throw_in_finally
+    - unnecessary_statements
+
+    # Clean today, kept as advice rather than gates.
+    - prefer_single_quotes
+    - unnecessary_await_in_return
+    - use_super_parameters
+
+    # Deliberately NOT enabled yet, with the count measured at b1c2a13:
+    #   directives_ordering (626), avoid_redundant_argument_values (408),
+    #   avoid_slow_async_io (155), prefer_relative_imports (151),
+    #   avoid_dynamic_calls (43). Each is a mechanical sweep of its own; turn
+    #   one on in the same commit that clears it, never before.
+    # cancel_subscriptions is a false positive here: the rule only inspects the
+    # function that creates the subscription, and TournamentOpenWatcher
+    # correctly cancels in stop().

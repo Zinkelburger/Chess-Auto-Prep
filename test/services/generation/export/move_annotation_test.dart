@@ -75,6 +75,59 @@ void main() {
       expect(tagFor(MoveLikelihoodSource.engine), '[%engineReply 0.500]');
     });
 
+    test('a single metric is enough to be worth emitting', () {
+      // isEmpty decides whether the move gets a comment at all, so every
+      // field it consults has to keep a lone annotation alive.
+      const singles = <String, MoveAnnotation>{
+        '[%eval +0.31]': MoveAnnotation(evalCp: 31),
+        '[%myEase 0.81]': MoveAnnotation(myEase: 0.81),
+        '[%ease 0.42]': MoveAnnotation(opponentEase: 0.42),
+        '[%score 54.2%]': MoveAnnotation(practicalScore: 0.542),
+        '[%lastPlayed 2024]': MoveAnnotation(lastPlayedYear: 2024),
+      };
+
+      singles.forEach((token, annotation) {
+        expect(annotation.toPgnComment(MoveAnnotationDetail.full), token);
+      });
+    });
+
+    test('a half-specified likelihood is dropped, not half-rendered', () {
+      // A probability with no source has no honest tag to write, and a
+      // source with no probability has no number: both are silently skipped
+      // rather than emitted with a hole in them.
+      expect(
+        const MoveAnnotation(
+          likelihood: 0.3,
+        ).toPgnComment(MoveAnnotationDetail.full),
+        isNull,
+      );
+      expect(
+        const MoveAnnotation(
+          likelihoodSource: MoveLikelihoodSource.maia,
+          evalCp: 10,
+        ).toPgnComment(MoveAnnotationDetail.full),
+        '[%eval +0.10]',
+      );
+    });
+
+    test('counters at zero are omitted rather than written as zero', () {
+      expect(
+        const MoveAnnotation(
+          gameCount: 0,
+          lastPlayedYear: 0,
+          evalCp: 20,
+        ).toPgnComment(MoveAnnotationDetail.full),
+        '[%eval +0.20]',
+      );
+      expect(
+        const MoveAnnotation(
+          gameCount: 1,
+          evalCp: 20,
+        ).toPgnComment(MoveAnnotationDetail.full),
+        '[%eval +0.20] [%games 1]',
+      );
+    });
+
     test('formats evaluations as signed pawns', () {
       String evalOf(int cp) =>
           MoveAnnotation(evalCp: cp).toPgnComment(MoveAnnotationDetail.full)!;
@@ -130,6 +183,28 @@ void main() {
       expect(const MoveAnnotation(mistakeCp: 40).glyph, isNull);
     });
 
+    // The two grading thresholds are user-visible words on a move: pin the
+    // side of the line each loss falls on, not the numbers themselves.
+    test('a loss of exactly a pawn and a half is already a blunder', () {
+      const atBoundary = MoveAnnotation(mistakeCp: 150);
+      const justUnder = MoveAnnotation(mistakeCp: 149);
+
+      expect(atBoundary.explanation, 'Blunder: gives up 1.50.');
+      expect(atBoundary.glyph, '?');
+      expect(justUnder.explanation, 'Inaccuracy: gives up 1.49.');
+      expect(justUnder.glyph, '?!');
+    });
+
+    test('a loss below the mistake floor is not written up at all', () {
+      const atFloor = MoveAnnotation(mistakeCp: 80);
+      const justUnder = MoveAnnotation(mistakeCp: 79);
+
+      expect(atFloor.explanation, 'Inaccuracy: gives up 0.80.');
+      expect(atFloor.glyph, '?!');
+      expect(justUnder.explanation, isEmpty);
+      expect(justUnder.glyph, isNull);
+    });
+
     test('marks where master practice ends', () {
       expect(
         const MoveAnnotation(gameCount: 9, lastBookMove: true).explanation,
@@ -139,6 +214,92 @@ void main() {
       expect(
         const MoveAnnotation(gameCount: 9, lastBookMove: true).isEmpty,
         isFalse,
+      );
+    });
+  });
+
+  group('notes', () {
+    const base = MoveAnnotation(evalCp: 31);
+    const transposition = 'Transposes to 1. d4 Nf6.';
+
+    test('prose reaches the file even with the metrics switched off', () {
+      const noted = MoveAnnotation(evalCp: 31, note: 'Improves on Kramnik.');
+
+      expect(
+        noted.toPgnComment(MoveAnnotationDetail.likelihood),
+        'Improves on Kramnik.',
+      );
+      expect(
+        noted.toPgnComment(MoveAnnotationDetail.full),
+        'Improves on Kramnik. [%eval +0.31]',
+      );
+      // An empty note is not prose; it must not open the comment with a space.
+      expect(
+        const MoveAnnotation(
+          evalCp: 31,
+          note: '',
+        ).toPgnComment(MoveAnnotationDetail.full),
+        '[%eval +0.31]',
+      );
+    });
+
+    test('a second note follows the first instead of replacing it', () {
+      // The extractor's transposition note and the composer's improvement
+      // note land on the same move; neither may swallow the other.
+      expect(
+        base.withNote('First.').withNote('Second.').note,
+        'First. Second.',
+      );
+      expect(
+        base.withNote('Prose.').withTransposition([
+          'd4',
+          'Nf6',
+        ], transposition).note,
+        'Prose. $transposition',
+      );
+      expect(
+        base.withTransposition(['d4', 'Nf6'], transposition).note,
+        transposition,
+      );
+    });
+
+    test('withdrawing a transposition restores the prose that preceded it', () {
+      final marked = base.withNote('Prose.').withTransposition([
+        'd4',
+        'Nf6',
+      ], transposition);
+      expect(
+        marked.toPgnComment(MoveAnnotationDetail.full),
+        'Prose. $transposition [%transposes d4 Nf6] [%eval +0.31]',
+      );
+
+      final withdrawn = marked.withoutTransposition(transposition);
+      expect(withdrawn.note, 'Prose.');
+      expect(withdrawn.transposesTo, isNull);
+      expect(
+        withdrawn.toPgnComment(MoveAnnotationDetail.full),
+        'Prose. [%eval +0.31]',
+      );
+    });
+
+    test('withdrawing the only note leaves no empty prose behind', () {
+      final withdrawn = base
+          .withTransposition(['d4', 'Nf6'], transposition)
+          .withoutTransposition(transposition);
+
+      expect(withdrawn.note, isNull);
+      expect(
+        withdrawn.toPgnComment(MoveAnnotationDetail.full),
+        '[%eval +0.31]',
+      );
+    });
+
+    test('prose we did not append is left alone', () {
+      final other = base.withNote('Someone else wrote this.');
+
+      expect(
+        other.withoutTransposition(transposition).note,
+        'Someone else wrote this.',
       );
     });
   });

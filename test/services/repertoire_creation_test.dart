@@ -26,6 +26,9 @@ class _TempStorage implements StorageService {
       p.join(repertoireDirPath, '$chapterName.pgn');
 
   @override
+  Future<bool> fileExists(String path) async => File(path).existsSync();
+
+  @override
   Future<void> writeFile(
     String path,
     String content, {
@@ -139,4 +142,26 @@ void main() {
     expect('[Event "'.allMatches(text).length, 2);
     expect(text, contains('[Event "Chapter 1 — 3.Nc3"]'));
   });
+  // Two names can sanitise to one folder ("Sicilian: Najdorf" and
+  // "Sicilian_ Najdorf"), so a caller's name check can pass for a chapter
+  // that already exists. Creating over it would replace someone's lines with
+  // a three-line header.
+  test(
+    'creating over an existing chapter refuses instead of writing',
+    () async {
+      await createRepertoire(name: 'Najdorf', color: 'Black', storage: storage);
+      final path = p.join(dir.path, 'Najdorf', 'Main.pgn');
+      File(path).writeAsStringSync('// Main\n// Color: Black\n\n1. e4 c5 *\n');
+
+      await expectLater(
+        createRepertoire(name: 'Najdorf', color: 'White', storage: storage),
+        throwsA(isA<RepertoireExistsException>()),
+      );
+      expect(
+        File(path).readAsStringSync(),
+        contains('1. e4 c5'),
+        reason: 'the lines that were there are still there',
+      );
+    },
+  );
 }

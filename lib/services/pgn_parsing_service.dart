@@ -166,44 +166,48 @@ int countPgnGames(String pgnContent) => countPgnGamesFast(pgnContent);
 
 /// Fast game count for list/metadata display.
 ///
-/// Counts `[Event ` headers at line starts by scanning the string in place,
-/// without accumulating per-game substrings the way [splitPgnIntoGames] does
-/// (its repeated `currentGame += line` is superlinear, so counting a library
-/// of large PGNs that way is what makes the picker screens sluggish).
+/// Walks the text one line at a time without accumulating per-game substrings
+/// the way [splitPgnIntoGames] does (its repeated `currentGame += line` is
+/// superlinear, so counting a library of large PGNs that way is what makes the
+/// picker screens sluggish).
 ///
-/// All repertoire / study / tactics files this app writes are `[Event`-
-/// delimited, so the count is exact for them; header-less move-only text is
-/// still reported as a single game, matching [splitPgnIntoGames].
+/// Counts exactly what the splitter splits, which is not merely the number of
+/// `[Event ` line starts: text above the first header is a game too, the one
+/// the splitter gives a synthetic `[Event "Repertoire Line"]` block. Counting
+/// headers alone reported a file with a non-comment banner — or one opening
+/// with bare movetext before its `[Event ` games — as one game short of the
+/// Lines list built from the very same file.
 int countPgnGamesFast(String pgnContent) {
   final content = stripBom(pgnContent);
-  const marker = '[Event ';
+  final length = content.length;
   var count = 0;
-  var from = 0;
-  while (true) {
-    final idx = content.indexOf(marker, from);
-    if (idx < 0) break;
-    // Only headers that begin a line (start of file or just after a newline,
-    // with nothing but blanks between) start a new game — mirrors
-    // `trimmedLine.startsWith('[Event ')`.
-    if (_isLineStart(content, idx)) count++;
-    from = idx + marker.length;
-  }
-  if (count > 0) return count;
+  // Whether a game is already open, which is what decides if a non-header line
+  // starts the synthetic header-less game or merely belongs to the game above.
+  var inGame = false;
 
-  // No headers: header-less move text counts as one game if it has any
-  // non-comment, non-blank content.
   var lineStart = 0;
-  while (lineStart <= content.length) {
+  while (lineStart <= length) {
     var lineEnd = content.indexOf('\n', lineStart);
-    if (lineEnd < 0) lineEnd = content.length;
-    final t = content.substring(lineStart, lineEnd).trim();
-    if (t.isNotEmpty && !isPgnCommentLine(t)) return 1;
+    if (lineEnd < 0) lineEnd = length;
+    final firstNonBlank = _firstNonBlank(content, lineStart, lineEnd);
+
+    // The trailing space is load-bearing, exactly as in [splitPgnIntoGames]:
+    // a bare `[Event` prefix also matches `[EventDate "..."]`.
+    if (content.startsWith('[Event ', firstNonBlank)) {
+      count++;
+      inGame = true;
+    } else if (!inGame && firstNonBlank < lineEnd) {
+      final trimmedLine = content.substring(firstNonBlank, lineEnd).trim();
+      if (!isPgnCommentLine(trimmedLine)) {
+        count++;
+        inGame = true;
+      }
+    }
     lineStart = lineEnd + 1;
   }
-  return 0;
+  return count;
 }
 
-/// Whether only blanks separate [offset] from the start of its line.
 bool _isLineStart(String content, int offset) {
   var i = offset - 1;
   while (i >= 0) {
@@ -253,7 +257,7 @@ List<String> mainlineSansOf(String gameText) {
   final sans = <String>[];
   var depth = 0;
 
-  var lineStart = _movetextStart(text);
+  var lineStart = movetextStart(text);
   // Set when a brace comment ran past the end of its line: the scan resumes
   // mid-line at the `}` instead of at the next line start.
   var resumeInsideLine = false;
@@ -346,10 +350,16 @@ Map<String, String> extractHeaderBlock(String gameText) {
   return headers;
 }
 
-/// Offset of the first movetext line: past any leading blank / `%` lines and
-/// the run of header lines.  A line that carries text after its last header
-/// tag starts the movetext itself, as in dartchess.
-int _movetextStart(String text) {
+/// Offset of the first movetext character: past any leading blank / `%`
+/// lines and the run of header lines.  A line that carries text after its
+/// last header tag starts the movetext itself, as in dartchess.
+///
+/// `0` for header-less move text (which [splitPgnIntoGames] supports), and
+/// past the end of [text] when the game has no movetext at all.  This is the
+/// boundary anything that rewrites a game's moves in place has to cut on:
+/// searching for the last `]`-terminated line instead finds a `]` inside a
+/// comment and splices in the middle of the movetext.
+int movetextStart(String text) {
   var lineStart = 0;
   var inHeaders = false;
   while (lineStart < text.length) {

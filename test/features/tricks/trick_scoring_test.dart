@@ -146,6 +146,24 @@ void main() {
       final picked = selectProbeCandidates([a, b, c], budget: 2, windowCp: 60);
       expect(picked.map((x) => x.san), ['b', 'c']);
     });
+
+    test('a zero window scores on reach alone, never NaN', () {
+      // With no window there is nothing to discount against: dividing the
+      // cost by it would produce 0/0, and one NaN poisons the whole sort.
+      final score = prescreenScore(
+        candidate(reach: 0.4, costCp: 25),
+        windowCp: 0,
+      );
+      expect(score.isNaN, isFalse);
+      expect(score, closeTo(0.4, 1e-9));
+    });
+
+    test('a budget of one still probes the best candidate', () {
+      final a = candidate(reach: 0.10, costCp: 0, san: 'a');
+      final b = candidate(reach: 0.30, costCp: 60, san: 'b'); // 0.15
+      final picked = selectProbeCandidates([a, b], budget: 1, windowCp: 60);
+      expect(picked.map((x) => x.san), ['b']);
+    });
   });
 
   group('dedupTargets', () {
@@ -191,6 +209,136 @@ void main() {
         maxNodes: 2,
       );
       expect(picked.map((t) => t.reach), [0.30, 0.20]);
+    });
+
+    test('a cap of one still yields the single best target', () {
+      final picked = selectDiscoveryTargets(
+        [target(reach: 0.10), target(reach: 0.30), target(reach: 0.20)],
+        minReachProb: 0.005,
+        maxNodes: 1,
+      );
+      expect(picked.map((t) => t.reach), [0.30]);
+    });
+  });
+
+  group('collectTrickTargets', () {
+    // Side to move alternates down the tree, which is the point: ownership is
+    // read off each FEN, never inferred from the depth.
+    const start = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const afterE4 =
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+    const afterD4 =
+        'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1';
+    const afterE4c5 =
+        'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2';
+    const afterE4e5 =
+        'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2';
+
+    /// ply 0  start        (White to move)
+    /// ply 1  e4 (30/40)   d4 (10/40)      (Black to move)
+    /// ply 2  c5 (6/30)    e5 (24/30)      (White to move)
+    OpeningTreeNode tree() => OpeningTreeNode(
+      move: '',
+      fen: start,
+      gamesPlayed: 40,
+      children: {
+        'e4': OpeningTreeNode(
+          move: 'e4',
+          fen: afterE4,
+          gamesPlayed: 30,
+          children: {
+            'c5': OpeningTreeNode(move: 'c5', fen: afterE4c5, gamesPlayed: 6),
+            'e5': OpeningTreeNode(move: 'e5', fen: afterE4e5, gamesPlayed: 24),
+          },
+        ),
+        'd4': OpeningTreeNode(move: 'd4', fen: afterD4, gamesPlayed: 10),
+      },
+    );
+
+    test('collects the trickster to move, and only the trickster', () {
+      // Owner is White, so the trick positions are the Black-to-move ones.
+      final asWhite = collectTrickTargets(
+        tree(),
+        playerIsWhite: true,
+        maxPly: 4,
+      );
+      expect(asWhite.targets.map((t) => t.fen), [afterE4, afterD4]);
+      expect(asWhite.nodesWalked, 5);
+
+      // Same tree, owner is Black: the complementary set, never the same one.
+      final asBlack = collectTrickTargets(
+        tree(),
+        playerIsWhite: false,
+        maxPly: 4,
+      );
+      expect(asBlack.targets.map((t) => t.fen), [start, afterE4c5, afterE4e5]);
+      expect(asBlack.nodesWalked, 5);
+    });
+
+    test('owner branching attenuates reach; trickster steering does not', () {
+      // Owner (White) chooses at the root, so its 30/10 game split is how
+      // often each reply is actually faced.
+      final asWhite = collectTrickTargets(
+        tree(),
+        playerIsWhite: true,
+        maxPly: 4,
+      );
+      expect(asWhite.targets.map((t) => t.reach), [
+        closeTo(0.75, 1e-9), // 30/40
+        closeTo(0.25, 1e-9), // 10/40
+      ]);
+
+      // Owner is Black: the root is the trickster's own choice, so both
+      // replies keep full reach, and the split only bites one ply lower,
+      // where Black (the owner) picks between 6 and 24 games.
+      final asBlack = collectTrickTargets(
+        tree(),
+        playerIsWhite: false,
+        maxPly: 4,
+      );
+      expect(asBlack.targets.map((t) => t.reach), [
+        closeTo(1.0, 1e-9), // root
+        closeTo(0.2, 1e-9), // 1.0 (steering) * 6/30
+        closeTo(0.8, 1e-9), // 1.0 (steering) * 24/30
+      ]);
+    });
+
+    test('walks to exactly maxPly and not one ply further', () {
+      // maxPly 1: the ply-1 nodes are *at* the limit and are collected.
+      final atLimit = collectTrickTargets(
+        tree(),
+        playerIsWhite: true,
+        maxPly: 1,
+      );
+      expect(atLimit.targets.map((t) => t.fen), [afterE4, afterD4]);
+      expect(atLimit.nodesWalked, 3); // root + two replies, no grandchildren
+
+      // maxPly 0: only the root, so nothing below it is collected or walked.
+      final rootOnly = collectTrickTargets(
+        tree(),
+        playerIsWhite: true,
+        maxPly: 0,
+      );
+      expect(rootOnly.targets, isEmpty); // root is the owner's move
+      expect(rootOnly.nodesWalked, 1);
+
+      // The ply-2 targets exist, but only once maxPly reaches them.
+      expect(
+        collectTrickTargets(
+          tree(),
+          playerIsWhite: false,
+          maxPly: 1,
+        ).targets.map((t) => t.fen),
+        [start],
+      );
+      expect(
+        collectTrickTargets(
+          tree(),
+          playerIsWhite: false,
+          maxPly: 2,
+        ).targets.map((t) => t.fen),
+        [start, afterE4c5, afterE4e5],
+      );
     });
   });
 }

@@ -451,7 +451,8 @@ mixin _RepertoireTabContent
     final tree = _controller.tree;
     final path = _controller.path;
     final children = path.isEmpty ? tree.roots : tree.nodeAt(path)?.children;
-    return {for (final c in (children ?? const [])) c.san};
+    if (children == null) return const {};
+    return {for (final c in children) c.san};
   }
 
   /// Echo the hovered explorer row on the board, the way Lichess arrows a

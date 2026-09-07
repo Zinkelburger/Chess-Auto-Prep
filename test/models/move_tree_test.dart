@@ -348,5 +348,60 @@ void main() {
       final tree = MoveTree.fromPgn('this is not valid pgn');
       expect(tree.isEmpty, true);
     });
+
+    test('a comment on a variation survives serialize -> parse', () {
+      const pgn = '1. e4 e5 (1... c5 {the Sicilian}) 2. Nf3 *';
+      const variation = TreePath([0, 1]);
+      final tree = MoveTree.fromPgn(pgn);
+      expect(tree.nodeAt(variation)?.san, 'c5');
+      expect(tree.nodeAt(variation)?.comment, 'the Sicilian');
+
+      final back = MoveTree.fromPgn(tree.toPgnMoveText());
+      expect(back.nodeAt(variation)?.san, 'c5');
+      expect(
+        back.nodeAt(variation)?.comment,
+        'the Sicilian',
+        reason: 'saving must not drop a comment just because it is on a RAV',
+      );
+    });
+
+    test('a variation is numbered from the ply it branches at', () {
+      // The sideline starts on Black's first move, so it opens `1... c5` and
+      // its own continuation is White's *second* move. Renumbering a
+      // variation puts the reader on the wrong move of the game.
+      final tree = MoveTree.fromPgn('1. e4 e5 (1... c5 2. Nf3) 2. Nf3 *');
+      expect(tree.toPgnMoveText(), contains('(1... c5 2. Nf3'));
+    });
+
+    test('a variation on White\'s move keeps the same move number', () {
+      final tree = MoveTree.fromPgn('1. e4 e5 2. Nf3 (2. d4 exd4) Nc6 *');
+      expect(tree.toPgnMoveText(), contains('(2. d4 exd4'));
+    });
+  });
+
+  group('MoveTree bounds', () {
+    test('promoteVariation ignores a path outside the sibling list', () {
+      final tree = MoveTree.fromPgn('1. e4 e5 (1... c5) *');
+      final before = tree.toPgnMoveText();
+
+      tree.promoteVariation(const TreePath([0, 5]));
+      tree.promoteVariation(const TreePath([0, 2]));
+      tree.promoteVariation(const TreePath([0, -1]));
+      tree.promoteVariation(const TreePath([0, 0]));
+      tree.promoteVariation(const TreePath([7]));
+
+      expect(
+        tree.toPgnMoveText(),
+        before,
+        reason: 'an unknown or already-mainline path is a no-op, not a crash',
+      );
+    });
+
+    test('promoteVariation on a real variation swaps it to the mainline', () {
+      final tree = MoveTree.fromPgn('1. e4 e5 (1... c5) *');
+      tree.promoteVariation(const TreePath([0, 1]));
+      expect(tree.nodeAt(const TreePath([0, 0]))?.san, 'c5');
+      expect(tree.nodeAt(const TreePath([0, 1]))?.san, 'e5');
+    });
   });
 }

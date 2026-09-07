@@ -638,11 +638,12 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
       }),
     );
     if (epoch != _epoch || isDisposed) return;
-    final missing = (_step?.moves == path ? _step!.candidates : const [])
-        .where((c) => c.evalCp == null)
-        .take(engineFillLimit)
-        .map((c) => c.san)
-        .toList();
+    final missing =
+        (_step?.moves == path ? _step!.candidates : const <PlanCandidate>[])
+            .where((c) => c.evalCp == null)
+            .take(engineFillLimit)
+            .map((c) => c.san)
+            .toList();
     for (final san in missing) {
       if (epoch != _epoch || isDisposed) return;
       if (_step == null || _step!.moves != path) return;

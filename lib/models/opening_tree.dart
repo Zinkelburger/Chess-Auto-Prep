@@ -903,9 +903,13 @@ class OpeningTree {
     }
 
     // Rebuild the FEN index.  Node ids were assigned in BFS order, so
-    // indexing in id order keeps each FEN's node list in tree order, as the
-    // builder's own walk produced it.  A pre-existing `fenToNodes` entry (an
-    // older sender) is accepted as-is.
+    // indexing in id order files each FEN's nodes shallowest-first — *not*
+    // the depth-first order the builder's walk produced them in.  Both are
+    // legitimate: a FEN's node list is a set of transposing paths, and the
+    // only thing that reads its order is [PositionGroup.primaryNode], which
+    // picks the most-played path and is therefore free to break a tie either
+    // way.  A pre-existing `fenToNodes` entry (an older sender) is accepted
+    // as-is.
     final rawFenIndex = json['fenToNodes'] as Map<String, dynamic>?;
     if (rawFenIndex != null) {
       final fenToNodes = <String, List<OpeningTreeNode>>{};
