@@ -30,6 +30,7 @@ import '../services/storage/storage_factory.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
+import '../features/generate/widgets/generate_position_pane.dart';
 import '../widgets/generation/generation_lock_overlay.dart';
 import '../widgets/layout/board_zone.dart';
 import '../widgets/layout/bottom_pane.dart';
@@ -240,21 +241,31 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// is what the breadcrumb title shows too.
   String get _configRouteTitle => _controller.currentRepertoire?.name ?? '';
 
-  /// Opens the generation config full-screen. The route closes itself once
-  /// the build starts; we then bring the Jobs pane forward so the progress
-  /// it kicked off is the first thing back on screen.
-  Future<void> _openGenerationDialog() async {
+  /// Reveal generation beside the board at its current position.
+  Future<void> _openGenerateTab() async {
+    if (_isCompactLayout) {
+      _toolsTabController.animateTo(4);
+    } else {
+      unawaited(_layout.setLinesPanelCollapsed(false));
+      _sidePanelTabController.animateTo(3);
+    }
+    _reclaimFocus();
+  }
+
+  /// Line planning and trimming use their own configuration route.
+  Future<void> _openLineBuildDialog({bool cutOnly = false}) async {
     if (_configRouteOpen) return;
     _configRouteOpen = true;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
-          title: 'Generate from here',
+          title: cutOnly ? 'Cut lines' : 'Build planned lines',
           startSignal: _generationController,
           hasStarted: () => _generationController.isGenerating,
           child: RepertoireGenerationTab(
             key: _generationTabKey,
+            cutOnly: cutOnly,
             fen: _controller.fen,
             isWhiteRepertoire: _controller.isRepertoireWhite,
             currentRepertoire: _controller.currentRepertoire,
@@ -340,7 +351,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   void _discoverTrapsFromRepertoire() {
     final path = _repertoireFilePath;
     if (path == null) return;
-    unawaited(_openGenerationDialog());
+    unawaited(_openLineBuildDialog());
     _seedGenerationWhenReady(pgnPaths: [path]);
   }
 
@@ -420,8 +431,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   void initState() {
     super.initState();
 
-    _toolsTabController = TabController(length: 3, vsync: this);
-    _sidePanelTabController = TabController(length: 3, vsync: this);
+    _toolsTabController = TabController(length: 5, vsync: this);
+    _sidePanelTabController = TabController(length: 4, vsync: this);
     _outline = RepertoireOutlineController(
       onActiveChapterMoved: _onActiveChapterMoved,
     );
@@ -502,9 +513,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   }
 
   Future<void> _seedGenerationAfterLoad(List<String> pgnPaths) async {
-    unawaited(_openGenerationDialog());
     await _controller.awaitLoaded();
     if (!mounted) return;
+    unawaited(_openLineBuildDialog());
     _seedGenerationWhenReady(pgnPaths: pgnPaths, autoStart: true);
   }
 
@@ -728,7 +739,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _controller.loadMoveSequence(
       _commonPrefix(_controller.repertoireLines.map((l) => l.moves)),
     );
-    unawaited(_openGenerationDialog());
+    unawaited(_openGenerateTab());
   }
 
   /// The longest SAN prefix shared by every sequence; empty for no lines.
@@ -1044,7 +1055,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         },
         onSelectRepertoire: _showRepertoireSelection,
         onTrainRepertoire: _trainRepertoire,
-        onOpenGeneration: _openGenerationDialog,
+        onOpenGeneration: _openGenerateTab,
         onPlanBuild: () => unawaited(_openPlanner()),
         onOpenAudit: _openAuditDialog,
         onImportPgn: _importPgn,

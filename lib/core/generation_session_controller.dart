@@ -1463,10 +1463,14 @@ class GenerationSessionController extends ChangeNotifier
     if (playedPlies != moves.length) {
       return 'Could not play ${moves.join(' ')} from the repertoire start.';
     }
-    if (_databasePath != null &&
+    if (_databasePath == null ||
         !p.equals(_databasePath!, target.repertoireFilePath)) {
-      // The bundle belongs to another file; never merge across repertoires.
-      clearTree();
+      // Generate can be opened immediately after selecting a chapter. Wait
+      // for its saved analysis before adding a probe, so a fast click cannot
+      // replace a database whose background load has not finished yet.
+      await loadSavedTreeFor(target.repertoireFilePath);
+      if (isDisposed) return 'Generation was closed.';
+      if (_isGenerating) return 'A generation is already running.';
     }
 
     final base =
@@ -1481,6 +1485,13 @@ class GenerationSessionController extends ChangeNotifier
       startFen: fen,
       playAsWhite: target.playAsWhite,
       maxPly: target.plies,
+      // Coverage answers and master extensions belong to line planning.
+      // A position search observes the depth the user asked for.
+      coverMinProb: 0,
+      masterDepthBonusPlies: 0,
+      engineThreads: target.engineThreads == null
+          ? null
+          : clampEngineThreads(target.engineThreads!),
       timeBudgetMinutes: 0,
       buildMode: BuildMode.stockfishExpectimax,
       pgnFilePaths: const [],

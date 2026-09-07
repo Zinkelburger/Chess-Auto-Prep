@@ -33,6 +33,7 @@ class RepertoireTreePane extends StatefulWidget {
     required this.repertoireMovesAtPosition,
     required this.onPlayMove,
     required this.onAddMove,
+    this.sourceName,
     this.onHoverTreeMove,
     this.onHoverExplorerMove,
   });
@@ -46,6 +47,7 @@ class RepertoireTreePane extends StatefulWidget {
 
   /// The repertoire's tree, or null before one is loaded.
   final OpeningTree? tree;
+  final String? sourceName;
   final List<RepertoireLine> repertoireLines;
   final List<String> currentMoveSequence;
 
@@ -151,15 +153,19 @@ class _RepertoireTreePaneState extends State<RepertoireTreePane> {
       child: Row(
         children: [
           const SizedBox(width: 8),
-          Text(
-            'Repertoire tree',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[400],
+          Expanded(
+            child: Text(
+              widget.sourceName == null
+                  ? 'Repertoire tree'
+                  : 'Saved lines: ${widget.sourceName}',
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[400],
+              ),
             ),
           ),
-          const Spacer(),
           IconButton(
             icon: Icon(
               _showExplorer ? Icons.menu_book : Icons.menu_book_outlined,

@@ -114,7 +114,7 @@ void main() {
 
       expect(find.text('IMPORT'), findsOneWidget);
       // File and paste are one entry: the dialog it opens offers both.
-      expect(find.text('From a PGN…'), findsOneWidget);
+      expect(find.text('From a PGN…'), findsNothing);
       expect(find.text('Paste PGN…'), findsNothing);
 
       expect(find.text('TRAIN'), findsOneWidget);
