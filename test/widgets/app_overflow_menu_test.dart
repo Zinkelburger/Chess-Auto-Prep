@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chess_auto_prep/theme/app_motion.dart';
 import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
 
 Widget _wrap(List<AppMenuEntry> entries) => MaterialApp(
@@ -19,6 +20,22 @@ void main() {
     await tester.pumpWidget(_wrap(const []));
 
     expect(find.byIcon(Icons.more_vert), findsNothing);
+  });
+
+  testWidgets('opens with the app-wide short menu animation', (tester) async {
+    await tester.pumpWidget(_wrap([AppMenuEntry(label: 'Only', onRun: () {})]));
+
+    expect(
+      tester
+          .widget<PopupMenuButton<int>>(find.byType(PopupMenuButton<int>))
+          .popUpAnimationStyle,
+      AppMotion.menuAnimation,
+    );
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pump();
+    await tester.pump(AppMotion.menu);
+    expect(find.text('Only'), findsOneWidget);
   });
 
   testWidgets('runs the entry that was tapped, not its neighbour', (
