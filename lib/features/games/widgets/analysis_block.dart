@@ -27,7 +27,7 @@ import '../../../theme/app_colors.dart';
 import '../services/opening_review.dart';
 import '../../../theme/app_text_styles.dart';
 import '../services/home_review_runner.dart';
-import 'home_block.dart';
+import '../../../widgets/common/home_block.dart';
 
 class AnalysisBlock extends StatelessWidget {
   const AnalysisBlock({
