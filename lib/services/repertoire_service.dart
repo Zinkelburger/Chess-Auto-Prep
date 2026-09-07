@@ -769,6 +769,144 @@ class RepertoireService {
     return deleteGameAt(fromPath, gameIndex);
   }
 
+  /// The games at [gameIndexes] of [filePath] as `(index, text)`, in file
+  /// order, skipping indexes the file does not have. Null when the file is
+  /// missing.
+  Future<List<({int index, String text})>?> readGameTextsAt(
+    String filePath,
+    Set<int> gameIndexes,
+  ) async {
+    final document = await readPgnDocument(filePath);
+    if (document == null) return null;
+    return [
+      for (var i = 0; i < document.games.length; i++)
+        if (gameIndexes.contains(i)) (index: i, text: document.games[i]),
+    ];
+  }
+
+  /// Inserts each of [games] so that it ends up at its `index` — the indexes
+  /// are the *final* positions, applied in ascending order, and clamped to the
+  /// end of the file. Inserting `(2, a), (5, b)` into a six-game file puts
+  /// `a` third and `b` sixth.
+  ///
+  /// That contract is what makes a deletion undoable exactly: removing the
+  /// games at a set of indexes and inserting them back at the same indexes
+  /// restores the file, however scattered the set was. Creates the file when
+  /// it does not exist.
+  Future<void> insertGameTextsAt(
+    String filePath,
+    List<({int index, String text})> games,
+  ) async {
+    if (games.isEmpty) return;
+    final file = io.File(filePath);
+    final existed = await file.exists();
+    final content = existed ? await readTextFile(file) : '';
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    final result = List<String>.from(document.games);
+    final sorted = [...games]..sort((a, b) => a.index.compareTo(b.index));
+    for (final g in sorted) {
+      final at = g.index.clamp(0, result.length);
+      result.insert(at, g.text.trim());
+    }
+    await writeTextFileAtomically(
+      file,
+      reassemblePgnDocument(document.preamble, result),
+      createOnly: !existed,
+      expectedContent: existed ? content : null,
+    );
+  }
+
+  /// Moves the games at [gameIndexes] of [fromPath] into [toPath], keeping
+  /// their relative order, and returns the indexes they now occupy there
+  /// (ascending; empty when none of them existed).
+  ///
+  /// Where they land: as one block starting at [toIndex] — "before the game
+  /// that is at [toIndex] now" — or at the end when it is null; or, with
+  /// [toIndexes], at exactly those final positions (see [insertGameTextsAt]),
+  /// which is how a move is undone.
+  ///
+  /// Within one file this is a reorder and a single write. Across files the
+  /// destination is written before the source, so a failure between the two
+  /// can leave a duplicate but never a lost line. [transform] rewrites each
+  /// moved game's text on the way (the caller pins the line id with it).
+  Future<List<int>> moveGamesTo({
+    required String fromPath,
+    required Set<int> gameIndexes,
+    required String toPath,
+    int? toIndex,
+    List<int>? toIndexes,
+    String Function(int index, String text)? transform,
+  }) async {
+    assert(toIndex == null || toIndexes == null);
+    final source = await readPgnDocument(fromPath);
+    if (source == null) return const [];
+    final moving = <int>[];
+    final texts = <String>[];
+    final remaining = <String>[];
+    for (var i = 0; i < source.games.length; i++) {
+      if (gameIndexes.contains(i)) {
+        moving.add(i);
+        texts.add(transform?.call(i, source.games[i]) ?? source.games[i]);
+      } else {
+        remaining.add(source.games[i]);
+      }
+    }
+    if (moving.isEmpty) return const [];
+    assert(toIndexes == null || toIndexes.length == moving.length);
+
+    if (p.equals(fromPath, toPath)) {
+      // "Before the game at toIndex" is measured in the old numbering; the
+      // games taken out above it shift the slot down.
+      final finals = toIndexes != null
+          ? ([...toIndexes]..sort())
+          : _block(
+              toIndex == null
+                  ? remaining.length
+                  : toIndex - moving.where((i) => i < toIndex).length,
+              moving.length,
+              remaining.length,
+            );
+      for (var k = 0; k < finals.length; k++) {
+        remaining.insert(finals[k].clamp(0, remaining.length), texts[k]);
+      }
+      await writePgnDocument(
+        fromPath,
+        preamble: source.preamble,
+        games: remaining,
+        expectedContent: source.originalContent,
+      );
+      return finals;
+    }
+
+    final destination = await readPgnDocument(toPath);
+    final destinationLength = destination?.games.length ?? 0;
+    final finals = toIndexes != null
+        ? ([...toIndexes]..sort())
+        : _block(
+            toIndex ?? destinationLength,
+            moving.length,
+            destinationLength,
+          );
+    await insertGameTextsAt(toPath, [
+      for (var k = 0; k < finals.length; k++)
+        (index: finals[k], text: texts[k]),
+    ]);
+    await writePgnDocument(
+      fromPath,
+      preamble: source.preamble,
+      games: remaining,
+      expectedContent: source.originalContent,
+    );
+    return finals;
+  }
+
+  /// [count] consecutive indexes from [start], clamped so the block fits
+  /// after [length] existing games.
+  static List<int> _block(int start, int count, int length) {
+    final from = start.clamp(0, length);
+    return [for (var k = 0; k < count; k++) from + k];
+  }
+
   /// Writes spaced-repetition metadata into PGN headers for a specific line.
   /// Headers used: [LastReview], [Difficulty], [Interval], [DueDate],
   /// [PassCount], [FailCount]. Unknown headers are ignored by standard PGN

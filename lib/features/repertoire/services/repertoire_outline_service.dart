@@ -16,6 +16,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../models/repertoire_line.dart';
 import '../../../models/repertoire_metadata.dart';
+import '../../../services/repertoire_review_service.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
@@ -23,6 +24,7 @@ import '../../../utils/safe_file_name.dart';
 import '../models/repertoire_outline.dart';
 import 'chapter_splitter.dart';
 import 'chapter_store.dart';
+import 'review_progress_repointer.dart';
 
 /// Why a structural edit was refused, in words the user can act on.
 class OutlineEditException implements Exception {
@@ -38,17 +40,28 @@ class RepertoireOutlineService {
     RepertoireService? repertoire,
     ChapterStore? chapters,
     ChapterSplitter? splitter,
+    ReviewProgressRepointer? repointer,
   }) : _storage = storage ?? StorageFactory.instance,
        _repertoire = repertoire ?? RepertoireService(),
        _chapters = chapters ?? ChapterStore(storage: storage),
+       _repointer =
+           repointer ??
+           ReviewProgressRepointer(
+             review: RepertoireReviewService(storage: storage),
+           ),
        _splitter =
            splitter ??
-           ChapterSplitter(storage: storage, repertoire: repertoire);
+           ChapterSplitter(
+             storage: storage,
+             repertoire: repertoire,
+             repointer: repointer,
+           );
 
   final StorageService _storage;
   final RepertoireService _repertoire;
   final ChapterStore _chapters;
   final ChapterSplitter _splitter;
+  final ReviewProgressRepointer _repointer;
 
   /// Parsed lines per chapter path, keyed by the file's modification time so
   /// an unchanged chapter is never re-parsed on rebuild.
@@ -377,14 +390,88 @@ class RepertoireOutlineService {
     required int gameIndex,
     required String toChapterPath,
   }) async {
-    final ok = await _repertoire.moveGame(
+    final landed = await moveLines(
+      fromChapterPath: fromChapterPath,
+      gameIndexes: {gameIndex},
+      toChapterPath: toChapterPath,
+    );
+    return landed.isNotEmpty;
+  }
+
+  /// Moves the lines at [gameIndexes] of one chapter into another — or,
+  /// when both paths are the same file, reorders them — and returns the
+  /// indexes they occupy afterwards (empty when none was found).
+  ///
+  /// They land as a block before the line now at [toIndex], at the end when
+  /// it is null, or at exactly [toIndexes] (what undoing a move passes).
+  ///
+  /// A line that crosses files keeps its training progress: its id is
+  /// pinned into the game first, so the position-based fallback id cannot
+  /// change under it, and the review records keyed by the old chapter are
+  /// re-pointed at the new one.
+  Future<List<int>> moveLines({
+    required String fromChapterPath,
+    required Set<int> gameIndexes,
+    required String toChapterPath,
+    int? toIndex,
+    List<int>? toIndexes,
+  }) async {
+    final sameFile = p.equals(fromChapterPath, toChapterPath);
+    final idByIndex = <int, String>{};
+    if (!sameFile) {
+      final parsed = await _repertoire.parseRepertoireFile(fromChapterPath);
+      for (final line in parsed) {
+        if (gameIndexes.contains(line.gameIndex)) {
+          idByIndex[line.gameIndex] = line.id;
+        }
+      }
+    }
+    final landed = await _repertoire.moveGamesTo(
       fromPath: fromChapterPath,
-      gameIndex: gameIndex,
+      gameIndexes: gameIndexes,
       toPath: toChapterPath,
+      toIndex: toIndex,
+      toIndexes: toIndexes,
+      transform: sameFile
+          ? null
+          : (i, text) {
+              final id = idByIndex[i];
+              return id == null
+                  ? text
+                  : ReviewProgressRepointer.pinLineId(text, id);
+            },
     );
     _lineCache.remove(fromChapterPath);
     _lineCache.remove(toChapterPath);
-    return ok;
+    if (landed.isNotEmpty && !sameFile && idByIndex.isNotEmpty) {
+      await _repointer.repoint(
+        from: fromChapterPath,
+        movedIdsByPath: {toChapterPath: idByIndex.values.toSet()},
+      );
+    }
+    return landed;
+  }
+
+  /// Deletes the lines at [gameIndexes] and returns what went, as the
+  /// `(index, text)` pairs [restoreLines] puts back.
+  Future<List<({int index, String text})>> deleteLines(
+    String chapterPath,
+    Set<int> gameIndexes,
+  ) async {
+    final removed = await _repertoire.readGameTextsAt(chapterPath, gameIndexes);
+    if (removed == null || removed.isEmpty) return const [];
+    await _repertoire.deleteLinesAt(chapterPath, gameIndexes);
+    _lineCache.remove(chapterPath);
+    return removed;
+  }
+
+  /// Puts lines back where [deleteLines] took them from.
+  Future<void> restoreLines(
+    String chapterPath,
+    List<({int index, String text})> lines,
+  ) async {
+    await _repertoire.insertGameTextsAt(chapterPath, lines);
+    _lineCache.remove(chapterPath);
   }
 
   Future<bool> renameLine(
