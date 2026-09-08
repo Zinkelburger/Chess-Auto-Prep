@@ -82,7 +82,13 @@ void main() {
 
     test('join multiple chords with "or"', () {
       expect(AppShortcut.fullScreen.label, 'Ctrl+F or F11');
-      expect(AppShortcut.solitaire.label, 'Ctrl+S or Shift+S');
+      expect(
+        const AppShortcut([
+          KeyChord(LogicalKeyboardKey.keyS, control: true),
+          KeyChord(LogicalKeyboardKey.keyS, shift: true),
+        ]).label,
+        'Ctrl+S or Shift+S',
+      );
     });
 
     test('modifiers render in front of the key', () {
@@ -109,8 +115,11 @@ void main() {
 
     test('carries modifiers through to each binding', () {
       final bindings = KeyBinding.forShortcut(
-        AppShortcut.solitaire,
-        'Toggle solitaire',
+        const AppShortcut([
+          KeyChord(LogicalKeyboardKey.keyS, control: true),
+          KeyChord(LogicalKeyboardKey.keyS, shift: true),
+        ]),
+        'Example action',
         () {},
       );
       expect(bindings, hasLength(2));

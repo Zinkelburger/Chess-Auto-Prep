@@ -58,14 +58,6 @@ Finder get _value => find
     )
     .last;
 
-Future<void> _chooseDate(WidgetTester tester) async {
-  final choice = find.widgetWithText(TextField, 'Choose condition');
-  await tester.enterText(choice, 'Date after');
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('In or after').last);
-  await tester.pumpAndSettle();
-}
-
 Future<void> _finishMatching(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 350));
   // Matching uses a real isolate; allow it to reply outside fake async.
@@ -89,35 +81,34 @@ void main() {
         tester
             .getSize(find.byKey(const ValueKey('pgn-filter-dialog-content')))
             .height,
-        lessThanOrEqualTo(300),
+        lessThanOrEqualTo(672),
       );
       expect(find.byType(LinesPreviewPanel), findsNothing);
       expect(find.byType(SequenceFilter), findsNothing);
-      expect(find.byTooltip('Preview matching games'), findsNothing);
+      expect(find.text('Preview games'), findsNothing);
       await tester.tap(find.text('Clear filters'));
       await tester.pumpAndSettle();
       expect(find.text('Show 2 games'), findsOneWidget);
 
-      await tester.tap(find.text('Filter'));
+      await tester.tap(find.text('Year'));
       await tester.pumpAndSettle();
-      await _chooseDate(tester);
       await tester.enterText(_value, '2026');
       await _finishMatching(tester);
-      expect(find.text('In or after'), findsOneWidget);
+      expect(find.text('Date contains'), findsOneWidget);
       expect(find.text('Match all conditions'), findsNothing);
       expect(find.text('Show 1 game'), findsOneWidget);
       expect(find.byType(LinesPreviewPanel), findsNothing);
-      await tester.ensureVisible(find.byTooltip('Preview matching games'));
-      await tester.tap(find.byTooltip('Preview matching games'));
+      await tester.ensureVisible(find.text('Preview games'));
+      await tester.tap(find.text('Preview games'));
       await tester.pumpAndSettle();
       expect(find.byType(LinesPreviewPanel), findsOneWidget);
-      expect(find.byTooltip('Hide preview').hitTestable(), findsOneWidget);
+      expect(find.text('Hide preview').hitTestable(), findsOneWidget);
       await tester.tap(find.text('Clear filters'));
       await tester.pumpAndSettle();
       expect(find.byType(LinesPreviewPanel), findsNothing);
       expect(find.text('Show 2 games'), findsOneWidget);
-      await tester.ensureVisible(find.text('Advanced'));
-      await tester.tap(find.text('Advanced'));
+      await tester.ensureVisible(find.text('Position & moves'));
+      await tester.tap(find.text('Position & moves'));
       await tester.pumpAndSettle();
       expect(find.byType(SequenceFilter), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -129,10 +120,9 @@ void main() {
     (tester) async {
       List<int>? applied;
       await _open(tester, onApply: (indices, _) => applied = indices);
-      await tester.tap(find.text('Filter'));
+      await tester.tap(find.text('Year'));
       await tester.pumpAndSettle();
-      await _chooseDate(tester);
-      await tester.enterText(_value, '2025');
+      await tester.enterText(_value, '202');
       await _finishMatching(tester);
       expect(find.text('Show 2 games'), findsOneWidget);
       await tester.enterText(_value, '2026');
@@ -143,7 +133,7 @@ void main() {
       );
       await _finishMatching(tester);
       expect(find.text('Show 1 game'), findsOneWidget);
-      await tester.tap(find.text('Advanced'));
+      await tester.tap(find.text('Position & moves'));
       await tester.pumpAndSettle();
       final position = find.widgetWithText(TextField, 'FEN or moves');
       await tester.enterText(position, 'invalid');
@@ -185,10 +175,8 @@ void main() {
       find.byKey(const ValueKey('pgn-filter-dialog-content')),
     );
     expect(dialogSize.width, lessThanOrEqualTo(560));
-    expect(dialogSize.height, lessThanOrEqualTo(300));
+    expect(dialogSize.height, lessThanOrEqualTo(672));
     expect(find.text('Match all conditions'), findsNothing);
-    final condition = find.widgetWithText(TextField, 'Choose condition');
-    expect(tester.getTopLeft(condition).dy, tester.getTopLeft(_value).dy);
     await tester.enterText(_value, '2026');
     await _finishMatching(tester);
     await tester.tap(find.text('Show 1 game'));
@@ -220,7 +208,7 @@ void main() {
       await tester.tap(find.text('Clear filters'));
       await tester.pumpAndSettle();
       expect(find.widgetWithText(TextField, 'Choose condition'), findsNothing);
-      expect(find.text('Filter').hitTestable(), findsOneWidget);
+      expect(find.text('Year').hitTestable(), findsOneWidget);
       expect(find.text('Show 2 games'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },

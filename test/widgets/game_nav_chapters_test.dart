@@ -42,7 +42,7 @@ Widget _host({
 );
 
 Finder get _chapterSearch => find.descendant(
-  of: find.byType(GameChapterDialog),
+  of: find.byType(GameSearchDialog),
   matching: find.byType(TextField),
 );
 
@@ -167,45 +167,23 @@ void main() {
     });
   });
 
-  testWidgets(
-    'counter browses chapters, counts games and marks current chapter',
-    (tester) async {
-      await tester.pumpWidget(_host(currentIndex: 3));
-      await _openChapters(tester);
-
-      expect(find.text('Browse chapters'), findsOneWidget);
-      expect(find.text('French Defence'), findsOneWidget);
-      expect(find.text('Caro-Kann'), findsOneWidget);
-      expect(find.text('2 games · starts at game 1'), findsOneWidget);
-      expect(find.text('3 games · starts at game 3'), findsOneWidget);
-      final selected = tester.widget<ListTile>(
-        find.ancestor(
-          of: find.text('Caro-Kann'),
-          matching: find.byType(ListTile),
-        ),
-      );
-      expect(selected.selected, isTrue);
-    },
-  );
-
-  testWidgets('search is case-insensitive and Enter jumps to chapter start', (
-    tester,
-  ) async {
+  testWidgets('chapters select a group before opening a game', (tester) async {
     final jumps = <int>[];
     await tester.pumpWidget(_host(onGoToGame: jumps.add));
     await _openChapters(tester);
-    await tester.enterText(_chapterSearch, '  CARO  ');
+    expect(find.text('Browse Games'), findsOneWidget);
+    await tester.tap(find.text('Caro-Kann').first);
     await tester.pumpAndSettle();
-
-    expect(find.text('French Defence'), findsNothing);
-    expect(find.text('Caro-Kann'), findsOneWidget);
-    await tester.testTextInput.receiveAction(TextInputAction.search);
+    expect(jumps, isEmpty);
+    expect(find.text('Caro-Kann · 3 shown'), findsOneWidget);
+    await tester.tap(find.text('Continuation 3'));
     await tester.pumpAndSettle();
-    expect(jumps, [2]);
-    expect(find.byType(GameChapterDialog), findsNothing);
+    expect(jumps, [3]);
   });
 
-  testWidgets('selection uses the filtered/sorted index', (tester) async {
+  testWidgets('chapter search and selection preserve filtered indices', (
+    tester,
+  ) async {
     final all = _course();
     final visible = GameNavItem.fromEntries(
       all,
@@ -215,38 +193,54 @@ void main() {
     await tester.pumpWidget(_host(games: visible, onGoToGame: jumps.add));
     await tester.tap(find.text('Game'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('French Defence'));
+    await tester.enterText(_chapterSearch, 'French');
+    await tester.pumpAndSettle();
+    await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
     expect(jumps, [1]);
   });
 
-  testWidgets('empty search does not navigate and Escape dismisses', (
-    tester,
-  ) async {
-    final jumps = <int>[];
-    await tester.pumpWidget(_host(onGoToGame: jumps.add));
-    await _openChapters(tester);
-    await tester.enterText(_chapterSearch, 'no such chapter');
-    await tester.pumpAndSettle();
-    expect(find.text('No matching chapters'), findsOneWidget);
-    await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pumpAndSettle();
-    expect(jumps, isEmpty);
-    expect(find.byType(GameChapterDialog), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(find.byType(GameChapterDialog), findsNothing);
-    expect(jumps, isEmpty);
-  });
-
-  testWidgets('search button still opens game search in chapter collections', (
+  testWidgets('search all games escapes a chapter with no matches', (
     tester,
   ) async {
     await tester.pumpWidget(_host());
-    await tester.tap(find.text('Search'));
+    await _openChapters(tester);
+    await tester.tap(find.text('French Defence').first);
     await tester.pumpAndSettle();
-    expect(find.byType(GameSearchDialog), findsOneWidget);
-    expect(find.byType(GameChapterDialog), findsNothing);
+    await tester.enterText(_chapterSearch, 'Continuation 4');
+    await tester.pumpAndSettle();
+    expect(find.text('No matches'), findsOneWidget);
+    await tester.tap(find.text('Search all games'));
+    await tester.pumpAndSettle();
+    expect(find.text('Continuation 4'), findsWidgets);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(GameSearchDialog), findsNothing);
+  });
+
+  test('event groups require five games and keep years separate', () {
+    final games = [
+      for (var i = 0; i < 10; i++)
+        GameNavItem(
+          label: 'Game $i',
+          studyRating: 0,
+          headers: {
+            'Event': 'Tata Steel',
+            'Date': i < 5 ? '2020.01.01' : '2021.01.01',
+          },
+        ),
+      const GameNavItem(
+        label: 'Other',
+        studyRating: 0,
+        headers: {'Event': '?'},
+      ),
+    ];
+    expect(gameBrowserGroups(games).map((g) => g.label), [
+      'Tata Steel 2020',
+      'Tata Steel 2021',
+    ]);
+    expect(gameBrowserGroups(games.take(4).toList()), isEmpty);
+    expect(gameBrowserGroups(games).last.gameIndices, [5, 6, 7, 8, 9]);
   });
 
   testWidgets(
@@ -256,7 +250,7 @@ void main() {
       await tester.pumpWidget(_host(onGoToGame: jumps.add));
       await tester.tap(find.byType(TextField));
       await tester.pumpAndSettle();
-      expect(find.byType(GameChapterDialog), findsNothing);
+      expect(find.byType(GameSearchDialog), findsNothing);
       expect(GameNumberField.focusActive(), isTrue);
       await tester.enterText(find.byType(TextField), '4');
       await tester.testTextInput.receiveAction(TextInputAction.go);
@@ -289,7 +283,7 @@ void main() {
     expect(find.byIcon(Icons.arrow_drop_down), findsNothing);
     await tester.tap(find.text('Game'));
     await tester.pumpAndSettle();
-    expect(find.byType(GameChapterDialog), findsNothing);
+    expect(find.byType(GameSearchDialog), findsNothing);
     await tester.enterText(find.byType(TextField), '2');
     await tester.testTextInput.receiveAction(TextInputAction.go);
     await tester.pumpAndSettle();
@@ -305,7 +299,6 @@ void main() {
     await tester.tap(find.text('of 5'));
     await tester.pumpAndSettle();
     expect(find.byType(GameSearchDialog), findsOneWidget);
-    expect(find.byType(GameChapterDialog), findsNothing);
   });
 
   testWidgets('empty collection has no browser and disables number entry', (

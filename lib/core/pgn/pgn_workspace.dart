@@ -13,9 +13,9 @@ class PgnWorkspace extends ChangeNotifier {
   final Map<int, String> titles = {
     game: 'Game',
     books: 'My books',
-    explorer: 'Opening explorer',
-    analysis: 'Analysis',
-    tree: 'Opening tree',
+    explorer: 'Opening Database',
+    analysis: 'Analysis Graph',
+    tree: 'Tree',
     collection: 'Collection',
   };
   int _index = game;

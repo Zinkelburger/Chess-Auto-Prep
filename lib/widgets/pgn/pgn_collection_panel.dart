@@ -10,12 +10,11 @@ class PgnCollectionPanel extends StatefulWidget {
     required this.onSaveStudy,
     required this.onExportPgn,
     required this.onExportScid,
-    required this.onSeed,
     required this.onTree,
   });
   final List<PgnGameEntry> games;
   final ValueChanged<List<PgnGameEntry>> onSaveStudy;
-  final VoidCallback onExportPgn, onExportScid, onSeed, onTree;
+  final VoidCallback onExportPgn, onExportScid, onTree;
   @override
   State<PgnCollectionPanel> createState() => _PgnCollectionPanelState();
 }
@@ -64,14 +63,10 @@ class _PgnCollectionPanelState extends State<PgnCollectionPanel> {
                   onPressed: widget.onExportScid,
                   child: const Text('Export Scid…'),
                 ),
-                TextButton(
-                  onPressed: widget.onSeed,
-                  child: const Text('Create repertoire…'),
-                ),
               ],
             ),
             const Text(
-              'Export and repertoire actions use all games in the current filter.',
+              'Export actions use all games in the current filter.',
               style: AppTextStyles.caption,
             ),
           ],

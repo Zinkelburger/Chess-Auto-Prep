@@ -1,8 +1,8 @@
 // Page chrome for game reading. Optional activities have one labelled menu.
 part of 'pgn_viewer_screen.dart';
 
-mixin _AppBarBuildersMixin
-    on State<PgnViewerScreen>, _RepertoireGenerationMixin {
+mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
+  PgnViewerController get _controller;
   bool get _editMode;
   bool get _onLineTab;
   bool get _onReferenceTab;
@@ -10,11 +10,9 @@ mixin _AppBarBuildersMixin
   set _singleGameFocus(bool value);
   GameViewPreferences get _viewPreferences;
   void _setViewPreferences(GameViewPreferences value);
-  int get _lineTabIndex;
   int get _explorerTabIndex;
   int get _analysisTabIndex;
   void _showPanel(int index);
-  Future<void> _checkDatabase();
   PgnViewerHandle get _activeMovetextController;
   PgnViewerWidgetController get _pgnWidgetController;
   PgnViewerWidgetController get _lineWidgetController;
@@ -22,8 +20,8 @@ mixin _AppBarBuildersMixin
   Future<void> _editInStudy();
   Future<void> _addCurrentGameToStudy();
   Future<void> _copyCurrentGamePgn();
+  Future<void> _copyCollectionPgn();
   void _openSliceDialog();
-  void _showTrophyCabinet();
   Future<void> _exportSlice();
   Future<void> _exportSliceAsScid();
   Future<void> _pickFile();
@@ -31,7 +29,6 @@ mixin _AppBarBuildersMixin
   Future<void> _loadFile(String path);
   void _closeFile();
   bool _toggleSolitaireMode();
-  @override
   void _reclaimFocus();
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
@@ -50,11 +47,10 @@ mixin _AppBarBuildersMixin
           ),
           if (loaded && !_controller.isSolitaireMode) ...[
             const SizedBox(width: 12),
-            TextButton.icon(
+            TextButton(
               key: const Key('pgn-filter-button'),
               onPressed: _openSliceDialog,
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(
+              child: Text(
                 _controller.hasActiveFilters
                     ? 'Filter · ${_controller.filteredGames.length}/${_controller.allGames.length}'
                     : 'Filter',
@@ -98,72 +94,60 @@ mixin _AppBarBuildersMixin
             AppMenuEntry(
               heading: 'Edit',
               label: _editMode ? 'Finish editing' : 'Edit PGN',
-              icon: Icons.edit_outlined,
               enabled: !_onLineTab,
               onRun: _toggleEditMode,
             ),
           AppMenuEntry(
             label: _viewingStudy && !_onReferenceTab
                 ? 'Edit study'
-                : 'Save game to study…',
+                : 'Add to Study',
             onRun: _viewingStudy && !_onReferenceTab
                 ? _editInStudy
                 : _addCurrentGameToStudy,
           ),
-          AppMenuEntry(label: 'Copy game PGN', onRun: _copyCurrentGamePgn),
-          if (_activeMovetextController.hasEphemeralMoves)
+          if (!solitaire) ...[
             AppMenuEntry(
-              label: 'Clear analysis marks',
-              onRun: () {
-                if (!mounted) return;
-                _controller.stopAutoPlay();
-                _activeMovetextController.clearEphemeralMoves();
-                setState(() {});
-                _reclaimFocus();
-              },
+              heading: 'Explore',
+              label: 'Analysis Graph',
+              onRun: () => _showPanel(_analysisTabIndex),
             ),
+            AppMenuEntry(
+              label: 'Tree',
+              onRun: () => _showPanel(PgnWorkspace.tree),
+            ),
+            AppMenuEntry(
+              label: 'Opening Database',
+              onRun: () => _showPanel(_explorerTabIndex),
+            ),
+          ],
           AppMenuEntry(
-            label: solitaire ? 'Leave solitaire chess' : 'Solitaire chess',
-            enabled: !_controller.showOpeningTree && !_onReferenceTab,
-            shortcut: AppShortcut.solitaire.label,
-            onRun: _toggleSolitaireMode,
+            label: 'Export',
+            dividerAbove: true,
+            onRun: () {},
+            children: [
+              AppMenuEntry(
+                heading: '${_controller.filteredGames.length} games in view',
+                label: 'Export as PGN…',
+                onRun: _exportSlice,
+              ),
+              AppMenuEntry(label: 'Export as SCID…', onRun: _exportSliceAsScid),
+              AppMenuEntry(
+                dividerAbove: true,
+                label: 'Copy Game PGN',
+                onRun: _copyCurrentGamePgn,
+              ),
+              AppMenuEntry(
+                label: 'Copy Collection PGN',
+                onRun: _copyCollectionPgn,
+              ),
+            ],
           ),
+          if (solitaire)
+            AppMenuEntry(
+              label: 'Leave solitaire chess',
+              onRun: _toggleSolitaireMode,
+            ),
         ],
-        if (hasGame && !solitaire) ...[
-          AppMenuEntry(
-            heading: 'Explore',
-            label: 'Analysis',
-            onRun: () => _showPanel(_analysisTabIndex),
-          ),
-          AppMenuEntry(
-            label: 'Database',
-            icon: Icons.storage_outlined,
-            onRun: _checkDatabase,
-          ),
-          AppMenuEntry(
-            label: 'My books',
-            onRun: () => _showPanel(_lineTabIndex),
-          ),
-          AppMenuEntry(
-            label: 'Opening explorer',
-            onRun: () => _showPanel(_explorerTabIndex),
-          ),
-          AppMenuEntry(
-            label: 'Collection opening tree',
-            shortcut: AppShortcut.toggleOpeningTree.label,
-            onRun: () => _showPanel(PgnWorkspace.tree),
-          ),
-          AppMenuEntry(
-            heading: 'Collection',
-            label: 'Organize and export games',
-            onRun: () => _showPanel(PgnWorkspace.collection),
-          ),
-        ],
-        if (_controller.totalTrophyCount > 0 || solitaire)
-          AppMenuEntry(
-            label: 'Solitaire chess trophies',
-            onRun: _showTrophyCabinet,
-          ),
       ],
     );
   }
@@ -182,7 +166,6 @@ mixin _AppBarBuildersMixin
     },
     onExportPgn: _exportSlice,
     onExportScid: _exportSliceAsScid,
-    onSeed: _generateRepertoireFromGames,
     onTree: () => _showPanel(PgnWorkspace.tree),
   );
 

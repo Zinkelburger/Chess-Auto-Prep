@@ -241,8 +241,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
 
   Widget _buildHeader(BuildContext context) {
     return Container(
-      color: AppColors.surfaceElevated,
-      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+      padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
       child: Row(
         children: [
           Expanded(
@@ -274,7 +273,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
 
   Widget _buildFilterColumn() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: _buildFilterContents(),
     );
   }
@@ -288,7 +287,13 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
           _buildQuickPresets(),
           const SizedBox(height: 12),
         ],
-        HeaderFilters(controller: _filters, games: widget.allGames),
+        const Text('Find games by', style: AppTextStyles.bodyStrong),
+        const SizedBox(height: 8),
+        HeaderFilters(
+          controller: _filters,
+          games: widget.allGames,
+          simple: true,
+        ),
         const SizedBox(height: 8),
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
@@ -297,7 +302,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
           visualDensity: VisualDensity.compact,
           initiallyExpanded:
               _filters.hasPositionFilter || _filters.hasSequenceFilter,
-          title: const Text('Advanced', style: AppTextStyles.body),
+          title: const Text('Position & moves', style: AppTextStyles.body),
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 8, bottom: 12),
@@ -367,7 +372,6 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: const BoxDecoration(
-        color: AppColors.surfaceElevated,
         border: Border(top: BorderSide(color: AppColors.divider)),
       ),
       // Counts change width while matching, and desktop windows can be narrow.
@@ -378,30 +382,24 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
         spacing: 8,
         overflowSpacing: 4,
         children: [
-          TextButton.icon(
+          TextButton(
             style: TextButton.styleFrom(
               visualDensity: VisualDensity.standard,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               minimumSize: const Size(0, 36),
             ),
             onPressed: _reset,
-            icon: const Icon(Icons.restart_alt, size: 18),
-            label: const Text('Clear filters'),
+            child: const Text('Clear filters'),
           ),
           if (_hasFilters)
-            IconButton(
-              tooltip: _showPreview ? 'Hide preview' : 'Preview matching games',
-              isSelected: _showPreview,
-              icon: const Icon(Icons.visibility_outlined, size: 20),
-              selectedIcon: const Icon(Icons.visibility_off_outlined, size: 20),
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              padding: const EdgeInsets.all(8),
+            TextButton(
+              child: Text(_showPreview ? 'Hide preview' : 'Preview games'),
               onPressed: () {
                 if (!mounted) return;
                 setState(() => _showPreview = !_showPreview);
               },
             ),
-          FilledButton.icon(
+          FilledButton(
             style: FilledButton.styleFrom(
               visualDensity: VisualDensity.standard,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -415,8 +413,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                     Navigator.pop(context);
                   }
                 : null,
-            icon: const Icon(Icons.arrow_forward, size: 18),
-            label: Text(countLabel),
+            child: Text(countLabel),
           ),
         ],
       ),

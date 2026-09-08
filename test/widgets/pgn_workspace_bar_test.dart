@@ -59,7 +59,7 @@ void main() {
     expect(find.byTooltip('Close Game tab'), findsNothing);
     await tester.tap(find.text('Game'));
     expect(workspace.index, 0);
-    await tester.tap(find.byTooltip('Close Analysis tab'));
+    await tester.tap(find.byTooltip('Close Analysis Graph tab'));
     await tester.pump();
     expect(find.text('Game'), findsNothing);
     expect(tester.takeException(), isNull);

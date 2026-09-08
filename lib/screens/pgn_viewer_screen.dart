@@ -6,8 +6,7 @@
 ///
 /// The screen state is split across part files: app-bar builders in
 /// `pgn_viewer_screen_app_bar.dart`, body/pane builders in
-/// `pgn_viewer_screen_panes.dart`, and the generate-repertoire-from-games
-/// flow in `pgn_viewer_screen_repertoire.dart`.
+/// `pgn_viewer_screen_panes.dart`.
 library;
 
 import 'dart:async';
@@ -37,7 +36,6 @@ import '../features/games/widgets/repertoire_line_panel.dart';
 import '../services/games_library/game_filter.dart' show dedupKeyForHeaders;
 import '../services/storage/app_paths.dart';
 import '../services/lichess_auth_service.dart';
-import '../services/storage/storage_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
 import '../models/board_annotation.dart';
@@ -75,7 +73,6 @@ import '../features/games/widgets/add_games_to_study.dart';
 import '../widgets/game_nav_bar.dart';
 import '../widgets/game_number_field.dart';
 import '../widgets/game_search_dialog.dart';
-import '../widgets/pgn/generate_repertoire_dialog.dart';
 import '../widgets/study/add_to_study_flow.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
@@ -87,7 +84,6 @@ import '../widgets/opening_explorer/opening_explorer_panel.dart';
 
 part 'pgn_viewer_screen_app_bar.dart';
 part 'pgn_viewer_screen_panes.dart';
-part 'pgn_viewer_screen_repertoire.dart';
 
 /// Side-panel tab indices. Game is always 0. Line is only present when
 /// reviewing one of your games from the Games/tactics handoff; Analysis
@@ -103,11 +99,7 @@ class PgnViewerScreen extends StatefulWidget {
 }
 
 class _PgnViewerScreenState extends State<PgnViewerScreen>
-    with
-        WindowListener,
-        _RepertoireGenerationMixin,
-        _AppBarBuildersMixin,
-        _PaneBuildersMixin {
+    with WindowListener, _AppBarBuildersMixin, _PaneBuildersMixin {
   @override
   late final PgnViewerController _controller;
   @override
@@ -146,7 +138,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Repertoire comparison is available for imports as well as handoffs.
   bool get _lineTabVisible => true;
 
-  @override
   int get _lineTabIndex => _lineTabVisible ? 1 : -1;
 
   @override
@@ -281,13 +272,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _referencePositions.remove(id);
     setState(() {});
     _reclaimFocus();
-  }
-
-  @override
-  Future<void> _checkDatabase() async {
-    if (!mounted) return;
-    final id = _databasePickerTab ??= _tabController.add('Database');
-    _showPanel(id);
   }
 
   void _openDatabase(String path) {
@@ -1007,7 +991,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     }
   }
 
-  @override
   void _showTrophyCabinet() {
     unawaited(
       showDialog(
@@ -1110,6 +1093,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   @override
+  Future<void> _copyCollectionPgn() async {
+    await Clipboard.setData(
+      ClipboardData(text: _controller.buildExportContent()),
+    );
+    if (!mounted) return;
+    showAppSnackBar(context, 'Collection PGN copied');
+    _reclaimFocus();
+  }
+
+  @override
   Future<void> _addCurrentGameToStudy() async {
     await addGamesToStudy(
       context,
@@ -1123,12 +1116,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _exportSlice() async {
-    if (_controller.filteredGames.isEmpty || _controller.filePath == null) {
+    if (_controller.filteredGames.isEmpty) {
       return;
     }
 
-    final defaultName = _controller.defaultExportFileName();
-    if (defaultName == null) return;
+    final defaultName = _controller.defaultExportFileName() ?? 'games.pgn';
 
     final content = _controller.buildExportContent();
     final outUri = await FilePicker.saveFile(
@@ -1136,7 +1128,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       fileName: defaultName,
       type: FileType.custom,
       allowedExtensions: ['pgn'],
-      initialDirectory: p.dirname(_controller.filePath!),
+      initialDirectory: _controller.filePath == null
+          ? null
+          : p.dirname(_controller.filePath!),
       bytes: utf8.encode(content),
     );
     if (outUri == null) {
@@ -1166,11 +1160,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   Future<void> _exportSliceAsScid() async {
     final games = _controller.filteredGames;
-    if (games.isEmpty || _controller.filePath == null) return;
+    if (games.isEmpty) return;
 
     final dir = await FilePicker.getDirectoryPath(
       dialogTitle: 'Where should the Scid database go?',
-      initialDirectory: p.dirname(_controller.filePath!),
+      initialDirectory: _controller.filePath == null
+          ? null
+          : p.dirname(_controller.filePath!),
     );
     if (dir == null) {
       _reclaimFocus();
@@ -1587,26 +1583,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         }
       },
     ),
-    ...KeyBinding.forShortcut(
-      AppShortcut.toggleOpeningTree,
-      'Toggle opening tree',
-      _controller.toggleOpeningTree,
-    ),
     for (var i = 0; i < AppShortcut.forkCandidates.length; i++)
       ...KeyBinding.forShortcutIf(
         AppShortcut.forkCandidates[i],
         'Play fork candidate ${i + 1}',
         () => _pgnWidgetController.selectBranchCandidate(i),
       ),
-    // Ctrl+S is the one people reach for; Shift+S stays because it is what the
-    // mode has always answered to. Neither collides with the bare S that steps
-    // to the next game — a chord's modifiers are part of its identity.
-    // Escape (above) is the way out of the mode.
-    ...KeyBinding.forShortcutIf(
-      AppShortcut.solitaire,
-      'Toggle solitaire mode',
-      _toggleSolitaireMode,
-    ),
     // Jump into the annotation panel's comment field (amend mode only).
     ...KeyBinding.forShortcutIf(
       AppShortcut.commentMove,

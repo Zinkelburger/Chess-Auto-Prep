@@ -19,6 +19,7 @@ bool _isValidEco(String value) => _ecoExact.hasMatch(value.trim());
 
 class HeaderFilters extends StatelessWidget {
   final SliceFilterController controller;
+  final bool simple;
 
   /// When provided, [kPlayerHeaderField] rows show which header spellings
   /// their names currently match across these games (and how often), so the
@@ -26,7 +27,12 @@ class HeaderFilters extends StatelessWidget {
   /// trusting substring matching blind.
   final List<GameRecord>? games;
 
-  const HeaderFilters({super.key, required this.controller, this.games});
+  const HeaderFilters({
+    super.key,
+    required this.controller,
+    this.games,
+    this.simple = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -46,25 +52,160 @@ class HeaderFilters extends StatelessWidget {
             const SizedBox(height: 8),
           ],
           for (int i = 0; i < controller.headerRows.length; i++)
-            _buildFilterRow(context, i),
-          OutlinedButton.icon(
-            onPressed: () {
-              if (!context.mounted) return;
-              controller.addHeaderRow();
-              controller.setHeaderField(
-                controller.headerRows.length - 1,
-                kPlayerHeaderField,
-              );
-            },
-            style: OutlinedButton.styleFrom(
-              visualDensity: VisualDensity.standard,
-              minimumSize: const Size(0, 32),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+            simple ? _buildSimpleRow(context, i) : _buildFilterRow(context, i),
+          if (simple)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final field in [
+                  kPlayerHeaderField,
+                  'Event',
+                  'Date',
+                  'Result',
+                  'Opening',
+                ])
+                  TextButton(
+                    onPressed: () => _addField(context, field),
+                    child: Text(field == 'Date' ? 'Year' : field),
+                  ),
+                PopupMenuButton<String>(
+                  tooltip: 'More filters',
+                  onSelected: (field) => _addField(context, field),
+                  itemBuilder: (_) => [
+                    for (final field in kHeaderFieldOptions)
+                      PopupMenuItem(
+                        value: field,
+                        child: Text(_fieldLabel(field)),
+                      ),
+                  ],
+                  child: const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text('More…'),
+                  ),
+                ),
+              ],
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: () {
+                if (!context.mounted) return;
+                controller.addHeaderRow();
+                controller.setHeaderField(
+                  controller.headerRows.length - 1,
+                  kPlayerHeaderField,
+                );
+              },
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.standard,
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Filter'),
             ),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Filter'),
+        ],
+      ),
+    );
+  }
+
+  String _fieldLabel(String field) => switch (field) {
+    'Date' => 'Year',
+    'WhiteElo' => 'White rating',
+    'BlackElo' => 'Black rating',
+    'StudyRating' => 'Study rating',
+    'StudySummary' => 'Study summary',
+    'Site' => 'Place',
+    _ => field,
+  };
+
+  void _addField(BuildContext context, String field) {
+    if (!context.mounted) return;
+    controller.addHeaderRow();
+    final index = controller.headerRows.length - 1;
+    controller.setHeaderField(index, field);
+    if (field == 'Result') controller.setHeaderMode(index, MatchMode.exact);
+  }
+
+  Widget _buildSimpleRow(BuildContext context, int index) {
+    final row = controller.headerRows[index];
+    return Padding(
+      key: ObjectKey(row),
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(_fieldLabel(row.field), style: AppTextStyles.bodyStrong),
+              const Spacer(),
+              PopupMenuButton<MatchMode>(
+                tooltip: 'Change matching rule',
+                initialValue: row.mode,
+                onSelected: (mode) {
+                  if (!context.mounted) return;
+                  controller.setHeaderMode(index, mode);
+                },
+                itemBuilder: (_) => [
+                  for (final mode in modesForField(row.field))
+                    PopupMenuItem(
+                      value: mode,
+                      child: Text(
+                        HeaderFilterConfig(
+                          field: row.field,
+                          mode: mode,
+                          value: '',
+                        ).conditionLabel,
+                      ),
+                    ),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 10,
+                  ),
+                  child: Text(
+                    row.toConfig().conditionLabel,
+                    style: AppTextStyles.caption,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Remove filter',
+                onPressed: () {
+                  if (!context.mounted) return;
+                  controller.removeHeaderRow(index);
+                },
+                icon: const Icon(Icons.close, size: 18),
+              ),
+            ],
           ),
+          TextField(
+            controller: row.controller,
+            autofocus: row.value.isEmpty,
+            style: AppTextStyles.body,
+            decoration: InputDecoration(
+              hintText: switch (row.field) {
+                kPlayerHeaderField => 'Player name, either colour',
+                'Date' => 'Year, e.g. 2020',
+                'Event' => 'Event or match name',
+                'Result' => '1-0, 0-1, 1/2-1/2 or *',
+                _ => _fieldLabel(row.field),
+              },
+              filled: true,
+              fillColor: AppColors.surfaceElevated,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            onChanged: (value) {
+              if (!context.mounted) return;
+              controller.setHeaderValue(index, value);
+            },
+          ),
+          if (_showsNameMatches(row)) _buildNameMatchesLine(row.value),
         ],
       ),
     );

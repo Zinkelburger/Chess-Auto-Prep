@@ -64,16 +64,6 @@ const shortcutReference = [
   ShortcutReference('Game reader', 'Edit in Study', AppShortcut.amendGame),
   ShortcutReference('Game reader', 'Paste PGN', AppShortcut.pastePgn),
   ShortcutReference(
-    'Game reader',
-    'Show collection opening tree',
-    AppShortcut.toggleOpeningTree,
-  ),
-  ShortcutReference(
-    'Solitaire',
-    'Enter or leave solitaire',
-    AppShortcut.solitaire,
-  ),
-  ShortcutReference(
     'Solitaire',
     'Start from the setup strip',
     AppShortcut.startSolitaire,

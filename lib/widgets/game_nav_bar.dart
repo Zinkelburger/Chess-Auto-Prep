@@ -12,7 +12,6 @@ import 'shortcut_tooltip.dart';
 import 'game_nav_item.dart';
 import 'game_number_field.dart';
 import 'game_search_dialog.dart';
-import 'game_chapter_dialog.dart';
 
 export '../models/pgn_filter_models.dart' show GameSortMode;
 export 'game_nav_item.dart' show GameNavItem;
@@ -117,24 +116,13 @@ class GameNavBar extends StatelessWidget {
       child: InkWell(
         key: const Key('game-counter-browser'),
         borderRadius: BorderRadius.circular(6),
-        onTap: () =>
-            hasChapters ? _openChapters(context) : _openGameSearch(context),
+        onTap: () => _openGameSearch(context),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [number, const Icon(Icons.arrow_drop_down, size: 18)],
         ),
       ),
     );
-  }
-
-  Future<void> _openChapters(BuildContext context) async {
-    final selected = await showGameChapterDialog(
-      context: context,
-      games: games,
-      currentIndex: currentIndex,
-    );
-    if (!context.mounted) return;
-    if (selected != null) onGoToGame?.call(selected);
   }
 
   Future<void> _openGameSearch(BuildContext context) async {

@@ -11,11 +11,10 @@ import '../theme/app_text_styles.dart';
 import '../utils/app_shortcuts.dart';
 import 'common/list_search_field.dart';
 import 'game_nav_item.dart';
+import 'game_chapter_dialog.dart';
 import 'game_number_field.dart';
 import 'shortcut_tooltip.dart';
 
-const _visibleRows = 10;
-const _dialogWidth = 600.0;
 const _resultRowHeight = 62.0;
 
 const _junkValues = {
@@ -38,6 +37,8 @@ const _searchHeaderKeys = [
   'Opening',
   'Variation',
   'Site',
+  'Date',
+  'Round',
 ];
 
 class _SearchResult {
@@ -109,7 +110,7 @@ String _playerName(Map<String, String> headers, String key) {
 }
 
 String _buildSearchableText(GameNavItem game) {
-  final parts = <String>[];
+  final parts = <String>[game.label, if (game.chapter != null) game.chapter!];
   for (final key in _searchHeaderKeys) {
     final v = _header(game.headers, key);
     if (!_isJunk(v)) parts.add(v);
@@ -268,6 +269,25 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
   // Results cached and only recomputed when the query text changes.
   late List<_SearchResult> _results = _computeResults(_entries, '');
   String _lastQuery = '';
+  late final List<GameNavChapter> _groups = gameBrowserGroups(widget.games);
+  GameNavChapter? _group;
+
+  void _chooseGroup(GameNavChapter? group) {
+    if (!mounted) return;
+    setState(() {
+      _group = group;
+      _refreshResults();
+    });
+  }
+
+  void _refreshResults() {
+    final indices = _group?.gameIndices.toSet();
+    _results = _computeResults(_entries, _lastQuery)
+        .where((result) => indices == null || indices.contains(result.index))
+        .toList();
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
   late final ScrollController _scroll = ScrollController(
     initialScrollOffset: math.max(
       0,
@@ -286,7 +306,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
     if (!mounted) return;
     _lastQuery = value;
     setState(() {
-      _results = _computeResults(_entries, value);
+      _refreshResults();
     });
   }
 
@@ -299,80 +319,70 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final results = _results;
-
+    final size = MediaQuery.sizeOf(context);
+    final hasGroups = _groups.isNotEmpty;
+    final wide = size.width >= 760;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.escape): () =>
             Navigator.pop(context),
       },
       child: Dialog(
-        backgroundColor: theme.colorScheme.surface,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: _dialogWidth),
+        insetPadding: const EdgeInsets.all(24),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: math.min(hasGroups ? 1000 : 800, size.width - 48),
+          height: math.min(740, size.height - 48),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(24),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
-                    const Icon(
-                      Icons.view_list_outlined,
-                      size: 22,
-                      color: AppColors.info,
+                    const Expanded(
+                      child: Text('Browse Games', style: AppTextStyles.title),
                     ),
-                    const SizedBox(width: 9),
-                    const Text(
-                      'Browse games and chapters',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
                     Text(
-                      '${widget.games.length} total',
-                      style: AppTextStyles.caption,
+                      '${widget.games.length} games',
+                      style: AppTextStyles.muted,
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      tooltip: 'Close game browser',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 ListSearchField(
                   hintText: 'Search games or enter game #...',
                   autofocus: true,
                   onChanged: _onQueryChanged,
                   onSubmitted: _onSubmitted,
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  // Show up to _visibleRows at once, but never taller than the
-                  // window allows (leaving room for the search field + margins).
-                  height: math
-                      .min(
-                        _visibleRows * _resultRowHeight,
-                        MediaQuery.sizeOf(context).height - 220,
-                      )
-                      .clamp(_resultRowHeight, _visibleRows * _resultRowHeight),
-                  child: results.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Text(
-                            'No matches',
-                            style: TextStyle(
-                              color: AppColors.onSurfaceMuted,
-                              fontSize: 13,
-                            ),
-                          ),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: wide && hasGroups
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(width: 220, child: _buildGroups()),
+                            const SizedBox(width: 24),
+                            Expanded(child: _buildGames()),
+                          ],
                         )
-                      : ListView.builder(
-                          controller: _scroll,
-                          padding: EdgeInsets.zero,
-                          itemCount: results.length,
-                          itemBuilder: (context, i) =>
-                              _buildResultRow(context, results[i]),
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (hasGroups)
+                              SizedBox(
+                                height: 108,
+                                child: _buildGroups(horizontal: true),
+                              ),
+                            Expanded(child: _buildGames()),
+                          ],
                         ),
                 ),
               ],
@@ -382,6 +392,96 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
       ),
     );
   }
+
+  Widget _buildGroups({bool horizontal = false}) => ListView(
+    scrollDirection: horizontal ? Axis.horizontal : Axis.vertical,
+    children: [
+      _groupTile(null, horizontal),
+      for (final group in _groups) _groupTile(group, horizontal),
+    ],
+  );
+
+  Widget _groupTile(GameNavChapter? group, bool horizontal) {
+    final selected = identical(_group, group);
+    final count = group?.gameIndices.length ?? widget.games.length;
+    return Padding(
+      padding: EdgeInsets.only(bottom: 8, right: horizontal ? 8 : 0),
+      child: SizedBox(
+        width: horizontal ? 180 : null,
+        child: Material(
+          color: selected
+              ? Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withValues(alpha: 0.35)
+              : AppColors.surfaceElevated,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(
+              color: selected ? AppColors.onSurfaceMuted : Colors.transparent,
+            ),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _chooseGroup(group),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    group?.label ?? 'All games',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodyStrong,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$count game${count == 1 ? '' : 's'}',
+                    style: AppTextStyles.caption,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGames() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(
+        '${_group?.label ?? 'All games'} · ${_results.length} shown',
+        style: AppTextStyles.muted,
+      ),
+      const SizedBox(height: 12),
+      Expanded(
+        child: _results.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('No matches', style: AppTextStyles.muted),
+                    if (_group != null)
+                      TextButton(
+                        onPressed: () => _chooseGroup(null),
+                        child: const Text('Search all games'),
+                      ),
+                  ],
+                ),
+              )
+            : ListView.builder(
+                controller: _scroll,
+                padding: EdgeInsets.zero,
+                itemCount: _results.length,
+                itemBuilder: (context, i) =>
+                    _buildResultRow(context, _results[i]),
+              ),
+      ),
+    ],
+  );
 
   Widget _buildResultRow(BuildContext context, _SearchResult result) {
     final entry = _entries[result.index];
@@ -396,7 +496,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
 
     final borderColor = isCurrent
         ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.6)
-        : AppColors.outline;
+        : Colors.transparent;
     final bgColor = isCurrent
         ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.25)
         : Colors.transparent;

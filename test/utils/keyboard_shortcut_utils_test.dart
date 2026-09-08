@@ -67,14 +67,16 @@ void main() {
     });
 
     test('arrow navigation and modified letter shortcuts coexist', () {
-      // Queue navigation uses an arrow while Ctrl+S and Shift+S toggle
-      // solitaire; all can be registered on the same screen.
+      // Queue navigation and custom modifier chords can share a screen.
       expect(
         () => runKeyBindings([
           ...KeyBinding.forShortcut(AppShortcut.nextItem, 'Next game', () {}),
           ...KeyBinding.forShortcut(
-            AppShortcut.solitaire,
-            'Toggle solitaire',
+            const AppShortcut([
+              KeyChord(LogicalKeyboardKey.keyS, control: true),
+              KeyChord(LogicalKeyboardKey.keyS, shift: true),
+            ]),
+            'Example action',
             () {},
           ),
         ], LogicalKeyboardKey.keyS),
