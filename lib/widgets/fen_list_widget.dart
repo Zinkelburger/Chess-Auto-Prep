@@ -27,8 +27,14 @@ class FenListWidget extends StatefulWidget {
   /// Determines the eval sort direction for "Bad Eval" / "Good Eval".
   final bool playerIsWhite;
 
-  /// Whether engine eval data is available for the eval sorts.
+  /// Whether engine eval data is available for the eval sorts. The sorts are
+  /// offered either way: picking one without evals is how a first-time user
+  /// finds out the engine pass exists.
   final bool hasEvals;
+
+  /// Opens the engine-analysis setup; null while it cannot start (a job is
+  /// running, or there is no tree yet).
+  final VoidCallback? onAnalyzeWithEngine;
 
   /// Opening tree for the displayed colour — used to derive each position's
   /// move number (stored FENs are normalised to 4 fields, so the move counter
@@ -44,6 +50,7 @@ class FenListWidget extends StatefulWidget {
     required this.onFenSelected,
     this.playerIsWhite = true,
     this.hasEvals = false,
+    this.onAnalyzeWithEngine,
     this.openingTree,
     this.navController,
   });
@@ -79,8 +86,8 @@ class _FenListWidgetState extends State<FenListWidget>
   final Map<String, ReachEstimate?> _reachCache = {};
 
   Map<String, String> get _sortMap => {
-    if (widget.hasEvals) 'Bad Eval': _badEvalSortKey,
-    if (widget.hasEvals) 'Good Eval': _goodEvalSortKey,
+    'Bad Eval': _badEvalSortKey,
+    'Good Eval': _goodEvalSortKey,
     'Lowest Win Rate': 'win_rate',
     'Highest Win Rate': 'win_rate_desc',
     'Most Games': 'games',
@@ -113,9 +120,6 @@ class _FenListWidgetState extends State<FenListWidget>
     }
     if (widget.hasEvals && !old.hasEvals && _sortBy == 'Lowest Win Rate') {
       setState(() => _sortBy = 'Bad Eval');
-    }
-    if (!_sortMap.containsKey(_sortBy)) {
-      setState(() => _sortBy = _sortMap.keys.first);
     }
     if (!identical(widget.openingTree, old.openingTree) ||
         widget.playerIsWhite != old.playerIsWhite) {
@@ -359,13 +363,14 @@ class _FenListWidgetState extends State<FenListWidget>
 
   Widget _buildPositionsList(List<PositionStats> positions) {
     if (positions.isEmpty) {
-      final isEvalSort = _isEvalSort;
+      if (_isEvalSort && !widget.hasEvals) return _buildNoEvalsYet();
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Text(
-            isEvalSort
-                ? 'No evaluated positions found.\nRun "Analyze with Engine" first.'
+            _isEvalSort
+                ? 'No evaluated positions match these filters.\n'
+                      'Try lowering the minimum games or depth.'
                 : 'No positions found.\nTry lowering the minimum games or depth filters.',
             textAlign: TextAlign.center,
             style: const TextStyle(color: AppColors.onSurfaceMuted),
@@ -382,6 +387,34 @@ class _FenListWidgetState extends State<FenListWidget>
         final stats = positions[index];
         return _buildPositionItem(index + 1, stats);
       },
+    );
+  }
+
+  /// An eval sort before any engine pass: say what is missing and offer the
+  /// one action that fills it, right where its results will appear.
+  Widget _buildNoEvalsYet() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'These games have not been analyzed with the engine yet.\n'
+              'Stockfish scores the most-played positions so you can sort '
+              'by the worst and best of them.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.onSurfaceMuted),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              onPressed: widget.onAnalyzeWithEngine,
+              icon: const Icon(Icons.memory, size: 18),
+              label: const Text('Analyze with engine…'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

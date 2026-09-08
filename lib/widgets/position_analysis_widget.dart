@@ -113,6 +113,10 @@ class PositionAnalysisWidget extends StatefulWidget {
   /// Whether engine eval data is available for the "Bad Eval" sort.
   final bool hasEvals;
 
+  /// Opens the engine-analysis setup; null while it cannot start. Offered by
+  /// the positions list when an eval sort has nothing to show.
+  final VoidCallback? onAnalyzeWithEngine;
+
   /// Analyzed player's username — used in generated study-chapter names and
   /// stats comments.
   final String? playerName;
@@ -180,6 +184,7 @@ class PositionAnalysisWidget extends StatefulWidget {
     this.isLoading = false,
     this.onAnalyze,
     this.hasEvals = false,
+    this.onAnalyzeWithEngine,
     this.playerName,
     this.analysisPgnPath,
     this.externalNavigateFen,
@@ -597,6 +602,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
         onFenSelected: _onFenSelected,
         playerIsWhite: widget.playerIsWhite ?? true,
         hasEvals: widget.hasEvals,
+        onAnalyzeWithEngine: widget.onAnalyzeWithEngine,
         openingTree: widget.openingTree,
         navController: _positionsNav,
       );
