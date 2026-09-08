@@ -235,6 +235,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void _setViewPreferences(GameViewPreferences value) {
+    if (!mounted) return;
     _preferencesChanged = true;
     _reviewHandoff = false;
     setState(() => _viewPreferences = value);
@@ -1326,18 +1327,26 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// that would disturb a puzzle. Keep descriptions in sync with the button
   /// tooltips that advertise them.
   List<KeyBinding> get _keyBindings => [
-    KeyBinding.run(LogicalKeyboardKey.enter, 'Focus current variation', () {
-      if (_activeMovetextController
-          case final PgnViewerWidgetController reader) {
-        reader.focusVariation();
-      }
-    }, control: true),
-    KeyBinding.run(LogicalKeyboardKey.arrowLeft, 'Return to parent line', () {
-      if (_activeMovetextController
-          case final PgnViewerWidgetController reader) {
-        reader.returnToParentLine();
-      }
-    }, control: true),
+    ...KeyBinding.forShortcut(
+      AppShortcut.focusVariation,
+      'Focus current variation',
+      () {
+        if (_activeMovetextController
+            case final PgnViewerWidgetController reader) {
+          reader.focusVariation();
+        }
+      },
+    ),
+    ...KeyBinding.forShortcut(
+      AppShortcut.returnToParentLine,
+      'Return to parent line',
+      () {
+        if (_activeMovetextController
+            case final PgnViewerWidgetController reader) {
+          reader.returnToParentLine();
+        }
+      },
+    ),
     // Solitaire: arrows/Home/End still browse the revealed region (the PGN
     // widget caps mainline navigation at the frontier); R reveals, and the
     // autoplay/tab-switch/engine/amend keys are swallowed so they can't

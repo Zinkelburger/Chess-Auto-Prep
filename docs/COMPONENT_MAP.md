@@ -446,6 +446,14 @@ RepertoireTrainingScreen
 
 ### PGN viewer (Open PGN)
 
+The **Game options** menu contains **Save to study** (this game or selected
+collection games), or **Edit study** when viewing an existing study, plus view
+and exploration controls. It is visually separated from the **Games** mode
+switcher. In the reading pane, **Focus variation** is a filled button;
+**Return to parent** is outlined, with their keyboard shortcuts in tooltips.
+The analysis overview below the board can be collapsed with its down arrow
+and restored with **Show analysis**; this uses the saved graph preference.
+
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
   → StorageService.fileExists / readFile (absolute paths as-is; relative → app documents)

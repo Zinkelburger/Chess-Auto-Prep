@@ -15,6 +15,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   int get _explorerTabIndex;
   int get _analysisTabIndex;
   GameViewPreferences get _viewPreferences;
+  void _setViewPreferences(GameViewPreferences value);
   bool get _reviewHandoff;
   void _showPanel(int index);
   void _startAutoAnalysisForCurrentGame();
@@ -168,7 +169,6 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
         ),
         if (!_controller.isSolitaireMode &&
             _controller.filteredGames.isNotEmpty &&
-            (_viewPreferences.graph || _reviewHandoff) &&
             !_onLineTab &&
             !_controller.showOpeningTree)
           _buildAnalysisOverview(),
@@ -248,6 +248,20 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   }
 
   Widget _buildAnalysisOverview() {
+    if (!_viewPreferences.graph && !_reviewHandoff) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: TextButton.icon(
+            onPressed: () =>
+                _setViewPreferences(_viewPreferences.copyWith(graph: true)),
+            icon: const Icon(Icons.expand_less, size: 18),
+            label: const Text('Show analysis'),
+          ),
+        ),
+      );
+    }
     final evals = _analysisController.evals;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -273,6 +287,13 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
                     ? _startAutoAnalysisForCurrentGame
                     : () => _showPanel(_analysisTabIndex),
                 child: Text(evals.isEmpty ? 'Analyze game' : 'Review moves'),
+              ),
+              IconButton(
+                tooltip: 'Collapse analysis',
+                onPressed: () => _setViewPreferences(
+                  _viewPreferences.copyWith(graph: false),
+                ),
+                icon: const Icon(Icons.expand_more, size: 20),
               ),
             ],
           ),

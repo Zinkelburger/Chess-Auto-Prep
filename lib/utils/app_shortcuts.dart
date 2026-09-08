@@ -147,6 +147,13 @@ class AppShortcut {
     KeyChord(LogicalKeyboardKey.keyR),
   ]);
 
+  static const focusVariation = AppShortcut([
+    KeyChord(LogicalKeyboardKey.enter, control: true),
+  ]);
+  static const returnToParentLine = AppShortcut([
+    KeyChord(LogicalKeyboardKey.arrowLeft, control: true),
+  ]);
+
   // ── Board and panels ───────────────────────────────────────────────────
 
   static const flipBoard = AppShortcut([KeyChord(LogicalKeyboardKey.keyF)]);
@@ -250,6 +257,8 @@ class AppShortcut {
     goToStart,
     goToEnd,
     returnToMainline,
+    focusVariation,
+    returnToParentLine,
     flipBoard,
     toggleEngine,
     toggleExpectimax,
