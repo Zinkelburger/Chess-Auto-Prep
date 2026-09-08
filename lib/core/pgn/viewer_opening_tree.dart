@@ -61,6 +61,16 @@ class ViewerOpeningTree {
   final VoidCallback? onReclaimFocus;
 
   bool showOpeningTree = false;
+  bool includeVariations = false;
+
+  void setIncludeVariations(bool value) {
+    if (includeVariations == value) return;
+    includeVariations = value;
+    clearTree();
+    clearCache();
+    unawaited(rebuild());
+  }
+
   OpeningTree? openingTree;
   bool buildingTree = false;
   int treeBuildProcessed = 0;
@@ -79,9 +89,13 @@ class ViewerOpeningTree {
 
   static const _maxCacheEntries = 500;
   final Map<String, List<int>> _positionGameCache = {};
+  Map<String, List<int>>? _mainlineIndex;
 
   /// Reset tree state when a new file is loaded.
   void resetForNewFile() {
+    _generation++;
+    _mainlineIndex = null;
+    buildingTree = false;
     openingTree = null;
     showOpeningTree = false;
     treeCurrentMoveSequence = [];
@@ -92,6 +106,8 @@ class ViewerOpeningTree {
   /// Drop the built tree (e.g. after re-slicing); a rebuild follows if shown.
   /// The saved return position is dropped too — it belongs to the old slice.
   void clearTree() {
+    _generation++;
+    _mainlineIndex = null;
     openingTree = null;
     _savedMoveSequence = null;
     _leftForGame = false;
@@ -170,11 +186,14 @@ class ViewerOpeningTree {
     onChanged();
 
     try {
+      final games = List<PgnGameEntry>.of(filteredGames());
+      final variations = includeVariations;
       final tree = await OpeningTreeBuilder.buildTree(
-        pgnList: filteredGames().map((g) => g.pgnText).toList(),
+        pgnList: games.map((g) => g.pgnText).toList(),
         username: '',
         userIsWhite: null,
         strictPlayerMatching: false,
+        includeVariations: variations,
         maxDepth: kOpeningTreeMaxDepth,
         onProgress: (processed, total) {
           if (!isActive() || generation != _generation) return;
@@ -184,6 +203,13 @@ class ViewerOpeningTree {
         },
       );
       if (!isActive() || generation != _generation) return;
+      final mainlineIndex = variations
+          ? null
+          : await compute(pgn.buildMainlineFenIndex, [
+              for (final g in games) (headers: g.headers, pgnText: g.pgnText),
+            ]);
+      if (!isActive() || generation != _generation) return;
+      _mainlineIndex = mainlineIndex;
       openingTree = tree;
       buildingTree = false;
       treeBuildProcessed = treeBuildTotal;
@@ -313,9 +339,13 @@ class ViewerOpeningTree {
 
       final filtered = filteredGames();
 
+      if (!includeVariations && _mainlineIndex != null) {
+        return _mainlineIndex![fen] ?? <int>[];
+      }
+
       // Fast path: map FEN-index (allGames indices) → filteredGames indices.
       final fenIndexValue = fenIndex();
-      if (fenIndexValue != null) {
+      if (includeVariations && fenIndexValue != null) {
         final allIndices = fenIndexValue[fen] ?? const [];
         if (allIndices.isEmpty) return <int>[];
         final all = allGames();
@@ -342,6 +372,7 @@ class ViewerOpeningTree {
           filtered[i].headers,
           filtered[i].pgnText,
           fen,
+          includeVariations: includeVariations,
         )) {
           results.add(i);
         }

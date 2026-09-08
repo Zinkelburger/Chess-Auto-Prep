@@ -216,20 +216,19 @@ class GameSearchButton extends StatelessWidget {
   Widget build(BuildContext context) {
     // Same outline, radius, and type as [GameNumberField] so the pair reads
     // as one control group instead of a padded CTA next to a compact box.
-    final button = OutlinedButton.icon(
+    final button = TextButton.icon(
       onPressed: onPressed,
       icon: const Icon(Icons.search, size: 16),
       label: const Text('Search'),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.ink,
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.onSurfaceMuted,
         iconSize: 16,
         minimumSize: const Size(0, kGameNavControlHeight),
         maximumSize: const Size(double.infinity, kGameNavControlHeight),
         padding: const EdgeInsets.symmetric(horizontal: 10),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.standard,
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        side: const BorderSide(color: AppColors.outline),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w400),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     );
