@@ -9,7 +9,7 @@ final RegExp _sanCoreRe = RegExp('^$kSanCorePattern\$');
 final RegExp _leadBracketRe = RegExp(r'^[(\["]+');
 final RegExp _trailPunctRe = RegExp(r'[)\]",;.!?]+$');
 final RegExp _moveNumberPrefixRe = RegExp(r'^\d+\.{1,3}');
-final RegExp _ellipsisPrefixRe = RegExp(r'^\.{2,3}');
+final RegExp _ellipsisPrefixRe = RegExp(r'^(?:\.{2,3}|…)');
 final RegExp _glyphSuffixRe = RegExp(r'[!?+#]+$');
 
 /// Memoizes [_extractLegalSan] across rebuilds. Navigating the game
@@ -50,18 +50,43 @@ _legalSanCache = {};
   final suffix = trail?.group(0) ?? '';
   rest = rest.substring(0, rest.length - suffix.length);
   if (rest.isEmpty) return null;
+  // Explicit notation must agree with the anchor. In particular, ...c5 in
+  // a note after Black's move must never preview White's legal c4-c5.
+  final numbered = RegExp(r'^(\d+)(\.{1,3})').firstMatch(rest);
+  if (numbered != null) {
+    final white = numbered[2] == '.';
+    if (int.parse(numbered[1]!) != pos.fullmoves ||
+        white != (pos.turn == Side.white)) {
+      return null;
+    }
+  } else if ((rest.startsWith('...') || rest.startsWith('…')) &&
+      pos.turn != Side.black) {
+    return null;
+  }
   // Strip a leading move number / ellipsis (8., 12..., …) and trailing glyphs.
   var core = rest
       .replaceFirst(_moveNumberPrefixRe, '')
       .replaceFirst(_ellipsisPrefixRe, '')
       .replaceFirst(_glyphSuffixRe, '');
   if (core.isEmpty || !_sanCoreRe.hasMatch(core)) return null;
+  // A bare square in a sentence ("knight to f3") is ambiguous. Numbered
+  // pawn moves, ellipsis moves, captures and tokenized book runs stay playable.
+  if (RegExp(r'^[a-h][1-8]$').hasMatch(core) &&
+      numbered == null &&
+      !_ellipsisPrefixRe.hasMatch(rest)) {
+    return null;
+  }
   try {
     if (pos.parseSan(core) == null) return null;
   } catch (_) {
     return null;
   }
-  return (prefix: prefix, san: core, suffix: suffix);
+  final coreOffset = rest.indexOf(core);
+  return (
+    prefix: '$prefix${rest.substring(0, coreOffset)}',
+    san: core,
+    suffix: '${rest.substring(coreOffset + core.length)}$suffix',
+  );
 }
 
 /// The (fullmove number, side) of a move played at [ply] half-moves in.

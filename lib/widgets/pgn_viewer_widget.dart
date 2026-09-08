@@ -16,6 +16,7 @@ import 'package:chess_auto_prep/utils/chess_utils.dart'
         recentMoveTrailSquares;
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
+import 'package:chess_auto_prep/theme/app_text_styles.dart';
 import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show commentProse, joinComments, mergeCommentProse;
@@ -722,6 +723,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
           child: PgnReadingPane(
             key: _readingPaneKey,
             showReadingOptions: widget.showReadingOptions,
+            previewingComment: _inlineActive,
             selection: (
               _game,
               _mainLineIndex,
@@ -740,10 +742,18 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         ),
         ?_buildBranchChips(),
         if (_inlineActive)
-          TextButton.icon(
-            onPressed: _returnToMainline,
-            icon: const Icon(Icons.subdirectory_arrow_left, size: 18),
-            label: const Text('Return to mainline (R)'),
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            children: [
+              const Text('Comment preview', style: AppTextStyles.caption),
+              TextButton.icon(
+                onPressed: _returnToMainline,
+                icon: const Icon(Icons.subdirectory_arrow_left, size: 18),
+                label: const Text('Return to mainline (R)'),
+              ),
+            ],
           ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

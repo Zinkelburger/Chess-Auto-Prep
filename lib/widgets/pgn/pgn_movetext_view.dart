@@ -18,6 +18,7 @@ import '../../services/game_analysis_controller.dart'
 import '../../theme/app_colors.dart';
 import '../../theme/pgn_text_styles.dart';
 import 'comment_editor.dart';
+import 'comment_diagram.dart';
 import '../../utils/course_comment_spacing.dart';
 import 'pgn_reading_pane.dart';
 import 'pgn_reading_passage.dart';
@@ -39,6 +40,7 @@ import '../../utils/pgn_comment_utils.dart'
         kMaxUnevaluatedPlies,
         CommentToken,
         CommentProse,
+        CommentDiagram,
         CommentMove,
         MoveMetrics,
         RichSegment,

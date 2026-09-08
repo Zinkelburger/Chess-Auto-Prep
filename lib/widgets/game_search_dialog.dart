@@ -378,7 +378,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                           children: [
                             if (hasGroups)
                               SizedBox(
-                                height: 108,
+                                height: 52,
                                 child: _buildGroups(horizontal: true),
                               ),
                             Expanded(child: _buildGames()),
@@ -405,9 +405,9 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
     final selected = identical(_group, group);
     final count = group?.gameIndices.length ?? widget.games.length;
     return Padding(
-      padding: EdgeInsets.only(bottom: 8, right: horizontal ? 8 : 0),
+      padding: EdgeInsets.only(bottom: 4, right: horizontal ? 8 : 0),
       child: SizedBox(
-        width: horizontal ? 180 : null,
+        width: horizontal ? 220 : null,
         child: Material(
           color: selected
               ? Theme.of(
@@ -424,21 +424,24 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
             borderRadius: BorderRadius.circular(10),
             onTap: () => _chooseGroup(group),
             child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              child: Row(
                 children: [
-                  Text(
-                    group?.label ?? 'All games',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodyStrong,
+                  Expanded(
+                    child: Tooltip(
+                      message: group?.label ?? 'All games',
+                      child: Text(
+                        group?.label ?? 'All games',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodyStrong,
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '$count game${count == 1 ? '' : 's'}',
-                    style: AppTextStyles.caption,
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: '$count game${count == 1 ? '' : 's'}',
+                    child: Text('$count', style: AppTextStyles.caption),
                   ),
                 ],
               ),

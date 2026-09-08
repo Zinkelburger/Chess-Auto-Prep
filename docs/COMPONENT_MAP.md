@@ -546,13 +546,24 @@ gear opens view preferences.
 
 The game counter and Search both open the larger **Browse Games** dialog.
 Chapter detection uses the same header rules as repertoire browsing. Chapters
-appear as cards in a left sidebar; selecting one lists its games without jumping
+appear as compact single-line rows with counts and full-title tooltips in a left sidebar; selecting one lists its games without jumping
 to the first game. Without chapters, Event (or Site when Event is missing) plus
 year creates a group only for more than four games. **All games** always remains
 available, including ungrouped games. Search matches game labels, chapters,
 players, event, place, dates, openings and study text within the selected group;
 empty results offer Search all games. A number still offers Go to game N.
-Narrow windows move group cards into a horizontal strip.
+Narrow windows move the compact group rows into a horizontal strip. Repertoire
+and training chapter pickers also use reduced row padding.
+
+PGN comment diagrams (`pgn/comment_diagram.dart`) render embedded FENs as small
+boards labelled **Comment position**, including FENs nested inside Chessable
+editorial brackets. Parenthetical prose stays inline; move runs continue across
+notes and replay from their embedded FEN. Dotted-underlined comment moves offer
+**Preview comment move** tooltips and show **Comment preview** while navigating.
+The note stays in view during preview. They never become saved mainline moves
+or variations. Explicit move numbers and sides must match the preview position;
+bare square references in prose are not inferred as pawn moves. Move numbers, check signs
+and annotations are preserved in prose; invalid diagram text remains readable.
 
 Opening tree (**Actions → Tree**): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). The viewer defaults to one mainline per game. **Include variations** rebuilds both tree frequencies and the matching-game index with all RAVs; the collection game count is shown separately from variation-path counts. Other builder callers retain their existing automatic policy (RAVs for course `Result *`, mainlines for scored games). `*` results count toward frequency without a fake 50% draw bar — the UI says **lines** instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Expand all** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
 

@@ -10,12 +10,14 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../theme/pgn_text_styles.dart';
+import 'comment_diagram.dart';
 import '../../utils/pgn_comment_utils.dart'
     show
         filterDisplayComment,
         parseCommentTokens,
         stripEngineTokens,
         CommentMove,
+        CommentDiagram,
         CommentProse;
 
 /// Build flowing spans for a raw PGN comment.
@@ -54,7 +56,9 @@ List<InlineSpan> commentProseSpans(
   );
   final spans = <InlineSpan>[];
   for (final t in parseCommentTokens(stripEngineTokens(filtered))) {
-    if (t is CommentMove) {
+    if (t is CommentDiagram) {
+      spans.add(WidgetSpan(child: CommentDiagramBoard(fen: t.fen)));
+    } else if (t is CommentMove) {
       spans.add(TextSpan(text: '${t.display} ', style: moveStyle));
     } else if (t is CommentProse) {
       spans.add(TextSpan(text: '${t.text} ', style: proseStyle));
