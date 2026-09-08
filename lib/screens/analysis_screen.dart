@@ -14,6 +14,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../features/audit/models/audit_finding.dart';
@@ -183,7 +184,9 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     unawaited(_opponents.ensureLoaded());
     _opponents.addListener(_onOpponentsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _currentPlayer == null) {
+      if (mounted &&
+          _currentPlayer == null &&
+          context.read<AppState>().settingsMode != AppMode.positionAnalysis) {
         unawaited(_showPlayerSelection());
       }
     });

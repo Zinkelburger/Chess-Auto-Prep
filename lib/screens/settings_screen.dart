@@ -59,7 +59,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _selectView(AppMode mode) {
-    if (!mounted) return;
+    if (!mounted || context.read<AppState>().isRepertoireGenerating) return;
     if (mode == widget.initialMode) {
       setState(() => _global = false);
     } else {
@@ -230,6 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     for (final mode in availableModeMenuOrder())
                       ListTile(
                         key: ValueKey('settings-view-${mode.name}'),
+                        minTileHeight: 32,
                         dense: true,
                         visualDensity: VisualDensity.compact,
                         title: Text(mode.label, style: AppTextStyles.body),
@@ -244,9 +245,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     for (var i = 0; i < _sections.length; i++)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.only(bottom: 2),
                         child: ListTile(
                           key: Key('settings-nav-$i'),
+                          minTileHeight: 32,
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
                           selected: _selected == i,
                           selectedTileColor: AppColors.accent.withValues(
                             alpha: 0.12,

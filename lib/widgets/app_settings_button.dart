@@ -19,10 +19,16 @@ Future<void> openAppSettings(BuildContext context) async {
 /// Consistent trailing gear. Contextual content stays owned by its view.
 /// A settings navigation request also works for a view not yet built by MainScreen.
 class AppSettingsButton extends StatefulWidget {
-  const AppSettingsButton({super.key, required this.mode, this.contentBuilder});
+  const AppSettingsButton({
+    super.key,
+    required this.mode,
+    this.contentBuilder,
+    this.onClosed,
+  });
 
   final AppMode mode;
   final WidgetBuilder? contentBuilder;
+  final VoidCallback? onClosed;
 
   @override
   State<AppSettingsButton> createState() => _AppSettingsButtonState();
@@ -45,7 +51,13 @@ class _AppSettingsButtonState extends State<AppSettingsButton> {
           ),
         ),
       );
-      if (mounted && mode != null) app.openViewSettings(mode);
+      if (mounted) {
+        if (mode != null) {
+          app.openViewSettings(mode);
+        } else {
+          widget.onClosed?.call();
+        }
+      }
     } finally {
       _opening = false;
     }

@@ -164,6 +164,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(getAppState(tester).currentMode, equals(AppMode.repertoire));
+      expect(find.text('Actions'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('view-settings-repertoire')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('switches to Repertoire Trainer', (tester) async {

@@ -44,7 +44,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.showSelectRepertoireAction = false,
     this.generationLocked = false,
     this.trapNavigation,
-    required this.onOpenSettings,
+    this.onSettingsClosed,
     this.onSelectRepertoire,
     this.onTrainRepertoire,
     this.onOpenGeneration,
@@ -69,7 +69,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final bool showSelectRepertoireAction;
   final bool generationLocked;
   final Widget? trapNavigation;
-  final VoidCallback onOpenSettings;
+  final VoidCallback? onSettingsClosed;
   final VoidCallback? onSelectRepertoire;
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
@@ -110,6 +110,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             onTap: onOpenGeneration,
           ),
         RepertoireActionsMenu(
+          onChoose: generationLocked ? null : onSelectRepertoire,
           onPlanBuild: onPlanBuild,
           onGenerate: onOpenGeneration,
           onImportPgn: onImportPgn,
@@ -120,6 +121,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         const AppModeSwitcher(),
         AppSettingsButton(
           mode: AppMode.repertoire,
+          onClosed: onSettingsClosed,
           contentBuilder: onOpenRepertoireOptions == null
               ? null
               : (_) => ListView(
@@ -506,6 +508,7 @@ class RepertoireActionsMenu extends StatelessWidget {
     this.onImportPgn,
     this.onTrain,
     this.onAudit,
+    this.onChoose,
     this.trainEnabled = true,
   });
 
@@ -514,6 +517,7 @@ class RepertoireActionsMenu extends StatelessWidget {
   final VoidCallback? onImportPgn;
   final VoidCallback? onTrain;
   final VoidCallback? onAudit;
+  final VoidCallback? onChoose;
 
   /// False keeps the Train row visible but greyed — while a build runs the
   /// chapter is changing under the trainer, so the row waits.
@@ -561,6 +565,12 @@ class RepertoireActionsMenu extends StatelessWidget {
       ..._headed(_import, import_),
       ..._headed(_train, train),
       ..._headed(_check, check),
+      if (onChoose != null)
+        AppMenuEntry(
+          heading: 'Library',
+          label: 'Choose repertoire…',
+          onRun: onChoose!,
+        ),
     ];
   }
 

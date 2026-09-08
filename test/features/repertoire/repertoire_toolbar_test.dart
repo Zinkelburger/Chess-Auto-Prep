@@ -14,6 +14,7 @@ Future<void> _pump(
   VoidCallback? onPlanBuild,
   VoidCallback? onGenerate,
   VoidCallback? onImportPgn,
+  VoidCallback? onChoose,
 }) async {
   tester.view.physicalSize = const Size(1600, 900);
   tester.view.devicePixelRatio = 1.0;
@@ -32,12 +33,13 @@ Future<void> _pump(
             title: const Text('Test'),
             showTrainAction: onTrain != null,
             generationLocked: generationLocked,
-            onOpenSettings: () {},
+            onSettingsClosed: () {},
             onTrainRepertoire: onTrain,
             onOpenAudit: onOpenAudit,
             onPlanBuild: onPlanBuild,
             onOpenGeneration: onGenerate,
             onImportPgn: onImportPgn,
+            onSelectRepertoire: onChoose,
             isWhiteRepertoire: true,
             onOpenRepertoireOptions: () {},
           ),
@@ -91,6 +93,18 @@ void main() {
   });
 
   group('Actions menu', () {
+    testWidgets('library action keeps the empty builder navigable', (
+      tester,
+    ) async {
+      var chosen = false;
+      await _pump(tester, onChoose: () => chosen = true);
+      await _openActions(tester);
+      expect(find.text('LIBRARY'), findsOneWidget);
+      await tester.tap(find.text('Choose repertoire…'));
+      await tester.pumpAndSettle();
+      expect(chosen, isTrue);
+    });
+
     testWidgets('groups its rows under Generate, Import, Train and Check', (
       tester,
     ) async {

@@ -101,6 +101,17 @@ mixin _AppBarBuildersMixin
       label: 'Actions',
       tooltip: 'Actions',
       entries: [
+        AppMenuEntry(
+          heading: 'File',
+          label: 'Open PGN file…',
+          onRun: () => unawaited(_pickFile()),
+        ),
+        AppMenuEntry(
+          label: 'Paste PGN',
+          shortcut: 'Ctrl+V',
+          onRun: () => unawaited(_pastePgn()),
+        ),
+        if (hasGame) AppMenuEntry(label: 'Close file', onRun: _closeFile),
         if (hasGame && !solitaire) ...[
           AppMenuEntry(
             heading: 'Explore',
