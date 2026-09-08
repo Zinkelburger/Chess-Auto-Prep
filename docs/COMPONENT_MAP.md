@@ -837,7 +837,7 @@ moves, so walking one of your games through it finds the first move masters
 never played — who left theory, where, what masters play there instead, and
 the strongest and most recent games that did. Branch points are grouped like
 the opening review, so the one you keep walking into rises to the top. Master
-games are opened in the Games viewer by writing them to an ordinary PGN
+games are opened in the PGN Viewer by writing them to an ordinary PGN
 collection, so playing through them is not reimplemented.
 
 | File | Purpose |

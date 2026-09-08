@@ -29,8 +29,9 @@ extension AppModeLabel on AppMode {
     AppMode.positionAnalysis => 'Player analysis',
     AppMode.repertoire => 'Repertoire builder',
     AppMode.repertoireTrainer => 'Repertoire trainer',
-    // Where your games open. "PGN Viewer" named the file format.
-    AppMode.pgnViewer => 'Games',
+    // Named for what it is: every chess player knows PGN. Was briefly
+    // "Games" (Sept 2026), which read as something else.
+    AppMode.pgnViewer => 'PGN Viewer',
     AppMode.study => 'Study',
     AppMode.engineTournament => 'Engine tournament',
     AppMode.bughouse => 'Bughouse lab',
