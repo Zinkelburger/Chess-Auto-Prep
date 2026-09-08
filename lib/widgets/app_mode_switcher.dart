@@ -51,31 +51,31 @@ class AppModeSwitcher extends StatelessWidget {
             ),
         ],
       ],
+      // Drawn exactly like the Actions anchor beside it: label, drop arrow,
+      // no box. The current mode's name is the label so the bar still says
+      // where you are; "View" stays as a quiet prefix.
       child: Container(
         constraints: const BoxConstraints(minHeight: 44),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.outline),
-          borderRadius: BorderRadius.circular(8),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('View', style: AppTextStyles.caption),
-                Text(
-                  mode.label,
-                  style: AppTextStyles.bodyStrong.copyWith(
-                    color: locked ? AppColors.onSurfaceDisabled : AppColors.ink,
-                  ),
-                ),
-              ],
+            Text(
+              'View',
+              style: AppTextStyles.body.copyWith(
+                color: locked
+                    ? AppColors.onSurfaceDisabled
+                    : AppColors.onSurfaceMuted,
+              ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 6),
+            Text(
+              mode.label,
+              style: AppTextStyles.bodyStrong.copyWith(
+                color: locked ? AppColors.onSurfaceDisabled : AppColors.ink,
+              ),
+            ),
+            const SizedBox(width: 8),
             Icon(
               Icons.arrow_drop_down,
               size: 20,
