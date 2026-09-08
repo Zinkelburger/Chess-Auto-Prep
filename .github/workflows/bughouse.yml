@@ -22,50 +22,12 @@
 #           where the two-board dialect, the joint-move parsing and the
 #           handshake timeout live.
 #
-# Runs on demand, as a required release gate, and when the bughouse stack
-# changes on a development/published branch.
+# Runs as a required release gate on every supported engine platform.
 
 name: Bughouse engine
 
+# Called only by release.yml when a v* release tag is pushed.
 on:
-  push:
-    branches:
-      - main
-      - backup/local-main
-    paths:
-      - 'tools/fetch_bughouse.py'
-      - 'tools/bughouse.lock.json'
-      - 'tools/test_bughouse_engine.py'
-      - 'tools/diagnose_bughouse_windows.ps1'
-      - 'tools/test_diagnose_bughouse_windows.ps1'
-      - 'lib/features/bughouse/models/**'
-      - 'test/features/bughouse/**'
-      - 'lib/features/bughouse/services/**'
-      - 'windows/**'
-      - 'integration_test/bughouse_first_run_test.dart'
-      - 'integration_test/app_test.dart'
-      - 'packaging/windows/**'
-      - 'tools/vc_redist.lock.json'
-      - '.github/workflows/release.yml'
-      - '.github/workflows/bughouse.yml'
-  pull_request:
-    paths:
-      - 'tools/fetch_bughouse.py'
-      - 'tools/bughouse.lock.json'
-      - 'tools/test_bughouse_engine.py'
-      - 'tools/diagnose_bughouse_windows.ps1'
-      - 'tools/test_diagnose_bughouse_windows.ps1'
-      - 'lib/features/bughouse/models/**'
-      - 'test/features/bughouse/**'
-      - 'lib/features/bughouse/services/**'
-      - 'windows/**'
-      - 'integration_test/bughouse_first_run_test.dart'
-      - 'integration_test/app_test.dart'
-      - 'packaging/windows/**'
-      - 'tools/vc_redist.lock.json'
-      - '.github/workflows/release.yml'
-      - '.github/workflows/bughouse.yml'
-  workflow_dispatch:
   workflow_call:
 
 jobs:
@@ -157,9 +119,6 @@ jobs:
           flutter test integration_test/bughouse_first_run_test.dart -d windows
 
   macos:
-    # Ten times the minutes of a Linux runner, so only when it is asked for or
-    # when a release is being cut.
-    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7

@@ -2,13 +2,8 @@
 
 name: CI
 
+# Called only by release.yml when a v* release tag is pushed.
 on:
-  push:
-    branches:
-      - main
-      - backup/local-main
-  pull_request:
-  workflow_dispatch:
   workflow_call:
 
 jobs:
