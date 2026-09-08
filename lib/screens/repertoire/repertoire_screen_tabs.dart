@@ -46,7 +46,7 @@ mixin _RepertoireTabContent
               if (!_isCompactLayout)
                 IconButton(
                   icon: const Icon(Icons.keyboard_double_arrow_left, size: 16),
-                  tooltip: 'Hide chapters (L)',
+                  tooltip: 'Hide chapters',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
                     minWidth: 28,

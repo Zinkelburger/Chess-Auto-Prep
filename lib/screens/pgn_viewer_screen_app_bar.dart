@@ -85,7 +85,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
           ),
           AppMenuEntry(
             label: 'Paste PGN',
-            shortcut: 'Ctrl+V',
+            shortcut: AppShortcut.pastePgn.label,
             onRun: () => unawaited(_pastePgn()),
           ),
         ],

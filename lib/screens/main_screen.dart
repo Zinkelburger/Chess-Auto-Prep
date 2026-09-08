@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
@@ -218,58 +217,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
 
     return Scaffold(
-      // Ctrl+1…8 (Cmd on macOS) jump between modes in the mode menu's order —
-      // the chords the menu advertises beside each entry. Bound here, once,
-      // above every screen; the screens' own key handlers see the event first
-      // and none of them claims a Ctrl+digit.
-      body: CallbackShortcuts(
-        bindings: {
-          for (final mode in availableModeMenuOrder()) ...{
-            SingleActivator(
-              _digitKey(mode.shortcutNumber),
-              control: true,
-            ): () =>
-                _switchTo(mode),
-            SingleActivator(_digitKey(mode.shortcutNumber), meta: true): () =>
-                _switchTo(mode),
-          },
-        },
-        child: IndexedStack(
-          index: _supportedModes.indexOf(activeMode),
-          children: [
-            for (final mode in _supportedModes)
-              TickerMode(
-                enabled: mode == activeMode && !_appBackgrounded,
-                child:
-                    _modeViews[mode] ??
-                    (mode == activeMode
-                        ? const _ModeLoadingView()
-                        : const SizedBox.shrink()),
-              ),
-          ],
-        ),
+      body: IndexedStack(
+        index: _supportedModes.indexOf(activeMode),
+        children: [
+          for (final mode in _supportedModes)
+            TickerMode(
+              enabled: mode == activeMode && !_appBackgrounded,
+              child:
+                  _modeViews[mode] ??
+                  (mode == activeMode
+                      ? const _ModeLoadingView()
+                      : const SizedBox.shrink()),
+            ),
+        ],
       ),
     );
-  }
-
-  static LogicalKeyboardKey _digitKey(int n) => switch (n) {
-    1 => LogicalKeyboardKey.digit1,
-    2 => LogicalKeyboardKey.digit2,
-    3 => LogicalKeyboardKey.digit3,
-    4 => LogicalKeyboardKey.digit4,
-    5 => LogicalKeyboardKey.digit5,
-    6 => LogicalKeyboardKey.digit6,
-    7 => LogicalKeyboardKey.digit7,
-    8 => LogicalKeyboardKey.digit8,
-    _ => LogicalKeyboardKey.digit9,
-  };
-
-  /// Same guard as the menu: no switching while generation holds the app.
-  void _switchTo(AppMode mode) {
-    final appState = _appState ?? context.read<AppState>();
-    if (appState.isRepertoireGenerating) return;
-    if (appState.currentMode == mode) return;
-    appState.setMode(mode);
   }
 
   Widget _createModeView(AppMode mode) {

@@ -67,7 +67,7 @@ class SolitaireSetupStrip extends StatelessWidget {
               IconButton(
                 onPressed: controller.cancelSolitaireSetup,
                 icon: const Icon(Icons.close, size: 18),
-                tooltip: 'Cancel (Esc)',
+                tooltip: actionTooltip('Cancel', shortcut: AppShortcut.leave),
                 visualDensity: VisualDensity.compact,
               ),
             ],
@@ -171,7 +171,10 @@ class SolitaireSetupStrip extends StatelessWidget {
               Tooltip(
                 message: count == 0
                     ? 'Pick the other side, or start from the game start'
-                    : 'Start (Enter)',
+                    : actionTooltip(
+                        'Start',
+                        shortcut: AppShortcut.startSolitaire,
+                      ),
                 waitDuration: const Duration(milliseconds: 500),
                 child: FilledButton.icon(
                   onPressed: count == 0 ? null : controller.beginSolitaire,
@@ -447,7 +450,10 @@ class SolitaireStatusBar extends StatelessWidget {
               IconButton(
                 onPressed: onExit,
                 icon: const Icon(Icons.close, size: 18),
-                tooltip: 'Leave solitaire (Esc)',
+                tooltip: actionTooltip(
+                  'Leave solitaire',
+                  shortcut: AppShortcut.leave,
+                ),
                 visualDensity: VisualDensity.compact,
               ),
             ],

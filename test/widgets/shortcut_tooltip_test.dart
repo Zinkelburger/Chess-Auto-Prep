@@ -9,7 +9,7 @@ void main() {
     test('appends the registry label in parentheses', () {
       expect(
         actionTooltip('Flip board', shortcut: AppShortcut.flipBoard),
-        'Flip board (F)',
+        'Flip board',
       );
       expect(
         actionTooltip('Undo last add', shortcut: AppShortcut.undo),
@@ -79,16 +79,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('Analyze (V)'), findsOneWidget);
+      expect(find.text('Analyze'), findsNWidgets(2));
     });
   });
 
   group('ShortcutTooltip', () {
     testWidgets('renders the label the screens bind', (tester) async {
-      // There is no "empty shortcut" case left to assert against: the API
-      // takes an AppShortcut, and every registry entry has at least one
-      // chord, so a tooltip advertising nothing is unrepresentable rather
-      // than caught at runtime.
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(

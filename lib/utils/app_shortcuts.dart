@@ -1,32 +1,6 @@
-/// The app's keyboard shortcut registry: one named entry per action, holding
-/// **every** chord that fires it and the **one** label its tooltips show.
-///
-/// Why this exists: a shortcut used to be two independent strings — a
-/// [KeyBinding] in the screen and a hand-typed `shortcut: '↑'` in the widget
-/// — with nothing tying them together. They drifted (a doc comment still
-/// promised "N/P" long after those bindings became ↓/↑), and a binding that
-/// could never fire was invisible until someone pressed the key and nothing
-/// happened. Here the chords *are* the label, so the two cannot disagree:
-///
-/// ```dart
-/// // screen: binds ↑
-/// ...KeyBinding.forShortcut(AppShortcut.previousItem, 'Previous game', prev),
-/// // widget: renders "Previous game (↑)" — never hand-typed
-/// ShortcutTooltip.of(AppShortcut.previousItem, description: 'Previous game', …)
-/// ```
-///
-/// **Uniqueness is per screen, not global.** Two screens may reuse a chord for
-/// different actions ([searchGames] and [focusMoveInput] are both `/`); what
-/// must never happen is one screen binding a chord twice, which
-/// `handleKeyBindings` asserts against in debug builds.
-///
-/// **Move-text safety.** On screens with an always-hot move box (the tactics
-/// panel), a bare key that can appear in SAN or UCI is typed into the box and
-/// never reaches the shortcut. [KeyBinding.safeWhileTypingMoves] decides that.
-/// Entries meant to work on *every* screen — [previousItem], [nextItem] —
-/// therefore avoid the files a–h, the pieces K/Q/R/N/B, castling O, capture x,
-/// ranks 1–8 and `-`/`=`. Arrow keys satisfy that constraint while keeping
-/// navigation consistent and mnemonic-free.
+/// Central registry for app commands, their key chords and the Settings reference.
+/// Unassigned actions keep their identity so handlers and tooltips both follow
+/// the same policy: no chord means no binding and no shortcut hint.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -109,8 +83,14 @@ class AppShortcut {
   /// `const` initializer list.)
   const AppShortcut(this.chords, {this.scope = ShortcutScope.anyScreen});
 
-  /// The chords that fire this action. Never empty — `app_shortcuts_test.dart`
-  /// checks that, since a `const` constructor cannot assert on list length.
+  /// An action with no keyboard binding. Mouse/menu controls remain available.
+  const AppShortcut.unassigned()
+    : chords = const [],
+      scope = ShortcutScope.anyScreen;
+
+  bool get isAssigned => chords.isNotEmpty;
+
+  /// The chords that fire this action; empty for unassigned actions.
   final List<KeyChord> chords;
 
   /// Where this entry is expected to work — checked by
@@ -118,7 +98,7 @@ class AppShortcut {
   /// quietly moving [nextItem] onto the knight.
   final ShortcutScope scope;
 
-  /// What every tooltip for this action shows: `↑`, `Ctrl+F or F11`.
+  /// What every tooltip for this action shows: `↑`, `Ctrl+V`.
   String get label => chords.map((c) => c.label).join(' or ');
 
   // ── Stepping the current queue ─────────────────────────────────────────
@@ -145,17 +125,9 @@ class AppShortcut {
   static const forwardOneMove = AppShortcut([
     KeyChord(LogicalKeyboardKey.arrowRight),
   ]);
-  static const goToStart = AppShortcut([
-    KeyChord(LogicalKeyboardKey.home),
-    KeyChord(LogicalKeyboardKey.pageUp),
-  ]);
-  static const goToEnd = AppShortcut([
-    KeyChord(LogicalKeyboardKey.end),
-    KeyChord(LogicalKeyboardKey.pageDown),
-  ]);
-  static const returnToMainline = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyR),
-  ]);
+  static const goToStart = AppShortcut([KeyChord(LogicalKeyboardKey.home)]);
+  static const goToEnd = AppShortcut([KeyChord(LogicalKeyboardKey.end)]);
+  static const returnToMainline = AppShortcut.unassigned();
 
   static const focusVariation = AppShortcut([
     KeyChord(LogicalKeyboardKey.enter),
@@ -166,20 +138,13 @@ class AppShortcut {
 
   // ── Board and panels ───────────────────────────────────────────────────
 
-  static const flipBoard = AppShortcut([KeyChord(LogicalKeyboardKey.keyF)]);
-  static const toggleEngine = AppShortcut([KeyChord(LogicalKeyboardKey.keyE)]);
-  static const toggleExpectimax = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyX),
-  ]);
-  static const toggleLinesPanel = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyL),
-  ]);
-  static const nextTab = AppShortcut([KeyChord(LogicalKeyboardKey.tab)]);
+  static const flipBoard = AppShortcut.unassigned();
+  static const toggleEngine = AppShortcut.unassigned();
+  static const toggleExpectimax = AppShortcut.unassigned();
+  static const toggleLinesPanel = AppShortcut.unassigned();
+  static const nextTab = AppShortcut.unassigned();
 
-  static const fullScreen = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyF, control: true),
-    KeyChord(LogicalKeyboardKey.f11),
-  ]);
+  static const fullScreen = AppShortcut([KeyChord(LogicalKeyboardKey.f11)]);
 
   /// Leave whatever you are in, innermost first — the app-wide Escape
   /// contract. Every screen spells out its own ladder in the description.
@@ -188,32 +153,24 @@ class AppShortcut {
   // ── PGN viewer ─────────────────────────────────────────────────────────
 
   static const autoPlay = AppShortcut([KeyChord(LogicalKeyboardKey.space)]);
-  static const autoNextGame = AppShortcut([KeyChord(LogicalKeyboardKey.keyW)]);
-  static const amendGame = AppShortcut([KeyChord(LogicalKeyboardKey.keyA)]);
-  static const goToGameNumber = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyG),
-  ]);
+  static const autoNextGame = AppShortcut.unassigned();
+  static const amendGame = AppShortcut.unassigned();
+  static const goToGameNumber = AppShortcut.unassigned();
 
-  /// `/` — the search key everywhere it is free, and unambiguous here because
-  /// the viewer has no move box to focus. (It moved off `S` when previous/next
-  /// claimed that key; `S` is the queue, on every screen, and one meaning per
-  /// key is worth more than the mnemonic.)
-  static const searchGames = AppShortcut([KeyChord(LogicalKeyboardKey.slash)]);
+  static const searchGames = AppShortcut.unassigned();
 
-  static const revealMove = AppShortcut([KeyChord(LogicalKeyboardKey.keyR)]);
+  static const revealMove = AppShortcut.unassigned();
 
   /// Solitaire only: highlight the piece that moves.
-  static const hintMove = AppShortcut([KeyChord(LogicalKeyboardKey.keyH)]);
+  static const hintMove = AppShortcut.unassigned();
   static const pastePgn = AppShortcut([
     KeyChord(LogicalKeyboardKey.keyV, control: true),
   ]);
 
   // ── Study and annotation ───────────────────────────────────────────────
 
-  static const commentMove = AppShortcut([KeyChord(LogicalKeyboardKey.keyC)]);
-  static const browseInViewer = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyA),
-  ]);
+  static const commentMove = AppShortcut.unassigned();
+  static const browseInViewer = AppShortcut.unassigned();
   static const undo = AppShortcut([
     KeyChord(LogicalKeyboardKey.keyZ, control: true),
   ]);
@@ -223,32 +180,18 @@ class AppShortcut {
   static const toggleSolution = AppShortcut([
     KeyChord(LogicalKeyboardKey.space),
   ]);
-  static const analyzePosition = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyV),
-  ]);
-  static const autoAdvance = AppShortcut([KeyChord(LogicalKeyboardKey.keyJ)]);
-  static const restartLine = AppShortcut([KeyChord(LogicalKeyboardKey.keyR)]);
-  static const focusMoveInput = AppShortcut([
-    KeyChord(LogicalKeyboardKey.slash),
-  ]);
+  static const analyzePosition = AppShortcut.unassigned();
+  static const autoAdvance = AppShortcut.unassigned();
+  static const restartLine = AppShortcut.unassigned();
+  static const focusMoveInput = AppShortcut.unassigned();
 
   // ── Traps and findings ─────────────────────────────────────────────────
 
-  static const toggleTrapTour = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyT),
-  ]);
-  static const dismissFinding = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyD),
-  ]);
+  static const toggleTrapTour = AppShortcut.unassigned();
+  static const dismissFinding = AppShortcut.unassigned();
 
-  /// Shift+←/→ jump between traps *inside the current line* — a different axis
-  /// from [previousItem]/[nextItem], which step the trap list itself.
-  static const previousTrapInLine = AppShortcut([
-    KeyChord(LogicalKeyboardKey.arrowLeft, shift: true),
-  ]);
-  static const nextTrapInLine = AppShortcut([
-    KeyChord(LogicalKeyboardKey.arrowRight, shift: true),
-  ]);
+  static const previousTrapInLine = AppShortcut.unassigned();
+  static const nextTrapInLine = AppShortcut.unassigned();
 
   static const startSolitaire = AppShortcut([
     KeyChord(LogicalKeyboardKey.enter),
@@ -256,22 +199,8 @@ class AppShortcut {
   static const pasteFen = AppShortcut([
     KeyChord(LogicalKeyboardKey.keyV, control: true, shift: true),
   ]);
-  static const candidateKeys = [
-    LogicalKeyboardKey.digit1,
-    LogicalKeyboardKey.digit2,
-    LogicalKeyboardKey.digit3,
-    LogicalKeyboardKey.digit4,
-    LogicalKeyboardKey.digit5,
-    LogicalKeyboardKey.digit6,
-    LogicalKeyboardKey.digit7,
-    LogicalKeyboardKey.digit8,
-    LogicalKeyboardKey.digit9,
-  ];
-  static final forkCandidates = [
-    for (final key in candidateKeys) AppShortcut([KeyChord(key)]),
-  ];
 
-  /// Every entry above, for the invariant tests.
+  /// Every assigned action; checked against the reference below.
   static const all = <AppShortcut>[
     previousItem,
     nextItem,
@@ -279,38 +208,16 @@ class AppShortcut {
     forwardOneMove,
     goToStart,
     goToEnd,
-    returnToMainline,
     focusVariation,
     startSolitaire,
     pasteFen,
     returnToParentLine,
-    flipBoard,
-    toggleEngine,
-    toggleExpectimax,
-    toggleLinesPanel,
-    nextTab,
     fullScreen,
     leave,
     autoPlay,
-    autoNextGame,
-    amendGame,
-    goToGameNumber,
-    searchGames,
-    revealMove,
-    hintMove,
     pastePgn,
-    commentMove,
-    browseInViewer,
     undo,
     toggleSolution,
-    analyzePosition,
-    autoAdvance,
-    restartLine,
-    focusMoveInput,
-    toggleTrapTour,
-    dismissFinding,
-    previousTrapInLine,
-    nextTrapInLine,
   ];
 }
 
@@ -324,3 +231,54 @@ enum ShortcutScope {
   /// so every chord has to be move-text safe.
   everyScreen,
 }
+
+/// A row in Settings. Labels are derived from the actual binding.
+class ShortcutReference {
+  const ShortcutReference(this.group, this.description, this.shortcut);
+  final String group;
+  final String description;
+  final AppShortcut shortcut;
+}
+
+const shortcutReference = [
+  ShortcutReference(
+    'Lists',
+    'Previous game, chapter, puzzle or finding',
+    AppShortcut.previousItem,
+  ),
+  ShortcutReference(
+    'Lists',
+    'Next game, chapter, puzzle or finding',
+    AppShortcut.nextItem,
+  ),
+  ShortcutReference('Boards', 'Previous move', AppShortcut.backOneMove),
+  ShortcutReference('Boards', 'Next move', AppShortcut.forwardOneMove),
+  ShortcutReference('Boards', 'Start of line', AppShortcut.goToStart),
+  ShortcutReference('Boards', 'End of line', AppShortcut.goToEnd),
+  ShortcutReference(
+    'App',
+    'Close dialog, leave panel or exit mode',
+    AppShortcut.leave,
+  ),
+  ShortcutReference(
+    'Game reader',
+    'Focus variation',
+    AppShortcut.focusVariation,
+  ),
+  ShortcutReference(
+    'Game reader',
+    'Return to parent variation',
+    AppShortcut.returnToParentLine,
+  ),
+  ShortcutReference('Game reader', 'Play / pause moves', AppShortcut.autoPlay),
+  ShortcutReference('Game reader', 'Fullscreen', AppShortcut.fullScreen),
+  ShortcutReference('Game reader', 'Paste PGN', AppShortcut.pastePgn),
+  ShortcutReference('Solitaire setup', 'Start', AppShortcut.startSolitaire),
+  ShortcutReference(
+    'Training',
+    'Show solution / next learning step',
+    AppShortcut.toggleSolution,
+  ),
+  ShortcutReference('Study / repertoire', 'Undo', AppShortcut.undo),
+  ShortcutReference('Study / repertoire', 'Paste FEN', AppShortcut.pasteFen),
+];

@@ -751,7 +751,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
               TextButton.icon(
                 onPressed: _returnToMainline,
                 icon: const Icon(Icons.subdirectory_arrow_left, size: 18),
-                label: const Text('Return to mainline (R)'),
+                label: const Text('Return to mainline'),
               ),
             ],
           ),
@@ -782,7 +782,10 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
                   width: 36,
                   height: 36,
                 ),
-                tooltip: 'Back (←)',
+                tooltip: actionTooltip(
+                  'Back',
+                  shortcut: AppShortcut.backOneMove,
+                ),
               ),
               IconButton(
                 onPressed: _canGoForward ? _goForward : null,
@@ -792,7 +795,10 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
                   width: 36,
                   height: 36,
                 ),
-                tooltip: 'Forward (→)',
+                tooltip: actionTooltip(
+                  'Forward',
+                  shortcut: AppShortcut.forwardOneMove,
+                ),
               ),
               if (widget.showStartEndButtons)
                 IconButton(

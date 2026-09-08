@@ -60,7 +60,7 @@ class SettingsSection extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         child,
         if (showDivider) ...[
           const SizedBox(height: 16),
@@ -100,7 +100,7 @@ class SettingsGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Material(
         color: AppColors.surfaceElevated,
         shape: RoundedRectangleBorder(
@@ -112,7 +112,7 @@ class SettingsGroup extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -127,7 +127,7 @@ class SettingsGroup extends StatelessWidget {
                     ],
                   ),
                   if (subtitle != null) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     Text(subtitle!, style: AppTextStyles.muted),
                   ],
                 ],
@@ -414,7 +414,7 @@ class SettingsValueRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final labelBlock = _LabelBlock(
@@ -427,7 +427,7 @@ class SettingsValueRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 labelBlock,
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 labelledControl,
               ],
             );
@@ -435,7 +435,7 @@ class SettingsValueRow extends StatelessWidget {
           return Row(
             children: [
               Expanded(child: labelBlock),
-              const SizedBox(width: 32),
+              const SizedBox(width: 16),
               labelledControl,
             ],
           );
@@ -459,7 +459,7 @@ class _LabelBlock extends StatelessWidget {
       children: [
         Text(label, style: AppTextStyles.bodyStrong),
         if (description != null) ...[
-          const SizedBox(height: 6),
+          const SizedBox(height: 3),
           Text(description!, style: AppTextStyles.muted),
         ],
       ],

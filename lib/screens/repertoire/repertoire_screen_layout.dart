@@ -81,8 +81,8 @@ mixin _RepertoireLayout
         tabController: _sidePanelTabController,
         tabs: const [],
         stripLabel: 'Chapters',
-        hideTooltip: 'Hide chapters (L)',
-        showTooltip: 'Show chapters (L)',
+        hideTooltip: 'Hide chapters',
+        showTooltip: 'Show chapters',
         onCollapsedChanged: _layout.setOutlinePanelCollapsed,
         children: const [],
       );

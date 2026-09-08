@@ -1,87 +1,99 @@
 import 'package:flutter/material.dart';
 
-import '../../core/app_state.dart';
+import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/app_shortcuts.dart';
-import '../../utils/shortcut_reference.dart';
-import 'settings_widgets.dart';
 
+/// One compact reference, with aligned columns and a rule between each row.
 class KeyboardShortcutsSection extends StatelessWidget {
   const KeyboardShortcutsSection({super.key});
 
-  Widget _row(String action, String keys) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: Text(action, style: AppTextStyles.body)),
-        const SizedBox(width: 16),
-        Text(keys, style: AppTextStyles.mono),
-      ],
-    ),
-  );
+  Widget _cell(String text, {bool heading = false, bool muted = false}) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        child: Text(
+          text,
+          style: heading
+              ? AppTextStyles.bodyStrong
+              : muted
+              ? AppTextStyles.muted
+              : AppTextStyles.body,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Padding(
-        padding: EdgeInsets.only(bottom: 20),
-        child: Text(
-          'Shortcuts act on the current view. Text fields keep their normal editing keys; move inputs also allow navigation keys. Hover a control to see its shortcut.',
-          style: AppTextStyles.muted,
+      DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.divider),
+          borderRadius: BorderRadius.circular(6),
         ),
-      ),
-      SettingsGroup(
-        title: 'Switch view',
-        icon: Icons.apps,
-        children: [
-          for (final mode in availableModeMenuOrder())
-            _row(
-              mode.label,
-              KeyChord(
-                AppShortcut.candidateKeys[mode.shortcutNumber - 1],
-                control: true,
-              ).label,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Table(
+            columnWidths: const {
+              0: FlexColumnWidth(3),
+              1: FixedColumnWidth(140),
+              2: FlexColumnWidth(1.5),
+            },
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            border: const TableBorder(
+              horizontalInside: BorderSide(color: AppColors.divider),
+              verticalInside: BorderSide(color: AppColors.divider),
             ),
-        ],
-      ),
-      for (final group in shortcutReference.map((e) => e.group).toSet())
-        SettingsGroup(
-          title: group,
-          icon: Icons.keyboard_outlined,
-          children: [
-            for (final entry in shortcutReference.where(
-              (e) => e.group == group,
-            ))
-              _row(entry.description, entry.shortcut.label),
-            if (group == 'Game reader')
-              _row(
-                'Choose the numbered continuation at a fork',
-                '${AppShortcut.forkCandidates.first.label}–${AppShortcut.forkCandidates.last.label}',
+            children: [
+              TableRow(
+                decoration: const BoxDecoration(
+                  color: AppColors.surfaceElevated,
+                ),
+                children: [
+                  _cell('Action', heading: true),
+                  _cell('Key', heading: true),
+                  _cell('Where', heading: true),
+                ],
               ),
-          ],
+              for (final entry in shortcutReference)
+                TableRow(
+                  children: [
+                    _cell(entry.description),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceElevated,
+                            border: Border.all(color: AppColors.outline),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            entry.shortcut.label,
+                            style: AppTextStyles.mono,
+                          ),
+                        ),
+                      ),
+                    ),
+                    _cell(entry.group, muted: true),
+                  ],
+                ),
+            ],
+          ),
         ),
-      SettingsGroup(
-        title: 'Repertoire planner',
-        icon: Icons.route_outlined,
-        children: [
-          _row('Undo start move or leave preview / redo start move', '← / →'),
-          _row('Begin or continue', 'Enter'),
-          _row('Previous question', 'Backspace'),
-          _row('Stop here', 'G'),
-          _row('Select numbered answer', '1–9'),
-        ],
       ),
-      SettingsGroup(
-        title: 'Bughouse',
-        icon: Icons.grid_on_outlined,
-        children: [
-          _row('Previous / next ply', '← / →'),
-          _row('Start / end', 'Home / End'),
-          _row('Flip board A / board B', 'F / G'),
-          _row('Toggle analysis', 'Space'),
-        ],
+      const SizedBox(height: 10),
+      const Text(
+        'Text fields keep their normal editing keys. Tab moves between controls. '
+        'Hover a button to see its shortcut.',
+        style: AppTextStyles.muted,
       ),
     ],
   );
