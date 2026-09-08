@@ -1047,7 +1047,55 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `storage/storage_service.dart` | Abstract file I/O; `listRepertoireFiles()` → `List<RepertoireMetadata>` |
 | `storage/io_storage_service.dart` | Desktop/mobile IO; `_resolveFile` maps relative paths to app documents; `readFile` / PGN reads use UTF-8 with Latin-1 fallback via `utils/file_text_reader.dart`; `listRepertoireFiles` filters out `*_raw_games.pgn` companion files; `fileStat` returns file size + modification time for index staleness checks |
 | `storage/storage_factory.dart` | Platform factory |
-| `storage/app_paths.dart` | App data directories |
+| `storage/app_paths.dart` | Version-independent document, support and local cache roots |
+| `storage/schema_guard.dart` | Reject newer SQLite schemas; flushed SQLite snapshot before saved-game schema upgrades |
+| `features/updates/services/app_update_service.dart` | Daily stable GitHub release checks, persisted check/download preferences, streamed size/SHA-256 verification, reusable verified download, install scheduling/cancellation |
+| `features/updates/services/update_installer.dart` | Detect Windows Setup, Linux deb/rpm or marked portable bundles; launch an acknowledged detached helper that waits for normal app close |
+| `features/updates/widgets/app_updates.dart` | Startup update popup and Settings → About controls; installation is explicitly scheduled, never a forced exit |
+
+**Storage and upgrade policy.** Installation directories contain replaceable
+application code/assets. App version numbers never enter the user-data paths.
+`AppPaths` remains the canonical app-side directory boundary:
+
+| Data | Existing location / policy |
+|---|---|
+| Repertoires, studies, tactics sets, opponents, collections and tournament work | Named directories directly under OS Documents; legacy training/review CSV and analyzed-game files also live at its root. These are intentionally unchanged for existing users. PGN/CSV remain exportable independently of the app. |
+| User games | `app_games.db` in application support; current schema 2. Before changing an older schema, `VACUUM INTO` makes a consistent `.before-schema-2.sqlite` backup including committed WAL contents. DDL, rekeying and schema version update share one transaction. |
+| Master games | `master_games.db` in support; current schema 4. Transactional migration; old schema 1 is a deliberately rebuildable download cache. |
+| Evaluation cache | `eval_cache.db` in support; current schema 4. Existing sqflite migrations preserve/rekey Stockfish evals and can invalidate Maia policies. A newer schema is refused by sqflite and the cache falls back to memory. |
+| Settings and accounts | SharedPreferences under the platform application-support identity; defaults supply missing preference keys. Tokens currently use this store too, rather than an OS credential vault. |
+| Extracted engines / downloaded database locations | Engines are reproducible support data. Large optional evaluation stores retain their user-selected paths; upgrades must not silently relocate these. |
+| Update downloads / logs | `AppPaths.cacheDirectory()/updates/`, using LocalAppData on Windows. Kept outside installation and durable documents; a cached payload is verified again before reuse/install. Install logs and retained Linux bundles are currently retained for explicit troubleshooting/cleanup. |
+
+Linux support is normally `$XDG_DATA_HOME/com.example.chess_auto_prep`
+(default `~/.local/share/com.example.chess_auto_prep`); path_provider preserves
+an existing legacy executable-name directory. Windows support is normally
+`%APPDATA%/com.example/Chess Auto Prep`. Windows CompanyName/ProductName,
+the Linux application/executable IDs, and the Windows Setup AppId therefore
+form a **storage identity**; changing branding in those fields needs an explicit
+migration. Flatpak's sandbox creates a separate profile from native packages;
+switching package families does not automatically import the other profile.
+
+This is a best-effort forward-upgrade policy, not a public compatibility or
+rollback guarantee. User-game and master-game readers reject future schemas
+before changing journal mode or schema, close failed connections, and do not
+classify newer schemas as corruption. A failed user-game migration rolls back
+and retains the pre-migration snapshot. Existing atomic file writers and PGN/CSV
+migration backups remain the document protection boundary. Unknown custom PGN
+annotations/JSON formats still need feature-specific fixtures when changed;
+there is no universal version envelope for every file format.
+
+`test/fixtures/storage/app_games_v1.sql` is frozen independently of current
+writers. `upgrade_contract_test.dart` tests preservation, reopening, migration
+failure rollback and future-schema refusal. Existing data-integrity and eval
+migration tests run in the release quality gate. Windows release builds also
+run the updater/upgrade contract tests. Offline `test_storage_contract.py` pins
+storage identities and legacy folder names; change those assertions only with
+a reviewed data migration. `test_app_updates.py` exercises the shipped helper
+against disposable bundles (wait/cancel, verified replacement, checksum and
+traversal rejection, rollback); its Windows case uses fake installer/app files.
+Real Windows Setup and Linux package-manager authorization still need native
+release smoke testing. No release or update is triggered by these tests.
 
 ### `lib/widgets/` (grouped)
 

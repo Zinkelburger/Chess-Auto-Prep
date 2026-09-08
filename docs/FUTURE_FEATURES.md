@@ -43,6 +43,17 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 | Remove legacy tab hybrid in Edit wide mode | **Partial** | Wide Edit still uses `RepertoireTabBar` (Browse + PGN tabs) while context is a separate zone |
 | Status bar expectimax / coherence metrics | **Partial** | `RepertoireStatusBar` shows coverage, traps, lines, engine, tree nodes — not V% or coherence |
 
+### Storage and update follow-ups
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Broader historical file fixtures | **Partial** | Frozen saved-games schema fixture, data-integrity and eval migrations are gated. Add fixtures whenever custom PGN/CSV/JSON formats change; no blanket compatibility promise. |
+| One namespaced Documents root / relocatable data home | **Deferred** | Existing named folders and root-level legacy files remain addressable. A future move needs copy/verify/switch migration and external-path handling. |
+| Windows bulk data outside roaming profiles | **Deferred** | Existing support databases use AppData/Roaming. New update payloads use local cache; moving old databases requires a separate migration. |
+| OS credential vault | **Not started** | OAuth/PAT tokens currently use SharedPreferences. Migrate without discarding accounts when vault storage is introduced. |
+| Additional auto-update formats and cleanup | **Partial** | Windows Setup, deb/rpm and marked Linux portable bundles supported. Flatpak/Windows ZIP/macOS use manual updates; install logs, downloaded releases and previous portable bundles need a retention UI. |
+| Native update smoke matrix | **Partial** | Linux portable helper tests and Windows helper tests with disposable fake programs are gated. Test actual Windows Setup and Linux authorization/cancellation before publishing. |
+
 ### Global settings completeness
 
 | Item | Status | Notes |

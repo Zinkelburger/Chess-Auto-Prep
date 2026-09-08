@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../features/updates/widgets/app_updates.dart';
 import '../constants/engine_defaults.dart';
 import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
@@ -214,6 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ], compact),
                       _page(4, [_buildDatabasesSection()], compact),
                       _page(5, [
+                        const UpdateSettingsSection(),
                         _buildAboutSection(),
                         _buildResetButton(),
                       ], compact),

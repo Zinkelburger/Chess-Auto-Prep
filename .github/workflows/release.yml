@@ -125,7 +125,10 @@ jobs:
       - name: Zip bundle
         run: |
           cd build/linux/x64/release/bundle
+          # Only portable bundles carry the updater ownership marker.
+          printf '1\n' > .chess-auto-prep-portable
           zip -r ../../../../../chess-auto-prep-${{ github.ref_name }}-linux.zip .
+          rm .chess-auto-prep-portable
 
       - name: Build .deb
         run: |
@@ -179,6 +182,12 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+
+      - name: Test Windows updater and storage upgrade contracts
+        run: |
+          flutter pub get
+          flutter test test/features/updates test/services/storage/upgrade_contract_test.dart
+          python tools/test_app_updates.py
 
       - name: Fetch the pinned Microsoft VC++ prerequisite
         shell: pwsh
@@ -504,6 +513,11 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      - name: Publish download checksums
+        run: |
+          cd artifacts
+          sha256sum chess-auto-prep-* > SHA256SUMS
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -519,5 +533,17 @@ jobs:
             | Fedora / RHEL / openSUSE | `linux-x86_64.rpm` |
             | Other Linux | `linux.flatpak` — or `linux.zip`, portable |
             | macOS | `macos-arm64` (M1–M4) · `macos-x86_64` (Intel) |
+
+            Windows Setup and marked Linux portable installs support in-app updates.
+            Debian/RPM updates use your system installer and may ask for a password.
+            In Settings → About, choose automatic checks and downloads. The app
+            prompts before scheduling installation after you close it.
+            Flatpak and Windows portable users should use their package manager
+            or download the new release manually.
+
+            `SHA256SUMS` contains download hashes. In-app updates also require
+            GitHub's SHA-256 asset digest and verify the file before installation.
+            Back up important work before upgrading. We aim to preserve saved
+            data, but do not guarantee backward compatibility or downgrades.
 
             [Full install notes](https://github.com/Zinkelburger/Chess-Auto-Prep#installing-a-release)
