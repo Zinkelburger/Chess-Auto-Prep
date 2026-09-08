@@ -86,6 +86,15 @@ default is two cores. This controls CPU affinity, not Hivemind's compiled
 worker count; Windows/macOS still use the engine's own CPU allocation.
 Tournament resources remain owned by the tournament runner.
 
+Windows first-use checks run in the built desktop app via
+`integration_test/bughouse_first_run_test.dart`: an empty disposable profile
+with spaces and non-ASCII characters, real bundled extraction, app-local VC++
+DLL checks, repeated engine searches, and repair of a same-size damaged network.
+The Bughouse engine workflow also runs the app boot/navigation tests on Windows;
+release builds require that workflow to pass before packaging Windows. Hosted
+runners have VC++ installed, so these checks supplement the binary dependency
+audit; they do not replace an installer/portable test on a clean Windows PC.
+
 `widgets/board_editor/editable_board.dart` supplies the shared editing surface
 to both ordinary board editors and bughouse, after the lichess editor: the
 `EditorTool` in `core/board_editor_controller.dart` is a pointer (drag pieces,

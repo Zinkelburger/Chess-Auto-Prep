@@ -18,6 +18,9 @@ jobs:
   quality-gate:
     uses: ./.github/workflows/ci.yml
 
+  bughouse-gate:
+    uses: ./.github/workflows/bughouse.yml
+
   build-linux:
     needs: quality-gate
     runs-on: ubuntu-22.04
@@ -159,7 +162,7 @@ jobs:
             chess-auto-prep-${{ github.ref_name }}-linux-x86_64.rpm
 
   build-windows:
-    needs: quality-gate
+    needs: [quality-gate, bughouse-gate]
     # The supported client floor is Windows 10. Do not silently move the build
     # to VS 2026/Server 2025 through windows-latest: v1.15.3 did exactly that,
     # then shipped runtime files that had never been exercised as a bundle.

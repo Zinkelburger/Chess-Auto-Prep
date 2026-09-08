@@ -22,8 +22,8 @@
 #           where the two-board dialect, the joint-move parsing and the
 #           handshake timeout live.
 #
-# Runs on demand, on release tags, and when anything in the bughouse stack
-# changes — not on every push, for the same reason ci.yml does not.
+# Runs on demand, as a required release gate, and when the bughouse stack
+# changes on a development/published branch.
 
 name: Bughouse engine
 
@@ -32,8 +32,6 @@ on:
     branches:
       - main
       - backup/local-main
-    tags:
-      - 'v*'
     paths:
       - 'tools/fetch_bughouse.py'
       - 'tools/bughouse.lock.json'
@@ -43,7 +41,12 @@ on:
       - 'lib/features/bughouse/models/**'
       - 'test/features/bughouse/**'
       - 'lib/features/bughouse/services/**'
-      - 'windows/CMakeLists.txt'
+      - 'windows/**'
+      - 'integration_test/bughouse_first_run_test.dart'
+      - 'integration_test/app_test.dart'
+      - 'packaging/windows/**'
+      - 'tools/vc_redist.lock.json'
+      - '.github/workflows/release.yml'
       - '.github/workflows/bughouse.yml'
   pull_request:
     paths:
@@ -55,9 +58,15 @@ on:
       - 'lib/features/bughouse/models/**'
       - 'test/features/bughouse/**'
       - 'lib/features/bughouse/services/**'
-      - 'windows/CMakeLists.txt'
+      - 'windows/**'
+      - 'integration_test/bughouse_first_run_test.dart'
+      - 'integration_test/app_test.dart'
+      - 'packaging/windows/**'
+      - 'tools/vc_redist.lock.json'
+      - '.github/workflows/release.yml'
       - '.github/workflows/bughouse.yml'
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   engine:
@@ -121,7 +130,21 @@ jobs:
           HIVEMIND_BIN: ${{ matrix.os == 'windows-2022' && 'engine under test/hivemind-windows.exe' || 'engine under test/hivemind-linux' }}
           HIVEMIND_MODEL: engine under test/hivemind.onnx
           HIVEMIND_LIB: engine under test
-        run: flutter test test/features/bughouse/bughouse_engine_test.dart test/features/bughouse/bughouse_tournament_engine_test.dart
+        run: flutter test test/features/bughouse
+
+      # Unlike the Python extraction/client checks, this runs inside a built
+      # Flutter desktop app. It proves rootBundle discovery, first extraction,
+      # app-local VC++ copying, Unicode profile paths and corruption recovery.
+      - name: Fetch bundled Stockfish for the desktop boot test
+        if: runner.os == 'Windows'
+        run: python tools/fetch_assets.py --only stockfish-windows
+
+      - name: Boot the Windows app and test first-use bughouse installation
+        if: runner.os == 'Windows'
+        timeout-minutes: 20
+        run: >-
+          flutter test integration_test/app_test.dart
+          integration_test/bughouse_first_run_test.dart -d windows
 
   macos:
     # Ten times the minutes of a Linux runner, so only when it is asked for or
