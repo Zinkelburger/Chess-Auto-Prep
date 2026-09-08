@@ -14,11 +14,18 @@ import 'fake_bughouse_engine.dart';
 /// without understanding or retyping any of it. That is one button, and these
 /// are the tests that it is wired to the report rather than to the sentence.
 void main() {
-  const report = '''
-Chess Auto Prep 9.9.9 — bughouse engine diagnostics
-Problem     : the engine said no
-Files beside the engine
-  onnxruntime.dll   16149344 bytes  (size ok)''';
+  final report = BughouseEngine.formatReport(
+    headline: BughouseEngine.describeExit(-1073741701),
+    executablePath: r'C:\support\bughouse\hivemind-windows.exe',
+    argv: ['--model', 'hivemind.onnx'],
+    workingDirectory: r'C:\support\bughouse',
+    exitCode: -1073741701,
+    spoke: false,
+    directory: ['onnxruntime.dll 16149344 bytes'],
+    libraries: [],
+    stdout: [],
+    stderr: ['last raw stderr line'],
+  );
 
   late FakeBughouseEngine engine;
   late BughouseController controller;
@@ -86,7 +93,8 @@ Files beside the engine
   testWidgets('a failure without one does not invent it', (tester) async {
     await showFailure(tester, BughouseEngineFailure('plain'));
     expect(controller.error, contains('plain'));
-    expect(controller.errorReport, isNull);
+    expect(controller.errorReport, contains('Engine diagnostics: unavailable'));
+    expect(controller.errorReport, contains('plain'));
   });
 
   testWidgets('the copy button puts the whole report on the clipboard', (
@@ -114,7 +122,7 @@ Files beside the engine
       BughouseEngineFailure('the engine said no', report: report),
     );
 
-    expect(find.text('Copy diagnostics'), findsOneWidget);
+    expect(find.text('Copy full report'), findsOneWidget);
     // Collapsed to begin with: the report is pages long and the banner is not
     // where anyone reads it. Copying does not require opening it.
     expect(find.text('Hide details'), findsNothing);
@@ -122,14 +130,17 @@ Files beside the engine
     await tester.tap(find.byKey(const Key('bughouse-copy-diagnostics')));
     await tester.pump();
 
-    expect(copied, contains('the engine said no'));
+    expect(copied, report);
+    expect(copied, contains('STATUS_INVALID_IMAGE_FORMAT'));
+    expect(copied, contains('last raw stderr line'));
+    expect(copied, endsWith('END BUGHOUSE DIAGNOSTICS'));
     expect(copied, contains('16149344 bytes'));
     expect(find.text('Copied'), findsOneWidget);
 
     // The confirmation is temporary, so a second copy is never blocked by the
     // first one's tick.
     await tester.pump(const Duration(seconds: 4));
-    expect(find.text('Copy diagnostics'), findsOneWidget);
+    expect(find.text('Copy full report'), findsOneWidget);
   });
 
   testWidgets('the details can be opened without copying', (tester) async {
@@ -143,8 +154,10 @@ Files beside the engine
     expect(find.textContaining('Files beside the engine'), findsOneWidget);
   });
 
-  testWidgets('a failure with no report offers no button', (tester) async {
+  testWidgets('a failure with no report still offers copyable error evidence', (
+    tester,
+  ) async {
     await showFailure(tester, BughouseEngineFailure('plain'));
-    expect(find.text('Copy diagnostics'), findsNothing);
+    expect(find.text('Copy full report'), findsOneWidget);
   });
 }

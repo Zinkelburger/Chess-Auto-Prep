@@ -1219,7 +1219,9 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   /// Records a failure and, when the engine attached one, the report behind it.
   void _failWith(Object e, String fallback) {
     _error = _describe(e, fallback);
-    _errorReport = e is BughouseEngineFailure ? e.report : null;
+    _errorReport =
+        (e is BughouseEngineFailure ? e.report : null) ??
+        BughouseEngine.unavailableReport(e);
     _errorLink = e is BughouseEngineFailure ? e.helpUrl : null;
   }
 

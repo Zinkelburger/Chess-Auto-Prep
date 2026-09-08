@@ -454,13 +454,16 @@ class BughouseBundle {
 
     Future<void> compare(String name, String? want, String reference) async {
       final file = File(p.join(directory, name));
-      if (!await file.exists()) return;
       final label = '  ${name.padRight(28)}';
+      if (!await file.exists()) {
+        lines.add('$label MISSING');
+        return;
+      }
       final got = await _hashOf(file.openRead());
       if (want == null || got == null) {
         lines.add('$label could not be compared against $reference');
       } else if (got == want) {
-        lines.add('$label matches $reference');
+        lines.add('$label matches $reference (SHA-256 $got)');
       } else {
         lines.add('$label DOES NOT MATCH $reference');
         lines.add('  ${' '.padRight(28)}on disk $got');
@@ -496,7 +499,9 @@ class BughouseBundle {
     for (final name in damaged) {
       try {
         await File(p.join(directory, name)).delete();
+        lines.add('  $name: removed; will be extracted on next launch');
       } catch (e) {
+        lines.add('  $name: removal failed: $e');
         log.w('Could not remove the damaged $name: $e');
       }
     }
@@ -684,12 +689,8 @@ class ContentVerification {
   /// The sentence to put in front of the user, or null when nothing is wrong.
   String? get repairedMessage {
     if (damaged.isEmpty) return null;
-    final what = damaged.length == 1
-        ? "The engine's ${damaged.single} was damaged"
-        : '${damaged.length} of the engine\'s files were damaged';
-    return '$what on disk — the bytes did not match the copy inside this '
-        'build, which is why Windows refused to load it. It has been removed. '
-        'Open Bughouse Lab again and the app will write a fresh one.';
+    return 'File mismatch: ${damaged.join(', ')}. '
+        'See removal results above. Open Bughouse Lab again to retry extraction.';
   }
 }
 

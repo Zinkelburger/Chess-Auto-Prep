@@ -89,6 +89,14 @@ explains batch size directly below its control: keep 8 for everyday analysis;
 16 or 32 are optional throughput experiments, with a search-feedback trade-off
 that means faster processing does not guarantee stronger moves.
 
+Engine failures show the exit code and Windows NTSTATUS name without guessing
+which file caused it. **Copy full report** copies the diagnostic block through
+`END BUGHOUSE DIAGNOSTICS`, including OS/app/runtime, executable and arguments,
+DLL candidates, SHA-256 comparisons, repair results and captured output.
+File/DLL inspection precedes repair; collection errors stay in their section
+without discarding the rest of the report. DLL candidates are a filesystem
+inspection, not an observed Windows loader trace.
+
 Windows first-use checks run in the built desktop app via
 `integration_test/bughouse_first_run_test.dart`: an empty disposable profile
 with spaces and non-ASCII characters, real bundled extraction, app-local VC++

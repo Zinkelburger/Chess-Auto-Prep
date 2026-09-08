@@ -106,7 +106,7 @@ class WindowsLoaderCheck {
 
   /// How to spell a machine value to a person.
   static String describeMachine(int? machine) => machine == null
-      ? 'not a Windows program at all'
+      ? 'PE header unreadable or invalid'
       : _machineNames[machine] ?? 'machine 0x${machine.toRadixString(16)}';
 
   /// The directories the loader tries, in its order, for a process whose image
@@ -214,19 +214,14 @@ class WindowsLoaderCheck {
     final buffer = StringBuffer();
     for (final r in wrong) {
       buffer.writeln(
-        'The engine is 64-bit, but Windows loads ${r.name} from\n'
-        '  ${r.path}\n'
-        'and that copy is ${describeMachine(r.machine)}. Move or rename it, '
-        'or take its folder off PATH.',
+        '${r.name}: expected x64; candidate is ${describeMachine(r.machine)}\n'
+        '  ${r.path}',
       );
     }
     if (missing.isNotEmpty) {
       buffer.writeln(
-        '${missing.map((r) => r.name).join(', ')} could not be found anywhere. '
-        'These come with the Microsoft Visual C++ Redistributable (x64); the '
-        'app normally copies them beside the engine itself, so this also means '
-        'that copy did not happen. Installing it by hand fixes this for good: '
-        '$redistributableUrl',
+        '${missing.map((r) => r.name).join(', ')}: not found in inspected directories. '
+        'Microsoft Visual C++ Redistributable (x64): $redistributableUrl',
       );
     }
     return buffer.toString().trimRight();

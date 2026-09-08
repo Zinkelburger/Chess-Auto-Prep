@@ -157,7 +157,7 @@ void main() {
       expect(found.isWrongArchitecture, isTrue);
       expect(
         WindowsLoaderCheck.describe([found]),
-        contains('not a Windows program at all'),
+        contains('PE header unreadable or invalid'),
       );
     });
 
