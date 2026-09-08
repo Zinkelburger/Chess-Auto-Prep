@@ -9,7 +9,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../services/storage/app_paths.dart';
 import '../../../utils/log.dart';
-import 'windows_loader_check.dart';
+import 'bughouse_windows_runtime.dart';
 
 /// Resolves the three files Hivemind needs at runtime, extracting them from
 /// the asset bundle on first use — the same shape as [StockfishBundle], with
@@ -25,6 +25,10 @@ import 'windows_loader_check.dart';
 /// runtime plus the network — and it runs on any desktop.
 class BughouseBundle {
   static _Resolved? _cached;
+
+  static List<String> _installationDiagnostics = [];
+  static List<String> get installationDiagnostics =>
+      List.unmodifiable(_installationDiagnostics);
 
   /// Where [_install] put the files, or null before it has run — and null for
   /// a local build pointed at by [useLocalBuild], which came from somewhere
@@ -48,8 +52,7 @@ class BughouseBundle {
   static Map<String, int> get expectedSizes => _sizes;
   static Map<String, int> _sizes = const {};
 
-  /// SHA-256 values for the extracted payloads. New release manifests carry
-  /// these; old integer-only manifests stay readable for in-place upgrades.
+  /// Required SHA-256 values for the extracted payloads in this build.
   static Map<String, String> get expectedHashes => _hashes;
   static Map<String, String> _hashes = const {};
 
@@ -138,7 +141,9 @@ class BughouseBundle {
   /// of a checkout that has not run `tools/fetch_bughouse.py`.
   static Future<String> ensureInstalled() {
     final cached = _cached;
-    if (cached != null) return Future.value(cached.executable);
+    if (cached != null && _installDirectory == null) {
+      return Future.value(cached.executable); // Explicit local-build override.
+    }
     // One extraction at a time. Two callers arriving together (the analysis
     // pump and a button press during the first launch) would otherwise write
     // the same 54 MB network concurrently.
@@ -148,9 +153,28 @@ class BughouseBundle {
   static Future<String>? _installing;
 
   static Future<String> _install() async {
+    _cached = null;
+    _installationDiagnostics = [];
+    try {
+      return await _installFiles();
+    } catch (e) {
+      if (e is BughouseRuntimeFailure) {
+        _installationDiagnostics.addAll(e.lines);
+      }
+      _installationDiagnostics.add('Installation failed: $e');
+      throw BughouseBundleBroken(
+        'Engine dependency verification failed: $e',
+        diagnostics: List.of(_installationDiagnostics),
+      );
+    }
+  }
+
+  static Future<String> _installFiles() async {
     final dir = await AppPaths.supportDirectory();
     final target = Directory(p.join(dir.path, 'bughouse'));
     await target.create(recursive: true);
+    _installDirectory = target.path;
+    _installationDiagnostics.add('Engine folder: ${target.path}');
 
     final manifest = await _loadManifest();
     _sizes = {
@@ -174,27 +198,21 @@ class BughouseBundle {
         expectedSize: manifest[name]?.bytes,
         expectedSha256: manifest[name]?.sha256,
       );
+      _installationDiagnostics.add(
+        '$name: verified SHA-256 ${manifest[name]!.sha256}',
+      );
     }
 
     if (Platform.isWindows) {
-      final copied = await installWindowsRuntime(
-        source: applicationDirectory(),
-        target: target,
+      _installationDiagnostics.addAll(
+        await installWindowsRuntime(
+          source: applicationDirectory(),
+          target: target,
+        ),
       );
-      // Say so at install time, not at first search. Whether the engine then
-      // starts depends on the machine having the redistributable system-wide,
-      // which most do — so this is a warning rather than a failure, but it is
-      // the single most useful line in the log when it does not.
-      final absent = [
-        for (final name in WindowsLoaderCheck.appSuppliedDependencies)
-          if (!copied.any((c) => c.toLowerCase() == name.toLowerCase())) name,
-      ];
-      if (absent.isNotEmpty) {
-        log.w(
-          'The bughouse engine has no app-supplied copy of '
-          '${absent.join(', ')} in ${target.path}. It will start only on a '
-          'machine that has the Microsoft Visual C++ Redistributable (x64) '
-          'installed system-wide.',
+      for (final name in [_binaryName(), _runtimeName()]) {
+        await BughouseWindowsRuntime.requireX64(
+          File(p.join(target.path, name)),
         );
       }
     } else {
@@ -206,20 +224,8 @@ class BughouseBundle {
       }
     }
 
-    // Check what actually landed, rather than assuming the writes above did
-    // what they were told. A file that came out the wrong size is not a
-    // theoretical worry here: Windows keeps its own `onnxruntime.dll` in
-    // System32, so an engine whose copy is missing or half-written does not
-    // fail to start — it silently loads the operating system's ONNX Runtime
-    // instead, and fails somewhere far less legible.
-    //
-    // Sizes only. Content is already settled by the time we get here:
-    // [_installAsset] returns either because the file on disk hashed correctly
-    // or because [_extractVerifiedAsset] hashed the decoded payload before
-    // writing it — which is the check that catches the right-sized corrupt
-    // file the size test cannot see. Passing [_hashes] here as well re-read
-    // and re-hashed the whole ~82 MB payload a second time on every launch,
-    // for a comparison that had already been made and could not fail.
+    // Existing files were hashed above; new payloads are checked both before
+    // writing and from the staged file before installation.
     final problems = await verifyExtraction(target.path, _sizes);
     if (problems.isNotEmpty) {
       throw BughouseBundleBroken(
@@ -310,141 +316,22 @@ class BughouseBundle {
   /// from what the build deploys fails in exactly the way this whole function
   /// exists to prevent.
   @visibleForTesting
-  static bool isWindowsRuntimeLibrary(String fileName) {
-    final name = fileName.toLowerCase();
-    if (!name.endsWith('.dll')) return false;
-    return name.startsWith('msvcp140') ||
-        name.startsWith('vcruntime140') ||
-        name.startsWith('concrt140');
-  }
+  static bool isWindowsRuntimeLibrary(String name) =>
+      BughouseWindowsRuntime.isRuntime(name);
 
-  /// Copies the Visual C++ runtime from [source] next to the engine in
-  /// [target], and returns the names copied.
-  ///
-  /// This is the difference between the mode working on a fresh Windows
-  /// machine and not working at all. `onnxruntime.dll` imports MSVCP140.dll,
-  /// MSVCP140_1.dll, VCRUNTIME140.dll and VCRUNTIME140_1.dll, none of which is
-  /// part of a clean Windows install — they come with the Visual C++
-  /// redistributable, which most machines have only because some other program
-  /// installed it. windows/CMakeLists.txt therefore deploys them beside
-  /// `chess_auto_prep.exe`, and that is enough for the app itself and for the
-  /// ONNX runtime it loads in-process.
-  ///
-  /// It is *not* enough for the bughouse engine, because that is a separate
-  /// process: Windows resolves a process's imports against the directory of
-  /// **its own** image, never the parent's. `hivemind.exe` lives in the
-  /// support directory, so it looked for MSVCP140.dll there, in System32, and
-  /// on PATH, found it in none of them, and was stopped by the loader before
-  /// `main` — which the app saw as a live process that never answered `uci`.
-  ///
-  /// Copying rather than putting the app directory on the child's PATH
-  /// because the engine's own directory is the *first* place the loader
-  /// looks, ahead of every registry knob that can reorder the rest of the
-  /// search, and because the runtime the engine ships is already installed
-  /// there by the same step.
-  ///
-  /// Missing sources are not an error: a machine that has the redistributable
-  /// system-wide runs fine without any of this, and the exit code the engine
-  /// dies with says so plainly if it does not.
+  /// Returns the checks and repairs performed against this build's archive.
   @visibleForTesting
   static Future<List<String>> installWindowsRuntime({
     required Directory source,
     required Directory target,
-  }) async {
-    final copied = <String>[];
-    if (!await source.exists()) return copied;
-    final libraries = <File>[];
-    await for (final entry in source.list(followLinks: false)) {
-      if (entry is! File) continue;
-      final name = p.basename(entry.path);
-      if (!isWindowsRuntimeLibrary(name)) continue;
-      libraries.add(entry);
-    }
+  }) => BughouseWindowsRuntime.ensureInstalled(
+    archive: BughouseWindowsRuntime.archiveDirectory(source),
+    target: target,
+  );
 
-    // The installer deliberately omits loose VC++ DLLs after installing the
-    // centrally serviced Microsoft prerequisite. Remove fallback DLLs copied
-    // by an older portable/app-local build: a DLL beside Hivemind wins over
-    // the repaired central copy and could preserve 0xC000007B across upgrades.
-    if (libraries.isEmpty) {
-      if (await target.exists()) {
-        await for (final entry in target.list(followLinks: false)) {
-          if (entry is! File ||
-              !isWindowsRuntimeLibrary(p.basename(entry.path))) {
-            continue;
-          }
-          try {
-            await entry.delete();
-            log.i('Removed stale app-local VC++ runtime ${entry.path}');
-          } catch (e) {
-            log.w('Could not remove stale VC++ runtime ${entry.path}: $e');
-          }
-        }
-      }
-      return copied;
-    }
-
-    for (final entry in libraries) {
-      final name = p.basename(entry.path);
-      final dest = File(p.join(target.path, name));
-      try {
-        final sourceHash = await _hashOf(entry.openRead());
-        if (sourceHash == null) {
-          throw FileSystemException('could not hash source file', entry.path);
-        }
-        if (await dest.exists() &&
-            await dest.length() == await entry.length() &&
-            await _hashOf(dest.openRead()) == sourceHash) {
-          copied.add(name);
-          continue;
-        }
-
-        final partial = File('${dest.path}.$pid.partial');
-        if (await partial.exists()) await partial.delete();
-        try {
-          await entry.copy(partial.path);
-          if (await _hashOf(partial.openRead()) != sourceHash) {
-            throw FileSystemException('checksum changed while copying', name);
-          }
-          if (await dest.exists()) await dest.delete();
-          await partial.rename(dest.path);
-        } finally {
-          if (await partial.exists()) await partial.delete();
-        }
-        copied.add(name);
-      } catch (e) {
-        // A locked or in-use DLL is survivable — the system copy may still
-        // be there — so say so and carry on rather than failing the launch.
-        log.w('Could not copy $name beside the bughouse engine: $e');
-      }
-    }
-    return copied;
-  }
-
-  /// Whether the installed files are still the bytes this build carries, and
-  /// removal of any that are not.
-  ///
-  /// [verifyExtraction] compares sizes, which catches every write that stopped
-  /// early — a full disk, a killed launch, an antivirus that truncated the
-  /// file it was scanning. It cannot catch the one failure that looks like
-  /// nothing at all: a file of exactly the right length holding the wrong
-  /// bytes. Windows refuses such an image with STATUS_INVALID_IMAGE_FORMAT,
-  /// the same status it uses for a 32-bit library, and its PE header still
-  /// parses — so the architecture reads back as x64 and every other line of
-  /// the diagnostic calls the file healthy. Worse, [_installAsset] re-extracts
-  /// only when the size differs, so nothing the user can do from inside the
-  /// app — no upgrade, no reinstall — ever replaces it. That is the state this
-  /// exists to end.
-  ///
-  /// The comparison needs no shipped hash and so cannot drift: the reference
-  /// for an extracted file is the compressed asset in this very build, and for
-  /// a Visual C++ library it is the app's own copy beside the running
-  /// executable, which this process has by definition already loaded. A file
-  /// that differs from either is wrong, full stop — so it is deleted, the
-  /// resolved paths are dropped, and the next [ensureInstalled] writes it
-  /// again.
-  ///
-  /// Deliberately not on the launch path: it hashes about 70 MB. It runs once,
-  /// after a launch has already failed.
+  /// After a failed launch, records content mismatches and removal results.
+  /// The next launch independently verifies and restores managed files from
+  /// this build's assets and private VC++ archive.
   static Future<ContentVerification> verifyAndRepair() async {
     final directory = _installDirectory;
     if (directory == null) return const ContentVerification.none();
@@ -481,18 +368,19 @@ class BughouseBundle {
     }
 
     if (Platform.isWindows) {
-      final appDir = applicationDirectory();
-      if (await appDir.exists()) {
-        await for (final entry in appDir.list(followLinks: false)) {
-          if (entry is! File) continue;
-          final name = p.basename(entry.path);
-          if (!isWindowsRuntimeLibrary(name)) continue;
+      try {
+        final manifest = await BughouseWindowsRuntime.readManifest(
+          BughouseWindowsRuntime.archiveDirectory(applicationDirectory()),
+        );
+        for (final entry in manifest.entries) {
           await compare(
-            name,
-            await _hashOf(entry.openRead()),
-            "the app's own copy of it",
+            entry.key,
+            entry.value.hash,
+            'the bundled VC++ manifest',
           );
         }
+      } catch (e) {
+        lines.add('VC++ manifest check failed: $e');
       }
     }
 
@@ -552,6 +440,7 @@ class BughouseBundle {
     String? libraryDir,
   }) {
     _installDirectory = null;
+    _installationDiagnostics = [];
     _cached = _Resolved(
       executable: executable,
       model: model,
@@ -560,32 +449,26 @@ class BughouseBundle {
   }
 
   static Future<Map<String, _AssetIntegrity>> _loadManifest() async {
-    try {
-      final raw = await rootBundle.loadString('assets/bughouse/manifest.json');
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      return json.map((name, value) {
-        // Integer-only manifests shipped before payload hashes were added.
-        if (value is num) {
-          return MapEntry(name, _AssetIntegrity(bytes: value.toInt()));
-        }
-        final record = value as Map<String, dynamic>;
-        return MapEntry(
-          name,
-          _AssetIntegrity(
-            bytes: (record['bytes'] as num).toInt(),
-            sha256: (record['sha256'] as String?)?.toLowerCase(),
-          ),
+    final raw = await rootBundle.loadString('assets/bughouse/manifest.json');
+    final json = jsonDecode(raw) as Map<String, dynamic>;
+    final manifest = <String, _AssetIntegrity>{};
+    for (final name in installedFileNames) {
+      final record = json[name];
+      if (record is! Map<String, dynamic> ||
+          record['bytes'] is! int ||
+          (record['bytes'] as int) <= 0 ||
+          record['sha256'] is! String ||
+          !RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(record['sha256'] as String)) {
+        throw FormatException(
+          'Missing size/SHA-256 for $name in assets/bughouse/manifest.json',
         );
-      });
-    } catch (e) {
-      // Not fatal — the extraction still works — but it turns off the only
-      // check that ever notices a half-written file, so it is worth a line.
-      log.w(
-        'The bughouse asset manifest could not be read ($e); an '
-        'incomplete extraction will not be detected.',
+      }
+      manifest[name] = _AssetIntegrity(
+        bytes: record['bytes'] as int,
+        sha256: (record['sha256'] as String).toLowerCase(),
       );
-      return const {};
     }
+    return manifest;
   }
 
   static Future<void> _installAsset({
@@ -604,14 +487,16 @@ class BughouseBundle {
       final hashMatches =
           expectedSha256 == null || actualHash == expectedSha256.toLowerCase();
       if (sizeMatches && hashMatches) return;
-      await file.delete();
+      _installationDiagnostics.add(
+        '${p.basename(target)}: mismatch ($length bytes, SHA-256 $actualHash); replacing',
+      );
     }
 
     final ByteData data;
     try {
       data = await rootBundle.load(asset);
     } catch (e) {
-      throw BughouseBundleMissing(asset);
+      throw BughouseBundleBroken('Could not read bundled asset $asset: $e');
     }
     final compressed = Uint8List.fromList(
       data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
@@ -662,6 +547,14 @@ void _extractVerifiedAsset({
   try {
     if (partial.existsSync()) partial.deleteSync();
     partial.writeAsBytesSync(payload, flush: true);
+    if (expectedSha256 != null &&
+        sha256.convert(partial.readAsBytesSync()).toString() !=
+            expectedSha256.toLowerCase()) {
+      throw FileSystemException(
+        'Staged payload failed SHA-256 verification',
+        partial.path,
+      );
+    }
     if (destination.existsSync()) destination.deleteSync();
     partial.renameSync(target);
   } finally {
@@ -706,8 +599,9 @@ class BughouseBundleMissing implements Exception {
 
 /// The assets are there, but installing them did not produce a usable engine.
 class BughouseBundleBroken implements Exception {
-  BughouseBundleBroken(this.message);
+  BughouseBundleBroken(this.message, {this.diagnostics = const []});
   final String message;
+  final List<String> diagnostics;
 
   @override
   String toString() => message;

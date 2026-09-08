@@ -1294,6 +1294,11 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
         movetime: Duration(milliseconds: _passMs),
       );
       if (generation != _generation) return;
+      if (_errorReport != null) {
+        _error = null;
+        _errorReport = null;
+        _errorLink = null;
+      }
       _analyses = {
         ..._analyses,
         team: BughouseTeamAnalysis(

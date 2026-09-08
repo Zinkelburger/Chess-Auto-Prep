@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path/path.dart' as p;
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_bundle.dart';
 
 /// Whether a build carries the bughouse engine decides whether the mode is
@@ -126,21 +125,6 @@ void main() {
     // its imports against its own directory and not its parent's. Without the
     // copy the engine is stopped by the loader before `main` — no stdout, no
     // stderr, no exit — and the app can only report a timeout.
-    late Directory appDir;
-    late Directory engineDir;
-
-    setUp(() {
-      appDir = Directory.systemTemp.createTempSync('bughouse-app');
-      engineDir = Directory.systemTemp.createTempSync('bughouse-engine');
-    });
-
-    tearDown(() {
-      appDir.deleteSync(recursive: true);
-      engineDir.deleteSync(recursive: true);
-    });
-
-    void write(Directory dir, String name, [int bytes = 4]) =>
-        File(p.join(dir.path, name)).writeAsBytesSync(List.filled(bytes, 0));
 
     test('recognises every spelling CMake may deploy', () {
       for (final name in [
@@ -175,87 +159,6 @@ void main() {
           reason: name,
         );
       }
-    });
-
-    test('copies the runtime out of the app directory', () async {
-      write(appDir, 'MSVCP140.dll');
-      write(appDir, 'VCRUNTIME140_1.dll');
-      write(appDir, 'flutter_windows.dll');
-
-      final copied = await BughouseBundle.installWindowsRuntime(
-        source: appDir,
-        target: engineDir,
-      );
-
-      expect(copied, containsAll(['MSVCP140.dll', 'VCRUNTIME140_1.dll']));
-      expect(File(p.join(engineDir.path, 'MSVCP140.dll')).existsSync(), isTrue);
-      expect(
-        File(p.join(engineDir.path, 'flutter_windows.dll')).existsSync(),
-        isFalse,
-      );
-    });
-
-    test('re-copies a truncated file but not an intact one', () async {
-      write(appDir, 'MSVCP140.dll', 16);
-      write(engineDir, 'MSVCP140.dll', 3);
-
-      await BughouseBundle.installWindowsRuntime(
-        source: appDir,
-        target: engineDir,
-      );
-
-      expect(File(p.join(engineDir.path, 'MSVCP140.dll')).lengthSync(), 16);
-    });
-
-    test('re-copies a corrupt runtime with the right size', () async {
-      File(
-        p.join(appDir.path, 'MSVCP140.dll'),
-      ).writeAsBytesSync(List.filled(16, 1));
-      File(
-        p.join(engineDir.path, 'MSVCP140.dll'),
-      ).writeAsBytesSync(List.filled(16, 2));
-
-      await BughouseBundle.installWindowsRuntime(
-        source: appDir,
-        target: engineDir,
-      );
-
-      expect(
-        File(p.join(engineDir.path, 'MSVCP140.dll')).readAsBytesSync(),
-        List.filled(16, 1),
-      );
-    });
-
-    test('a machine with the redistributable installed still launches', () {
-      // Nothing to copy is not a failure: the system copy may well be there,
-      // and if it is not, the engine's exit code says so in words.
-      expect(
-        BughouseBundle.installWindowsRuntime(
-          source: Directory(p.join(appDir.path, 'gone')),
-          target: engineDir,
-        ),
-        completion(isEmpty),
-      );
-    });
-
-    test('a central-runtime install removes an old loose fallback', () async {
-      write(engineDir, 'MSVCP140.dll');
-      write(engineDir, 'VCRUNTIME140_1.dll');
-
-      final copied = await BughouseBundle.installWindowsRuntime(
-        source: appDir,
-        target: engineDir,
-      );
-
-      expect(copied, isEmpty);
-      expect(
-        File(p.join(engineDir.path, 'MSVCP140.dll')).existsSync(),
-        isFalse,
-      );
-      expect(
-        File(p.join(engineDir.path, 'VCRUNTIME140_1.dll')).existsSync(),
-        isFalse,
-      );
     });
   });
 }

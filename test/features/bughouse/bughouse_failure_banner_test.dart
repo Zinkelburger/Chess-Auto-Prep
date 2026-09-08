@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
+import 'package:chess_auto_prep/features/bughouse/services/bughouse_bundle.dart';
 import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_analysis_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -141,6 +142,63 @@ void main() {
     // first one's tick.
     await tester.pump(const Duration(seconds: 4));
     expect(find.text('Copy full report'), findsOneWidget);
+  });
+
+  testWidgets('failed DLL repair keeps verification evidence on the clipboard', (
+    tester,
+  ) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await showFailure(
+      tester,
+      BughouseBundleBroken(
+        'Could not replace msvcp140.dll',
+        diagnostics: [
+          'msvcp140.dll: SHA-256 actual, expected expected',
+          r'FileSystemException: Access denied, path = C:\profile\bughouse\msvcp140.dll (OS Error: Access is denied, errno = 5)',
+        ],
+      ),
+    );
+    await tester.tap(find.byKey(const Key('bughouse-copy-diagnostics')));
+    await tester.pump();
+    expect(copied, contains('SHA-256 actual, expected expected'));
+    expect(copied, contains('errno = 5'));
+    expect(copied, endsWith('END BUGHOUSE DIAGNOSTICS'));
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('a successful retry clears the previous failure report', (
+    tester,
+  ) async {
+    await showFailure(
+      tester,
+      BughouseEngineFailure('previous failure', report: report),
+    );
+    expect(controller.error, isNotNull);
+    engine.searchDelay = const Duration(milliseconds: 10);
+    controller.setAnalysisEnabled(true);
+    for (var i = 0; i < 50 && controller.error != null; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(controller.error, isNull);
+    expect(controller.errorReport, isNull);
+    expect(find.byKey(const Key('bughouse-copy-diagnostics')), findsNothing);
+    controller.setAnalysisEnabled(false);
+    await tester.pump(const Duration(milliseconds: 20));
   });
 
   testWidgets('the details can be opened without copying', (tester) async {
