@@ -89,7 +89,6 @@ class WindowsLoaderCheck {
   ///
   /// Takes bytes rather than a path so a test can hand it a two-byte file and
   /// a truncated header without touching a disk.
-  @visibleForTesting
   static int? peMachine(Uint8List head) {
     if (head.length < 0x40 || head[0] != 0x4D || head[1] != 0x5A) return null;
     final data = ByteData.sublistView(head);

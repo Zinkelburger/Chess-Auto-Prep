@@ -328,6 +328,21 @@ class BughouseEngine implements BughouseAnalysisEngine {
       if (!await File(model).exists()) {
         throw FileSystemException('Network not found', model);
       }
+      if (Platform.isWindows && await File(executable).exists()) {
+        final candidates = await WindowsLoaderCheck.resolveAll(
+          engineDir: engineDir,
+          environment: {...Platform.environment, ...environment},
+        );
+        final invalid = candidates
+            .where((dll) => dll.isMissing || dll.isWrongArchitecture)
+            .toList();
+        if (invalid.isNotEmpty) {
+          throw FileSystemException(
+            'DLL preflight failed:\n${WindowsLoaderCheck.report(invalid)}',
+            engineDir,
+          );
+        }
+      }
       process = await Process.start(
         executable,
         argv,
@@ -753,7 +768,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
       'OS          : ${Platform.operatingSystemVersion}\n'
       'Dart        : ${Platform.version}\n'
       'App         : ${Platform.resolvedExecutable}\n'
-      'Engine diagnostics: unavailable for this failure\n'
+      '${error is BughouseBundleBroken ? error.diagnostics.join('\n') : 'Engine diagnostics: unavailable for this failure'}\n'
       'END BUGHOUSE DIAGNOSTICS';
 
   /// The report itself, with every fact already gathered.
@@ -798,6 +813,11 @@ class BughouseEngine implements BughouseAnalysisEngine {
       ..writeln('Arguments   : ${jsonEncode(argv)}')
       ..writeln('Working dir : $workingDirectory');
     if (loaderPath != null) out.writeln('Library path: $loaderPath');
+    if (BughouseBundle.installationDiagnostics.isNotEmpty) {
+      out
+        ..writeln('Dependency verification before launch')
+        ..writeln(BughouseBundle.installationDiagnostics.join('\n'));
+    }
 
     out
       ..writeln()

@@ -11,6 +11,7 @@ heavy checks/builds use `scripts/ci.sh with -- COMMAND`.
 | `tools/mcp/mcp_stdio.py` | Shared JSON-RPC stdio transport; keep it dependency-free because clients start it from a bare command |
 | `tools/fetch_assets.py` | Fetch host Stockfish into gitignored `assets/executables/`; `--check` verifies build assets |
 | `tools/fetch_bughouse.py` | Fetch engine, ONNX Runtime and network into gitignored `assets/bughouse/`, pinned by `tools/bughouse.lock.json`; `--hivemind <checkout>` packs a local build |
+| `tools/package_bughouse_runtime.py` | Packages and verifies the Windows build’s private VC++ DLL archives and SHA-256 manifest; used by CMake and release checks |
 | `tools/test_bughouse_engine.py` | `deps [--all]` checks bundle dependencies; `run` searches with the extracted engine. Bughouse/release CI gates Linux and Windows bundles |
 | `tools/diagnose_bughouse_windows.ps1` | Self-contained diagnostic on the failing Windows machine: published hashes, PE headers, loader resolution, mitigations and actual startup |
 | `tools/bughouse_db/` | Offline FICS opening book; `python3 -m bughouse_db <command>` from `tools/`, with `fetch`, `index`, `explore` or `status`; test with `tools/test_bughouse_db.py` |

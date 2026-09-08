@@ -302,6 +302,9 @@ jobs:
           --install-to "final engine under test"
           --windows-runtime-from build/windows/x64/runner/Release
 
+      - name: Verify the private engine runtime archive
+        run: python tools/package_bughouse_runtime.py --bundle build/windows/x64/runner/Release --check
+
       - name: Zip bundle (portable)
         shell: pwsh
         run: |
@@ -366,6 +369,10 @@ jobs:
             if (Test-Path $log) { Write-Host "--- installer log ---"; Get-Content $log -Tail 80 }
             exit 1
           }
+          # Setup must retain the engine's compressed runtime even though it
+          # excludes loose VC++ DLLs from the application's root directory.
+          python tools/package_bughouse_runtime.py --bundle "$installDir" --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Move-Item "dist\chess-auto-prep-$version-windows-setup.exe" "chess-auto-prep-${{ github.ref_name }}-windows-setup.exe"
 
       - uses: actions/upload-artifact@v7

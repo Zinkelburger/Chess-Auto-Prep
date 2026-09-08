@@ -13,6 +13,7 @@ TESTS=(
   tools/test_file_mutation_lint.py
   tools/verify_maia_model.py
   tools/test_vc_redist.py
+  tools/test_package_bughouse_runtime.py
   tools/mcp/test_chess_prep.py
   tools/mcp/test_opening_tree.py
   tools/mcp/test_expectimax.py

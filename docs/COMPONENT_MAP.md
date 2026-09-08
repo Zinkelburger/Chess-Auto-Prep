@@ -93,7 +93,17 @@ Engine failures show the exit code and Windows NTSTATUS name without guessing
 which file caused it. **Copy full report** copies the diagnostic block through
 `END BUGHOUSE DIAGNOSTICS`, including OS/app/runtime, executable and arguments,
 DLL candidates, SHA-256 comparisons, repair results and captured output.
-File/DLL inspection precedes repair; collection errors stay in their section
+Before each new bundled engine process, the app rechecks engine/network/ONNX
+SHA-256 hashes and repairs mismatches from bundled assets. On Windows, CMake
+packages the build's x64 VC++ DLLs under `data/bughouse-runtime/` as compressed
+files with a size/hash manifest, included in both Setup and the portable ZIP.
+Bughouse verifies its private copies against that manifest and restores missing
+or altered files, independently of system-wide VC++. Invalid archives, failed
+replacement/removal and missing or wrong-architecture DLL candidates stop the
+launch and appear in the full report. Only engine-local files are repaired;
+Windows system files are never deleted. Hash checks establish file identity;
+the actual engine handshake still determines whether Windows can load them.
+File/DLL inspection after a startup failure precedes repair; collection errors stay in their section
 without discarding the rest of the report. DLL candidates are a filesystem
 inspection, not an observed Windows loader trace.
 
