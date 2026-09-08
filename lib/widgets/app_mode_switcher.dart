@@ -1,5 +1,5 @@
 /// Mode picker, placed between Actions and the settings gear in app bars.
-/// Its grouped menu and Ctrl+digit shortcuts share the app mode registry.
+/// Its grouped menu follows the app mode registry.
 library;
 
 import 'package:flutter/material.dart';
@@ -27,7 +27,7 @@ class AppModeSwitcher extends StatelessWidget {
       key: switcherKey,
       tooltip: locked
           ? 'Locked — repertoire generation in progress'
-          : 'Switch mode (Ctrl+1…${availableModeMenuOrder().length})',
+          : 'Switch mode',
       enabled: !locked,
       onSelected: context.read<AppState>().setMode,
       position: PopupMenuPosition.under,
@@ -44,7 +44,6 @@ class AppModeSwitcher extends StatelessWidget {
                 entry: AppMenuEntry(
                   label: m.label,
                   onRun: () {},
-                  shortcut: 'Ctrl+${m.shortcutNumber}',
                   checked: m == mode ? true : null,
                 ),
               ),

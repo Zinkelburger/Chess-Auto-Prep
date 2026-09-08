@@ -54,7 +54,7 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
     final tile = ListTile(
       dense: true,
       title: Text(label, style: AppTextStyles.body),
-      trailing: shortcut == null
+      trailing: shortcut == null || !shortcut.isAssigned
           ? null
           : Text(shortcut.label, style: AppTextStyles.caption),
       onTap: action == null

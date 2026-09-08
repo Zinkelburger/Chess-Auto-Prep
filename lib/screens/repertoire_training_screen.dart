@@ -266,15 +266,26 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     // filters it out) and the disabled move-input field can retain focus. The
     // "Next" button also self-focuses (see _NextButton.autofocus), so this is a
     // secondary path — whichever the focused node is, space advances.
-    if (event.logicalKey == LogicalKeyboardKey.space) {
-      if (_training.learnWaitingForAck) {
-        _training.learnAcknowledged();
-        return KeyEventResult.handled;
-      }
-      if (_training.opponentWaitingForAck) {
-        _training.opponentAcknowledged();
-        return KeyEventResult.handled;
-      }
+    if (runKeyBindings(
+          KeyBinding.forShortcutIf(
+            AppShortcut.toggleSolution,
+            'Next learning step',
+            () {
+              if (_training.learnWaitingForAck) {
+                _training.learnAcknowledged();
+                return true;
+              }
+              if (_training.opponentWaitingForAck) {
+                _training.opponentAcknowledged();
+                return true;
+              }
+              return false;
+            },
+          ),
+          event.logicalKey,
+        ) ==
+        KeyEventResult.handled) {
+      return KeyEventResult.handled;
     }
 
     return handleKeyBindings(_keyBindings, event, node: node);

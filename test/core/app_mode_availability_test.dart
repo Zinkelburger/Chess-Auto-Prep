@@ -20,7 +20,7 @@ void main() {
     );
   });
 
-  test('an unavailable mode leaves the menu and the chord list', () {
+  test('an unavailable mode leaves the menu', () {
     unavailableModes.add(AppMode.bughouse);
 
     expect(AppMode.bughouse.isAvailable, isFalse);
@@ -28,21 +28,6 @@ void main() {
 
     final lab = availableAppModeGroups().firstWhere((g) => g.heading == 'Lab');
     expect(lab.modes, [AppMode.engineTournament]);
-  });
-
-  test('the other modes keep the chord the menu taught them', () {
-    final before = {
-      for (final mode in kAppModeMenuOrder) mode: mode.shortcutNumber,
-    };
-    unavailableModes.add(AppMode.bughouse);
-
-    for (final mode in availableModeMenuOrder()) {
-      expect(
-        mode.shortcutNumber,
-        before[mode],
-        reason: 'hiding an optional mode must not renumber ${mode.label}',
-      );
-    }
   });
 
   test('a group whose every mode is gone disappears with them', () {

@@ -60,16 +60,16 @@ void main() {
       expect(find.text('Lines'), findsOneWidget);
       expect(find.text('Tree'), findsOneWidget);
       expect(find.text('lines body'), findsOneWidget);
-      expect(find.byTooltip('Hide lines (L)'), findsOneWidget);
+      expect(find.byTooltip('Hide lines'), findsOneWidget);
     });
 
     testWidgets('the hide button collapses it', (tester) async {
       await tester.pumpWidget(_wrap(const _Host(collapsed: false)));
 
-      await tester.tap(find.byTooltip('Hide lines (L)'));
+      await tester.tap(find.byTooltip('Hide lines'));
       await tester.pumpAndSettle();
 
-      expect(find.byTooltip('Show lines (L)'), findsOneWidget);
+      expect(find.byTooltip('Show lines'), findsOneWidget);
       expect(find.text('lines body'), findsNothing);
     });
   });

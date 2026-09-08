@@ -6,6 +6,8 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../models/board_size.dart';
+import '../../../utils/app_shortcuts.dart';
+import '../../../widgets/shortcut_tooltip.dart';
 
 class RepertoireNavControls extends StatelessWidget {
   const RepertoireNavControls({
@@ -50,14 +52,17 @@ class RepertoireNavControls extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.chevron_left, size: 20),
             onPressed: onGoBack,
-            tooltip: 'Back (←)',
+            tooltip: actionTooltip('Back', shortcut: AppShortcut.backOneMove),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right, size: 20),
             onPressed: onGoForward,
-            tooltip: 'Forward (→)',
+            tooltip: actionTooltip(
+              'Forward',
+              shortcut: AppShortcut.forwardOneMove,
+            ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
@@ -73,7 +78,7 @@ class RepertoireNavControls extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.flip, size: 14),
             onPressed: onFlipBoard,
-            tooltip: 'Flip board (F)',
+            tooltip: 'Flip board',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),

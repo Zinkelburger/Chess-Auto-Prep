@@ -130,7 +130,7 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
                       tooltip:
                           'Games that reach this opening-tree position, '
                           'in the current sort.\n'
-                          'Type a number and press Enter to open that game (G)',
+                          'Type a number and press Enter to open that game',
                     ),
                     GameSearchButton(
                       shortcut: AppShortcut.searchGames,

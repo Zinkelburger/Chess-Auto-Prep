@@ -129,7 +129,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
           const SizedBox(width: 4),
           const Expanded(
             child: Tooltip(
-              message: 'Toggle expectimax (X)',
+              message: 'Toggle expectimax',
               child: Text('Expectimax', style: AppTextStyles.caption),
             ),
           ),

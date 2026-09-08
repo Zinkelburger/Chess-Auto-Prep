@@ -364,7 +364,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     if (!hasData && !widget.isAuditing) {
       return const Center(
         child: Text(
-          'No audit results yet.\nRun an audit from the toolbar (A).',
+          'No audit results yet.\nRun an audit from the toolbar.',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 13),
         ),

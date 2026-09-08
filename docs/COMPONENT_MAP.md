@@ -64,7 +64,7 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 |---|---|
 | Play or drop a piece | Drag on either board; reserve pieces also support click then square |
 | Identify seats | You / Partner / Opponent / Partner’s opponent, beside each clock |
-| Pause or resume | Analysis toolbar, or Space |
+| Pause or resume | Analysis toolbar |
 | Read candidate continuations | Board 1 and Board 2 ranked lines appear together, automatically using the side to move on each board. Searches still consider both boards jointly; all scores are from your team’s perspective |
 | Preview a continuation | Hover a move or candidate to show the resulting boards and reserves; exit restores the current position without changing history |
 | Play a continuation | Click a move to play the joint sequence through that point, including its other-board moves |
@@ -190,7 +190,7 @@ main.dart
 | `study` | `StudyScreen` | Multi-chapter studies |
 | `engineTournament` | `EngineTournamentScreen` | Engine-vs-engine matches, crosstable, per-game PGN |
 
-Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens a grouped, text-only menu (Train / Build / Analyse / Lab / Data, order in `kAppModeGroups`); Ctrl/Cmd+1…9 follow the same order and are bound once in `MainScreen`.
+Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens a grouped, text-only menu (Train / Build / Analyse / Lab / Data, order in `kAppModeGroups`); switching views uses this menu, with no Ctrl/Cmd+number bindings.
 
 #### App bar conventions (unified June 2026)
 
@@ -221,12 +221,12 @@ RepertoireScreen (composition root — wires controllers to widgets)
   ├─ TrapIndexService
   │
   ├─ Wide (≥ kCompactBreakpoint):
-  │     Row: Outline column (resizable, collapsible → "Chapters" strip, shortcut L)
+  │     Row: Outline column (resizable, collapsible → "Chapters" strip)
   │          | Board (square, annotated)
   │          | PGN editor (PgnWithAnalysisPane) + NavControls
   │          | Analysis panel (resizable, collapsible → "Analysis" strip)
   │              TabBar: Engine | Database | Tree
-  │                Engine: InlineEngineBar (E) over InlineExpectimaxBar (X)
+  │                Engine: InlineEngineBar over InlineExpectimaxBar
   │                Database: RepertoireDatabasePane (live Lichess explorer)
   │                Tree: RepertoireTreePane (OpeningTreeWidget, optional explorer split)
   │       Outline column content = RepertoireOutlinePanel (default)
@@ -267,7 +267,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Bottom pane (VS Code-style):** Collapsed by default (zero height). Auto-opens to Findings tab when audit starts, Jobs tab when generation starts. Tabs show badge counts. Resizable by dragging the top edge (min 120px, max 60% of screen height). Collapse via close button, `Escape` key, or double-click the drag handle. The `onClose` callback clears inline config flags so that reopening the pane does not show stale config forms. `Escape` both collapses the pane and resets inline gen/audit config state.
 
-**Findings tab UX:** Category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends) with counts — multi-select toggles. Findings are sorted by reach probability (cumulative likelihood of the line occurring). The visible count is capped (default 20) and user-configurable via an inline text field in the status row; as findings are dismissed, lower-probability ones surface automatically. Each finding tile shows its reach probability right-aligned (e.g. "12.3%"). When capped, the status row reads "Top [N] of M · X% – Y% reach". Bulk dismiss via right-click context menu: dismiss similar, dismiss at depth, dismiss all of type. Keyboard: ↓/↑ to cycle findings (board navigates within full repertoire tree), D to dismiss current — routed through `RepertoireShortcuts` at the screen level (active when the Findings tab is open in the bottom pane), delegating to `AuditFindingsPanelState.selectNext()` / `selectPrevious()` / `dismissSelected()` via `GlobalKey`; ↑/↓ also work when the findings panel has focus. Selected finding is highlighted. Timestamp shows when saved results were generated.
+**Findings tab UX:** Category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends) with counts — multi-select toggles. Findings are sorted by reach probability (cumulative likelihood of the line occurring). The visible count is capped (default 20) and user-configurable via an inline text field in the status row; as findings are dismissed, lower-probability ones surface automatically. Each finding tile shows its reach probability right-aligned (e.g. "12.3%"). When capped, the status row reads "Top [N] of M · X% – Y% reach". Bulk dismiss via right-click context menu: dismiss similar, dismiss at depth, dismiss all of type. Keyboard: ↓/↑ to cycle findings (board navigates within full repertoire tree), dismiss through the row menu — navigation is routed through `RepertoireShortcuts` at the screen level (active when the Findings tab is open in the bottom pane), delegating to `AuditFindingsPanelState.selectNext()` / `selectPrevious()` / `dismissSelected()` via `GlobalKey`; ↑/↓ also work when the findings panel has focus. Selected finding is highlighted. Timestamp shows when saved results were generated.
 
 **Line metrics view (outline column):** The old `RepertoireLinesBrowser` (search/filter/sort, coverage/ease/coherence columns, gap buttons) plus the Lines/Traps segmented toggle, reached from the outline header's metrics button; "Back to chapters" returns to the outline. The Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges, and expandable detail cards. `BoardPreviewController` is threaded through; a `FloatingBoardPreview` overlay is mounted in the view's `Stack`.
 
@@ -278,18 +278,14 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Board annotations:** `BoardAnnotation` model with `AnnotationBrush` (green/red/blue/yellow/purple). `_AnnotationPainter` renders arrows (shaft + arrowhead) and circles on a `CustomPaint` overlay above pieces.
 
-**Keyboard shortcuts:** Handled by `RepertoireShortcuts` (letter keys suppressed while a text field has focus — see `lib/utils/keyboard_shortcut_utils.dart`):
-- `E` — toggle engine (Engine tab of the analysis panel)
-- `X` — toggle expectimax
-- `L` — wide: collapse/expand the outline column; compact: PGN ↔ Chapters tab
-- `F` — flip board
-- `T` — toggle trap walkthrough at a trap position
-- `S`/`↓`, `P`/`↑` — next/prev finding (Findings tab open) or trap-tour stop
-- `D` — dismiss current finding (when Findings tab is open in bottom pane)
+**Keyboard shortcuts:** `lib/utils/app_shortcuts.dart` owns every app-command binding and its Settings reference. `RepertoireShortcuts` dispatches the shared entries, with text-field guards in `keyboard_shortcut_utils.dart`.
+- `↑` / `↓` — previous/next finding or trap-tour stop
+- `←` / `→`, Home / End — navigate moves
 - `Ctrl/Cmd+Z` — undo last repertoire add
 - `Ctrl/Cmd+Shift+V` — paste FEN from clipboard
-- `Escape` — collapse bottom pane + clear inline config flags
-- `←` / `→` — navigate moves; `Shift+←` / `Shift+→` — previous/next trap
+- `Escape` — close the current panel
+
+View-switching Ctrl/Cmd+number shortcuts, bare letter commands, slash, panel-Tab, numbered fork/planner choices and Shift+arrow trap jumps have been removed. Their mouse controls remain available. Unassigned actions have no chords, dispatch no keys and show no shortcut suffix in shared tooltips.
 
 Digit shortcuts (bottom-pane tab toggles `1`/`2`/`3`, edit-mode NAG `1`–`6`, star ratings, etc.) are **not** bound.
 
@@ -431,7 +427,7 @@ AuditFindingsPanel (bottom pane Findings tab)
   → Filter bar: severity chips (Critical/Warning/Info), "X of N" counter
   → Findings list: sort (severity/reach/ply), filter by type
   → Bulk dismiss: right-click → dismiss similar / at depth / all of type
-  → Keyboard: ↓/↑ cycle findings, D dismisses, when panel focused (board navigates)
+  → Keyboard: ↓/↑ cycle findings when panel focused (board navigates); dismiss with the row menu
   → Selected finding highlighted, board arrows shown
   → Dismissed section: count + "Restore all" at bottom
   → Finding tap → RepertoireController.loadMoveSequence()
@@ -522,10 +518,7 @@ to its parent, restoring any parent focus and reading position. **Esc** first
 returns to a manually scrolled reading position, then returns to the parent
 variation, then follows the existing mode-exit behavior. Parent and focus
 controls use quiet text buttons with registry-backed shortcut tooltips.
-Global **Settings → Keyboard shortcuts** lists mappings by view, including
-mode switching, numbered continuations, planner and bughouse controls. Shared
-actions use `shortcut_reference.dart` and the same `AppShortcut` entries as
-handlers and tooltips; an invariant test requires every shared entry to be listed.
+Global **Settings → Keyboard shortcuts** shows a compact, bordered Action / Key / Where table with keycaps. Bindings and reference rows live together in `app_shortcuts.dart`; there is no separate list of handwritten mappings. Shared settings cards use 10px vertical row/header padding and 12px group gaps, with a 680px content cap to keep labels and values close together.
 
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
@@ -537,7 +530,7 @@ PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal
 Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].pgnText` → `Clipboard.setData` + `AppMessages.pgnCopied` snackbar
 Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept)
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
-Keyboard: `↑`/`↓` previous/next game, `←`/`→` moves, Home/Page Up and End/Page Down jump, Enter focus variation, Esc return to parent or leave mode, `F` flip, Ctrl+F/F11 fullscreen, `E` engine, Space playback, `W` auto-next, `A` edit in Study, `/` search, `G` game number, Ctrl+V paste PGN, `C` comment, `R` mainline (reveal in solitaire), `H` solitaire hint, Tab next panel, and 1–9 fork candidates. Enter starts solitaire during setup. Text fields retain their normal editing behavior.
+Keyboard: `↑`/`↓` previous/next game, `←`/`→` moves, Home/End jump, Enter focus variation, Esc return to parent or leave mode, F11 fullscreen, Space playback, and Ctrl/Cmd+V paste PGN. Enter starts solitaire during setup. Text fields retain their normal editing behavior.
 Workspace tabs: the main **Game** stays open. **Actions** opens Analysis Graph,
 Tree, or Opening Database (the opening explorer). The strip appears only with
 two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles
@@ -830,7 +823,7 @@ AuditSessionController._launchAuditConfig() (via screen)
 - Move numbers in summaries: "Missing: 3...Nd2" instead of "Missing: Nd2". Also for mistakes/inaccuracies.
 - Dismiss button: 16px icon with 32px hit target and hover feedback.
 - Bulk dismiss via right-click context menu: dismiss similar (same type + FEN), dismiss at depth (all of same type at ply N or earlier), dismiss all of type.
-- Keyboard navigation: ↓/↑ cycle through findings (board auto-navigates), D dismisses and advances; suppressed while a text field has focus.
+- Keyboard navigation: ↓/↑ cycle through findings (board auto-navigates); dismiss with the row menu; suppressed while a text field has focus.
 - Selected finding gets a highlighted background in the list, with "X of N" counter in status bar.
 - Timestamp display: "2h ago", "3d ago", etc. when viewing saved results.
 - Dismissed findings shown in a collapsed section at the bottom with "Restore all".
@@ -926,7 +919,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `repertoire_training_screen.dart` | Repertoire and study trainer: a stable board beside the source picker, chapter/line browser or current lesson; Learn and Review respect the selected chapter and session size. Read opens the shared chapter reader. The settings gear follows the global mode switcher; Skip is visible, and Line actions include persistent exclusion. The browser restores excluded lines without discarding review history. Keyboard: Space acknowledges the next learning step, arrows skip lines, `/` focuses move input, Escape returns to the browser. |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |
-| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: N/P/F/E/W/A/T/S letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen; caches `AppState` so dispose does not `context.read` |
+| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: arrows, Home/End, Enter, Space, Escape, Ctrl/Cmd+V paste, F11 fullscreen; caches `AppState` so dispose does not `context.read` |
 | `player_selection_screen.dart` | Player pick for analysis: cached game-sets from chess.com / lichess downloads, PGN-file imports, and **opponent lists** (`OpponentListImportDialog` → one merged player per opponent, sourced from every account listed, tagged with the event as `group`; batch download with per-person progress, skip-existing, failures reported not swallowed); search matches name, platform and group |
 | `settings_screen.dart` | Persistent shared settings route with expandable view chapters and grouped Views / Global navigation; shared preferences (accounts, **display** — board coordinates and piece notation with a live preview board, my repertoires, engine cores, ChessDB); focused sections have independent scrolling; Keyboard shortcuts lists mappings by view; per-panel gears deep-link to shared analysis chapters |
 
@@ -1062,7 +1055,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 
 | File | Purpose |
 |------|---------|
-| `shortcut_tooltip.dart` | **Shortcut hover tooltips** — `actionTooltip()`, `ShortcutIconButton`, `ShortcutTooltip`, `shortcutTooltip()` (500ms hover delay); debug asserts if shortcut is empty. Cursor rule: `.cursor/rules/shortcut-tooltips.mdc`. Tests: `test/widgets/shortcut_tooltip_test.dart`. |
+| `shortcut_tooltip.dart` | **Shortcut hover tooltips** — `actionTooltip()`, `ShortcutIconButton`, `ShortcutTooltip`, `shortcutTooltip()` (500ms hover delay); unassigned actions omit the suffix. Tests: `test/widgets/shortcut_tooltip_test.dart`. |
 | `common/list_search_field.dart` | Compact one-line filter box (`fontSize` 13, 6px radius outline) used by list toolbars and `GameSearchDialog`; `matchesSearch` is the shared contains-filter |
 
 #### Layout (repertoire builder zones)
@@ -1093,7 +1086,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | File | Purpose |
 |------|---------|
 | `repertoire/repertoire_board_pane.dart` | Board + preview overlay + generation dim |
-| `repertoire/repertoire_shortcuts.dart` | `RepertoireShortcuts` — `CallbackShortcuts` (Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+V paste FEN) + `Focus.onKeyEvent` for letter/arrow bindings; suppresses shortcuts while a text field is focused (`isTextInputFocused()` in `lib/utils/keyboard_shortcut_utils.dart`) |
+| `repertoire/repertoire_shortcuts.dart` | `RepertoireShortcuts` — `CallbackShortcuts` (Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+V paste FEN) + `Focus.onKeyEvent` for arrow/Escape bindings; suppresses shortcuts while a text field is focused (`isTextInputFocused()` in `lib/utils/keyboard_shortcut_utils.dart`) |
 | `repertoire/repertoire_toolbar.dart` | App bar: repertoire/chapter breadcrumb title; Actions → view picker → gear. |
 | `repertoire/repertoire_tab_bar.dart` | Compact layout tab bar (PGN | Context) + navigation trail |
 | `repertoire/repertoire_analyze_pane.dart` | Wires analyze zones (lines, coverage, traps) |

@@ -1199,7 +1199,7 @@ class _Header extends StatelessWidget {
             ),
           if (onCollapse != null)
             IconButton(
-              tooltip: 'Hide chapters (L)',
+              tooltip: 'Hide chapters',
               icon: const Icon(Icons.keyboard_double_arrow_left, size: 16),
               visualDensity: VisualDensity.compact,
               onPressed: onCollapse,
