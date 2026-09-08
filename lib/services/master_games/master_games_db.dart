@@ -21,6 +21,7 @@
 /// blocking each other.
 library;
 
+import '../storage/schema_guard.dart';
 import 'dart:io';
 
 import 'package:sqlite3/sqlite3.dart';
@@ -258,16 +259,22 @@ class MasterGamesDb {
       path,
       mode: readOnly ? OpenMode.readOnly : OpenMode.readWriteCreate,
     );
-    db.execute('PRAGMA journal_mode = WAL');
-    db.execute('PRAGMA synchronous = ${forImport ? 'OFF' : 'NORMAL'}');
-    db.execute('PRAGMA temp_store = MEMORY');
-    db.execute('PRAGMA busy_timeout = 10000');
-    // Every issue dirties pages all over `book`, so without a limit the WAL
-    // grows to the size of the database between checkpoints.
-    db.execute('PRAGMA journal_size_limit = 67108864');
-    if (forImport) db.execute('PRAGMA cache_size = -262144');
-    if (!readOnly) _migrate(db);
-    return MasterGamesDb._(db, path);
+    try {
+      requireSupportedSchema(db, _schemaVersion, 'Master games');
+      db.execute('PRAGMA journal_mode = WAL');
+      db.execute('PRAGMA synchronous = ${forImport ? 'OFF' : 'NORMAL'}');
+      db.execute('PRAGMA temp_store = MEMORY');
+      db.execute('PRAGMA busy_timeout = 10000');
+      // Every issue dirties pages all over `book`, so without a limit the WAL
+      // grows to the size of the database between checkpoints.
+      db.execute('PRAGMA journal_size_limit = 67108864');
+      if (forImport) db.execute('PRAGMA cache_size = -262144');
+      if (!readOnly) _migrate(db);
+      return MasterGamesDb._(db, path);
+    } catch (_) {
+      db.close();
+      rethrow;
+    }
   }
 
   /// `<support>/master_games.db`.
@@ -285,17 +292,19 @@ class MasterGamesDb {
   static void _migrate(Database db) {
     final v = db.select('PRAGMA user_version').first.columnAt(0) as int;
     if (v >= _schemaVersion) return;
-    if (v == 1) {
-      // v1 stored movetext as TEXT.  This is a rebuildable cache, so the
-      // cheapest correct migration is to start over: dropping `twic_issues`
-      // makes the next sync re-download everything.
-      db.execute('''
+    db.execute('BEGIN IMMEDIATE');
+    try {
+      if (v == 1) {
+        // v1 stored movetext as TEXT.  This is a rebuildable cache, so the
+        // cheapest correct migration is to start over: dropping `twic_issues`
+        // makes the next sync re-download everything.
+        db.execute('''
         DROP TABLE IF EXISTS book;
         DROP TABLE IF EXISTS games;
         DROP TABLE IF EXISTS twic_issues;
       ''');
-    }
-    db.execute('''
+      }
+      db.execute('''
       CREATE TABLE IF NOT EXISTS games(
         id INTEGER PRIMARY KEY,
         twic INTEGER,
@@ -357,9 +366,14 @@ class MasterGamesDb {
         value BLOB NOT NULL
       );
     ''');
-    _migrateToV3(db, from: v);
-    _migrateToV4(db, from: v);
-    db.execute('PRAGMA user_version = $_schemaVersion');
+      _migrateToV3(db, from: v);
+      _migrateToV4(db, from: v);
+      db.execute('PRAGMA user_version = $_schemaVersion');
+      db.execute('COMMIT');
+    } catch (_) {
+      db.execute('ROLLBACK');
+      rethrow;
+    }
   }
 
   /// v3 → v4: classical-only counts.

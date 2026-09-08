@@ -53,6 +53,39 @@ Packaging lives in `packaging/` (`windows/installer.iss`, `deb/build_deb.sh`,
 on `v*` tags. All Linux artifacts are x86_64: there is no arm64 build because
 Stockfish ships no Linux arm64 binary and `libcdbdirect` has no arm64 target.
 
+### Updating the app
+
+On Linux and Windows, **Settings → About → App updates** controls automatic
+checks and downloads (both enabled by default in release builds). Checks run
+at most daily. A popup announces a newer stable release; the verified download
+can be installed after you choose **Install when I close the app**. Finish and
+save your work, then close normally; the helper installs and reopens the app.
+You can cancel a scheduled installation before closing. Disabling automatic
+downloads keeps update notifications; disabling checks leaves **Check now**.
+
+Windows Setup upgrades the existing per-user install. Debian/RPM installations
+use `pkexec` with the system package tool and may request an administrator
+password. Marked Linux portable bundles update in place and keep a sibling
+`.previous-*` bundle for recovery; they require writable install/parent folders,
+`unzip`, `sha256sum`, and `flock`. Older portable bundles need one manual upgrade
+to acquire the marker. Flatpak, Windows portable, macOS and unsupported layouts
+link to releases for manual installation. Development builds never check in the
+background.
+
+Downloads require the release asset's [SHA-256 digest from GitHub](https://docs.github.com/en/rest/releases/releases); missing or
+mismatched hashes stop installation. Each release also publishes `SHA256SUMS`.
+Update files and installer logs live in the system's local app cache under
+`updates/`; saved work stays in Documents and application support. Failed
+installation logs are shown at the next launch. Native installers can fail or
+require intervention; a portable swap failure restores the old directory when
+possible. After a power loss during a portable directory swap, restore the
+retained `.previous-*` folder to the original install path if necessary.
+
+We aim to preserve saved data across upgrades, but do **not** guarantee backward
+compatibility or downgrades. Keep backups of important work. Database migrations
+have regression tests; a database from a newer version is refused instead of
+being rewritten by an older app. See [storage details](docs/COMPONENT_MAP.md#storage--platform).
+
 ## Getting Started
 
 ### Prerequisites

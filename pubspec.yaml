@@ -46,6 +46,8 @@ dependencies:
   url_launcher: ^6.3.2
   fl_chart: ^1.2.0
   window_manager: ^0.5.2
+  package_info_plus: ^10.2.1
+  pub_semver: ^2.2.1
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +64,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/updater/
     - assets/images/
     - assets/pieces/
     - assets/maia3_simplified.onnx
