@@ -59,10 +59,8 @@ class OpponentEntry {
   });
 
   List<PlayerAccount> get accounts => [
-    if (chesscom != null && chesscom!.isNotEmpty)
-      PlayerAccount('chesscom', chesscom!),
-    if (lichess != null && lichess!.isNotEmpty)
-      PlayerAccount('lichess', lichess!),
+    for (final name in accountNames(chesscom)) PlayerAccount('chesscom', name),
+    for (final name in accountNames(lichess)) PlayerAccount('lichess', name),
   ];
 
   bool get hasAccount => accounts.isNotEmpty;

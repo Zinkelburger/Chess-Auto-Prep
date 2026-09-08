@@ -20,6 +20,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../services/storage/app_paths.dart';
+import '../../../models/analysis_player_info.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../utils/atomic_file.dart';
 import '../../../utils/safe_change_notifier.dart';
@@ -146,6 +147,22 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
   final Map<String, Tournament> _tournaments = {};
   Future<void>? _loading;
   bool _loaded = false;
+  Future<void>? _writes;
+
+  Future<void> _persist(Future<void> Function() write) {
+    final result = _writes == null ? write() : _writes!.then((_) => write());
+    late final Future<void> tail;
+    void finished() {
+      if (identical(_writes, tail)) _writes = null;
+    }
+
+    tail = result.then<void>(
+      (_) => finished(),
+      onError: (Object _, StackTrace _) => finished(),
+    );
+    _writes = tail;
+    return result;
+  }
 
   bool get isLoaded => _loaded;
 
@@ -240,11 +257,33 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
       if (id != null && norm(person.uscfId) == id) return person;
     }
     for (final person in _people.values) {
-      if (cc != null && norm(person.chesscom) == cc) return person;
-      if (li != null && norm(person.lichess) == li) return person;
+      if (cc != null &&
+          person.accounts.any(
+            (a) =>
+                a.platform == 'chesscom' &&
+                accountNames(
+                  cc,
+                ).any((n) => n.toLowerCase() == a.username.toLowerCase()),
+          )) {
+        return person;
+      }
+      if (li != null &&
+          person.accounts.any(
+            (a) =>
+                a.platform == 'lichess' &&
+                accountNames(
+                  li,
+                ).any((n) => n.toLowerCase() == a.username.toLowerCase()),
+          )) {
+        return person;
+      }
     }
     for (final person in _people.values) {
-      if (nm != null && norm(person.name) == nm) return person;
+      if (nm != null &&
+          norm(person.name) == nm &&
+          (id == null || person.uscfId == null || norm(person.uscfId) == id)) {
+        return person;
+      }
     }
     return null;
   }
@@ -257,6 +296,29 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
       if (person.playerName.toLowerCase() == key) return person;
     }
     return null;
+  }
+
+  PersonRecord? personForPlayer(AnalysisPlayerInfo player) {
+    for (final person in people) {
+      if (person.gameSetKeys.contains(player.playerKey)) return person;
+    }
+    return (player.platform == 'import'
+            ? personForPlayerName(player.username)
+            : null) ??
+        matchPerson(
+          chesscom: player.platform == 'chesscom'
+              ? player.username
+              : player.accounts
+                    .where((a) => a.platform == 'chesscom')
+                    .map((a) => a.username)
+                    .join(', '),
+          lichess: player.platform == 'lichess'
+              ? player.username
+              : player.accounts
+                    .where((a) => a.platform == 'lichess')
+                    .map((a) => a.username)
+                    .join(', '),
+        );
   }
 
   /// How many tournaments list this person.
@@ -287,12 +349,13 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _writePeople() => _storage.writePeople(
-    const JsonEncoder.withIndent('  ').convert({
+  Future<void> _writePeople() {
+    final json = const JsonEncoder.withIndent('  ').convert({
       'format': kPeopleFormat,
       'people': [for (final p in people) p.toJson()],
-    }),
-  );
+    });
+    return _persist(() => _storage.writePeople(json));
+  }
 
   // ── Tournaments ────────────────────────────────────────────────
 
@@ -343,9 +406,11 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
   Future<Tournament> saveTournament(Tournament tournament) async {
     final stored = tournament.copyWith(updatedAt: DateTime.now());
     _tournaments[stored.id] = stored;
-    await _storage.writeTournament(
-      stored.id,
-      const JsonEncoder.withIndent('  ').convert(stored.toJson()),
+    await _persist(
+      () => _storage.writeTournament(
+        stored.id,
+        const JsonEncoder.withIndent('  ').convert(stored.toJson()),
+      ),
     );
     notifyListeners();
     return stored;
@@ -353,7 +418,7 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
 
   Future<void> deleteTournament(String id) async {
     if (_tournaments.remove(id) == null) return;
-    await _storage.deleteTournament(id);
+    await _persist(() => _storage.deleteTournament(id));
     notifyListeners();
   }
 }

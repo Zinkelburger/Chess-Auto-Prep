@@ -1,26 +1,12 @@
-# Opponent prep for a tournament
+# Players and groups
 
-Prepare for a whole event with the tools you already use for one opponent.
-The field is worked out **outside** the app — a local MCP server an agent can
-drive (entry list → who is who online → who you are likely to play) — and the
-result is an **opponent list** that Player Analysis imports. From there every
-opponent is an ordinary player: opening tree, holes, tricks, engine weakness,
-repertoire clash, exactly as for anyone else.
+Keep one saved record per person, link their online accounts and prep studies,
+and include them in any number of groups. A group can be a tournament entry
+list, club regulars, or any other list of players to prepare against.
 
-```
-entry list ─▶ chess_prep MCP server ─▶ opponents.json ─▶ Player Analysis
-              (Python, no app needed)                     Import Opponents
-              · roster_import                             · one player per opponent
-              · roster_resolve  (bundled directory)       · games from every account
-              · identity_propose / confirm  (agent + you) · tagged with the event
-              · constraint_add  (siblings, club-mates)
-              · pairing_simulate  (Monte Carlo Swiss)
-              · opponents_export
-```
-
-There is no Tournament mode in the app any more; the earlier one is gone. The
-pairing engine, the identity directory and the roster all live in
-`tools/mcp/chess_prep/`.
+**Player analysis → Choose a player → Players & groups** opens Groups; **All
+players** opens the editable directory. The optional MCP tools below can help
+identify accounts before importing, but ordinary editing and prep run in the app.
 
 ## The MCP server
 
@@ -207,48 +193,46 @@ proposals are listed under `skipped` in the tool result.
 
 ## In the app
 
-**Player analysis → Choose a player → From a tournament field.** This is the
-sheet-and-docs the workflow used to live in, inside the app:
+- **Players** and each **group** share an editable table: Name, USCF ID,
+  Chess.com accounts, Lichess accounts, Files / study chapters, Games, Rating,
+  Notes, and a prepared checkbox inside groups. Type directly in cells; valid
+  edits save automatically. Saving failures remain on the affected cell and
+  Enter retries. Commas, semicolons and whitespace separate multiple accounts.
+- **Add saved accounts** in All players brings existing Player Analysis
+  downloads and imported game sets into the directory. Adding a name or ID
+  preserves their stored game links. Prep reuses saved accounts before
+  downloading, combines multiple saved sets with game-identity deduplication,
+  and the inline Accounts / files area opens individual sources.
+- **Groups** are named lists with an ordinary persistent study. Create and
+  rename groups inline. **Add players** expands an in-page chooser of saved
+  people or inserts a new editable row. Removing someone from a group has Undo
+  and keeps their directory record, games and studies.
+- **Paste player list** expands an in-page import with preview. It accepts
+  CSV/TSV, Markdown or column-aligned organizer tables, the existing opponent
+  JSON format, or a URL containing an HTML table. Include column headings.
+  USCF IDs and known handles reuse directory records; unmatched people remain
+  visible even without accounts. Page failures offer pasting the table instead.
+- **Files / study chapters** shows clickable linked studies and chapters.
+  **Create prep** creates the player's personal study. **Link study** expands
+  an in-page browser of saved studies and chapters; Browse PGN files uses the
+  platform file picker. Unlink removes only the association. Missing files
+  report their path instead of silently creating a replacement.
+- **Prepare** opens Player Analysis with the person and group as context.
+  A visible toolbar offers the study, repertoire check, save line, prepared
+  checkbox, previous/next player, and return to the group. Existing opening and
+  weakness analysis tools remain available.
+- **Open group study / Train group study** use the same saved PGN. It is
+  created once (including existing personal prep where available), then edited
+  normally; subsequent opens never regenerate it over the user's changes.
+  Saving lines from group prep prefers this study and prefixes chapters with
+  the player's name and the colour the user holds.
 
-- **Tournaments** — one per event, past and present, newest first. A
-  tournament has a name, a date, a round count and a *field*.
-- **The sheet** (one tournament) — a row per opponent with the columns of the
-  spreadsheet it replaces: prepared ✓ · name · rating · USCF ID · Chess.com ·
-  Lichess · games saved · notes. Tapping a row analyses that person (their
-  games are downloaded first if none are saved). The row menu opens or trains
-  their prep file, refreshes their games, edits them, or removes them from the
-  field. The sheet menu imports an `opponents.json`, downloads everyone's
-  missing games, fills ratings from US Chess, trains every prep file in the
-  field as one session, and **saves the tournament as text** (Markdown: the
-  table, then each opponent's notes and prep lines).
-- **People** — the directory behind every sheet. A person is entered once
-  (name, USCF ID, handles, rating, notes) and listed in any number of
-  tournaments. The editor's **Look up** turns a US Chess ID into the name and
-  rating; **Find on US Chess** goes from a name to candidate IDs. Importing an
-  `opponents.json` matches its rows to existing people by USCF ID, then
-  handle, then name, and fills only their blanks.
-- **Prep file** — a study per person (`Prep – <Name>.pgn`), created on first
-  use with *As White* and *As Black* chapters. In Player analysis, "Add line
-  to study…" offers it first and names the chapter by the colour you hold.
-  One chapter per line, because the trainer drills chapters.
-- **In Player analysis**, an opponent opened from a sheet carries the
-  tournament as context: the subtitle reads `Spring Open 2026 · 3 of 12`, and
-  the menu adds *Open prep file*, *Prepared* (the tick on the sheet), *Next /
-  Previous opponent* and *Tournament sheet…*. **Check against my
-  repertoire…** works for any player: it walks their games on the displayed
-  colour through the book designated for the other colour (My books on the
-  Tactics page) and lists the moves it has no answer to, most played first;
-  tapping one moves the board there.
-
-Files: `Documents/opponents/people.json` and
-`Documents/opponents/tournaments/<id>.json` (`chess-auto-prep/people@1`,
-`chess-auto-prep/tournament@1`). Both are small JSON the store rewrites whole;
-the text export is the human-readable copy.
-
-The older path still works: an `opponents.json` can also be imported
-straight into a sheet, and a game-set downloaded that way is the same
-game-set the sheet uses (one merged set per person, named
-`"Jane Doe; janed; jd_li"`, tagged with the event).
+Files remain backward compatible: `Documents/opponents/people.json` and
+`Documents/opponents/tournaments/<id>.json` retain their original format IDs.
+People optionally carry `game_sets` (stable cached-corpus keys) and `studies`
+(path plus optional chapter name); groups optionally carry `study` (PGN path).
+Existing personal `prep_file` paths, dates, rounds and pairing data are retained.
+Writes are ordered so quick edits cannot leave an older snapshot on disk.
 
 ## Where the code lives
 

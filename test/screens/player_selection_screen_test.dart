@@ -105,10 +105,7 @@ void main() {
     expect(find.text('No players yet'), findsNothing);
     expect(find.text('Online…'), findsOneWidget);
     expect(find.text('From PGN files…'), findsOneWidget);
-    expect(
-      find.text('From a tournament field (experimental)…'),
-      findsOneWidget,
-    );
+    expect(find.text('Groups of players…'), findsOneWidget);
   });
 
   testWidgets('a saved player is listed with one add control, not three', (
@@ -130,10 +127,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Online…'), findsOneWidget);
     expect(find.text('From PGN files…'), findsOneWidget);
-    expect(
-      find.text('From a tournament field (experimental)…'),
-      findsOneWidget,
-    );
+    expect(find.text('Groups of players…'), findsOneWidget);
   });
 
   testWidgets('tapping a player pops the screen with it', (tester) async {

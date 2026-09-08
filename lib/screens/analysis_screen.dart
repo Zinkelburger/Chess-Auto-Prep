@@ -235,6 +235,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       ),
       body: Column(
         children: [
+          _buildPrepToolbar(),
           ..._buildJobProgressStrip(theme),
           Expanded(child: _buildBody(context)),
         ],
@@ -347,7 +348,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           enabled: _boardActions.canOpenGames,
           onRun: _boardActions.openGamesInPgnViewer,
         ),
-        ..._prepMenuEntries(),
         AppMenuEntry(
           label: 'Choose a player…',
           icon: Icons.person_search,

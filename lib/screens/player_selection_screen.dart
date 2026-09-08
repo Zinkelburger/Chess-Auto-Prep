@@ -108,6 +108,10 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       appBar: AppBar(
         title: const Text('Which player?'),
         actions: [
+          TextButton(
+            onPressed: _openTournaments,
+            child: const Text('Players & groups'),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: AddPlayerButton(onSelected: _addPlayerFrom),

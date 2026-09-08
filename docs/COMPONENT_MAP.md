@@ -1130,6 +1130,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `study/study_side_pane.dart` | Engine bar + compact chapter bar + PGN editor |
 | `study/study_picker_bar.dart` | App-bar study switcher with inline rename |
 | `study/study_name_dialog.dart` | Shared name prompt for studies and chapters |
+| `features/opponents/` | Players and Groups: shared autosaving `PlayerTable`, multiple online accounts, stable links to saved game sets, inline list import and study/chapter linking, persistent group studies and visible prep navigation. `OpponentStore` serializes writes; legacy people/tournament files remain readable. See [Players and groups](OPPONENT_PREP.md#in-the-app). |
 | `opponent_list_import_dialog.dart` | Import an opponent-list JSON into Player Analysis |
 | `training/training_lines_panel.dart` | **Training Lines browser** — replaces raw `RepertoireLinesBrowser` in the trainer Lines tab; top action bar with **Learn** (new lines) / **Review** (due lines) buttons with count badges; lines grouped into three sections: **Due for Review** (sorted weakest-first), **New** (unseen), **Learned** (collapsed by default, sorted by next due date); each row shows color chip, line name, status label ("Due 2h ago" / "New" / "Next: 3d"), pass/fail ratio, and move mastery bar; tapping a row starts that line |
 | `settings/settings_widgets.dart` | Reusable settings tiles |

@@ -26,8 +26,8 @@ enum AddPlayerSource {
 
   /// Open the tournaments you are preparing for.
   opponentList(
-    label: 'From a tournament field (experimental)',
-    detail: 'Organise the opponents you are about to play',
+    label: 'Groups of players',
+    detail: 'Saved players, accounts and prep studies',
   );
 
   const AddPlayerSource({required this.label, required this.detail});

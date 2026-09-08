@@ -75,6 +75,7 @@ class Tournament {
   final String? date;
   final int? rounds;
   final List<TournamentEntry> entries;
+  final String? studyPath;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -84,6 +85,7 @@ class Tournament {
     this.date,
     this.rounds,
     this.entries = const [],
+    this.studyPath,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -111,6 +113,7 @@ class Tournament {
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
     'entries': [for (final e in entries) e.toJson()],
+    if (studyPath != null) 'study': studyPath,
   };
 
   factory Tournament.fromJson(Map<String, dynamic> json, {String? fallbackId}) {
@@ -122,6 +125,7 @@ class Tournament {
     return Tournament(
       id: json['id'] as String? ?? fallbackId ?? newTournamentId(''),
       name: (json['name'] as String? ?? '').trim(),
+      studyPath: json['study'] as String?,
       date: (json['date'] as String?)?.trim(),
       rounds: (json['rounds'] as num?)?.toInt(),
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? now,
@@ -140,6 +144,7 @@ class Tournament {
     int? rounds,
     bool clearRounds = false,
     List<TournamentEntry>? entries,
+    String? studyPath,
     DateTime? updatedAt,
   }) => Tournament(
     id: id,
@@ -147,6 +152,7 @@ class Tournament {
     date: clearDate ? null : (date ?? this.date),
     rounds: clearRounds ? null : (rounds ?? this.rounds),
     entries: entries ?? this.entries,
+    studyPath: studyPath ?? this.studyPath,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
