@@ -29,8 +29,9 @@ extension AppModeLabel on AppMode {
     AppMode.positionAnalysis => 'Player analysis',
     AppMode.repertoire => 'Repertoire builder',
     AppMode.repertoireTrainer => 'Repertoire trainer',
-    // Where your games open. "PGN Viewer" named the file format.
-    AppMode.pgnViewer => 'Games',
+    // Named for what it is: every chess player knows PGN. Was briefly
+    // "Games" (Sept 2026), which read as something else.
+    AppMode.pgnViewer => 'PGN Viewer',
     AppMode.study => 'Study',
     AppMode.engineTournament => 'Engine tournament',
     AppMode.bughouse => 'Bughouse lab',
@@ -237,7 +238,25 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   /// Also drops any still-parked handoff: it belongs to the navigation this
   /// switch abandons, and would otherwise fire the next time its screen is
   /// built — yanking the user back to a file they had navigated away from.
+  AppMode? _settingsMode;
+  AppMode? get settingsMode => _settingsMode;
+
+  /// Navigate from global preferences to a view's contextual settings.
+  void openViewSettings(AppMode mode) {
+    if (isRepertoireGenerating || !mode.isAvailable) return;
+    setMode(mode);
+    _settingsMode = mode;
+    notifyListeners();
+  }
+
+  bool takeViewSettingsRequest(AppMode mode) {
+    if (_settingsMode != mode || _currentMode != mode) return false;
+    _settingsMode = null;
+    return true;
+  }
+
   void setMode(AppMode mode) {
+    _settingsMode = null;
     _history?.recordReset(mode);
     _pendingHandoff = null;
     _currentMode = mode;

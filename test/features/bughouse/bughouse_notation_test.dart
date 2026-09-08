@@ -9,10 +9,14 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Two boards, two move lists — the FICS arrangement — and a score that says
 /// what it means.
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   /// 1.e4 Nf6 2.e5 Nd5 on board A, 1.d4 d5 on board B, entered interleaved so
   /// the entry order and the two board orders genuinely differ.
   BughouseController playedController() {

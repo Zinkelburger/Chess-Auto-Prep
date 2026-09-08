@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/theme/app_motion.dart';
@@ -11,11 +12,47 @@ Widget _wrap(List<AppMenuEntry> entries) => MaterialApp(
 );
 
 Future<void> _open(WidgetTester tester) async {
-  await tester.tap(find.byIcon(Icons.more_vert));
+  await tester.tap(find.text('Actions'));
   await tester.pumpAndSettle();
 }
 
 void main() {
+  testWidgets('export submenu opens on hover and runs only chosen action', (
+    tester,
+  ) async {
+    final ran = <String>[];
+    await tester.pumpWidget(
+      _wrap([
+        AppMenuEntry(
+          label: 'Edit PGN',
+          heading: 'Edit',
+          onRun: () => ran.add('edit'),
+        ),
+        AppMenuEntry(
+          label: 'Export',
+          onRun: () {},
+          children: [
+            AppMenuEntry(label: 'Export as PGN', onRun: () => ran.add('pgn')),
+            AppMenuEntry(label: 'Export as SCID', onRun: () => ran.add('scid')),
+          ],
+        ),
+      ]),
+    );
+    await _open(tester);
+    expect(find.text('Export as PGN'), findsNothing);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    await mouse.moveTo(tester.getCenter(find.text('Export')));
+    await tester.pumpAndSettle();
+    expect(find.text('Export as PGN'), findsOneWidget);
+    expect(ran, isEmpty);
+    await tester.tap(find.text('Export as SCID'));
+    await tester.pumpAndSettle();
+    expect(ran, ['scid']);
+    expect(find.text('Edit PGN'), findsNothing);
+    await mouse.removePointer();
+  });
+
   testWidgets('renders nothing at all when it has no entries', (tester) async {
     await tester.pumpWidget(_wrap(const []));
 
@@ -32,7 +69,7 @@ void main() {
       AppMotion.menuAnimation,
     );
 
-    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.tap(find.text('Actions'));
     await tester.pump();
     await tester.pump(AppMotion.menu);
     expect(find.text('Only'), findsOneWidget);

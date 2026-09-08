@@ -14,7 +14,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../core/app_state.dart';
 import '../features/audit/models/audit_finding.dart';
 import '../features/audit/models/audit_result.dart';
 import '../features/holes/services/hole_hunt_config.dart';
@@ -28,10 +30,6 @@ import '../features/opponents/widgets/tournament_screen.dart';
 import '../features/holes/services/hole_hunt_persistence.dart';
 import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/hole_hunt_config_dialog.dart';
-import '../features/tricks/services/trick_hunt_config.dart';
-import '../features/tricks/services/trick_hunt_persistence.dart';
-import '../features/tricks/services/trick_hunt_service.dart';
-import '../features/tricks/widgets/trick_hunt_config_dialog.dart';
 import '../models/analysis_player_info.dart';
 import '../models/engine_weakness_result.dart';
 import '../models/position_analysis.dart';
@@ -40,9 +38,10 @@ import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
 import '../services/engine/generation_lease.dart';
 import '../services/engine_weakness_service.dart';
-import '../services/maia/maia_factory.dart';
 import '../services/unified_analysis_builder.dart';
 import '../theme/app_colors.dart';
+import '../widgets/analysis/player_downloads.dart';
+import '../widgets/analysis_download_dialog.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/app_breadcrumb_trail.dart';
@@ -54,7 +53,6 @@ import 'player_selection_screen.dart';
 
 part 'analysis_screen_engine.dart';
 part 'analysis_screen_holes.dart';
-part 'analysis_screen_tricks.dart';
 part 'analysis_screen_prep.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -134,25 +132,9 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   bool _isHunting = false;
   bool _huntIsWhite = true;
   bool _huntCancelled = false;
-  bool _trapPassSkipped = false;
-
-  // ── Trick hunt state ────────────────────────────────────────────────
-  //
-  // Same shape as the hole hunt: reports and configs per colour, live
-  // findings and progress for the run in flight.
-  final TrickHuntService _trickService = TrickHuntService();
-  final Map<bool, AuditResult?> _tricksResults = {true: null, false: null};
-  final Map<bool, TrickHuntConfig?> _tricksConfigs = {true: null, false: null};
-  List<AuditFinding> _tricksLive = [];
-  TrickHuntProgress? _tricksProgress;
-  bool _isTrickHunting = false;
-  bool _trickHuntIsWhite = true;
-  bool _trickHuntCancelled = false;
-  bool _trickProbesSkipped = false;
+  bool _probesSkipped = false;
 
   // Implemented by the concrete state; called from the extracted mixins.
-  Future<void> _analyzeBothColors();
-  Future<bool> _redownloadGames(int monthsBack);
   Future<void> _selectPlayer(AnalysisPlayerInfo player);
 
   void _showError(String message) {
@@ -175,14 +157,16 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
 }
 
 class _AnalysisScreenState extends _AnalysisScreenStateBase
-    with _EngineWeaknessMixin, _HoleHuntMixin, _TrickHuntMixin, _PrepMixin {
+    with _EngineWeaknessMixin, _HoleHuntMixin, _PrepMixin {
   @override
   void initState() {
     super.initState();
     unawaited(_opponents.ensureLoaded());
     _opponents.addListener(_onOpponentsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _currentPlayer == null) {
+      if (mounted &&
+          _currentPlayer == null &&
+          context.read<AppState>().settingsMode != AppMode.positionAnalysis) {
         unawaited(_showPlayerSelection());
       }
     });
@@ -197,7 +181,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     _evalService?.dispose();
     // The pending hunt futures notice the flag and release the engine.
     if (_isHunting) _holeService.cancel();
-    if (_isTrickHunting) _trickService.cancel();
     super.dispose();
   }
 
@@ -206,35 +189,53 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final titleBlock = _currentPlayer == null
+    final player = _currentPlayer;
+    final titleBlock = player == null
         ? const SizedBox.shrink()
-        : Text(
-            _metadataSubtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  _metadataSubtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Sits beside "downloaded 30d ago" because that is the fact it
+              // changes. A PGN-file import has nowhere to fetch from.
+              if (player.canRedownload)
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 18),
+                  tooltip: 'Download the latest games…',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _isAnalyzing ? null : _showRedownload,
+                ),
+            ],
           );
 
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: AppBarTitleWithTrail(title: titleBlock),
-        actions: [
-          if (_currentPlayer != null) ..._buildColorControls(),
-          // The one engine action that stays in the bar. It is rendered at all
-          // times and disables in place, so nothing in the AppBar moves when a
-          // job starts or stops; the two hunts live in the kebab beside it.
-          TextButton.icon(
-            icon: const Icon(Icons.refresh, size: 18),
-            label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
-            onPressed: _canStartEngineJob ? _showWeaknessConfig : null,
+        title: AppBarTitleWithTrail(
+          title: Row(
+            children: [
+              Expanded(child: titleBlock),
+              if (player != null) ..._buildColorControls(),
+            ],
           ),
-          const AppModeSwitcher(),
+        ),
+        actions: [
           _buildActionsMenu(),
+          const AppModeSwitcher(),
+          const AppSettingsButton(mode: AppMode.positionAnalysis),
         ],
       ),
       body: Column(
         children: [
+          _buildPrepToolbar(),
           ..._buildJobProgressStrip(theme),
           Expanded(child: _buildBody(context)),
         ],
@@ -245,11 +246,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   /// Engine actions are disabled (never hidden) while any job runs or before
   /// a tree exists to analyze.
   bool get _canStartEngineJob =>
-      _openingTree != null &&
-      !_isAnalyzing &&
-      !_evalRunning &&
-      !_isHunting &&
-      !_isTrickHunting;
+      _openingTree != null && !_isAnalyzing && !_evalRunning && !_isHunting;
 
   List<Widget> _buildColorControls() {
     return [
@@ -285,15 +282,24 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     ];
   }
 
-  /// Kebab holding everything that isn't the primary engine run: the two
-  /// opponent hunts, the position handoffs, then switching player and opening
-  /// app settings — the last two were icon buttons of their own until the bar
-  /// grew to six controls. Handoffs save a *line* in a study; puzzle-ness is
-  /// a marker the user sets on a move inside the study ("Puzzle starts
-  /// here"), not a separate authored artifact.
+  /// Grouped Actions menu for engine runs, position handoffs and players. The plain engine pass also has a
+  /// button where its results show up: the positions list, sorted by eval.
+  /// Handoffs save a *line* in a study; puzzle-ness is a marker the user sets
+  /// on a move inside the study ("Puzzle starts here"), not a separate
+  /// authored artifact.
   Widget _buildActionsMenu() {
     return AppOverflowMenu(
       entries: [
+        AppMenuEntry(
+          heading: 'Analyze',
+          label: _hasEvals ? 'Re-analyze with engine…' : 'Analyze with engine…',
+          icon: Icons.memory,
+          enabled: _canStartEngineJob,
+          onRun: () => unawaited(_showWeaknessConfig()),
+          hint:
+              'Scores this player\'s most-played positions with Stockfish.\n'
+              'Sort the positions list by Bad Eval or Good Eval to see them.',
+        ),
         AppMenuEntry(
           label: 'Find holes…',
           icon: Icons.gps_fixed,
@@ -302,22 +308,11 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           hint:
               'Attacks this player\'s games from the other side and reports\n'
               'where the lines can be beaten: strong moves the games never\n'
-              'answer, moves with a verified refutation, and traps a human is\n'
-              'likely to fall into. Not the same as Analyze with Engine, which\n'
+              'answer, moves with a verified refutation, and tricks — near-\n'
+              'best moves and novelties that score better in practice than\n'
+              'the engine move. Not the same as Analyze with Engine, which\n'
               'only scores positions by raw eval — results here are ranked by\n'
               'reach probability × gain, so it stays a short list.',
-        ),
-        AppMenuEntry(
-          label: 'Find tricks…',
-          icon: Icons.auto_fix_high,
-          enabled: _canStartEngineJob,
-          onRun: () => unawaited(_showTrickHuntConfig()),
-          hint:
-              'Plays the other side of this player\'s games and hunts moves\n'
-              'that are close to engine-best but poisonous in practice —\n'
-              'including novelties the games never faced. A move is reported\n'
-              'when the mistakes it invites outweigh what it concedes, ranked\n'
-              'by reach probability × net gain.',
         ),
         AppMenuEntry(
           label: 'Check against my repertoire…',
@@ -330,6 +325,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
               'Tactics page) and lists the moves it has no answer to.',
         ),
         AppMenuEntry(
+          heading: 'Study and games',
           label: 'Add line to study…',
           icon: Icons.menu_book_outlined,
           enabled: _boardActions.hasPosition,
@@ -347,17 +343,12 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           enabled: _boardActions.canOpenGames,
           onRun: _boardActions.openGamesInPgnViewer,
         ),
-        ..._prepMenuEntries(),
         AppMenuEntry(
+          heading: 'Player',
           label: 'Choose a player…',
           icon: Icons.person_search,
           dividerAbove: true,
           onRun: _showPlayerSelection,
-        ),
-        AppMenuEntry(
-          label: 'App settings…',
-          icon: Icons.settings,
-          onRun: () => openAppSettings(context),
         ),
       ],
     );
@@ -407,19 +398,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
               : 'Hole hunt: ${_holesProgress?.message ?? 'starting…'}',
           cancelTooltip: 'Cancel hole hunt',
           onCancel: _huntCancelled ? null : _cancelHoleHunt,
-        ),
-      ];
-    }
-    if (_isTrickHunting) {
-      return [
-        LinearProgressIndicator(minHeight: 2, value: _tricksProgress?.fraction),
-        _buildJobStatusRow(
-          theme,
-          message: _trickHuntCancelled
-              ? 'Cancelling trick hunt…'
-              : 'Trick hunt: ${_tricksProgress?.message ?? 'starting…'}',
-          cancelTooltip: 'Cancel trick hunt',
-          onCancel: _trickHuntCancelled ? null : _cancelTrickHunt,
         ),
       ];
     }
@@ -495,8 +473,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     }
 
     final huntOnDisplayedColor = _isHunting && _huntIsWhite == _playerIsWhite;
-    final trickHuntOnDisplayedColor =
-        _isTrickHunting && _trickHuntIsWhite == _playerIsWhite;
     return PositionAnalysisWidget(
       analysis: _positionAnalysis,
       openingTree: _openingTree,
@@ -506,23 +482,16 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       isLoading: _isAnalyzing,
       onAnalyze: _analyzeBothColors,
       hasEvals: _hasEvals,
+      onAnalyzeWithEngine: _canStartEngineJob ? _showWeaknessConfig : null,
       playerName: _currentPlayer?.username,
       analysisPgnPath: _analysisPgnPath,
       holesResult: _holesResults[_playerIsWhite],
       holesLiveFindings: huntOnDisplayedColor ? _holesLive : const [],
       isHoleHunting: huntOnDisplayedColor,
       holesProgress: huntOnDisplayedColor ? _holesProgress : null,
-      holesTrapPassSkipped: _trapPassSkipped && _huntIsWhite == _playerIsWhite,
+      holesProbesSkipped: _probesSkipped && _huntIsWhite == _playerIsWhite,
       onHolesResultChanged: _onHolesResultChanged,
       onStartHoleHunt: _canStartEngineJob ? _showHoleHuntConfig : null,
-      tricksResult: _tricksResults[_playerIsWhite],
-      tricksLiveFindings: trickHuntOnDisplayedColor ? _tricksLive : const [],
-      isTrickHunting: trickHuntOnDisplayedColor,
-      tricksProgress: trickHuntOnDisplayedColor ? _tricksProgress : null,
-      tricksProbesSkipped:
-          _trickProbesSkipped && _trickHuntIsWhite == _playerIsWhite,
-      onTricksResultChanged: _onTricksResultChanged,
-      onStartTrickHunt: _canStartEngineJob ? _showTrickHuntConfig : null,
       actions: _boardActions,
     );
   }
@@ -560,7 +529,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   Future<void> _selectPlayer(AnalysisPlayerInfo player) async {
     _cancelEvalAnalysis();
     if (_isHunting) _cancelHoleHunt();
-    if (_isTrickHunting) _cancelTrickHunt();
     setState(() {
       _currentPlayer = player;
       _resetAnalysisState();
@@ -588,105 +556,43 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     _holesConfigs[false] = null;
     _holesLive = [];
     _holesProgress = null;
-    _trapPassSkipped = false;
-    _tricksResults[true] = null;
-    _tricksResults[false] = null;
-    _tricksConfigs[true] = null;
-    _tricksConfigs[false] = null;
-    _tricksLive = [];
-    _tricksProgress = null;
-    _trickProbesSkipped = false;
+    _probesSkipped = false;
   }
 
   // ── Re-download games ───────────────────────────────────────────
 
-  /// Downloads all games for the given month range and returns `true` on
-  /// success.
-  @override
-  Future<bool> _redownloadGames(int monthsBack) async {
+  /// Fetch this player's games again — range and time controls are asked
+  /// for, site and username are not — then rebuild both trees. Engine evals
+  /// and hunt results are cleared: they described the old game-set.
+  Future<void> _showRedownload() async {
     final player = _currentPlayer;
-    if (player == null) return false;
-    // PGN-file imports have no source to re-download from.
-    if (!player.canRedownload) return false;
+    if (player == null || !player.canRedownload) return;
+
+    final config = await showDialog<AnalysisPlayerInfo>(
+      context: context,
+      builder: (_) => AnalysisDownloadDialog(player: player),
+    );
+    if (config == null || !mounted) return;
 
     _cancelEvalAnalysis();
+    if (_isHunting) _cancelHoleHunt();
     _analysisTask?.cancel();
 
-    final progress = ValueNotifier<String>('Downloading games…');
+    final saved = await PlayerDownloadRunner(
+      _gamesService,
+    ).downloadOne(context, config);
+    if (!saved || !mounted) return;
 
-    unawaited(
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => PopScope(
-          canPop: false,
-          child: AlertDialog(
-            content: ValueListenableBuilder<String>(
-              valueListenable: progress,
-              builder: (_, message, _) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(message, textAlign: TextAlign.center),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    final updated = await _gamesService.findExistingPlayer(
+      config.platform,
+      config.username,
     );
-
-    try {
-      final pgns = await _gamesService.downloadGamesFor(
-        player,
-        monthsBack: monthsBack,
-        onProgress: (msg) => progress.value = msg,
-      );
-
-      if (pgns.isEmpty) {
-        if (mounted) {
-          Navigator.of(context).pop();
-          _showError('No games found for ${player.displayName}.');
-        }
-        return false;
-      }
-
-      progress.value = 'Saving…';
-
-      final updated = await _gamesService.saveAnalysisGames(
-        pgns,
-        platform: player.platform,
-        username: player.username,
-        maxGames: player.maxGames,
-        monthsBack: monthsBack,
-        speeds: player.speeds,
-        accounts: player.accounts,
-        group: player.group,
-      );
-
-      if (mounted) Navigator.of(context).pop();
-
-      setState(() {
-        _currentPlayer = updated;
-        _resetAnalysisState();
-      });
-
-      return true;
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context).pop();
-        _showError('Re-download failed: $e');
-      }
-      return false;
-    } finally {
-      // Safe while the dialog is still animating out: `removeListener` is the
-      // one ChangeNotifier method that does not assert on a disposed
-      // notifier, so the ValueListenableBuilder can still detach.  Same shape
-      // as PlayerDownloadRunner.downloadOne, which is where this dialog came
-      // from; without it one notifier leaked per re-download.
-      progress.dispose();
-    }
+    if (!mounted) return;
+    setState(() {
+      _currentPlayer = updated ?? config;
+      _resetAnalysisState();
+    });
+    await _analyzeBothColors();
   }
 
   // ── Analysis ─────────────────────────────────────────────────────
@@ -707,7 +613,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     }
   }
 
-  @override
   Future<void> _analyzeBothColors() async {
     final player = _currentPlayer;
     if (player == null) return;
@@ -804,12 +709,10 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       });
 
       // Merge previously computed engine evals into the displayed analysis,
-      // and restore any saved hole/trick reports.
+      // and restore any saved hole reports.
       await _loadEngineEvals();
       if (!isCurrent()) return;
       await _loadHolesReports();
-      if (!isCurrent()) return;
-      await _loadTricksReports();
       final warning = _gamesService.storageWarning;
       if (mounted && warning != null) _showError(warning);
     } catch (e) {

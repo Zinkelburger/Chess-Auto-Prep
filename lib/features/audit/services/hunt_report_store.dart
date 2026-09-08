@@ -1,16 +1,10 @@
 /// Saving and restoring a hunt report — the findings plus the config that
 /// produced them — as a JSON file at a path the caller supplies.
 ///
-/// The hole hunt and the trick hunt each had their own copy of this: two
-/// 123-line files that differed only in the word "hole" versus "trick". They
-/// were not going to stay in step, and the format they share is the whole
-/// point — Player Analysis keys both per player and colour, and reads them
-/// back the same way.
-///
-/// Generic over the config type rather than over an interface, because
-/// [HoleHuntConfig] and [TrickHuntConfig] have nothing in common beyond a map
-/// round-trip; a shared base class would be a name for that coincidence and
-/// nothing more. The two function arguments *are* the contract.
+/// Player Analysis keys reports per player and colour and reads them back
+/// the same way. Generic over the config type: the two function arguments
+/// *are* the contract, so any hunt with a map round-trip for its config can
+/// use it.
 library;
 
 import 'dart:convert';
@@ -49,7 +43,7 @@ class HuntReportStore<C> {
     required this.decodeConfig,
   });
 
-  /// Names this store in debug output ("HoleHunt", "TrickHunt").
+  /// Names this store in debug output ("HoleHunt").
   final String label;
 
   final Map<String, dynamic> Function(C config) encodeConfig;

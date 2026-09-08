@@ -52,7 +52,8 @@ scripts/ci.sh with -- COMMAND             # bounded arbitrary heavy command
 scripts/ci.sh status
 ```
 
-Full batch checks run on the development backup in GitHub CI. A full local suite on every commit is not
-required; choose focused checks and report their results. If display setup is
+GitHub CI runs only for releases, as defined in [the Git guide](../../../docs/agents/git.md).
+A full local suite on every commit is not required; choose focused checks and
+report their results. If display setup is
 missing, run `scripts/setup_agent_display.sh`. Never fall back to a visible
 window or an uncapped command to work around a failed launcher.

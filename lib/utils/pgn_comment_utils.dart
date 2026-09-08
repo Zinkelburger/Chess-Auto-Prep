@@ -555,7 +555,9 @@ final _chessableMarkerRe = RegExp(
 /// or when it appears to use double-space paragraph breaks (long prose with
 /// 2+ instances of `  ` that are not mere move-notation spacing).
 bool hasChessableFormatting(String comment) {
-  if (_chessableMarkerRe.hasMatch(comment)) return true;
+  if (_chessableMarkerRe.hasMatch(comment) || _fenRe.hasMatch(comment)) {
+    return true;
+  }
   // Detect double-space paragraph breaks in long prose: require the comment
   // to be long enough that double-spaces are likely real paragraph separators,
   // not just spacing around move notation.
@@ -689,7 +691,7 @@ RichSegmentType _segmentType(String openTag) {
 // Inline-move comment tokenization (book-style PGNs)
 // ---------------------------------------------------------------------------
 
-/// A single token of a comment: either prose text or a chess move.
+/// A comment token: prose, an embedded position, or a preview move.
 ///
 /// Book PGNs (Chessable / Forward Chess exports) embed analysis lines directly
 /// in comment text, with double-spaces separating each move token (e.g.
@@ -698,6 +700,12 @@ RichSegmentType _segmentType(String openTag) {
 /// chips and flow the prose naturally instead of one-token-per-line.
 sealed class CommentToken {
   const CommentToken();
+}
+
+/// An embedded FEN to render independently of the main board.
+class CommentDiagram extends CommentToken {
+  final String fen;
+  const CommentDiagram(this.fen);
 }
 
 /// A run of human-readable prose.
@@ -917,13 +925,14 @@ List<CommentToken> parseCommentTokens(String text) {
     }
 
     // Prose: pull out any embedded FEN(s), emitting the surrounding text and
-    // arming the anchor for the following run. The FEN itself is not rendered.
+    // arming the anchor for the following run and preserving its diagram.
     var cursor = 0;
     for (final match in _fenRe.allMatches(part)) {
       final fen = match.group(0)!;
       if (!_isValidFen(fen)) continue;
       final before = part.substring(cursor, match.start).trim();
       if (before.isNotEmpty) handleMove(before);
+      tokens.add(CommentDiagram(fen));
       pendingAnchorFen = fen;
       forceNewRun = true;
       final seed = _fenPrevPly(fen);

@@ -4,6 +4,8 @@ import '../../models/training_settings.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../settings/settings_widgets.dart';
+import '../settings/settings_navigation.dart';
+import '../common/choice_field.dart';
 
 /// Focused preference pages, using the same rows and cards as app settings.
 class TrainingSettingsPanel extends StatefulWidget {
@@ -73,6 +75,7 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
     bool queue = false,
     bool chapters = false,
   }) {
+    if (!mounted) return;
     update();
     settings.saveSoon();
     if (queue) widget.onQueueSettingsChanged();
@@ -83,6 +86,19 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final sharedChapter = SettingsChapterScope.maybeOf(context);
+    if (sharedChapter != null) {
+      return ListView(
+        key: ValueKey(sharedChapter),
+        padding: const EdgeInsets.all(24),
+        children: switch (sharedChapter) {
+          0 => _session(),
+          1 => _learning(),
+          2 => _playback(),
+          _ => _material(),
+        },
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 760;
@@ -110,22 +126,17 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: DropdownButtonFormField<int>(
+                child: ChoiceField<int>(
                   key: const Key('training-settings-section'),
-                  initialValue: _selected,
-                  decoration: const InputDecoration(
-                    labelText: 'Section',
-                    border: OutlineInputBorder(),
-                  ),
+                  value: _selected,
+                  label: 'Section',
                   items: [
                     for (var i = 0; i < _sections.length; i++)
-                      DropdownMenuItem(
-                        value: i,
-                        child: Text(_sections[i].label),
-                      ),
+                      ChoiceItem(value: i, label: _sections[i].label),
                   ],
                   onChanged: (value) {
-                    if (value != null) setState(() => _selected = value);
+                    if (!mounted) return;
+                    setState(() => _selected = value);
                   },
                 ),
               ),
@@ -167,7 +178,10 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
                               ? AppTextStyles.bodyStrong
                               : AppTextStyles.body,
                         ),
-                        onTap: () => setState(() => _selected = i),
+                        onTap: () {
+                          if (!mounted) return;
+                          setState(() => _selected = i);
+                        },
                       ),
                     ),
                   if (widget.onOpenAppSettings != null) ...[

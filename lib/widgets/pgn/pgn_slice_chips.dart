@@ -75,41 +75,44 @@ class PgnSliceChips extends StatelessWidget {
   }
 
   Widget _buildActiveChip(String label, int index) {
-    return GestureDetector(
-      onTap: onOpenSliceDialog,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.chipActiveBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.info.withAlpha(60), width: 0.5),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 140),
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.chipActiveFg,
+    return Tooltip(
+      message: 'Edit $label',
+      child: GestureDetector(
+        onTap: onOpenSliceDialog,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.chipActiveBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.info.withAlpha(60), width: 0.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 280),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.chipActiveFg,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
               ),
-            ),
-            const SizedBox(width: 4),
-            GestureDetector(
-              onTap: () => controller.removeSliceChip(index),
-              child: Icon(
-                Icons.close,
-                size: 13,
-                color: AppColors.chipActiveFg.withAlpha(180),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => controller.removeSliceChip(index),
+                child: Icon(
+                  Icons.close,
+                  size: 13,
+                  color: AppColors.chipActiveFg.withAlpha(180),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -152,17 +155,13 @@ class PgnSliceChips extends StatelessWidget {
 
   Widget _buildAddSliceChip() {
     return Tooltip(
-      message: controller.hasActiveFilters
-          ? 'Explore or edit this collection view'
-          : 'Explore and filter this collection',
+      message: 'Add or edit filters',
       child: GestureDetector(
         onTap: onOpenSliceDialog,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            // Fill flips to the active-chip blue when filters are applied so
-            // the Edit affordance reads as "on" at a glance (the fg colors
-            // alone were too close to tell apart on the grey fill).
+            // Keep the filter entry visibly active while conditions apply.
             color: controller.hasActiveFilters
                 ? AppColors.chipActiveBg
                 : AppColors.chipInactiveBg,
@@ -186,7 +185,7 @@ class PgnSliceChips extends StatelessWidget {
               ),
               const SizedBox(width: 3),
               Text(
-                controller.hasActiveFilters ? 'Edit view' : 'Explore',
+                'Filter',
                 style: TextStyle(
                   fontSize: 12,
                   color: controller.hasActiveFilters

@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 
 /// Mainline e4 e5 Nf3 Nc6 with a multi-block comment on 1. e4, a commented
@@ -65,6 +66,45 @@ Position _positionAfter(List<String> sans) {
 }
 
 void main() {
+  testWidgets('finishing editing immediately flushes the pending comment', (
+    tester,
+  ) async {
+    final editing = ValueNotifier(true);
+    final emissions = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ValueListenableBuilder<bool>(
+            valueListenable: editing,
+            builder: (_, value, _) => PgnViewerWidget(
+              pgnText: _annotatedPgn,
+              editMode: value,
+              initialMainLineIndex: 1,
+              onCommentsChanged: emissions.add,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(PgnAnnotationPanel),
+        matching: find.byType(TextField),
+      ),
+      'Keep this final edit',
+    );
+    // The 400ms debounce has not fired. Removing the editor must still save.
+    expect(emissions, isEmpty);
+    editing.value = false;
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(emissions.single, contains('Keep this final edit'));
+    expect(emissions.single, contains('Sicilian try'));
+    await tester.pumpWidget(const SizedBox.shrink());
+    editing.dispose();
+  });
+
   testWidgets('sparse comma-free player names are not treated as book titles', (
     tester,
   ) async {

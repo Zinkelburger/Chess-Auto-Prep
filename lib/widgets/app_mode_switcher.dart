@@ -1,15 +1,5 @@
-/// The labelled mode picker that is also the navigation.
-///
-/// It reads `Tactics ▾`: the current mode, and the menu of the others behind
-/// it. It sits at the **right** end of every app bar, immediately before that
-/// bar's settings control (a gear, or the "App settings…" row of its overflow
-/// menu), because that is the side the pointer already lives on — it spent a
-/// while as the bar's title on the left, which meant crossing the window for
-/// every mode switch. The menu is grouped (Train / Build / Analyse / Lab),
-/// text only, 13px rows via [AppMenuEntryRow] like every other menu in the
-/// app, and shows the Ctrl+digit chord beside each mode.
-///
-/// The chords themselves are bound once in `MainScreen`, not here.
+/// Mode picker, placed between Actions and the settings gear in app bars.
+/// Its grouped menu and Ctrl+digit shortcuts share the app mode registry.
 library;
 
 import 'package:flutter/material.dart';
@@ -18,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_motion.dart';
+import '../theme/app_text_styles.dart';
 import 'app_overflow_menu.dart';
 
 class AppModeSwitcher extends StatelessWidget {
@@ -32,7 +23,7 @@ class AppModeSwitcher extends StatelessWidget {
       (s) => s.isRepertoireGenerating,
     );
     final mode = context.select<AppState, AppMode>((s) => s.currentMode);
-    return PopupMenuButton<AppMode>(
+    final picker = PopupMenuButton<AppMode>(
       key: switcherKey,
       tooltip: locked
           ? 'Locked — repertoire generation in progress'
@@ -60,17 +51,22 @@ class AppModeSwitcher extends StatelessWidget {
             ),
         ],
       ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      // Drawn exactly like the Actions anchor beside it: label, drop arrow,
+      // no box. The current mode's name is the whole label, so the bar
+      // still says where you are without a "View" prefix.
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               mode.label,
-              style: Theme.of(context).textTheme.titleMedium,
-              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.bodyStrong.copyWith(
+                color: locked ? AppColors.onSurfaceDisabled : AppColors.ink,
+              ),
             ),
-            const SizedBox(width: 2),
+            const SizedBox(width: 8),
             Icon(
               Icons.arrow_drop_down,
               size: 20,
@@ -79,6 +75,21 @@ class AppModeSwitcher extends StatelessWidget {
           ],
         ),
       ),
+    );
+    // Keep screen actions separate from app navigation on every top bar.
+    // The separator and its breathing room are outside the menu's hit area.
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(width: 16),
+        const SizedBox(
+          height: 28,
+          child: VerticalDivider(width: 1, color: AppColors.outline),
+        ),
+        const SizedBox(width: 16),
+        picker,
+        const SizedBox(width: 8),
+      ],
     );
   }
 }

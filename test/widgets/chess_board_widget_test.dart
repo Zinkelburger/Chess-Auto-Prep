@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/widgets/board/board_square_painter.dart';
+import 'package:chess_auto_prep/models/board_display_settings.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/widgets/common/piece_image.dart';
 import 'package:dartchess/dartchess.dart';
@@ -84,6 +86,62 @@ void main() {
       expect(onSquareGrid(origin, square), isTrue);
     }
   });
+
+  for (final coordinates in BoardCoordinates.values) {
+    for (final flipped in [false, true]) {
+      testWidgets(
+        'd7 feedback follows pieces: $coordinates, flipped=$flipped',
+        (tester) async {
+          final position = after(['e4']);
+          Widget interactive({bool enabled = true}) => MaterialApp(
+            home: Center(
+              child: SizedBox.square(
+                dimension: 483,
+                child: ChessBoardWidget(
+                  position: position,
+                  coordinates: coordinates,
+                  flipped: flipped,
+                  enableUserMoves: enabled,
+                ),
+              ),
+            ),
+          );
+          BoardSquarePainter surface() => tester
+              .widgetList<CustomPaint>(
+                find.descendant(
+                  of: find.byType(ChessBoardWidget),
+                  matching: find.byType(CustomPaint),
+                ),
+              )
+              .map((w) => w.painter)
+              .whereType<BoardSquarePainter>()
+              .single;
+          await tester.pumpWidget(interactive());
+          await tester.pumpAndSettle();
+          final pawn = find.descendant(
+            of: find.byKey(const ValueKey('d7')),
+            matching: find.byType(PieceImage),
+          );
+          final before = tester.getRect(pawn);
+          await tester.tapAt(before.center);
+          await tester.pump();
+          expect(surface().selectedSquare, 'd7');
+          expect(surface().legalMoveSquares, {'d6', 'd5'});
+          expect(surface().highlightedSquares, isEmpty);
+          expect(tester.getRect(pawn), before);
+          await tester.tapAt(before.center);
+          await tester.pump();
+          expect(surface().selectedSquare, isNull);
+          expect(surface().legalMoveSquares, isEmpty);
+          await tester.tapAt(before.center);
+          await tester.pump();
+          await tester.pumpWidget(interactive(enabled: false));
+          expect(surface().selectedSquare, isNull);
+          expect(surface().legalMoveSquares, isEmpty);
+        },
+      );
+    }
+  }
 
   group('promotion', () {
     // White pawn on b7, black king h8, white king e1: b7-b8 promotes.

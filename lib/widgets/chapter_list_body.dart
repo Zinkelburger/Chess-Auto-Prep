@@ -205,7 +205,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                   ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                   itemCount: chapters.length,
                   itemBuilder: (context, index) =>
                       _buildChapterCard(chapters[index]),
@@ -246,7 +246,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
         : '$lines · ${sections.length} chapters';
     final radius = BorderRadius.circular(12);
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -256,11 +256,11 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                 ? radius
                 : BorderRadius.vertical(top: radius.topLeft),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                       color: AppColors.surfaceInset,
                       borderRadius: BorderRadius.circular(8),
@@ -268,18 +268,20 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                     child: const Icon(
                       Icons.menu_book,
                       color: AppColors.onSurfaceSoft,
-                      size: 32,
+                      size: 20,
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           chapter.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -287,7 +289,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                         Text(
                           summary,
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 12,
                             color: Colors.grey[600],
                           ),
                         ),
@@ -329,7 +331,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
       onTap: () =>
           widget.onSelected(ChapterPick(chapter, courseChapter: section.name)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(72, 10, 16, 10),
+        padding: const EdgeInsets.fromLTRB(48, 7, 12, 7),
         child: Row(
           children: [
             Expanded(

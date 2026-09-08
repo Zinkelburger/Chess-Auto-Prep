@@ -1,9 +1,4 @@
-/// Stockfish settings — the dialog behind every Stockfish gear (⚙).
-///
-/// One stable dialog wherever Stockfish analysis appears: the inline engine
-/// bar, the unified engine pane, and the analysis dock. Its sibling is
-/// analysis_panels_dialog.dart (panel visibility) — deliberately two
-/// separate dialogs, not modes of one.
+/// Shared analysis preferences, reachable from the app settings sidebar.
 library;
 
 import 'package:flutter/material.dart';
@@ -12,19 +7,14 @@ import '../../constants/engine_defaults.dart';
 import '../../models/engine_settings.dart';
 import '../../theme/app_colors.dart';
 import '../settings/settings_widgets.dart';
+import '../app_settings_button.dart';
 
 /// Opens the Stockfish settings dialog.
-Future<void> showStockfishSettingsDialog(BuildContext context) {
-  return showSettingsDialog(
-    context,
-    icon: Icons.memory,
-    title: 'Stockfish settings',
-    bodyBuilder: (_) => const _StockfishSettingsBody(),
-  );
-}
+Future<void> showStockfishSettingsDialog(BuildContext context) =>
+    openAppSettings(context, initialGlobalSection: 7);
 
-class _StockfishSettingsBody extends StatelessWidget {
-  const _StockfishSettingsBody();
+class StockfishSettingsBody extends StatelessWidget {
+  const StockfishSettingsBody({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +29,8 @@ class _StockfishSettingsBody extends StatelessWidget {
             SettingsSection(
               icon: Icons.search,
               title: 'Search',
+              subtitle:
+                  'Greater depth spends longer checking each position. More lines compares more candidate moves. PV rows controls how much of each continuation you can read.',
               child: SettingsIntGrid(
                 fields: [
                   SettingsIntSpec(
@@ -74,7 +66,8 @@ class _StockfishSettingsBody extends StatelessWidget {
             SettingsSection(
               icon: Icons.table_chart_outlined,
               title: 'Move table',
-              subtitle: 'The candidate-move table in analysis views.',
+              subtitle:
+                  'Stockfish evaluations add engine scores to candidate moves. Turn them off to rely on Maia and database information. The move limit keeps the table short.',
               showDivider: false,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -106,8 +99,8 @@ class _StockfishSettingsBody extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'CPU cores, memory and the opponent rating are in App settings '
-              '(⚙ in the top bar).',
+              'CPU cores, memory and the opponent rating are in '
+              'Global settings → Engine.',
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.onSurfaceMuted,

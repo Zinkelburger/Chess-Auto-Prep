@@ -141,7 +141,6 @@ class _CompactChapterBar extends StatelessWidget {
             onPressed: onAddChapter,
           ),
           PopupMenuButton<Object>(
-            icon: const Icon(Icons.more_vert, size: 18),
             tooltip: 'Chapter actions',
             onSelected: (action) => action is ChapterAction
                 ? actions.run(action, study.chapterIndex)
@@ -156,6 +155,16 @@ class _CompactChapterBar extends StatelessWidget {
                 canDelete: study.doc.chapters.length > 1,
               ),
             ],
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Chapter', style: TextStyle(fontSize: 13)),
+                  Icon(Icons.arrow_drop_down, size: 18),
+                ],
+              ),
+            ),
           ),
         ],
       ),

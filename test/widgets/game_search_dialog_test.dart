@@ -52,7 +52,7 @@ void main() {
     await tester.pumpWidget(_navBar());
 
     expect(find.text('Search'), findsOneWidget);
-    final searchSize = tester.getSize(find.byType(OutlinedButton));
+    final searchSize = tester.getSize(find.byType(TextButton));
     final numberSize = tester.getSize(find.byType(GameNumberField));
     expect(searchSize.height, equals(kGameNavControlHeight));
     expect(numberSize.height, equals(kGameNavControlHeight));

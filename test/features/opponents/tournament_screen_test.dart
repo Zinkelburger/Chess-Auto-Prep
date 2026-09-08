@@ -127,18 +127,51 @@ void main() {
     expect(actions.gameSetFor(sets, jane)?.gameCount, 120);
   });
 
+  test(
+    'saved accounts become reusable people and matching respects platform',
+    () async {
+      final disk = MemoryOpponentStorage();
+      final directory = OpponentStore(disk);
+      final source = _FakeGamesService([
+        const AnalysisPlayerInfo(
+          platform: 'chesscom',
+          username: 'shared',
+          gameCount: 8,
+        ),
+        const AnalysisPlayerInfo(
+          platform: 'lichess',
+          username: 'shared',
+          gameCount: 5,
+        ),
+      ]);
+      final actions = OpponentActions(store: directory, games: source);
+      expect(await actions.addSavedPlayers(), 2);
+      expect(await actions.addSavedPlayers(), 0);
+      expect(directory.people.length, 2);
+      final chesscom = directory.matchPerson(chesscom: 'shared')!;
+      expect(
+        actions.gameSetsFor(source.players, chesscom).single.platform,
+        'chesscom',
+      );
+      final reopened = OpponentStore(disk);
+      await reopened.ensureLoaded();
+      expect(reopened.personForPlayer(source.players.first)?.id, chesscom.id);
+    },
+  );
+
   testWidgets('shows every column of the sheet', (tester) async {
     await pumpSheet(tester);
     for (final header in [
       'Name',
       'Rating',
       'USCF ID',
-      'Chess.com',
-      'Lichess',
+      'Chess.com accounts',
+      'Lichess accounts',
+      'Files / study chapters',
       'Games',
       'Notes',
     ]) {
-      expect(find.text(header), findsOneWidget, reason: header);
+      expect(find.text(header), findsWidgets, reason: header);
     }
     expect(find.text('Spring Open 2026'), findsOneWidget);
     expect(find.text('Jane Doe'), findsOneWidget);
@@ -149,13 +182,43 @@ void main() {
     printOnFailure(
       tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).join(' | '),
     );
-    expect(find.text('120'), findsOneWidget, reason: 'saved games count');
+    expect(find.text('120 saved'), findsOneWidget, reason: 'saved games count');
     expect(find.text('Bob Roe'), findsOneWidget);
     expect(find.text('bobr'), findsOneWidget);
-    expect(find.text('—'), findsOneWidget, reason: 'Bob has no games saved');
-    expect(find.text('Odds'), findsOneWidget);
-    expect(find.text('42%'), findsOneWidget);
+    expect(
+      find.text('No saved games'),
+      findsOneWidget,
+      reason: 'Bob has no games saved',
+    );
+    expect(find.byIcon(Icons.more_vert), findsNothing);
   });
+
+  testWidgets(
+    'editing cells persists identity, multiple accounts and notes without a dialog',
+    (tester) async {
+      await pumpSheet(tester);
+      await tester.enterText(
+        find.byKey(Key('player-${jane.id}-Name')),
+        'Jane Smith',
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(Key('player-${jane.id}-Chess.com')),
+        'janed, jane_alt',
+      );
+      await tester.pumpAndSettle();
+      expect(store.person(jane.id)!.accounts.length, 2);
+      expect(store.person(jane.id)!.name, 'Jane Smith');
+      expect(
+        store.person(jane.id)!.gameSetKeys,
+        contains(games.players.single.playerKey),
+      );
+      expect(find.byType(AlertDialog), findsNothing);
+      await tester.tap(find.byKey(Key('prepare-${jane.id}')));
+      await tester.pumpAndSettle();
+      expect(picked!.playerKey, games.players.single.playerKey);
+    },
+  );
 
   testWidgets('ticking prepared is saved on the tournament', (tester) async {
     await pumpSheet(tester);
@@ -168,7 +231,7 @@ void main() {
     tester,
   ) async {
     await pumpSheet(tester);
-    await tester.tap(find.byKey(Key('opponent-row-${jane.id}')));
+    await tester.tap(find.byKey(Key('prepare-${jane.id}')));
     await tester.pumpAndSettle();
     expect(picked, isNotNull);
     expect(picked!.displayName, 'Jane Doe');
@@ -184,6 +247,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(Key('add-opponent-${carol.id}')), findsOneWidget);
     expect(find.byKey(Key('add-opponent-${jane.id}')), findsNothing);
+    expect(find.byType(AlertDialog), findsNothing);
     await tester.tap(find.byKey(Key('add-opponent-${carol.id}')));
     await tester.pumpAndSettle();
     expect(find.text('Carol Poe'), findsOneWidget);
@@ -194,16 +258,8 @@ void main() {
     tester,
   ) async {
     await pumpSheet(tester);
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(Key('opponent-row-${bob.id}')),
-        matching: find.byIcon(Icons.more_vert),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove from tournament'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await tester.ensureVisible(find.byTooltip('Remove from group').last);
+    await tester.tap(find.byTooltip('Remove from group').last);
     await tester.pumpAndSettle();
     expect(store.tournament(open.id)!.entries.length, 1);
     expect(store.person(bob.id), isNotNull);
@@ -245,11 +301,11 @@ void main() {
     );
     await tester.tap(find.text('open list'));
     await tester.pumpAndSettle();
-    expect(find.text('Tournaments'), findsOneWidget);
-    expect(find.textContaining('2 opponents'), findsOneWidget);
+    expect(find.text('Groups'), findsOneWidget);
+    expect(find.textContaining('2 players'), findsOneWidget);
     await tester.tap(find.byKey(Key('tournament-${open.id}')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(Key('opponent-row-${jane.id}')));
+    await tester.tap(find.byKey(Key('prepare-${jane.id}')));
     await tester.pumpAndSettle();
     expect(picked?.displayName, 'Jane Doe');
     expect(find.byType(TournamentsScreen), findsNothing);

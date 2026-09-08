@@ -16,6 +16,9 @@ import '../../../core/app_state.dart';
 import '../../../models/analysis_player_info.dart';
 import '../../../services/analysis_games_service.dart';
 import '../../../services/opponent_list.dart';
+import '../../../services/pgn_parsing_service.dart';
+import '../../../services/game_identity.dart';
+import '../../../services/storage/storage_factory.dart';
 import '../../../utils/app_messages.dart';
 import '../../../utils/atomic_file.dart';
 import '../../../widgets/analysis/player_downloads.dart';
@@ -61,46 +64,168 @@ class OpponentActions {
     return {for (final p in all) p.username.toLowerCase(): p};
   }
 
+  List<AnalysisPlayerInfo> gameSetsFor(
+    Iterable<AnalysisPlayerInfo> sets,
+    PersonRecord person,
+  ) => sets.where((set) {
+    if (person.gameSetKeys.contains(set.playerKey) ||
+        (set.platform == 'import' &&
+            set.username.toLowerCase() == person.playerName.toLowerCase())) {
+      return true;
+    }
+    final accounts = set.accounts.isNotEmpty
+        ? set.accounts
+        : [
+            if (set.platform != 'import')
+              PlayerAccount(set.platform, set.username),
+          ];
+    // Reuse only corpora whose accounts all belong to this person.
+    return accounts.isNotEmpty &&
+        accounts.every(
+          (a) => person.accounts.any(
+            (b) =>
+                a.platform == b.platform &&
+                a.username.toLowerCase() == b.username.toLowerCase(),
+          ),
+        );
+  }).toList();
+
   AnalysisPlayerInfo? gameSetFor(
     Map<String, AnalysisPlayerInfo> sets,
     PersonRecord person,
-  ) => sets[person.playerName.toLowerCase()];
+  ) {
+    final matches = gameSetsFor(sets.values, person);
+    return matches.isEmpty ? null : matches.first;
+  }
 
-  /// The person's game-set, downloading it first when there is none.
-  /// Returns null when they have no online account or the download found
-  /// nothing. The result carries [group] so Player Analysis can tie it back
-  /// to the tournament.
+  Future<int> addSavedPlayers() async {
+    await store.ensureLoaded();
+    var added = 0;
+    for (final set in await games.getAllCachedPlayers()) {
+      final accounts = set.accounts.isNotEmpty
+          ? set.accounts
+          : [
+              if (set.platform != 'import')
+                PlayerAccount(set.platform, set.username),
+            ];
+      var person = store.personForPlayer(set);
+      if (person == null) {
+        person = PersonRecord.create(
+          name: set.displayName,
+          chesscom: accounts
+              .where((a) => a.platform == 'chesscom')
+              .map((a) => a.username)
+              .join(', '),
+          lichess: accounts
+              .where((a) => a.platform == 'lichess')
+              .map((a) => a.username)
+              .join(', '),
+        );
+        added++;
+      }
+      await store.savePerson(
+        person.copyWith(
+          gameSetKeys: {...person.gameSetKeys, set.playerKey}.toList(),
+        ),
+      );
+    }
+    return added;
+  }
+
+  /// Reuse downloaded accounts and explicitly linked PGNs before downloading.
   Future<AnalysisPlayerInfo?> ensureGames(
     BuildContext context,
     PersonRecord person, {
     String? group,
   }) async {
-    if (!person.hasAccount) {
-      showAppSnackBar(
-        context,
-        '${person.name} has no Chess.com or Lichess username yet — '
-        'edit them to add one.',
+    final saved = gameSetsFor(await games.getAllCachedPlayers(), person);
+    if (saved.isNotEmpty) {
+      await store.savePerson(
+        (store.person(person.id) ?? person).copyWith(
+          gameSetKeys: {
+            ...person.gameSetKeys,
+            for (final s in saved) s.playerKey,
+          }.toList(),
+        ),
       );
+      if (saved.length == 1) return saved.single.copyWith(group: group);
+      final chunks = <String, String>{};
+      for (final set in saved) {
+        final pgn = await games.loadAnalysisGames(set.platform, set.username);
+        if (pgn != null) {
+          for (final game in splitPgnIntoGames(pgn)) {
+            chunks[canonicalGameKey(extractHeaders(game), game)] = game.trim();
+          }
+        }
+      }
+      if (chunks.isNotEmpty) {
+        final info = await games.saveAnalysisGames(
+          chunks.values.join('\n\n'),
+          platform: 'import',
+          username: person.playerName,
+          maxGames: 100,
+          accounts: person.accounts,
+          group: group,
+        );
+        await store.savePerson(
+          (store.person(person.id) ?? person).copyWith(
+            gameSetKeys: {
+              ...person.gameSetKeys,
+              info.playerKey,
+              for (final s in saved) s.playerKey,
+            }.toList(),
+          ),
+        );
+        return info;
+      }
+    }
+    if (!context.mounted) return null;
+    if (!person.hasAccount) {
+      showAppSnackBar(context, 'Add an account in the row to download games.');
       return null;
     }
     final wanted = person.toPlayerInfo(
       group: group,
       monthsBack: defaultMonthsBack,
     );
-    var existing = await games.findExistingPlayer(
+    final ok = await downloads.downloadOne(context, wanted);
+    if (!ok) return null;
+    final info = await games.findExistingPlayer(
       wanted.platform,
       wanted.username,
     );
-    if (existing == null) {
-      if (!context.mounted) return null;
-      final ok = await downloads.downloadOne(context, wanted);
-      if (!ok) return null;
-      existing = await games.findExistingPlayer(
-        wanted.platform,
-        wanted.username,
+    if (info != null) {
+      await store.savePerson(
+        (store.person(person.id) ?? person).copyWith(
+          gameSetKeys: {...person.gameSetKeys, info.playerKey}.toList(),
+        ),
       );
     }
-    return existing?.copyWith(group: group ?? existing.group);
+    return info;
+  }
+
+  Future<void> openStudyLink(BuildContext context, PlayerStudyLink link) async {
+    if (!await StorageFactory.instance.fileExists(link.path)) {
+      if (context.mounted) {
+        showAppSnackBar(
+          context,
+          'This file has moved or is missing: ${link.path}',
+          isError: true,
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    final app = context.read<AppState>();
+    popToRoot(context);
+    app.handOff(EditStudy(studyPath: link.path, chapterName: link.chapter));
+  }
+
+  Future<void> openGroupStudy(BuildContext context, Tournament group) async {
+    final path = await prepFiles.ensureGroup(group);
+    if (context.mounted) {
+      await openStudyLink(context, PlayerStudyLink(path: path));
+    }
   }
 
   /// Download games for everyone in the field who has an account and no
@@ -168,12 +293,8 @@ class OpponentActions {
     Tournament tournament,
   ) async {
     final appState = context.read<AppState>();
-    final path = await prepFiles.mergedForTournament(tournament);
+    final path = await prepFiles.ensureGroup(tournament);
     if (!context.mounted) return;
-    if (path == null) {
-      showAppSnackBar(context, 'No prep lines in this field yet.');
-      return;
-    }
     popToRoot(context);
     appState.switchToStudyTraining(
       path: path,

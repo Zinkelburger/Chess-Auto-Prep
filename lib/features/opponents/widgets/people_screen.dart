@@ -1,57 +1,87 @@
-/// The directory: everyone you have ever entered, searchable, so a regular
-/// is one tap in the next tournament instead of a re-typed row.
-library;
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../theme/app_colors.dart';
-import '../../../theme/app_text_styles.dart';
-import '../../../widgets/app_overflow_menu.dart';
+import '../../../utils/app_messages.dart';
 import '../../../widgets/common/confirm_dialog.dart';
-import '../../../widgets/common/list_search_field.dart';
 import '../models/person_record.dart';
-import 'opponent_actions.dart';
 import '../services/opponent_store.dart';
-import 'person_edit_dialog.dart';
+import 'opponent_actions.dart';
+import 'player_table.dart';
 
 class PeopleScreen extends StatefulWidget {
   const PeopleScreen({super.key, this.store, this.actions});
-
   final OpponentStore? store;
   final OpponentActions? actions;
-
   @override
   State<PeopleScreen> createState() => _PeopleScreenState();
 }
 
 class _PeopleScreenState extends State<PeopleScreen> {
-  late final OpponentStore _store = widget.store ?? OpponentStore.instance;
-  late final OpponentActions _actions =
-      widget.actions ?? OpponentActions(store: _store);
-  String _query = '';
+  late final _store = widget.store ?? OpponentStore.instance;
+  late final _actions = widget.actions ?? OpponentActions(store: _store);
+  final _search = TextEditingController();
+  String? _newPerson;
+  String? _error;
+  int _reload = 0;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_store.ensureLoaded());
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      await _store.ensureLoaded();
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
   Future<void> _add() async {
-    final created = await showDialog<PersonRecord>(
-      context: context,
-      builder: (_) => const PersonEditDialog(),
-    );
-    if (created != null) await _store.savePerson(created);
+    try {
+      final person = await _store.savePerson(
+        PersonRecord.create(name: 'New player'),
+      );
+      if (mounted) {
+        setState(() {
+          _search.clear();
+          _newPerson = person.id;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Not saved: $e');
+    }
   }
 
-  Future<void> _edit(PersonRecord person) async {
-    final edited = await showDialog<PersonRecord>(
-      context: context,
-      builder: (_) => PersonEditDialog(person: person),
-    );
-    if (edited != null) await _store.savePerson(edited);
+  Future<void> _savedAccounts() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final count = await _actions.addSavedPlayers();
+      if (mounted) {
+        setState(() {
+          _reload++;
+          _search.clear();
+        });
+        showAppSnackBar(
+          context,
+          'Added $count players. Existing accounts are linked.',
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _analyse(PersonRecord person) async {
@@ -59,143 +89,75 @@ class _PeopleScreenState extends State<PeopleScreen> {
     if (info != null && mounted) Navigator.of(context).pop(info);
   }
 
-  Future<void> _delete(PersonRecord person) async {
-    final n = _store.tournamentCountFor(person.id);
+  Future<void> _remove(PersonRecord person) async {
     final ok = await confirmAction(
       context,
       title: 'Delete ${person.name}?',
-      message: [
-        if (n > 0) 'Also removes them from $n tournament${n == 1 ? '' : 's'}.',
-        'Their prep file stays in Study; their downloaded games stay in '
-            'Player Analysis.',
-      ].join(' '),
+      message:
+          'Removes this player from all groups. Their saved games and studies stay on disk.',
       confirmLabel: 'Delete',
     );
     if (ok) await _store.deletePerson(person.id);
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('People'),
-        actions: [
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Players')),
+    body: ListenableBuilder(
+      listenable: _store,
+      builder: (context, _) => Column(
+        children: [
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(
-              key: const Key('people-add'),
-              onPressed: _add,
-              child: const Text('Add person'),
+            padding: const EdgeInsets.all(12),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 240,
+                  child: TextField(
+                    controller: _search,
+                    decoration: const InputDecoration(
+                      hintText: 'Search players',
+                      isDense: true,
+                    ),
+                    onChanged: (_) {
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ),
+                FilledButton(
+                  key: const Key('people-add'),
+                  onPressed: _store.isLoaded ? _add : null,
+                  child: const Text('Add player'),
+                ),
+                OutlinedButton(
+                  onPressed: _busy || !_store.isLoaded ? null : _savedAccounts,
+                  child: Text(_busy ? 'Linking…' : 'Add saved accounts'),
+                ),
+                const Text(
+                  'Edit cells directly · Saved automatically · Separate accounts with commas',
+                ),
+              ],
             ),
+          ),
+          if (_error != null) Text(_error!),
+          Expanded(
+            child: !_store.isLoaded
+                ? const Center(child: CircularProgressIndicator())
+                : PlayerTable(
+                    key: ValueKey(_reload),
+                    store: _store,
+                    actions: _actions,
+                    people: _store.searchPeople(_search.text),
+                    newPersonId: _newPerson,
+                    onAnalyse: _analyse,
+                    onRemove: _remove,
+                  ),
           ),
         ],
       ),
-      body: ListenableBuilder(
-        listenable: _store,
-        builder: (context, _) {
-          if (!_store.isLoaded) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (_store.people.isEmpty) {
-            return const Center(
-              child: Text(
-                'Nobody yet.',
-                style: TextStyle(color: AppColors.onSurfaceMuted),
-              ),
-            );
-          }
-          final people = _store.searchPeople(_query);
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: ListSearchField(
-                  hintText: 'Search people',
-                  autofocus: true,
-                  onChanged: (v) => setState(() => _query = v),
-                ),
-              ),
-              Expanded(
-                child: people.isEmpty
-                    ? Center(
-                        child: Text(
-                          'Nobody matches "$_query"',
-                          style: const TextStyle(
-                            color: AppColors.onSurfaceMuted,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                        itemCount: people.length,
-                        itemBuilder: (_, i) => _PersonTile(
-                          person: people[i],
-                          tournaments: _store.tournamentCountFor(people[i].id),
-                          onEdit: () => _edit(people[i]),
-                          onAnalyse: () => _analyse(people[i]),
-                          onOpenPrep: () =>
-                              _actions.openPrepFile(context, people[i]),
-                          onDelete: () => _delete(people[i]),
-                        ),
-                      ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _PersonTile extends StatelessWidget {
-  const _PersonTile({
-    required this.person,
-    required this.tournaments,
-    required this.onEdit,
-    required this.onAnalyse,
-    required this.onOpenPrep,
-    required this.onDelete,
-  });
-
-  final PersonRecord person;
-  final int tournaments;
-  final VoidCallback onEdit;
-  final VoidCallback onAnalyse;
-  final VoidCallback onOpenPrep;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final facts = [
-      if (person.rating != null) '${person.rating}',
-      if (person.uscfId != null) 'USCF ${person.uscfId}',
-      if (person.handlesLine.isNotEmpty) person.handlesLine,
-      if (tournaments > 0)
-        'in $tournaments tournament${tournaments == 1 ? '' : 's'}',
-    ].join(' · ');
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        key: Key('person-${person.id}'),
-        onTap: onEdit,
-        title: Text(person.name),
-        subtitle: Text(
-          facts.isEmpty ? 'No details yet' : facts,
-          style: AppTextStyles.muted,
-        ),
-        trailing: AppOverflowMenu(
-          entries: [
-            AppMenuEntry(
-              label: 'Analyse games',
-              enabled: person.hasAccount,
-              onRun: onAnalyse,
-            ),
-            AppMenuEntry(label: 'Open prep file', onRun: onOpenPrep),
-            AppMenuEntry(label: 'Edit…', dividerAbove: true, onRun: onEdit),
-            AppMenuEntry(label: 'Delete', onRun: onDelete),
-          ],
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }

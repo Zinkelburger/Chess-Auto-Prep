@@ -37,8 +37,74 @@ class PrepFiles {
       ],
     );
     await storage.writeFile(reserved.path, doc.toPgn(), createOnly: true);
-    await store.savePerson(person.copyWith(prepFilePath: reserved.path));
+    await store.savePerson(
+      (store.person(person.id) ?? person).copyWith(prepFilePath: reserved.path),
+    );
     return reserved.path;
+  }
+
+  /// The group's own editable study. It is created once, never regenerated.
+  Future<String> ensureGroup(Tournament group) async {
+    final storage = StorageFactory.instance;
+    final current = store.tournament(group.id) ?? group;
+    if (current.studyPath != null &&
+        await storage.fileExists(current.studyPath!)) {
+      return current.studyPath!;
+    }
+    final reserved = await reserveStudyPath(current.name);
+    final chapters = <StudyChapter>[];
+    for (final entry in current.entries) {
+      final person = store.person(entry.personId);
+      if (person == null || person.prepFilePath == null) continue;
+      final text = await storage.readFile(person.prepFilePath!);
+      if (text == null) continue;
+      for (final chapter in StudyDocument.fromPgn(
+        text,
+        name: person.name,
+      ).chapters) {
+        if (chapter.tree.isNotEmpty) {
+          chapters.add(
+            StudyChapter(
+              name: '${person.name} · ${chapter.name}',
+              orientation: chapter.orientation,
+              headers: Map.of(chapter.headers),
+              tree: chapter.tree,
+            ),
+          );
+        }
+      }
+    }
+    await storage.writeFile(
+      reserved.path,
+      StudyDocument(
+        name: reserved.name,
+        chapters: chapters.isEmpty ? [StudyChapter(name: 'Notes')] : chapters,
+      ).toPgn(),
+      createOnly: true,
+    );
+    await store.saveTournament(
+      (store.tournament(group.id) ?? current).copyWith(
+        studyPath: reserved.path,
+      ),
+    );
+    return reserved.path;
+  }
+
+  Future<String> preferredFor(PersonRecord person, Tournament? group) async {
+    if (group == null) return ensure(person);
+    final path = await ensureGroup(group);
+    final current = store.person(person.id) ?? person;
+    if (!current.studyLinks.any((link) => link.path == path)) {
+      await store.savePerson(
+        current.copyWith(
+          studyLinks: [
+            ...current.studyLinks,
+            PlayerStudyLink(path: path),
+          ],
+        ),
+      );
+    }
+    return path;
   }
 
   /// Whether the person's prep file exists on disk.

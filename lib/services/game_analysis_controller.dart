@@ -15,6 +15,7 @@
 library;
 
 import 'dart:async';
+import '../core/pgn/pgn_dummy_mainline.dart';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -183,6 +184,7 @@ typedef CachedGameAnalysis = ({
 
 CachedGameAnalysis? parseCachedEvals(String pgnText) {
   final parsed = PgnGame.parsePgn(pgnText);
+  promoteNullMoveDummyMainline(parsed.moves);
   final mainline = parsed.moves.mainline().toList();
   if (mainline.isEmpty) return null;
 
@@ -319,7 +321,7 @@ CachedGameAnalysis? parseCachedEvals(String pgnText) {
   return (
     evals: classified,
     startWinChance: startWinChance,
-    totalMoves: mainline.length,
+    totalMoves: realPlies,
   );
 }
 
@@ -540,8 +542,9 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
     try {
       final parsed = PgnGame.parsePgn(pgnText);
+      promoteNullMoveDummyMainline(parsed.moves);
       final mainline = parsed.moves.mainline().toList();
-      _totalMoves = mainline.length;
+      _totalMoves = mainline.where((move) => !isNullMoveSan(move.san)).length;
       notifyListeners();
 
       if (mainline.isEmpty) {

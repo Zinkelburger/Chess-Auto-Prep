@@ -395,7 +395,6 @@ abstract final class AppColors {
   static const findingMissingResponse = info;
   static const findingWeakPosition = Color(0xFFFF5722);
   static const findingUncoveredStrongMove = Color(0xFF00BCD4);
-  static const findingPracticalTrap = Color(0xFFE040FB);
   static const findingTrickyMove = Color(0xFF7C4DFF);
   static const findingClash = Color(0xFF9C27B0);
 
@@ -417,11 +416,14 @@ abstract final class AppColors {
 
   static const boardLightSquare = Color(0xFFF0D9B5);
   static const boardDarkSquare = Color(0xFFB58863);
-  static const boardSelected = Color(0xFFFFFF00);
-  static const boardHighlight = Color(0x806496FF);
+  static const boardSelected = Color(0x669BC700);
+  static const boardHighlight = Color(0x556496FF);
+
+  /// Quiet destination dots / capture rings, visible on both board colours.
+  static const boardLegalMove = Color(0x55000000);
 
   /// Subtle tint kept on the from/to squares of the most recent half-moves
-  /// (Chessable-style trail). Quieter than [boardHighlight] so it reads as
+  /// (Chessable-style trail). Quieter than [boardSelected] so it reads as
   /// context, not as an active selection.
   static const boardRecentMove = Color(0x559BC700);
 

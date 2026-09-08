@@ -136,3 +136,25 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# Keep verified, compressed VC++ copies for the separate bughouse process.
+# The setup installer excludes loose runtime DLLs but includes these archives.
+# Neither a damaged system installation nor a stale extracted DLL becomes the
+# engine's only source of dependencies. Run after all bundle files are installed.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../assets/bughouse/hivemind-windows.exe.gz")
+  find_program(BUGHOUSE_PYTHON NAMES python3 python)
+  if(NOT BUGHOUSE_PYTHON)
+    message(FATAL_ERROR "Python is required to package the bughouse runtime")
+  endif()
+  install(CODE "
+    execute_process(
+      COMMAND \"${BUGHOUSE_PYTHON}\"
+        \"${CMAKE_CURRENT_SOURCE_DIR}/../tools/package_bughouse_runtime.py\"
+        --bundle \"${CMAKE_INSTALL_PREFIX}\"
+      RESULT_VARIABLE bughouse_runtime_result
+    )
+    if(NOT bughouse_runtime_result EQUAL 0)
+      message(FATAL_ERROR \"Could not package the verified bughouse runtime\")
+    endif()
+  " COMPONENT Runtime)
+endif()

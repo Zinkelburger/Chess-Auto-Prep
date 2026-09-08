@@ -434,8 +434,9 @@ Position _positionFromHeaders(Map<String, String> headers) {
 void _forEachPgnNode(
   PgnNode<PgnNodeData> root,
   Position start,
-  bool Function(Position pos, PgnNode<PgnNodeData> node) visit,
-) {
+  bool Function(Position pos, PgnNode<PgnNodeData> node) visit, {
+  bool includeVariations = true,
+}) {
   if (!visit(start, root)) return;
   final stack = <({PgnNode<PgnNodeData> node, Position pos})>[
     (node: root, pos: start),
@@ -443,7 +444,17 @@ void _forEachPgnNode(
   while (stack.isNotEmpty) {
     final cur = stack.removeLast();
     final kids = cur.node.children;
-    for (var i = kids.length - 1; i >= 0; i--) {
+    for (
+      var i =
+          (includeVariations
+              ? kids.length
+              : kids.isEmpty
+              ? 0
+              : 1) -
+          1;
+      i >= 0;
+      i--
+    ) {
       final next = playSanOrNullMove(cur.pos, kids[i].data.san);
       if (next == null) continue;
       if (!visit(next, kids[i])) return;
@@ -486,7 +497,7 @@ class _ReplayGame {
     }
   }
 
-  bool passesThroughFen(String targetFen) {
+  bool passesThroughFen(String targetFen, {bool includeVariations = true}) {
     var found = false;
     _forEachPgnNode(game.moves, start, (pos, _) {
       if (normalizeFen(pos.fen) == targetFen) {
@@ -494,7 +505,7 @@ class _ReplayGame {
         return false;
       }
       return true;
-    });
+    }, includeVariations: includeVariations);
     return found;
   }
 
@@ -516,9 +527,13 @@ class _ReplayGame {
 bool gamePassesThroughFen(
   Map<String, String> headers,
   String pgnText,
-  String targetFen,
-) =>
-    _ReplayGame.tryParse(headers, pgnText)?.passesThroughFen(targetFen) ??
+  String targetFen, {
+  bool includeVariations = true,
+}) =>
+    _ReplayGame.tryParse(
+      headers,
+      pgnText,
+    )?.passesThroughFen(targetFen, includeVariations: includeVariations) ??
     false;
 
 /// SAN after [targetFen] is reached, along the line that found it (the
@@ -746,8 +761,9 @@ String? parseTargetFen(String? input) {
 ///
 /// Isolate-safe: no instance state captured.
 Map<String, List<int>> buildFenIndex(
-  List<({Map<String, String> headers, String pgnText})> games,
-) {
+  List<({Map<String, String> headers, String pgnText})> games, {
+  bool includeVariations = true,
+}) {
   final index = <String, List<int>>{};
 
   void record(String fen, int gameIdx) {
@@ -768,7 +784,7 @@ Map<String, List<int>> buildFenIndex(
       ) {
         record(normalizeFen(pos.fen), i);
         return true;
-      });
+      }, includeVariations: includeVariations);
     } catch (_) {
       // Best-effort; failure here is non-fatal and intentionally ignored.
     }
@@ -1057,3 +1073,8 @@ bool _matchGroupsAt(
   }
   return false;
 }
+
+/// Isolate entry point for a mainline-only position index.
+Map<String, List<int>> buildMainlineFenIndex(
+  List<({Map<String, String> headers, String pgnText})> games,
+) => buildFenIndex(games, includeVariations: false);

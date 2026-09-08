@@ -8,7 +8,7 @@
 /// one you keep walking into is at the top, and a detail pane that puts the
 /// position, the masters' moves and the games worth opening in one place.
 ///
-/// Two ways out, both into the Games viewer: one of your games at the branch
+/// Two ways out, both into the PGN Viewer: one of your games at the branch
 /// (so you can see what happened next), or a master game at the same ply (so
 /// you can see what should have happened next). The dialog pops itself before
 /// either, because both navigate away from the home column.
@@ -489,7 +489,7 @@ class _MasterPracticeDialogState extends State<MasterPracticeDialog> {
     return Tooltip(
       message:
           '${game.white} – ${game.black}, ${key.where}: ${key.reason} game '
-          'with ${key.moveSan} here.\nClick to open it in Games at this move.',
+          'with ${key.moveSan} here.\nClick to open it in the PGN Viewer at this move.',
       waitDuration: const Duration(milliseconds: 500),
       child: InkWell(
         onTap: () => unawaited(_openMasterGame(entry, key)),
@@ -526,7 +526,7 @@ class _MasterPracticeDialogState extends State<MasterPracticeDialog> {
       MyGameOutcome.unknown => game.result,
     };
     return Tooltip(
-      message: 'Open this game in Games at this move.',
+      message: 'Open this game in the PGN Viewer at this move.',
       waitDuration: const Duration(milliseconds: 500),
       child: InkWell(
         onTap: () => _openMyGame(game, report),

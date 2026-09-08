@@ -13,11 +13,11 @@ import '../theme/app_colors.dart';
 
 /// Fits four digits; static so the bar's layout never shifts as the number
 /// grows.
-const _fieldWidth = 56.0;
+const _fieldWidth = 32.0;
 
 /// Shared height for the **Game N of Total** box and the Search button
 /// beside it, so the pair aligns in the nav bar and the opening-tree list.
-const kGameNavControlHeight = 32.0;
+const kGameNavControlHeight = 28.0;
 
 class GameNumberField extends StatefulWidget {
   /// Focuses the most recently mounted box and selects its number, so a
@@ -25,7 +25,9 @@ class GameNumberField extends StatefulWidget {
   /// Returns false when none is on screen, letting the key fall through.
   static bool focusActive() {
     for (final state in _GameNumberFieldState._mounted.reversed) {
-      if (state.mounted && state.widget.gameCount > 0) {
+      if (state.mounted &&
+          TickerMode.valuesOf(state.context).enabled &&
+          state.widget.gameCount > 0) {
         state._focusAndSelect();
         return true;
       }
@@ -156,7 +158,7 @@ class _GameNumberFieldState extends State<GameNumberField> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final enabled = widget.gameCount > 0 && widget.onGoToGame != null;
-    const labelStyle = TextStyle(fontSize: 13, fontWeight: FontWeight.w600);
+    const labelStyle = TextStyle(fontSize: 13, color: AppColors.onSurfaceMuted);
 
     // The box is drawn here, not by the input decorator: a decorator sizes
     // its border to the text line, so inside a 32px control it drew a short
@@ -169,7 +171,9 @@ class _GameNumberFieldState extends State<GameNumberField> {
         const Text('Game', style: labelStyle),
         const SizedBox(width: 6),
         Container(
-          width: _fieldWidth,
+          width:
+              _fieldWidth +
+              (widget.gameCount.toString().length - 2).clamp(0, 8) * 7.0,
           height: kGameNavControlHeight,
           alignment: Alignment.center,
           decoration: BoxDecoration(
@@ -191,7 +195,8 @@ class _GameNumberFieldState extends State<GameNumberField> {
             onSubmitted: _submit,
             style: const TextStyle(
               fontSize: 13,
-              fontWeight: FontWeight.w600,
+              color: AppColors.onSurfaceMuted,
+              fontWeight: FontWeight.w400,
               height: 1.0,
             ),
             decoration: const InputDecoration.collapsed(

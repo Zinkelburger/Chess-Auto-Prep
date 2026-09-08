@@ -1,4 +1,6 @@
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/models/training_settings.dart';
+import 'package:chess_auto_prep/widgets/training/training_settings_panel.dart';
 import 'package:chess_auto_prep/models/board_display_settings.dart';
 import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/models/eval_database_settings.dart';
@@ -29,6 +31,71 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> selectGlobal(WidgetTester tester, Finder finder) async {
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 1400));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      finder,
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    await tester.tap(finder);
+  }
+
+  testWidgets('trainer chapters stay inside one shared settings shell', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final settings = TrainingSettings();
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppState(),
+        child: MaterialApp(
+          home: SettingsScreen(
+            initialMode: AppMode.repertoireTrainer,
+            viewContentBuilder: (_) => TrainingSettingsPanel(
+              settings: settings,
+              trainingMode: TrainingMode.repertoire,
+              repetitionMode: RepetitionMode.spaced,
+              onQueueSettingsChanged: () {},
+              onSettingsChanged: () {},
+              onTrainingModeChanged: (_) {},
+              onRepetitionModeChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('New lines'), findsOneWidget);
+    expect(find.byKey(const Key('training-settings-nav-0')), findsNothing);
+    expect(find.byKey(const Key('settings-view-tactics')), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('New lines')), '12');
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('settings-chapter-repertoireTrainer-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('New lines'), findsNothing);
+    expect(find.byKey(const Key('training-depth')), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('settings-chapter-repertoireTrainer-2')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('training-depth')), findsNothing);
+    await tester.tap(
+      find.byKey(const Key('settings-chapter-repertoireTrainer-0')),
+    );
+    await tester.pumpAndSettle();
+    expect((await TrainingSettings.load()).newLinesPerSession, 12);
+    expect(find.text('12'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('navigation shows one section and preserves account edits', (
     tester,
   ) async {
@@ -39,12 +106,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'unsaved-token');
 
-    await tester.tap(find.byKey(const Key('settings-nav-3')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-3')));
     await tester.pumpAndSettle();
     expect(find.text('CPU cores'), findsOneWidget);
     expect(find.text('Your chess usernames'), findsNothing);
 
-    await tester.tap(find.byKey(const Key('settings-nav-0')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-0')));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, 'unsaved-token'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -54,7 +121,7 @@ void main() {
     tester,
   ) async {
     await pumpSettings(tester, const Size(1280, 720));
-    await tester.tap(find.byKey(const Key('settings-nav-6')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-6')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Focus the current variation'),
@@ -83,7 +150,7 @@ void main() {
     );
     await tester.ensureVisible(find.byKey(const Key('settings-nav-5')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('settings-nav-5')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-5')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Reset settings…'),
@@ -121,7 +188,7 @@ void main() {
         // top match.
         await tester.enterText(
           find.byKey(const Key('settings-section-picker')),
-          section.substring(0, 3),
+          'Global · $section',
         );
         await tester.pumpAndSettle();
         await tester.testTextInput.receiveAction(TextInputAction.done);
@@ -163,7 +230,7 @@ void main() {
       );
       await tester.tap(find.text('Open settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('settings-nav-4')));
+      await selectGlobal(tester, find.byKey(const Key('settings-nav-4')));
       await tester.pumpAndSettle();
       expect(find.textContaining('Years of games'), findsNothing);
       expect(find.textContaining('ChessDB data directory'), findsNothing);
@@ -185,7 +252,7 @@ void main() {
   ) async {
     addTearDown(() => BoardDisplaySettings.instance.resetToDefaults());
     await pumpSettings(tester, const Size(1280, 720));
-    await tester.tap(find.byKey(const Key('settings-nav-1')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-1')));
     await tester.pumpAndSettle();
     expect(find.text('Board coordinates'), findsOneWidget);
     expect(find.text('Piece notation'), findsOneWidget);

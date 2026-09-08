@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
+import 'package:chess_auto_prep/features/bughouse/services/bughouse_bundle.dart';
 import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_analysis_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,11 +15,18 @@ import 'fake_bughouse_engine.dart';
 /// without understanding or retyping any of it. That is one button, and these
 /// are the tests that it is wired to the report rather than to the sentence.
 void main() {
-  const report = '''
-Chess Auto Prep 9.9.9 — bughouse engine diagnostics
-Problem     : the engine said no
-Files beside the engine
-  onnxruntime.dll   16149344 bytes  (size ok)''';
+  final report = BughouseEngine.formatReport(
+    headline: BughouseEngine.describeExit(-1073741701),
+    executablePath: r'C:\support\bughouse\hivemind-windows.exe',
+    argv: ['--model', 'hivemind.onnx'],
+    workingDirectory: r'C:\support\bughouse',
+    exitCode: -1073741701,
+    spoke: false,
+    directory: ['onnxruntime.dll 16149344 bytes'],
+    libraries: [],
+    stdout: [],
+    stderr: ['last raw stderr line'],
+  );
 
   late FakeBughouseEngine engine;
   late BughouseController controller;
@@ -86,7 +94,8 @@ Files beside the engine
   testWidgets('a failure without one does not invent it', (tester) async {
     await showFailure(tester, BughouseEngineFailure('plain'));
     expect(controller.error, contains('plain'));
-    expect(controller.errorReport, isNull);
+    expect(controller.errorReport, contains('Engine diagnostics: unavailable'));
+    expect(controller.errorReport, contains('plain'));
   });
 
   testWidgets('the copy button puts the whole report on the clipboard', (
@@ -114,7 +123,7 @@ Files beside the engine
       BughouseEngineFailure('the engine said no', report: report),
     );
 
-    expect(find.text('Copy diagnostics'), findsOneWidget);
+    expect(find.text('Copy full report'), findsOneWidget);
     // Collapsed to begin with: the report is pages long and the banner is not
     // where anyone reads it. Copying does not require opening it.
     expect(find.text('Hide details'), findsNothing);
@@ -122,14 +131,74 @@ Files beside the engine
     await tester.tap(find.byKey(const Key('bughouse-copy-diagnostics')));
     await tester.pump();
 
-    expect(copied, contains('the engine said no'));
+    expect(copied, report);
+    expect(copied, contains('STATUS_INVALID_IMAGE_FORMAT'));
+    expect(copied, contains('last raw stderr line'));
+    expect(copied, endsWith('END BUGHOUSE DIAGNOSTICS'));
     expect(copied, contains('16149344 bytes'));
     expect(find.text('Copied'), findsOneWidget);
 
     // The confirmation is temporary, so a second copy is never blocked by the
     // first one's tick.
     await tester.pump(const Duration(seconds: 4));
-    expect(find.text('Copy diagnostics'), findsOneWidget);
+    expect(find.text('Copy full report'), findsOneWidget);
+  });
+
+  testWidgets('failed DLL repair keeps verification evidence on the clipboard', (
+    tester,
+  ) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await showFailure(
+      tester,
+      BughouseBundleBroken(
+        'Could not replace msvcp140.dll',
+        diagnostics: [
+          'msvcp140.dll: SHA-256 actual, expected expected',
+          r'FileSystemException: Access denied, path = C:\profile\bughouse\msvcp140.dll (OS Error: Access is denied, errno = 5)',
+        ],
+      ),
+    );
+    await tester.tap(find.byKey(const Key('bughouse-copy-diagnostics')));
+    await tester.pump();
+    expect(copied, contains('SHA-256 actual, expected expected'));
+    expect(copied, contains('errno = 5'));
+    expect(copied, endsWith('END BUGHOUSE DIAGNOSTICS'));
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('a successful retry clears the previous failure report', (
+    tester,
+  ) async {
+    await showFailure(
+      tester,
+      BughouseEngineFailure('previous failure', report: report),
+    );
+    expect(controller.error, isNotNull);
+    engine.searchDelay = const Duration(milliseconds: 10);
+    controller.setAnalysisEnabled(true);
+    for (var i = 0; i < 50 && controller.error != null; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(controller.error, isNull);
+    expect(controller.errorReport, isNull);
+    expect(find.byKey(const Key('bughouse-copy-diagnostics')), findsNothing);
+    controller.setAnalysisEnabled(false);
+    await tester.pump(const Duration(milliseconds: 20));
   });
 
   testWidgets('the details can be opened without copying', (tester) async {
@@ -143,8 +212,10 @@ Files beside the engine
     expect(find.textContaining('Files beside the engine'), findsOneWidget);
   });
 
-  testWidgets('a failure with no report offers no button', (tester) async {
+  testWidgets('a failure with no report still offers copyable error evidence', (
+    tester,
+  ) async {
     await showFailure(tester, BughouseEngineFailure('plain'));
-    expect(find.text('Copy diagnostics'), findsNothing);
+    expect(find.text('Copy full report'), findsOneWidget);
   });
 }

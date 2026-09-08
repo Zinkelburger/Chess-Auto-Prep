@@ -6,8 +6,16 @@
 ///    reply to,
 ///  - refutation: owner repertoire moves that concretely lose, with a
 ///    verified refutation PV,
-///  - practicalTrap: end-of-line positions whose expectimax (practical)
-///    eval is far better for the attacker than the raw engine eval.
+///  - trickyMove: near-best attacker moves and novelties whose practical
+///    (Maia expectimax) value beats even the engine-best move's raw eval —
+///    the owner is expected to misplay against them by more than they
+///    concede objectively.
+///
+/// One MultiPV discovery per attacker position feeds both the uncovered
+/// check and the trick candidates. Attacker-to-move leaves get discovery
+/// after the walk (most reachable first), which is how the hunt reaches
+/// past the recorded games; the best candidates then each get a short
+/// expectimax probe.
 ///
 /// Unlike the defensive audit this is not a breadth checklist: findings
 /// carry an exploitScore (reach probability × gain) and the report is
@@ -19,7 +27,6 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../models/build_tree_node.dart';
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/eval_cache.dart';
@@ -33,73 +40,85 @@ import '../../../services/run_control.dart';
 import '../../../services/tree_build_service.dart';
 import '../../../services/eval/eval_move_helpers.dart';
 import '../../../utils/chess_utils.dart' as chess_utils;
+import '../../../utils/ease_utils.dart';
+import '../../../utils/fen_utils.dart';
 import '../../audit/models/audit_finding.dart';
 import '../../audit/models/audit_result.dart';
 import '../../audit/services/exploit_ranking.dart';
 import 'hole_hunt_config.dart';
 import 'hole_scoring.dart';
-import '../../../utils/fen_utils.dart';
 
-enum HoleHuntPhase { walking, traps }
+enum HoleHuntPhase { walking, leaves, probing }
 
 /// Progress callback emitted periodically during a hunt.
 typedef HoleHuntProgressCallback = void Function(HoleHuntProgress progress);
 
 class HoleHuntProgress {
   final HoleHuntPhase phase;
-  final int nodesChecked;
-  final int totalNodes;
-  final int leavesDone;
-  final int leavesTotal;
+
+  /// Units of the current phase: positions walked, leaves discovered, or
+  /// candidates probed.
+  final int done;
+  final int total;
   final int findingsCount;
 
   const HoleHuntProgress({
     required this.phase,
-    this.nodesChecked = 0,
-    this.totalNodes = 0,
-    this.leavesDone = 0,
-    this.leavesTotal = 0,
+    this.done = 0,
+    this.total = 0,
     this.findingsCount = 0,
   });
 
-  /// The walk owns 0..0.7 of the bar, the trap pass 0.7..1.0.
+  /// The walk owns 0..0.6 of the bar, leaf discovery 0.6..0.7, the probes
+  /// 0.7..1.0. An empty later phase reads as done, not as stuck.
   double get fraction {
     switch (phase) {
       case HoleHuntPhase.walking:
-        final walkFraction = totalNodes > 0 ? nodesChecked / totalNodes : 0.0;
-        return 0.7 * walkFraction.clamp(0.0, 1.0);
-      case HoleHuntPhase.traps:
-        final trapFraction = leavesTotal > 0 ? leavesDone / leavesTotal : 1.0;
-        return 0.7 + 0.3 * trapFraction.clamp(0.0, 1.0);
+        final f = total > 0 ? done / total : 0.0;
+        return 0.6 * f.clamp(0.0, 1.0);
+      case HoleHuntPhase.leaves:
+        final f = total > 0 ? done / total : 1.0;
+        return 0.6 + 0.1 * f.clamp(0.0, 1.0);
+      case HoleHuntPhase.probing:
+        final f = total > 0 ? done / total : 1.0;
+        return 0.7 + 0.3 * f.clamp(0.0, 1.0);
     }
   }
 
-  String get message {
-    switch (phase) {
-      case HoleHuntPhase.walking:
-        return 'Walking $nodesChecked / $totalNodes positions';
-      case HoleHuntPhase.traps:
-        return 'Trap search $leavesDone / $leavesTotal leaves';
-    }
-  }
+  String get message => switch (phase) {
+    HoleHuntPhase.walking => 'Walking $done / $total positions',
+    HoleHuntPhase.leaves => 'Discovery $done / $total leaves',
+    HoleHuntPhase.probing => 'Probing $done / $total candidates',
+  };
 }
 
 class HoleHuntService {
   final StockfishPool _pool = StockfishPool.instance;
   final EvalCache _evalCache = EvalCache.instance;
 
-  /// Wall-clock budget per leaf expectimax build; enforced via the build's
-  /// own isCancelled hook so the builder unwinds cleanly instead of being
+  /// At most this many trick candidates per position enter the probe pool,
+  /// so one hot position cannot eat the whole probe budget. An in-tree move
+  /// inside the window is always kept in addition.
+  static const int _maxCandidatesPerNode = 3;
+
+  /// Wall-clock budget per probe build; enforced via the build's own
+  /// isCancelled hook so the builder unwinds cleanly instead of being
   /// orphaned by a thrown timeout.
-  static const Duration _trapBuildTimeout = Duration(seconds: 180);
+  static const Duration _probeTimeout = Duration(seconds: 60);
 
   /// Cooperative pause/cancel for the run in progress.
   final RunControl _control = RunControl();
 
-  /// True when the most recent hunt skipped the trap pass because Maia was
-  /// unavailable. Surfaced as a note in the report panel.
-  bool get trapPassSkipped => _trapPassSkipped;
-  bool _trapPassSkipped = false;
+  /// True when the most recent hunt skipped the trick probes because Maia
+  /// was unavailable. Surfaced as a note in the report panel.
+  bool get probesSkipped => _probesSkipped;
+  bool _probesSkipped = false;
+
+  /// Trick candidates the most recent hunt collected, before the probe
+  /// budget was applied.
+  @visibleForTesting
+  int get lastCandidateCount => _lastCandidateCount;
+  int _lastCandidateCount = 0;
 
   void cancel() => _control.cancel();
   void pause() => _control.pause();
@@ -117,11 +136,20 @@ class HoleHuntService {
     void Function(AuditFinding)? onFinding,
   }) async {
     _control.reset();
-    _trapPassSkipped = false;
+    _probesSkipped = false;
+    _lastCandidateCount = 0;
     final stopwatch = Stopwatch()..start();
     final findings = <AuditFinding>[];
-    final leaves = <LeafEntry>[];
     final attackerIsWhite = !isWhiteRepertoire;
+    final wantTricks = config.probeBudget > 0;
+
+    // Trick targets, deduplicated across transpositions: a position reached
+    // twice sums its reach onto the first-seen representative.
+    final targetsByFen = <String, TrickTarget>{};
+    // Attacker-to-move leaves, discovered after the walk under the probe
+    // budget rather than one by one inside it.
+    final leafTargets = <TrickTarget>[];
+    final candidates = <TrickCandidate>[];
 
     int attackerNodes = 0;
     int ownerNodes = 0;
@@ -134,6 +162,24 @@ class HoleHuntService {
     void emit(AuditFinding f) {
       findings.add(f);
       onFinding?.call(f);
+    }
+
+    /// The trick target for [node], or null when the position was already
+    /// seen (its reach has been added to the existing target).
+    TrickTarget? newTarget(OpeningTreeNode node, _HuntQueueEntry entry) {
+      final key = normalizeFen(node.fen);
+      final existing = targetsByFen[key];
+      if (existing != null) {
+        existing.reach = (existing.reach + entry.cumProb).clamp(0.0, 1.0);
+        return null;
+      }
+      final target = TrickTarget(
+        node: node,
+        movePath: entry.movePath,
+        reach: entry.cumProb,
+      );
+      targetsByFen[key] = target;
+      return target;
     }
 
     // ── Pass 1: BFS walk ─────────────────────────────────────────────────
@@ -162,8 +208,8 @@ class HoleHuntService {
         onProgress?.call(
           HoleHuntProgress(
             phase: HoleHuntPhase.walking,
-            nodesChecked: checked,
-            totalNodes: totalNodes,
+            done: checked,
+            total: totalNodes,
             findingsCount: findings.length,
           ),
         );
@@ -174,13 +220,10 @@ class HoleHuntService {
 
       if (node.children.isEmpty) {
         leafNodes++;
-        leaves.add(
-          LeafEntry(
-            fen: node.fen,
-            movePath: entry.movePath,
-            cumProb: entry.cumProb,
-          ),
-        );
+        if (wantTricks && !isOwnerTurn) {
+          final target = newTarget(node, entry);
+          if (target != null) leafTargets.add(target);
+        }
         continue;
       }
 
@@ -197,13 +240,15 @@ class HoleHuntService {
         evalCacheMisses += misses;
       } else {
         attackerNodes++;
-        await _checkAttackerCoverage(
+        await _checkAttackerNode(
           node: node,
           entry: entry,
           attackerIsWhite: attackerIsWhite,
           tree: tree,
           config: config,
           emit: emit,
+          target: wantTricks ? newTarget(node, entry) : null,
+          candidates: candidates,
         );
       }
 
@@ -230,16 +275,35 @@ class HoleHuntService {
       }
     }
 
-    // ── Pass 2: leaf expectimax (practical traps) ────────────────────────
-    if (!_control.isCancelled) {
-      await _trapPass(
-        leaves: leaves,
-        attackerIsWhite: attackerIsWhite,
-        config: config,
-        findingsCount: () => findings.length,
-        onProgress: onProgress,
-        emit: emit,
-      );
+    // ── Pass 2: trick search — leaf discovery, then expectimax probes ────
+    final haveTrickWork = leafTargets.isNotEmpty || candidates.isNotEmpty;
+    if (wantTricks && haveTrickWork && !_control.isCancelled) {
+      // Every probe is a Maia expectimax build, so settle the model before
+      // spending any more engine time.
+      if (!await _ensureMaia()) {
+        _probesSkipped = true;
+      } else {
+        await _discoverLeaves(
+          leaves: leafTargets,
+          attackerIsWhite: attackerIsWhite,
+          config: config,
+          candidates: candidates,
+          findingsCount: () => findings.length,
+          onProgress: onProgress,
+        );
+        _lastCandidateCount = candidates.length;
+        if (!_control.isCancelled) {
+          await _probePass(
+            candidates: candidates,
+            tree: tree,
+            attackerIsWhite: attackerIsWhite,
+            config: config,
+            findingsCount: () => findings.length,
+            onProgress: onProgress,
+            emit: emit,
+          );
+        }
+      }
     }
 
     stopwatch.stop();
@@ -247,11 +311,9 @@ class HoleHuntService {
     final ranked = rankByExploitScore(findings);
     onProgress?.call(
       HoleHuntProgress(
-        phase: HoleHuntPhase.traps,
-        nodesChecked: checked,
-        totalNodes: totalNodes,
-        leavesDone: 1,
-        leavesTotal: 1,
+        phase: HoleHuntPhase.probing,
+        done: 1,
+        total: 1,
         findingsCount: ranked.length,
       ),
     );
@@ -268,41 +330,69 @@ class HoleHuntService {
     );
   }
 
-  // ── Attacker coverage: strong moves the file has no reply to ──────────
+  // ── Discovery ──────────────────────────────────────────────────────────
 
-  Future<void> _checkAttackerCoverage({
+  /// MultiPV lines at [fen] in engine order, SAN-resolved, with the best
+  /// line's eval cached White-normalised. Empty when the engine had
+  /// nothing to say.
+  Future<List<DiscoveredCandidate>> _discover(
+    String fen,
+    HoleHuntConfig config,
+  ) async {
+    final discovery = await _pool.discoverMoves(
+      fen: fen,
+      depth: config.discoveryDepth,
+      multiPv: config.discoveryMultiPv,
+      isWhiteToMove: isWhiteToMove(fen),
+    );
+    if (discovery.lines.isEmpty) return const [];
+
+    _evalCache.putEvalCpWhiteSoon(
+      fen,
+      discovery.lines.first.effectiveCp,
+      config.discoveryDepth,
+    );
+
+    final lines = <DiscoveredCandidate>[];
+    for (final line in discovery.lines) {
+      final san = chess_utils.uciToSanOrNull(fen, line.moveUci);
+      if (san == null) continue;
+      lines.add(
+        DiscoveredCandidate(
+          uci: line.moveUci,
+          san: san,
+          whiteCp: line.effectiveCp,
+        ),
+      );
+    }
+    return lines;
+  }
+
+  // ── Attacker nodes: uncovered strong moves + trick candidates ──────────
+
+  Future<void> _checkAttackerNode({
     required OpeningTreeNode node,
     required _HuntQueueEntry entry,
     required bool attackerIsWhite,
     required OpeningTree tree,
     required HoleHuntConfig config,
     required void Function(AuditFinding) emit,
+    required TrickTarget? target,
+    required List<TrickCandidate> candidates,
   }) async {
     try {
-      final discovery = await _pool.discoverMoves(
-        fen: node.fen,
-        depth: config.discoveryDepth,
-        multiPv: config.discoveryMultiPv,
-        isWhiteToMove: isWhiteToMove(node.fen),
-      );
-      if (discovery.lines.isEmpty) return;
+      final lines = await _discover(node.fen, config);
+      if (lines.isEmpty) return;
 
       int toAttacker(int whiteCp) => attackerIsWhite ? whiteCp : -whiteCp;
 
-      final bestWhiteCp = discovery.lines.first.effectiveCp;
+      final bestWhiteCp = lines.first.whiteCp;
       final bestAttackerCp = toAttacker(bestWhiteCp);
-      _evalCache.putEvalCpWhiteSoon(
-        node.fen,
-        bestWhiteCp,
-        config.discoveryDepth,
-      );
 
-      for (final line in discovery.lines) {
-        final san = chess_utils.uciToSanOrNull(node.fen, line.moveUci);
-        if (san == null) continue;
-        if (node.children.containsKey(san)) continue; // covered
+      for (final line in lines) {
+        if (node.children.containsKey(line.san)) continue; // covered
 
-        final attackerCp = toAttacker(line.effectiveCp);
+        final attackerCp = toAttacker(line.whiteCp);
         if (bestAttackerCp - attackerCp > config.strongMoveWindowCp) continue;
         if (attackerCp < config.uncoveredMinAdvantageCp) continue;
 
@@ -317,15 +407,31 @@ class HoleHuntService {
                       : AuditSeverity.info),
             movePath: entry.movePath,
             fen: node.fen,
-            missingMove: san,
-            positionEvalCp: line.effectiveCp,
+            missingMove: line.san,
+            positionEvalCp: line.whiteCp,
             bestMoveEvalCp: bestWhiteCp,
             cumulativeProbability: entry.cumProb,
-            transposesIntoRepertoire: tree.doesMoveTranspose(node.fen, san),
+            transposesIntoRepertoire: tree.doesMoveTranspose(
+              node.fen,
+              line.san,
+            ),
             exploitScore: exploitScoreOf(
               cumProb: entry.cumProb,
               gainCp: gainCp,
             ),
+          ),
+        );
+      }
+
+      if (target != null) {
+        candidates.addAll(
+          selectCandidates(
+            target: target,
+            lines: lines,
+            inTreeSans: node.children.keys.toSet(),
+            attackerIsWhite: attackerIsWhite,
+            windowCp: config.candidateWindowCp,
+            maxPerNode: _maxCandidatesPerNode,
           ),
         );
       }
@@ -349,25 +455,12 @@ class HoleHuntService {
     int cacheHits = 0;
     int cacheMisses = 0;
     try {
-      final discovery = await _pool.discoverMoves(
-        fen: node.fen,
-        depth: config.discoveryDepth,
-        multiPv: config.discoveryMultiPv,
-        isWhiteToMove: isWhiteToMove(node.fen),
-      );
+      final lines = await _discover(node.fen, config);
       cacheMisses++;
-      if (discovery.lines.isEmpty) return (cacheHits, cacheMisses);
+      if (lines.isEmpty) return (cacheHits, cacheMisses);
 
-      final bestWhiteCp = discovery.lines.first.effectiveCp;
-      final bestSan = chess_utils.uciToSanOrNull(
-        node.fen,
-        discovery.lines.first.moveUci,
-      );
-      _evalCache.putEvalCpWhiteSoon(
-        node.fen,
-        bestWhiteCp,
-        config.discoveryDepth,
-      );
+      final bestWhiteCp = lines.first.whiteCp;
+      final bestSan = lines.first.san;
 
       int ownerLossOf(int whiteCp) =>
           isWhiteRepertoire ? bestWhiteCp - whiteCp : whiteCp - bestWhiteCp;
@@ -378,9 +471,9 @@ class HoleHuntService {
         if (repUci == null) continue;
 
         int? repWhiteCp;
-        for (final line in discovery.lines) {
-          if (line.moveUci == repUci) {
-            repWhiteCp = line.effectiveCp;
+        for (final line in lines) {
+          if (line.uci == repUci) {
+            repWhiteCp = line.whiteCp;
             break;
           }
         }
@@ -453,58 +546,98 @@ class HoleHuntService {
     return (cacheHits, cacheMisses);
   }
 
-  // ── Trap pass: expectimax the top leaves ───────────────────────────────
+  // ── Leaf discovery: candidates past the recorded games ─────────────────
 
-  Future<void> _trapPass({
-    required List<LeafEntry> leaves,
+  Future<void> _discoverLeaves({
+    required List<TrickTarget> leaves,
+    required bool attackerIsWhite,
+    required HoleHuntConfig config,
+    required List<TrickCandidate> candidates,
+    required int Function() findingsCount,
+    required HoleHuntProgressCallback? onProgress,
+  }) async {
+    final selected = selectTopTargets(leaves, config.probeBudget);
+    for (var i = 0; i < selected.length; i++) {
+      onProgress?.call(
+        HoleHuntProgress(
+          phase: HoleHuntPhase.leaves,
+          done: i,
+          total: selected.length,
+          findingsCount: findingsCount(),
+        ),
+      );
+      if (!await _control.checkpoint()) return;
+
+      final target = selected[i];
+      try {
+        final lines = await _discover(target.fen, config);
+        candidates.addAll(
+          selectCandidates(
+            target: target,
+            lines: lines,
+            inTreeSans: const {},
+            attackerIsWhite: attackerIsWhite,
+            windowCp: config.candidateWindowCp,
+            maxPerNode: _maxCandidatesPerNode,
+          ),
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[HoleHunt] Leaf discovery failed at ${target.fen}: $e');
+        }
+      }
+    }
+  }
+
+  // ── Probe pass: expectimax the best candidates ─────────────────────────
+
+  Future<void> _probePass({
+    required List<TrickCandidate> candidates,
+    required OpeningTree tree,
     required bool attackerIsWhite,
     required HoleHuntConfig config,
     required int Function() findingsCount,
     required HoleHuntProgressCallback? onProgress,
     required void Function(AuditFinding) emit,
   }) async {
-    if (config.trapLeafCount <= 0 || leaves.isEmpty) return;
+    final selected = selectProbeCandidates(
+      candidates,
+      budget: config.probeBudget,
+      windowCp: config.candidateWindowCp,
+    );
+    if (selected.isEmpty) return;
 
-    if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
-      _trapPassSkipped = true;
-      debugPrint('[HoleHunt] Trap pass skipped — Maia unavailable');
-      return;
-    }
-    try {
-      await MaiaFactory.instance!.initialize();
-    } catch (e) {
-      _trapPassSkipped = true;
-      debugPrint('[HoleHunt] Trap pass skipped — Maia init failed: $e');
-      return;
-    }
-
-    final selected = selectTopLeaves(leaves, config.trapLeafCount);
     final buildService = TreeBuildService();
 
     for (var i = 0; i < selected.length; i++) {
-      if (!await _control.checkpoint()) return;
-
       onProgress?.call(
         HoleHuntProgress(
-          phase: HoleHuntPhase.traps,
-          leavesDone: i,
-          leavesTotal: selected.length,
+          phase: HoleHuntPhase.probing,
+          done: i,
+          total: selected.length,
           findingsCount: findingsCount(),
         ),
       );
+      if (!await _control.checkpoint()) return;
 
-      final leaf = selected[i];
+      final candidate = selected[i];
+      final postFen = chess_utils.playUciMove(
+        candidate.target.fen,
+        candidate.uci,
+      );
+      if (postFen == null) continue;
+
       final buildConfig = TreeBuildConfig(
-        startFen: leaf.fen,
+        startFen: postFen,
         playAsWhite: attackerIsWhite,
-        maxPly: config.trapSearchPly,
-        maxNodes: 800 * config.trapSearchPly,
+        maxPly: config.probePly,
+        maxNodes: 800 * config.probePly,
         buildMode: BuildMode.stockfishExpectimax,
         // 1 UCI thread per worker: parallelism comes from pool workers,
         // and >1 would reconfigure workers other features rely on.
         engineThreads: 1,
         minProbability: 0.02,
-        evalDepth: config.trapEvalDepth,
+        evalDepth: config.probeEvalDepth,
         maiaElo: config.maiaElo,
         ourMultipv: 4,
         oppMaxChildren: 4,
@@ -512,71 +645,102 @@ class HoleHuntService {
         // Tight node budget: keep it on depth, not opening breadth.
         openingWidthPlies: 0,
         verifyFinal: false,
-        // The defaults (0..200, root-anchored) prune attacker tries that
-        // merely hold the raw eval — exactly the moves a practical trap is
-        // made of. Widen the window; still root-anchored via relativeEval.
+        // The defaults (0..200, root-anchored) prune attacker follow-ups
+        // that merely hold the raw eval — exactly the moves a trick's
+        // punishment is made of. Widen; still root-anchored via relativeEval.
         minEvalCp: -200,
         maxEvalCp: 400,
       );
 
       try {
         final buildClock = Stopwatch()..start();
-        final tree = await buildService.build(
+        final probeTree = await buildService.build(
           config: buildConfig,
           isCancelled: () =>
-              _control.isCancelled || buildClock.elapsed > _trapBuildTimeout,
+              _control.isCancelled || buildClock.elapsed > _probeTimeout,
           onProgress: (_) {},
         );
         if (_control.isCancelled) return;
-        if (tree.root.children.isEmpty) continue;
+        if (probeTree.root.children.isEmpty) continue;
 
-        final fenMap = FenMap()..populate(tree.root);
+        final fenMap = FenMap()..populate(probeTree.root);
         final eca = ExpectimaxCalculator(config: buildConfig, fenMap: fenMap);
-        eca.calculate(tree);
-        calculateTreeEase(tree);
+        eca.calculate(probeTree);
+        calculateTreeEase(probeTree);
 
         final lines = generateExpectimaxLines(
-          tree.root,
+          probeTree.root,
           buildConfig,
           eca,
           topLines: 1,
-          maxPlies: config.trapSearchPly,
+          maxPlies: config.probePly,
           fenMap: fenMap,
         );
-        if (lines.isEmpty) continue;
 
-        final top = lines.first;
-        final rawCp = top.evalCp;
-        final gap = top.expectedEvalCp - (rawCp ?? top.expectedEvalCp);
-        if (gap < config.practicalGapThresholdCp) continue;
+        // Practical value from the probe ROOT: probability-weighted over
+        // all opponent replies plus the uncovered-mass tail — the top line
+        // alone reflects only the most probable reply and overstates
+        // tricks whose punished reply is the popular one.
+        final int probeExpectedCp;
+        if (probeTree.root.hasExpectimax) {
+          probeExpectedCp = expectedCpFromWinProb(
+            probeTree.root.expectimaxValue,
+          );
+        } else if (lines.isNotEmpty) {
+          probeExpectedCp = lines.first.expectedEvalCp;
+        } else {
+          continue;
+        }
+
+        final metrics = candidate.metrics;
+        final netGain = metrics.netGainCp(probeExpectedCp);
+        if (netGain < config.minNetGainCp) continue;
 
         emit(
           AuditFinding(
-            type: AuditFindingType.practicalTrap,
-            severity: gap >= config.practicalGapThresholdCp * 2
+            type: AuditFindingType.trickyMove,
+            severity: netGain >= config.minNetGainCp * 2
                 ? AuditSeverity.critical
                 : AuditSeverity.warning,
-            movePath: leaf.movePath,
-            fen: leaf.fen,
-            positionEvalCp: rawCp,
-            expectedEvalCp: top.expectedEvalCp,
-            practicalGapCp: gap,
-            oppEase: _trapOppEase(tree, attackerIsWhite, top),
-            exploitLine: top.movesSan,
-            cumulativeProbability: leaf.cumProb,
-            exploitScore: exploitScoreOf(cumProb: leaf.cumProb, gainCp: gap),
+            movePath: candidate.target.movePath,
+            fen: candidate.target.fen,
+            ourMove: candidate.san,
+            // Only novelties get missingMove: it is what enables the
+            // ephemeral board preview of a move the tree does not have.
+            missingMove: candidate.isNovelty ? candidate.san : null,
+            bestMove: candidate.bestSan,
+            evalLossCp: metrics.objectiveCostCp.clamp(0, 1 << 20),
+            positionEvalCp: _toWhite(metrics.candidateRawCp, attackerIsWhite),
+            bestMoveEvalCp: _toWhite(metrics.bestRawCp, attackerIsWhite),
+            expectedEvalCp: probeExpectedCp,
+            practicalGapCp: metrics.practicalGapCp(probeExpectedCp),
+            netGainCp: netGain,
+            oppEase: probeTree.root.ease,
+            isNovelty: candidate.isNovelty,
+            exploitLine: [
+              candidate.san,
+              if (lines.isNotEmpty) ...lines.first.movesSan,
+            ],
+            cumulativeProbability: candidate.target.reach,
+            transposesIntoRepertoire:
+                candidate.isNovelty &&
+                tree.doesMoveTranspose(candidate.target.fen, candidate.san),
+            exploitScore: exploitScoreOf(
+              cumProb: candidate.target.reach,
+              gainCp: netGain,
+            ),
           ),
         );
       } catch (e) {
-        debugPrint('[HoleHunt] Trap build failed at leaf ${leaf.fen}: $e');
+        debugPrint('[HoleHunt] Probe failed after ${candidate.san}: $e');
       }
     }
 
     onProgress?.call(
       HoleHuntProgress(
-        phase: HoleHuntPhase.traps,
-        leavesDone: selected.length,
-        leavesTotal: selected.length,
+        phase: HoleHuntPhase.probing,
+        done: selected.length,
+        total: selected.length,
         findingsCount: findingsCount(),
       ),
     );
@@ -584,22 +748,22 @@ class HoleHuntService {
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
-  /// Ease of the position where the repertoire OWNER is to move — ease is
-  /// the side-to-move's ease, so this is the "how likely are they to go
-  /// wrong" number. The trap-pass root when the owner moves there, else the
-  /// child after the attacker's first exploit move. Null when unset.
-  double? _trapOppEase(
-    BuildTree tree,
-    bool attackerIsWhite,
-    ExpectimaxLine top,
-  ) {
-    final root = tree.root;
-    if (root.isWhiteToMove != attackerIsWhite) return root.ease;
-    if (top.movesUci.isEmpty) return null;
-    for (final child in root.children) {
-      if (child.moveUci == top.movesUci.first) return child.ease;
+  /// Attacker-perspective cp back to White-normalized (its own inverse).
+  static int _toWhite(int attackerCp, bool attackerIsWhite) =>
+      attackerIsWhite ? attackerCp : -attackerCp;
+
+  Future<bool> _ensureMaia() async {
+    if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
+      debugPrint('[HoleHunt] Trick probes skipped — Maia unavailable');
+      return false;
     }
-    return null;
+    try {
+      await MaiaFactory.instance!.initialize();
+      return true;
+    } catch (e) {
+      debugPrint('[HoleHunt] Trick probes skipped — Maia init failed: $e');
+      return false;
+    }
   }
 }
 

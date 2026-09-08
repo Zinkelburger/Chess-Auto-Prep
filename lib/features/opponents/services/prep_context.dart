@@ -44,7 +44,7 @@ class PrepContext {
   /// tournament's name). Null when the player is nobody in the directory.
   static PrepContext? resolve(OpponentStore store, AnalysisPlayerInfo player) {
     if (!store.isLoaded) return null;
-    final person = store.personForPlayerName(player.username);
+    final person = store.personForPlayer(player);
     if (person == null) return null;
     final group = player.group;
     final tournament = group == null ? null : store.tournamentNamed(group);

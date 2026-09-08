@@ -430,7 +430,7 @@ class _ChapterCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Material(
         color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
@@ -438,7 +438,7 @@ class _ChapterCard extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: EdgeInsets.fromLTRB(dense ? 12 : 16, 12, 8, 12),
+            padding: EdgeInsets.fromLTRB(dense ? 10 : 12, 7, 8, 7),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.divider),
@@ -454,10 +454,10 @@ class _ChapterCard extends StatelessWidget {
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       _ProgressStrip(counts: counts),
                     ],
                   ),
@@ -649,20 +649,18 @@ class _LineCard extends StatelessWidget {
                       color: AppColors.onSurfaceMuted,
                     ),
                   if (onExclude != null && line.readOnlyLabel == null)
-                    PopupMenuButton<bool>(
-                      tooltip: 'Line options',
-                      icon: const Icon(Icons.more_horiz, size: 18),
-                      onSelected: (_) => onExclude!(),
-                      itemBuilder: (_) => [
-                        PopupMenuItem(
-                          value: true,
-                          child: Text(
-                            (entry?.excluded ?? false)
-                                ? 'Include in training'
-                                : 'Exclude from training',
-                          ),
-                        ),
-                      ],
+                    IconButton(
+                      tooltip: (entry?.excluded ?? false)
+                          ? 'Include in training'
+                          : 'Exclude from training',
+                      icon: Icon(
+                        (entry?.excluded ?? false)
+                            ? Icons.undo
+                            : Icons.playlist_remove,
+                        size: 18,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onExclude,
                     ),
                   const SizedBox(width: 2),
                   _ActionPill(

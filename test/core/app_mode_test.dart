@@ -21,5 +21,6 @@ void main() {
     expect(labels.toSet().length, labels.length);
     expect(AppMode.engineTournament.label, 'Engine tournament');
     expect(AppMode.databases.label, 'Databases');
+    expect(AppMode.pgnViewer.label, 'PGN Viewer');
   });
 }

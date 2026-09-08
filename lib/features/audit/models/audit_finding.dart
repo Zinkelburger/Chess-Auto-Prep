@@ -11,13 +11,10 @@ enum AuditFindingType {
   deadEnd,
 
   // Hole-hunt (adversarial) finding types — emitted by HoleHuntService,
-  // never by the defensive audit.
+  // never by the defensive audit. trickyMove is a near-best (or novelty)
+  // attacker move that scores better in practice than the engine-best move.
   uncoveredStrongMove,
   refutation,
-  practicalTrap,
-
-  // Trick-hunt finding type — emitted by TrickHuntService: a near-best (or
-  // novelty) move that scores better in practice than the engine-best move.
   trickyMove,
 }
 
@@ -87,14 +84,14 @@ class AuditFinding {
   /// elsewhere in the repertoire (the resulting FEN exists in the tree).
   final bool transposesIntoRepertoire;
 
-  /// For Refutation/PracticalTrap: the concrete line to play (SAN).
+  /// For Refutation/TrickyMove: the concrete line to play (SAN).
   final List<String>? exploitLine;
 
-  /// For PracticalTrap: expectimax practical eval (attacker perspective, cp).
+  /// For TrickyMove: expectimax practical eval (attacker perspective, cp).
   final int? expectedEvalCp;
 
-  /// For PracticalTrap: expectedEvalCp minus raw engine eval (cp) — how much
-  /// harder the position plays than it "should".
+  /// For TrickyMove: expectedEvalCp minus the candidate's raw engine eval
+  /// (cp) — how much harder the position plays than it "should".
   final int? practicalGapCp;
 
   /// For TrickyMove: probe practical eval minus the engine-best move's raw
@@ -102,7 +99,7 @@ class AuditFinding {
   /// expectation over just playing the best move.
   final int? netGainCp;
 
-  /// For PracticalTrap/TrickyMove: the opponent's ease in the probed
+  /// For TrickyMove: the opponent's ease in the probed
   /// position (0..1, app-wide ease formula). Low = many plausible ways to
   /// go wrong.
   final double? oppEase;
@@ -219,13 +216,6 @@ class AuditFinding {
             ? ' — ${line.join(" ")}'
             : '';
         return 'Refuted: $numbered loses ${evalLossCp}cp$lineTag';
-      case AuditFindingType.practicalTrap:
-        final line = exploitLine;
-        final lineTag = line != null && line.isNotEmpty
-            ? ' (${line.take(6).join(" ")})'
-            : '';
-        return 'Trap zone: practically +${practicalGapCp}cp over the raw eval'
-            '$lineTag';
       case AuditFindingType.trickyMove:
         final move = ourMove ?? '?';
         final numbered = _sanWithMoveNumber(move, movePath.length);

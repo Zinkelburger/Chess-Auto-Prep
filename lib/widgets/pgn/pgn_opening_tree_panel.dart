@@ -14,8 +14,6 @@ import 'package:flutter/material.dart';
 import '../../core/pgn_viewer_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
-import '../../utils/app_shortcuts.dart';
-import '../shortcut_tooltip.dart';
 import '../game_nav_item.dart';
 import '../game_search_dialog.dart';
 import '../layout/edit_context_split_handle.dart';
@@ -51,15 +49,6 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
           ),
           child: Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, size: 20),
-                onPressed: controller.toggleOpeningTree,
-                tooltip: actionTooltip(
-                  'Back to Game/Analysis',
-                  shortcut: AppShortcut.toggleOpeningTree,
-                ),
-                visualDensity: VisualDensity.compact,
-              ),
               const SizedBox(width: 4),
               Text(
                 'Opening Tree',
@@ -94,6 +83,44 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
                     ],
                   ),
                 ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            children: [
+              Text(
+                '${controller.filteredGames.length} games in this collection',
+                style: AppTextStyles.caption,
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Checkbox(
+                    value: controller.treeIncludeVariations,
+                    onChanged: (v) => controller.setTreeIncludeVariations(v!),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  GestureDetector(
+                    onTap: () => controller.setTreeIncludeVariations(
+                      !controller.treeIncludeVariations,
+                    ),
+                    child: const Text(
+                      'Include variations',
+                      style: AppTextStyles.muted,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                controller.treeIncludeVariations
+                    ? 'Counts include separate variation paths.'
+                    : 'One mainline per game.',
+                style: AppTextStyles.caption,
+              ),
             ],
           ),
         ),

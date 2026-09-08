@@ -28,7 +28,6 @@ import '../widgets/master_games_prompt_banner.dart';
 import '../features/coverage/widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
 import '../services/storage/storage_factory.dart';
-import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
 import '../features/generate/widgets/generate_position_pane.dart';
@@ -41,7 +40,7 @@ import '../widgets/repertoire_list_body.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';
 import '../features/repertoire/models/repertoire_reload_summary.dart';
-import '../features/repertoire/widgets/repertoire_options_dialog.dart';
+import '../features/repertoire/widgets/repertoire_settings_body.dart';
 import '../features/repertoire/widgets/repertoire_reload_dialog.dart';
 import '../features/repertoire/widgets/repertoire_toolbar.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -966,10 +965,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       return Scaffold(
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
-          onOpenSettings: () async {
-            await openAppSettings(context);
-            _reclaimFocus();
-          },
+          onSettingsClosed: _reclaimFocus,
         ),
         body: const Center(
           child: Column(
@@ -990,10 +986,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
           showSelectRepertoireAction: true,
-          onOpenSettings: () async {
-            await openAppSettings(context);
-            _reclaimFocus();
-          },
+          onSettingsClosed: _reclaimFocus,
           onSelectRepertoire: _showRepertoireSelection,
         ),
         body: Center(
@@ -1027,10 +1020,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
           showSelectRepertoireAction: true,
-          onOpenSettings: () async {
-            await openAppSettings(context);
-            _reclaimFocus();
-          },
+          onSettingsClosed: _reclaimFocus,
           onSelectRepertoire: _showRepertoireSelection,
         ),
         body: RepertoireListBody(
@@ -1064,10 +1054,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         showTrainAction: true,
         showSelectRepertoireAction: true,
         generationLocked: _generationController.isGenerating,
-        onOpenSettings: () async {
-          await openAppSettings(context);
-          _reclaimFocus();
-        },
+        onSettingsClosed: _reclaimFocus,
         onSelectRepertoire: _showRepertoireSelection,
         onTrainRepertoire: _trainRepertoire,
         onOpenGeneration: _openGenerateTab,
@@ -1075,9 +1062,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onOpenAudit: _openAuditDialog,
         onImportPgn: _importPgn,
         trapNavigation: _buildTrapNavigation(),
-        isWhiteRepertoire: _controller.isRepertoireWhite,
-        onOpenRepertoireOptions: () => showRepertoireOptionsDialog(
-          context: context,
+        repertoireSettingsBuilder: (_) => RepertoireSettingsBody(
           isWhiteRepertoire: _controller.isRepertoireWhite,
           sideChangeEnabled: !_generationController.isGenerating,
           onSideChanged: (isWhite) => _controller.setRepertoireColor(isWhite),

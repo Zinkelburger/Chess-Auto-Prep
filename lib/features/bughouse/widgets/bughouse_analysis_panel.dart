@@ -121,7 +121,7 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel>
             padding: EdgeInsets.zero,
             children: switch (_tab) {
               1 => [_TableRules(controller: controller)],
-              2 => [_EngineSection(controller: controller)],
+              2 => [BughouseEngineSettingsSection(controller: controller)],
               _ => [
                 if (controller.isComparing ||
                     controller.scenarios.isNotEmpty) ...[
@@ -711,8 +711,8 @@ class _TableRules extends StatelessWidget {
   }
 }
 
-class _EngineSection extends StatelessWidget {
-  const _EngineSection({required this.controller});
+class BughouseEngineSettingsSection extends StatelessWidget {
+  const BughouseEngineSettingsSection({super.key, required this.controller});
   final BughouseController controller;
 
   @override
@@ -898,19 +898,23 @@ class _BannerState extends State<_Banner> {
           ],
           if (details != null) ...[
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 CopyButton(
                   key: const Key('bughouse-copy-diagnostics'),
-                  label: 'Copy diagnostics',
+                  label: 'Copy full report',
                   foreground: foreground,
                   dense: true,
-                  text: () => '${widget.message}\n\n$details',
+                  text: () => details,
                 ),
                 const SizedBox(width: 4),
                 TextButton(
                   key: const Key('bughouse-toggle-diagnostics'),
-                  onPressed: () => setState(() => _expanded = !_expanded),
+                  onPressed: () {
+                    if (!mounted) return;
+                    setState(() => _expanded = !_expanded);
+                  },
                   style: TextButton.styleFrom(
                     foregroundColor: foreground,
                     padding: const EdgeInsets.symmetric(
@@ -928,8 +932,7 @@ class _BannerState extends State<_Banner> {
               ],
             ),
             Text(
-              'Send this to whoever is looking at the bug — it names every '
-              'file, its size and where the engine looked for it.',
+              'Copy and send the full report, including END BUGHOUSE DIAGNOSTICS.',
               style: AppTextStyles.caption.copyWith(
                 color: foreground.withValues(alpha: 0.75),
               ),

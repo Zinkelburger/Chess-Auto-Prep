@@ -3,7 +3,8 @@
 Line coverage answers "did this line run in the suite?". It does not answer the
 question you actually care about: **would anything fail if this line were
 wrong?** Those come apart badly. When this was first run here, three files at
-100% line coverage scored 100%, 78% and 56% — the last one, `trick_scoring.dart`,
+100% line coverage scored 100%, 78% and 56% — the last one, the trick scoring
+helpers (now part of `hole_scoring.dart`),
 had nearly half its logic executed by the suite and defended by none of it.
 
 `scripts/mutation_test.py` makes a small semantic change to a source file (a

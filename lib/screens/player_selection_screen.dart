@@ -108,6 +108,10 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       appBar: AppBar(
         title: const Text('Which player?'),
         actions: [
+          TextButton(
+            onPressed: _openTournaments,
+            child: const Text('Players & groups'),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: AddPlayerButton(onSelected: _addPlayerFrom),
@@ -330,29 +334,12 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     }
   }
 
-  /// Download again with a different range. A multi-account opponent has no
-  /// single platform/username to edit, so it is asked only for the range.
+  /// Download again with a different range or time controls. Site and
+  /// username are fixed: a multi-account opponent has no single one to edit.
   Future<void> _changeRange(AnalysisPlayerInfo player) async {
-    if (player.accounts.isNotEmpty) {
-      final months = await _askMonths(player);
-      if (months == null || !mounted) return;
-      await _download(player.copyWith(monthsBack: months));
-      return;
-    }
-
-    final appState = context.read<AppState>();
     final config = await showDialog<AnalysisPlayerInfo>(
       context: context,
-      builder: (_) => AnalysisDownloadDialog(
-        chesscomUsername: player.platform == 'chesscom'
-            ? player.username
-            : appState.chesscomUsername,
-        lichessUsername: player.platform == 'lichess'
-            ? player.username
-            : appState.lichessUsername,
-        initialPlatform: player.platform,
-        initialSpeeds: player.speeds,
-      ),
+      builder: (_) => AnalysisDownloadDialog(player: player),
     );
     if (config == null || !mounted) return;
     await _download(config);
@@ -383,43 +370,6 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     if (confirmed != true) return;
     await _gamesService.deletePlayerData(player.platform, player.username);
     await _loadCachedPlayers();
-  }
-
-  /// Ask for a month range for a multi-account opponent. Null on cancel.
-  Future<int?> _askMonths(AnalysisPlayerInfo player) async {
-    final controller = TextEditingController(text: '${player.monthsBack ?? 6}');
-    try {
-      return await showDialog<int>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text('Download ${player.displayName} again'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: 'Months of games, per account',
-              helperText: player.accounts.map((a) => a.username).join(', '),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final n = int.tryParse(controller.text.trim());
-                if (n != null && n > 0) Navigator.of(ctx).pop(n);
-              },
-              child: const Text('Download'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      controller.dispose();
-    }
   }
 }
 
@@ -470,7 +420,7 @@ class _PlayerTile extends StatelessWidget {
           style: const TextStyle(color: AppColors.onSurfaceMuted),
         ),
         trailing: PopupMenuButton<_PlayerAction>(
-          tooltip: 'More actions',
+          tooltip: 'Player actions',
           onSelected: onAction,
           itemBuilder: (_) => [
             // PGN-file imports have no source to fetch fresh games from.
@@ -504,6 +454,13 @@ class _PlayerTile extends StatelessWidget {
               ),
             ),
           ],
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Actions', style: TextStyle(fontSize: 13)),
+              Icon(Icons.arrow_drop_down, size: 18),
+            ],
+          ),
         ),
       ),
     );

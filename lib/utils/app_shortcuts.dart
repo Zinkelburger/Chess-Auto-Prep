@@ -174,9 +174,6 @@ class AppShortcut {
   static const toggleLinesPanel = AppShortcut([
     KeyChord(LogicalKeyboardKey.keyL),
   ]);
-  static const toggleOpeningTree = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyT),
-  ]);
   static const nextTab = AppShortcut([KeyChord(LogicalKeyboardKey.tab)]);
 
   static const fullScreen = AppShortcut([
@@ -202,11 +199,6 @@ class AppShortcut {
   /// claimed that key; `S` is the queue, on every screen, and one meaning per
   /// key is worth more than the mnemonic.)
   static const searchGames = AppShortcut([KeyChord(LogicalKeyboardKey.slash)]);
-
-  static const solitaire = AppShortcut([
-    KeyChord(LogicalKeyboardKey.keyS, control: true),
-    KeyChord(LogicalKeyboardKey.keyS, shift: true),
-  ]);
 
   static const revealMove = AppShortcut([KeyChord(LogicalKeyboardKey.keyR)]);
 
@@ -296,7 +288,6 @@ class AppShortcut {
     toggleEngine,
     toggleExpectimax,
     toggleLinesPanel,
-    toggleOpeningTree,
     nextTab,
     fullScreen,
     leave,
@@ -305,7 +296,6 @@ class AppShortcut {
     amendGame,
     goToGameNumber,
     searchGames,
-    solitaire,
     revealMove,
     hintMove,
     pastePgn,

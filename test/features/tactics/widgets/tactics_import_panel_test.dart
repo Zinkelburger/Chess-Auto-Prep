@@ -7,6 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/widgets/app_settings_button.dart';
+import 'package:chess_auto_prep/widgets/settings/settings_navigation.dart';
+import 'package:chess_auto_prep/features/tactics/widgets/tactics_session_settings_form.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/features/tactics/controllers/tactics_session_controller.dart';
@@ -59,6 +62,29 @@ void main() {
         ],
         child: MaterialApp(
           home: Scaffold(
+            appBar: AppBar(
+              actions: [
+                AppSettingsButton(
+                  mode: AppMode.tactics,
+                  contentBuilder: (context) => ListenableBuilder(
+                    listenable: session,
+                    builder: (context, _) => ListView(
+                      padding: const EdgeInsets.all(24),
+                      children: [
+                        TacticsSessionSettingsForm(
+                          settings: session.sessionSettings,
+                          showCustomType: true,
+                          section: SettingsChapterScope.maybeOf(context) == 0
+                              ? TacticsSettingsSection.session
+                              : TacticsSettingsSection.selection,
+                          onChanged: session.setSessionSettings,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
             body: SingleChildScrollView(
               child: TacticsImportPanel(
                 isImporting: isImporting,
@@ -159,7 +185,7 @@ void main() {
 
     await tester.enterText(find.byKey(field), '30');
     await tester.pump();
-    await tester.tap(find.textContaining('Apply ('));
+    await tester.tap(find.byTooltip('Close settings (Esc)'));
     await tester.pumpAndSettle();
 
     expect(session.sessionSettings.maxAgeDays, 30);
@@ -187,7 +213,7 @@ void main() {
       reason: 'a number that governs nothing should not be typeable',
     );
 
-    await tester.tap(find.textContaining('Apply ('));
+    await tester.tap(find.byTooltip('Close settings (Esc)'));
     await tester.pumpAndSettle();
     expect(session.sessionSettings.maxAgeDays, isNull);
   });
@@ -209,7 +235,7 @@ void main() {
     await tester.pump();
     await tester.enterText(find.byKey(field), '');
     await tester.pump();
-    await tester.tap(find.textContaining('Apply ('));
+    await tester.tap(find.byTooltip('Close settings (Esc)'));
     await tester.pumpAndSettle();
 
     expect(

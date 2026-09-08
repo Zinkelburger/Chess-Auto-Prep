@@ -201,13 +201,14 @@ void main() {
     const fen =
         'r1bqkbnr/pp1ppp1p/2n3p1/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 1 5';
 
-    test('hides the FEN and anchors the following run to it', () {
+    test('preserves a diagram and anchors the following run to it', () {
       final tokens = parseCommentTokens(
         'The next part is about more normal Dragon play after $fen\n'
         '5.Nc3\nBg7\n6.Be3',
       );
 
-      // FEN itself is never emitted as a token.
+      // FEN is a diagram token, never raw prose.
+      expect(tokens.whereType<CommentDiagram>().single.fen, fen);
       expect(
         tokens.whereType<CommentProse>().any((p) => p.text.contains('/')),
         false,

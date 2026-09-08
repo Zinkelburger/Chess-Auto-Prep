@@ -254,3 +254,13 @@ class PlayerAccount {
   @override
   String toString() => '$platform:$username';
 }
+
+/// User-entered account cells accept commas, semicolons, or line breaks.
+List<String> accountNames(String? value) {
+  final seen = <String>{};
+  return [
+    for (final part in (value ?? '').split(RegExp(r'[,;\s]+')))
+      if (part.trim().isNotEmpty && seen.add(part.trim().toLowerCase()))
+        part.trim(),
+  ];
+}

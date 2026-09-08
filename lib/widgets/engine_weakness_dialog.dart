@@ -7,11 +7,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../models/analysis_player_info.dart';
 import '../models/engine_settings.dart';
 import '../theme/app_colors.dart';
 import 'info_hint.dart';
-import 'labeled_toggle.dart';
 
 /// Settings returned by the config dialog.
 class EngineWeaknessConfig {
@@ -20,8 +18,6 @@ class EngineWeaknessConfig {
   final int whiteCp;
   final int blackCp;
   final int workers;
-  final bool redownload;
-  final int monthsBack;
 
   const EngineWeaknessConfig({
     required this.depth,
@@ -29,8 +25,6 @@ class EngineWeaknessConfig {
     required this.whiteCp,
     required this.blackCp,
     required this.workers,
-    this.redownload = false,
-    this.monthsBack = 6,
   });
 }
 
@@ -39,17 +33,11 @@ class EngineWeaknessConfig {
 const int _kDefaultDepth = 15;
 
 class EngineWeaknessConfigDialog extends StatefulWidget {
-  final AnalysisPlayerInfo? playerInfo;
-
   /// True when the player already has engine evals, i.e. this run replaces
   /// them. Only changes the wording of the header.
   final bool isReanalysis;
 
-  const EngineWeaknessConfigDialog({
-    super.key,
-    this.playerInfo,
-    this.isReanalysis = false,
-  });
+  const EngineWeaknessConfigDialog({super.key, this.isReanalysis = false});
 
   @override
   State<EngineWeaknessConfigDialog> createState() =>
@@ -63,15 +51,6 @@ class _EngineWeaknessConfigDialogState
   late final TextEditingController _whiteCpCtrl;
   late final TextEditingController _blackCpCtrl;
   late final TextEditingController _workersCtrl;
-  late final TextEditingController _monthsCtrl;
-
-  /// Freshness is what people almost always want when they re-run this, so
-  /// the fetch is opted *out* of, not into — but only where there is a source
-  /// to fetch from. PGN-file imports have none, and leaving it on there
-  /// would abort the run in [_redownloadGames].
-  late bool _redownload = _canRedownload;
-
-  bool get _canRedownload => widget.playerInfo?.canRedownload ?? false;
 
   @override
   void initState() {
@@ -82,9 +61,6 @@ class _EngineWeaknessConfigDialogState
     _whiteCpCtrl = TextEditingController(text: '-50');
     _blackCpCtrl = TextEditingController(text: '100');
     _workersCtrl = TextEditingController(text: '${settings.cores}');
-    _monthsCtrl = TextEditingController(
-      text: '${widget.playerInfo?.monthsBack ?? 6}',
-    );
   }
 
   @override
@@ -94,7 +70,6 @@ class _EngineWeaknessConfigDialogState
     _whiteCpCtrl.dispose();
     _blackCpCtrl.dispose();
     _workersCtrl.dispose();
-    _monthsCtrl.dispose();
     super.dispose();
   }
 
@@ -107,8 +82,6 @@ class _EngineWeaknessConfigDialogState
         blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
         workers:
             int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.cores,
-        redownload: _redownload,
-        monthsBack: int.tryParse(_monthsCtrl.text) ?? 6,
       ),
     );
   }
@@ -182,54 +155,6 @@ class _EngineWeaknessConfigDialogState
                   ),
                 ],
               ),
-              if (_canRedownload) ...[
-                const Divider(height: 24),
-                Row(
-                  children: [
-                    AppCheckbox(
-                      label:
-                          'Re-download from '
-                          '${widget.playerInfo!.platformDisplayName}',
-                      value: _redownload,
-                      onChanged: (v) => setState(() => _redownload = v),
-                    ),
-                    const SizedBox(width: 6),
-                    InfoHint(
-                      'Fetches this player\'s latest games from '
-                      '${widget.playerInfo!.platformDisplayName} and rebuilds\n'
-                      'the opening trees before the engine runs, so games played\n'
-                      'since the last download are included. Leave it off to\n'
-                      'analyze the games already on disk.',
-                    ),
-                    const SizedBox(width: 12),
-                    // Kept mounted and merely disabled when the box is off, so
-                    // ticking it doesn't shuffle the row.
-                    _field(
-                      'Months',
-                      _monthsCtrl,
-                      64,
-                      enabled: _redownload,
-                      hint:
-                          'How far back to fetch, in months. Larger ranges take\n'
-                          'longer to download and analyze. Used only when '
-                          're-downloading.',
-                    ),
-                  ],
-                ),
-                if (widget.playerInfo!.downloadedAt != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 48, top: 4),
-                    child: Text(
-                      'Last downloaded ${widget.playerInfo!.downloadTimeAgo}'
-                      ' · fetched ${widget.playerInfo!.rangeDescription}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceMuted,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-              ],
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -265,7 +190,7 @@ class _EngineWeaknessConfigDialogState
 
     return Row(
       children: [
-        const Icon(Icons.refresh, size: 28),
+        const Icon(Icons.memory, size: 28),
         const SizedBox(width: 12),
         Expanded(
           child: Column(

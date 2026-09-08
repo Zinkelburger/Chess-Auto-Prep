@@ -103,16 +103,24 @@ void main() {
     await search();
     await search(); // A second launch reuses the same installed files.
 
-    // Same-length corruption escaped the old size-only extraction check.
-    // Damage the network after both processes exit, then exercise the repair
-    // used by the failure reporter and start a real search again.
+    // Every new process verifies the same-size payload even after paths have
+    // been cached. No failed launch/manual repair step should be necessary.
     final model = File(BughouseBundle.modelPath!);
     final bytes = await model.readAsBytes();
     bytes[0] ^= 0xff;
     await model.writeAsBytes(bytes, flush: true);
-    final repair = await BughouseBundle.verifyAndRepair();
-    expect(repair.damaged, ['hivemind.onnx']);
     await search();
+    if (Platform.isWindows) {
+      final runtime = File(p.join(engineDir, 'msvcp140.dll'));
+      final runtimeBytes = await runtime.readAsBytes();
+      final originalHash = sha256.convert(runtimeBytes);
+      runtimeBytes[runtimeBytes.length ~/ 2] ^= 0xff;
+      await runtime.writeAsBytes(runtimeBytes, flush: true);
+      // The private archive must repair this without copying a loose DLL from
+      // the app directory or depending on the runner's central runtime.
+      await search();
+      expect(await sha256.bind(runtime.openRead()).first, originalHash);
+    }
   }, timeout: const Timeout(Duration(minutes: 5)));
   // One native process: launching separate integration executables in one
   // flutter test invocation can trigger the Windows single-instance handoff

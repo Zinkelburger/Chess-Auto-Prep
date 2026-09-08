@@ -12,7 +12,7 @@
 # are re-run against the third field before being reported, otherwise the score
 # is a lower bound and it sends people to write tests that already exist.
 lib/services/generation/tree_prune.dart|test/services/generation/tree_prune_test.dart|test/services/generation
-lib/features/tricks/services/trick_scoring.dart|test/features/tricks/trick_scoring_test.dart|test/features/tricks
+lib/features/holes/services/hole_scoring.dart|test/features/holes/hole_scoring_test.dart|test/features/holes
 lib/services/fp_growth.dart|test/services/fp_growth_test.dart|test/services/coherence_service_test.dart test/features/coverage
 lib/services/crosstable_builder.dart|test/features/engine_tournament/crosstable_builder_test.dart|test/features/engine_tournament
 lib/services/repertoire_pgn_text.dart|test/services/repertoire_pgn_text_test.dart|

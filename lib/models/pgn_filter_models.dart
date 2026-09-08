@@ -70,12 +70,35 @@ class HeaderFilterConfig {
         value: j['value'] as String? ?? '',
       );
 
-  String get chipLabel {
-    final modeStr = mode == MatchMode.contains
-        ? ''
-        : ' (${matchModeLabel(mode, numeric: isNumericField(field))})';
-    return '$field$modeStr: $value';
+  /// Readable condition prefix, shared by the editor and active chips.
+  /// Bounds remain inclusive, just as in the persisted matching modes.
+  String get conditionLabel {
+    if (field == 'Date') {
+      if (mode == MatchMode.after) return 'In or after';
+      if (mode == MatchMode.before) return 'In or before';
+    }
+    final subject = switch (field) {
+      'WhiteElo' => 'White rating',
+      'BlackElo' => 'Black rating',
+      'StudyRating' => 'Study rating',
+      'StudySummary' => 'Study summary',
+      'White' => 'White name',
+      'Black' => 'Black name',
+      kPlayerHeaderField => 'Player name',
+      _ => field,
+    };
+    final relation = switch (mode) {
+      MatchMode.contains => 'contains',
+      MatchMode.notContains => 'excludes',
+      MatchMode.exact => 'is',
+      MatchMode.regex => 'matches regex',
+      MatchMode.after => 'at least',
+      MatchMode.before => 'at most',
+    };
+    return '$subject $relation';
   }
+
+  String get chipLabel => '$conditionLabel $value';
 }
 
 // ── Slice config ─────────────────────────────────────────────────────────────

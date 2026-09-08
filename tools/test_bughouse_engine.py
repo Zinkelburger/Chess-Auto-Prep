@@ -220,14 +220,14 @@ def require_app_deploys(dll: str) -> None:
     silently, with no stderr, which is exactly the bug this file exists for.
     """
     prefix = next(p for p in WINDOWS_APP_DEPLOYED_PREFIXES if dll.startswith(p))
-    dart = BUNDLE_DART.read_text().lower()
+    dart = (BUNDLE_DART.parent / 'bughouse_windows_runtime.dart').read_text().lower()
     if f"'{prefix}" not in dart and f'"{prefix}' not in dart:
         fail(
             f"{dll} has to be copied beside the engine, but "
             f"{BUNDLE_DART.relative_to(REPO_ROOT)} does not mention '{prefix}'. "
-            "See BughouseBundle.installWindowsRuntime."
+            "See BughouseWindowsRuntime.ensureInstalled."
         )
-    if "InstallRequiredSystemLibraries" not in CMAKE_WINDOWS.read_text():
+    if "InstallRequiredSystemLibraries" not in CMAKE_WINDOWS.read_text() or "package_bughouse_runtime.py" not in CMAKE_WINDOWS.read_text():
         fail(
             f"{dll} has to ship with the app, but "
             f"{CMAKE_WINDOWS.relative_to(REPO_ROOT)} no longer deploys the "
@@ -399,39 +399,20 @@ def install_like_the_app(target: Path) -> tuple[Path, Path]:
 
 
 def install_windows_runtime(source: Path, target: Path) -> list[str]:
-    """Copy the final app bundle's VC++ runtime beside the extracted engine.
-
-    This is deliberately the same prefix contract as
-    BughouseBundle.installWindowsRuntime. The pre-build engine check used to
-    run against the hosted runner's centrally installed runtime, then merely
-    assert that the final app contained some DLLs. Running with these exact
-    files after the Flutter build is what proves the portable package users
-    receive rather than the unusually well-provisioned CI machine.
-    """
-    prefixes = WINDOWS_APP_DEPLOYED_PREFIXES
-    copied: list[str] = []
-    for candidate in source.iterdir():
-        lower = candidate.name.lower()
-        if not candidate.is_file() or not lower.endswith(".dll"):
-            continue
-        if not lower.startswith(prefixes):
-            continue
-        shutil.copy2(candidate, target / candidate.name)
-        copied.append(candidate.name)
-
-    required = {
-        "msvcp140.dll",
-        "msvcp140_1.dll",
-        "vcruntime140.dll",
-        "vcruntime140_1.dll",
-    }
-    missing = sorted(required - {name.lower() for name in copied})
-    if missing:
-        fail(
-            f"{source} does not contain the final VC++ runtime: "
-            + ", ".join(missing)
-        )
-    return sorted(copied, key=str.lower)
+    """Extract and verify the same private VC++ archive used by the app."""
+    from package_bughouse_runtime import package
+    package(source, check=True)
+    archive = source / "data" / "bughouse-runtime"
+    manifest = json.loads((archive / "manifest.json").read_text())
+    for name, expected in manifest.items():
+        payload = gzip.decompress((archive / f"{name}.gz").read_bytes())
+        if hashlib.sha256(payload).hexdigest() != expected["sha256"]:
+            fail(f"{archive / name}: source changed after verification")
+        destination = target / name
+        destination.write_bytes(payload)
+        if hashlib.sha256(destination.read_bytes()).hexdigest() != expected["sha256"]:
+            fail(f"{destination}: installed DLL hash mismatch")
+    return sorted(manifest)
 
 
 def cmd_run(args) -> int:

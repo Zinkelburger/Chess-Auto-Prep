@@ -5,39 +5,21 @@ part of 'pgn_viewer_screen.dart';
 
 /// Board-pane / side-panel / game-tab builders, split out of
 /// [_PgnViewerScreenState].
-mixin _PaneBuildersMixin on State<PgnViewerScreen> {
-  PgnViewerController get _controller;
-  PgnViewerWidgetController get _pgnWidgetController;
-  PgnViewerWidgetController get _lineWidgetController;
+mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   GameAnalysisController get _analysisController;
-  TabController get _tabController;
-  bool get _onLineTab;
-  int get _explorerTabIndex;
-  int get _analysisTabIndex;
-  GameViewPreferences get _viewPreferences;
-  void _setViewPreferences(GameViewPreferences value);
-  bool get _reviewHandoff;
-  void _showPanel(int index);
-  void _startAutoAnalysisForCurrentGame();
-  PgnViewerHandle get _activeMovetextController;
+  PgnWorkspace get _tabController;
+  void _closePanel(int id);
+  Widget _buildExtraPanel(int id);
   void _handleBoardMove(String san);
-  bool get _editMode;
-  void _toggleEditMode();
-  Future<void> _pickFile();
-  Future<void> _loadFile(String path);
-  Future<void> _copyCurrentGamePgn();
-  Future<void> _addCurrentGameToStudy();
   Future<void> _leaveSolitaire();
   void _analyseSolitaireGame();
   Future<void> _guardingSolitaireProgress(VoidCallback action);
-  void _reclaimFocus();
   List<SolitaireTrophy> get _detectedTrophies;
   Future<void> _detectTrophies();
   DeviationReport? get _deviationReport;
   void _openInBuilder(DeviationReport report);
   void _showLineTab();
   bool get _lineTabVisited;
-  bool get _lineTabVisible;
   void _showLinePosition(Position position);
   void _onGamePosition(Position position);
   LiveExplorerService get _explorer;
@@ -167,139 +149,80 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             ),
           ),
         ),
-        if (!_controller.isSolitaireMode &&
-            _controller.filteredGames.isNotEmpty &&
-            !_onLineTab &&
-            !_controller.showOpeningTree)
-          _buildAnalysisOverview(),
-        if (_controller.filteredGames.isNotEmpty) _buildCollectionNavigation(),
+        if (_controller.filteredGames.isNotEmpty && !_onReferenceTab)
+          _buildCollectionNavigation(),
+        if (_onReferenceTab) const SizedBox(height: 48),
       ],
     );
   }
 
   Widget _buildSidePanel() {
-    if (_controller.showOpeningTree) {
-      return PgnOpeningTreePanel(controller: _controller);
-    }
-    // Solitaire is a pure guessing exercise: no Analysis tab (and no engine).
     final showTabs = !_controller.isSolitaireMode;
-    final deviation = _deviationReport;
+    final tabs = showTabs ? _tabController.openTabs : [0];
     return Column(
       children: [
-        if (deviation != null &&
-            !deviation.inBook &&
-            showTabs &&
-            _lineTabVisible)
+        if (showTabs)
+          PgnWorkspaceBar(
+            workspace: _tabController,
+            onSelect: _showPanel,
+            onClose: _closePanel,
+          ),
+        if (_deviationReport case final deviation?
+            when showTabs && _tabController.index == 0)
           _DeviationBanner(report: deviation, onShowLine: _showLineTab),
-        if (showTabs && _tabController.index != 0)
-          Row(
-            children: [
-              TextButton.icon(
-                onPressed: () => _showPanel(0),
-                icon: const Icon(Icons.arrow_back, size: 18),
-                label: const Text('Back to game'),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _onLineTab
-                      ? 'My repertoire'
-                      : _tabController.index == _explorerTabIndex
-                      ? 'Opening explorer'
-                      : 'Game analysis',
-                  style: AppTextStyles.muted,
-                ),
-              ),
-            ],
-          ),
         Expanded(
-          child: showTabs
-              ? TabBarView(
-                  controller: _tabController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _buildGameTab(),
-                    if (_lineTabVisible) _buildLineTab(),
-                    _buildExplorerTab(),
-                    GameAnalysisTab(
-                      analysisController: _analysisController,
-                      pgnController: _pgnWidgetController,
-                      currentPly: _controller.currentPly,
-                      variationDepth: _pgnWidgetController.variationDepth,
-                      gamePgnText: _controller.filteredGames.isNotEmpty
-                          ? _controller
-                                .filteredGames[_controller.currentGameIndex]
-                                .pgnText
-                          : null,
-                      onAnnotatedMovetext: _controller.persistMoveComments,
-                      onUserNavigation: () {
-                        _controller.stopAutoPlay();
-                        _reclaimFocus();
-                      },
-                      onAnalysisComplete: _detectTrophies,
-                      detectedTrophies: _detectedTrophies,
-                    ),
-                  ],
-                )
-              : _buildGameTab(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAnalysisOverview() {
-    if (!_viewPreferences.graph && !_reviewHandoff) {
-      return const SizedBox.shrink();
-    }
-    final evals = _analysisController.evals;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
+          child: IndexedStack(
+            index: showTabs ? tabs.indexOf(_tabController.index) : 0,
             children: [
-              Expanded(
-                child: Text(
-                  _analysisController.isAnalyzing
-                      ? 'Analyzing ${_analysisController.analyzedMoves}/${_analysisController.totalMoves}'
-                      : evals.isNotEmpty
-                      ? (evals.length < _analysisController.totalMoves
-                            ? 'Partial evaluation · ${evals.length}/${_analysisController.totalMoves} moves'
-                            : 'Game evaluation')
-                      : 'Game analysis',
-                  style: AppTextStyles.caption,
+              for (final id in tabs)
+                KeyedSubtree(
+                  key: ValueKey('panel-$id'),
+                  child: Offstage(
+                    offstage: id != (showTabs ? _tabController.index : 0),
+                    child: TickerMode(
+                      enabled: id == (showTabs ? _tabController.index : 0),
+                      child: switch (id) {
+                        0 => _buildGameTab(),
+                        1 => _buildLineTab(),
+                        2 => _buildExplorerTab(),
+                        3 => GameAnalysisTab(
+                          analysisController: _analysisController,
+                          pgnController: _pgnWidgetController,
+                          currentPly: _controller.currentPly,
+                          variationDepth: _pgnWidgetController.variationDepth,
+                          gamePgnText: _controller.filteredGames.isNotEmpty
+                              ? _controller
+                                    .filteredGames[_controller.currentGameIndex]
+                                    .pgnText
+                              : null,
+                          onAnnotatedMovetext: _controller.persistMoveComments,
+                          onUserNavigation: () {
+                            if (!mounted) return;
+                            _controller.stopAutoPlay();
+                            _reclaimFocus();
+                          },
+                          onAnalysisComplete: _detectTrophies,
+                          detectedTrophies: _detectedTrophies,
+                        ),
+                        4 => PgnOpeningTreePanel(controller: _controller),
+                        5 => _buildDatabaseTools(),
+                        _ => _buildExtraPanel(id),
+                      },
+                    ),
+                  ),
                 ),
-              ),
-              TextButton(
-                onPressed: evals.isEmpty
-                    ? _startAutoAnalysisForCurrentGame
-                    : () => _showPanel(_analysisTabIndex),
-                child: Text(evals.isEmpty ? 'Analyze game' : 'Review moves'),
-              ),
             ],
           ),
         ),
-        if (evals.isNotEmpty)
-          GameAnalysisChart(
-            height: 110,
-            evals: evals,
-            startWinChance: _analysisController.startWinChance,
-            currentPly: _controller.currentPly,
-            onPlySelected: (ply) {
-              _controller.stopAutoPlay();
-              _pgnWidgetController.goToMainLineIndex(ply);
-              _reclaimFocus();
-            },
-          ),
       ],
     );
   }
 
   Widget _buildCollectionNavigation() => GameNavBar(
-    games: [
-      for (final g in _controller.filteredGames) GameNavItem.fromEntry(g),
-    ],
+    games: GameNavItem.fromEntries(
+      _controller.allGames,
+      visibleGames: _controller.filteredGames,
+    ),
     currentIndex: _controller.currentGameIndex,
     sortMode: _controller.sortMode,
     isAutoPlaying: !_onLineTab && _controller.isAutoPlaying,
@@ -312,33 +235,6 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     },
     onToggleAutoPlay: _onLineTab ? null : _controller.toggleAutoPlay,
     isSolitaireMode: _controller.isSolitaireMode,
-    trailing:
-        !_controller.isSolitaireMode &&
-            !_onLineTab &&
-            !_controller.showOpeningTree
-        ? TextButton.icon(
-            key: const Key('game-analysis-toggle'),
-            onPressed: () => _setViewPreferences(
-              _viewPreferences.copyWith(
-                graph: !(_viewPreferences.graph || _reviewHandoff),
-              ),
-            ),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.onSurfaceMuted,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              minimumSize: const Size(0, 32),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: AppTextStyles.caption,
-            ),
-            icon: Icon(
-              _viewPreferences.graph || _reviewHandoff
-                  ? Icons.expand_more
-                  : Icons.chevron_right,
-              size: 16,
-            ),
-            label: const Text('Analysis'),
-          )
-        : null,
   );
 
   /// The Line tab: what my books say about the game on screen, and the prepared
@@ -594,61 +490,49 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     );
   }
 
-  Widget _buildEditModeBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.08),
-        border: Border(
-          bottom: BorderSide(
-            color: AppColors.warning.withValues(alpha: 0.3),
-            width: 0.5,
+  Widget _buildEditModeBar() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: const BoxDecoration(
+      color: AppColors.surface,
+      border: Border(
+        top: BorderSide(color: AppColors.warningSurface, width: 3),
+        bottom: BorderSide(color: AppColors.warningSurface, width: 2),
+      ),
+    ),
+    child: Wrap(
+      spacing: 12,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        const Icon(Icons.edit, size: 20, color: AppColors.warningSurface),
+        Text(
+          'Editing PGN',
+          style: AppTextStyles.bodyStrong.copyWith(
+            color: AppColors.warningSurface,
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.edit, size: 14, color: AppColors.warning),
-          const SizedBox(width: 6),
-          const Text(
-            'Amending',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.warning,
-            ),
+        Text(
+          _controller.filePath == null
+              ? 'Copy PGN or save to a study to keep changes'
+              : _controller.errorMessage != null
+              ? _controller.errorMessage!
+              : 'Changes to the file are saved',
+          style: AppTextStyles.muted.copyWith(color: AppColors.ink),
+        ),
+        TextButton.icon(
+          onPressed: _toggleEditMode,
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('Finish editing'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.surface,
+            backgroundColor: AppColors.warningSurface,
+            textStyle: AppTextStyles.bodyStrong,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Changes are saved to the file',
-              style: AppTextStyles.caption.copyWith(fontSize: 12),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: _toggleEditMode,
-            icon: const Icon(
-              Icons.close,
-              size: 14,
-              color: AppColors.onSurfaceMuted,
-            ),
-            label: Text(
-              'Exit',
-              style: AppTextStyles.caption.copyWith(fontSize: 12),
-            ),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 /// One-line banner above the side-panel tabs: where this game first left the

@@ -64,7 +64,14 @@ List<InlineSpan> _plainCommentSpans(
     return (block: null, spans: spans);
   }
   if (richFormatting) {
-    final segments = parseRichComment(raw);
+    // Editorial parentheses belong inside the sentence. Flatten only these
+    // delimiters before segmenting so nested diagrams remain visible and a
+    // move sequence continues through an intervening aside.
+    final segments = parseRichComment(
+      raw
+          .replaceAll(RegExp(r'@@Start(?:Bracket|Square)@@'), '(')
+          .replaceAll(RegExp(r'@@End(?:Bracket|Square)@@'), ')'),
+    );
     if (segments.isNotEmpty) {
       return (
         block: _buildRichCommentBlock(
@@ -81,7 +88,7 @@ List<InlineSpan> _plainCommentSpans(
   final tokens = parseCommentTokens(stripEngineTokens(raw));
   if (tokens.isEmpty) return (block: null, spans: const []);
 
-  final hasMove = tokens.any((t) => t is CommentMove);
+  final hasMove = tokens.any((t) => t is CommentMove || t is CommentDiagram);
   final paragraphs = _splitParagraphs(tokens);
   if (!hasMove && paragraphs.length <= 1) {
     return (
@@ -142,35 +149,48 @@ Widget _buildTokenParagraphs(
   bool interactive = true,
 }) {
   final paragraphs = _splitParagraphs(tokens);
-  if (paragraphs.length == 1) {
-    return Text.rich(
-      TextSpan(
-        children: _buildCommentTokenSpans(
-          view,
-          paragraphs.first,
-          anchorPos: anchorPos,
-          anchorPly: anchorPly,
-          interactive: interactive,
-        ),
-      ),
-    );
+  final runMoves = <int, List<CommentMove>>{};
+  for (final token in tokens.whereType<CommentMove>()) {
+    (runMoves[token.runId] ??= []).add(token);
   }
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      for (int i = 0; i < paragraphs.length; i++) ...[
-        if (i > 0) const SizedBox(height: 15),
+  final children = <Widget>[];
+  for (final paragraph in paragraphs) {
+    final pending = <CommentToken>[];
+    void flush() {
+      if (pending.isEmpty) return;
+      children.add(
         Text.rich(
           TextSpan(
             children: _buildCommentTokenSpans(
               view,
-              paragraphs[i],
+              List.of(pending),
               anchorPos: anchorPos,
               anchorPly: anchorPly,
               interactive: interactive,
+              allRunMoves: runMoves,
             ),
           ),
         ),
+      );
+      pending.clear();
+    }
+
+    for (final token in paragraph) {
+      if (token is CommentDiagram) {
+        flush();
+        children.add(CommentDiagramBoard(fen: token.fen));
+      } else {
+        pending.add(token);
+      }
+    }
+    flush();
+  }
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (var i = 0; i < children.length; i++) ...[
+        if (i > 0) const SizedBox(height: 12),
+        children[i],
       ],
     ],
   );
@@ -184,11 +204,14 @@ List<InlineSpan> _buildCommentTokenSpans(
   Position? anchorPos,
   int anchorPly = 0,
   bool interactive = true,
+  Map<int, List<CommentMove>>? allRunMoves,
 }) {
   // Collect the moves of each run (in order) so a click can replay the line.
-  final runMoves = <int, List<CommentMove>>{};
-  for (final t in tokens) {
-    if (t is CommentMove) (runMoves[t.runId] ??= []).add(t);
+  final runMoves = allRunMoves ?? <int, List<CommentMove>>{};
+  if (allRunMoves == null) {
+    for (final t in tokens.whereType<CommentMove>()) {
+      (runMoves[t.runId] ??= []).add(t);
+    }
   }
 
   final proseStyle = PgnTextStyles.commentAt(0);
@@ -282,33 +305,46 @@ WidgetSpan _buildProseMoveSpan(
   return WidgetSpan(
     alignment: PlaceholderAlignment.baseline,
     baseline: TextBaseline.alphabetic,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () =>
-          view.onPlayInlineLine!(coords.moveNumber, coords.isWhite, [san], 0),
-      child: Container(
-        decoration: isActive
-            ? BoxDecoration(
-                color: AppColors.pgnMoveCurrentBg,
-                borderRadius: BorderRadius.circular(3),
-                border: Border.all(color: AppColors.pgnMoveCurrent, width: 1),
-              )
-            : BoxDecoration(
-                borderRadius: BorderRadius.circular(3),
-                border: Border.all(color: Colors.transparent, width: 1),
-              ),
-        child: Text(
-          san,
-          style: (isActive ? PgnTextStyles.currentMove : PgnTextStyles.move)
-              .copyWith(
-                fontSize: 16,
-                height: 1.72,
-                decoration: isActive ? null : TextDecoration.underline,
-                decorationColor: AppColors.onSurfaceMuted.withValues(
-                  alpha: 0.5,
-                ),
-                decorationStyle: TextDecorationStyle.dotted,
-              ),
+    child: Tooltip(
+      message: 'Preview comment move',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => view.onPlayInlineLine!(
+            coords.moveNumber,
+            coords.isWhite,
+            [san],
+            0,
+          ),
+          child: Container(
+            decoration: isActive
+                ? BoxDecoration(
+                    color: AppColors.pgnMoveCurrentBg,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: AppColors.pgnMoveCurrent,
+                      width: 1,
+                    ),
+                  )
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: Colors.transparent, width: 1),
+                  ),
+            child: Text(
+              san,
+              style: (isActive ? PgnTextStyles.currentMove : PgnTextStyles.move)
+                  .copyWith(
+                    fontSize: 16,
+                    height: 1.72,
+                    decoration: isActive ? null : TextDecoration.underline,
+                    decorationColor: AppColors.onSurfaceMuted.withValues(
+                      alpha: 0.5,
+                    ),
+                    decorationStyle: TextDecorationStyle.dotted,
+                  ),
+            ),
+          ),
         ),
       ),
     ),
@@ -343,52 +379,61 @@ WidgetSpan _buildCommentMoveSpan(
   return WidgetSpan(
     alignment: PlaceholderAlignment.baseline,
     baseline: TextBaseline.alphabetic,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: clickable
-          ? () {
-              final sans = run.map((m) => m.san).toList();
-              view.onPlayInlineLine!(
-                run.first.moveNumber,
-                run.first.isWhite,
-                sans,
-                idxInRun,
-                anchorFen: run.first.anchorFen,
-              );
-            }
-          : null,
-      child: Container(
-        decoration: isActiveMove
-            ? BoxDecoration(
-                color: AppColors.pgnMoveCurrentBg,
-                borderRadius: BorderRadius.circular(3),
-                border: Border.all(color: AppColors.pgnMoveCurrent, width: 1),
-              )
-            // Reserve the border width so activating a move doesn't reflow.
-            : BoxDecoration(
-                borderRadius: BorderRadius.circular(3),
-                border: Border.all(color: Colors.transparent, width: 1),
-              ),
-        child: Text(
-          '${move.display} ',
-          style:
-              (isActiveMove
-                      ? baseMoveStyle.copyWith(
-                          color: AppColors.pgnMoveCurrentFg,
-                          fontWeight: FontWeight.w600,
-                        )
-                      : baseMoveStyle)
-                  .copyWith(
-                    fontSize: 16,
-                    height: 1.72,
-                    decoration: clickable && !isActiveMove
-                        ? TextDecoration.underline
-                        : null,
-                    decorationColor: AppColors.onSurfaceMuted.withValues(
-                      alpha: 0.5,
+    child: Tooltip(
+      message: clickable ? 'Preview comment move' : 'Move in comment',
+      child: MouseRegion(
+        cursor: clickable ? SystemMouseCursors.click : MouseCursor.defer,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: clickable
+              ? () {
+                  final sans = run.map((m) => m.san).toList();
+                  view.onPlayInlineLine!(
+                    run.first.moveNumber,
+                    run.first.isWhite,
+                    sans,
+                    idxInRun,
+                    anchorFen: run.first.anchorFen,
+                  );
+                }
+              : null,
+          child: Container(
+            decoration: isActiveMove
+                ? BoxDecoration(
+                    color: AppColors.pgnMoveCurrentBg,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: AppColors.pgnMoveCurrent,
+                      width: 1,
                     ),
-                    decorationStyle: TextDecorationStyle.dotted,
+                  )
+                // Reserve the border width so activating a move doesn't reflow.
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: Colors.transparent, width: 1),
                   ),
+            child: Text(
+              '${move.display} ',
+              style:
+                  (isActiveMove
+                          ? baseMoveStyle.copyWith(
+                              color: AppColors.pgnMoveCurrentFg,
+                              fontWeight: FontWeight.w600,
+                            )
+                          : baseMoveStyle)
+                      .copyWith(
+                        fontSize: 16,
+                        height: 1.72,
+                        decoration: clickable && !isActiveMove
+                            ? TextDecoration.underline
+                            : null,
+                        decorationColor: AppColors.onSurfaceMuted.withValues(
+                          alpha: 0.5,
+                        ),
+                        decorationStyle: TextDecorationStyle.dotted,
+                      ),
+            ),
+          ),
         ),
       ),
     ),
@@ -403,19 +448,49 @@ Widget _buildRichCommentBlock(
   int anchorPly = 0,
   bool interactive = true,
 }) {
+  final children = <Widget>[];
+  final text = StringBuffer();
+  void flush() {
+    if (text.isEmpty) return;
+    children.add(
+      _buildTokenParagraphs(
+        view,
+        parseCommentTokens(text.toString()),
+        anchorPos: anchorPos,
+        anchorPly: anchorPly,
+        interactive: interactive,
+      ),
+    );
+    text.clear();
+  }
+
+  for (final segment in segments) {
+    if (segment.type == RichSegmentType.text ||
+        segment.type == RichSegmentType.fen) {
+      // Tokenize the complete passage together: a diagram anchors all moves
+      // of the following run, even across paragraphs and editorial asides.
+      text.writeln(segment.content);
+    } else {
+      flush();
+      children.add(
+        _buildRichSegmentWidget(
+          view,
+          segment,
+          anchorPos: anchorPos,
+          anchorPly: anchorPly,
+          interactive: interactive,
+        ),
+      );
+    }
+  }
+  flush();
   return _proseContainer(
     Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (int i = 0; i < segments.length; i++) ...[
+        for (var i = 0; i < children.length; i++) ...[
           if (i > 0) const SizedBox(height: 15),
-          _buildRichSegmentWidget(
-            view,
-            segments[i],
-            anchorPos: anchorPos,
-            anchorPly: anchorPly,
-            interactive: interactive,
-          ),
+          children[i],
         ],
       ],
     ),
@@ -458,31 +533,7 @@ Widget _buildRichSegmentWidget(
       return Text('[${segment.content}]', style: PgnTextStyles.commentBracket);
 
     case RichSegmentType.fen:
-      return Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppColors.pgnComment.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: AppColors.pgnComment.withValues(alpha: 0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.grid_on,
-              size: 14,
-              color: AppColors.pgnComment.withValues(alpha: 0.75),
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(segment.content, style: PgnTextStyles.commentFen),
-            ),
-          ],
-        ),
-      );
+      return CommentDiagramBoard(fen: segment.content);
 
     case RichSegmentType.link:
       return Text(segment.content, style: PgnTextStyles.commentLink);

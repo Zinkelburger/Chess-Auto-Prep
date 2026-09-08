@@ -22,11 +22,15 @@ mixin _PrepMixin on _AnalysisScreenStateBase {
     final prep = _prep;
     _boardActions.preferredStudy = prep == null
         ? null
-        : () => _opponentActions.prepFiles.ensure(prep.person);
+        : () => _opponentActions.prepFiles.preferredFor(
+            prep.person,
+            prep.tournament,
+          );
     // The chapter is named for the colour *I* hold against them.
     _boardActions.chapterPrefix = prep == null
         ? null
-        : () => _playerIsWhite ? 'As Black' : 'As White';
+        : () =>
+              '${prep.inTournament ? '${prep.person.name} · ' : ''}${_playerIsWhite ? 'As Black' : 'As White'}';
   }
 
   /// ` · Spring Open 2026 · 3 of 12` for the app-bar subtitle, or ''.
@@ -35,45 +39,67 @@ mixin _PrepMixin on _AnalysisScreenStateBase {
     return prep == null || !prep.inTournament ? '' : ' · ${prep.label}';
   }
 
-  List<AppMenuEntry> _prepMenuEntries() {
+  Widget _buildPrepToolbar() {
     final prep = _prep;
-    if (prep == null) return const [];
+    if (prep == null) return const SizedBox.shrink();
     final next = prep.neighbour(_opponents, 1);
     final prev = prep.neighbour(_opponents, -1);
-    final entry = prep.entry;
-    return [
-      AppMenuEntry(
-        label: 'Open prep file: ${prep.person.name}',
-        dividerAbove: true,
-        onRun: () =>
-            unawaited(_opponentActions.openPrepFile(context, prep.person)),
-        hint:
-            'The study holding your notes and lines against '
-            '${prep.person.name}. "Add line to study…" offers it first.',
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Wrap(
+        spacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(prep.person.name),
+          if (prep.inTournament) Text(prep.label),
+          TextButton(
+            onPressed: () => unawaited(
+              prep.tournament == null
+                  ? _opponentActions.openPrepFile(context, prep.person)
+                  : _opponentActions.openGroupStudy(context, prep.tournament!),
+            ),
+            child: Text(
+              prep.inTournament ? 'Open group study' : 'Open prep study',
+            ),
+          ),
+          TextButton(
+            onPressed: _openingTree == null || _isAnalyzing
+                ? null
+                : () => unawaited(_runRepertoireCheck()),
+            child: const Text('Check repertoire'),
+          ),
+          TextButton(
+            onPressed: _openingTree == null
+                ? null
+                : () => unawaited(_boardActions.addCurrentLineToStudy()),
+            child: const Text('Save line to study'),
+          ),
+          if (prep.entry != null) ...[
+            FilterChip(
+              label: const Text('Prepared'),
+              selected: prep.entry!.prepared,
+              onSelected: (_) => unawaited(_togglePrepared()),
+            ),
+            TextButton(
+              onPressed: prev == null
+                  ? null
+                  : () => unawaited(_switchToPerson(prev)),
+              child: const Text('Previous player'),
+            ),
+            TextButton(
+              onPressed: next == null
+                  ? null
+                  : () => unawaited(_switchToPerson(next)),
+              child: const Text('Next player'),
+            ),
+            TextButton(
+              onPressed: () => unawaited(_openTournamentSheet()),
+              child: const Text('Back to group'),
+            ),
+          ],
+        ],
       ),
-      if (entry != null) ...[
-        AppMenuEntry(
-          label: 'Prepared',
-          checked: entry.prepared,
-          onRun: () => unawaited(_togglePrepared()),
-          hint: 'Tick when your prep for them is done; the sheet shows it.',
-        ),
-        AppMenuEntry(
-          label: next == null ? 'Next opponent' : 'Next: ${next.name}',
-          enabled: next != null,
-          onRun: () => unawaited(_switchToPerson(next!)),
-        ),
-        AppMenuEntry(
-          label: prev == null ? 'Previous opponent' : 'Previous: ${prev.name}',
-          enabled: prev != null,
-          onRun: () => unawaited(_switchToPerson(prev!)),
-        ),
-        AppMenuEntry(
-          label: 'Tournament sheet…',
-          onRun: () => unawaited(_openTournamentSheet()),
-        ),
-      ],
-    ];
+    );
   }
 
   Future<void> _togglePrepared() async {

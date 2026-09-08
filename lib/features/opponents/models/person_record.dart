@@ -38,6 +38,10 @@ class PersonRecord {
   /// The study that is this person's prep file, once one has been created.
   final String? prepFilePath;
 
+  /// Explicit links survive display-name and account edits.
+  final List<String> gameSetKeys;
+  final List<PlayerStudyLink> studyLinks;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -51,6 +55,8 @@ class PersonRecord {
     this.title,
     this.notes = '',
     this.prepFilePath,
+    this.gameSetKeys = const [],
+    this.studyLinks = const [],
     required this.createdAt,
     required this.updatedAt,
   });
@@ -126,6 +132,8 @@ class PersonRecord {
     if (title != null) 'title': title,
     if (notes.isNotEmpty) 'notes': notes,
     if (prepFilePath != null) 'prep_file': prepFilePath,
+    'game_sets': gameSetKeys,
+    'studies': [for (final link in studyLinks) link.toJson()],
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
   };
@@ -142,6 +150,14 @@ class PersonRecord {
       title: _clean(json['title'] as String?),
       notes: json['notes'] as String? ?? '',
       prepFilePath: _clean(json['prep_file'] as String?),
+      gameSetKeys: (json['game_sets'] as List? ?? [])
+          .whereType<String>()
+          .toList(),
+      studyLinks: [
+        for (final link in json['studies'] as List? ?? [])
+          if (link is Map)
+            PlayerStudyLink.fromJson(link.cast<String, dynamic>()),
+      ],
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? now,
       updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? '') ?? now,
     );
@@ -162,6 +178,8 @@ class PersonRecord {
     String? notes,
     String? prepFilePath,
     bool clearPrepFilePath = false,
+    List<String>? gameSetKeys,
+    List<PlayerStudyLink>? studyLinks,
     DateTime? updatedAt,
   }) => PersonRecord(
     id: id,
@@ -175,10 +193,28 @@ class PersonRecord {
     prepFilePath: clearPrepFilePath
         ? null
         : (_clean(prepFilePath) ?? this.prepFilePath),
+    gameSetKeys: gameSetKeys ?? this.gameSetKeys,
+    studyLinks: studyLinks ?? this.studyLinks,
     createdAt: createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
 
   @override
   String toString() => 'PersonRecord($id, $name)';
+}
+
+/// A whole PGN/study or a named chapter, opened directly from the player row.
+class PlayerStudyLink {
+  const PlayerStudyLink({required this.path, this.chapter});
+  final String path;
+  final String? chapter;
+  Map<String, dynamic> toJson() => {
+    'path': path,
+    if (chapter != null) 'chapter': chapter,
+  };
+  factory PlayerStudyLink.fromJson(Map<String, dynamic> json) =>
+      PlayerStudyLink(
+        path: json['path'] as String,
+        chapter: json['chapter'] as String?,
+      );
 }

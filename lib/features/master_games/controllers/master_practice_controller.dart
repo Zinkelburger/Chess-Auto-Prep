@@ -1,7 +1,7 @@
 /// State behind the master-practice review dialog.
 ///
 /// One review over the games it is given, a selection, and the hand-off of a
-/// master game to the Games viewer. The walk itself lives in
+/// master game to the PGN Viewer. The walk itself lives in
 /// [MasterPracticeReviewer]; this only owns when it runs and what is shown.
 library;
 

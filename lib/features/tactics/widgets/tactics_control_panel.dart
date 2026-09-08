@@ -360,7 +360,6 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
     // external set, and no revealing the answer of the unsolved session head.
     final canEdit = !_database.isExternalSet && _session.canEditCurrent;
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, size: 18),
       tooltip: 'Game actions',
       onSelected: (action) {
         switch (action) {
@@ -384,6 +383,16 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
           child: const Text('Edit tactic…'),
         ),
       ],
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Game', style: TextStyle(fontSize: 13)),
+            Icon(Icons.arrow_drop_down, size: 18),
+          ],
+        ),
+      ),
     );
   }
 

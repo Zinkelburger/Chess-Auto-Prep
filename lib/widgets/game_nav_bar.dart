@@ -54,7 +54,7 @@ class GameNavBar extends StatelessWidget {
     child: Wrap(
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 4,
+      spacing: 8,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -65,13 +65,7 @@ class GameNavBar extends StatelessWidget {
               onPressed: currentIndex > 0 ? onPrev : null,
               icon: const Icon(Icons.chevron_left),
             ),
-            GameNumberField(
-              currentIndex: currentIndex,
-              gameCount: games.length,
-              onGoToGame: onGoToGame,
-              tooltip:
-                  'Game ${currentIndex + 1} of ${games.length}. Type a number to jump (G)',
-            ),
+            _buildCounter(context),
             ShortcutIconButton(
               description: 'Next game',
               shortcut: AppShortcut.nextItem,
@@ -99,12 +93,45 @@ class GameNavBar extends StatelessWidget {
     ),
   );
 
+  Widget _buildCounter(BuildContext context) {
+    final canBrowse =
+        !isSolitaireMode && games.isNotEmpty && onGoToGame != null;
+    final hasChapters = games.any((game) => game.chapter != null);
+    final number = GameNumberField(
+      currentIndex: currentIndex,
+      gameCount: games.length,
+      onGoToGame: onGoToGame,
+      tooltip: canBrowse
+          ? null
+          : actionTooltip(
+              'Game ${currentIndex + 1} of ${games.length}. Type a number to jump',
+              shortcut: AppShortcut.goToGameNumber,
+            ),
+    );
+    if (!canBrowse) return number;
+    return Tooltip(
+      message: hasChapters
+          ? 'Browse chapters. ${actionTooltip('Type a game number to jump', shortcut: AppShortcut.goToGameNumber)}'
+          : 'Browse games. ${actionTooltip('Type a game number to jump', shortcut: AppShortcut.goToGameNumber)}',
+      child: InkWell(
+        key: const Key('game-counter-browser'),
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => _openGameSearch(context),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [number, const Icon(Icons.arrow_drop_down, size: 18)],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openGameSearch(BuildContext context) async {
     final selected = await showGameSearchDialog(
       context: context,
       games: games,
       currentIndex: currentIndex,
     );
+    if (!context.mounted) return;
     if (selected != null) onGoToGame?.call(selected);
   }
 }

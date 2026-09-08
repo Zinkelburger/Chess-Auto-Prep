@@ -23,6 +23,7 @@ void main() {
     String? lichess,
     String? platform,
     Set<GameSpeed>? speeds,
+    AnalysisPlayerInfo? player,
   }) async {
     result = null;
     await tester.pumpWidget(
@@ -38,6 +39,7 @@ void main() {
                     lichessUsername: lichess,
                     initialPlatform: platform,
                     initialSpeeds: speeds,
+                    player: player,
                   ),
                 );
               },
@@ -206,5 +208,68 @@ void main() {
     );
     expect(find.byType(AnalysisDownloadDialog), findsOneWidget);
     expect(result, isNull);
+  });
+
+  testWidgets('downloading a saved player again asks only how much and what', (
+    tester,
+  ) async {
+    await openDialog(
+      tester,
+      player: AnalysisPlayerInfo(
+        platform: 'lichess',
+        username: 'penguingm1',
+        monthsBack: 12,
+        speeds: const {GameSpeed.bullet},
+        downloadedAt: DateTime.now().subtract(const Duration(days: 30)),
+        gameCount: 400,
+      ),
+    );
+
+    expect(find.text('Download penguingm1 again'), findsOneWidget);
+    expect(find.textContaining('From Lichess · last downloaded'), findsOne);
+    // No site toggle, no username: just the amount.
+    expect(find.byType(SegmentedButton<String>), findsNothing);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.widgetWithText(TextField, '12'), findsOneWidget);
+    expect(find.textContaining('at bullet.'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '3');
+    await tapSpeed(tester, GameSpeed.blitz);
+    await tester.tap(find.widgetWithText(FilledButton, 'Download'));
+    await tester.pumpAndSettle();
+
+    expect(result!.platform, 'lichess');
+    expect(result!.username, 'penguingm1');
+    expect(result!.monthsBack, 3);
+    expect(result!.speeds, {GameSpeed.bullet, GameSpeed.blitz});
+  });
+
+  testWidgets('a merged opponent is downloaded again for every account', (
+    tester,
+  ) async {
+    await openDialog(
+      tester,
+      player: const AnalysisPlayerInfo(
+        platform: 'import',
+        username: 'Jane Doe',
+        maxGames: 250,
+        accounts: [
+          PlayerAccount('chesscom', 'jane1'),
+          PlayerAccount('lichess', 'jane2'),
+        ],
+      ),
+    );
+
+    expect(find.text('Download Jane Doe again'), findsOneWidget);
+    expect(find.textContaining('From jane1, jane2'), findsOneWidget);
+    // Game-count mode, because that is how the set was fetched.
+    expect(find.widgetWithText(TextField, '250'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Download'));
+    await tester.pumpAndSettle();
+
+    expect(result!.accounts.length, 2);
+    expect(result!.monthsBack, isNull);
+    expect(result!.maxGames, 250);
   });
 }

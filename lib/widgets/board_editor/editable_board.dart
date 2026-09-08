@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 import '../../core/board_editor_controller.dart';
 import '../../theme/app_colors.dart';
 import '../common/piece_image.dart';
+import '../board/board_square_painter.dart';
 
 class EditableBoard extends StatefulWidget {
   const EditableBoard({
@@ -69,11 +70,6 @@ class EditableBoard extends StatefulWidget {
 }
 
 class _EditableBoardState extends State<EditableBoard> {
-  // Same palette as ChessBoardWidget, both sourced from the shared board
-  // tokens (the editor may still diverge visually later).
-  static const Color lightSquareColor = AppColors.boardLightSquare;
-  static const Color darkSquareColor = AppColors.boardDarkSquare;
-
   // Pointer-tool drag of a piece already on the board.
   Square? _dragFrom;
   Piece? _draggedPiece;
@@ -244,10 +240,7 @@ class _EditableBoardState extends State<EditableBoard> {
                   clipBehavior: Clip.none,
                   children: [
                     CustomPaint(
-                      painter: _EditorBoardPainter(
-                        lightColor: lightSquareColor,
-                        darkColor: darkSquareColor,
-                      ),
+                      painter: BoardSquarePainter(flipped: widget.flipped),
                       size: Size(boardSize, boardSize),
                     ),
                     ..._buildPieces(squareSize),
@@ -325,41 +318,4 @@ class _EditableBoardState extends State<EditableBoard> {
     }
     return widgets;
   }
-}
-
-class _EditorBoardPainter extends CustomPainter {
-  final Color lightColor;
-  final Color darkColor;
-
-  _EditorBoardPainter({required this.lightColor, required this.darkColor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final squareSize = size.width / 8;
-    for (int col = 0; col < 8; col++) {
-      for (int row = 0; row < 8; row++) {
-        final isLight = (col + row) % 2 == 0;
-        canvas.drawRect(
-          Rect.fromLTWH(
-            col * squareSize,
-            row * squareSize,
-            squareSize,
-            squareSize,
-          ),
-          Paint()..color = isLight ? lightColor : darkColor,
-        );
-      }
-    }
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()
-        ..color = AppColors.boardOutline
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _EditorBoardPainter old) =>
-      lightColor != old.lightColor || darkColor != old.darkColor;
 }

@@ -1,20 +1,5 @@
-/// The one overflow menu every screen's app bar uses.
-///
-/// Each screen used to hand-roll its own `PopupMenuButton` — different item
-/// widgets, different icon sizes, some with subtitles, some without — so the
-/// same action looked like a different control depending on where you found
-/// it. This is that menu, once: a `⋮` button, an [AppMenuEntry] per row, and
-/// a rule that rows are labels rather than labels-plus-an-explaining-sentence.
-///
-/// The bar itself is meant to stay at four controls: title, one primary
-/// action, this menu, and the mode switcher. Anything occasional belongs in
-/// here.
-///
-/// A menu with more than a handful of rows groups them under section
-/// headings ([AppMenuEntry.heading]) — the same uppercase eyebrow the mode
-/// switcher uses — rather than under dividers alone, so the reader scans
-/// four words instead of twelve rows. [AppOverflowMenu.anchor] lets a screen
-/// hang the same menu off a labelled control ("Actions ▾") instead of the ⋮.
+/// Shared grouped actions menu. App bars use the visible Actions label;
+/// contextual pickers can supply their own label or anchor.
 library;
 
 import 'package:flutter/material.dart';
@@ -38,10 +23,13 @@ class AppMenuEntry {
     this.checked,
     this.shortcut,
     this.hint,
+    this.children = const [],
   }) : assert(
          icon == null || leading == null,
          'Give an entry an icon or a leading widget, not both.',
        );
+
+  final List<AppMenuEntry> children;
 
   final String label;
   final VoidCallback onRun;
@@ -77,25 +65,24 @@ class AppMenuEntry {
   final String? hint;
 }
 
-/// Trailing `⋮` menu for an app bar.
+/// Labelled menu for app bars and contextual operations.
 class AppOverflowMenu extends StatelessWidget {
   const AppOverflowMenu({
     super.key,
     required this.entries,
-    this.tooltip = 'More actions',
+    this.tooltip = 'Actions',
     this.anchor,
-    this.label,
+    this.label = 'Actions',
     this.enabled = true,
   });
 
   final List<AppMenuEntry> entries;
   final String tooltip;
 
-  /// The control the menu hangs off. Null is the `⋮` icon; a labelled
-  /// control ("Actions ▾") opens the same menu under itself.
+  /// Optional custom anchor; otherwise uses [label] (Actions by default).
   final Widget? anchor;
 
-  /// Standard quiet text-and-arrow anchor for in-view menus.
+  /// Labelled text-and-arrow anchor. Explicit null opts into an icon anchor.
   final String? label;
 
   /// False greys the anchor and keeps the menu shut — for a bar that is
@@ -106,6 +93,27 @@ class AppOverflowMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = entries;
     if (rows.isEmpty) return const SizedBox.shrink();
+    if (rows.any((row) => row.children.isNotEmpty)) {
+      return MenuAnchor(
+        menuChildren: _nestedRows(rows),
+        builder: (context, controller, child) => TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
+          onPressed: !enabled
+              ? null
+              : () {
+                  controller.isOpen ? controller.close() : controller.open();
+                },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label ?? tooltip, style: AppTextStyles.bodyStrong),
+              const SizedBox(width: 8),
+              const Icon(Icons.arrow_drop_down, size: 20),
+            ],
+          ),
+        ),
+      );
+    }
     final items = <PopupMenuEntry<int>>[
       for (var i = 0; i < rows.length; i++) ...[
         if ((rows[i].dividerAbove || rows[i].heading != null) && i > 0)
@@ -114,31 +122,45 @@ class AppOverflowMenu extends StatelessWidget {
         PopupMenuItem<int>(
           value: i,
           enabled: rows[i].enabled,
-          // The mode switcher's row height, so the two menus that sit side
-          // by side on a bar read as one kind of thing.
+          // Match the shared mode menu's row height.
           height: 32,
           child: AppMenuEntryRow(entry: rows[i]),
         ),
       ],
     ];
+    final isActionsMenu = label == 'Actions';
     final anchor =
         this.anchor ??
         (label == null
             ? null
-            : Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            : Container(
+                constraints: BoxConstraints(minHeight: isActionsMenu ? 44 : 0),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isActionsMenu ? 12 : 8,
+                  vertical: 6,
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       label!,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style:
+                          (isActionsMenu
+                                  ? AppTextStyles.bodyStrong
+                                  : Theme.of(context).textTheme.titleMedium!)
+                              .copyWith(
+                                color: enabled
+                                    ? AppColors.ink
+                                    : AppColors.onSurfaceDisabled,
+                              ),
                     ),
-                    const SizedBox(width: 2),
-                    const Icon(
+                    SizedBox(width: isActionsMenu ? 8 : 2),
+                    Icon(
                       Icons.arrow_drop_down,
                       size: 20,
-                      color: AppColors.ink,
+                      color: enabled
+                          ? AppColors.ink
+                          : AppColors.onSurfaceDisabled,
                     ),
                   ],
                 ),
@@ -163,6 +185,28 @@ class AppOverflowMenu extends StatelessWidget {
     );
   }
 }
+
+List<Widget> _nestedRows(List<AppMenuEntry> entries) => [
+  for (var i = 0; i < entries.length; i++) ...[
+    if (i > 0 && (entries[i].heading != null || entries[i].dividerAbove))
+      const Divider(height: 12),
+    if (entries[i].heading case final heading?)
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        child: Text(heading.toUpperCase(), style: AppTextStyles.eyebrow),
+      ),
+    if (entries[i].children.isNotEmpty)
+      SubmenuButton(
+        menuChildren: _nestedRows(entries[i].children),
+        child: Text(entries[i].label, style: AppTextStyles.body),
+      )
+    else
+      MenuItemButton(
+        onPressed: entries[i].enabled ? entries[i].onRun : null,
+        child: Text(entries[i].label, style: AppTextStyles.body),
+      ),
+  ],
+];
 
 /// A non-selectable section heading row for any popup menu: the uppercase
 /// eyebrow the mode switcher introduced, now shared so every grouped menu

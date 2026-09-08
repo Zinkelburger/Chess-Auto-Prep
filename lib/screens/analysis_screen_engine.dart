@@ -11,20 +11,10 @@ mixin _EngineWeaknessMixin on _AnalysisScreenStateBase {
 
     final config = await showDialog<EngineWeaknessConfig>(
       context: context,
-      builder: (_) => EngineWeaknessConfigDialog(
-        playerInfo: _currentPlayer,
-        isReanalysis: _hasEvals,
-      ),
+      builder: (_) => EngineWeaknessConfigDialog(isReanalysis: _hasEvals),
     );
 
     if (config == null || !mounted) return;
-
-    if (config.redownload) {
-      final ok = await _redownloadGames(config.monthsBack);
-      if (!ok) return;
-      await _analyzeBothColors();
-      if (!mounted) return;
-    }
 
     unawaited(_runWeaknessAnalysis(config));
   }

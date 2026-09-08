@@ -16,6 +16,7 @@ class OpeningTreeBuilder {
     required bool? userIsWhite,
     int maxDepth = 30,
     bool strictPlayerMatching = true,
+    bool? includeVariations,
     void Function(int processed, int total)? onProgress,
   }) async {
     final transferJson = onProgress == null
@@ -26,6 +27,7 @@ class OpeningTreeBuilder {
               userIsWhite: userIsWhite,
               maxDepth: maxDepth,
               strictPlayerMatching: strictPlayerMatching,
+              includeVariations: includeVariations,
             );
           })
         : await _buildTreeWithProgress(
@@ -34,6 +36,7 @@ class OpeningTreeBuilder {
             userIsWhite: userIsWhite,
             maxDepth: maxDepth,
             strictPlayerMatching: strictPlayerMatching,
+            includeVariations: includeVariations,
             onProgress: onProgress,
           );
     return OpeningTree.fromTransferJson(transferJson);
@@ -45,6 +48,7 @@ class OpeningTreeBuilder {
     required bool? userIsWhite,
     required int maxDepth,
     required bool strictPlayerMatching,
+    bool? includeVariations,
     required void Function(int processed, int total) onProgress,
   }) async {
     final receivePort = ReceivePort();
@@ -56,6 +60,7 @@ class OpeningTreeBuilder {
           'userIsWhite': userIsWhite,
           'maxDepth': maxDepth,
           'strictPlayerMatching': strictPlayerMatching,
+          'includeVariations': includeVariations,
         });
 
     final completer = Completer<Map<String, dynamic>>();
@@ -99,6 +104,7 @@ class OpeningTreeBuilder {
         userIsWhite: args['userIsWhite'] as bool?,
         maxDepth: args['maxDepth'] as int,
         strictPlayerMatching: args['strictPlayerMatching'] as bool,
+        includeVariations: args['includeVariations'] as bool?,
         onProgress: (processed, total) {
           sendPort.send({
             'type': 'progress',
@@ -124,6 +130,7 @@ class OpeningTreeBuilder {
     required bool? userIsWhite,
     int maxDepth = 30,
     bool strictPlayerMatching = true,
+    bool? includeVariations,
     void Function(int processed, int total)? onProgress,
   }) {
     final tree = OpeningTree();
@@ -153,6 +160,7 @@ class OpeningTreeBuilder {
               userIsWhite: userIsWhite,
               maxDepth: maxDepth,
               strictPlayerMatching: strictPlayerMatching,
+              includeVariations: includeVariations,
             );
           } catch (_) {
             skipped++;
@@ -190,6 +198,7 @@ class OpeningTreeBuilder {
     required bool? userIsWhite,
     required int maxDepth,
     required bool strictPlayerMatching,
+    bool? includeVariations,
     void Function(PgnGame<PgnNodeData> game, Object error)? onError,
   }) {
     foldGamesIntoTree<PgnGame<PgnNodeData>>(
@@ -205,6 +214,7 @@ class OpeningTreeBuilder {
             userIsWhite: userIsWhite,
             maxDepth: maxDepth,
             strictPlayerMatching: strictPlayerMatching,
+            includeVariations: includeVariations,
           );
         } catch (e) {
           if (onError == null) rethrow;
@@ -229,6 +239,7 @@ class OpeningTreeBuilder {
     required bool? userIsWhite,
     required int maxDepth,
     required bool strictPlayerMatching,
+    bool? includeVariations,
   }) {
     // 1. Safe Header Access
     final white = game.headers['White'] ?? '';
@@ -266,7 +277,7 @@ class OpeningTreeBuilder {
       userResult: userResult,
       maxDepth: maxDepth,
       startPosition: _startPositionOf(game),
-      includeVariations: userResult == null,
+      includeVariations: includeVariations ?? userResult == null,
     );
   }
 

@@ -30,8 +30,10 @@ without publishing it. Do not open PRs unless requested.
    a visible preview when requested.
 
 The helper does not run tests for you. Use the task's relevant local checks
-before integration. Full GitHub CI runs on `backup/local-main`; fix regressions
-from your task and keep the batch unpublished until its required checks pass.
+before integration. GitHub CI runs only as part of the `v*` release-tag
+workflow; development backups and PRs do not trigger it. The CI and bughouse
+workflows are reusable release gates, with no standalone dispatch trigger.
+Fix regressions from your task using focused local checks.
 A failed backup push is recoverable: keep the worktrees and retry integration.
 Never force-push the backup to hide divergence from another machine.
 
@@ -51,7 +53,7 @@ Keep local main's useful history. To produce a compact published history:
    preparing from a different checkout before the squash could copy newer
    workflow files into the clean publication input.
 3. Push that publication branch, run the full required checks on its exact
-   HEAD (local bounded checks or GitHub CI via workflow dispatch), and then
+   HEAD using local bounded checks, and then
    fast-forward `origin/main` with the explicit `HEAD:refs/heads/main` refspec.
    If the remote advanced, reconcile and revalidate; never force-push it.
 4. Merge the published commit back into a task worktree based on local main,

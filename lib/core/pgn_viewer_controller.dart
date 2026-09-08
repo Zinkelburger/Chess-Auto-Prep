@@ -216,6 +216,9 @@ class PgnViewerController extends ChangeNotifier
 
   @override
   bool get showOpeningTree => _viewerTree.showOpeningTree;
+  bool get treeIncludeVariations => _viewerTree.includeVariations;
+  void setTreeIncludeVariations(bool value) =>
+      _viewerTree.setIncludeVariations(value);
   OpeningTree? get openingTree => _viewerTree.openingTree;
   bool get buildingTree => _viewerTree.buildingTree;
   int get treeBuildProcessed => _viewerTree.treeBuildProcessed;

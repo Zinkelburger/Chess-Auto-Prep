@@ -493,7 +493,6 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       AuditFindingType.deadEnd => 'dead ends',
       AuditFindingType.uncoveredStrongMove => 'uncovered strong moves',
       AuditFindingType.refutation => 'refutations',
-      AuditFindingType.practicalTrap => 'practical traps',
       AuditFindingType.trickyMove => 'tricky moves',
     };
   }

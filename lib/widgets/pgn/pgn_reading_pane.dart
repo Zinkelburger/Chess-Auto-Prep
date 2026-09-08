@@ -33,6 +33,9 @@ class PgnReadingPane extends StatefulWidget {
   final Object selection;
   final Color backgroundColor;
   final bool showReadingOptions;
+
+  /// Keep the quoted passage on screen while its moves play on the board.
+  final bool previewingComment;
   final List<MoveNode> analysisPath;
   final int branchPly;
   final int startingMoveNumber;
@@ -46,6 +49,7 @@ class PgnReadingPane extends StatefulWidget {
     required this.selection,
     this.backgroundColor = AppColors.pgnSurface,
     this.showReadingOptions = true,
+    this.previewingComment = false,
     required this.analysisPath,
     required this.branchPly,
     required this.startingMoveNumber,
@@ -153,7 +157,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
   @override
   void didUpdateWidget(PgnReadingPane oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selection != widget.selection) {
+    if (oldWidget.selection != widget.selection && !widget.previewingComment) {
       if (_scope != null &&
           !widget.analysisPath.any((n) => n.id == _scope!.root.id)) {
         _scope = null;
