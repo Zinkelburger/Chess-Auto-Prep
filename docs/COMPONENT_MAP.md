@@ -446,13 +446,25 @@ RepertoireTrainingScreen
 
 ### PGN viewer (Open PGN)
 
-The **Game options** menu contains **Save to study** (this game or selected
-collection games), or **Edit study** when viewing an existing study, plus view
-and exploration controls. It is visually separated from the **Games** mode
-switcher. In the reading pane, **Focus variation** is a filled button;
-**Return to parent** is outlined, with their keyboard shortcuts in tooltips.
-The analysis overview below the board can be collapsed with its down arrow
-and restored with **Show analysis**; this uses the saved graph preference.
+**Game options ▾** and **Filter games ▾** use the shared, quiet
+`AppOverflowMenu.label` anchor also used by repertoire **Actions ▾**.
+Game options groups Settings, Explore, Study and Collection; filters groups
+filter selection/reset and sort order. **Game view…** opens grouped Analysis,
+Playback, and Board and moves settings using the global `SettingsGroup` controls.
+The small **Analysis** disclosure shares the previous/next-game row, costs no
+extra row while collapsed, and mirrors the saved **Analysis overview** choice.
+New profiles start collapsed; existing explicit preferences are retained.
+The separator above the move text and the bright navigation top border are gone.
+
+In the reader, **Enter** focuses a variation. **←** steps back through its root
+to its parent, restoring any parent focus and reading position. **Esc** first
+returns to a manually scrolled reading position, then returns to the parent
+variation, then follows the existing mode-exit behavior. Parent and focus
+controls use quiet text buttons with registry-backed shortcut tooltips.
+Global **Settings → Keyboard shortcuts** lists mappings by view, including
+mode switching, numbered continuations, planner and bughouse controls. Shared
+actions use `shortcut_reference.dart` and the same `AppShortcut` entries as
+handlers and tooltips; an invariant test requires every shared entry to be listed.
 
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
@@ -464,7 +476,7 @@ PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal
 Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].pgnText` → `Clipboard.setData` + `AppMessages.pgnCopied` snackbar
 Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept)
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
-Keyboard: `N`/`P` prev/next game, `F` flip (`Ctrl+F`/F11 fullscreen), `E` engine (`Ctrl+E` export), `W` auto-next, `A` edit mode, `T` opening tree, `S` solitaire mode; plus `←`/`→` navigate, Home/End jump, Space auto-play, Tab cycle tabs, Escape exit edit/fullscreen/clear annotations. Letter keys suppressed while a text field has focus. Digit star-rating shortcuts removed.
+Keyboard: `↑`/`↓` previous/next game, `←`/`→` moves, Home/Page Up and End/Page Down jump, Enter focus variation, Esc return to parent or leave mode, `F` flip, Ctrl+F/F11 fullscreen, `E` engine, Space playback, `W` auto-next, `A` edit in Study, `T` opening tree, Ctrl+S/Shift+S solitaire, `/` search, `G` game number, Ctrl+V paste PGN, `C` comment, `R` mainline (reveal in solitaire), `H` solitaire hint, Tab next panel, and 1–9 fork candidates. Enter starts solitaire during setup. Text fields retain their normal editing behavior.
 Side tabs: **Game | Analysis** by default. **Line** (book line vs the game on screen, plus the deviation banner) is added only for a Games/tactics handoff (`gameId` / single-game focus). Course files use the opening tree (`T`) to browse matching lines instead.
 Opening tree (`T`): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). Course / repertoire games (`Result *`) fold RAVs into the tree so every book continuation is a sibling, not just each chapter's mainline; scored player games stay mainline-only (their variations are analysis notes). `*` results count toward frequency without a fake 50% draw bar — the UI says **lines** instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Expand all** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
 
@@ -820,7 +832,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: N/P/F/E/W/A/T/S letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen; caches `AppState` so dispose does not `context.read` |
 | `player_selection_screen.dart` | Player pick for analysis: cached game-sets from chess.com / lichess downloads, PGN-file imports, and **opponent lists** (`OpponentListImportDialog` → one merged player per opponent, sourced from every account listed, tagged with the event as `group`; batch download with per-person progress, skip-existing, failures reported not swallowed); search matches name, platform and group |
-| `settings_screen.dart` | Machine-level settings (accounts, **display** — board coordinates and piece notation with a live preview board, my repertoires, engine cores, ChessDB); body is a bounded `ListView` so every section is reachable; analysis *behavior* lives on per-panel gears |
+| `settings_screen.dart` | Machine-level settings (accounts, **display** — board coordinates and piece notation with a live preview board, my repertoires, engine cores, ChessDB); focused sections have independent scrolling; Keyboard shortcuts lists mappings by view; analysis *behavior* lives on per-panel gears |
 
 ### `lib/services/` (grouped)
 

@@ -50,6 +50,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('keyboard reference displays shared mappings and is scrollable', (
+    tester,
+  ) async {
+    await pumpSettings(tester, const Size(1280, 720));
+    await tester.tap(find.byKey(const Key('settings-nav-6')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Focus the current variation'),
+      250,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const PageStorageKey('settings-page-6')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('Enter'), findsWidgets);
+    expect(find.text('Ctrl+Enter'), findsNothing);
+    expect(find.text('Ctrl+←'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a short window can scroll to reset and cancel safely', (
     tester,
   ) async {
@@ -92,6 +114,7 @@ void main() {
         'Engine',
         'Data',
         'About',
+        'Keyboard shortcuts',
         'Accounts',
       ]) {
         // The picker is a text box: type part of the name, Enter takes the

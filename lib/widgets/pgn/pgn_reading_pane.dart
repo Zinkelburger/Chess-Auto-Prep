@@ -205,27 +205,41 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
     return true;
   }
 
-  void focusVariation() {
+  bool focusVariation() {
     final branch = _branches.lastOrNull;
-    if (branch == null || branch.root.id == _scope?.root.id) return;
+    if (!mounted || branch == null || branch.root.id == _scope?.root.id) {
+      return false;
+    }
     setState(() {
       _bookmarks.add((scope: _scope, offset: _scroll.offset));
       _scope = branch;
       _browsing = false;
     });
     _scheduleAnchor();
+    return true;
   }
 
-  void returnToParent() {
-    final branch = _scope ?? _branches.lastOrNull;
-    if (branch == null) return;
+  /// Leaving a focused branch with Left restores its parent reading position.
+  bool backOutOfFocus() {
+    if (_scope?.root.id != widget.analysisPath.lastOrNull?.id ||
+        _scope == null) {
+      return false;
+    }
+    return returnToParent();
+  }
+
+  bool returnToParent() {
+    final branch = _branches.lastOrNull ?? _scope;
+    if (!mounted || branch == null) return false;
     setState(() {
-      if (_bookmarks.isNotEmpty) {
-        final bookmark = _bookmarks.removeLast();
-        _scope = bookmark.scope;
-        _restoreOffset = bookmark.offset;
-      } else {
-        _scope = null;
+      if (branch.root.id == _scope?.root.id) {
+        if (_bookmarks.isNotEmpty) {
+          final bookmark = _bookmarks.removeLast();
+          _scope = bookmark.scope;
+          _restoreOffset = bookmark.offset;
+        } else {
+          _scope = null;
+        }
       }
       _browsing = false;
     });
@@ -235,6 +249,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
       widget.onMainline();
     }
     _scheduleAnchor();
+    return true;
   }
 
   void _mainline() {
@@ -294,10 +309,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                       ShortcutTooltip(
                         description: 'Return to parent line',
                         shortcut: AppShortcut.returnToParentLine,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: AppColors.outline),
-                          ),
+                        child: TextButton.icon(
                           onPressed: returnToParent,
                           icon: const Icon(
                             Icons.subdirectory_arrow_left,
@@ -311,7 +323,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                       ShortcutTooltip(
                         description: 'Read this variation at full width',
                         shortcut: AppShortcut.focusVariation,
-                        child: FilledButton.icon(
+                        child: TextButton.icon(
                           onPressed: focusVariation,
                           icon: const Icon(Icons.zoom_in, size: 18),
                           label: const Text('Focus variation'),

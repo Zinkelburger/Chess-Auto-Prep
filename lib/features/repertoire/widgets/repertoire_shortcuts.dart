@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
@@ -167,13 +166,15 @@ class RepertoireShortcuts extends StatelessWidget {
   Widget build(BuildContext context) {
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(
-          LogicalKeyboardKey.keyV,
-          control: true,
-          shift: true,
-        ): onPasteFenFromClipboard,
-        const SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
-            onPasteFenFromClipboard,
+        for (final chord in AppShortcut.pasteFen.chords) ...{
+          SingleActivator(
+            chord.key,
+            control: chord.control,
+            shift: chord.shift,
+          ): onPasteFenFromClipboard,
+          SingleActivator(chord.key, meta: chord.control, shift: chord.shift):
+              onPasteFenFromClipboard,
+        },
       },
       child: Focus(
         focusNode: focusNode,

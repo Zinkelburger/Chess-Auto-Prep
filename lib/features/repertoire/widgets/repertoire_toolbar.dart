@@ -591,21 +591,7 @@ class RepertoireActionsMenu extends StatelessWidget {
           key: menuKey,
           tooltip: 'Actions',
           entries: entries,
-          anchor: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Actions', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(width: 2),
-                const Icon(
-                  Icons.arrow_drop_down,
-                  size: 20,
-                  color: AppColors.ink,
-                ),
-              ],
-            ),
-          ),
+          label: 'Actions',
         ),
       ),
     );

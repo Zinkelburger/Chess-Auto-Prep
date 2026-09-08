@@ -217,6 +217,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
       _setInlineCursor(_inlineCursor - 1);
       return;
     }
+    if (_readingPaneKey.currentState?.backOutOfFocus() ?? false) return;
     if (_analysisPath.isNotEmpty) {
       if (_analysisPath.length > 1) {
         final parentPath = _analysisPath.sublist(0, _analysisPath.length - 1);

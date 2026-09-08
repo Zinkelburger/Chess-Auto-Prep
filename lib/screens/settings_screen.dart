@@ -26,6 +26,7 @@ import '../widgets/common/choice_field.dart';
 import '../widgets/common/confirm_dialog.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
+import '../widgets/settings/keyboard_shortcuts_section.dart';
 import '../widgets/shortcut_tooltip.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -73,6 +74,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       label: 'About',
       icon: Icons.info_outline,
       description: 'Project information and app maintenance.',
+    ),
+    (
+      label: 'Keyboard shortcuts',
+      icon: Icons.keyboard_outlined,
+      description:
+          'Key mappings by view, using the same registry as the controls.',
     ),
   ];
 
@@ -133,6 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _buildAboutSection(),
                     _buildResetButton(),
                   ], compact),
+                  _page(6, const [KeyboardShortcutsSection()], compact),
                 ],
               ),
             ),
