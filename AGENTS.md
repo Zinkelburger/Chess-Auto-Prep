@@ -44,9 +44,10 @@ repertoires, training, player analysis and studies.
   For instructions/docs-only changes, run `scripts/ci.sh lint` and check links.
 - For visible changes, use the `run-chess-auto-prep` skill and inspect a
   screenshot from the headless app. Stop your preview before testing its tree.
-- Full coverage, offline tools and integration checks run on the development
-  backup in GitHub CI. Require a passing batch before publishing; a full local
-  suite before each commit is not required.
+- GitHub CI runs only through the `v*` release-tag workflow; branch pushes,
+  backup pushes and PRs do not trigger it. Releases require passing coverage,
+  offline-tool, integration and engine gates. Use focused local checks during
+  development; a full local suite before each commit is not required.
 - Before stopping, waiting for later or reporting completion, commit all
   intended files and push. Push checkpoint commits during long tasks.
 - Keep useful local commits/checkpoints; do not rewrite shared local main to
