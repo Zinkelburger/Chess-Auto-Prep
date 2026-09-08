@@ -86,10 +86,22 @@ default is two cores. This controls CPU affinity, not Hivemind's compiled
 worker count; Windows/macOS still use the engine's own CPU allocation.
 Tournament resources remain owned by the tournament runner.
 
-`widgets/board_editor/editable_board.dart` supplies the shared drag surface to
-both ordinary board editors and bughouse. `BoardEditorWidget` binds it to
-`BoardEditorController`; the bughouse cards bind it to their dual-board state.
-Bughouse king moves update the board atomically before validating the position.
+`widgets/board_editor/editable_board.dart` supplies the shared editing surface
+to both ordinary board editors and bughouse, after the lichess editor: the
+`EditorTool` in `core/board_editor_controller.dart` is a pointer (drag pieces,
+drop off the board to remove), a piece brush or the eraser. A brush or the
+eraser acts on press and keeps painting while the button is held; pressing a
+square that already holds the brush piece removes it; right-click swaps a
+brush's colour and otherwise clears the square. Flutter cannot show a piece
+as the cursor, so the board hides the cursor and draws a ghost of the tool.
+`widgets/board_editor/piece_palette.dart` is the spare-piece strip (pointer,
+king to pawn, bin): a drag places once and leaves the pointer in hand, a click
+takes the piece as the brush. `BoardWithSpares` in the editor dialog stacks
+the far side's strip, the board and the near side's strip, following the
+flip. `BoardEditorWidget` binds the surface to `BoardEditorController`; the
+bughouse cards bind it to their dual-board state and share the same tool
+model and palette. Bughouse king moves update the board atomically before
+validating the position.
 
 The app driver sets `BUGHOUSE_DB_HOME` to its disposable profile. An explicit
 archive override is authoritative and cannot fall through to the user's book.

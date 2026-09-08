@@ -123,7 +123,19 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
                 label: const Text('Clear board'),
                 onPressed: _editor.clear,
               ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.swap_vert, size: 16),
+                label: const Text('Flip board'),
+                onPressed: _editor.toggleFlip,
+              ),
             ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Drag pieces where you want them, or click a spare piece and '
+            'paint it onto squares. Right-click clears a square; with a '
+            'piece in hand it switches the colour.',
+            style: AppTextStyles.caption,
           ),
           const SizedBox(height: 12),
 

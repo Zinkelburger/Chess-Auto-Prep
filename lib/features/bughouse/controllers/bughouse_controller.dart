@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../core/board_editor_controller.dart'
+    show EditorTool, EraserTool, PieceBrush, PointerTool;
 import '../../../models/board_annotation.dart';
 import '../../../utils/chess_utils.dart' show roleChar;
 import '../../../utils/safe_change_notifier.dart';
@@ -24,22 +26,6 @@ import 'bughouse_tournament_controller.dart';
 /// analysis pump has to let go for the duration, because one process answers
 /// one question at a time.
 enum BughouseMode { play, setup, tournament }
-
-/// What a click on a board does while in setup mode.
-sealed class SetupTool {
-  const SetupTool();
-}
-
-/// Place this piece.
-class PlaceTool extends SetupTool {
-  const PlaceTool(this.piece);
-  final Piece piece;
-}
-
-/// Clear the clicked square.
-class EraseTool extends SetupTool {
-  const EraseTool();
-}
 
 /// Owns the two-board position, the line played through it, and the engine.
 ///
@@ -172,8 +158,10 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
   BughouseMode _mode = BughouseMode.play;
   BughouseMode get mode => _mode;
 
-  SetupTool _tool = const PlaceTool(Piece(color: Side.white, role: Role.pawn));
-  SetupTool get tool => _tool;
+  /// The setup-mode tool, shared with the standard board editor so both
+  /// boards edit the way every other board in the app does.
+  EditorTool _tool = const PointerTool();
+  EditorTool get tool => _tool;
 
   /// Board orientation, independent per board so either can be studied from
   /// either seat.
@@ -588,7 +576,8 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  void setTool(SetupTool tool) {
+  void setTool(EditorTool tool) {
+    if (tool == _tool) return;
     _tool = tool;
     notifyListeners();
   }
@@ -655,18 +644,57 @@ class BughouseController extends ChangeNotifier with SafeChangeNotifier {
 
   // ------------------------------------------------------------------- setup
 
-  /// Places or clears a square in the editor.
+  /// A press on a square with the tool in hand: the brush places its piece
+  /// (pressing the piece it already holds removes it), the eraser clears the
+  /// square, the pointer does nothing — it moves pieces by dragging.
   ///
-  /// [erase] is the right-click path, which clears whatever is there whichever
-  /// tool is selected — the same bargain every position editor makes, and the
-  /// reason the eraser tool is a convenience rather than the only way out.
+  /// [erase] clears whatever is there whichever tool is selected — the same
+  /// bargain every position editor makes, and the reason the eraser tool is
+  /// a convenience rather than the only way out.
   void applyTool(BughouseBoard which, Square square, {bool erase = false}) {
-    final piece = erase
-        ? null
-        : switch (_tool) {
-            PlaceTool(:final piece) => piece,
-            EraseTool() => null,
-          };
+    final Piece? piece;
+    if (erase) {
+      piece = null;
+    } else {
+      switch (_tool) {
+        case PieceBrush(piece: final brush):
+          final existing = state.board(which).board.pieceAt(square);
+          piece = existing == brush ? null : brush;
+        case EraserTool():
+          piece = null;
+        case PointerTool():
+          return;
+      }
+    }
+    _setPieceAt(which, square, piece);
+  }
+
+  /// The held pointer crossed onto [square]: keep painting without the
+  /// toggle, so a stroke fills every square it touches.
+  void paintSquare(BughouseBoard which, Square square) {
+    switch (_tool) {
+      case PieceBrush(:final piece):
+        if (state.board(which).board.pieceAt(square) == piece) return;
+        _setPieceAt(which, square, piece);
+      case EraserTool():
+        if (state.board(which).board.pieceAt(square) == null) return;
+        _setPieceAt(which, square, null);
+      case PointerTool():
+        break;
+    }
+  }
+
+  /// Right-click on a square: a brush swaps to the other colour, otherwise
+  /// the square is cleared.
+  void secondaryPress(BughouseBoard which, Square square) {
+    if (_tool case PieceBrush(:final flipped)) {
+      setTool(flipped);
+    } else {
+      applyTool(which, square, erase: true);
+    }
+  }
+
+  void _setPieceAt(BughouseBoard which, Square square, Piece? piece) {
     final next = state.withPieceAt(which, square, piece);
     if (next == null) {
       _fail('That leaves an impossible position.');

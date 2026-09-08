@@ -215,16 +215,10 @@ class _Eval extends StatelessWidget {
               icon: const Icon(Icons.edit_outlined, size: 18),
               onPressed: () => controller.setMode(BughouseMode.setup),
             ),
-            PopupMenuButton<BughouseMode>(
-              tooltip: 'More bughouse tools',
-              icon: const Icon(Icons.more_horiz, size: 20),
-              onSelected: controller.setMode,
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: BughouseMode.tournament,
-                  child: Text('Engine tournament'),
-                ),
-              ],
+            IconButton(
+              tooltip: 'Engine tournament',
+              icon: const Icon(Icons.emoji_events_outlined, size: 18),
+              onPressed: () => controller.setMode(BughouseMode.tournament),
             ),
           ],
         ),
