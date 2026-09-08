@@ -794,7 +794,18 @@ class _EngineSection extends StatelessWidget {
           BughouseEngineSettings.batchMin,
           BughouseEngineSettings.batchMax,
           (v) => controller.setEngineSettings(settings.copyWith(batchSize: v)),
-          hint: 'Positions evaluated together by the network',
+          hint:
+              'Positions evaluated together. Default: 8. Larger batches may '
+              'improve speed, but do not guarantee better moves.',
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'How many positions the engine evaluates together. '
+          'Keep 8 for everyday analysis.\n\n'
+          'Try 16 or 32 to see if your computer searches more positions per '
+          'second. Larger batches choose more positions before seeing the '
+          'results, so higher speed does not guarantee better moves.',
+          style: AppTextStyles.muted,
         ),
       ],
     );

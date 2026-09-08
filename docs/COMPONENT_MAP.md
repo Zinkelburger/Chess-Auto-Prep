@@ -84,7 +84,10 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 `taskset`, restricted to the parent process’s allowed CPU set. The persisted
 default is two cores. This controls CPU affinity, not Hivemind's compiled
 worker count; Windows/macOS still use the engine's own CPU allocation.
-Tournament resources remain owned by the tournament runner.
+Tournament resources remain owned by the tournament runner. Engine settings
+explains batch size directly below its control: keep 8 for everyday analysis;
+16 or 32 are optional throughput experiments, with a search-feedback trade-off
+that means faster processing does not guarantee stronger moves.
 
 Windows first-use checks run in the built desktop app via
 `integration_test/bughouse_first_run_test.dart`: an empty disposable profile
