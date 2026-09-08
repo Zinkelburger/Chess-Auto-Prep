@@ -21,9 +21,11 @@ class GameViewSettingsDialog extends StatefulWidget {
     this.onReadingOptions,
     this.onFullscreen,
     this.embedded = false,
+    this.onAnalysis,
   });
 
   final bool embedded;
+  final VoidCallback? onAnalysis;
   final GameViewPreferences preferences;
   final Perspective perspective;
   final ValueChanged<GameViewPreferences> onChanged;
@@ -96,11 +98,7 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
           title: 'Analysis',
           icon: Icons.analytics_outlined,
           children: [
-            SettingsSwitchTile(
-              label: 'Analysis overview',
-              value: _prefs.graph,
-              onChanged: (v) => _update(_prefs.copyWith(graph: v)),
-            ),
+            _action('Open analysis tab', widget.onAnalysis),
             SettingsSwitchTile(
               label: 'Live engine controls',
               value: _prefs.engine,

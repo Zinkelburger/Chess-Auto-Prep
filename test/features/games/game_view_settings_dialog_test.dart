@@ -31,9 +31,7 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Analysis overview'));
-    await tester.pumpAndSettle();
-    expect(prefs.graph, isTrue);
+    expect(find.text('Open analysis tab'), findsOneWidget);
     await tester.tap(find.text('Live engine controls'));
     await tester.pumpAndSettle();
     expect(prefs.engine, isTrue);

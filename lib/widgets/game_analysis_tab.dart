@@ -383,6 +383,28 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
               ],
             ),
           ),
+        if (!isAnalyzing && evals.isNotEmpty && evals.length < total)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Saved evaluations for ${evals.length} of $total played positions',
+                  style: AppTextStyles.muted,
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'The PGN contains evaluations for only part of the mainline. Analyze the game to fill the gaps.',
+                  style: AppTextStyles.caption,
+                ),
+                TextButton(
+                  onPressed: _startAnalysis,
+                  child: const Text('Analyze full game'),
+                ),
+              ],
+            ),
+          ),
         if (evals.isNotEmpty) ...[
           GameAnalysisChart(
             evals: evals,

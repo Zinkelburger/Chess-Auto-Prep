@@ -54,7 +54,7 @@ class GameNavBar extends StatelessWidget {
     child: Wrap(
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 4,
+      spacing: 8,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,

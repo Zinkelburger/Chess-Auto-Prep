@@ -5,6 +5,7 @@ mixin _AppBarBuildersMixin
     on State<PgnViewerScreen>, _RepertoireGenerationMixin {
   bool get _editMode;
   bool get _onLineTab;
+  bool get _onReferenceTab;
   bool get _viewingStudy;
   set _singleGameFocus(bool value);
   GameViewPreferences get _viewPreferences;
@@ -13,13 +14,13 @@ mixin _AppBarBuildersMixin
   int get _explorerTabIndex;
   int get _analysisTabIndex;
   void _showPanel(int index);
+  Future<void> _checkDatabase();
   PgnViewerHandle get _activeMovetextController;
   PgnViewerWidgetController get _pgnWidgetController;
   PgnViewerWidgetController get _lineWidgetController;
   void _toggleEditMode();
   Future<void> _editInStudy();
   Future<void> _addCurrentGameToStudy();
-  Future<void> _saveSliceAsStudy();
   Future<void> _copyCurrentGamePgn();
   void _openSliceDialog();
   void _showTrophyCabinet();
@@ -82,8 +83,10 @@ mixin _AppBarBuildersMixin
         ],
       ),
       actions: [
+        if (_controller.filteredGames.isNotEmpty &&
+            !_controller.isSolitaireMode)
+          _buildAddTabMenu(),
         _buildViewMenu(),
-        const SizedBox(width: 16),
         const AppModeSwitcher(),
         AppSettingsButton(
           mode: AppMode.pgnViewer,
@@ -94,6 +97,42 @@ mixin _AppBarBuildersMixin
     );
   }
 
+  Widget _buildAddTabMenu({bool compact = false}) => AppOverflowMenu(
+    label: compact ? null : 'Add tab',
+    anchor: compact
+        ? const Padding(
+            padding: EdgeInsets.all(8),
+            child: Icon(Icons.add, size: 18, color: AppColors.onSurfaceMuted),
+          )
+        : null,
+    tooltip: 'Add a workspace tab',
+    entries: [
+      AppMenuEntry(
+        label: 'Check against database…',
+        icon: Icons.storage_outlined,
+        onRun: _checkDatabase,
+      ),
+      AppMenuEntry(label: 'My books', onRun: () => _showPanel(_lineTabIndex)),
+      AppMenuEntry(
+        label: 'Opening explorer',
+        onRun: () => _showPanel(_explorerTabIndex),
+      ),
+      AppMenuEntry(
+        label: 'Analysis',
+        onRun: () => _showPanel(_analysisTabIndex),
+      ),
+      AppMenuEntry(
+        label: 'Collection opening tree',
+        shortcut: AppShortcut.toggleOpeningTree.label,
+        onRun: () => _showPanel(PgnWorkspace.tree),
+      ),
+      AppMenuEntry(
+        label: 'Database operations',
+        onRun: () => _showPanel(PgnWorkspace.collection),
+      ),
+    ],
+  );
+
   Widget _buildViewMenu() {
     final hasGame = _controller.filteredGames.isNotEmpty;
     final solitaire = _controller.isSolitaireMode;
@@ -101,82 +140,33 @@ mixin _AppBarBuildersMixin
       label: 'Actions',
       tooltip: 'Actions',
       entries: [
-        AppMenuEntry(
-          heading: 'File',
-          label: 'Open PGN file…',
-          onRun: () => unawaited(_pickFile()),
-        ),
-        AppMenuEntry(
-          label: 'Paste PGN',
-          shortcut: 'Ctrl+V',
-          onRun: () => unawaited(_pastePgn()),
-        ),
-        if (hasGame) AppMenuEntry(label: 'Close file', onRun: _closeFile),
-        if (hasGame && !solitaire) ...[
+        if (!hasGame) ...[
           AppMenuEntry(
-            heading: 'Explore',
-            label: 'Game moves',
-            onRun: () => _showPanel(0),
+            label: 'Open PGN file…',
+            onRun: () => unawaited(_pickFile()),
           ),
           AppMenuEntry(
-            label: 'My repertoire',
-            onRun: () => _showPanel(_lineTabIndex),
-          ),
-          AppMenuEntry(
-            label: 'Opening explorer',
-            onRun: () => _showPanel(_explorerTabIndex),
-          ),
-          AppMenuEntry(
-            label: 'Game analysis…',
-            onRun: () => _showPanel(_analysisTabIndex),
-          ),
-          AppMenuEntry(
-            label: _controller.showOpeningTree
-                ? 'Return to game'
-                : 'Collection opening tree',
-            shortcut: AppShortcut.toggleOpeningTree.label,
-            onRun: _controller.toggleOpeningTree,
-          ),
-          AppMenuEntry(
-            label: 'Solitaire chess',
-            enabled: !_controller.showOpeningTree,
-            shortcut: AppShortcut.solitaire.label,
-            onRun: _toggleSolitaireMode,
+            label: 'Paste PGN',
+            shortcut: 'Ctrl+V',
+            onRun: () => unawaited(_pastePgn()),
           ),
         ],
-        if (hasGame && solitaire)
-          AppMenuEntry(
-            heading: 'Play',
-            label: 'Leave solitaire chess',
-            onRun: _toggleSolitaireMode,
-          ),
-        if (_controller.totalTrophyCount > 0 || solitaire)
-          AppMenuEntry(
-            label: 'Solitaire chess trophies',
-            onRun: _showTrophyCabinet,
-          ),
         if (hasGame) ...[
-          AppMenuEntry(
-            heading: 'Study',
-            label: _viewingStudy ? 'Edit study' : 'Save game to study…',
-            onRun: _viewingStudy ? _editInStudy : _addCurrentGameToStudy,
-          ),
-          if (_controller.filteredGames.length > 1)
+          if (!solitaire && !_onReferenceTab)
             AppMenuEntry(
-              label: 'Save selected games to study…',
-              onRun: _saveSliceAsStudy,
-            ),
-          if (_viewingStudy)
-            AppMenuEntry(
-              label: 'Copy game to another study…',
-              onRun: _addCurrentGameToStudy,
-            ),
-          if (!solitaire)
-            AppMenuEntry(
-              label: _editMode ? 'Finish amending' : 'Amend game',
+              label: _editMode ? 'Finish editing' : 'Edit game',
+              icon: Icons.edit_outlined,
               enabled: !_onLineTab,
               onRun: _toggleEditMode,
             ),
+          AppMenuEntry(
+            label: _viewingStudy && !_onReferenceTab
+                ? 'Edit study'
+                : 'Save game to study…',
+            onRun: _viewingStudy && !_onReferenceTab
+                ? _editInStudy
+                : _addCurrentGameToStudy,
+          ),
           AppMenuEntry(label: 'Copy game PGN', onRun: _copyCurrentGamePgn),
           if (_activeMovetextController.hasEphemeralMoves)
             AppMenuEntry(
@@ -190,25 +180,42 @@ mixin _AppBarBuildersMixin
               },
             ),
           AppMenuEntry(
-            heading: 'Collection',
-            label: 'Export ${_controller.filteredGames.length} games as PGN…',
-            onRun: _exportSlice,
-          ),
-          AppMenuEntry(
-            label: 'Export as Scid database…',
-            onRun: _exportSliceAsScid,
-          ),
-          AppMenuEntry(
-            label: 'Seed a repertoire from these games…',
-            onRun: _generateRepertoireFromGames,
+            label: solitaire ? 'Leave solitaire chess' : 'Solitaire chess',
+            enabled: !_controller.showOpeningTree && !_onReferenceTab,
+            shortcut: AppShortcut.solitaire.label,
+            onRun: _toggleSolitaireMode,
           ),
         ],
+        if (_controller.totalTrophyCount > 0 || solitaire)
+          AppMenuEntry(
+            label: 'Solitaire chess trophies',
+            onRun: _showTrophyCabinet,
+          ),
       ],
     );
   }
 
+  Widget _buildDatabaseTools() => PgnCollectionPanel(
+    games: _controller.filteredGames,
+    onSaveStudy: (games) async {
+      if (!mounted) return;
+      await addGamesToStudy(
+        context,
+        games: games,
+        currentIndex: 0,
+        chooseGames: false,
+      );
+      if (mounted) _reclaimFocus();
+    },
+    onExportPgn: _exportSlice,
+    onExportScid: _exportSliceAsScid,
+    onSeed: _generateRepertoireFromGames,
+    onTree: () => _showPanel(PgnWorkspace.tree),
+  );
+
   Widget _gameViewSettings() => GameViewSettingsDialog(
     preferences: _viewPreferences,
+    onAnalysis: () => _showPanel(_analysisTabIndex),
     perspective: _controller.perspective,
     onChanged: _setViewPreferences,
     onFlip: _controller.toggleBoardFlipped,
@@ -218,7 +225,8 @@ mixin _AppBarBuildersMixin
         ? null
         : (_onLineTab ? _lineWidgetController : _pgnWidgetController)
               .showReadingOptions,
-    onFullscreen: _controller.filteredGames.isNotEmpty && !_onLineTab
+    onFullscreen:
+        _controller.filteredGames.isNotEmpty && !_onLineTab && !_onReferenceTab
         ? _controller.toggleFullScreen
         : null,
     embedded: true,
