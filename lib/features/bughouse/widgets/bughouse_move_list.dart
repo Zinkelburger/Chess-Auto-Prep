@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
+import '../../../utils/app_shortcuts.dart';
+import '../../../widgets/shortcut_tooltip.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_history.dart';
@@ -138,12 +140,18 @@ class BughouseLineControls extends StatelessWidget {
       children: [
         _NavButton(
           icon: Icons.first_page,
-          tooltip: 'Start of the line (Home)',
+          tooltip: actionTooltip(
+            'Start of the line',
+            shortcut: AppShortcut.goToStart,
+          ),
           onPressed: history.canGoBack ? controller.toStart : null,
         ),
         _NavButton(
           icon: Icons.chevron_left,
-          tooltip: 'Back one ply (←)',
+          tooltip: actionTooltip(
+            'Back one ply',
+            shortcut: AppShortcut.backOneMove,
+          ),
           onPressed: history.canGoBack ? controller.back : null,
         ),
         Padding(
@@ -157,12 +165,18 @@ class BughouseLineControls extends StatelessWidget {
         ),
         _NavButton(
           icon: Icons.chevron_right,
-          tooltip: 'Forward one ply (→)',
+          tooltip: actionTooltip(
+            'Forward one ply',
+            shortcut: AppShortcut.forwardOneMove,
+          ),
           onPressed: history.canGoForward ? controller.forward : null,
         ),
         _NavButton(
           icon: Icons.last_page,
-          tooltip: 'End of the line (End)',
+          tooltip: actionTooltip(
+            'End of the line',
+            shortcut: AppShortcut.goToEnd,
+          ),
           onPressed: history.canGoForward ? controller.toEnd : null,
         ),
         const SizedBox(width: 12),

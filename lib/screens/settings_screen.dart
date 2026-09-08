@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../features/updates/widgets/app_updates.dart';
 import '../constants/engine_defaults.dart';
 import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
@@ -141,8 +142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     (
       label: 'Keyboard shortcuts',
       icon: Icons.keyboard_outlined,
-      description:
-          'Key mappings by view, using the same registry as the controls.',
+      description: 'The essentials for the current view.',
     ),
     (
       label: 'Engine analysis',
@@ -215,6 +215,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ], compact),
                       _page(4, [_buildDatabasesSection()], compact),
                       _page(5, [
+                        const UpdateSettingsSection(),
                         _buildAboutSection(),
                         _buildResetButton(),
                       ], compact),
@@ -369,7 +370,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                       ],
                       const Padding(
-                        padding: EdgeInsets.fromLTRB(12, 24, 12, 16),
+                        padding: EdgeInsets.fromLTRB(12, 16, 12, 8),
                         child: Text('GLOBAL', style: AppTextStyles.eyebrow),
                       ),
                       for (var i = 0; i < 7; i++) ...[
@@ -455,9 +456,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Padding(
             padding: EdgeInsets.fromLTRB(
-              compact ? 20 : 32,
+              compact ? 16 : 24,
               24,
-              compact ? 20 : 32,
+              compact ? 16 : 24,
               0,
             ),
             child: Column(
@@ -492,7 +493,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     return ListView(
       key: ValueKey('settings-default-${mode.name}-$_chapter'),
-      padding: EdgeInsets.all(compact ? 20 : 32),
+      padding: EdgeInsets.all(compact ? 16 : 24),
       children: [
         if (mode == AppMode.databases)
           _buildDatabasesSection()
@@ -520,26 +521,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       key: PageStorageKey('settings-page-$index'),
       primary: false,
       padding: EdgeInsets.fromLTRB(
-        compact ? 20 : 40,
-        32,
-        compact ? 20 : 40,
-        40,
+        compact ? 16 : 24,
+        16,
+        compact ? 16 : 24,
+        24,
       ),
       children: [
         Align(
           alignment: Alignment.topLeft,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: const BoxConstraints(maxWidth: 680),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  section.label,
-                  style: AppTextStyles.title.copyWith(fontSize: 26),
-                ),
+                Text(section.label, style: AppTextStyles.title),
                 const SizedBox(height: 8),
                 Text(section.description, style: AppTextStyles.muted),
-                const SizedBox(height: 28),
+                const SizedBox(height: 16),
                 ...children,
               ],
             ),
@@ -732,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// had a section here, and between them they filled more of this screen than
   /// everything else put together — while still not answering "how much disk
   /// is this using", because no section could see the others. They live on the
-  /// Databases page now (Ctrl+9). What stays is the one switch that is a
+  /// Databases page now. What stays is the one switch that is a
   /// preference about *this machine's* network use rather than a fact about a
   /// store on its disk.
   Widget _buildDatabasesSection() {

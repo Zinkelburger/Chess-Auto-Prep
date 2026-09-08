@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'features/updates/widgets/app_updates.dart';
 import 'core/app_history.dart';
 import 'core/app_state.dart';
 import 'core/study_controller.dart';
@@ -278,7 +279,7 @@ class ChessAutoPrepApp extends StatelessWidget {
             if (enableSemantics) return wrapped;
             return ExcludeSemantics(child: wrapped);
           },
-          home: const MainScreen(),
+          home: const AppUpdateHost(child: MainScreen()),
           debugShowCheckedModeBanner: false,
         ),
       ),

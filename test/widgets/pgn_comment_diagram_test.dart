@@ -119,7 +119,8 @@ void main() {
         .join(' ');
     expect(text, contains('1...'));
     expect(text, contains('!?'));
-    expect(text, contains('or ...'));
+    expect(text, contains('or '));
+    expect(text, contains('...d5'));
     expect(find.byTooltip('Preview comment move'), findsWidgets);
   });
   testWidgets('Black ellipsis cannot preview a legal White pawn move', (

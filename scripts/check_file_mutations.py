@@ -19,6 +19,8 @@ MUTATION = re.compile(
 # modules. The count is a tripwire: adding another direct mutation in an
 # already-approved file still fails until this policy is deliberately reviewed.
 APPROVED: dict[str, tuple[int, str]] = {
+    "lib/features/updates/services/app_update_service.dart": (1, "stream only to a private disposable .part file; verified move uses mutation service"),
+    "lib/services/storage/schema_guard.dart": (2, "synchronous SQLite snapshot adapter; publish flushed VACUUM backup and remove only failed temporary output"),
     "lib/utils/atomic_file.dart": (18, "journaled atomic-write adapter"),
     "lib/services/storage/file_mutation_service.dart": (
         7,

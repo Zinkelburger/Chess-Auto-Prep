@@ -20,6 +20,7 @@ import '../../theme/pgn_text_styles.dart';
 import 'comment_editor.dart';
 import 'comment_diagram.dart';
 import '../../utils/course_comment_spacing.dart';
+import '../../utils/prose_comment_parser.dart';
 import 'pgn_reading_pane.dart';
 import 'pgn_reading_passage.dart';
 import 'movetext_primitives.dart' show MoveChip;
@@ -92,6 +93,9 @@ class PgnMovetextView extends StatefulWidget {
   /// Whether comments can be edited (click a move to edit its comment).
   final bool canEditComments;
 
+  /// Show every source branch separately while editing its annotations.
+  final bool editMode;
+
   /// Force book-PGN comment formatting for ambiguous source material.
   /// Recognizable Chessable/Forward Chess markup and long multi-paragraph
   /// comments are detected automatically; this flag is only needed when a
@@ -163,6 +167,7 @@ class PgnMovetextView extends StatefulWidget {
     required this.analysisPath,
     required this.editingCommentIndex,
     required this.canEditComments,
+    this.editMode = false,
     this.bookFormatting = false,
     this.startingMoveNumber = 1,
     this.startingWhiteTurn = true,
@@ -187,6 +192,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
   final Map<int, bool> _branchVisibility = {};
 
   void _toggleBranch(int id) {
+    if (!mounted) return;
     setState(() => _branchVisibility[id] = !(_branchVisibility[id] ?? true));
   }
 
@@ -369,12 +375,6 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
     }
 
-    // Variations at ply 0 (before any move)
-    final varsAtZero = view.variationsByPly[0];
-    if (varsAtZero != null && varsAtZero.isNotEmpty) {
-      emitVariationsAtPly(0);
-    }
-
     for (int i = 0; i < view.moveHistory.length; i++) {
       // Solitaire mode: stop rendering at the revealed boundary
       if (view.reveal != null && !view.reveal!.isMainlineVisible(i)) break;
@@ -401,9 +401,9 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       if (isNullMoveSan(san)) {
         for (final c in moveData.comments ?? const <String>[]) {
           if (machineAnnotated && _isEvalOnlyComment(c)) continue;
-          emitComment(c);
+          emitComment(c, anchorPos: _posAt(prefix, i), anchorPly: i);
         }
-        final ply = i + 1;
+        final ply = i;
         final varsHere = view.variationsByPly[ply];
         if (varsHere != null && varsHere.isNotEmpty) {
           emitVariationsAtPly(ply);
@@ -526,21 +526,20 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
         );
       }
 
-      // Variations branch *after* the move at index i (ply = i + 1). In
-      // solitaire, only ephemeral attempts show at the un-guessed frontier.
-      final ply = i + 1;
-      final varsHere = view.variationsByPly[ply];
-      if (varsHere != null && varsHere.isNotEmpty) {
-        emitVariationsAtPly(ply);
-      }
+      // RAVs at i are alternatives to the move just read, so its explanation
+      // comes first (including opening comments before root alternatives).
+      emitVariationsAtPly(i);
 
       if (!isWhiteTurn) moveNumber++;
       isWhiteTurn = !isWhiteTurn;
     }
 
-    // NOTE: variations branching after the final move are already rendered by
-    // the loop above (ply = i + 1 reaches moveHistory.length on the last move).
-    // Do NOT re-render them here or they appear twice.
+    // Continuations added beyond the spine, and revealed solitaire attempts
+    // at an unplayed frontier, still need a place after the last visible move.
+    final frontier =
+        view.reveal?.mainlinePly.clamp(0, view.moveHistory.length) ??
+        view.moveHistory.length;
+    emitVariationsAtPly(frontier);
 
     flushSpans();
 

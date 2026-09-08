@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/app_shortcuts.dart';
+import 'shortcut_tooltip.dart';
 import 'chess_board_widget.dart';
 import 'game_nav_bar.dart' show kAutoPlaySpeeds;
 
@@ -159,7 +161,10 @@ class FullscreenGameView extends StatelessWidget {
                         Icons.skip_previous,
                         color: AppColors.overlayInk,
                       ),
-                      tooltip: 'Previous game (↑)',
+                      tooltip: actionTooltip(
+                        'Previous game',
+                        shortcut: AppShortcut.previousItem,
+                      ),
                     ),
                     IconButton(
                       onPressed: onGoBack,
@@ -167,7 +172,10 @@ class FullscreenGameView extends StatelessWidget {
                         Icons.chevron_left,
                         color: AppColors.overlayInk,
                       ),
-                      tooltip: 'Back (←)',
+                      tooltip: actionTooltip(
+                        'Back',
+                        shortcut: AppShortcut.backOneMove,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     IconButton(
@@ -181,9 +189,10 @@ class FullscreenGameView extends StatelessWidget {
                             ? AppColors.starAccent
                             : AppColors.overlayInk,
                       ),
-                      tooltip: isAutoPlaying
-                          ? 'Pause (Space)'
-                          : 'Watch game (Space)',
+                      tooltip: actionTooltip(
+                        isAutoPlaying ? 'Pause' : 'Watch game',
+                        shortcut: AppShortcut.autoPlay,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     IconButton(
@@ -192,7 +201,10 @@ class FullscreenGameView extends StatelessWidget {
                         Icons.chevron_right,
                         color: AppColors.overlayInk,
                       ),
-                      tooltip: 'Forward (→)',
+                      tooltip: actionTooltip(
+                        'Forward',
+                        shortcut: AppShortcut.forwardOneMove,
+                      ),
                     ),
                     IconButton(
                       onPressed: currentIndex < totalGames - 1 ? onNext : null,
@@ -200,7 +212,10 @@ class FullscreenGameView extends StatelessWidget {
                         Icons.skip_next,
                         color: AppColors.overlayInk,
                       ),
-                      tooltip: 'Next game (↓)',
+                      tooltip: actionTooltip(
+                        'Next game',
+                        shortcut: AppShortcut.nextItem,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     PopupMenuButton<double>(
@@ -240,7 +255,7 @@ class FullscreenGameView extends StatelessWidget {
                       ],
                     ),
                     Tooltip(
-                      message: 'Auto next game (W)',
+                      message: 'Auto next game',
                       child: GestureDetector(
                         onTap: () => onSetAutoNext?.call(!autoNextGame),
                         child: Container(
@@ -290,7 +305,10 @@ class FullscreenGameView extends StatelessWidget {
                 color: AppColors.overlayInkMuted,
                 size: 28,
               ),
-              tooltip: 'Exit fullscreen (Esc)',
+              tooltip: actionTooltip(
+                'Exit fullscreen',
+                shortcut: AppShortcut.leave,
+              ),
             ),
           ),
         ],

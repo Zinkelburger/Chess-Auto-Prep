@@ -26,8 +26,8 @@ class RepertoireLinesSidePanel extends StatelessWidget {
     required this.children,
     required this.onCollapsedChanged,
     this.stripLabel,
-    this.hideTooltip = 'Hide lines (L)',
-    this.showTooltip = 'Show lines (L)',
+    this.hideTooltip = 'Hide lines',
+    this.showTooltip = 'Show lines',
   });
 
   final bool collapsed;

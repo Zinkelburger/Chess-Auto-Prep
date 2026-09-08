@@ -14,8 +14,6 @@ import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_eval.dart';
 import '../models/bughouse_state.dart';
 import '../../../widgets/common/number_stepper.dart';
-import '../../../widgets/shortcut_tooltip.dart';
-import '../../../utils/app_shortcuts.dart';
 import 'bughouse_book_panel.dart';
 import '../services/bughouse_cpu_limit.dart';
 import 'bughouse_panel_section.dart';
@@ -182,10 +180,7 @@ class _Eval extends StatelessWidget {
             IconButton(
               visualDensity: VisualDensity.compact,
               icon: Icon(on ? Icons.pause : Icons.play_arrow, size: 22),
-              tooltip: actionTooltip(
-                on ? 'Pause analysis' : 'Resume analysis',
-                shortcut: AppShortcut.autoPlay,
-              ),
+              tooltip: on ? 'Pause analysis' : 'Resume analysis',
               onPressed: controller.isComparing
                   ? null
                   : () => controller.setAnalysisEnabled(!on),

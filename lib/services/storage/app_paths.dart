@@ -23,6 +23,9 @@ class AppPaths {
     return getApplicationSupportDirectory();
   }
 
+  /// Disposable downloads belong in local cache (not Windows roaming data).
+  static Future<Directory> cacheDirectory() => getApplicationCacheDirectory();
+
   static Future<File> documentsFile(String relativePath) async {
     final docs = await documentsDirectory();
     return File(p.join(docs.path, relativePath));

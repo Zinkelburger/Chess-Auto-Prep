@@ -12,6 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Check release tag matches the embedded application version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PYCODE'
+          import os
+          import re
+          from pathlib import Path
+          version = re.search(r'^version:\s*(\S+)', Path('pubspec.yaml').read_text(), re.M).group(1)
+          assert os.environ['RELEASE_TAG'] == f'v{version}', 'Release tag must match pubspec.yaml for update comparisons'
+          PYCODE
+
       # Pinned so the formatter can't drift between stable releases and
       # start flagging files that are clean locally. Bump deliberately,
       # re-running `dart format` in the same commit if output changes.

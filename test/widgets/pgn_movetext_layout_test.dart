@@ -29,6 +29,7 @@ void main() {
     WidgetTester tester, {
     required List<PgnNodeData> moveHistory,
     Map<int, List<MoveNode>> variationsByPly = const {},
+    bool editMode = false,
   }) {
     return tester.pumpWidget(
       MaterialApp(
@@ -42,6 +43,7 @@ void main() {
               analysisPath: const [],
               editingCommentIndex: null,
               canEditComments: false,
+              editMode: editMode,
               onMainLineMoveClicked: (_) {},
               onShowMoveContextMenu: (_, _) {},
               onSaveComment: (_, _) {},
@@ -59,6 +61,75 @@ void main() {
       .map((r) => r.text.toPlainText())
       .where((t) => t.trim().isNotEmpty)
       .toList();
+
+  testWidgets(
+    'welcome precedes root sidelines and repeated leaves read as prose',
+    (tester) async {
+      final d4 = MoveNode(san: 'd4', fen: 'unused', comment: 'Other openings.');
+      final reference = MoveNode(
+        san: 'e4',
+        fen: 'unused',
+        comment: 'in one course.',
+      );
+      final continuation = MoveNode(
+        san: 'e4',
+        fen: 'unused',
+        comment: 'Real line.',
+      );
+      continuation.children.add(MoveNode(san: 'c5', fen: 'unused'));
+      await pumpMovetext(
+        tester,
+        moveHistory: [
+          PgnNodeData(san: 'e4', comments: ['Welcome.']),
+        ],
+        variationsByPly: {
+          0: [d4, reference, continuation],
+        },
+      );
+      expect(
+        tester
+            .getTopLeft(find.textContaining('Welcome.', findRichText: true))
+            .dy,
+        lessThan(
+          tester
+              .getTopLeft(
+                find.textContaining('Other openings.', findRichText: true),
+              )
+              .dy,
+        ),
+      );
+      expect(find.byKey(ValueKey('pgn-branch-${reference.id}')), findsNothing);
+      expect(
+        find.textContaining('1.e4 in one course.', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('pgn-branch-${continuation.id}')),
+        findsOneWidget,
+      );
+      expect(reference.comment, 'in one course.');
+      expect(continuation.children.single.san, 'c5');
+    },
+  );
+
+  testWidgets('editing preserves controls on a repeated prose reference', (
+    tester,
+  ) async {
+    final reference = MoveNode(
+      san: 'e4',
+      fen: 'unused',
+      comment: 'in one course.',
+    );
+    await pumpMovetext(
+      tester,
+      editMode: true,
+      moveHistory: [PgnNodeData(san: 'e4')],
+      variationsByPly: {
+        0: [reference],
+      },
+    );
+    expect(find.byKey(ValueKey('pgn-branch-${reference.id}')), findsOneWidget);
+  });
 
   testWidgets('black move after white comment keeps 1... prefix', (
     tester,

@@ -375,7 +375,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                     overflow: TextOverflow.ellipsis,
                   )
                 : const Tooltip(
-                    message: 'Toggle engine (E)',
+                    message: 'Toggle engine',
                     child: Text('Engine', style: AppTextStyles.caption),
                   ),
           ),

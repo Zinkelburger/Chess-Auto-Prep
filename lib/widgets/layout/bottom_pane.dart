@@ -8,6 +8,8 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../utils/app_shortcuts.dart';
+import '../shortcut_tooltip.dart';
 import 'bottom_pane_controller.dart';
 
 export 'bottom_pane_controller.dart' show BottomPaneController, BottomPaneTab;
@@ -195,7 +197,7 @@ class BottomPaneState extends State<BottomPane>
           IconButton(
             icon: const Icon(Icons.close, size: 14),
             onPressed: _closeFromChrome,
-            tooltip: 'Collapse (Esc)',
+            tooltip: actionTooltip('Collapse', shortcut: AppShortcut.leave),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),

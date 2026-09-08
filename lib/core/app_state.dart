@@ -40,20 +40,17 @@ extension AppModeLabel on AppMode {
 }
 
 /// The mode menu, grouped by what you are doing rather than listed flat.
-/// Also the order of the Ctrl+1…9 shortcuts (see [AppModeShortcut]), so the
-/// menu teaches the chord that makes it unnecessary.
 const List<({String heading, List<AppMode> modes})> kAppModeGroups = [
   (heading: 'Train', modes: [AppMode.tactics, AppMode.repertoireTrainer]),
   (heading: 'Build', modes: [AppMode.repertoire, AppMode.study]),
   (heading: 'Analyse', modes: [AppMode.pgnViewer, AppMode.positionAnalysis]),
   (heading: 'Lab', modes: [AppMode.engineTournament, AppMode.bughouse]),
   // Its own group of one, at the end, because it is the only entry that is
-  // about the app's data rather than about chess — and because appending it
-  // leaves every existing Ctrl+digit chord where it was.
+  // about the app's data rather than about chess.
   (heading: 'Data', modes: [AppMode.databases]),
 ];
 
-/// Every mode in menu order — what Ctrl+1…9 index into.
+/// Every mode in menu order.
 final List<AppMode> kAppModeMenuOrder = [
   for (final group in kAppModeGroups) ...group.modes,
 ];
@@ -87,21 +84,11 @@ List<({String heading, List<AppMode> modes})> availableAppModeGroups() => [
       ),
 ];
 
-/// Menu order, filtered the same way — the modes a chord may reach.
+/// Menu order, filtered to available modes.
 List<AppMode> availableModeMenuOrder() => [
   for (final mode in kAppModeMenuOrder)
     if (mode.isAvailable) mode,
 ];
-
-extension AppModeShortcut on AppMode {
-  /// 1-based position in the menu: the digit in this mode's Ctrl+digit chord.
-  ///
-  /// Numbered from the *full* menu, so a mode's chord is the same on every
-  /// machine whether or not an optional one is installed. The one optional
-  /// mode, bughouse, sits second from last, so today nothing renumbers
-  /// either way.
-  int get shortcutNumber => kAppModeMenuOrder.indexOf(this) + 1;
-}
 
 extension AppModeEngine on AppMode {
   /// Modes whose [IndexedStack] child keeps an interactive engine pane alive.

@@ -19,13 +19,13 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_state.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
+import '../../../utils/app_shortcuts.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_settings_button.dart';
@@ -99,12 +99,10 @@ class _BughouseScreenState extends State<BughouseScreen> {
                   AppMenuEntry(
                     heading: 'Board',
                     label: 'Flip board A',
-                    shortcut: 'F',
                     onRun: () => controller.toggleFlip(BughouseBoard.a),
                   ),
                   AppMenuEntry(
                     label: 'Flip board B',
-                    shortcut: 'G',
                     onRun: () => controller.toggleFlip(BughouseBoard.b),
                   ),
                 ],
@@ -124,100 +122,98 @@ class _BughouseScreenState extends State<BughouseScreen> {
               ),
             ],
           ),
-          body: CallbackShortcuts(
-            bindings: {
-              // Every binding defers to a text field with focus: `f`, `g` and
-              // space are letters someone types into a clock or a FEN, and
-              // the arrows move the caret there. The app's other boards make
-              // the same check.
-              const SingleActivator(LogicalKeyboardKey.arrowLeft):
-                  _unlessTyping(controller.back),
-              const SingleActivator(LogicalKeyboardKey.arrowRight):
-                  _unlessTyping(controller.forward),
-              const SingleActivator(LogicalKeyboardKey.home): _unlessTyping(
-                controller.toStart,
-              ),
-              const SingleActivator(LogicalKeyboardKey.end): _unlessTyping(
-                controller.toEnd,
-              ),
-              const SingleActivator(LogicalKeyboardKey.keyF): _unlessTyping(
-                () => controller.toggleFlip(BughouseBoard.a),
-              ),
-              const SingleActivator(LogicalKeyboardKey.keyG): _unlessTyping(
-                () => controller.toggleFlip(BughouseBoard.b),
-              ),
-              const SingleActivator(LogicalKeyboardKey.space): _unlessTyping(
-                () =>
-                    controller.setAnalysisEnabled(!controller.analysisEnabled),
-              ),
-            },
-            child: Focus(
-              focusNode: _keys,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // A tournament panel carries a games table and a
-                  // crosstable, so it needs more room than an engine pane.
-                  // Whenever the boards can still be drawn at full size the
-                  // engine pane gets that width too, so switching modes
-                  // never resizes the boards; only on a window too narrow
-                  // for both does the engine pane give the boards the room.
-                  const wide = 540.0;
-                  const narrow = 400.0;
-                  final boardsFitBeside =
-                      constraints.maxWidth - 24 - 16 - wide >=
-                      _Boards.pairWidthAtFullSize;
-                  final panelWidth =
-                      controller.mode == BughouseMode.tournament ||
-                          boardsFitBeside
-                      ? wide
-                      : narrow;
-                  // Below this the two boards plus a panel stop fitting side by
-                  // side, and stacking beats shrinking all three.
-                  final stacked = constraints.maxWidth < 720 + panelWidth;
-                  final side = _SidePanel(controller: controller);
+          body: Focus(
+            focusNode: _keys,
+            onKeyEvent: (node, event) => handleKeyBindings(
+              [
+                ...KeyBinding.forShortcut(
+                  AppShortcut.backOneMove,
+                  'Previous ply',
+                  controller.back,
+                ),
+                ...KeyBinding.forShortcut(
+                  AppShortcut.forwardOneMove,
+                  'Next ply',
+                  controller.forward,
+                ),
+                ...KeyBinding.forShortcut(
+                  AppShortcut.goToStart,
+                  'Start of line',
+                  controller.toStart,
+                ),
+                ...KeyBinding.forShortcut(
+                  AppShortcut.goToEnd,
+                  'End of line',
+                  controller.toEnd,
+                ),
+              ],
+              event,
+              node: node,
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // A tournament panel carries a games table and a
+                // crosstable, so it needs more room than an engine pane.
+                // Whenever the boards can still be drawn at full size the
+                // engine pane gets that width too, so switching modes
+                // never resizes the boards; only on a window too narrow
+                // for both does the engine pane give the boards the room.
+                const wide = 540.0;
+                const narrow = 400.0;
+                final boardsFitBeside =
+                    constraints.maxWidth - 24 - 16 - wide >=
+                    _Boards.pairWidthAtFullSize;
+                final panelWidth =
+                    controller.mode == BughouseMode.tournament ||
+                        boardsFitBeside
+                    ? wide
+                    : narrow;
+                // Below this the two boards plus a panel stop fitting side by
+                // side, and stacking beats shrinking all three.
+                final stacked = constraints.maxWidth < 720 + panelWidth;
+                final side = _SidePanel(controller: controller);
 
-                  if (stacked) {
-                    return ListView(
-                      padding: const EdgeInsets.all(12),
-                      children: [
-                        _Boards(
-                          controller: controller,
-                          boardWidth: _Boards.fit(
-                            width: constraints.maxWidth - 24,
-                            // Stacked, the column scrolls, so height stops
-                            // bounding the board and width alone decides.
-                            height: double.infinity,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(height: 560, child: side),
-                      ],
-                    );
-                  }
-                  return Padding(
+                if (stacked) {
+                  return ListView(
                     padding: const EdgeInsets.all(12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: SingleChildScrollView(
-                            child: _Boards(
-                              controller: controller,
-                              boardWidth: _Boards.fit(
-                                width:
-                                    constraints.maxWidth - 24 - 16 - panelWidth,
-                                height: constraints.maxHeight - 24,
-                              ),
+                    children: [
+                      _Boards(
+                        controller: controller,
+                        boardWidth: _Boards.fit(
+                          width: constraints.maxWidth - 24,
+                          // Stacked, the column scrolls, so height stops
+                          // bounding the board and width alone decides.
+                          height: double.infinity,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(height: 560, child: side),
+                    ],
+                  );
+                }
+                return Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: _Boards(
+                            controller: controller,
+                            boardWidth: _Boards.fit(
+                              width:
+                                  constraints.maxWidth - 24 - 16 - panelWidth,
+                              height: constraints.maxHeight - 24,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        SizedBox(width: panelWidth, child: side),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      ),
+                      const SizedBox(width: 16),
+                      SizedBox(width: panelWidth, child: side),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -225,12 +221,6 @@ class _BughouseScreenState extends State<BughouseScreen> {
     );
   }
 }
-
-/// A shortcut that stands down while a text field has the keyboard.
-VoidCallback _unlessTyping(VoidCallback action) => () {
-  if (isTextInputFocused()) return;
-  action();
-};
 
 /// The two boards side by side, and the one control that spans them.
 class _Boards extends StatelessWidget {
