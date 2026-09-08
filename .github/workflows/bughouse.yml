@@ -139,6 +139,17 @@ jobs:
         if: runner.os == 'Windows'
         run: python tools/fetch_assets.py --only stockfish-windows
 
+      # This disposable runner has no person to answer the native .pgn offer.
+      # Decline that optional association as Setup can; leave all engine files
+      # and the first-use test's application profile absent.
+      - name: Decline file associations in the disposable test account
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -Path HKCU:\Software\ChessAutoPrep -Force | Out-Null
+          New-ItemProperty -Path HKCU:\Software\ChessAutoPrep `
+            -Name FileAssociationChoice -Value no -PropertyType String -Force | Out-Null
+
       - name: Boot the Windows app and test first-use bughouse installation
         if: runner.os == 'Windows'
         timeout-minutes: 20
