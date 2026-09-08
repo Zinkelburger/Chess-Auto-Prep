@@ -16,6 +16,11 @@ library;
 /// The choice is remembered between downloads and travels with the saved
 /// game-set, so "download the latest games" keeps fetching the same kind.
 ///
+/// Given a saved [AnalysisDownloadDialog.player], the first two questions are
+/// already answered: the dialog fetches that game-set again and asks only how
+/// much and which kind of games. That is the refresh button on the Player
+/// Analysis subtitle and "Download a different range…" on the player picker.
+///
 /// Pops with an [AnalysisPlayerInfo], or `null` if the user cancels.
 
 import 'dart:async';
@@ -49,12 +54,19 @@ class AnalysisDownloadDialog extends StatefulWidget {
   /// their filter; otherwise the last choice made in this dialog is used.
   final Set<GameSpeed>? initialSpeeds;
 
+  /// A saved game-set to download again; must be [AnalysisPlayerInfo.canRedownload].
+  /// Its site and username are fixed (a merged opponent has several accounts,
+  /// none of them editable here), its range and time controls are the starting
+  /// values, and the result is that player with the new range applied.
+  final AnalysisPlayerInfo? player;
+
   const AnalysisDownloadDialog({
     super.key,
     this.chesscomUsername,
     this.lichessUsername,
     this.initialPlatform,
     this.initialSpeeds,
+    this.player,
   });
 
   @override
@@ -77,8 +89,10 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   static const _keyMaxGames = 'analysis_download.max_games';
 
   late Set<GameSpeed> _speeds = {
-    ...widget.initialSpeeds ?? defaultDownloadSpeeds,
+    ...widget.initialSpeeds ?? widget.player?.speeds ?? defaultDownloadSpeeds,
   };
+
+  AnalysisPlayerInfo? get _player => widget.player;
 
   /// Remembered separately per mode, so flipping the toggle back and forth
   /// does not overwrite "24 months" with "100 games".
@@ -102,9 +116,23 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
       _platform = 'lichess';
     }
 
-    _usernameController = TextEditingController(text: _usernameFor(_platform));
+    final player = _player;
+    if (player != null) {
+      _platform = player.platform;
+      if (player.monthsBack != null) {
+        _months = player.monthsBack!;
+      } else {
+        _mode = _DownloadMode.games;
+        _maxGames = player.maxGames;
+      }
+    }
+
+    _usernameController = TextEditingController(
+      text: player?.username ?? _usernameFor(_platform),
+    );
     _amountController = TextEditingController(text: '$_amount');
-    unawaited(_loadPrefs());
+    // A saved player's own range outranks whatever was last typed here.
+    if (player == null) unawaited(_loadPrefs());
   }
 
   @override
@@ -201,7 +229,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     final amount = int.tryParse(_amountController.text.trim());
 
     setState(() {
-      _usernameError = username.isEmpty ? AppMessages.enterUsername : null;
+      _usernameError = username.isEmpty && _player == null
+          ? AppMessages.enterUsername
+          : null;
       _amountError = (amount == null || amount < 1)
           ? (_mode == _DownloadMode.months
                 ? AppMessages.invalidMonths
@@ -210,6 +240,19 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
       _speedsError = _speeds.isEmpty;
     });
     if (_usernameError != null || _amountError != null || _speedsError) return;
+
+    final player = _player;
+    if (player != null) {
+      Navigator.of(context).pop(
+        player.copyWith(
+          maxGames: _mode == _DownloadMode.games ? _maxGames : player.maxGames,
+          monthsBack: _mode == _DownloadMode.months ? _months : null,
+          clearMonthsBack: _mode == _DownloadMode.games,
+          speeds: {..._speeds},
+        ),
+      );
+      return;
+    }
 
     unawaited(_savePrefs());
     Navigator.of(context).pop(
@@ -236,10 +279,28 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
 
   // ── Build ────────────────────────────────────────────────────────
 
+  /// Where a saved player's games come from and when they were last fetched,
+  /// so the range below can be judged against what is already on disk.
+  String get _playerSource {
+    final player = _player!;
+    final from = player.accounts.isNotEmpty
+        ? player.accounts.map((a) => a.username).join(', ')
+        : player.platformDisplayName;
+    final when = player.downloadedAt == null
+        ? ''
+        : ' · last downloaded ${player.downloadTimeAgo}';
+    return 'From $from$when.';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final player = _player;
     return AlertDialog(
-      title: const Text('Download a player’s games'),
+      title: Text(
+        player == null
+            ? 'Download a player’s games'
+            : 'Download ${player.displayName} again',
+      ),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
@@ -247,35 +308,40 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'chesscom', label: Text('Chess.com')),
-                  ButtonSegment(value: 'lichess', label: Text('Lichess')),
-                ],
-                selected: {_platform},
-                onSelectionChanged: (s) => _onPlatformChanged(s.first),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _usernameController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'Username',
-                  helperText:
-                      'Their public '
-                      '${_platform == 'chesscom' ? 'Chess.com' : 'Lichess'}'
-                      ' username — yours or an opponent’s.',
-                  border: const OutlineInputBorder(),
-                  errorText: _usernameError,
+              if (player != null) ...[
+                Text(_playerSource, style: AppTextStyles.caption),
+                const SizedBox(height: 16),
+              ] else ...[
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'chesscom', label: Text('Chess.com')),
+                    ButtonSegment(value: 'lichess', label: Text('Lichess')),
+                  ],
+                  selected: {_platform},
+                  onSelectionChanged: (s) => _onPlatformChanged(s.first),
                 ),
-                onChanged: (_) {
-                  if (_usernameError != null) {
-                    setState(() => _usernameError = null);
-                  }
-                },
-                onSubmitted: (_) => _onDownload(),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _usernameController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Username',
+                    helperText:
+                        'Their public '
+                        '${_platform == 'chesscom' ? 'Chess.com' : 'Lichess'}'
+                        ' username — yours or an opponent’s.',
+                    border: const OutlineInputBorder(),
+                    errorText: _usernameError,
+                  ),
+                  onChanged: (_) {
+                    if (_usernameError != null) {
+                      setState(() => _usernameError = null);
+                    }
+                  },
+                  onSubmitted: (_) => _onDownload(),
+                ),
+                const SizedBox(height: 24),
+              ],
               const Text(
                 'How many games',
                 style: TextStyle(fontWeight: FontWeight.w600),
@@ -300,6 +366,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 width: 180,
                 child: TextField(
                   controller: _amountController,
+                  autofocus: player != null,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: InputDecoration(

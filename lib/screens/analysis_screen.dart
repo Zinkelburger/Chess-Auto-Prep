@@ -43,6 +43,8 @@ import '../services/engine_weakness_service.dart';
 import '../services/maia/maia_factory.dart';
 import '../services/unified_analysis_builder.dart';
 import '../theme/app_colors.dart';
+import '../widgets/analysis/player_downloads.dart';
+import '../widgets/analysis_download_dialog.dart';
 import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/app_breadcrumb_trail.dart';
@@ -151,8 +153,6 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   bool _trickProbesSkipped = false;
 
   // Implemented by the concrete state; called from the extracted mixins.
-  Future<void> _analyzeBothColors();
-  Future<bool> _redownloadGames(int monthsBack);
   Future<void> _selectPlayer(AnalysisPlayerInfo player);
 
   void _showError(String message) {
@@ -206,13 +206,31 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final titleBlock = _currentPlayer == null
+    final player = _currentPlayer;
+    final titleBlock = player == null
         ? const SizedBox.shrink()
-        : Text(
-            _metadataSubtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  _metadataSubtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Sits beside "downloaded 30d ago" because that is the fact it
+              // changes. A PGN-file import has nowhere to fetch from.
+              if (player.canRedownload)
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 18),
+                  tooltip: 'Download the latest games…',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _isAnalyzing ? null : _showRedownload,
+                ),
+            ],
           );
 
     return Scaffold(
@@ -220,15 +238,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         titleSpacing: 16,
         title: AppBarTitleWithTrail(title: titleBlock),
         actions: [
-          if (_currentPlayer != null) ..._buildColorControls(),
-          // The one engine action that stays in the bar. It is rendered at all
-          // times and disables in place, so nothing in the AppBar moves when a
-          // job starts or stops; the two hunts live in the kebab beside it.
-          TextButton.icon(
-            icon: const Icon(Icons.refresh, size: 18),
-            label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
-            onPressed: _canStartEngineJob ? _showWeaknessConfig : null,
-          ),
+          if (player != null) ..._buildColorControls(),
           const AppModeSwitcher(),
           _buildActionsMenu(),
         ],
@@ -285,15 +295,25 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     ];
   }
 
-  /// Kebab holding everything that isn't the primary engine run: the two
-  /// opponent hunts, the position handoffs, then switching player and opening
-  /// app settings — the last two were icon buttons of their own until the bar
-  /// grew to six controls. Handoffs save a *line* in a study; puzzle-ness is
-  /// a marker the user sets on a move inside the study ("Puzzle starts
-  /// here"), not a separate authored artifact.
+  /// Kebab holding the engine runs, the position handoffs, then switching
+  /// player and opening app settings — the last two were icon buttons of their
+  /// own until the bar grew to six controls. The plain engine pass also has a
+  /// button where its results show up: the positions list, sorted by eval.
+  /// Handoffs save a *line* in a study; puzzle-ness is a marker the user sets
+  /// on a move inside the study ("Puzzle starts here"), not a separate
+  /// authored artifact.
   Widget _buildActionsMenu() {
     return AppOverflowMenu(
       entries: [
+        AppMenuEntry(
+          label: _hasEvals ? 'Re-analyze with engine…' : 'Analyze with engine…',
+          icon: Icons.memory,
+          enabled: _canStartEngineJob,
+          onRun: () => unawaited(_showWeaknessConfig()),
+          hint:
+              'Scores this player\'s most-played positions with Stockfish.\n'
+              'Sort the positions list by Bad Eval or Good Eval to see them.',
+        ),
         AppMenuEntry(
           label: 'Find holes…',
           icon: Icons.gps_fixed,
@@ -506,6 +526,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       isLoading: _isAnalyzing,
       onAnalyze: _analyzeBothColors,
       hasEvals: _hasEvals,
+      onAnalyzeWithEngine: _canStartEngineJob ? _showWeaknessConfig : null,
       playerName: _currentPlayer?.username,
       analysisPgnPath: _analysisPgnPath,
       holesResult: _holesResults[_playerIsWhite],
@@ -600,93 +621,39 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
 
   // ── Re-download games ───────────────────────────────────────────
 
-  /// Downloads all games for the given month range and returns `true` on
-  /// success.
-  @override
-  Future<bool> _redownloadGames(int monthsBack) async {
+  /// Fetch this player's games again — range and time controls are asked
+  /// for, site and username are not — then rebuild both trees. Engine evals
+  /// and hunt results are cleared: they described the old game-set.
+  Future<void> _showRedownload() async {
     final player = _currentPlayer;
-    if (player == null) return false;
-    // PGN-file imports have no source to re-download from.
-    if (!player.canRedownload) return false;
+    if (player == null || !player.canRedownload) return;
+
+    final config = await showDialog<AnalysisPlayerInfo>(
+      context: context,
+      builder: (_) => AnalysisDownloadDialog(player: player),
+    );
+    if (config == null || !mounted) return;
 
     _cancelEvalAnalysis();
+    if (_isHunting) _cancelHoleHunt();
+    if (_isTrickHunting) _cancelTrickHunt();
     _analysisTask?.cancel();
 
-    final progress = ValueNotifier<String>('Downloading games…');
+    final saved = await PlayerDownloadRunner(
+      _gamesService,
+    ).downloadOne(context, config);
+    if (!saved || !mounted) return;
 
-    unawaited(
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => PopScope(
-          canPop: false,
-          child: AlertDialog(
-            content: ValueListenableBuilder<String>(
-              valueListenable: progress,
-              builder: (_, message, _) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  Text(message, textAlign: TextAlign.center),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+    final updated = await _gamesService.findExistingPlayer(
+      config.platform,
+      config.username,
     );
-
-    try {
-      final pgns = await _gamesService.downloadGamesFor(
-        player,
-        monthsBack: monthsBack,
-        onProgress: (msg) => progress.value = msg,
-      );
-
-      if (pgns.isEmpty) {
-        if (mounted) {
-          Navigator.of(context).pop();
-          _showError('No games found for ${player.displayName}.');
-        }
-        return false;
-      }
-
-      progress.value = 'Saving…';
-
-      final updated = await _gamesService.saveAnalysisGames(
-        pgns,
-        platform: player.platform,
-        username: player.username,
-        maxGames: player.maxGames,
-        monthsBack: monthsBack,
-        speeds: player.speeds,
-        accounts: player.accounts,
-        group: player.group,
-      );
-
-      if (mounted) Navigator.of(context).pop();
-
-      setState(() {
-        _currentPlayer = updated;
-        _resetAnalysisState();
-      });
-
-      return true;
-    } catch (e) {
-      if (mounted) {
-        Navigator.of(context).pop();
-        _showError('Re-download failed: $e');
-      }
-      return false;
-    } finally {
-      // Safe while the dialog is still animating out: `removeListener` is the
-      // one ChangeNotifier method that does not assert on a disposed
-      // notifier, so the ValueListenableBuilder can still detach.  Same shape
-      // as PlayerDownloadRunner.downloadOne, which is where this dialog came
-      // from; without it one notifier leaked per re-download.
-      progress.dispose();
-    }
+    if (!mounted) return;
+    setState(() {
+      _currentPlayer = updated ?? config;
+      _resetAnalysisState();
+    });
+    await _analyzeBothColors();
   }
 
   // ── Analysis ─────────────────────────────────────────────────────
@@ -707,7 +674,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     }
   }
 
-  @override
   Future<void> _analyzeBothColors() async {
     final player = _currentPlayer;
     if (player == null) return;
