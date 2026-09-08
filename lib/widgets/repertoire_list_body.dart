@@ -7,12 +7,15 @@ library;
 import 'common/name_entry_dialog.dart';
 import 'dart:async';
 
+import 'package:path/path.dart' as p;
+
 import 'package:flutter/material.dart';
 
 import '../models/repertoire_metadata.dart';
 import '../screens/repertoire_chapters_screen.dart';
 import '../features/repertoire/widgets/repertoire_import_dialog.dart';
 import '../services/storage/storage_factory.dart';
+import 'pgn_import_dialog.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
@@ -40,11 +43,14 @@ class RepertoireListBody extends StatefulWidget {
   /// custom-tactics sets) and tapping one calls this instead.
   final ValueChanged<RepertoireMetadata>? onStudySelected;
 
+  final Future<PickedPgnImport?> Function() pickPgn;
+
   const RepertoireListBody({
     super.key,
     required this.onSelected,
     this.onCourseChapterSelected,
     this.onStudySelected,
+    this.pickPgn = pickPgnImport,
   });
 
   @override
@@ -57,6 +63,8 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   bool _isLoading = true;
   String? _loadError;
   String _search = '';
+  bool _importing = false;
+  bool _pasting = false;
 
   List<RepertoireMetadata> get _visibleRepertoires =>
       _repertoires.where((r) => matchesSearch(_search, r.name)).toList();
@@ -187,22 +195,61 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   }
 
   Widget _buildToolbar() {
+    final importingFile = _importing && !_pasting;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Row(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: ListSearchField(
+          const Text('Your repertoires', style: AppTextStyles.title),
+          const SizedBox(height: 6),
+          const Text(
+            'Choose a PGN from your files. Rename it here anytime.',
+            style: AppTextStyles.muted,
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              FilledButton.icon(
+                onPressed: _importing ? null : _importRepertoire,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.ink,
+                  foregroundColor: AppColors.surface,
+                  minimumSize: const Size(0, 46),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  textStyle: AppTextStyles.bodyStrong,
+                ),
+                icon: importingFile
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.folder_open, size: 20),
+                label: Text(importingFile ? 'Importing…' : 'Import repertoire'),
+              ),
+              TextButton.icon(
+                onPressed: _importing
+                    ? null
+                    : () => _importRepertoire(paste: true),
+                icon: const Icon(Icons.content_paste, size: 18),
+                label: const Text('Paste PGN'),
+              ),
+            ],
+          ),
+          if (_repertoires.isNotEmpty || _studies.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            ListSearchField(
               hintText: 'Search repertoires',
-              onChanged: (value) => setState(() => _search = value),
+              onChanged: (value) {
+                if (!mounted) return;
+                setState(() => _search = value);
+              },
             ),
-          ),
-          const SizedBox(width: 12),
-          FilledButton.icon(
-            onPressed: _importRepertoire,
-            icon: const Icon(Icons.upload_file, size: 18),
-            label: const Text('Import repertoire'),
-          ),
+          ],
         ],
       ),
     );
@@ -373,20 +420,39 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     }
   }
 
-  Future<void> _importRepertoire() async {
-    final created = await showRepertoireImportDialog(
-      context,
-      existingNames: _repertoires.map((r) => r.name).toList(),
-    );
-    if (created == null || !mounted) return;
-    widget.onSelected(
-      RepertoireMetadata(
-        filePath: created.chapterPath,
-        name: 'Main',
-        gameCount: created.gameCount,
-        lastModified: DateTime.now(),
-      ),
-    );
+  Future<void> _importRepertoire({bool paste = false}) async {
+    if (!mounted || _importing) return;
+    setState(() {
+      _importing = true;
+      _pasting = paste;
+    });
+    try {
+      final names = _repertoires.map((r) => r.name).toList();
+      final created = paste
+          ? await showRepertoirePasteDialog(context, existingNames: names)
+          : await showRepertoireImportDialog(
+              context,
+              existingNames: names,
+              pickPgn: widget.pickPgn,
+            );
+      if (created == null || !mounted) return;
+      showAppSnackBar(
+        context,
+        'Imported “${p.basename(created.directoryPath)}”. '
+        'Rename it from your repertoire list.',
+      );
+      widget.onSelected(
+        RepertoireMetadata(
+          filePath: created.chapterPath,
+          name: p.basenameWithoutExtension(created.chapterPath),
+          gameCount: created.gameCount,
+          lastModified: DateTime.now(),
+        ),
+      );
+      if (mounted) await _loadRepertoires();
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
   }
 
   Future<void> _deleteRepertoire(RepertoireMetadata repertoire) async {

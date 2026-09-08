@@ -1001,7 +1001,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
 | `layout/empty_state_placeholder.dart` | Shared empty states |
-| `repertoire_list_body.dart` | Embeddable repertoire list with create/rename/delete; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
+| `repertoire_list_body.dart` | Embeddable repertoire list with import/rename/delete; the primary Import repertoire action opens the native file picker immediately, saves under a safe unique filename-derived name, and opens the imported chapter. A quieter Paste PGN action accepts text without setup; naming stays on the library cards and training side/settings remain available in Train. `features/repertoire/widgets/repertoire_import_dialog.dart` owns both flows; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
 | `layout/responsive_split_layout.dart` | Generic split helper |
 
 #### Repertoire-specific
