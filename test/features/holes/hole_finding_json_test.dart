@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
+import 'package:chess_auto_prep/features/audit/models/audit_result.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const someFen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
@@ -47,27 +48,69 @@ void main() {
     expect(restored.summary, contains('Nxe4 Qe2 d5'));
   });
 
-  test('practicalTrap round-trips with gap fields', () {
+  test('trickyMove round-trips with all trick fields', () {
     final finding = AuditFinding(
-      type: AuditFindingType.practicalTrap,
+      type: AuditFindingType.trickyMove,
       severity: AuditSeverity.warning,
-      movePath: const ['d4', 'd5', 'c4'],
+      movePath: const ['e4', 'c5'],
       fen: someFen,
-      expectedEvalCp: 95,
-      practicalGapCp: 80,
-      oppEase: 0.35,
-      exploitLine: const ['e4', 'dxe4', 'Ne5'],
-      cumulativeProbability: 0.6,
-      exploitScore: 0.6 * 80,
+      ourMove: 'b4',
+      missingMove: 'b4',
+      bestMove: 'Nf3',
+      evalLossCp: 35,
+      positionEvalCp: -10,
+      bestMoveEvalCp: 25,
+      expectedEvalCp: 90,
+      practicalGapCp: 100,
+      netGainCp: 65,
+      oppEase: 0.22,
+      isNovelty: true,
+      exploitLine: const ['b4', 'cxb4', 'a3'],
+      cumulativeProbability: 0.31,
+      exploitScore: 0.31 * 65,
+      transposesIntoRepertoire: false,
     );
     final restored = AuditFinding.fromJson(finding.toJson());
-    expect(restored.type, AuditFindingType.practicalTrap);
-    expect(restored.expectedEvalCp, 95);
-    expect(restored.practicalGapCp, 80);
-    expect(restored.oppEase, closeTo(0.35, 1e-9));
-    expect(restored.exploitLine, ['e4', 'dxe4', 'Ne5']);
-    expect(restored.summary, contains('Trap zone'));
-    expect(restored.summary, contains('+80cp'));
+    expect(restored.type, AuditFindingType.trickyMove);
+    expect(restored.ourMove, 'b4');
+    expect(restored.missingMove, 'b4');
+    expect(restored.bestMove, 'Nf3');
+    expect(restored.evalLossCp, 35);
+    expect(restored.expectedEvalCp, 90);
+    expect(restored.practicalGapCp, 100);
+    expect(restored.netGainCp, 65);
+    expect(restored.oppEase, closeTo(0.22, 1e-9));
+    expect(restored.isNovelty, isTrue);
+    expect(restored.exploitLine, ['b4', 'cxb4', 'a3']);
+    expect(restored.exploitScore, closeTo(0.31 * 65, 1e-9));
+  });
+
+  test('trick summary names the move, net gain, and novelty tag', () {
+    final novelty = AuditFinding(
+      type: AuditFindingType.trickyMove,
+      severity: AuditSeverity.warning,
+      movePath: const ['e4', 'c5'],
+      fen: someFen,
+      ourMove: 'b4',
+      netGainCp: 65,
+      isNovelty: true,
+    );
+    // Candidate is played FROM the finding's fen, i.e. at ply
+    // movePath.length (White's move 2 here).
+    expect(novelty.summary, contains('2. b4'));
+    expect(novelty.summary, contains('+65cp'));
+    expect(novelty.summary, contains('novelty'));
+
+    final inTree = AuditFinding(
+      type: AuditFindingType.trickyMove,
+      severity: AuditSeverity.warning,
+      movePath: const ['e4', 'c5'],
+      fen: someFen,
+      ourMove: 'Nf3',
+      netGainCp: 40,
+      isNovelty: false,
+    );
+    expect(inTree.summary, isNot(contains('novelty')));
   });
 
   test('new fields absent stay null and legacy findings still parse', () {
@@ -84,10 +127,41 @@ void main() {
     expect(restored.exploitLine, isNull);
     expect(restored.expectedEvalCp, isNull);
     expect(restored.practicalGapCp, isNull);
+    expect(restored.netGainCp, isNull);
+    expect(restored.oppEase, isNull);
+    expect(restored.isNovelty, isNull);
     expect(restored.exploitScore, isNull);
   });
 
-  test('dismissKey is unique across the three hole types at one FEN', () {
+  test('a report holding a retired finding type drops just that row', () {
+    // The trap pass used to write `practicalTrap` findings. A saved report
+    // with one must still open, minus the row this build cannot name.
+    final kept = AuditFinding(
+      type: AuditFindingType.refutation,
+      severity: AuditSeverity.critical,
+      movePath: const ['e4'],
+      fen: someFen,
+      ourMove: 'e4',
+    );
+    final json = AuditResult(
+      findings: [kept],
+      nodesChecked: 1,
+      ourMoveNodesChecked: 1,
+      opponentNodesChecked: 0,
+      leafNodesChecked: 0,
+      elapsed: Duration.zero,
+    ).toJson();
+    (json['findings'] as List).add({
+      'type': 'practicalTrap',
+      'severity': 'warning',
+      'movePath': ['d4'],
+      'fen': someFen,
+    });
+    final restored = AuditResult.fromJson(json);
+    expect(restored.findings.map((f) => f.type), [AuditFindingType.refutation]);
+  });
+
+  test('dismissKey is unique across the hole types at one FEN', () {
     final uncovered = AuditFinding(
       type: AuditFindingType.uncoveredStrongMove,
       severity: AuditSeverity.info,
@@ -102,13 +176,19 @@ void main() {
       fen: someFen,
       ourMove: 'Nf3',
     );
-    final trap = AuditFinding(
-      type: AuditFindingType.practicalTrap,
+    AuditFinding trick(String san) => AuditFinding(
+      type: AuditFindingType.trickyMove,
       severity: AuditSeverity.info,
       movePath: const [],
       fen: someFen,
+      ourMove: san,
     );
-    final keys = {uncovered.dismissKey, refutation.dismissKey, trap.dismissKey};
-    expect(keys.length, 3);
+    final keys = {
+      uncovered.dismissKey,
+      refutation.dismissKey,
+      trick('b4').dismissKey,
+      trick('Nf3').dismissKey,
+    };
+    expect(keys.length, 4);
   });
 }

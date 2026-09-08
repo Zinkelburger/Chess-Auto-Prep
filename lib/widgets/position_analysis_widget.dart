@@ -1,7 +1,7 @@
 /// Position analysis widget – three-panel layout for the Player Analysis screen.
 ///
-/// Left: the ranked lists that drive the board — Positions · Holes · Tricks,
-/// chosen with a selector that always shows each report's finding count.
+/// Left: the ranked lists that drive the board — Positions · Holes, chosen
+/// with a selector that always shows the report's finding count.
 /// Centre: chess board. Right: engine bar + a tabbed pane of views onto the
 /// *current* position (Move Tree · Games · PGN · Analysis), four tabs so none
 /// of them can be pushed off a scrolling tab bar.
@@ -35,8 +35,6 @@ import '../features/audit/models/audit_result.dart';
 import '../features/audit/services/audit_board_annotations.dart';
 import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/holes_report_panel.dart';
-import '../features/tricks/services/trick_hunt_service.dart';
-import '../features/tricks/widgets/tricks_report_panel.dart';
 import '../models/board_annotation.dart';
 import '../models/move_tree.dart';
 import '../models/position_analysis.dart';
@@ -63,11 +61,11 @@ part 'position_analysis_widget.navigation.dart';
 
 const int _kAnalysisTabIndex = 3;
 
-/// What the left column is listing. All three are "pick an item, the board
-/// jumps there" lists, which is why they share one column instead of being
+/// What the left column is listing. Both are "pick an item, the board jumps
+/// there" lists, which is why they share one column instead of being
 /// squeezed into the right pane's tab bar alongside views of the *current*
 /// position.
-enum _LeftPanelMode { positions, holes, tricks }
+enum _LeftPanelMode { positions, holes }
 
 /// Starting-position board, shown when no FEN has been selected yet.
 const Position _startingPosition = Chess.initial;
@@ -142,35 +140,14 @@ class PositionAnalysisWidget extends StatefulWidget {
   final bool isHoleHunting;
   final HoleHuntProgress? holesProgress;
 
-  /// Show the "trap search skipped" note (Maia unavailable).
-  final bool holesTrapPassSkipped;
+  /// Show the "trick search skipped" note (Maia unavailable).
+  final bool holesProbesSkipped;
 
   /// Re-persist after dismissal edits in the report panel.
   final void Function(AuditResult result)? onHolesResultChanged;
 
   /// Open the hunt config to start (or re-run) a hunt.
   final VoidCallback? onStartHoleHunt;
-
-  // ── Trick hunt (Tricks tab) — state owned by the host screen ────────
-
-  /// Completed trick-hunt report for the displayed colour, if any.
-  final AuditResult? tricksResult;
-
-  /// Findings streamed from an in-flight trick hunt on the displayed colour.
-  final List<AuditFinding> tricksLiveFindings;
-
-  /// True while a trick hunt is running on the displayed colour's tree.
-  final bool isTrickHunting;
-  final TrickHuntProgress? tricksProgress;
-
-  /// Show the "probes skipped" note (Maia unavailable).
-  final bool tricksProbesSkipped;
-
-  /// Re-persist after dismissal edits in the report panel.
-  final void Function(AuditResult result)? onTricksResultChanged;
-
-  /// Open the trick-hunt config to start (or re-run) a hunt.
-  final VoidCallback? onStartTrickHunt;
 
   /// Handle for the host screen's app-bar menu to trigger the handoff
   /// actions (study / puzzle / PGN viewer).
@@ -193,16 +170,9 @@ class PositionAnalysisWidget extends StatefulWidget {
     this.holesLiveFindings = const [],
     this.isHoleHunting = false,
     this.holesProgress,
-    this.holesTrapPassSkipped = false,
+    this.holesProbesSkipped = false,
     this.onHolesResultChanged,
     this.onStartHoleHunt,
-    this.tricksResult,
-    this.tricksLiveFindings = const [],
-    this.isTrickHunting = false,
-    this.tricksProgress,
-    this.tricksProbesSkipped = false,
-    this.onTricksResultChanged,
-    this.onStartTrickHunt,
     this.actions,
   });
 
@@ -233,7 +203,6 @@ abstract class _PositionAnalysisWidgetStateBase
   // is showing.
   final ListNavController _positionsNav = ListNavController();
   final ListNavController _holesNav = ListNavController();
-  final ListNavController _tricksNav = ListNavController();
 
   /// Which list the left column shows. Never hidden behind a menu: the
   /// selector carries the finding counts, so an unread report announces
@@ -303,8 +272,6 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
     // selector the user has to think to press.
     if (widget.isHoleHunting && !oldWidget.isHoleHunting) {
       _leftMode = _LeftPanelMode.holes;
-    } else if (widget.isTrickHunting && !oldWidget.isTrickHunting) {
-      _leftMode = _LeftPanelMode.tricks;
     }
     if (widget.externalNavigateFen != null &&
         widget.externalNavigateGeneration != _lastNavigateGeneration) {
@@ -408,11 +375,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
                 ? !widget.playerIsWhite!
                 : false,
             onMove: _onBoardMove,
-            // Each list is gated on its own tab, so at most one contributes.
-            annotations: [
-              ..._holesBoardAnnotations(),
-              ..._tricksBoardAnnotations(),
-            ],
+            annotations: _holesBoardAnnotations(),
           ),
         ),
       ),
@@ -463,8 +426,8 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
       _tabController.animateTo(0);
       return true;
     }),
-    // ↑/↓ step whichever left-column list is showing (positions,
-    // holes or tricks) — the app-wide pair, same as games and chapters.
+    // ↑/↓ step whichever left-column list is showing (positions or
+    // holes) — the app-wide pair, same as games and chapters.
     ...KeyBinding.forShortcut(
       AppShortcut.nextItem,
       'Next item in the left list',
@@ -529,7 +492,6 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   ListNavController get _activeListNav => switch (_leftMode) {
     _LeftPanelMode.positions => _positionsNav,
     _LeftPanelMode.holes => _holesNav,
-    _LeftPanelMode.tricks => _tricksNav,
   };
 
   // =====================================================================
@@ -550,7 +512,6 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
           child: switch (_leftMode) {
             _LeftPanelMode.positions => _buildPositionsList(),
             _LeftPanelMode.holes => _buildHolesReport(),
-            _LeftPanelMode.tricks => _buildTricksReport(),
           },
         ),
       ],
@@ -571,10 +532,6 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
             ButtonSegment(
               value: _LeftPanelMode.holes,
               label: Text('Holes${_holesCountLabel()}'),
-            ),
-            ButtonSegment(
-              value: _LeftPanelMode.tricks,
-              label: Text('Tricks${_tricksCountLabel()}'),
             ),
           ],
           selected: {_leftMode},
@@ -767,7 +724,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
       liveFindings: widget.holesLiveFindings,
       isHunting: widget.isHoleHunting,
       progress: widget.holesProgress,
-      trapPassSkipped: widget.holesTrapPassSkipped,
+      probesSkipped: widget.holesProbesSkipped,
       onFindingSelected: _onHoleFindingSelected,
       onResultChanged: widget.onHolesResultChanged,
       onStartHunt: widget.onStartHoleHunt,
@@ -789,50 +746,6 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
     }
     return buildAuditBoardAnnotations(
       result: widget.holesResult,
-      currentFen: expandFen(_currentFen!),
-    );
-  }
-
-  // =====================================================================
-  // Tricks report (left column)
-  // =====================================================================
-
-  /// " (n)" suffix for the Tricks segment, or empty when nothing to count.
-  String _tricksCountLabel() {
-    final count =
-        (widget.tricksResult?.activeFindingCount ?? 0) +
-        widget.tricksLiveFindings.length;
-    return count > 0 ? ' ($count)' : '';
-  }
-
-  Widget _buildTricksReport() {
-    return TricksReportPanel(
-      result: widget.tricksResult,
-      liveFindings: widget.tricksLiveFindings,
-      isHunting: widget.isTrickHunting,
-      progress: widget.tricksProgress,
-      probesSkipped: widget.tricksProbesSkipped,
-      onFindingSelected: _onTrickFindingSelected,
-      onResultChanged: widget.onTricksResultChanged,
-      onStartHunt: widget.onStartTrickHunt,
-      navController: _tricksNav,
-    );
-  }
-
-  /// Clicking a finding jumps the board (and tree cursor) to its position.
-  void _onTrickFindingSelected(AuditFinding finding) {
-    widget.openingTree?.navigateToFen(finding.fen);
-    _navigateTo(finding.fen);
-  }
-
-  /// Arrows for trick findings at the displayed position — built only while
-  /// the Tricks report is showing so they never bleed into normal browsing.
-  List<BoardAnnotation> _tricksBoardAnnotations() {
-    if (_leftMode != _LeftPanelMode.tricks || _currentFen == null) {
-      return const [];
-    }
-    return buildAuditBoardAnnotations(
-      result: widget.tricksResult,
       currentFen: expandFen(_currentFen!),
     );
   }

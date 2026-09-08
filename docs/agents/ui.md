@@ -30,7 +30,7 @@ Reuse these widgets (paths relative to `lib/`):
 | Name with validation | `showNameEntryDialog` in `widgets/common/name_entry_dialog.dart` |
 | Pick from a list | `ChoiceField` in `widgets/common/choice_field.dart`; two or three fixed options use `SegmentedButton`, never `DropdownButton` |
 | Set a whole number | `NumberStepper` in `widgets/common/number_stepper.dart`, never a fixed numeric menu |
-| Findings report | `HuntReportPanel` in `features/audit/widgets/hunt_report_panel.dart` |
+| Findings report | `HolesReportPanel` in `features/holes/widgets/holes_report_panel.dart` |
 | Threshold, disclosure, visible cap | `features/audit/widgets/hunt_controls.dart` |
 
 ## Keyboard shortcuts

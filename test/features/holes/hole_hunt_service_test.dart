@@ -11,8 +11,10 @@
 ///  - `refutation`: a repertoire move that loses by more than the threshold,
 ///    confirmed by a deeper single-PV search.
 ///
-/// The third (`practicalTrap`) needs a real `TreeBuildService` run, so only
-/// its gates are covered.
+/// The third (`trickyMove`) needs a real `TreeBuildService` run, so what is
+/// covered is everything up to the probes: the Maia gate, which leaves get
+/// discovery, and that the candidate pool is fed from the same discovery as
+/// the uncovered check.
 library;
 
 import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
@@ -35,6 +37,16 @@ const _repertoire = [
   '[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0',
   '[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0',
   '[Result "0-1"]\n\n1. e4 e5 2. Bc4 Nf6 0-1',
+];
+
+/// Read as a Black repertoire: Black's own choice at move 2 (2...Nc6 three
+/// times, 2...Nf6 once) attenuates reach, and every leaf is White — the
+/// attacker — to move.
+const _blackRepertoire = [
+  '[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0',
+  '[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0',
+  '[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 1-0',
+  '[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nf6 1-0',
 ];
 
 Future<OpeningTree> _build(List<String> games) => OpeningTreeBuilder.buildTree(
@@ -66,7 +78,11 @@ void main() {
   void scriptEval(OpeningTreeNode node, ScriptLine line) =>
       engine.evals[normalizeFen(node.fen)] = line;
 
-  /// Defaults that keep the expectimax trap pass out of the way — it needs a
+  /// The positions discovery actually searched, in order.
+  List<String> searchedKeys() =>
+      engine.discoverySearches.map(normalizeFen).toList();
+
+  /// Defaults that keep the trick search out of the way — its probes need a
   /// real tree build, which a unit test cannot drive.
   HoleHuntConfig config({
     int maxPly = 30,
@@ -74,14 +90,14 @@ void main() {
     int uncoveredMinAdvantageCp = -25,
     int outOfBookBonusCp = 50,
     int refutationThresholdCp = 80,
-    int trapLeafCount = 0,
+    int probeBudget = 0,
   }) => HoleHuntConfig(
     maxPly: maxPly,
     strongMoveWindowCp: strongMoveWindowCp,
     uncoveredMinAdvantageCp: uncoveredMinAdvantageCp,
     outOfBookBonusCp: outOfBookBonusCp,
     refutationThresholdCp: refutationThresholdCp,
-    trapLeafCount: trapLeafCount,
+    probeBudget: probeBudget,
   );
 
   setUpAll(() async {
@@ -107,12 +123,14 @@ void main() {
     HoleHuntConfig? cfg,
     bool isWhiteRepertoire = true,
     void Function(AuditFinding)? onFinding,
+    HoleHuntProgressCallback? onProgress,
   }) async {
     final result = await service.hunt(
       tree: tree,
       isWhiteRepertoire: isWhiteRepertoire,
       config: cfg ?? config(),
       onFinding: onFinding,
+      onProgress: onProgress,
     );
     return result.findings;
   }
@@ -437,84 +455,197 @@ void main() {
     });
   });
 
-  group('trap pass gating', () {
-    test('asking for no leaves is not a skipped trap pass', () async {
-      useMaia(FakeMaia(failInit: true));
-
-      await hunt(cfg: config(trapLeafCount: 0));
-
-      expect(service.trapPassSkipped, isFalse);
+  group('trick search', () {
+    setUp(() async {
+      tree = await _build(_blackRepertoire);
     });
 
-    test('a Maia that will not load skips the trap pass', () async {
+    /// The White-to-move leaves of the Black repertoire, by reach.
+    OpeningTreeNode popularLeaf() => at(['e4', 'e5', 'Nf3', 'Nc6']);
+    OpeningTreeNode rareLeaf() => at(['e4', 'e5', 'Nf3', 'Nf6']);
+
+    test(
+      'no probe budget: no leaf discovery, and Maia is never asked',
+      () async {
+        final maia = FakeMaia(failInit: true);
+        useMaia(maia);
+
+        await hunt(isWhiteRepertoire: false, cfg: config(probeBudget: 0));
+
+        expect(maia.initializeCalls, 0);
+        expect(service.probesSkipped, isFalse);
+        expect(
+          searchedKeys(),
+          isNot(contains(normalizeFen(popularLeaf().fen))),
+        );
+      },
+    );
+
+    test(
+      'a Maia that will not load skips the trick search, keeps the walk',
+      () async {
+        final maia = FakeMaia(failInit: true);
+        useMaia(maia);
+        scriptDiscovery(tree.root, const [
+          ScriptLine.cp(150, pv: ['e2e4']),
+          ScriptLine.cp(120, pv: ['d2d4']), // uncovered
+        ]);
+
+        final findings = await hunt(
+          isWhiteRepertoire: false,
+          cfg: config(probeBudget: 4),
+        );
+
+        expect(service.probesSkipped, isTrue);
+        expect(maia.initializeCalls, 1);
+        expect(findings.map((f) => f.type), [
+          AuditFindingType.uncoveredStrongMove,
+        ]);
+        expect(
+          searchedKeys(),
+          isNot(contains(normalizeFen(popularLeaf().fen))),
+        );
+      },
+    );
+
+    test('a walk with nothing to probe never consults Maia', () async {
       final maia = FakeMaia(failInit: true);
       useMaia(maia);
 
-      final findings = await hunt(cfg: config(trapLeafCount: 4));
-
-      expect(service.trapPassSkipped, isTrue);
-      expect(maia.initializeCalls, 1);
-      expect(findings, isEmpty);
-    });
-
-    test('a walk that reached no leaves never consults Maia', () async {
-      final maia = FakeMaia(failInit: true);
-      useMaia(maia);
-
-      // maxPly 1 stops above every childless node, so there is nothing to
-      // expectimax — and nothing to load a model for.
-      await hunt(cfg: config(maxPly: 1, trapLeafCount: 4));
+      // As a White repertoire every leaf is the owner's move, and nothing
+      // is scripted, so no attacker position yields a candidate either.
+      tree = await _build(_repertoire);
+      await hunt(isWhiteRepertoire: true, cfg: config(probeBudget: 4));
 
       expect(maia.initializeCalls, 0);
-      expect(service.trapPassSkipped, isFalse);
+      expect(service.probesSkipped, isFalse);
+    });
+
+    test('attacker-to-move leaves get discovery after the walk, most reachable '
+        'first, under the probe budget', () async {
+      useMaia(FakeMaia());
+
+      await hunt(isWhiteRepertoire: false, cfg: config(probeBudget: 1));
+
+      // The walk's own discoveries (root, e4, e5, Nf3) come first; then
+      // only the leaf behind 2...Nc6 (3 of 4 games) makes the budget.
+      expect(searchedKeys(), [
+        normalizeFen(tree.root.fen),
+        normalizeFen(at(['e4']).fen),
+        normalizeFen(at(['e4', 'e5']).fen),
+        normalizeFen(at(['e4', 'e5', 'Nf3']).fen),
+        normalizeFen(popularLeaf().fen),
+      ]);
+
+      engine.discoverySearches.clear();
+      await hunt(isWhiteRepertoire: false, cfg: config(probeBudget: 4));
+      expect(searchedKeys().sublist(4), [
+        normalizeFen(popularLeaf().fen),
+        normalizeFen(rareLeaf().fen),
+      ]);
+    });
+
+    test(
+      'the uncovered check and the candidate pool share one discovery',
+      () async {
+        useMaia(FakeMaia());
+        tree = await _build(_repertoire);
+        final e4 = at(['e4']);
+        scriptDiscovery(e4, const [
+          // Black to move: e5 is in the tree, c5 is a novelty; both are
+          // inside the 60cp trick window.
+          ScriptLine.cp(20, pv: ['e7e5']),
+          ScriptLine.cp(10, pv: ['c7c5']),
+        ]);
+
+        // Stop at the first probe: it would need a real tree build.
+        final findings = await hunt(
+          cfg: config(probeBudget: 4),
+          onProgress: (p) {
+            if (p.phase == HoleHuntPhase.probing) service.cancel();
+          },
+        );
+
+        expect(
+          searchedKeys().where((k) => k == normalizeFen(e4.fen)),
+          hasLength(1),
+        );
+        expect(findings.map((f) => f.missingMove), ['c5']);
+        expect(service.lastCandidateCount, 2);
+      },
+    );
+
+    test('cancelling during leaf discovery stops at the next leaf', () async {
+      useMaia(FakeMaia());
+
+      await hunt(
+        isWhiteRepertoire: false,
+        cfg: config(probeBudget: 4),
+        onProgress: (p) {
+          if (p.phase == HoleHuntPhase.leaves && p.done == 1) {
+            service.cancel();
+          }
+        },
+      );
+
+      expect(searchedKeys(), isNot(contains(normalizeFen(rareLeaf().fen))));
+      expect(searchedKeys(), contains(normalizeFen(popularLeaf().fen)));
     });
   });
 
   group('HoleHuntProgress', () {
-    test('the walk owns the first 70% of the bar', () {
+    test('the walk owns the first 60% of the bar', () {
       expect(
         const HoleHuntProgress(
           phase: HoleHuntPhase.walking,
-          nodesChecked: 5,
-          totalNodes: 10,
+          done: 5,
+          total: 10,
         ).fraction,
-        closeTo(0.35, 1e-9),
+        closeTo(0.3, 1e-9),
       );
       expect(
         const HoleHuntProgress(
           phase: HoleHuntPhase.walking,
-          nodesChecked: 20,
-          totalNodes: 10,
+          done: 20,
+          total: 10,
         ).fraction,
-        closeTo(0.7, 1e-9),
+        closeTo(0.6, 1e-9),
         reason: 'clamped, never past the phase boundary',
       );
       expect(
-        const HoleHuntProgress(
-          phase: HoleHuntPhase.walking,
-          totalNodes: 0,
-        ).fraction,
+        const HoleHuntProgress(phase: HoleHuntPhase.walking).fraction,
         0.0,
         reason: 'an unknown total is no progress, not a division by zero',
       );
     });
 
-    test('the trap pass owns the last 30%', () {
+    test('leaf discovery owns 60%..70% and probing the rest', () {
       expect(
         const HoleHuntProgress(
-          phase: HoleHuntPhase.traps,
-          leavesDone: 1,
-          leavesTotal: 2,
+          phase: HoleHuntPhase.leaves,
+          done: 1,
+          total: 2,
         ).fraction,
-        closeTo(0.85, 1e-9),
+        closeTo(0.65, 1e-9),
       );
       expect(
         const HoleHuntProgress(
-          phase: HoleHuntPhase.traps,
-          leavesTotal: 0,
+          phase: HoleHuntPhase.probing,
+          done: 1,
+          total: 2,
         ).fraction,
+        closeTo(0.85, 1e-9),
+      );
+    });
+
+    test('an empty later phase reads as finished, not as stuck', () {
+      expect(
+        const HoleHuntProgress(phase: HoleHuntPhase.leaves).fraction,
+        closeTo(0.7, 1e-9),
+      );
+      expect(
+        const HoleHuntProgress(phase: HoleHuntPhase.probing).fraction,
         closeTo(1.0, 1e-9),
-        reason: 'nothing to do reads as done, not as stuck at 70%',
       );
     });
 
@@ -522,18 +653,26 @@ void main() {
       expect(
         const HoleHuntProgress(
           phase: HoleHuntPhase.walking,
-          nodesChecked: 3,
-          totalNodes: 9,
+          done: 3,
+          total: 9,
         ).message,
         'Walking 3 / 9 positions',
       );
       expect(
         const HoleHuntProgress(
-          phase: HoleHuntPhase.traps,
-          leavesDone: 2,
-          leavesTotal: 5,
+          phase: HoleHuntPhase.leaves,
+          done: 2,
+          total: 5,
         ).message,
-        'Trap search 2 / 5 leaves',
+        'Discovery 2 / 5 leaves',
+      );
+      expect(
+        const HoleHuntProgress(
+          phase: HoleHuntPhase.probing,
+          done: 4,
+          total: 4,
+        ).message,
+        'Probing 4 / 4 candidates',
       );
     });
   });

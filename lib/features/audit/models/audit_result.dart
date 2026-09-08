@@ -128,8 +128,13 @@ class AuditResult {
       AuditResult.fromJson(jsonDecode(s) as Map<String, dynamic>);
 
   factory AuditResult.fromJson(Map<String, dynamic> j) {
+    // A finding type this build no longer has (a report written by an older
+    // hunt) drops out on its own rather than taking the whole report with it.
+    final knownTypes = AuditFindingType.values.map((t) => t.name).toSet();
     final findings = (j['findings'] as List)
-        .map((e) => AuditFinding.fromJson(e as Map<String, dynamic>))
+        .cast<Map<String, dynamic>>()
+        .where((e) => knownTypes.contains(e['type']))
+        .map(AuditFinding.fromJson)
         .toList();
     return AuditResult(
       findings: findings,

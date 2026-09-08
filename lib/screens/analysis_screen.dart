@@ -30,10 +30,6 @@ import '../features/opponents/widgets/tournament_screen.dart';
 import '../features/holes/services/hole_hunt_persistence.dart';
 import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/hole_hunt_config_dialog.dart';
-import '../features/tricks/services/trick_hunt_config.dart';
-import '../features/tricks/services/trick_hunt_persistence.dart';
-import '../features/tricks/services/trick_hunt_service.dart';
-import '../features/tricks/widgets/trick_hunt_config_dialog.dart';
 import '../models/analysis_player_info.dart';
 import '../models/engine_weakness_result.dart';
 import '../models/position_analysis.dart';
@@ -42,7 +38,6 @@ import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
 import '../services/engine/generation_lease.dart';
 import '../services/engine_weakness_service.dart';
-import '../services/maia/maia_factory.dart';
 import '../services/unified_analysis_builder.dart';
 import '../theme/app_colors.dart';
 import '../widgets/analysis/player_downloads.dart';
@@ -58,7 +53,6 @@ import 'player_selection_screen.dart';
 
 part 'analysis_screen_engine.dart';
 part 'analysis_screen_holes.dart';
-part 'analysis_screen_tricks.dart';
 part 'analysis_screen_prep.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -138,21 +132,7 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   bool _isHunting = false;
   bool _huntIsWhite = true;
   bool _huntCancelled = false;
-  bool _trapPassSkipped = false;
-
-  // ── Trick hunt state ────────────────────────────────────────────────
-  //
-  // Same shape as the hole hunt: reports and configs per colour, live
-  // findings and progress for the run in flight.
-  final TrickHuntService _trickService = TrickHuntService();
-  final Map<bool, AuditResult?> _tricksResults = {true: null, false: null};
-  final Map<bool, TrickHuntConfig?> _tricksConfigs = {true: null, false: null};
-  List<AuditFinding> _tricksLive = [];
-  TrickHuntProgress? _tricksProgress;
-  bool _isTrickHunting = false;
-  bool _trickHuntIsWhite = true;
-  bool _trickHuntCancelled = false;
-  bool _trickProbesSkipped = false;
+  bool _probesSkipped = false;
 
   // Implemented by the concrete state; called from the extracted mixins.
   Future<void> _selectPlayer(AnalysisPlayerInfo player);
@@ -177,7 +157,7 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
 }
 
 class _AnalysisScreenState extends _AnalysisScreenStateBase
-    with _EngineWeaknessMixin, _HoleHuntMixin, _TrickHuntMixin, _PrepMixin {
+    with _EngineWeaknessMixin, _HoleHuntMixin, _PrepMixin {
   @override
   void initState() {
     super.initState();
@@ -201,7 +181,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     _evalService?.dispose();
     // The pending hunt futures notice the flag and release the engine.
     if (_isHunting) _holeService.cancel();
-    if (_isTrickHunting) _trickService.cancel();
     super.dispose();
   }
 
@@ -267,11 +246,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   /// Engine actions are disabled (never hidden) while any job runs or before
   /// a tree exists to analyze.
   bool get _canStartEngineJob =>
-      _openingTree != null &&
-      !_isAnalyzing &&
-      !_evalRunning &&
-      !_isHunting &&
-      !_isTrickHunting;
+      _openingTree != null && !_isAnalyzing && !_evalRunning && !_isHunting;
 
   List<Widget> _buildColorControls() {
     return [
@@ -333,22 +308,11 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           hint:
               'Attacks this player\'s games from the other side and reports\n'
               'where the lines can be beaten: strong moves the games never\n'
-              'answer, moves with a verified refutation, and traps a human is\n'
-              'likely to fall into. Not the same as Analyze with Engine, which\n'
+              'answer, moves with a verified refutation, and tricks — near-\n'
+              'best moves and novelties that score better in practice than\n'
+              'the engine move. Not the same as Analyze with Engine, which\n'
               'only scores positions by raw eval — results here are ranked by\n'
               'reach probability × gain, so it stays a short list.',
-        ),
-        AppMenuEntry(
-          label: 'Find tricks…',
-          icon: Icons.auto_fix_high,
-          enabled: _canStartEngineJob,
-          onRun: () => unawaited(_showTrickHuntConfig()),
-          hint:
-              'Plays the other side of this player\'s games and hunts moves\n'
-              'that are close to engine-best but poisonous in practice —\n'
-              'including novelties the games never faced. A move is reported\n'
-              'when the mistakes it invites outweigh what it concedes, ranked\n'
-              'by reach probability × net gain.',
         ),
         AppMenuEntry(
           label: 'Check against my repertoire…',
@@ -437,19 +401,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         ),
       ];
     }
-    if (_isTrickHunting) {
-      return [
-        LinearProgressIndicator(minHeight: 2, value: _tricksProgress?.fraction),
-        _buildJobStatusRow(
-          theme,
-          message: _trickHuntCancelled
-              ? 'Cancelling trick hunt…'
-              : 'Trick hunt: ${_tricksProgress?.message ?? 'starting…'}',
-          cancelTooltip: 'Cancel trick hunt',
-          onCancel: _trickHuntCancelled ? null : _cancelTrickHunt,
-        ),
-      ];
-    }
     return const [];
   }
 
@@ -522,8 +473,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     }
 
     final huntOnDisplayedColor = _isHunting && _huntIsWhite == _playerIsWhite;
-    final trickHuntOnDisplayedColor =
-        _isTrickHunting && _trickHuntIsWhite == _playerIsWhite;
     return PositionAnalysisWidget(
       analysis: _positionAnalysis,
       openingTree: _openingTree,
@@ -540,17 +489,9 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       holesLiveFindings: huntOnDisplayedColor ? _holesLive : const [],
       isHoleHunting: huntOnDisplayedColor,
       holesProgress: huntOnDisplayedColor ? _holesProgress : null,
-      holesTrapPassSkipped: _trapPassSkipped && _huntIsWhite == _playerIsWhite,
+      holesProbesSkipped: _probesSkipped && _huntIsWhite == _playerIsWhite,
       onHolesResultChanged: _onHolesResultChanged,
       onStartHoleHunt: _canStartEngineJob ? _showHoleHuntConfig : null,
-      tricksResult: _tricksResults[_playerIsWhite],
-      tricksLiveFindings: trickHuntOnDisplayedColor ? _tricksLive : const [],
-      isTrickHunting: trickHuntOnDisplayedColor,
-      tricksProgress: trickHuntOnDisplayedColor ? _tricksProgress : null,
-      tricksProbesSkipped:
-          _trickProbesSkipped && _trickHuntIsWhite == _playerIsWhite,
-      onTricksResultChanged: _onTricksResultChanged,
-      onStartTrickHunt: _canStartEngineJob ? _showTrickHuntConfig : null,
       actions: _boardActions,
     );
   }
@@ -588,7 +529,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   Future<void> _selectPlayer(AnalysisPlayerInfo player) async {
     _cancelEvalAnalysis();
     if (_isHunting) _cancelHoleHunt();
-    if (_isTrickHunting) _cancelTrickHunt();
     setState(() {
       _currentPlayer = player;
       _resetAnalysisState();
@@ -616,14 +556,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     _holesConfigs[false] = null;
     _holesLive = [];
     _holesProgress = null;
-    _trapPassSkipped = false;
-    _tricksResults[true] = null;
-    _tricksResults[false] = null;
-    _tricksConfigs[true] = null;
-    _tricksConfigs[false] = null;
-    _tricksLive = [];
-    _tricksProgress = null;
-    _trickProbesSkipped = false;
+    _probesSkipped = false;
   }
 
   // ── Re-download games ───────────────────────────────────────────
@@ -643,7 +576,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
 
     _cancelEvalAnalysis();
     if (_isHunting) _cancelHoleHunt();
-    if (_isTrickHunting) _cancelTrickHunt();
     _analysisTask?.cancel();
 
     final saved = await PlayerDownloadRunner(
@@ -777,12 +709,10 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
       });
 
       // Merge previously computed engine evals into the displayed analysis,
-      // and restore any saved hole/trick reports.
+      // and restore any saved hole reports.
       await _loadEngineEvals();
       if (!isCurrent()) return;
       await _loadHolesReports();
-      if (!isCurrent()) return;
-      await _loadTricksReports();
       final warning = _gamesService.storageWarning;
       if (mounted && warning != null) _showError(warning);
     } catch (e) {

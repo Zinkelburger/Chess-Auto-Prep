@@ -44,7 +44,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
       _holesProgress = null;
       _holesResults[isWhite] = null;
       _holesConfigs[isWhite] = config;
-      _trapPassSkipped = false;
+      _probesSkipped = false;
     });
 
     try {
@@ -102,7 +102,7 @@ mixin _HoleHuntMixin on _AnalysisScreenStateBase {
         setState(() {
           _holesResults[isWhite] = gamesUnchanged ? result : null;
           _holesLive = [];
-          _trapPassSkipped = _holeService.trapPassSkipped;
+          _probesSkipped = _holeService.probesSkipped;
         });
       }
     } catch (e) {

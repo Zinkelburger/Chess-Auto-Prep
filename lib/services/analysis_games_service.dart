@@ -335,15 +335,6 @@ class AnalysisGamesService {
     username,
     'holes_${isWhite ? 'white' : 'black'}.json',
   );
-  Future<String> tricksReportPath(
-    String platform,
-    String username,
-    bool isWhite,
-  ) => _cachePath(
-    platform,
-    username,
-    'tricks_${isWhite ? 'white' : 'black'}.json',
-  );
 
   Future<void> deletePlayerData(String platform, String username) =>
       _corpora.tombstone(platform, username);

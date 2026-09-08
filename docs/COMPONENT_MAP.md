@@ -239,7 +239,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
 - `lib/widgets/engine/inline_expectimax_bar.dart` — compact toggleable expectimax PV display
 - `lib/widgets/generation_config_dialog.dart` — legacy modal dialog (still importable but generation config now shows inline in Jobs tab)
 - `lib/features/audit/widgets/audit_config_dialog.dart` — legacy modal dialog (audit config now shows inline in Jobs tab)
-- `lib/features/audit/widgets/audit_findings_panel.dart` — findings list with category filter chips, auto-scaled to ~20 findings, bulk dismiss, keyboard navigation, and interrupted-audit resume banner; dismiss context menus use `showAnchorMenu` (shared with holes/tricks reports)
+- `lib/features/audit/widgets/audit_findings_panel.dart` — findings list with category filter chips, auto-scaled to ~20 findings, bulk dismiss, keyboard navigation, and interrupted-audit resume banner; dismiss context menus use `showAnchorMenu` (shared with the holes report)
 - `lib/features/audit/services/audit_persistence.dart` — centralized save/load for audit snapshots (result + config + resume state)
 - `lib/widgets/layout/jobs_panel.dart` — jobs panel: one compact card per active generation/audit job (phase, live stats, threads/hash, progress bar, controls); completed jobs as simple tiles; no duplicate status banners
 - `lib/widgets/repertoire_lines_browser.dart` — line search/filter/group browser; now the outline column's *metrics view*, not the default
@@ -849,16 +849,16 @@ collection, so playing through them is not reimplemented.
 
 ### `lib/features/holes/`
 
-Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.dart`), which keys results per player + colour. **Different from Analyze with Engine** (raw Stockfish eval coloring of most-played positions): this walks the loaded tree from the ATTACKER's side (opposite the tree's colour) and emits exploitable findings — `uncoveredStrongMove` (engine-strong attacker moves with no reply on file), `refutation` (owner moves that concretely lose, with verified Stockfish PV), `practicalTrap` (**only** the second pass: top leaves get a short Maia expectimax build where practical eval beats raw engine eval for the attacker). Ranked by `exploitScore` (reach × gain) into a short killer list, not a breadth checklist. Reuses the audit's `AuditFinding` model and shared `EvalCache`/`StockfishPool`.
+Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.dart`), which keys results per player + colour. **Different from Analyze with Engine** (raw Stockfish eval coloring of most-played positions): this walks the loaded tree from the ATTACKER's side (opposite the tree's colour) and emits exploitable findings — `uncoveredStrongMove` (engine-strong attacker moves with no reply on file), `refutation` (owner moves that concretely lose, with verified Stockfish PV), `trickyMove` (near-best attacker moves and novelties whose Maia expectimax value beats the engine-best move's raw eval — the owner is expected to misplay by more than the trick concedes). One MultiPV discovery per attacker position feeds both the uncovered check and the trick candidates; attacker-to-move leaves get discovery after the walk under the probe budget (most reachable first), which is how the hunt reaches past the recorded games; the top candidates by reach (discounted by objective cost) each get a short expectimax probe. Ranked by `exploitScore` (reach × gain) into a short killer list, not a breadth checklist. Reuses the audit's `AuditFinding` model and shared `EvalCache`/`StockfishPool`. Without Maia the walk still runs and the report notes that the trick search was skipped; the config dialog hides the trick knobs.
 
 | File | Purpose |
 |------|---------|
-| **services/hole_hunt_config.dart** | `HoleHuntConfig` — hunt thresholds/knobs for a hunt over an opening tree |
-| **services/hole_hunt_service.dart** | Adversarial walker: attacker-side BFS, Stockfish refutation verification, end-of-line expectimax trap pass |
-| **services/hole_scoring.dart** | Pure scoring/ranking helpers (exploit score, `LeafEntry` for the trap pass); engine/widget-free for unit tests |
-| **services/hole_hunt_persistence.dart** | `HoleHuntSnapshot` JSON save/load at a caller-supplied path; no resume state — cancels save partial reports |
+| **services/hole_hunt_config.dart** | `HoleHuntConfig` — walk thresholds plus the trick-probe knobs (window, budget, ply, eval depth, net-gain floor, Maia rating) |
+| **services/hole_hunt_service.dart** | Adversarial walker: attacker-side BFS, Stockfish refutation verification, post-walk leaf discovery, expectimax probes for tricks; `HoleHuntProgress` with walking/leaves/probing phases |
+| **services/hole_scoring.dart** | Pure helpers: reach propagation, `TrickTarget` and top-by-reach selection, `TrickCandidateMetrics` (the White-to-attacker sign flip), candidate windowing, probe prescreen; engine/widget-free for unit tests |
+| **services/hole_hunt_persistence.dart** | `HoleHuntSnapshot` JSON save/load at a caller-supplied path via the audit's `HuntReportStore`; no resume state — cancels save partial reports |
 | **widgets/hole_hunt_config_dialog.dart** | Config dialog; pops with a `HoleHuntConfig`, the host screen owns the hunt lifecycle |
-| **widgets/holes_report_panel.dart** | Lean ranked report for the Findings tab: flat list sorted by exploit score, per-type filter chips, simple dismissal |
+| **widgets/holes_report_panel.dart** | Ranked report for the Holes list: flat list sorted by exploit score, Uncovered / Refutations / Tricks filter chips, visible cap, dismissal, prev/next stepping |
 
 ### `lib/screens/`
 
@@ -954,7 +954,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 
 | File | Purpose |
 |------|---------|
-| `expectimax_line_service.dart` | `followExpectimaxLine`, `generateExpectimaxLines` (capped, used by hole/trick probes), `expectimaxLinesForAllMoves` (the pane's position table), `findNodeByFen`, `ExpectimaxLine` model. Pure reads of the cooked tree |
+| `expectimax_line_service.dart` | `followExpectimaxLine`, `generateExpectimaxLines` (capped, used by the hole hunt's trick probes), `expectimaxLinesForAllMoves` (the pane's position table), `findNodeByFen`, `ExpectimaxLine` model. Pure reads of the cooked tree |
 | `line_metrics_helpers.dart` | Line-level quality/trap/coherence metrics for UI |
 | `coherence_service.dart` | FP-Growth coherence + browse hints; `compute()` runs mining in `Isolate.run` |
 | `fp_growth.dart` | FP-Growth algorithm |
@@ -1212,10 +1212,13 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `test/services/eval/lichess_eval_controller_test.dart` | Download → import → enable, resume from a partial file, delete paths |
 | `test/services/eval/lichess_eval_source_test.dart` | Size/date probe and its offline fallback |
 | `test/services/eval/zstd_stream_test.dart` | Both zstd backends, and truncation detection |
-| `test/features/holes/hole_hunt_config_test.dart` | `HoleHuntConfig` defaults/serialization |
-| `test/features/holes/hole_finding_json_test.dart` | Hole finding JSON round-trip |
-| `test/features/holes/exploit_ranking_test.dart` | Exploit-score ranking/capping |
+| `test/features/holes/hole_hunt_config_test.dart` | `HoleHuntConfig` defaults/serialization, old two-pass keys ignored, snapshot round-trip |
+| `test/features/holes/hole_finding_json_test.dart` | Hole and trick finding JSON round-trip; a retired finding type drops without losing the report |
+| `test/features/holes/hole_hunt_service_test.dart` | The hunt against a scripted engine: walk shape, uncovered moves, refutations, ranking, the Maia gate, leaf discovery order and budget, one discovery feeding both the uncovered check and the candidate pool |
+| `test/features/holes/hole_scoring_test.dart` | Sign conventions, candidate windowing, prescreen and probe selection |
+| `test/features/holes/exploit_ranking_test.dart` | Exploit-score ranking, top-by-reach target selection, reach propagation |
 | `test/features/holes/hole_walk_probability_test.dart` | Reach-probability propagation in the attacker walk |
+| `test/features/holes/holes_report_panel_test.dart` | The report panel: empty state, filter chips surviving a rebuild, status row, nav-controller stepping |
 | `test/features/engine_tournament/engine_game_runner_test.dart` | The arbiter, against scripted engines: mate, threefold, fifty-move, draw/resign adjudication, move ceiling, illegal move, engine death, per-move and clock forfeits, PGN numbering from a FEN start |
 | `test/features/engine_tournament/crosstable_builder_test.dart` | Points from both sides, head-to-head order, SB tiebreak, Elo/LOS edge cases |
 | `test/features/engine_tournament/tournament_summary_test.dart` | History-rail wording: match score and leader, level match, field leader while running, self-match name numbering, day grouping and run duration |
