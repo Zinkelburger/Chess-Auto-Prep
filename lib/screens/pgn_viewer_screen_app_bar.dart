@@ -35,7 +35,6 @@ mixin _AppBarBuildersMixin
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
     final loaded = _controller.allGames.isNotEmpty;
-    final hasGame = _controller.filteredGames.isNotEmpty;
     final fileName = _controller.filePath == null
         ? (loaded ? 'Pasted games' : '')
         : p.basenameWithoutExtension(_controller.filePath!);
@@ -73,28 +72,10 @@ mixin _AppBarBuildersMixin
         ],
       ),
       actions: [
-        if (hasGame)
-          if (_viewingStudy)
-            TextButton(onPressed: _editInStudy, child: const Text('Edit study'))
-          else
-            MenuAnchor(
-              builder: (context, menu, _) => TextButton(
-                onPressed: () => menu.isOpen ? menu.close() : menu.open(),
-                child: const Text('Add to study'),
-              ),
-              menuChildren: [
-                MenuItemButton(
-                  onPressed: _addCurrentGameToStudy,
-                  child: const Text('This game…'),
-                ),
-                if (_controller.filteredGames.length > 1)
-                  MenuItemButton(
-                    onPressed: _saveSliceAsStudy,
-                    child: const Text('Choose games from this collection…'),
-                  ),
-              ],
-            ),
         _buildViewMenu(),
+        const SizedBox(width: 20),
+        const SizedBox(height: 24, child: VerticalDivider(width: 1)),
+        const SizedBox(width: 12),
         const AppModeSwitcher(),
         const SizedBox(width: 8),
       ],
@@ -106,11 +87,43 @@ mixin _AppBarBuildersMixin
     final solitaire = _controller.isSolitaireMode;
     final prefs = _viewPreferences;
     return MenuAnchor(
-      builder: (context, menu, _) => TextButton(
+      builder: (context, menu, _) => OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: AppColors.outline),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          minimumSize: const Size(0, 40),
+        ),
         onPressed: () => menu.isOpen ? menu.close() : menu.open(),
-        child: const Text('View'),
+        icon: const Icon(Icons.expand_more, size: 20),
+        iconAlignment: IconAlignment.end,
+        label: const Text('Game options'),
       ),
       menuChildren: [
+        if (hasGame) ...[
+          if (_viewingStudy)
+            MenuItemButton(
+              onPressed: _editInStudy,
+              leadingIcon: const Icon(Icons.edit_note, size: 20),
+              child: const Text('Edit study'),
+            )
+          else
+            SubmenuButton(
+              leadingIcon: const Icon(Icons.library_add_outlined, size: 20),
+              menuChildren: [
+                MenuItemButton(
+                  onPressed: _addCurrentGameToStudy,
+                  child: const Text('This game…'),
+                ),
+                if (_controller.filteredGames.length > 1)
+                  MenuItemButton(
+                    onPressed: _saveSliceAsStudy,
+                    child: const Text('Choose games from this collection…'),
+                  ),
+              ],
+              child: const Text('Save to study'),
+            ),
+          const Divider(),
+        ],
         if (hasGame && !solitaire) ...[
           SubmenuButton(
             menuChildren: [

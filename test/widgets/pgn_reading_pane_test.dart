@@ -113,7 +113,7 @@ void main() {
   testWidgets('focus a nested branch, return to parent and then mainline', (
     tester,
   ) async {
-    final controller = await _pump(tester);
+    final controller = await _pump(tester, width: 330);
     // Navigate through the real tree, including a normally folded third level.
     final view = tester.widget<PgnMovetextView>(find.byType(PgnMovetextView));
     final sicilian = view.variationsByPly[1]!.single;
@@ -129,7 +129,7 @@ void main() {
       findsOneWidget,
     );
     expect(_move('e5'), findsNWidgets(2));
-    controller.focusVariation();
+    await tester.tap(find.widgetWithText(FilledButton, 'Focus variation'));
     await tester.pumpAndSettle();
     expect(
       find.textContaining('Deep branch explanation.', findRichText: true),
@@ -148,7 +148,7 @@ void main() {
     controller.goForward();
     await tester.pumpAndSettle();
     expect(controller.currentFen, e5.children.first.fen);
-    controller.returnToParentLine();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Return to parent'));
     await tester.pumpAndSettle();
     expect(controller.currentFen, d4.fen);
     expect(

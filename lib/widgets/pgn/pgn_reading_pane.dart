@@ -7,6 +7,8 @@ import '../../models/move_tree.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart' show coordsAtPly;
+import '../../utils/app_shortcuts.dart';
+import '../shortcut_tooltip.dart';
 
 /// A sideline is identified by its actual first move, including for games
 /// starting from a FEN. No generated chapter names or separate variation index.
@@ -270,8 +272,8 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                 ),
                 child: Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 4,
-                  runSpacing: 2,
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
                     TextButton(
                       onPressed: branches.isEmpty ? null : _mainline,
@@ -289,22 +291,30 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                       ),
                     ],
                     if (branches.isNotEmpty)
-                      IconButton(
-                        tooltip: 'Parent line (Ctrl+←)',
-                        onPressed: returnToParent,
-                        icon: const Icon(
-                          Icons.subdirectory_arrow_left,
-                          size: 18,
+                      ShortcutTooltip(
+                        description: 'Return to parent line',
+                        shortcut: AppShortcut.returnToParentLine,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.outline),
+                          ),
+                          onPressed: returnToParent,
+                          icon: const Icon(
+                            Icons.subdirectory_arrow_left,
+                            size: 18,
+                          ),
+                          label: const Text('Return to parent'),
                         ),
                       ),
                     if (branches.isNotEmpty &&
                         branches.last.root.id != _scope?.root.id)
-                      TextButton(
-                        onPressed: focusVariation,
-                        child: const Tooltip(
-                          message:
-                              'Read this variation at full width (Ctrl+Enter)',
-                          child: Text('Focus variation'),
+                      ShortcutTooltip(
+                        description: 'Read this variation at full width',
+                        shortcut: AppShortcut.focusVariation,
+                        child: FilledButton.icon(
+                          onPressed: focusVariation,
+                          icon: const Icon(Icons.zoom_in, size: 18),
+                          label: const Text('Focus variation'),
                         ),
                       ),
                     if (widget.showReadingOptions)
