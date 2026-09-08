@@ -12,6 +12,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
+import 'app_test.dart' as app_smoke;
+
 // Only the profile location is substituted. Assets, extraction, runtime DLL
 // discovery and the engine process all come from the built desktop app.
 class _FreshProfile extends PathProviderPlatform
@@ -112,4 +114,8 @@ void main() {
     expect(repair.damaged, ['hivemind.onnx']);
     await search();
   }, timeout: const Timeout(Duration(minutes: 5)));
+  // One native process: launching separate integration executables in one
+  // flutter test invocation can trigger the Windows single-instance handoff
+  // before the second executable connects to the test runner.
+  app_smoke.main();
 }
