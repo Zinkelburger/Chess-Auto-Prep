@@ -83,7 +83,6 @@ mixin _AppBarBuildersMixin
       ),
       actions: [
         _buildViewMenu(),
-        const SizedBox(width: 16),
         const AppModeSwitcher(),
         AppSettingsButton(
           mode: AppMode.pgnViewer,

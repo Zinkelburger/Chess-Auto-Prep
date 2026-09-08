@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_motion.dart';
+import '../theme/app_text_styles.dart';
 import 'app_overflow_menu.dart';
 
 class AppModeSwitcher extends StatelessWidget {
@@ -22,7 +23,7 @@ class AppModeSwitcher extends StatelessWidget {
       (s) => s.isRepertoireGenerating,
     );
     final mode = context.select<AppState, AppMode>((s) => s.currentMode);
-    return PopupMenuButton<AppMode>(
+    final picker = PopupMenuButton<AppMode>(
       key: switcherKey,
       tooltip: locked
           ? 'Locked — repertoire generation in progress'
@@ -50,17 +51,31 @@ class AppModeSwitcher extends StatelessWidget {
             ),
         ],
       ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: Border.all(color: AppColors.outline),
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              mode.label,
-              style: Theme.of(context).textTheme.titleMedium,
-              overflow: TextOverflow.ellipsis,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('View', style: AppTextStyles.caption),
+                Text(
+                  mode.label,
+                  style: AppTextStyles.bodyStrong.copyWith(
+                    color: locked ? AppColors.onSurfaceDisabled : AppColors.ink,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 2),
+            const SizedBox(width: 12),
             Icon(
               Icons.arrow_drop_down,
               size: 20,
@@ -69,6 +84,21 @@ class AppModeSwitcher extends StatelessWidget {
           ],
         ),
       ),
+    );
+    // Keep screen actions separate from app navigation on every top bar.
+    // The separator and its breathing room are outside the menu's hit area.
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(width: 16),
+        const SizedBox(
+          height: 28,
+          child: VerticalDivider(width: 1, color: AppColors.outline),
+        ),
+        const SizedBox(width: 16),
+        picker,
+        const SizedBox(width: 8),
+      ],
     );
   }
 }

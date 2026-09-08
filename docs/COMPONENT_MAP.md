@@ -172,14 +172,14 @@ main.dart
 | `study` | `StudyScreen` | Multi-chapter studies |
 | `engineTournament` | `EngineTournamentScreen` | Engine-vs-engine matches, crosstable, per-game PGN |
 
-Mode switcher: `widgets/app_mode_switcher.dart` — the app-bar *title* (`Tactics ▾`) opens a grouped, text-only menu (Train / Build / Analyse / Lab, order in `kAppModeGroups`); Ctrl/Cmd+1…7 follow the same order and are bound once in `MainScreen`.
+Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens a grouped, text-only menu (Train / Build / Analyse / Lab / Data, order in `kAppModeGroups`); Ctrl/Cmd+1…9 follow the same order and are bound once in `MainScreen`.
 
 #### App bar conventions (unified June 2026)
 
 Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 - **`titleSpacing: 16`** on every `AppBar`.
-- **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → AppModeSwitcher → settings gear**. Actions use named groups, with no settings-only ellipsis. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
+- **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with a bordered, two-line View/current-mode anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions use named groups, with no settings-only ellipsis. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
 - **Settings**: `AppSettingsButton(mode: ...)` opens the current view’s preferences first. **Global settings** opens the shared sidebar, grouped into **Views** then **Global** (Accounts, Display, Repertoires, Engine, Data, About, Keyboard shortcuts). Selecting a view opens its settings, including views not yet mounted; navigation respects the repertoire-generation lock. Live view controllers own their settings content. Shared board/engine controls keep their existing scope.
 - **Toolbar buttons collapse** from text+icon to icon-only below `kToolbarCompactBreakpoint` (900 px).
 - **Layout body splits** at `kCompactBreakpoint` (960 px) from side-by-side to stacked.
@@ -1082,7 +1082,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 
 | File | Purpose |
 |------|---------|
-| `app_mode_switcher.dart` | Top-level mode switcher: the app-bar title with the grouped mode menu behind it |
+| `app_mode_switcher.dart` | Top-level View selector: bordered current-mode button and separator, with the grouped mode menu behind it |
 | `chess_board_widget.dart` | Board rendering, move input; coordinates follow the Display preference unless the caller passes `coordinates:` (thumbnails under 24px squares are always bare; *outside* takes a margin out of the squares — see `board/board_coordinates.dart`, whose `coordinateLabels` is the pure placement rule); `_BoardPainter.shouldRepaint` compares highlight/square/color state (not always `true`). Pieces are `Positioned` on their squares with no implicit animation, so a layout resize (expanding a chapter list, dragging a panel) cannot slide them. Annotation types live in `lib/models/board_annotation.dart`. |
 | `clickable_move_line.dart` | SAN line with tap + hover callbacks |
 | `navigation_trail.dart` | Breadcrumb trail widget (used by repertoire tab bar) |

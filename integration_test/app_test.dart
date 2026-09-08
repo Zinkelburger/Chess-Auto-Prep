@@ -18,8 +18,9 @@ void main() {
     testWidgets('boots into the unified Tactics home', (tester) async {
       await pumpApp(tester);
 
-      // App-bar title. At the root of the history the breadcrumb trail is
-      // deliberately absent — a lone crumb would just repeat this title.
+      // The View selector names the current mode. At the history root,
+      // the breadcrumb trail is absent to avoid repeating it.
+      expect(find.text('View'), findsOneWidget);
       expect(find.text('Tactics'), findsWidgets);
       final actions = find.text('Actions');
       final picker = find.byKey(AppModeSwitcher.switcherKey);

@@ -79,7 +79,7 @@ class AppOverflowMenu extends StatelessWidget {
   /// Optional custom anchor; otherwise uses [label] (Actions by default).
   final Widget? anchor;
 
-  /// Quiet text-and-arrow anchor. Explicit null opts into an icon anchor.
+  /// Labelled text-and-arrow anchor. Explicit null opts into an icon anchor.
   final String? label;
 
   /// False greys the anchor and keeps the menu shut — for a bar that is
@@ -98,31 +98,45 @@ class AppOverflowMenu extends StatelessWidget {
         PopupMenuItem<int>(
           value: i,
           enabled: rows[i].enabled,
-          // The mode switcher's row height, so the two menus that sit side
-          // by side on a bar read as one kind of thing.
+          // Match the shared mode menu's row height.
           height: 32,
           child: AppMenuEntryRow(entry: rows[i]),
         ),
       ],
     ];
+    final isActionsMenu = label == 'Actions';
     final anchor =
         this.anchor ??
         (label == null
             ? null
-            : Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            : Container(
+                constraints: BoxConstraints(minHeight: isActionsMenu ? 44 : 0),
+                padding: EdgeInsets.symmetric(
+                  horizontal: isActionsMenu ? 12 : 8,
+                  vertical: 6,
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       label!,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      style:
+                          (isActionsMenu
+                                  ? AppTextStyles.bodyStrong
+                                  : Theme.of(context).textTheme.titleMedium!)
+                              .copyWith(
+                                color: enabled
+                                    ? AppColors.ink
+                                    : AppColors.onSurfaceDisabled,
+                              ),
                     ),
-                    const SizedBox(width: 2),
-                    const Icon(
+                    SizedBox(width: isActionsMenu ? 8 : 2),
+                    Icon(
                       Icons.arrow_drop_down,
                       size: 20,
-                      color: AppColors.ink,
+                      color: enabled
+                          ? AppColors.ink
+                          : AppColors.onSurfaceDisabled,
                     ),
                   ],
                 ),
