@@ -1,4 +1,4 @@
-/// View picker, placed between Actions and the settings gear in app bars.
+/// Mode picker, placed between Actions and the settings gear in app bars.
 /// Its grouped menu and Ctrl+digit shortcuts share the app mode registry.
 library;
 
@@ -52,23 +52,14 @@ class AppModeSwitcher extends StatelessWidget {
         ],
       ],
       // Drawn exactly like the Actions anchor beside it: label, drop arrow,
-      // no box. The current mode's name is the label so the bar still says
-      // where you are; "View" stays as a quiet prefix.
+      // no box. The current mode's name is the whole label, so the bar
+      // still says where you are without a "View" prefix.
       child: Container(
         constraints: const BoxConstraints(minHeight: 44),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'View',
-              style: AppTextStyles.body.copyWith(
-                color: locked
-                    ? AppColors.onSurfaceDisabled
-                    : AppColors.onSurfaceMuted,
-              ),
-            ),
-            const SizedBox(width: 6),
             Text(
               mode.label,
               style: AppTextStyles.bodyStrong.copyWith(
