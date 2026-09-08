@@ -106,31 +106,33 @@ class HeaderFilters extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: ChoiceField<({String field, MatchMode mode})>(
-                  hint: 'Choose condition',
-                  value: (field: f.field, mode: f.mode),
-                  style: AppTextStyles.body,
-                  autofocus: f.value.isEmpty,
-                  items: [
-                    for (final field in kHeaderFieldOptions)
-                      for (final mode in modesForField(field))
-                        ChoiceItem(
-                          value: (field: field, mode: mode),
-                          label: HeaderFilterConfig(
-                            field: field,
-                            mode: mode,
-                            value: '',
-                          ).conditionLabel,
-                          searchText:
-                              '$field ${mode.name} ${HeaderFilterConfig(field: field, mode: mode, value: '').conditionLabel}',
-                        ),
-                  ],
-                  onChanged: (choice) {
-                    if (!context.mounted) return;
-                    controller.setHeaderField(index, choice.field);
-                    controller.setHeaderMode(index, choice.mode);
-                    FocusScope.of(context).nextFocus();
-                  },
+                child: _NewConditionFocus(
+                  focusOnMount: f.value.isEmpty,
+                  child: ChoiceField<({String field, MatchMode mode})>(
+                    hint: 'Choose condition',
+                    value: (field: f.field, mode: f.mode),
+                    style: AppTextStyles.body,
+                    items: [
+                      for (final field in kHeaderFieldOptions)
+                        for (final mode in modesForField(field))
+                          ChoiceItem(
+                            value: (field: field, mode: mode),
+                            label: HeaderFilterConfig(
+                              field: field,
+                              mode: mode,
+                              value: '',
+                            ).conditionLabel,
+                            searchText:
+                                '$field ${mode.name} ${HeaderFilterConfig(field: field, mode: mode, value: '').conditionLabel}',
+                          ),
+                    ],
+                    onChanged: (choice) {
+                      if (!context.mounted) return;
+                      controller.setHeaderField(index, choice.field);
+                      controller.setHeaderMode(index, choice.mode);
+                      FocusScope.of(context).nextFocus();
+                    },
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -235,4 +237,48 @@ class HeaderFilters extends StatelessWidget {
     return 'Matches ${summary.matchedGames} of ${summary.totalGames} games '
         'as: $shown$more';
   }
+}
+
+/// A new condition must take focus even when an existing row is being edited.
+/// Keep this scope local to the choice so traversal can continue to its value.
+class _NewConditionFocus extends StatefulWidget {
+  const _NewConditionFocus({required this.focusOnMount, required this.child});
+
+  final bool focusOnMount;
+  final Widget child;
+
+  @override
+  State<_NewConditionFocus> createState() => _NewConditionFocusState();
+}
+
+class _NewConditionFocusState extends State<_NewConditionFocus> {
+  final _scope = FocusScopeNode(
+    debugLabel: 'PGN filter condition',
+    traversalEdgeBehavior: TraversalEdgeBehavior.parentScope,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focusOnMount) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // The choice's input is now attached. Request it explicitly rather
+        // than relying on autofocus, which preserves an already focused field.
+        FocusTraversalGroup.of(
+          context,
+        ).findFirstFocus(_scope, ignoreCurrentFocus: true)?.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scope.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      FocusScope(node: _scope, child: widget.child);
 }
