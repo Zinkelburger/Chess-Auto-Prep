@@ -20,6 +20,7 @@ class RepertoireReviewEntry {
   DateTime? lastReviewedUtc;
   int passCount;
   int failCount;
+  bool excluded;
 
   RepertoireReviewEntry({
     required this.repertoireId,
@@ -35,6 +36,7 @@ class RepertoireReviewEntry {
     this.lastReviewedUtc,
     this.passCount = 0,
     this.failCount = 0,
+    this.excluded = false,
   });
 
   bool get isNew => lastRating.isEmpty;
@@ -53,6 +55,7 @@ class RepertoireReviewEntry {
     DateTime? lastReviewedUtc,
     int? passCount,
     int? failCount,
+    bool? excluded,
   }) {
     return RepertoireReviewEntry(
       repertoireId: repertoireId,
@@ -65,12 +68,14 @@ class RepertoireReviewEntry {
       lastReviewedUtc: lastReviewedUtc ?? this.lastReviewedUtc,
       passCount: passCount ?? this.passCount,
       failCount: failCount ?? this.failCount,
+      excluded: excluded ?? this.excluded,
     );
   }
 
   static RepertoireReviewEntry fromCsvRow(String row) {
-    final cells = decodeTrainingRow(row, 10);
-    if (cells.length != 8 && cells.length != 10) {
+    final hasExclusion = row.endsWith(',true') || row.endsWith(',false');
+    final cells = decodeTrainingRow(row, hasExclusion ? 11 : 10);
+    if (cells.length != 8 && cells.length != 10 && cells.length != 11) {
       throw FormatException('Invalid repertoire review row: $row');
     }
 
@@ -88,6 +93,7 @@ class RepertoireReviewEntry {
       lastReviewedUtc: reviewed,
       passCount: cells.length > 8 ? int.parse(cells[8]) : 0,
       failCount: cells.length > 9 ? int.parse(cells[9]) : 0,
+      excluded: cells.length > 10 && cells[10] == 'true',
     );
   }
 
@@ -110,6 +116,7 @@ class RepertoireReviewEntry {
       reviewedStr,
       passCount.toString(),
       failCount.toString(),
+      excluded.toString(),
     ]);
   }
 }

@@ -11,7 +11,7 @@ import 'storage/storage_service.dart';
 
 class RepertoireReviewService {
   static const _header =
-      'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,last_rating,last_reviewed_utc,pass_count,fail_count';
+      'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,last_rating,last_reviewed_utc,pass_count,fail_count,excluded';
   static const _historyHeader =
       'repertoire_id,line_id,timestamp_utc,rating,had_mistake,session_type';
   static const _moveProgressHeader =
@@ -258,6 +258,7 @@ class RepertoireReviewService {
     final due = <RepertoireLine>[];
     for (final line in lines) {
       final entry = reviewMap[line.id];
+      if (line.readOnlyLabel != null || (entry?.excluded ?? false)) continue;
       if (!dueOnly || entry == null || entry.isDue) {
         due.add(line);
       }

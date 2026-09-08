@@ -25,10 +25,10 @@ import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
+import '../widgets/shortcut_tooltip.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/chapter_reader_screen.dart';
 import '../widgets/training/chapter_setup_dialog.dart';
-import '../widgets/training/line_preview_dialog.dart';
 import '../widgets/training/move_input_widget.dart';
 import '../widgets/chapter_list_body.dart' show ChapterPick;
 import '../widgets/repertoire_list_body.dart';
@@ -39,6 +39,7 @@ import '../widgets/training/training_results_panel.dart';
 import '../widgets/training/training_settings_panel.dart';
 import '../widgets/training/training_side_dialog.dart';
 import 'repertoire_selection_screen.dart';
+import 'repertoire_chapters_screen.dart';
 
 // ---------------------------------------------------------------------------
 // TRAINING SCREEN
@@ -187,6 +188,26 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       _training.setRepertoire(pick.chapter);
       await _training.loadRepertoire(startChapter: pick.courseChapter);
     }
+  }
+
+  Future<void> _chooseChapter() async {
+    final source = _training.repertoire;
+    if (source == null) return;
+    final directory = p.dirname(source.filePath);
+    final pick = await Navigator.of(context).push<ChapterPick>(
+      MaterialPageRoute(
+        builder: (_) => RepertoireChaptersScreen(
+          repertoire: RepertoireMetadata(
+            filePath: directory,
+            name: p.basename(directory),
+            lastModified: DateTime.now(),
+          ),
+        ),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    _training.setRepertoire(pick.chapter);
+    await _training.loadRepertoire(startChapter: pick.courseChapter);
   }
 
   void _openInBuilder() {
@@ -347,12 +368,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
         ),
       ),
       actions: [
-        const AppModeSwitcher(),
         TextButton.icon(
           onPressed: _openSettingsDialog,
           icon: const Icon(Icons.settings_outlined, size: 18),
           label: const Text('Training settings'),
         ),
+        const AppModeSwitcher(),
         const SizedBox(width: 8),
       ],
     );
@@ -364,13 +385,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     final repertoire = _training.repertoire;
     if (repertoire == null || _training.sourceIsStudy) return null;
     return p.basename(p.dirname(repertoire.filePath));
-  }
-
-  /// `Black Repertoire › Main` as one string, for headings that take text.
-  String _repertoireTitle() {
-    final name = _training.repertoire?.name ?? 'Repertoire';
-    final folder = _repertoireFolder();
-    return folder == null ? name : '$folder › $name';
   }
 
   /// The app bar's `Repertoire › Chapter` crumb: folder plain, chapter bold,
@@ -501,7 +515,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   /// Choose material before starting a lesson.
   Widget _buildBrowser() {
     return TrainerBrowser(
-      title: _repertoireTitle(),
+      title: _training.repertoire!.name,
       subtitle: _browserSubtitle(),
       lines: _training.lines,
       reviewMap: _training.reviewMap,
@@ -509,6 +523,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       activeChapter: _training.activeChapter,
       onChapterSelected: _training.setActiveChapter,
       ungroupedChapter: TrainingSessionController.ungroupedChapter,
+      onBrowseChapters: _training.sourceIsStudy ? null : _chooseChapter,
       onLearn: _training.startLearnSession,
       onReview: _training.startReviewSession,
       learnBatchSize: _sessionCap(_training.settings.newLinesPerSession),
@@ -518,6 +533,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       onReadLines: _readLines,
       onApplyLearnedSelection: _applyLearnedSelection,
       introEnabled: _training.settings.skipToFirstComment,
+      onExcludeLine: (line, excluded) =>
+          unawaited(_training.setLineExcluded(line, excluded)),
     );
   }
 
@@ -526,9 +543,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   int _sessionCap(int setting) =>
       _training.repetitionMode == RepetitionMode.linear ? 0 : setting;
 
-  String _browserSubtitle() => _training.sourceIsStudy
-      ? 'Choose a chapter or start practising.'
-      : 'You play ${_training.sourceIsBlack ? 'Black' : 'White'} · Choose a chapter or start practising.';
+  String? _browserSubtitle() => _training.sourceIsStudy
+      ? null
+      : '${_training.sourceIsBlack ? 'Black' : 'White'} repertoire';
 
   /// Ask which side this file trains, and reload with the answer.
   Future<void> _chooseTrainingSide() async {
@@ -662,6 +679,15 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
                 ),
               ),
               const Spacer(),
+              ShortcutTooltip(
+                description: 'Skip to next line',
+                shortcut: AppShortcut.nextItem,
+                child: TextButton.icon(
+                  onPressed: _training.runComplete ? null : _training.skipLine,
+                  icon: const Icon(Icons.skip_next_outlined, size: 18),
+                  label: const Text('Skip'),
+                ),
+              ),
               AppOverflowMenu(
                 tooltip: 'Line actions',
                 anchor: const Padding(
@@ -686,9 +712,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
                     onRun: _training.restartLine,
                   ),
                   AppMenuEntry(
-                    label: 'Skip to next line',
-                    icon: Icons.skip_next,
-                    onRun: _training.skipLine,
+                    label: 'Exclude from training',
+                    icon: Icons.block_outlined,
+                    onRun: () =>
+                        unawaited(_training.setLineExcluded(line, true)),
                   ),
                   AppMenuEntry(
                     label: 'Explore position in Builder',
@@ -806,31 +833,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       : chapter;
 
   void _previewLine(RepertoireLine line) {
+    final chapter = _training.chapterOf(line);
     unawaited(
-      showDialog<void>(
-        context: context,
-        builder: (dialogContext) => LinePreviewDialog(
-          line: line,
-          editLabel: _training.sourceIsStudy
-              ? 'Edit in Study'
-              : 'Edit in Builder',
-          onEdit: () {
-            Navigator.of(dialogContext).pop();
-            if (_training.sourceIsStudy) {
-              _openInStudy();
-            } else if (_training.repertoire != null) {
-              context.read<AppState>().switchToBuilder(
-                repertoirePath: _training.repertoire!.filePath,
-                lineId: line.id,
-              );
-            }
-          },
-          onTrain: () {
-            Navigator.of(dialogContext).pop();
-            _training.startLine(line);
-          },
-        ),
-      ),
+      _readLines([
+        for (final candidate in _training.lines)
+          if (_training.chapterOf(candidate) == chapter) candidate,
+      ], initialLineId: line.id),
     );
   }
 
@@ -838,13 +846,19 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   /// board, every line's notes on one page. Never touches training state;
   /// train/edit hand off after the page closes, the same way the line
   /// preview does.
-  Future<void> _readLines(List<RepertoireLine> lines) async {
+  Future<void> _readLines(
+    List<RepertoireLine> lines, {
+    String? initialLineId,
+  }) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ChapterReaderScreen(
-          repertoireName: _repertoireTitle(),
-          chapterTitle: _chapterTitle(_training.activeChapter),
+          repertoireName: _repertoireFolder() ?? _training.repertoire!.name,
+          chapterTitle: _training.activeChapter == null
+              ? _training.repertoire!.name
+              : _chapterTitle(_training.activeChapter),
           lines: lines,
+          initialLineId: initialLineId,
           reviewMap: _training.reviewMap,
           editLabel: _training.sourceIsStudy
               ? 'Edit in Study'

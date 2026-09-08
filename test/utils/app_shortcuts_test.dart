@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/utils/app_shortcuts.dart';
+import 'package:chess_auto_prep/utils/shortcut_reference.dart';
 import 'package:chess_auto_prep/utils/keyboard_shortcut_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -9,6 +10,15 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('registry invariants', () {
+    test('every registered shortcut is discoverable in settings', () {
+      expect(
+        shortcutReference.map((e) => e.shortcut).toSet(),
+        AppShortcut.all.toSet(),
+      );
+      expect(AppShortcut.focusVariation.label, 'Enter');
+      expect(AppShortcut.returnToParentLine.label, 'Esc');
+    });
+
     test('every entry has at least one chord', () {
       // The const constructor cannot assert this itself, so it is asserted
       // here instead.
@@ -63,7 +73,7 @@ void main() {
   group('labels', () {
     test('render the glyphs tooltips have always shown', () {
       expect(AppShortcut.backOneMove.label, '←');
-      expect(AppShortcut.goToStart.label, 'Home');
+      expect(AppShortcut.goToStart.label, 'Home or Page Up');
       expect(AppShortcut.leave.label, 'Esc');
       expect(AppShortcut.autoPlay.label, 'Space');
       expect(AppShortcut.searchGames.label, '/');

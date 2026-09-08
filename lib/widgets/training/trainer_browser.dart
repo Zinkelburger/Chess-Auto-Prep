@@ -80,6 +80,7 @@ class TrainerBrowser extends StatefulWidget {
   /// Start a Learn / Review run over the current scope. Null = nothing to do
   /// (the button renders muted and unclickable).
   final VoidCallback? onLearn;
+  final VoidCallback? onBrowseChapters;
   final VoidCallback? onReview;
 
   /// How many lines one press of each button actually covers, or 0 when the
@@ -106,6 +107,7 @@ class TrainerBrowser extends StatefulWidget {
   /// Whether the uncommented intro auto-plays (dims those moves in the row
   /// preview, since they are shown rather than quizzed).
   final bool introEnabled;
+  final void Function(RepertoireLine line, bool excluded)? onExcludeLine;
 
   /// Narrow side-panel rendering: same structure, tighter, no page header.
   final bool dense;
@@ -121,6 +123,7 @@ class TrainerBrowser extends StatefulWidget {
     this.onChapterSelected,
     required this.ungroupedChapter,
     this.onLearn,
+    this.onBrowseChapters,
     this.onReview,
     this.learnBatchSize = 0,
     this.reviewBatchSize = 0,
@@ -129,6 +132,7 @@ class TrainerBrowser extends StatefulWidget {
     this.onReadLines,
     this.onApplyLearnedSelection,
     this.introEnabled = false,
+    this.onExcludeLine,
     this.dense = false,
   });
 
@@ -250,8 +254,11 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
   @override
   Widget build(BuildContext context) {
     final chapters = _chapters;
-    final showingChapterList =
-        chapters.isNotEmpty && widget.activeChapter == null;
+    final multipleChapters =
+        chapters.length > 1 ||
+        (chapters.isNotEmpty &&
+            widget.lines.any((line) => widget.chapterOf?.call(line) == null));
+    final showingChapterList = multipleChapters && widget.activeChapter == null;
     final visible = _visibleLines;
     final counts = countLines(visible, widget.reviewMap);
     final matchedChapters = [
@@ -268,14 +275,13 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
           title: widget.activeChapter == null
               ? widget.title
               : _chapterTitle(widget.activeChapter!),
-          subtitle: widget.activeChapter == null
-              ? widget.subtitle
-              : '${visible.length} line${visible.length == 1 ? '' : 's'} in '
-                    'this chapter',
+          subtitle: widget.subtitle,
           counts: counts,
           dense: widget.dense,
-          onBack: widget.activeChapter == null || _selecting
+          onBack: _selecting
               ? null
+              : widget.activeChapter == null || !multipleChapters
+              ? widget.onBrowseChapters
               : () => _openChapter(null),
           onLearn: _selecting ? null : widget.onLearn,
           onReview: _selecting ? null : widget.onReview,
@@ -411,6 +417,12 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
           line: line,
           status: lineStatusOf(widget.reviewMap[line.id]),
           entry: widget.reviewMap[line.id],
+          onExclude: widget.onExcludeLine == null
+              ? null
+              : () => widget.onExcludeLine!(
+                  line,
+                  !(widget.reviewMap[line.id]?.excluded ?? false),
+                ),
           // A puzzle-start marker auto-plays its prelude in every mode; the
           // comment-based intro only applies when the setting is on.
           introLength:
@@ -428,7 +440,8 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
               ? () => setState(() {
                   if (!_checked.remove(line.id)) _checked.add(line.id);
                 })
-              : line.isModelGame
+              : line.readOnlyLabel != null ||
+                    (widget.reviewMap[line.id]?.excluded ?? false)
               ? () => widget.onPreviewLine?.call(line)
               : () => widget.onTrainLine(line),
         );

@@ -33,7 +33,9 @@ while read -r line; do
   esac
 done
 ''');
-    await Process.run('chmod', ['+x', path]);
+    if (!Platform.isWindows) {
+      await Process.run('chmod', ['+x', path]);
+    }
   }
 
   setUp(() async {

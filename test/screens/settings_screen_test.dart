@@ -50,6 +50,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('keyboard reference displays shared mappings and is scrollable', (
+    tester,
+  ) async {
+    await pumpSettings(tester, const Size(1280, 720));
+    await tester.tap(find.byKey(const Key('settings-nav-6')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Focus the current variation'),
+      250,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const PageStorageKey('settings-page-6')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('Enter'), findsWidgets);
+    expect(find.text('Ctrl+Enter'), findsNothing);
+    expect(find.text('Ctrl+←'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a short window can scroll to reset and cancel safely', (
     tester,
   ) async {
@@ -92,6 +114,7 @@ void main() {
         'Engine',
         'Data',
         'About',
+        'Keyboard shortcuts',
         'Accounts',
       ]) {
         // The picker is a text box: type part of the name, Enter takes the
@@ -192,6 +215,48 @@ void main() {
     );
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('display.board_coordinates'), 'everySquare');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('close sits top-right where the gear was and pops the route', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>(
+        create: (_) => AppState(),
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SettingsScreen(),
+                  ),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final close = find.byTooltip('Close settings (Esc)');
+    expect(close, findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
+    expect(tester.getCenter(close).dx, greaterThan(1280 * 0.9));
+
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+    expect(find.text('open'), findsOneWidget);
+    expect(find.byType(SettingsScreen), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

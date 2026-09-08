@@ -90,6 +90,10 @@ final Map<LogicalKeyboardKey, String> _namedGlyphs = {
   LogicalKeyboardKey.space: 'Space',
   LogicalKeyboardKey.tab: 'Tab',
   LogicalKeyboardKey.home: 'Home',
+  LogicalKeyboardKey.enter: 'Enter',
+  LogicalKeyboardKey.pageUp: 'Page Up',
+  LogicalKeyboardKey.pageDown: 'Page Down',
+  LogicalKeyboardKey.backspace: 'Backspace',
   LogicalKeyboardKey.end: 'End',
   LogicalKeyboardKey.slash: '/',
   LogicalKeyboardKey.f11: 'F11',
@@ -141,10 +145,23 @@ class AppShortcut {
   static const forwardOneMove = AppShortcut([
     KeyChord(LogicalKeyboardKey.arrowRight),
   ]);
-  static const goToStart = AppShortcut([KeyChord(LogicalKeyboardKey.home)]);
-  static const goToEnd = AppShortcut([KeyChord(LogicalKeyboardKey.end)]);
+  static const goToStart = AppShortcut([
+    KeyChord(LogicalKeyboardKey.home),
+    KeyChord(LogicalKeyboardKey.pageUp),
+  ]);
+  static const goToEnd = AppShortcut([
+    KeyChord(LogicalKeyboardKey.end),
+    KeyChord(LogicalKeyboardKey.pageDown),
+  ]);
   static const returnToMainline = AppShortcut([
     KeyChord(LogicalKeyboardKey.keyR),
+  ]);
+
+  static const focusVariation = AppShortcut([
+    KeyChord(LogicalKeyboardKey.enter),
+  ]);
+  static const returnToParentLine = AppShortcut([
+    KeyChord(LogicalKeyboardKey.escape),
   ]);
 
   // ── Board and panels ───────────────────────────────────────────────────
@@ -241,6 +258,27 @@ class AppShortcut {
     KeyChord(LogicalKeyboardKey.arrowRight, shift: true),
   ]);
 
+  static const startSolitaire = AppShortcut([
+    KeyChord(LogicalKeyboardKey.enter),
+  ]);
+  static const pasteFen = AppShortcut([
+    KeyChord(LogicalKeyboardKey.keyV, control: true, shift: true),
+  ]);
+  static const candidateKeys = [
+    LogicalKeyboardKey.digit1,
+    LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
+    LogicalKeyboardKey.digit4,
+    LogicalKeyboardKey.digit5,
+    LogicalKeyboardKey.digit6,
+    LogicalKeyboardKey.digit7,
+    LogicalKeyboardKey.digit8,
+    LogicalKeyboardKey.digit9,
+  ];
+  static final forkCandidates = [
+    for (final key in candidateKeys) AppShortcut([KeyChord(key)]),
+  ];
+
   /// Every entry above, for the invariant tests.
   static const all = <AppShortcut>[
     previousItem,
@@ -250,6 +288,10 @@ class AppShortcut {
     goToStart,
     goToEnd,
     returnToMainline,
+    focusVariation,
+    startSolitaire,
+    pasteFen,
+    returnToParentLine,
     flipBoard,
     toggleEngine,
     toggleExpectimax,

@@ -55,6 +55,8 @@ import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_switcher.dart';
+import '../widgets/app_overflow_menu.dart';
+import '../features/games/widgets/game_view_settings_dialog.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/common/confirm_dialog.dart';
 import '../widgets/engine/engine_gate.dart';
@@ -235,6 +237,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void _setViewPreferences(GameViewPreferences value) {
+    if (!mounted) return;
     _preferencesChanged = true;
     _reviewHandoff = false;
     setState(() => _viewPreferences = value);
@@ -675,6 +678,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       showDialog(
         context: context,
         builder: (ctx) => PgnSliceDialog(
+          collectionName: _controller.filePath == null
+              ? 'Pasted games'
+              : p.basename(_controller.filePath!),
           allGames: _controller.allGames
               .map((g) => (headers: g.headers, pgnText: g.pgnText))
               .toList(),
@@ -1291,18 +1297,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _reclaimFocus();
   }
 
-  static const _digitKeys = [
-    LogicalKeyboardKey.digit1,
-    LogicalKeyboardKey.digit2,
-    LogicalKeyboardKey.digit3,
-    LogicalKeyboardKey.digit4,
-    LogicalKeyboardKey.digit5,
-    LogicalKeyboardKey.digit6,
-    LogicalKeyboardKey.digit7,
-    LogicalKeyboardKey.digit8,
-    LogicalKeyboardKey.digit9,
-  ];
-
   /// Whether the Book tab is the one on screen (and so owns the board and the
   /// arrow keys).
   @override
@@ -1323,18 +1317,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// that would disturb a puzzle. Keep descriptions in sync with the button
   /// tooltips that advertise them.
   List<KeyBinding> get _keyBindings => [
-    KeyBinding.run(LogicalKeyboardKey.enter, 'Focus current variation', () {
-      if (_activeMovetextController
-          case final PgnViewerWidgetController reader) {
-        reader.focusVariation();
-      }
-    }, control: true),
-    KeyBinding.run(LogicalKeyboardKey.arrowLeft, 'Return to parent line', () {
-      if (_activeMovetextController
-          case final PgnViewerWidgetController reader) {
-        reader.returnToParentLine();
-      }
-    }, control: true),
+    if (!_controller.isSolitaireSetup)
+      ...KeyBinding.forShortcutIf(
+        AppShortcut.focusVariation,
+        'Focus current variation',
+        () {
+          final reader = _activeMovetextController;
+          return reader is PgnViewerWidgetController && reader.focusVariation();
+        },
+      ),
     // Solitaire: arrows/Home/End still browse the revealed region (the PGN
     // widget caps mainline navigation at the frontier); R reveals, and the
     // autoplay/tab-switch/engine/amend keys are swallowed so they can't
@@ -1393,33 +1384,25 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       'Go to start of line',
       () => _paneRouter.goToStart(_controller.navigateToStart),
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.pageUp,
-      'Go to start of line',
-      () => _paneRouter.goToStart(_controller.navigateToStart),
-    ),
+
     ...KeyBinding.forShortcut(
       AppShortcut.goToEnd,
       'Go to end of line',
       () => _paneRouter.goToEnd(_controller.navigateToEnd),
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.pageDown,
-      'Go to end of line',
-      () => _paneRouter.goToEnd(_controller.navigateToEnd),
-    ),
+
     // In the PGN reader, the four arrow keys form one spatial model: left /
     // right move within a line, up / down move between chapters. Letter
     // aliases made the simple model harder to learn, so this screen does not
     // inherit the app-wide P/S alternatives.
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowDown,
+    ...KeyBinding.forShortcut(
+      AppShortcut.nextItem,
       'Next game',
       _controller.nextGame,
       repeats: true,
     ),
-    KeyBinding.run(
-      LogicalKeyboardKey.arrowUp,
+    ...KeyBinding.forShortcut(
+      AppShortcut.previousItem,
       'Previous game',
       _controller.prevGame,
       repeats: true,
@@ -1477,10 +1460,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     ),
     // The setup strip: Enter starts, Escape (below) closes it.
     if (_controller.isSolitaireSetup)
-      KeyBinding(LogicalKeyboardKey.enter, 'Start solitaire', () {
-        _controller.beginSolitaire();
-        return true;
-      }),
+      ...KeyBinding.forShortcutIf(
+        AppShortcut.startSolitaire,
+        'Start solitaire',
+        () {
+          _controller.beginSolitaire();
+          return true;
+        },
+      ),
     // Escape leaves whatever you are in, innermost first — the ordering is the
     // whole contract: solitaire and amend are modes you entered, full screen is
     // a view you entered, and scratch analysis moves are the only thing left to
@@ -1492,7 +1479,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       () {
         if (_activeMovetextController
             case final PgnViewerWidgetController reader) {
-          if (reader.returnToReadingMove()) return;
+          if (reader.returnToReadingMove() || reader.returnToParentLine()) {
+            return;
+          }
         }
         if (_controller.isSolitaireMode || _controller.isSolitaireSetup) {
           unawaited(_leaveSolitaire());
@@ -1526,13 +1515,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       'Toggle opening tree',
       _controller.toggleOpeningTree,
     ),
-    // Play the numbered branch candidate shown in the fork bar. The one
-    // family of keys with no registry entry: "the nth digit" is an index, not
-    // a named action, and the fork bar labels each candidate with its own
-    // number rather than advertising a shortcut in a tooltip.
-    for (var i = 0; i < _digitKeys.length; i++)
-      KeyBinding(
-        _digitKeys[i],
+    for (var i = 0; i < AppShortcut.forkCandidates.length; i++)
+      ...KeyBinding.forShortcutIf(
+        AppShortcut.forkCandidates[i],
         'Play fork candidate ${i + 1}',
         () => _pgnWidgetController.selectBranchCandidate(i),
       ),

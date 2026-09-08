@@ -84,6 +84,7 @@ class AppOverflowMenu extends StatelessWidget {
     required this.entries,
     this.tooltip = 'More actions',
     this.anchor,
+    this.label,
     this.enabled = true,
   });
 
@@ -93,6 +94,9 @@ class AppOverflowMenu extends StatelessWidget {
   /// The control the menu hangs off. Null is the `⋮` icon; a labelled
   /// control ("Actions ▾") opens the same menu under itself.
   final Widget? anchor;
+
+  /// Standard quiet text-and-arrow anchor for in-view menus.
+  final String? label;
 
   /// False greys the anchor and keeps the menu shut — for a bar that is
   /// locked while a long job runs.
@@ -117,26 +121,45 @@ class AppOverflowMenu extends StatelessWidget {
         ),
       ],
     ];
-    final anchor = this.anchor;
-    if (anchor == null) {
-      return PopupMenuButton<int>(
-        icon: const Icon(Icons.more_vert, size: 20),
+    final anchor =
+        this.anchor ??
+        (label == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label!,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(
+                      Icons.arrow_drop_down,
+                      size: 20,
+                      color: AppColors.ink,
+                    ),
+                  ],
+                ),
+              ));
+    return Theme(
+      data: Theme.of(context).copyWith(
+        dividerTheme: const DividerThemeData(color: AppColors.divider),
+      ),
+      child: PopupMenuButton<int>(
+        icon: anchor == null ? const Icon(Icons.more_vert, size: 20) : null,
         tooltip: tooltip,
         enabled: enabled,
+        position: anchor == null
+            ? PopupMenuPosition.over
+            : PopupMenuPosition.under,
+        padding: anchor == null ? const EdgeInsets.all(8) : EdgeInsets.zero,
         popUpAnimationStyle: AppMotion.menuAnimation,
         onSelected: (i) => rows[i].onRun(),
         itemBuilder: (_) => items,
-      );
-    }
-    return PopupMenuButton<int>(
-      tooltip: tooltip,
-      enabled: enabled,
-      position: PopupMenuPosition.under,
-      padding: EdgeInsets.zero,
-      popUpAnimationStyle: AppMotion.menuAnimation,
-      onSelected: (i) => rows[i].onRun(),
-      itemBuilder: (_) => items,
-      child: anchor,
+        child: anchor,
+      ),
     );
   }
 }

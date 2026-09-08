@@ -9,8 +9,6 @@
 /// trainer after closing.
 library;
 
-import 'dart:async' show unawaited;
-
 import 'package:dartchess/dartchess.dart' show PgnGame, Position, Side;
 import 'package:flutter/material.dart';
 
@@ -24,6 +22,8 @@ import '../../utils/app_shortcuts.dart';
 import '../../utils/keyboard_shortcut_utils.dart';
 import '../chess_board_widget.dart';
 import '../pgn/pgn_movetext_view.dart';
+import '../pgn/pgn_reading_pane.dart';
+import '../../theme/app_text_styles.dart';
 import '../shortcut_tooltip.dart';
 import '../trainer_keyboard_scope.dart';
 
@@ -114,24 +114,11 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
       widget.lines[_active].color.toLowerCase() == 'black';
 
   final FocusNode _focusNode = FocusNode(debugLabel: 'chapter-reader');
-  final ScrollController _scroll = ScrollController();
-
-  /// Attached to the current move of the active section so navigation can
-  /// keep it on screen.
-  final GlobalKey _currentMoveKey = GlobalKey();
-
-  @override
-  void initState() {
-    super.initState();
-    // Land on the opening line's heading, not the top of the page, when the
-    // reader was opened on a specific line.
-    if (_active > 0) _scrollIntoView(atStart: true);
-  }
+  final _readingPaneKey = GlobalKey<PgnReadingPaneState>();
 
   @override
   void dispose() {
     _focusNode.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
@@ -149,18 +136,18 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
 
   /// Park the cursor after [index] mainline moves of [section].
   void _goTo(int section, int index) {
+    if (!mounted || _sections.isEmpty) return;
     final target = _sections[section];
     final model = target.model;
     if (model != null && !model.goToMainLineMove(index)) return;
     setState(() => _active = section);
-    _scrollIntoView(atStart: index == 0 || model == null);
   }
 
   void _goToNode(int section, MoveNode node, int branchPly) {
+    if (!mounted) return;
     final model = _sections[section].model;
     if (model == null || !model.goToAnalysisNode(node, branchPly)) return;
     setState(() => _active = section);
-    _scrollIntoView();
   }
 
   /// Ply to land on when moving from section [from] to section [to]: the
@@ -199,6 +186,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
   }
 
   void _back() {
+    if (_readingPaneKey.currentState?.backOutOfFocus() ?? false) return;
     final section = _current;
     if (section == null) return;
     final model = section.model;
@@ -237,35 +225,6 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
     final model = _current?.model;
     if (model == null || model.analysisPath.isEmpty) return;
     _goTo(_active, model.activeBranchPly);
-  }
-
-  /// Keep the cursor on screen. The book is a lazy list, so a section far
-  /// from the viewport may not be built yet; in that case jump near it and
-  /// try once more after the frame.
-  void _scrollIntoView({bool atStart = false, bool retried = false}) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _sections.isEmpty) return;
-      final key = atStart ? _sections[_active].headingKey : _currentMoveKey;
-      final ctx = key.currentContext;
-      if (ctx == null) {
-        if (retried || !_scroll.hasClients) return;
-        final fraction = _active / _sections.length;
-        _scroll.jumpTo(fraction * _scroll.position.maxScrollExtent);
-        _scrollIntoView(atStart: atStart, retried: true);
-        return;
-      }
-      final renderObject = ctx.findRenderObject();
-      final scrollable = Scrollable.maybeOf(ctx);
-      if (renderObject == null || scrollable == null) return;
-      unawaited(
-        scrollable.position.ensureVisible(
-          renderObject,
-          alignment: atStart ? 0.05 : 0.35,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-        ),
-      );
-    });
   }
 
   // ── Handoffs ───────────────────────────────────────────────────────────
@@ -328,10 +287,15 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
       'Flip board',
       () => setState(() => _flipped = !_flipped),
     ),
+    ...KeyBinding.forShortcut(AppShortcut.leave, 'Close', () {
+      if (_readingPaneKey.currentState?.returnToMove() ?? false) return;
+      if (_readingPaneKey.currentState?.returnToParent() ?? false) return;
+      Navigator.of(context).maybePop();
+    }),
     ...KeyBinding.forShortcut(
-      AppShortcut.leave,
-      'Close',
-      () => Navigator.of(context).maybePop(),
+      AppShortcut.focusVariation,
+      'Focus variation',
+      () => _readingPaneKey.currentState?.focusVariation(),
     ),
   ];
 
@@ -345,11 +309,14 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
       focusNode: _focusNode,
       child: Scaffold(
         appBar: AppBar(
+          automaticallyImplyLeading: false,
           titleSpacing: 16,
           title: Text(
-            '${widget.repertoireName} ▸ ${widget.chapterTitle}',
+            widget.repertoireName == widget.chapterTitle
+                ? widget.repertoireName
+                : '${widget.repertoireName} ▸ ${widget.chapterTitle}',
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
           ),
           actions: [
             IconButton(
@@ -449,6 +416,18 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
               ),
               const SizedBox(width: 12),
               _navButton(
+                icon: Icons.skip_previous_outlined,
+                description: 'Previous line',
+                shortcut: AppShortcut.previousItem,
+                onPressed: _previousLine,
+              ),
+              _navButton(
+                icon: Icons.skip_next_outlined,
+                description: 'Next line',
+                shortcut: AppShortcut.nextItem,
+                onPressed: _nextLine,
+              ),
+              _navButton(
                 icon: Icons.swap_vert,
                 description: 'Flip board',
                 shortcut: AppShortcut.flipBoard,
@@ -492,7 +471,10 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             Text(
-              line.readOnlyLabel ?? status.label,
+              line.readOnlyLabel ??
+                  ((widget.reviewMap[line.id]?.excluded ?? false)
+                      ? 'Excluded'
+                      : status.label),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: AppColors.onSurfaceMuted,
               ),
@@ -503,8 +485,14 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                if (widget.onTrainLine != null && line.readOnlyLabel == null)
+                if (widget.onTrainLine != null &&
+                    line.readOnlyLabel == null &&
+                    !(widget.reviewMap[line.id]?.excluded ?? false))
                   FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.srsNew,
+                      foregroundColor: AppColors.onWarning,
+                    ),
                     onPressed: () => _train(line),
                     icon: const Icon(Icons.school_outlined, size: 16),
                     label: const Text('Train this line'),
@@ -538,19 +526,42 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
   }
 
   Widget _buildBook() {
-    // SelectionArea lets the user drag-select prose and copy it; move taps
-    // still reach the chips underneath.
-    return SelectionArea(
-      child: ListView.builder(
-        controller: _scroll,
-        padding: const EdgeInsets.fromLTRB(8, 8, 16, 48),
-        itemCount: _sections.length,
-        itemBuilder: _buildSection,
+    final model = _current?.model;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: PgnReadingPane(
+        key: _readingPaneKey,
+        backgroundColor: AppColors.surfaceContainer,
+        selection: (
+          _active,
+          model?.mainLineIndex,
+          model?.analysisPath.lastOrNull?.id,
+        ),
+        analysisPath: model?.analysisPath ?? const [],
+        branchPly: model?.activeBranchPly ?? 0,
+        startingMoveNumber: _current!.line.startPosition.fullmoves,
+        startingWhiteTurn: _current!.line.startPosition.turn == Side.white,
+        onMainline: _returnToMainline,
+        onNode: (node, ply) => _goToNode(_active, node, ply),
+        documentBuilder: (currentMoveKey, scope, expandAll) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < _sections.length; i++)
+              if (scope == null || i == _active)
+                _buildSection(context, i, currentMoveKey, scope, expandAll),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSection(BuildContext context, int index) {
+  Widget _buildSection(
+    BuildContext context,
+    int index,
+    GlobalKey currentMoveKey,
+    PgnReadingBranch? scope,
+    bool expandAll,
+  ) {
     final section = _sections[index];
     final line = section.line;
     final model = section.model;
@@ -559,23 +570,17 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
     final status = lineStatusOf(widget.reviewMap[line.id]);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(
-            color: active ? AppColors.onSurfaceSoft : Colors.transparent,
-            width: 2,
-          ),
-        ),
-      ),
+      margin: const EdgeInsets.only(bottom: 32),
+      padding: const EdgeInsets.only(bottom: 16),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 820),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              key: section.headingKey,
+              key: active && model?.mainLineIndex == 0 && scope == null
+                  ? currentMoveKey
+                  : section.headingKey,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
@@ -600,7 +605,10 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
                         ),
                       ),
                       Text(
-                        line.readOnlyLabel ?? status.label,
+                        line.readOnlyLabel ??
+                            ((widget.reviewMap[line.id]?.excluded ?? false)
+                                ? 'Excluded'
+                                : status.label),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: AppColors.onSurfaceMuted,
                         ),
@@ -608,7 +616,9 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
                     ],
                   ),
                 ),
-                if (widget.onTrainLine != null && line.readOnlyLabel == null)
+                if (widget.onTrainLine != null &&
+                    line.readOnlyLabel == null &&
+                    !(widget.reviewMap[line.id]?.excluded ?? false))
                   TextButton.icon(
                     onPressed: () => _train(line),
                     icon: const Icon(Icons.school_outlined, size: 16),
@@ -630,6 +640,8 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
               )
             else
               PgnMovetextView(
+                readingScope: scope,
+                expandAll: expandAll,
                 game: model.game,
                 moveHistory: model.moveHistory,
                 variationsByPly: model.variationsByPly,
@@ -642,7 +654,10 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
                 startingMoveNumber: model.startPosition.fullmoves,
                 startingWhiteTurn: model.startPosition.turn == Side.white,
                 startPosition: model.startPosition,
-                currentMoveKey: active ? _currentMoveKey : null,
+                currentMoveKey:
+                    active && (model.mainLineIndex > 0 || scope != null)
+                    ? currentMoveKey
+                    : null,
                 onMainLineMoveClicked: (moveIndex) =>
                     _goTo(index, moveIndex + 1),
                 onShowMoveContextMenu: (_, _) {},

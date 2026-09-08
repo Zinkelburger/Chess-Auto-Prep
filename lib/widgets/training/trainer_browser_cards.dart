@@ -209,7 +209,7 @@ class _PrimaryAction extends StatelessWidget {
   /// whole pool fits in one run.
   String get _subtitle {
     if (batchSize <= 0 || batchSize >= count) return '$count $hint';
-    return '$batchSize now · ${count - batchSize} to go';
+    return '$batchSize lines';
   }
 
   @override
@@ -500,6 +500,7 @@ class _LineCard extends StatelessWidget {
   final bool selecting;
   final bool checked;
   final VoidCallback? onPreview;
+  final VoidCallback? onExclude;
   final VoidCallback onTap;
 
   const _LineCard({
@@ -511,6 +512,7 @@ class _LineCard extends StatelessWidget {
     required this.selecting,
     required this.checked,
     this.onPreview,
+    this.onExclude,
     required this.onTap,
   });
 
@@ -609,7 +611,10 @@ class _LineCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        line.readOnlyLabel ?? _statusText,
+                        line.readOnlyLabel ??
+                            ((entry?.excluded ?? false)
+                                ? 'Excluded'
+                                : _statusText),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: AppColors.onSurfaceMuted,
                         ),
@@ -639,15 +644,30 @@ class _LineCard extends StatelessWidget {
                     IconButton(
                       onPressed: onPreview,
                       icon: const Icon(Icons.auto_stories_outlined, size: 17),
-                      tooltip:
-                          'Read this line — board and comments,\n'
-                          'no training',
+                      tooltip: 'Read line',
                       visualDensity: VisualDensity.compact,
                       color: AppColors.onSurfaceMuted,
                     ),
+                  if (onExclude != null && line.readOnlyLabel == null)
+                    PopupMenuButton<bool>(
+                      tooltip: 'Line options',
+                      icon: const Icon(Icons.more_horiz, size: 18),
+                      onSelected: (_) => onExclude!(),
+                      itemBuilder: (_) => [
+                        PopupMenuItem(
+                          value: true,
+                          child: Text(
+                            (entry?.excluded ?? false)
+                                ? 'Include in training'
+                                : 'Exclude from training',
+                          ),
+                        ),
+                      ],
+                    ),
                   const SizedBox(width: 2),
                   _ActionPill(
-                    label: line.readOnlyLabel != null
+                    label:
+                        line.readOnlyLabel != null || (entry?.excluded ?? false)
                         ? 'Read'
                         : status.actionLabel,
                   ),

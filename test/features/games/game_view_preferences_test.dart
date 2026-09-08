@@ -10,7 +10,7 @@ void main() {
     final initial = await GameViewPreferences.load();
     expect(initial.playback, isFalse);
     expect(initial.engine, isFalse);
-    expect(initial.graph, isTrue);
+    expect(initial.graph, isFalse);
     await initial
         .copyWith(
           playback: true,

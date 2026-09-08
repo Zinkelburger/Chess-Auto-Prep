@@ -15,6 +15,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   int get _explorerTabIndex;
   int get _analysisTabIndex;
   GameViewPreferences get _viewPreferences;
+  void _setViewPreferences(GameViewPreferences value);
   bool get _reviewHandoff;
   void _showPanel(int index);
   void _startAutoAnalysisForCurrentGame();
@@ -168,7 +169,6 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
         ),
         if (!_controller.isSolitaireMode &&
             _controller.filteredGames.isNotEmpty &&
-            (_viewPreferences.graph || _reviewHandoff) &&
             !_onLineTab &&
             !_controller.showOpeningTree)
           _buildAnalysisOverview(),
@@ -248,6 +248,9 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
   }
 
   Widget _buildAnalysisOverview() {
+    if (!_viewPreferences.graph && !_reviewHandoff) {
+      return const SizedBox.shrink();
+    }
     final evals = _analysisController.evals;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -309,6 +312,33 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
     },
     onToggleAutoPlay: _onLineTab ? null : _controller.toggleAutoPlay,
     isSolitaireMode: _controller.isSolitaireMode,
+    trailing:
+        !_controller.isSolitaireMode &&
+            !_onLineTab &&
+            !_controller.showOpeningTree
+        ? TextButton.icon(
+            key: const Key('game-analysis-toggle'),
+            onPressed: () => _setViewPreferences(
+              _viewPreferences.copyWith(
+                graph: !(_viewPreferences.graph || _reviewHandoff),
+              ),
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.onSurfaceMuted,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              textStyle: AppTextStyles.caption,
+            ),
+            icon: Icon(
+              _viewPreferences.graph || _reviewHandoff
+                  ? Icons.expand_more
+                  : Icons.chevron_right,
+              size: 16,
+            ),
+            label: const Text('Analysis'),
+          )
+        : null,
   );
 
   /// The Line tab: what my books say about the game on screen, and the prepared
@@ -522,7 +552,6 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen> {
             onAnalyse: _analyseSolitaireGame,
             onExit: () => unawaited(_leaveSolitaire()),
           ),
-        const Divider(height: 1),
         if (_editMode) _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(

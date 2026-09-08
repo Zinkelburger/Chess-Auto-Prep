@@ -1,7 +1,9 @@
+import 'package:chess_auto_prep/core/board_editor_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/models/bughouse_state.dart';
 import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_board_card.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
+import 'package:chess_auto_prep/widgets/board_editor/editable_board.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
@@ -188,7 +190,7 @@ void main() {
     controller.loadDualFen('$plain|$plain');
     controller.setMode(BughouseMode.setup);
     controller.setTool(
-      const PlaceTool(Piece(color: Side.white, role: Role.queen)),
+      const PieceBrush(Piece(color: Side.white, role: Role.queen)),
     );
 
     await tester.pumpWidget(
@@ -207,7 +209,7 @@ void main() {
       ),
     );
 
-    final board = tester.getRect(find.byType(ChessBoardWidget));
+    final board = tester.getRect(find.byType(EditableBoard));
     await tester.tapAt(centreOf(board, Square.e5));
     await tester.pumpAndSettle();
     expect(
@@ -215,7 +217,18 @@ void main() {
       const Piece(color: Side.white, role: Role.queen),
     );
 
-    // Right-click clears, whichever tool is selected.
+    // Right-click with a piece in hand swaps its colour, as on lichess.
+    await tester.tapAt(centreOf(board, Square.e5), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    expect(
+      controller.tool,
+      const PieceBrush(Piece(color: Side.black, role: Role.queen)),
+    );
+    expect(controller.state.boardA.board.pieceAt(Square.e5), isNotNull);
+
+    // With the pointer, right-click clears.
+    controller.setTool(const PointerTool());
+    await tester.pumpAndSettle();
     await tester.tapAt(centreOf(board, Square.e5), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
     expect(controller.state.boardA.board.pieceAt(Square.e5), isNull);

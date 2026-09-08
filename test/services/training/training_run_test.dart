@@ -69,6 +69,27 @@ void main() {
     reviews = {};
   });
 
+  test(
+    'skip lasts for one sitting, including the last line and linear mode',
+    () {
+      for (final repetition in RepetitionMode.values) {
+        mode = repetition;
+        final queue = [_line('a'), _line('b')];
+        final run = makeRun()..begin(queue, TrainingIntent.learn);
+        run.skip('a');
+        expect(
+          run.next(queue, TrainingIntent.learn, afterLineId: 'a')?.id,
+          'b',
+        );
+        run.skip('b');
+        expect(run.next(queue, TrainingIntent.learn, afterLineId: 'b'), isNull);
+        expect(run.remaining(queue, TrainingIntent.learn), 0);
+        run.begin(queue, TrainingIntent.learn);
+        expect(run.remaining(queue, TrainingIntent.learn), 2);
+      }
+    },
+  );
+
   group('the sitting is fixed when it starts', () {
     test('a learn run takes the first N untrained lines and no more', () {
       final queue = [for (var i = 0; i < 5; i++) _line('l$i')];

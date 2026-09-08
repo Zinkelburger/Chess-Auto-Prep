@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/models/bughouse_state.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
+import 'package:chess_auto_prep/features/bughouse/services/bughouse_book.dart';
 import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_analysis_panel.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +15,19 @@ void main() {
 
   setUp(() {
     engine = FakeBughouseEngine(searchDelay: const Duration(milliseconds: 1));
-    controller = BughouseController(engineOverride: engine);
+    controller = BughouseController(
+      engineOverride: engine,
+      bookOverride: BughouseBook.canned(
+        status: const BughouseBookStatus(
+          path: 'fixture',
+          games: 0,
+          maxPly: 16,
+          minGames: 3,
+          years: [2025],
+        ),
+        lookup: (_, _) => BughouseBookPosition.empty,
+      ),
+    );
   });
 
   tearDown(() => controller.dispose());
@@ -68,100 +81,120 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
   }
 
-  testWidgets('leads with candidates for each person who is on move', (
+  testWidgets('both boards show the lines for their side to move', (
     tester,
   ) async {
-    // At the initial position White is on move on both boards: that is us on
-    // board 1 (seat A) and our partner's opponent on board 2 (seat D).
     engine.resultsByTeam[Side.white] = result('(e2e4,pass)', '(g1f3,pass)');
     engine.resultsByTeam[Side.black] = result('(pass,d2d4)', '(pass,g1f3)');
-
     await pumpPanel(tester);
-
-    expect(find.text('TO MOVE NOW'), findsOneWidget);
-    expect(find.text('BOARD 1 · PLAYER A'), findsOneWidget);
-    expect(find.text('You · white'), findsOneWidget);
-    expect(find.text('BOARD 2 · PLAYER D'), findsOneWidget);
-    expect(find.text("Partner's opponent · white"), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('bughouse-candidate-a-e4')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('bughouse-candidate-b-d4')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('bughouse-candidate-a-Nf3')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('bughouse-candidate-b-Nf3')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('reserves a slot per line and per candidate before any arrive', (
-    tester,
-  ) async {
-    // One line back for each team, against a shortlist of three: the panel
-    // still holds three slots per team and three per candidate card, and
-    // filling them changes nothing's position.
-    engine.resultsByTeam[Side.white] = result('(e2e4,pass)', '(g1f3,pass)');
-    engine.resultsByTeam[Side.black] = result('(pass,d2d4)', '(pass,g1f3)');
-
-    await pumpPanel(tester);
-
-    for (final team in ['white', 'black']) {
+    expect(find.text('Opponents'), findsNothing);
+    expect(find.text('Board 1'), findsOneWidget);
+    expect(find.text('Board 2'), findsOneWidget);
+    expect(find.text('White to move'), findsNWidgets(2));
+    expect(find.textContaining('e4', findRichText: true), findsOneWidget);
+    expect(find.textContaining('d4', findRichText: true), findsOneWidget);
+    for (final board in BughouseBoard.values) {
       for (var i = 0; i < 3; i++) {
-        final slot = find.byKey(ValueKey('bughouse-line-slot-$team-$i'));
-        expect(slot, findsOneWidget);
-        expect(tester.getSize(slot).height, 44);
+        final slot = find.byKey(
+          ValueKey('bughouse-line-slot-${board.name}-$i'),
+        );
+        expect(tester.getSize(slot).height, 36);
       }
     }
-    // Two lines came back, so the third slot is blank — and still there.
-    final ours = find.byKey(const ValueKey('bughouse-line-slot-white-2'));
-    expect(
-      find.descendant(of: ours, matching: find.byType(Text)),
-      findsNothing,
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('board lines follow turn changes and play joint continuations', (
+    tester,
+  ) async {
+    controller.playMove(
+      BughouseBoard.a,
+      const NormalMove(from: Square.e2, to: Square.e4),
     );
-    // The candidate cards are the same height as each other and hold three
-    // slots each, though only two candidates came back.
-    final cards = find
-        .byKey(const ValueKey('bughouse-candidate-a-e4'))
-        .evaluate();
-    expect(cards, hasLength(1));
+    // Black on 1 and White on 2 now belong to the same team.
+    engine.resultsByTeam[Side.black] = result('(e7e5,d2d4)', '(b8c6,g1f3)');
+    await pumpPanel(tester);
+    expect(find.text('Black to move'), findsOneWidget);
+    expect(find.text('White to move'), findsOneWidget);
+    expect(find.textContaining('e5', findRichText: true), findsOneWidget);
+    expect(find.textContaining('d4', findRichText: true), findsOneWidget);
+    await tester.tap(find.textContaining('d4', findRichText: true));
+    await tester.pump();
+    expect(controller.state.boardA.board.pieceAt(Square.e5)?.role, Role.pawn);
+    expect(controller.state.boardB.board.pieceAt(Square.d4)?.role, Role.pawn);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a paused panel is the same height as a thinking one', (
-    tester,
-  ) async {
-    engine.resultsByTeam[Side.white] = result('(e2e4,pass)', '(g1f3,pass)');
-    engine.resultsByTeam[Side.black] = result('(pass,d2d4)', '(pass,g1f3)');
+  testWidgets(
+    'comparison opens Engine immediately and shows progress and results',
+    (tester) async {
+      engine.resultsByTeam[Side.white] = result('(e2e4,pass)', '(g1f3,pass)');
+      engine.resultsByTeam[Side.black] = result('(pass,d2d4)', '(pass,g1f3)');
+      await pumpPanel(tester);
+      engine.searchDelay = const Duration(milliseconds: 100);
+      await tester.tap(find.text('Board'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Compare clock scenarios'));
+      await tester.pump();
+      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 0);
+      expect(find.text('Clock scenarios'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('bughouse-clock-progress')),
+        findsOneWidget,
+      );
+      expect(find.text('Comparing… 0 of 3 ready'), findsOneWidget);
+      expect(
+        tester
+            .getTopLeft(find.byKey(const ValueKey('bughouse-clock-scenarios')))
+            .dy,
+        lessThan(250),
+      );
+      for (var i = 0; i < 30 && controller.scenarios.isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(find.text('Ahead (may sit)'), findsOneWidget);
+      expect(find.text('Comparing… 1 of 3 ready'), findsOneWidget);
+      for (var i = 0; i < 60 && controller.isComparing; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Comparison complete'), findsOneWidget);
+      expect(find.text('Level or behind'), findsOneWidget);
+      expect(find.text('Forced to move on 1'), findsOneWidget);
+      expect(find.text('Board 1: e4'), findsNWidgets(3));
+      expect(
+        find.byKey(const ValueKey('bughouse-clock-progress')),
+        findsNothing,
+      );
+      controller.playMove(
+        BughouseBoard.a,
+        const NormalMove(from: Square.e2, to: Square.e4),
+      );
+      await tester.pump();
+      expect(find.text('Clock scenarios'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('rules and engine controls open directly', (tester) async {
     await pumpPanel(tester);
-    final rules = find.text('OTHER TEAM');
-    final before = tester.getTopLeft(rules);
-
-    // Clearing the analysis empties every slot; the section under the
-    // slots must not move up to fill the gap.
-    controller.setAnalysisEnabled(true);
-    controller.setAnalysisEnabled(false);
-    await tester.pump(const Duration(milliseconds: 10));
-    expect(find.text('Thinking…'), findsNothing);
-    expect(tester.getTopLeft(rules), before);
-  });
-
-  testWidgets('keeps joint variation preview instructions visible', (
-    tester,
-  ) async {
-    engine.resultsByTeam[Side.white] = result('(e2e4,pass)', '(g1f3,pass)');
-    engine.resultsByTeam[Side.black] = result('(pass,d2d4)', '(pass,g1f3)');
-
-    await pumpPanel(tester);
-
-    expect(find.text('VARIATIONS'), findsOneWidget);
-    expect(find.text('YOUR TEAM'), findsOneWidget);
-    expect(find.text('OTHER TEAM'), findsOneWidget);
-    expect(find.textContaining('Hover a move to preview'), findsOneWidget);
+    await tester.tap(find.text('Board'));
+    await tester.pumpAndSettle();
+    expect(find.text('You play on Board 1'), findsOneWidget);
+    expect(find.text('Allow sitting'), findsOneWidget);
+    await tester.tap(find.text('Engine settings'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TabBar), findsOneWidget);
+    expect(find.byType(SegmentedButton<int>), findsNothing);
+    expect(find.text('Memory'), findsOneWidget);
+    expect(find.text('Lines'), findsOneWidget);
+    expect(find.text('Time per pass'), findsOneWidget);
+    expect(find.byType(ExpansionTile), findsNothing);
+    controller.toggleBook();
+    await tester.pumpAndSettle();
+    expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 0);
+    expect(find.text('FICS archive'), findsOneWidget);
+    expect(find.text('Memory'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

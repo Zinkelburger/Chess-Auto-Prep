@@ -37,15 +37,19 @@ class HeaderFilters extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Header Filters',
+            'Game details',
             style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           for (int i = 0; i < controller.headerRows.length; i++)
             _buildFilterRow(i),
-          TextButton.icon(
+          OutlinedButton.icon(
             onPressed: controller.addHeaderRow,
-            icon: const Icon(Icons.add, size: 16),
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.standard,
+              minimumSize: const Size(0, 44),
+            ),
+            icon: const Icon(Icons.add, size: 20),
             label: const Text('Add filter'),
           ),
         ],
@@ -84,18 +88,19 @@ class HeaderFilters extends StatelessWidget {
         !_isValidEco(f.value);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      key: ObjectKey(f),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
-              SizedBox(
-                width: 120,
+              Expanded(
                 child: ChoiceField<String>(
+                  label: 'Filter by',
                   value: f.field,
-                  style: const TextStyle(fontSize: 12),
+                  style: AppTextStyles.body,
                   items: [
                     for (final s in kHeaderFieldOptions)
                       ChoiceItem(value: s, label: s),
@@ -104,11 +109,11 @@ class HeaderFilters extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              SizedBox(
-                width: 120,
+              Expanded(
                 child: ChoiceField<MatchMode>(
+                  label: 'Match',
                   value: f.mode,
-                  style: const TextStyle(fontSize: 12),
+                  style: AppTextStyles.body,
                   items: [
                     for (final m in availableModes)
                       ChoiceItem(
@@ -122,50 +127,46 @@ class HeaderFilters extends StatelessWidget {
                   onChanged: (v) => controller.setHeaderMode(index, v),
                 ),
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: TextField(
-                  controller: f.controller,
-                  decoration: InputDecoration(
-                    hintText: hintText,
-                    hintStyle: AppTextStyles.hint.copyWith(fontSize: 12),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 10,
-                    ),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: showEcoWarn
-                        ? const Tooltip(
-                            message: 'Not a standard ECO code (A00–E99)',
-                            child: Icon(
-                              Icons.warning_amber,
-                              size: 16,
-                              color: AppColors.warning,
-                            ),
-                          )
-                        : null,
-                    suffixIconConstraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
-                    ),
-                  ),
-                  style: const TextStyle(fontSize: 12),
-                  onChanged: (v) => controller.setHeaderValue(index, v),
-                ),
-              ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               IconButton(
                 onPressed: () => controller.removeHeaderRow(index),
-                icon: const Icon(Icons.close, size: 18),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                tooltip: 'Remove filter',
+                icon: const Icon(Icons.close, size: 20),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: f.controller,
+            decoration: InputDecoration(
+              labelText: f.field == kPlayerHeaderField
+                  ? 'Player name'
+                  : f.field,
+              hintText: hintText,
+              hintStyle: AppTextStyles.hint,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 14,
+              ),
+              border: const OutlineInputBorder(),
+              suffixIcon: showEcoWarn
+                  ? const Tooltip(
+                      message: 'Not a standard ECO code (A00–E99)',
+                      child: Icon(
+                        Icons.warning_amber,
+                        size: 20,
+                        color: AppColors.warning,
+                      ),
+                    )
+                  : null,
+            ),
+            style: AppTextStyles.body,
+            onChanged: (v) => controller.setHeaderValue(index, v),
+          ),
           if (showEcoWarn)
             const Padding(
-              padding: EdgeInsets.only(left: 248, top: 2),
+              padding: EdgeInsets.only(left: 4, top: 4),
               child: Text(
                 'Expected A00–E99',
                 style: TextStyle(fontSize: 12, color: AppColors.warning),

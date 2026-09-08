@@ -6,6 +6,7 @@ import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
 import '../../../utils/chess_utils.dart' show parseSquare;
 import '../../../widgets/chess_board_widget.dart';
+import '../../../widgets/board_editor/editable_board.dart';
 import '../../../widgets/common/piece_image.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_state.dart';
@@ -60,39 +61,58 @@ class BughouseBoardCard extends StatelessWidget {
         const SizedBox(height: 6),
         AspectRatio(
           aspectRatio: 1,
-          child: _BoardSurface(
-            controller: controller,
-            which: which,
-            flipped: flipped,
-            // Only the boards listen to the hover, so a pointer crossing a
-            // line in the panel redraws two boards and nothing else.
-            child: ValueListenableBuilder<BughouseHover?>(
-              valueListenable: controller.hover,
-              builder: (context, _, _) => ChessBoardWidget(
-                position: position,
-                flipped: flipped,
-                enableUserMoves: controller.mode == BughouseMode.play,
-                recentMoveSquares: recent,
-                annotations: controller.annotationsFor(which),
-                highlightedSquares: _dropTargets(),
-                onSquareClicked: _onSquareClicked,
-                onMove: (completed) {
-                  if (controller.mode != BughouseMode.play) return;
-                  final from = parseSquare(completed.from);
-                  final to = parseSquare(completed.to);
-                  if (from == null || to == null) return;
-                  controller.playMove(
-                    which,
-                    NormalMove(
-                      from: from,
-                      to: to,
-                      promotion: _promotionOf(completed.uci),
+          child: controller.mode == BughouseMode.setup
+              ? EditableBoard(
+                  key: ValueKey('bughouse-editor-${which.name}'),
+                  flipped: flipped,
+                  pieceAt: position.board.pieceAt,
+                  tool: controller.tool,
+                  onPress: (square) => controller.applyTool(which, square),
+                  onPaint: (square) => controller.paintSquare(which, square),
+                  onSecondaryPress: (square) =>
+                      controller.secondaryPress(which, square),
+                  onRemove: (square) =>
+                      controller.applyTool(which, square, erase: true),
+                  onMove: (from, to) =>
+                      controller.moveEditorPiece(which, from, to),
+                  onPlace: (square, piece) =>
+                      controller.placeEditorPiece(which, square, piece),
+                )
+              : _BoardSurface(
+                  controller: controller,
+                  which: which,
+                  flipped: flipped,
+                  // Only the boards listen to the hover, so a pointer crossing a
+                  // line in the panel redraws two boards and nothing else.
+                  child: ValueListenableBuilder<BughouseHover?>(
+                    valueListenable: controller.hover,
+                    builder: (context, hover, _) => ChessBoardWidget(
+                      position: hover?.preview?.board(which) ?? position,
+                      flipped: flipped,
+                      enableUserMoves:
+                          controller.mode == BughouseMode.play &&
+                          controller.hover.value == null,
+                      recentMoveSquares: recent,
+                      annotations: controller.annotationsFor(which),
+                      highlightedSquares: _dropTargets(),
+                      onSquareClicked: _onSquareClicked,
+                      onMove: (completed) {
+                        if (controller.mode != BughouseMode.play) return;
+                        final from = parseSquare(completed.from);
+                        final to = parseSquare(completed.to);
+                        if (from == null || to == null) return;
+                        controller.playMove(
+                          which,
+                          NormalMove(
+                            from: from,
+                            to: to,
+                            promotion: _promotionOf(completed.uci),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
-            ),
-          ),
+                  ),
+                ),
         ),
         const SizedBox(height: 6),
         _PocketRow(controller: controller, which: which, side: bottomSide),
@@ -155,7 +175,7 @@ class _BoardHeader extends StatelessWidget {
     final last = controller.lastPlyOn(which);
     return Row(
       children: [
-        Text(which.label.toUpperCase(), style: AppTextStyles.eyebrow),
+        Text(which.label, style: AppTextStyles.bodyStrong),
         const SizedBox(width: 10),
         // The move that just landed here, which on two boards is two separate
         // questions — the whole-line cursor answers neither of them. Blank
@@ -444,7 +464,14 @@ class _PocketRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = controller.state;
+    return ValueListenableBuilder<BughouseHover?>(
+      valueListenable: controller.hover,
+      builder: (context, _, _) => _buildPocket(context),
+    );
+  }
+
+  Widget _buildPocket(BuildContext context) {
+    final state = controller.hover.value?.preview ?? controller.state;
     final position = state.board(which);
     final pockets = position.pockets ?? Pockets.empty;
     final setup = controller.mode == BughouseMode.setup;
@@ -680,34 +707,7 @@ class _BoardSurface extends StatelessWidget {
       builder: (context, _, _) => child,
     );
 
-    if (controller.mode != BughouseMode.setup) return target;
-
-    // In the editor the board is inert and this layer owns every click.
-    //
-    // Sitting a gesture detector *around* the board is not enough: the board
-    // widget registers its own tap recognisers whether or not user moves are
-    // enabled, wins the gesture arena as the inner competitor, and then throws
-    // the tap away — which is why picking a piece and clicking a square did
-    // nothing at all. Ignoring pointers on the board is what takes it out of
-    // the arena. Nothing is lost by it: dragging a reserve piece and moving a
-    // piece are both already off while editing.
-    return Builder(
-      builder: (inner) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapUp: (details) => _edit(inner, details.localPosition, erase: false),
-        onSecondaryTapUp: (details) =>
-            _edit(inner, details.localPosition, erase: true),
-        child: IgnorePointer(child: target),
-      ),
-    );
-  }
-
-  void _edit(BuildContext context, Offset local, {required bool erase}) {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final square = _squareAt(local, box.size);
-    if (square == null) return;
-    controller.applyTool(which, square, erase: erase);
+    return target;
   }
 
   /// The square under [local], or null when the point landed off the board.

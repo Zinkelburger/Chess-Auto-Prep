@@ -277,6 +277,10 @@ class BughouseBook {
     final env = io.Platform.environment;
     final home = env['HOME'] ?? env['USERPROFILE'] ?? io.Directory.current.path;
     final override = env['BUGHOUSE_DB_HOME'];
+    // An explicit profile must never fall through to the user's archive.
+    if (override != null && override.isNotEmpty) {
+      return [p.join(override, _fileName)];
+    }
     String? support;
     try {
       support = (await AppPaths.supportDirectory()).path;
@@ -284,7 +288,6 @@ class BughouseBook {
       support = null;
     }
     return [
-      if (override != null && override.isNotEmpty) p.join(override, _fileName),
       p.join(home, '.local', 'share', 'chess-prep', 'bughouse-db', _fileName),
       if (support != null) p.join(support, _fileName),
     ];

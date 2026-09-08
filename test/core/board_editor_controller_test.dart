@@ -60,18 +60,61 @@ void main() {
       const knight = Piece(color: Side.black, role: Role.knight);
       c.selectTool(const PieceBrush(knight));
 
-      c.tapSquare(Square.c3);
+      c.pressSquare(Square.c3);
       expect(c.pieceAt(Square.c3), knight);
 
-      c.tapSquare(Square.c3);
+      c.pressSquare(Square.c3);
       expect(c.pieceAt(Square.c3), isNull);
     });
 
     test('eraser removes pieces on tap', () {
       final c = BoardEditorController();
       c.selectTool(const EraserTool());
-      c.tapSquare(Square.e2);
+      c.pressSquare(Square.e2);
       expect(c.pieceAt(Square.e2), isNull);
+    });
+
+    test('the pointer is the default tool and a press does nothing', () {
+      final c = BoardEditorController();
+      expect(c.tool, const PointerTool());
+      c.pressSquare(Square.e2);
+      c.paintSquare(Square.e3);
+      expect(c.fen, BoardEditorController().fen);
+    });
+
+    test('paintSquare never toggles, so a stroke fills every square', () {
+      final c = BoardEditorController();
+      c.clear();
+      const rook = Piece(color: Side.white, role: Role.rook);
+      c.selectTool(const PieceBrush(rook));
+      c.paintSquare(Square.a1);
+      c.paintSquare(Square.a1);
+      expect(c.pieceAt(Square.a1), rook);
+      c.selectTool(const EraserTool());
+      c.paintSquare(Square.a1);
+      expect(c.pieceAt(Square.a1), isNull);
+    });
+
+    test('right-click swaps the brush colour, otherwise clears', () {
+      final c = BoardEditorController();
+      const knight = Piece(color: Side.white, role: Role.knight);
+      c.selectTool(const PieceBrush(knight));
+      c.secondaryPressSquare(Square.e2);
+      expect(
+        c.tool,
+        const PieceBrush(Piece(color: Side.black, role: Role.knight)),
+      );
+      expect(c.pieceAt(Square.e2)?.role, Role.pawn);
+      c.selectTool(const PointerTool());
+      c.secondaryPressSquare(Square.e2);
+      expect(c.pieceAt(Square.e2), isNull);
+    });
+
+    test('toggleFlip turns the board', () {
+      final c = BoardEditorController();
+      expect(c.flipped, isFalse);
+      c.toggleFlip();
+      expect(c.flipped, isTrue);
     });
   });
 

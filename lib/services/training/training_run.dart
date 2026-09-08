@@ -44,6 +44,9 @@ class TrainingRun {
   /// because the chapter ran out — a different sentence, and a different
   /// offer, at the end.
   bool _wasCapped = false;
+  final Set<String> _skipped = {};
+
+  void skip(String lineId) => _skipped.add(lineId);
 
   /// True while this sitting is limited to a fixed set of lines.
   bool get isCapped => _scope != null;
@@ -53,6 +56,7 @@ class TrainingRun {
   void clear() {
     _scope = null;
     _wasCapped = false;
+    _skipped.clear();
   }
 
   /// Fix the set of lines this sitting covers, from the head of [queue].
@@ -62,6 +66,7 @@ class TrainingRun {
   /// "Set complete!" a lie. A cap of zero or less means the cap is off.
   void begin(List<RepertoireLine> queue, TrainingIntent intent) {
     _wasCapped = false;
+    _skipped.clear();
     if (_repetitionMode() == RepetitionMode.linear) {
       _scope = null;
       return;
@@ -87,6 +92,7 @@ class TrainingRun {
 
   /// Whether [line] is still part of the run in progress.
   bool includes(RepertoireLine line, TrainingIntent intent) {
+    if (_skipped.contains(line.id)) return false;
     // Linear mode runs every queued line once, in order — there is no
     // untrained/due split to honour.
     if (_repetitionMode() == RepetitionMode.linear) return true;
@@ -139,9 +145,7 @@ class TrainingRun {
 
   /// Lines still ahead in this run — what the Train tab counts down.
   int remaining(List<RepertoireLine> queue, TrainingIntent intent) =>
-      _repetitionMode() == RepetitionMode.linear
-      ? queue.length
-      : queue.where((line) => includes(line, intent)).length;
+      queue.where((line) => includes(line, intent)).length;
 
   /// What to say when the run has nothing left.
   String completeMessage(TrainingIntent intent) {

@@ -7,6 +7,8 @@ import '../../models/move_tree.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart' show coordsAtPly;
+import '../../utils/app_shortcuts.dart';
+import '../shortcut_tooltip.dart';
 
 /// A sideline is identified by its actual first move, including for games
 /// starting from a FEN. No generated chapter names or separate variation index.
@@ -29,6 +31,7 @@ typedef PgnDocumentBuilder =
 /// never changes the board; only a navigation action requests an anchor.
 class PgnReadingPane extends StatefulWidget {
   final Object selection;
+  final Color backgroundColor;
   final bool showReadingOptions;
   final List<MoveNode> analysisPath;
   final int branchPly;
@@ -41,6 +44,7 @@ class PgnReadingPane extends StatefulWidget {
   const PgnReadingPane({
     super.key,
     required this.selection,
+    this.backgroundColor = AppColors.pgnSurface,
     this.showReadingOptions = true,
     required this.analysisPath,
     required this.branchPly,
@@ -50,6 +54,12 @@ class PgnReadingPane extends StatefulWidget {
     required this.onNode,
     required this.documentBuilder,
   });
+
+  static Color surfaceOf(BuildContext context) =>
+      context
+          .findAncestorWidgetOfExactType<PgnReadingPane>()
+          ?.backgroundColor ??
+      AppColors.pgnSurface;
 
   @override
   State<PgnReadingPane> createState() => PgnReadingPaneState();
@@ -203,27 +213,41 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
     return true;
   }
 
-  void focusVariation() {
+  bool focusVariation() {
     final branch = _branches.lastOrNull;
-    if (branch == null || branch.root.id == _scope?.root.id) return;
+    if (!mounted || branch == null || branch.root.id == _scope?.root.id) {
+      return false;
+    }
     setState(() {
       _bookmarks.add((scope: _scope, offset: _scroll.offset));
       _scope = branch;
       _browsing = false;
     });
     _scheduleAnchor();
+    return true;
   }
 
-  void returnToParent() {
-    final branch = _scope ?? _branches.lastOrNull;
-    if (branch == null) return;
+  /// Leaving a focused branch with Left restores its parent reading position.
+  bool backOutOfFocus() {
+    if (_scope?.root.id != widget.analysisPath.lastOrNull?.id ||
+        _scope == null) {
+      return false;
+    }
+    return returnToParent();
+  }
+
+  bool returnToParent() {
+    final branch = _branches.lastOrNull ?? _scope;
+    if (!mounted || branch == null) return false;
     setState(() {
-      if (_bookmarks.isNotEmpty) {
-        final bookmark = _bookmarks.removeLast();
-        _scope = bookmark.scope;
-        _restoreOffset = bookmark.offset;
-      } else {
-        _scope = null;
+      if (branch.root.id == _scope?.root.id) {
+        if (_bookmarks.isNotEmpty) {
+          final bookmark = _bookmarks.removeLast();
+          _scope = bookmark.scope;
+          _restoreOffset = bookmark.offset;
+        } else {
+          _scope = null;
+        }
       }
       _browsing = false;
     });
@@ -233,6 +257,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
       widget.onMainline();
     }
     _scheduleAnchor();
+    return true;
   }
 
   void _mainline() {
@@ -250,7 +275,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
     final branches = _branches;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.pgnSurface,
+        color: widget.backgroundColor,
         border: Border.all(color: const Color(0xFF363B43)),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -270,8 +295,8 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                 ),
                 child: Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 4,
-                  runSpacing: 2,
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
                     TextButton(
                       onPressed: branches.isEmpty ? null : _mainline,
@@ -289,22 +314,27 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                       ),
                     ],
                     if (branches.isNotEmpty)
-                      IconButton(
-                        tooltip: 'Parent line (Ctrl+←)',
-                        onPressed: returnToParent,
-                        icon: const Icon(
-                          Icons.subdirectory_arrow_left,
-                          size: 18,
+                      ShortcutTooltip(
+                        description: 'Return to parent line',
+                        shortcut: AppShortcut.returnToParentLine,
+                        child: TextButton.icon(
+                          onPressed: returnToParent,
+                          icon: const Icon(
+                            Icons.subdirectory_arrow_left,
+                            size: 18,
+                          ),
+                          label: const Text('Return to parent'),
                         ),
                       ),
                     if (branches.isNotEmpty &&
                         branches.last.root.id != _scope?.root.id)
-                      TextButton(
-                        onPressed: focusVariation,
-                        child: const Tooltip(
-                          message:
-                              'Read this variation at full width (Ctrl+Enter)',
-                          child: Text('Focus variation'),
+                      ShortcutTooltip(
+                        description: 'Read this variation at full width',
+                        shortcut: AppShortcut.focusVariation,
+                        child: TextButton.icon(
+                          onPressed: focusVariation,
+                          icon: const Icon(Icons.zoom_in, size: 18),
+                          label: const Text('Focus variation'),
                         ),
                       ),
                     if (widget.showReadingOptions)

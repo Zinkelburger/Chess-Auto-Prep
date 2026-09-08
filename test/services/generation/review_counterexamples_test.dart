@@ -93,7 +93,7 @@ void main() {
         nextNodeId: 1000,
         masterBook: (fen) => fen == kFenAfterE4
             ? [
-                BookMove(
+                const BookMove(
                   uci: 'c7c5',
                   games: 3000,
                   whiteWins: 0,

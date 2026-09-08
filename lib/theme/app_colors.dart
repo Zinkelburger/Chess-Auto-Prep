@@ -211,9 +211,9 @@ abstract final class AppColors {
   /// branch chips all render in the single near-white ink below.
   static const pgnMainLine = accent;
 
-  /// A continuous paper surface for reading PGNs. Notes use this same
+  /// A continuous black surface for reading PGNs. Notes use this same
   /// background; only the current move gets a restrained blue highlight.
-  static const pgnSurface = Color(0xFF1E2126);
+  static const pgnSurface = backdrop;
   static const pgnMove = Color(0xFFE9EBEF);
   static const pgnVariation = pgnMove;
   static const pgnVariationDeep = pgnMove;

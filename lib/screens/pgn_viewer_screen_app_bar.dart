@@ -35,50 +35,55 @@ mixin _AppBarBuildersMixin
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
     final loaded = _controller.allGames.isNotEmpty;
-    final hasGame = _controller.filteredGames.isNotEmpty;
     final fileName = _controller.filePath == null
         ? (loaded ? 'Pasted games' : '')
         : p.basenameWithoutExtension(_controller.filePath!);
     return AppBar(
       titleSpacing: 16,
-      title: AppBarTitleWithTrail(title: _buildOpenPgnMenuButton(fileName)),
-      actions: [
-        if (loaded && !_controller.isSolitaireMode)
-          Tooltip(
-            message: _controller.hasActiveFilters
-                ? _controller.activeSliceConfig.chipLabels.join(' · ')
-                : 'Filter by player, date, result, or position',
-            child: TextButton(
-              onPressed: _openSliceDialog,
-              child: Text(
-                _controller.hasActiveFilters
-                    ? 'Filters · ${_controller.filteredGames.length}/${_controller.allGames.length}'
-                    : 'Filter games',
-              ),
+      title: Row(
+        children: [
+          Flexible(
+            child: AppBarTitleWithTrail(
+              title: _buildOpenPgnMenuButton(fileName),
             ),
           ),
-        if (hasGame)
-          if (_viewingStudy)
-            TextButton(onPressed: _editInStudy, child: const Text('Edit study'))
-          else
-            MenuAnchor(
-              builder: (context, menu, _) => TextButton(
-                onPressed: () => menu.isOpen ? menu.close() : menu.open(),
-                child: const Text('Add to study'),
-              ),
-              menuChildren: [
-                MenuItemButton(
-                  onPressed: _addCurrentGameToStudy,
-                  child: const Text('This game…'),
+          if (loaded && !_controller.isSolitaireMode) ...[
+            const SizedBox(width: 12),
+            AppOverflowMenu(
+              label: _controller.hasActiveFilters
+                  ? 'Filters · ${_controller.filteredGames.length}/${_controller.allGames.length}'
+                  : 'Filter games',
+              tooltip: 'Filter games',
+              entries: [
+                AppMenuEntry(
+                  heading: 'Filter',
+                  label: 'Choose filters…',
+                  onRun: _openSliceDialog,
                 ),
-                if (_controller.filteredGames.length > 1)
-                  MenuItemButton(
-                    onPressed: _saveSliceAsStudy,
-                    child: const Text('Choose games from this collection…'),
+                if (_controller.hasActiveFilters)
+                  AppMenuEntry(
+                    label: 'Clear filters',
+                    onRun: _controller.resetFilters,
                   ),
+                AppMenuEntry(
+                  heading: 'Sort',
+                  label: 'File order',
+                  checked: _controller.sortMode == GameSortMode.fileOrder,
+                  onRun: () => _controller.setSortMode(GameSortMode.fileOrder),
+                ),
+                AppMenuEntry(
+                  label: 'Newest first',
+                  checked: _controller.sortMode == GameSortMode.dateDesc,
+                  onRun: () => _controller.setSortMode(GameSortMode.dateDesc),
+                ),
               ],
             ),
+          ],
+        ],
+      ),
+      actions: [
         _buildViewMenu(),
+        const SizedBox(width: 16),
         const AppModeSwitcher(),
         const SizedBox(width: 8),
       ],
@@ -88,218 +93,133 @@ mixin _AppBarBuildersMixin
   Widget _buildViewMenu() {
     final hasGame = _controller.filteredGames.isNotEmpty;
     final solitaire = _controller.isSolitaireMode;
-    final prefs = _viewPreferences;
-    return MenuAnchor(
-      builder: (context, menu, _) => TextButton(
-        onPressed: () => menu.isOpen ? menu.close() : menu.open(),
-        child: const Text('View'),
-      ),
-      menuChildren: [
+    return AppOverflowMenu(
+      label: 'Game options',
+      tooltip: 'Game options',
+      entries: [
+        AppMenuEntry(
+          heading: 'Settings',
+          label: 'Game view…',
+          icon: Icons.tune,
+          onRun: _openGameViewSettings,
+        ),
+        AppMenuEntry(
+          label: 'App settings…',
+          onRun: () => openAppSettings(context),
+        ),
         if (hasGame && !solitaire) ...[
-          SubmenuButton(
-            menuChildren: [
-              MenuItemButton(
-                onPressed: () => _showPanel(0),
-                child: const Text('Game moves'),
-              ),
-              MenuItemButton(
-                onPressed: () => _showPanel(_lineTabIndex),
-                child: const Text('My repertoire'),
-              ),
-              MenuItemButton(
-                onPressed: () => _showPanel(_explorerTabIndex),
-                child: const Text('Opening explorer'),
-              ),
-              MenuItemButton(
-                onPressed: () => _showPanel(_analysisTabIndex),
-                child: const Text('Game analysis…'),
-              ),
-              MenuItemButton(
-                onPressed: _controller.toggleOpeningTree,
-                child: Text(
-                  _controller.showOpeningTree
-                      ? 'Return to game'
-                      : 'Collection opening tree',
-                ),
-              ),
-            ],
-            child: const Text('Explore this game'),
+          AppMenuEntry(
+            heading: 'Explore',
+            label: 'Game moves',
+            onRun: () => _showPanel(0),
           ),
-          MenuItemButton(
-            onPressed: _controller.showOpeningTree
-                ? null
-                : _toggleSolitaireMode,
-            child: const Text('Solitaire chess'),
+          AppMenuEntry(
+            label: 'My repertoire',
+            onRun: () => _showPanel(_lineTabIndex),
+          ),
+          AppMenuEntry(
+            label: 'Opening explorer',
+            onRun: () => _showPanel(_explorerTabIndex),
+          ),
+          AppMenuEntry(
+            label: 'Game analysis…',
+            onRun: () => _showPanel(_analysisTabIndex),
+          ),
+          AppMenuEntry(
+            label: _controller.showOpeningTree
+                ? 'Return to game'
+                : 'Collection opening tree',
+            shortcut: AppShortcut.toggleOpeningTree.label,
+            onRun: _controller.toggleOpeningTree,
+          ),
+          AppMenuEntry(
+            label: 'Solitaire chess',
+            enabled: !_controller.showOpeningTree,
+            shortcut: AppShortcut.solitaire.label,
+            onRun: _toggleSolitaireMode,
           ),
         ],
         if (hasGame && solitaire)
-          MenuItemButton(
-            onPressed: _toggleSolitaireMode,
-            child: const Text('Leave solitaire chess'),
-          ),
-        SubmenuButton(
-          menuChildren: [
-            CheckboxMenuButton(
-              value: prefs.engine,
-              onChanged: (v) => _setViewPreferences(prefs.copyWith(engine: v)),
-              child: const Text('Live engine controls'),
-            ),
-            CheckboxMenuButton(
-              value: prefs.graph,
-              onChanged: (v) => _setViewPreferences(prefs.copyWith(graph: v)),
-              child: const Text('Saved analysis graph'),
-            ),
-            CheckboxMenuButton(
-              value: prefs.playback,
-              onChanged: (v) =>
-                  _setViewPreferences(prefs.copyWith(playback: v)),
-              child: const Text('Playback controls'),
-            ),
-            if (prefs.playback) ...[
-              SubmenuButton(
-                menuChildren: [
-                  for (final speed in kAutoPlaySpeeds)
-                    MenuItemButton(
-                      onPressed: () =>
-                          _setViewPreferences(prefs.copyWith(speed: speed)),
-                      leadingIcon: speed == prefs.speed
-                          ? const Icon(Icons.check, size: 16)
-                          : null,
-                      child: Text('${speed}s per move'),
-                    ),
-                ],
-                child: const Text('Playback speed'),
-              ),
-              CheckboxMenuButton(
-                value: prefs.autoNext,
-                onChanged: (v) =>
-                    _setViewPreferences(prefs.copyWith(autoNext: v)),
-                child: const Text('Continue to next game'),
-              ),
-            ],
-            if (hasGame)
-              MenuItemButton(
-                onPressed: () =>
-                    (_onLineTab ? _lineWidgetController : _pgnWidgetController)
-                        .showReadingOptions(),
-                child: const Text('Move list…'),
-              ),
-            const Divider(),
-            MenuItemButton(
-              onPressed: _controller.toggleBoardFlipped,
-              child: const Text('Flip board'),
-            ),
-            SubmenuButton(
-              menuChildren: [
-                MenuItemButton(
-                  onPressed: () => _controller.setPerspective(
-                    const Perspective(mode: PerspectiveMode.white),
-                  ),
-                  child: const Text('Always White'),
-                ),
-                MenuItemButton(
-                  onPressed: () => _controller.setPerspective(
-                    const Perspective(mode: PerspectiveMode.black),
-                  ),
-                  child: const Text('Always Black'),
-                ),
-                if (_controller.detectProtagonist() case final player?)
-                  MenuItemButton(
-                    onPressed: () => _controller.setPerspective(
-                      Perspective(
-                        mode: PerspectiveMode.player,
-                        playerName: player,
-                      ),
-                    ),
-                    child: Text('Follow $player'),
-                  ),
-              ],
-              child: const Text('Board orientation'),
-            ),
-            MenuItemButton(
-              onPressed: hasGame && !_onLineTab
-                  ? _controller.toggleFullScreen
-                  : null,
-              child: const Text('Fullscreen'),
-            ),
-            const Divider(),
-            MenuItemButton(
-              onPressed: () => _setViewPreferences(const GameViewPreferences()),
-              child: const Text('Restore simple defaults'),
-            ),
-          ],
-          child: const Text('Customize view'),
-        ),
-        if (hasGame)
-          SubmenuButton(
-            menuChildren: [
-              if (!solitaire)
-                MenuItemButton(
-                  onPressed: _onLineTab ? null : _toggleEditMode,
-                  child: Text(_editMode ? 'Finish amending' : 'Amend game'),
-                ),
-              MenuItemButton(
-                onPressed: _copyCurrentGamePgn,
-                child: const Text('Copy game PGN'),
-              ),
-              if (_activeMovetextController.hasEphemeralMoves)
-                MenuItemButton(
-                  onPressed: () {
-                    _controller.stopAutoPlay();
-                    _activeMovetextController.clearEphemeralMoves();
-                    setState(() {});
-                    _reclaimFocus();
-                  },
-                  child: const Text('Clear analysis marks'),
-                ),
-              if (_viewingStudy)
-                MenuItemButton(
-                  onPressed: _addCurrentGameToStudy,
-                  child: const Text('Copy game to another study…'),
-                ),
-              SubmenuButton(
-                menuChildren: [
-                  MenuItemButton(
-                    onPressed: () =>
-                        _controller.setSortMode(GameSortMode.fileOrder),
-                    child: const Text('File order'),
-                  ),
-                  MenuItemButton(
-                    onPressed: () =>
-                        _controller.setSortMode(GameSortMode.dateDesc),
-                    child: const Text('Newest first'),
-                  ),
-                ],
-                child: const Text('Sort games'),
-              ),
-              MenuItemButton(
-                onPressed: _exportSlice,
-                child: Text(
-                  'Export ${_controller.filteredGames.length} games as PGN…',
-                ),
-              ),
-              MenuItemButton(
-                onPressed: _exportSliceAsScid,
-                child: const Text('Export as Scid database…'),
-              ),
-              MenuItemButton(
-                onPressed: _generateRepertoireFromGames,
-                child: const Text('Seed a repertoire from these games…'),
-              ),
-            ],
-            child: const Text('Game and collection'),
+          AppMenuEntry(
+            heading: 'Play',
+            label: 'Leave solitaire chess',
+            onRun: _toggleSolitaireMode,
           ),
         if (_controller.totalTrophyCount > 0 || solitaire)
-          MenuItemButton(
-            onPressed: _showTrophyCabinet,
-            child: const Text('Solitaire chess trophies'),
+          AppMenuEntry(
+            label: 'Solitaire chess trophies',
+            onRun: _showTrophyCabinet,
           ),
-        const Divider(),
-        MenuItemButton(
-          onPressed: () => openAppSettings(context),
-          child: const Text('App settings…'),
-        ),
+        if (hasGame) ...[
+          AppMenuEntry(
+            heading: 'Study',
+            label: _viewingStudy ? 'Edit study' : 'Save game to study…',
+            onRun: _viewingStudy ? _editInStudy : _addCurrentGameToStudy,
+          ),
+          if (_controller.filteredGames.length > 1)
+            AppMenuEntry(
+              label: 'Save selected games to study…',
+              onRun: _saveSliceAsStudy,
+            ),
+          if (_viewingStudy)
+            AppMenuEntry(
+              label: 'Copy game to another study…',
+              onRun: _addCurrentGameToStudy,
+            ),
+          if (!solitaire)
+            AppMenuEntry(
+              label: _editMode ? 'Finish amending' : 'Amend game',
+              enabled: !_onLineTab,
+              onRun: _toggleEditMode,
+            ),
+          AppMenuEntry(label: 'Copy game PGN', onRun: _copyCurrentGamePgn),
+          if (_activeMovetextController.hasEphemeralMoves)
+            AppMenuEntry(
+              label: 'Clear analysis marks',
+              onRun: () {
+                if (!mounted) return;
+                _controller.stopAutoPlay();
+                _activeMovetextController.clearEphemeralMoves();
+                setState(() {});
+                _reclaimFocus();
+              },
+            ),
+          AppMenuEntry(
+            heading: 'Collection',
+            label: 'Export ${_controller.filteredGames.length} games as PGN…',
+            onRun: _exportSlice,
+          ),
+          AppMenuEntry(
+            label: 'Export as Scid database…',
+            onRun: _exportSliceAsScid,
+          ),
+          AppMenuEntry(
+            label: 'Seed a repertoire from these games…',
+            onRun: _generateRepertoireFromGames,
+          ),
+        ],
       ],
+    );
+  }
+
+  Future<void> _openGameViewSettings() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => GameViewSettingsDialog(
+        preferences: _viewPreferences,
+        perspective: _controller.perspective,
+        onChanged: _setViewPreferences,
+        onFlip: _controller.toggleBoardFlipped,
+        onPerspective: _controller.setPerspective,
+        player: _controller.detectProtagonist(),
+        onReadingOptions: _controller.filteredGames.isEmpty
+            ? null
+            : (_onLineTab ? _lineWidgetController : _pgnWidgetController)
+                  .showReadingOptions,
+        onFullscreen: _controller.filteredGames.isNotEmpty && !_onLineTab
+            ? _controller.toggleFullScreen
+            : null,
+      ),
     );
   }
 

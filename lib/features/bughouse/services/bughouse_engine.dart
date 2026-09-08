@@ -11,6 +11,7 @@ import '../../../utils/log.dart';
 import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_state.dart';
 import 'bughouse_bundle.dart';
+import 'bughouse_cpu_limit.dart';
 import 'windows_loader_check.dart';
 
 /// Thrown when the engine cannot be started or does not answer in time.
@@ -248,6 +249,9 @@ class BughouseEngine implements BughouseAnalysisEngine {
   /// Everything the engine wrote to stderr, for surfacing load failures
   /// (a missing model, an FP16 network) instead of a bare timeout.
   List<String> get diagnostics => List.unmodifiable(_stderrLines);
+
+  Future<void> setCpuLimit(int cores) =>
+      BughouseCpuLimit.apply(_process.pid, cores);
 
   static Future<BughouseEngine> launch({
     required String executablePath,

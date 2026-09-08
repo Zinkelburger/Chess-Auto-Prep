@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../theme/app_colors.dart';
+import 'pgn_reading_pane.dart';
 
 /// One move and its explanation. The same heading stays at the top while a
 /// long note is being read; it stops at the end of that note. No text is copied
@@ -22,7 +23,10 @@ class PgnReadingPassage extends StatelessWidget {
     return _StickyPassage(
       position: Scrollable.maybeOf(context)?.position,
       active: active,
-      heading: ColoredBox(color: AppColors.pgnSurface, child: children.first),
+      heading: ColoredBox(
+        color: PgnReadingPane.surfaceOf(context),
+        child: children.first,
+      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children.skip(1).toList(),

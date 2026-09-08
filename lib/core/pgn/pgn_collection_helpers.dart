@@ -20,16 +20,8 @@ import '../../services/pgn_parsing_service.dart' as pgn;
 
 List<PgnGameEntry> parseMultiGamePgn(String content) {
   final entries = <PgnGameEntry>[];
-  var chunkStart = 0;
-  // Chunk boundaries are `[Event ` at a line start — the same cut the
-  // look-behind regex made, found with `indexOf` instead of a regex split
-  // that materialised every chunk up front.
-  while (true) {
-    final next = _nextChunkBoundary(content, chunkStart);
-    final chunk = content.substring(chunkStart, next ?? content.length);
+  for (final chunk in pgn.splitPgnIntoGames(content)) {
     _addChunk(entries, chunk);
-    if (next == null) break;
-    chunkStart = next;
   }
   return entries;
 }

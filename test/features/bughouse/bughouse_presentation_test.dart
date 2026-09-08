@@ -129,7 +129,14 @@ void main() {
       final steps = controller.describePv(line, team: Side.white);
       expect(steps, hasLength(2));
 
+      final original = controller.state.dualFen;
       controller.hoverStep(steps[1], owner: 'row');
+      final preview = controller.hover.value!.preview!;
+      expect(preview.boardA.board.pieceAt(Square.e4)?.role, Role.pawn);
+      expect(preview.boardA.board.pieceAt(Square.e5)?.role, Role.pawn);
+      expect(preview.boardB.board.pieceAt(Square.d4)?.role, Role.pawn);
+      expect(controller.state.dualFen, original);
+      expect(controller.history.cursor, 0);
 
       expect(controller.annotationsFor(BughouseBoard.a), [
         const BoardAnnotation(

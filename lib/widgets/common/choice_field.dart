@@ -108,6 +108,7 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
   String? _query;
   int _highlight = 0;
   bool _opensUp = false;
+  bool? _arrowWasOpen;
   double _maxHeight = 280;
 
   ChoiceItem<T>? get _selected {
@@ -155,6 +156,7 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
   }
 
   void _onFocusChanged() {
+    if (!mounted) return;
     if (_focus.hasFocus) {
       _open();
     } else {
@@ -278,7 +280,9 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
 
   void _toggleFromArrow() {
     if (!widget.enabled) return;
-    if (_overlay.isShowing) {
+    final wasOpen = _arrowWasOpen ?? _overlay.isShowing;
+    _arrowWasOpen = null;
+    if (wasOpen) {
       _close(revert: true);
       _focus.unfocus();
     } else {
@@ -290,16 +294,29 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
   @override
   Widget build(BuildContext context) {
     final style = widget.style ?? AppTextStyles.body;
-    final arrow = IconButton(
-      icon: Icon(
-        _overlay.isShowing ? Icons.arrow_drop_up : Icons.arrow_drop_down,
-        size: 20,
+    // Desktop text fields gain focus on mouse-down, opening the list before
+    // the arrow's mouse-up. Toggle from the state before that focus change.
+    final arrow = Listener(
+      onPointerDown: (_) => _arrowWasOpen = _overlay.isShowing,
+      onPointerCancel: (_) => _arrowWasOpen = null,
+      child: ExcludeFocus(
+        child: IconButton(
+          icon: Icon(
+            _overlay.isShowing ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+            size: 20,
+          ),
+          tooltip: _overlay.isShowing ? 'Close list' : 'Show all',
+          visualDensity: widget.compact
+              ? VisualDensity.compact
+              : VisualDensity.standard,
+          padding: EdgeInsets.zero,
+          constraints: BoxConstraints(
+            minWidth: widget.compact ? 28 : 44,
+            minHeight: widget.compact ? 28 : 44,
+          ),
+          onPressed: widget.enabled ? _toggleFromArrow : null,
+        ),
       ),
-      tooltip: _overlay.isShowing ? 'Close list' : 'Show all',
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      onPressed: widget.enabled ? _toggleFromArrow : null,
     );
     final decoration = widget.compact
         ? InputDecoration(
@@ -386,22 +403,24 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
       offset: Offset(0, _opensUp ? -4 : 4),
       child: Align(
         alignment: _opensUp ? Alignment.bottomLeft : Alignment.topLeft,
-        child: TextFieldTapRegion(
-          child: Material(
-            elevation: 6,
-            color: AppColors.surfaceElevated,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: const BorderSide(color: AppColors.divider),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: fieldWidth,
-                maxWidth: width,
-                maxHeight: _maxHeight,
+        child: ExcludeFocus(
+          child: TextFieldTapRegion(
+            child: Material(
+              elevation: 6,
+              color: AppColors.surfaceElevated,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: AppColors.divider),
               ),
-              child: body,
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: fieldWidth,
+                  maxWidth: width,
+                  maxHeight: _maxHeight,
+                ),
+                child: body,
+              ),
             ),
           ),
         ),

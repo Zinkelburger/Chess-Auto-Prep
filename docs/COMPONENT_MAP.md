@@ -51,6 +51,70 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 
 **Chess logic:** `dartchess` for rules/FEN; `flutter_chess_board` for display.
 
+### Bughouse analysis and editing
+
+`features/bughouse/widgets/bughouse_screen.dart` keeps Board 1 and Board 2
+beside one analysis/reference panel. Underlined Engine / Board / Engine settings
+tabs provide navigation, distinct from the segmented database selectors.
+Engine moves use the PGN notation face at 16px, with consistently semibold white
+continuations, white move numbers and separators between candidates. The layout follows lila's separation of
+boards, engine lines and opening explorer. Smaller windows stack the panel.
+
+| User action | Control / behavior |
+|---|---|
+| Play or drop a piece | Drag on either board; reserve pieces also support click then square |
+| Identify seats | You / Partner / Opponent / Partner’s opponent, beside each clock |
+| Pause or resume | Analysis toolbar, or Space |
+| Read candidate continuations | Board 1 and Board 2 ranked lines appear together, automatically using the side to move on each board. Searches still consider both boards jointly; all scores are from your team’s perspective |
+| Preview a continuation | Hover a move or candidate to show the resulting boards and reserves; exit restores the current position without changing history |
+| Play a continuation | Click a move to play the joint sequence through that point, including its other-board moves |
+| Browse FICS | Book icon opens the archive immediately in the right panel; Board 1 / Board 2 filters the recorded next moves |
+| Interpret archive results | Result bars always describe your team. Move frequencies use the selected board’s recorded continuations; the archive remains keyed by both boards |
+| Change team, sitting or clocks | Board tab; editable clocks remain beside the players |
+| Compare clock assumptions | Board → Compare clock scenarios opens Engine immediately with a distinct Clock scenarios section, spinner and completed-result count. Each scenario’s evaluation and board-labeled moves appear as it finishes; current-clock lines remain separately labeled below. Hover explains the three cases (ahead and may sit, level or behind, forced to move on Board 1) |
+| Change cores, lines, memory or time | Engine settings tab, with number steppers and typed entry |
+| Edit either board | Pencil icon; shared drag editor supports palette placement, arbitrary piece movement and right-click removal; illegal kingless bughouse positions are rejected |
+| Change turn, castling, reserves, clear/reset | Edit position controls and reserve slots |
+| Load/copy a position | Dual FEN controls in the editor; copy menu below the boards |
+| Navigate or undo | Controls below the boards; arrows and Home/End navigate history |
+| Flip a board | Its header control; F for Board 1, G for Board 2 |
+| Run or review engine matches | More bughouse tools → Engine tournament; Done returns to analysis |
+
+`BughouseCpuLimit` limits all threads of the Linux analysis process with
+`taskset`, restricted to the parent process’s allowed CPU set. The persisted
+default is two cores. This controls CPU affinity, not Hivemind's compiled
+worker count; Windows/macOS still use the engine's own CPU allocation.
+Tournament resources remain owned by the tournament runner.
+
+Windows first-use checks run in the built desktop app via
+`integration_test/bughouse_first_run_test.dart`: an empty disposable profile
+with spaces and non-ASCII characters, real bundled extraction, app-local VC++
+DLL checks, repeated engine searches, and repair of a same-size damaged network.
+The Bughouse engine workflow also runs the app boot/navigation tests on Windows;
+release builds require that workflow to pass before packaging Windows. Hosted
+runners have VC++ installed, so these checks supplement the binary dependency
+audit; they do not replace an installer/portable test on a clean Windows PC.
+
+`widgets/board_editor/editable_board.dart` supplies the shared editing surface
+to both ordinary board editors and bughouse, after the lichess editor: the
+`EditorTool` in `core/board_editor_controller.dart` is a pointer (drag pieces,
+drop off the board to remove), a piece brush or the eraser. A brush or the
+eraser acts on press and keeps painting while the button is held; pressing a
+square that already holds the brush piece removes it; right-click swaps a
+brush's colour and otherwise clears the square. Flutter cannot show a piece
+as the cursor, so the board hides the cursor and draws a ghost of the tool.
+`widgets/board_editor/piece_palette.dart` is the spare-piece strip (pointer,
+king to pawn, bin): a drag places once and leaves the pointer in hand, a click
+takes the piece as the brush. `BoardWithSpares` in the editor dialog stacks
+the far side's strip, the board and the near side's strip, following the
+flip. `BoardEditorWidget` binds the surface to `BoardEditorController`; the
+bughouse cards bind it to their dual-board state and share the same tool
+model and palette. Bughouse king moves update the board atomically before
+validating the position.
+
+The app driver sets `BUGHOUSE_DB_HOME` to its disposable profile. An explicit
+archive override is authoritative and cannot fall through to the user's book.
+
 ### Architecture invariants (do not regress)
 
 These rules were added after the generation/traps remediation
@@ -401,7 +465,42 @@ RepertoireTrainingScreen
   → TrainingSettings (persisted)
 ```
 
+Train opens multi-chapter imports at the chapter picker instead of silently
+opening the introduction as “Main”. Course headers use the shared repertoire
+chapter detector; Game and Train split PGN collections with `splitPgnIntoGames`.
+The chapter reader reuses `PgnReadingPane` for prose spacing, move anchoring,
+variation focus and return-to-parent navigation, on a softer charcoal surface.
+Single-chapter files open straight to their lines with a direct route back to
+the repertoire's chapters. A line's Read action opens
+that same chapter reader at the chosen line.
+
+Training settings precede the global mode menu. **Skip** is visible during a
+lesson and leaves a line out for the current sitting without rating it.
+**Line → Exclude from training** saves an exclusion alongside review progress;
+excluded lines remain readable and can be restored from their line options.
+They do not contribute to Learn/Review counts or either scheduling queue.
+
 ### PGN viewer (Open PGN)
+
+**Game options ▾** and **Filter games ▾** use the shared, quiet
+`AppOverflowMenu.label` anchor also used by repertoire **Actions ▾**.
+Game options groups Settings, Explore, Study and Collection; filters groups
+filter selection/reset and sort order. **Game view…** opens grouped Analysis,
+Playback, and Board and moves settings using the global `SettingsGroup` controls.
+The small **Analysis** disclosure shares the previous/next-game row, costs no
+extra row while collapsed, and mirrors the saved **Analysis overview** choice.
+New profiles start collapsed; existing explicit preferences are retained.
+The separator above the move text and the bright navigation top border are gone.
+
+In the reader, **Enter** focuses a variation. **←** steps back through its root
+to its parent, restoring any parent focus and reading position. **Esc** first
+returns to a manually scrolled reading position, then returns to the parent
+variation, then follows the existing mode-exit behavior. Parent and focus
+controls use quiet text buttons with registry-backed shortcut tooltips.
+Global **Settings → Keyboard shortcuts** lists mappings by view, including
+mode switching, numbered continuations, planner and bughouse controls. Shared
+actions use `shortcut_reference.dart` and the same `AppShortcut` entries as
+handlers and tooltips; an invariant test requires every shared entry to be listed.
 
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
@@ -413,7 +512,7 @@ PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal
 Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].pgnText` → `Clipboard.setData` + `AppMessages.pgnCopied` snackbar
 Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept)
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
-Keyboard: `N`/`P` prev/next game, `F` flip (`Ctrl+F`/F11 fullscreen), `E` engine (`Ctrl+E` export), `W` auto-next, `A` edit mode, `T` opening tree, `S` solitaire mode; plus `←`/`→` navigate, Home/End jump, Space auto-play, Tab cycle tabs, Escape exit edit/fullscreen/clear annotations. Letter keys suppressed while a text field has focus. Digit star-rating shortcuts removed.
+Keyboard: `↑`/`↓` previous/next game, `←`/`→` moves, Home/Page Up and End/Page Down jump, Enter focus variation, Esc return to parent or leave mode, `F` flip, Ctrl+F/F11 fullscreen, `E` engine, Space playback, `W` auto-next, `A` edit in Study, `T` opening tree, Ctrl+S/Shift+S solitaire, `/` search, `G` game number, Ctrl+V paste PGN, `C` comment, `R` mainline (reveal in solitaire), `H` solitaire hint, Tab next panel, and 1–9 fork candidates. Enter starts solitaire during setup. Text fields retain their normal editing behavior.
 Side tabs: **Game | Analysis** by default. **Line** (book line vs the game on screen, plus the deviation banner) is added only for a Games/tactics handoff (`gameId` / single-game focus). Course files use the opening tree (`T`) to browse matching lines instead.
 Opening tree (`T`): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). Course / repertoire games (`Result *`) fold RAVs into the tree so every book continuation is a sibling, not just each chapter's mainline; scored player games stay mainline-only (their variations are analysis notes). `*` results count toward frequency without a fake 50% draw bar — the UI says **lines** instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Expand all** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
 
@@ -503,7 +602,7 @@ PgnSourcesPanel (lib/widgets/pgn_sources_panel.dart)
 
 Used by:
 - `RepertoireGenerationTab` (DB Explorer mode) — replaces `_buildPgnFilePickerSection()`
-- `PgnSliceDialog._buildResultsPreview()` — now embeds `LinesPreviewPanel` with hover board
+- `PgnSliceDialog` — optional matching-games preview embeds `LinesPreviewPanel` with hover board
 - `LineItemRow._MovesPreview` — upgraded to `HoverableMoveChips` for hover board on lines browser
 
 ---
@@ -764,12 +863,12 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `main_screen.dart` | Mode `IndexedStack`; engine suspend/resume on leaving/entering interactive-engine modes and on `paused`/`hidden`/`detached` (not `inactive`) |
 | `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; when no repertoire is selected shows `RepertoireListBody` inline instead of a placeholder button; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
 | `repertoire_selection_screen.dart` | Full-screen push wrapper around `RepertoireListBody`; pops with selected `RepertoireMetadata` |
-| `repertoire_training_screen.dart` | Training mode shell for **repertoires and studies-as-tactics**; Train tab has two `SegmentedButton` selectors — Mode (Repertoire/Tactics) and Repetition (Spaced repetition/Linear); when no source is loaded the body shows `RepertoireListBody` inline with a "Studies — custom tactics" section; consumes `pendingRepertoirePath`/`pendingTrainStudyPath` via an AppState listener (screen is cached in the IndexedStack); app-bar and PGN-tab edit buttons switch Builder↔Study by source; an empty loaded repertoire offers “Add lines in Repertoire Builder” (not offered for studies); Lines tab uses `TrainingLinesPanel` (categorized Learn/Review view with SRS metadata, per-line playability chips, bottleneck warnings, "needs scoring" banner linking to Builder — suppressed for studies); keyboard: J toggles manual advance, Space acknowledges learn steps or opponent-comment Next, `/` focuses move input (letter keys suppressed in text fields) |
+| `repertoire_training_screen.dart` | Repertoire and study trainer: a stable board beside the source picker, chapter/line browser or current lesson; Learn and Review respect the selected chapter and session size. Read opens the shared chapter reader. Training settings are left of the global mode switcher; Skip is visible, and Line actions include persistent exclusion. The browser restores excluded lines without discarding review history. Keyboard: Space acknowledges the next learning step, arrows skip lines, `/` focuses move input, Escape returns to the browser. |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: N/P/F/E/W/A/T/S letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen; caches `AppState` so dispose does not `context.read` |
 | `player_selection_screen.dart` | Player pick for analysis: cached game-sets from chess.com / lichess downloads, PGN-file imports, and **opponent lists** (`OpponentListImportDialog` → one merged player per opponent, sourced from every account listed, tagged with the event as `group`; batch download with per-person progress, skip-existing, failures reported not swallowed); search matches name, platform and group |
-| `settings_screen.dart` | Machine-level settings (accounts, **display** — board coordinates and piece notation with a live preview board, my repertoires, engine cores, ChessDB); body is a bounded `ListView` so every section is reachable; analysis *behavior* lives on per-panel gears |
+| `settings_screen.dart` | Machine-level settings (accounts, **display** — board coordinates and piece notation with a live preview board, my repertoires, engine cores, ChessDB); focused sections have independent scrolling; Keyboard shortcuts lists mappings by view; analysis *behavior* lives on per-panel gears |
 
 ### `lib/services/` (grouped)
 
@@ -926,7 +1025,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
 | `layout/empty_state_placeholder.dart` | Shared empty states |
-| `repertoire_list_body.dart` | Embeddable repertoire list with create/rename/delete; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
+| `repertoire_list_body.dart` | Embeddable repertoire list with import/rename/delete; the primary Import repertoire action opens the native file picker immediately, saves under a safe unique filename-derived name, and opens the imported chapter. A quieter Paste PGN action accepts text without setup; naming stays on the library cards and training side/settings remain available in Train. `features/repertoire/widgets/repertoire_import_dialog.dart` owns both flows; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
 | `layout/responsive_split_layout.dart` | Generic split helper |
 
 #### Repertoire-specific
@@ -1010,9 +1109,9 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `lines_preview_panel.dart` | **Browseable line list** — fuzzy search, virtualized scrolling, `HoverableMoveChips` per row with `FloatingBoardPreview` on hover; shows full-panel loading spinner while `computing` (replaces stale count + list); used in slice dialog and inline slice editor |
 | `hoverable_move_chips.dart` | **Inline move chips with hover board preview** — renders SAN moves as compact chips, computes FEN on hover, triggers `BoardPreviewController.setPreview`; shared by `LinesPreviewPanel`, `LineItemRow`, PGN Viewer |
 | `slice/position_filter.dart` | Shared position filter widget (FEN/SAN input + Apply/Clear + "Board position" chip); uses `PositionPreviewIcon` for hover board preview |
-| `slice/header_filters.dart` | Shared header filters widget (dynamic field/mode/value rows) |
+| `slice/header_filters.dart` | Shared header filters widget (labelled field/mode selectors above full-width values; 44px add/remove controls) |
 | `slice/sequence_filter.dart` | Shared move sequence filter widget ([gap]-separated groups) |
-| `pgn_slice_dialog.dart` | Slice dataset dialog (position, sequence, header filters) | Default header row starts as Date ≥ (changeable field/mode like other rows); live preview via `LinesPreviewPanel` with hover board; skips recompute when effective filters unchanged, on empty filter rows, or 300ms-debounced header typing; accepts optional `fenIndex` for O(1) position filtering |
+| `pgn_slice_dialog.dart` | Game filter dialog, opened beside the collection name at the top left | Shows the collection name and a live “Filter for” summary; roomy game-detail and position controls, move sequences under Advanced. Default header row starts as Date ≥. Preview is opt-in after filters are set; clearing filters hides it. Skips unchanged effective filters and debounces edits by 300ms; Apply waits for current results and valid position/sequence input. Accepts optional `fenIndex` for O(1) position filtering |
 | `position_preview_icon.dart` | **Shared hover-preview widget** — eye icon that shows a floating 200×200 board overlay on hover via `bestEffortPositionFromInput`; supports FEN, SAN, and `[gap]`-separated sequences; used by `PositionFilter` and `PgnSliceDialog` |
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Weakness detail dialog |

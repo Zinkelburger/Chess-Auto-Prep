@@ -11,7 +11,7 @@ class GameViewPreferences {
   const GameViewPreferences({
     this.playback = false,
     this.engine = false,
-    this.graph = true,
+    this.graph = false,
     this.speed = 1,
     this.autoNext = false,
   });
@@ -36,7 +36,7 @@ class GameViewPreferences {
     return GameViewPreferences(
       playback: prefs.getBool('game_view.playback') ?? false,
       engine: prefs.getBool('game_view.engine') ?? false,
-      graph: prefs.getBool('game_view.graph') ?? true,
+      graph: prefs.getBool('game_view.graph') ?? false,
       speed: speed.isFinite && speed >= 0.5 && speed <= 10 ? speed : 1,
       autoNext: prefs.getBool('game_view.auto_next') ?? false,
     );

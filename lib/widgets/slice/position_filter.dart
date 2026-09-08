@@ -41,7 +41,7 @@ class PositionFilter extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Position Filter',
+          'Board position',
           style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
@@ -52,11 +52,11 @@ class PositionFilter extends StatelessWidget {
                 controller: text,
                 decoration: InputDecoration(
                   hintText: 'FEN or moves',
-                  hintStyle: AppTextStyles.hint.copyWith(fontSize: 12),
+                  hintStyle: AppTextStyles.hint,
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 10,
-                    vertical: 10,
+                    vertical: 14,
                   ),
                   border: const OutlineInputBorder(),
                   suffixIcon: showOk || showError
@@ -72,7 +72,7 @@ class PositionFilter extends StatelessWidget {
                   ),
                 ),
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 14,
                   fontFamily: AppTextStyles.monoFamily,
                 ),
               ),
@@ -86,8 +86,8 @@ class PositionFilter extends StatelessWidget {
                   icon: const Icon(Icons.close, size: 16),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
+                    minWidth: 44,
+                    minHeight: 44,
                   ),
                   onPressed: controller.clearPosition,
                   tooltip: 'Clear position filter',
@@ -146,50 +146,16 @@ class _BoardPositionChip extends StatelessWidget {
           : isActive
           ? 'Filtering on the current board position'
           : 'Filter games through the current board position',
-      child: GestureDetector(
-        onTap: isStart ? null : onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: isStart
-                ? AppColors.chipInactiveBg
-                : isActive
-                ? AppColors.chipActiveBg
-                : AppColors.chipInactiveBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isActive ? AppColors.info : AppColors.outline,
-              width: isActive ? 1.5 : 0.5,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.grid_on,
-                size: 12,
-                color: isStart
-                    ? AppColors.onSurfaceDisabled
-                    : isActive
-                    ? AppColors.chipActiveFg
-                    : AppColors.onSurfaceSoft,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Use board position',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                  color: isStart
-                      ? AppColors.onSurfaceDisabled
-                      : isActive
-                      ? AppColors.chipActiveFg
-                      : AppColors.onSurfaceSoft,
-                ),
-              ),
-            ],
-          ),
+      child: OutlinedButton.icon(
+        onPressed: isStart ? null : onTap,
+        style: OutlinedButton.styleFrom(
+          visualDensity: VisualDensity.standard,
+          minimumSize: const Size(0, 44),
+          foregroundColor: isActive ? AppColors.chipActiveFg : null,
+          backgroundColor: isActive ? AppColors.chipActiveBg : null,
         ),
+        icon: const Icon(Icons.grid_on, size: 18),
+        label: Text(isActive ? 'Using board position' : 'Use board position'),
       ),
     );
   }

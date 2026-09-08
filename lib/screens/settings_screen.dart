@@ -18,6 +18,7 @@ import '../models/eval_database_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
+import '../utils/app_shortcuts.dart';
 import '../utils/san_display.dart';
 import '../utils/system_info.dart';
 import '../widgets/chess_board_widget.dart';
@@ -25,6 +26,8 @@ import '../widgets/common/choice_field.dart';
 import '../widgets/common/confirm_dialog.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
+import '../widgets/settings/keyboard_shortcuts_section.dart';
+import '../widgets/shortcut_tooltip.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -72,6 +75,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       icon: Icons.info_outline,
       description: 'Project information and app maintenance.',
     ),
+    (
+      label: 'Keyboard shortcuts',
+      icon: Icons.keyboard_outlined,
+      description:
+          'Key mappings by view, using the same registry as the controls.',
+    ),
   ];
 
   @override
@@ -83,11 +92,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         surfaceTintColor: Colors.transparent,
         titleSpacing: 8,
         title: const Text('Settings', style: AppTextStyles.title),
-        leading: IconButton(
-          tooltip: 'Back to app',
-          icon: const Icon(Icons.arrow_back, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+        // The way out sits where the gear that opened this screen was, so the
+        // pointer is already over it; a back arrow on the far left left users
+        // hunting for the exit.
+        automaticallyImplyLeading: false,
+        actions: [
+          ShortcutIconButton(
+            description: 'Close settings',
+            shortcut: AppShortcut.leave,
+            icon: const Icon(Icons.close, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 4),
+        ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: AppColors.divider),
@@ -123,6 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _buildAboutSection(),
                     _buildResetButton(),
                   ], compact),
+                  _page(6, const [KeyboardShortcutsSection()], compact),
                 ],
               ),
             ),

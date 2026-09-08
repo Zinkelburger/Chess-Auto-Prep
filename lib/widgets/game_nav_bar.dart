@@ -4,12 +4,10 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../utils/app_shortcuts.dart';
 
 import '../models/pgn_filter_models.dart';
-import '../theme/app_colors.dart';
 import 'shortcut_tooltip.dart';
 import 'game_nav_item.dart';
 import 'game_number_field.dart';
@@ -21,11 +19,6 @@ export 'game_nav_item.dart' show GameNavItem;
 /// Speed options shared between the nav bar and fullscreen overlay.
 const kAutoPlaySpeeds = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 10.0];
 
-const _previousGameShortcut = AppShortcut([
-  KeyChord(LogicalKeyboardKey.arrowUp),
-]);
-const _nextGameShortcut = AppShortcut([KeyChord(LogicalKeyboardKey.arrowDown)]);
-
 /// Collection navigation; optional tools live in the page's View menu.
 class GameNavBar extends StatelessWidget {
   final List<GameNavItem> games;
@@ -34,6 +27,7 @@ class GameNavBar extends StatelessWidget {
   final bool isAutoPlaying;
   final bool showPlayback;
   final bool isSolitaireMode;
+  final Widget? trailing;
   final VoidCallback? onPrev;
   final VoidCallback? onNext;
   final ValueChanged<int>? onGoToGame;
@@ -51,14 +45,12 @@ class GameNavBar extends StatelessWidget {
     this.onNext,
     this.onGoToGame,
     this.onToggleAutoPlay,
+    this.trailing,
   });
 
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: const BoxDecoration(
-      border: Border(top: BorderSide(color: AppColors.outline)),
-    ),
     child: Wrap(
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -69,7 +61,7 @@ class GameNavBar extends StatelessWidget {
           children: [
             ShortcutIconButton(
               description: 'Previous game',
-              shortcut: _previousGameShortcut,
+              shortcut: AppShortcut.previousItem,
               onPressed: currentIndex > 0 ? onPrev : null,
               icon: const Icon(Icons.chevron_left),
             ),
@@ -82,7 +74,7 @@ class GameNavBar extends StatelessWidget {
             ),
             ShortcutIconButton(
               description: 'Next game',
-              shortcut: _nextGameShortcut,
+              shortcut: AppShortcut.nextItem,
               onPressed: currentIndex < games.length - 1 ? onNext : null,
               icon: const Icon(Icons.chevron_right),
             ),
@@ -102,6 +94,7 @@ class GameNavBar extends StatelessWidget {
             ),
             label: Text(isAutoPlaying ? 'Pause' : 'Play'),
           ),
+        ?trailing,
       ],
     ),
   );

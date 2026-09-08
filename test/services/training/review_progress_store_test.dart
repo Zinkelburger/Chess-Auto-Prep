@@ -106,6 +106,53 @@ void main() {
 
   tearDown(() => store.dispose());
 
+  test('exclusion persists without rating and can be reversed', () async {
+    final target = line('a');
+    await store.setExcluded(target, true);
+    final saved = RepertoireReviewEntry.fromCsvRow(
+      review.saved.single.toCsvRow(),
+    );
+    expect(saved.excluded, isTrue);
+    expect(saved.isNew, isTrue);
+    expect(review.history, isEmpty);
+    final reloaded = {target.id: saved};
+    for (final dueOnly in [true, false]) {
+      expect(
+        review.orderLinesForReview(
+          [target],
+          reloaded,
+          ReviewOrder.sequential,
+          dueOnly: dueOnly,
+        ),
+        isEmpty,
+      );
+    }
+    store.byLine = reloaded;
+    await store.setExcluded(target, false);
+    expect(review.saved.single.excluded, isFalse);
+    expect(
+      review.orderLinesForReview(
+        [target],
+        store.byLine,
+        ReviewOrder.sequential,
+      ),
+      [target],
+    );
+  });
+
+  test('legacy review rows have no exclusion and retain comma paths', () {
+    final legacy = RepertoireReviewEntry.fromCsvRow(
+      '/a,b.pgn,l,Line,2.5,0,,,,0,0',
+    );
+    expect(legacy.repertoireId, '/a,b.pgn');
+    expect(legacy.excluded, isFalse);
+    final modern = legacy.copyWith(excluded: true);
+    expect(
+      RepertoireReviewEntry.fromCsvRow(modern.toCsvRow()).excluded,
+      isTrue,
+    );
+  });
+
   group('recordRating', () {
     test('creates an entry for a line seen for the first time', () async {
       await store.recordRating(line('A'), ReviewRating.good, hadMistake: false);
