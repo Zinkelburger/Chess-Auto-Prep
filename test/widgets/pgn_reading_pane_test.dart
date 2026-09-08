@@ -110,6 +110,78 @@ void main() {
     },
   );
 
+  testWidgets('Left crosses focused branch roots one parent at a time', (
+    tester,
+  ) async {
+    final controller = await _pump(tester);
+    final view = tester.widget<PgnMovetextView>(find.byType(PgnMovetextView));
+    final sicilian = view.variationsByPly[1]!.single;
+    final nf3 = sicilian.children.first;
+    final nested = nf3.children[1];
+    controller.goToVariationNode(sicilian, 1);
+    await tester.pumpAndSettle();
+    controller.focusVariation();
+    await tester.pumpAndSettle();
+    controller.goToVariationNode(nested, 1);
+    await tester.pumpAndSettle();
+    controller.focusVariation();
+    await tester.pumpAndSettle();
+    controller.goBack();
+    await tester.pumpAndSettle();
+    expect(controller.currentFen, nf3.fen);
+    expect(
+      find.textContaining('Mainline explanation.', findRichText: true),
+      findsNothing,
+    );
+    expect(
+      find.textContaining('Sicilian explanation.', findRichText: true),
+      findsOneWidget,
+    );
+    controller.goBack();
+    await tester.pumpAndSettle();
+    expect(controller.currentFen, sicilian.fen);
+    controller.goBack();
+    await tester.pumpAndSettle();
+    expect(controller.inVariation, isFalse);
+    expect(controller.mainLineIndex, 1);
+    expect(
+      find.textContaining('Mainline explanation.', findRichText: true),
+      findsOneWidget,
+    );
+    expect(controller.returnToParentLine(), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'parent command leaves an unfocused nested branch before its focused ancestor',
+    (tester) async {
+      final controller = await _pump(tester);
+      final view = tester.widget<PgnMovetextView>(find.byType(PgnMovetextView));
+      final sicilian = view.variationsByPly[1]!.single;
+      final nf3 = sicilian.children.first;
+      controller.goToVariationNode(sicilian, 1);
+      await tester.pumpAndSettle();
+      controller.focusVariation();
+      await tester.pumpAndSettle();
+      controller.goToVariationNode(nf3.children[1], 1);
+      await tester.pumpAndSettle();
+      expect(controller.returnToParentLine(), isTrue);
+      await tester.pumpAndSettle();
+      expect(controller.currentFen, nf3.fen);
+      expect(
+        find.textContaining('Mainline explanation.', findRichText: true),
+        findsNothing,
+      );
+      expect(controller.returnToParentLine(), isTrue);
+      await tester.pumpAndSettle();
+      expect(controller.inVariation, isFalse);
+      expect(
+        find.textContaining('Mainline explanation.', findRichText: true),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets('focus a nested branch, return to parent and then mainline', (
     tester,
   ) async {
@@ -129,7 +201,7 @@ void main() {
       findsOneWidget,
     );
     expect(_move('e5'), findsNWidgets(2));
-    await tester.tap(find.widgetWithText(FilledButton, 'Focus variation'));
+    await tester.tap(find.widgetWithText(TextButton, 'Focus variation'));
     await tester.pumpAndSettle();
     expect(
       find.textContaining('Deep branch explanation.', findRichText: true),
@@ -148,7 +220,7 @@ void main() {
     controller.goForward();
     await tester.pumpAndSettle();
     expect(controller.currentFen, e5.children.first.fen);
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Return to parent'));
+    await tester.tap(find.widgetWithText(TextButton, 'Return to parent'));
     await tester.pumpAndSettle();
     expect(controller.currentFen, d4.fen);
     expect(

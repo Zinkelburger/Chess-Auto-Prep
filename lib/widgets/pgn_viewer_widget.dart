@@ -23,6 +23,8 @@ import 'package:chess_auto_prep/widgets/study/add_to_study_flow.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'pgn/pgn_reading_pane.dart';
+import '../utils/app_shortcuts.dart';
+import 'shortcut_tooltip.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
 import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
 import 'package:chess_auto_prep/core/pgn/solitaire_script.dart'
@@ -191,10 +193,10 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   void showReadingOptions() =>
       _state?._readingPaneKey.currentState?.showReadingOptions();
 
-  void focusVariation() =>
-      _state?._readingPaneKey.currentState?.focusVariation();
-  void returnToParentLine() =>
-      _state?._readingPaneKey.currentState?.returnToParent();
+  bool focusVariation() =>
+      _state?._readingPaneKey.currentState?.focusVariation() ?? false;
+  bool returnToParentLine() =>
+      _state?._readingPaneKey.currentState?.returnToParent() ?? false;
   bool returnToReadingMove() =>
       _state?._readingPaneKey.currentState?.returnToMove() ?? false;
 
@@ -344,6 +346,8 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   bool get _inlineActive => _inlineCursor > 0 && _inlineSans.isNotEmpty;
 
   /// Repaint after the model changed under the widget's feet.
+  final _readingPaneKey = GlobalKey<PgnReadingPaneState>();
+
   void _rebuild() {
     if (mounted) setState(() {});
   }
@@ -372,8 +376,6 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   String get _headerText => widget.hideResult ? _gameInfoNoResult : _gameInfo;
   bool _isLoading = true;
   String? _error;
-
-  final _readingPaneKey = GlobalKey<PgnReadingPaneState>();
 
   @override
   bool get wantKeepAlive => true;
@@ -756,7 +758,10 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
                     width: 36,
                     height: 36,
                   ),
-                  tooltip: 'Start (Home)',
+                  tooltip: actionTooltip(
+                    'Start',
+                    shortcut: AppShortcut.goToStart,
+                  ),
                 ),
               IconButton(
                 onPressed: _canGoBack ? _goBack : null,
@@ -787,7 +792,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
                     width: 36,
                     height: 36,
                   ),
-                  tooltip: 'End (End)',
+                  tooltip: actionTooltip('End', shortcut: AppShortcut.goToEnd),
                 ),
             ],
           ),
