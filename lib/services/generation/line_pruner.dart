@@ -260,7 +260,8 @@ class LineSlice {
   /// its owner back in (see [LinePruner._pinTranspositionOwners]), because a
   /// book naming a move order it does not contain is the worse book.
   List<ExtractedLine> take(int count) {
-    if (_picks.isEmpty) return const [];
+    // Growable: callers sort the result in place.
+    if (_picks.isEmpty) return [];
     final keep = _keepFlags(count);
     return [
       for (var i = 0; i < _lines.length; i++)

@@ -315,7 +315,12 @@ class _StreamDecoder {
   /// check it would look like a short but successful read — which for the
   /// importer would mean silently building a partial database.
   void finish() {
-    if (!_sawInput) return;
+    // No input is not an empty stream: a zero-byte file has no frame, and
+    // `zstd -dc` refuses it too.  Reading it as empty would let the importer
+    // mark an empty database complete.
+    if (!_sawInput) {
+      throw const ZstdException('the archive is empty — nothing to import');
+    }
     if (_lastResult != 0) {
       throw const ZstdException(
         'the archive ends mid-frame — the download is incomplete',

@@ -91,11 +91,6 @@ class SnapshotExporter {
 
     final name = repertoireName.trim();
     if (name.isEmpty) return (false, 'Please enter a repertoire name.');
-    final storage = StorageFactory.instance;
-    final targetPath = await storage.repertoireFilePath(name);
-    if (await storage.fileExists(targetPath)) {
-      return (false, 'A repertoire named "$name" already exists.');
-    }
 
     final depth = progress.depth;
     final doVerify = verify && config.needsStockfish;
@@ -104,9 +99,18 @@ class SnapshotExporter {
     final pausedForVerify = doVerify && !_isPaused();
     final buildService = _buildService();
 
+    // Claimed before the first await: a second call arriving while the
+    // storage checks below are in flight must see the slot taken, or both
+    // runs export — to the same file.
     _exporting = true;
     _setStatus('Snapshot: preparing (depth $depth)…');
     try {
+      final storage = StorageFactory.instance;
+      final targetPath = await storage.repertoireFilePath(name);
+      if (await storage.fileExists(targetPath)) {
+        return (false, 'A repertoire named "$name" already exists.');
+      }
+
       if (pausedForVerify) buildService.pauseBuild();
 
       // Synchronous, so atomic w.r.t. the async build loop — the copy is a
@@ -120,7 +124,7 @@ class SnapshotExporter {
       );
 
       _setStatus('Snapshot: computing lines (depth $depth)…');
-      final result = await Isolate.run(() => runSnapshotExport(exportRequest));
+      final result = await _runSnapshotExportInIsolate(exportRequest);
 
       var pgnEntries = result.pgnEntries;
       String verifyNote = 'unverified';
@@ -206,3 +210,15 @@ class SnapshotExporter {
     _notify();
   }
 }
+
+/// Runs the pure export phases off the UI isolate.
+///
+/// A top-level function so the closure handed to [Isolate.run] closes over
+/// the request alone. Written inline in [SnapshotExporter.export] it shares
+/// that method's context, which also holds `this` for the status callbacks —
+/// and the exporter reaches the live build (the engine pool's provisioning
+/// future, the progress timers), none of which can cross an isolate boundary.
+/// The send then throws and every snapshot export fails.
+Future<SnapshotExportResult> _runSnapshotExportInIsolate(
+  SnapshotExportRequest request,
+) => Isolate.run(() => runSnapshotExport(request));

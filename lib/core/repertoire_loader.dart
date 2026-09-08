@@ -90,7 +90,8 @@ class RepertoireHeaders {
   final String rootMoves;
 
   /// Whether this is a White repertoire. Anything but `// Color: Black`
-  /// — including a missing header — reads as White.
+  /// (case-insensitive, as `extractRepertoireColor` reads it) — including a
+  /// missing header — reads as White.
   final bool isWhite;
 
   /// True when the file carried no `// Color:` header at all, so the user
@@ -243,7 +244,12 @@ RepertoireHeaders parseRepertoireHeaders(String pgnText) {
   }
   return RepertoireHeaders(
     rootMoves: rootMoves ?? '',
-    isWhite: color != null ? color != 'Black' : (inferred ?? true),
+    // Case-insensitive to match `extractRepertoireColor`, which every other
+    // reader of this line uses; the Builder and the Trainer must agree on
+    // whose file this is.
+    isWhite: color != null
+        ? color.toLowerCase() != 'black'
+        : (inferred ?? true),
     // Only ask when neither the comment nor the file's own title says.
     needsColorSelection: color == null && inferred == null,
   );

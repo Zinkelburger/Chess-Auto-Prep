@@ -49,17 +49,28 @@ import '../../../utils/safe_change_notifier.dart';
 
 enum PlanPhase { start, walking, review }
 
+/// Everything an answer can change, taken *before* the answer so that
+/// "back" restores the exact card the user was looking at — its kind too,
+/// not just its position — and forgets what the undone branch learned.
 class _Snapshot {
   final List<List<String>> frontier;
   final List<PlanChapter> chapters;
   final Map<String, int> chapterOf;
-  final List<String>? currentPath;
-  const _Snapshot(
-    this.frontier,
-    this.chapters,
-    this.chapterOf,
-    this.currentPath,
-  );
+  final PlanStep? step;
+  final Map<String, List<String>> seenFen;
+  final Map<String, List<String>> ourAnswerByFen;
+  final List<List<String>> manualRoots;
+  final int decisionCount;
+  const _Snapshot({
+    required this.frontier,
+    required this.chapters,
+    required this.chapterOf,
+    required this.step,
+    required this.seenFen,
+    required this.ourAnswerByFen,
+    required this.manualRoots,
+    required this.decisionCount,
+  });
 }
 
 class PlanController extends ChangeNotifier with SafeChangeNotifier {
@@ -302,13 +313,40 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     _chapterOf
       ..clear()
       ..addAll(snap.chapterOf);
-    if (decisions.isNotEmpty) decisions.removeLast();
+    _seenFen
+      ..clear()
+      ..addAll(snap.seenFen);
+    _ourAnswerByFen
+      ..clear()
+      ..addAll(snap.ourAnswerByFen);
+    _manualRoots
+      ..clear()
+      ..addAll(snap.manualRoots.map(List<String>.of));
+    // Silent decisions (a chapter's move, a reused answer) are logged without
+    // a snapshot of their own, so truncate to the length at answer time
+    // rather than popping one entry.
+    if (decisions.length > snap.decisionCount) {
+      decisions.removeRange(snap.decisionCount, decisions.length);
+    }
     _step = null;
     _phase = PlanPhase.walking;
-    if (snap.currentPath != null) {
-      await _openStep(snap.currentPath!);
-    } else {
+    final step = snap.step;
+    if (step == null) {
       await _advance();
+      return;
+    }
+    switch (step.kind) {
+      case PlanStepKind.confirmLeaf:
+        await _openLeafConfirm(step.moves, step.fen);
+      case PlanStepKind.transposition:
+        await _openTransposition(
+          step.moves,
+          step.fen,
+          step.transposesTo ?? const [],
+        );
+      case PlanStepKind.ourMove:
+      case PlanStepKind.theirMove:
+        await _openStep(step.moves);
     }
   }
 
@@ -317,10 +355,14 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
   void _pushHistory() {
     _history.add(
       _Snapshot(
-        _frontier.map(List<String>.of).toList(),
-        [for (final c in _chapters) c.copy()],
-        Map.of(_chapterOf),
-        _step?.moves,
+        frontier: _frontier.map(List<String>.of).toList(),
+        chapters: [for (final c in _chapters) c.copy()],
+        chapterOf: Map.of(_chapterOf),
+        step: _step,
+        seenFen: Map.of(_seenFen),
+        ourAnswerByFen: Map.of(_ourAnswerByFen),
+        manualRoots: _manualRoots.map(List<String>.of).toList(),
+        decisionCount: decisions.length,
       ),
     );
   }

@@ -356,13 +356,25 @@ Future<_GameMineOutcome?> _analyzeGameParallel({
     if (bestFenAfter != null && bestFenAfter == site.fenAfter) {
       // The score of a position is the score of the line the engine would
       // play from it, so evalA already *is* the after-position's score — no
-      // second search needed to write it down. Recorded as the collapsed
-      // centipawn value rather than the mate score: a mate-in-N seen from
-      // the position before the move is a mate-in-N-minus-one after it, and
-      // saturating beats writing a distance that is off by one.
-      plyEvals[site.plyIndex] = PlyEval(
-        cp: userColor == Side.white ? evalA.effectiveCp : -evalA.effectiveCp,
-        depth: evalA.depth,
+      // second search needed to write it down. A mate-in-N for me before
+      // the move is a mate-in-(N-1) after it (one of my N moves is now on
+      // the board); a mate against me keeps its distance (the opponent still
+      // needs every one of theirs). Written as a mate, not as the collapsed
+      // centipawn value: that packs to 10000-N, which the viewer unpacks as
+      // mate-in-N again — the off-by-one this arithmetic exists to avoid.
+      final mateBefore = evalA.scoreMate;
+      final mateAfter = mateBefore == null
+          ? null
+          : mateBefore > 1
+          ? mateBefore - 1
+          : mateBefore;
+      plyEvals[site.plyIndex] = _whiteNormalizedEval(
+        EvalResult(
+          scoreCp: evalA.scoreCp,
+          scoreMate: mateAfter,
+          depth: evalA.depth,
+        ),
+        sideToMoveIsWhite: userColor == Side.white,
       );
       // Its first move is the one that was played, so the rest of the same
       // line is what the engine plays on from here — no second search to get

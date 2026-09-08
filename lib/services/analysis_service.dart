@@ -319,9 +319,16 @@ class AnalysisService {
         final whiteCp = eval.scoreCp != null
             ? (whiteToMove ? -eval.scoreCp! : eval.scoreCp!)
             : null;
-        final whiteMate = eval.scoreMate != null
-            ? (whiteToMove ? -eval.scoreMate! : eval.scoreMate!)
-            : null;
+        // `mate 0` is the engine's answer for a checkmated root: the side to
+        // move after [uci] is mated, so [uci] delivered it. The distance has
+        // no sign to flip, so take it from who moved and count it from the
+        // root, mate in 1, the way discovery reports the same move.
+        final rawMate = eval.scoreMate;
+        final whiteMate = rawMate == null
+            ? null
+            : rawMate == 0
+            ? (whiteToMove ? 1 : -1)
+            : (whiteToMove ? -rawMate : rawMate);
         final fullPv = [uci, ...eval.pv];
 
         _emitResult(
@@ -341,8 +348,13 @@ class AnalysisService {
         }
       } finally {
         if (worker != null) _pool.release(worker);
-        _workerCurrentMoves.remove(workerIndex);
-        _emitPoolStatus();
+        // A cancel or a newer request has already published its own status
+        // and may have re-used this worker index; a stale loop unwinding must
+        // not remove the new entry or overwrite that status.
+        if (_workerCurrentMoves[workerIndex] == uci) {
+          _workerCurrentMoves.remove(workerIndex);
+        }
+        if (_generation == generation) _emitPoolStatus();
       }
     }
   }

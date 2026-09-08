@@ -66,8 +66,13 @@ class MaiaDbExpander extends NodeExpander {
 
       final childCpWhite = childEval.$1;
 
+      // Both numbers are White-POV, so the loss reads the other way round
+      // when Black is choosing — the same expression as [StockfishExpander]
+      // and [NodeExpander.injectCandidates].
       if (bestCpWhite != null) {
-        final evalLoss = bestCpWhite - childCpWhite;
+        final evalLoss = node.isWhiteToMove
+            ? bestCpWhite - childCpWhite
+            : childCpWhite - bestCpWhite;
         if (evalLoss > config.maxEvalLossCp) continue;
       }
 

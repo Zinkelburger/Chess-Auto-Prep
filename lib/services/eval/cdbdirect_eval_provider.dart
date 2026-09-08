@@ -14,6 +14,7 @@ import 'package:path/path.dart' as p;
 
 import '../../utils/fen_utils.dart';
 import 'cdbdirect_parse.dart';
+import 'chessdb_score.dart';
 import 'db_move_list.dart';
 import 'eval_canonicalize.dart';
 import 'external_eval_provider.dart';
@@ -291,11 +292,20 @@ class CdbDirectEvalProvider
       final parsed = parseCdbDirectResponse(response);
       if (parsed == null) return const EvalLookupResult.hardMiss();
 
-      final whiteCp = isWhiteStm ? parsed.cp : -parsed.cp;
+      // The dump scores like the API: side-to-move centipawns with mates
+      // encoded as ±(30000 − ply).  Decode them the same way the API path
+      // does, so the chain never sees a 29995-centipawn "eval" from here.
+      final decoded = mapChessDbRawScoreStm(parsed.cp);
+      final whiteCp = isWhiteStm ? decoded.stmCp : -decoded.stmCp;
       if (parsed.depth < minDepth) return const EvalLookupResult.shallow();
 
       return EvalLookupResult.found(
-        EvalHit(cp: whiteCp, depth: parsed.depth, bestMove: parsed.bestMove),
+        EvalHit(
+          cp: whiteCp,
+          mate: decoded.mate,
+          depth: parsed.depth,
+          bestMove: parsed.bestMove,
+        ),
       );
     } catch (e) {
       if (kDebugMode) debugPrint('[CdbDirectEvalProvider] lookup failed: $e');
