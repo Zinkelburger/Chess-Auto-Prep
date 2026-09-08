@@ -194,4 +194,46 @@ void main() {
     expect(prefs.getString('display.board_coordinates'), 'everySquare');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('close sits top-right where the gear was and pops the route', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>(
+        create: (_) => AppState(),
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.push<void>(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SettingsScreen(),
+                  ),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final close = find.byTooltip('Close settings (Esc)');
+    expect(close, findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
+    expect(tester.getCenter(close).dx, greaterThan(1280 * 0.9));
+
+    await tester.tap(close);
+    await tester.pumpAndSettle();
+    expect(find.text('open'), findsOneWidget);
+    expect(find.byType(SettingsScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
