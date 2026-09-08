@@ -86,10 +86,22 @@ default is two cores. This controls CPU affinity, not Hivemind's compiled
 worker count; Windows/macOS still use the engine's own CPU allocation.
 Tournament resources remain owned by the tournament runner.
 
-`widgets/board_editor/editable_board.dart` supplies the shared drag surface to
-both ordinary board editors and bughouse. `BoardEditorWidget` binds it to
-`BoardEditorController`; the bughouse cards bind it to their dual-board state.
-Bughouse king moves update the board atomically before validating the position.
+`widgets/board_editor/editable_board.dart` supplies the shared editing surface
+to both ordinary board editors and bughouse, after the lichess editor: the
+`EditorTool` in `core/board_editor_controller.dart` is a pointer (drag pieces,
+drop off the board to remove), a piece brush or the eraser. A brush or the
+eraser acts on press and keeps painting while the button is held; pressing a
+square that already holds the brush piece removes it; right-click swaps a
+brush's colour and otherwise clears the square. Flutter cannot show a piece
+as the cursor, so the board hides the cursor and draws a ghost of the tool.
+`widgets/board_editor/piece_palette.dart` is the spare-piece strip (pointer,
+king to pawn, bin): a drag places once and leaves the pointer in hand, a click
+takes the piece as the brush. `BoardWithSpares` in the editor dialog stacks
+the far side's strip, the board and the near side's strip, following the
+flip. `BoardEditorWidget` binds the surface to `BoardEditorController`; the
+bughouse cards bind it to their dual-board state and share the same tool
+model and palette. Bughouse king moves update the board atomically before
+validating the position.
 
 The app driver sets `BUGHOUSE_DB_HOME` to its disposable profile. An explicit
 archive override is authoritative and cannot fall through to the user's book.
@@ -448,7 +460,9 @@ Train opens multi-chapter imports at the chapter picker instead of silently
 opening the introduction as “Main”. Course headers use the shared repertoire
 chapter detector; Game and Train split PGN collections with `splitPgnIntoGames`.
 The chapter reader reuses `PgnReadingPane` for prose spacing, move anchoring,
-variation focus and return-to-parent navigation. A line's Read action opens
+variation focus and return-to-parent navigation, on a softer charcoal surface.
+Single-chapter files open straight to their lines with a direct route back to
+the repertoire's chapters. A line's Read action opens
 that same chapter reader at the chosen line.
 
 Training settings precede the global mode menu. **Skip** is visible during a
@@ -840,7 +854,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `main_screen.dart` | Mode `IndexedStack`; engine suspend/resume on leaving/entering interactive-engine modes and on `paused`/`hidden`/`detached` (not `inactive`) |
 | `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; when no repertoire is selected shows `RepertoireListBody` inline instead of a placeholder button; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
 | `repertoire_selection_screen.dart` | Full-screen push wrapper around `RepertoireListBody`; pops with selected `RepertoireMetadata` |
-| `repertoire_training_screen.dart` | Training mode shell for **repertoires and studies-as-tactics**; Train tab has two `SegmentedButton` selectors — Mode (Repertoire/Tactics) and Repetition (Spaced repetition/Linear); when no source is loaded the body shows `RepertoireListBody` inline with a "Studies — custom tactics" section; consumes `pendingRepertoirePath`/`pendingTrainStudyPath` via an AppState listener (screen is cached in the IndexedStack); app-bar and PGN-tab edit buttons switch Builder↔Study by source; an empty loaded repertoire offers “Add lines in Repertoire Builder” (not offered for studies); Lines tab uses `TrainingLinesPanel` (categorized Learn/Review view with SRS metadata, per-line playability chips, bottleneck warnings, "needs scoring" banner linking to Builder — suppressed for studies); keyboard: J toggles manual advance, Space acknowledges learn steps or opponent-comment Next, `/` focuses move input (letter keys suppressed in text fields) |
+| `repertoire_training_screen.dart` | Repertoire and study trainer: a stable board beside the source picker, chapter/line browser or current lesson; Learn and Review respect the selected chapter and session size. Read opens the shared chapter reader. Training settings are left of the global mode switcher; Skip is visible, and Line actions include persistent exclusion. The browser restores excluded lines without discarding review history. Keyboard: Space acknowledges the next learning step, arrows skip lines, `/` focuses move input, Escape returns to the browser. |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: N/P/F/E/W/A/T/S letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen; caches `AppState` so dispose does not `context.read` |
@@ -1002,7 +1016,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
 | `layout/empty_state_placeholder.dart` | Shared empty states |
-| `repertoire_list_body.dart` | Embeddable repertoire list with create/rename/delete; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
+| `repertoire_list_body.dart` | Embeddable repertoire list with import/rename/delete; the primary Import repertoire action opens the native file picker immediately, saves under a safe unique filename-derived name, and opens the imported chapter. A quieter Paste PGN action accepts text without setup; naming stays on the library cards and training side/settings remain available in Train. `features/repertoire/widgets/repertoire_import_dialog.dart` owns both flows; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
 | `layout/responsive_split_layout.dart` | Generic split helper |
 
 #### Repertoire-specific

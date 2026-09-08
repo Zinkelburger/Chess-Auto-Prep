@@ -76,6 +76,7 @@ class ReviewProgressRepointer {
           lastReviewedUtc: e.lastReviewedUtc,
           passCount: e.passCount,
           failCount: e.failCount,
+          excluded: e.excluded,
         ),
       );
     }

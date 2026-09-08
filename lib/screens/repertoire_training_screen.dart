@@ -39,6 +39,7 @@ import '../widgets/training/training_results_panel.dart';
 import '../widgets/training/training_settings_panel.dart';
 import '../widgets/training/training_side_dialog.dart';
 import 'repertoire_selection_screen.dart';
+import 'repertoire_chapters_screen.dart';
 
 // ---------------------------------------------------------------------------
 // TRAINING SCREEN
@@ -187,6 +188,26 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       _training.setRepertoire(pick.chapter);
       await _training.loadRepertoire(startChapter: pick.courseChapter);
     }
+  }
+
+  Future<void> _chooseChapter() async {
+    final source = _training.repertoire;
+    if (source == null) return;
+    final directory = p.dirname(source.filePath);
+    final pick = await Navigator.of(context).push<ChapterPick>(
+      MaterialPageRoute(
+        builder: (_) => RepertoireChaptersScreen(
+          repertoire: RepertoireMetadata(
+            filePath: directory,
+            name: p.basename(directory),
+            lastModified: DateTime.now(),
+          ),
+        ),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    _training.setRepertoire(pick.chapter);
+    await _training.loadRepertoire(startChapter: pick.courseChapter);
   }
 
   void _openInBuilder() {
@@ -366,13 +387,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     return p.basename(p.dirname(repertoire.filePath));
   }
 
-  /// `Black Repertoire › Main` as one string, for headings that take text.
-  String _repertoireTitle() {
-    final name = _training.repertoire?.name ?? 'Repertoire';
-    final folder = _repertoireFolder();
-    return folder == null ? name : '$folder › $name';
-  }
-
   /// The app bar's `Repertoire › Chapter` crumb: folder plain, chapter bold,
   /// the same weighting the Builder's breadcrumb uses.
   Widget _repertoireCrumb(ThemeData theme) {
@@ -501,7 +515,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   /// Choose material before starting a lesson.
   Widget _buildBrowser() {
     return TrainerBrowser(
-      title: _repertoireTitle(),
+      title: _training.repertoire!.name,
       subtitle: _browserSubtitle(),
       lines: _training.lines,
       reviewMap: _training.reviewMap,
@@ -509,6 +523,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       activeChapter: _training.activeChapter,
       onChapterSelected: _training.setActiveChapter,
       ungroupedChapter: TrainingSessionController.ungroupedChapter,
+      onBrowseChapters: _training.sourceIsStudy ? null : _chooseChapter,
       onLearn: _training.startLearnSession,
       onReview: _training.startReviewSession,
       learnBatchSize: _sessionCap(_training.settings.newLinesPerSession),
@@ -838,8 +853,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ChapterReaderScreen(
-          repertoireName: _repertoireTitle(),
-          chapterTitle: _chapterTitle(_training.activeChapter),
+          repertoireName: _repertoireFolder() ?? _training.repertoire!.name,
+          chapterTitle: _training.activeChapter == null
+              ? _training.repertoire!.name
+              : _chapterTitle(_training.activeChapter),
           lines: lines,
           initialLineId: initialLineId,
           reviewMap: _training.reviewMap,

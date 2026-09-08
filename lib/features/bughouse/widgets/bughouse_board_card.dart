@@ -66,7 +66,11 @@ class BughouseBoardCard extends StatelessWidget {
                   key: ValueKey('bughouse-editor-${which.name}'),
                   flipped: flipped,
                   pieceAt: position.board.pieceAt,
-                  onTap: (square) => controller.applyTool(which, square),
+                  tool: controller.tool,
+                  onPress: (square) => controller.applyTool(which, square),
+                  onPaint: (square) => controller.paintSquare(which, square),
+                  onSecondaryPress: (square) =>
+                      controller.secondaryPress(which, square),
                   onRemove: (square) =>
                       controller.applyTool(which, square, erase: true),
                   onMove: (from, to) =>

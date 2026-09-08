@@ -80,6 +80,7 @@ class TrainerBrowser extends StatefulWidget {
   /// Start a Learn / Review run over the current scope. Null = nothing to do
   /// (the button renders muted and unclickable).
   final VoidCallback? onLearn;
+  final VoidCallback? onBrowseChapters;
   final VoidCallback? onReview;
 
   /// How many lines one press of each button actually covers, or 0 when the
@@ -122,6 +123,7 @@ class TrainerBrowser extends StatefulWidget {
     this.onChapterSelected,
     required this.ungroupedChapter,
     this.onLearn,
+    this.onBrowseChapters,
     this.onReview,
     this.learnBatchSize = 0,
     this.reviewBatchSize = 0,
@@ -252,8 +254,11 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
   @override
   Widget build(BuildContext context) {
     final chapters = _chapters;
-    final showingChapterList =
-        chapters.isNotEmpty && widget.activeChapter == null;
+    final multipleChapters =
+        chapters.length > 1 ||
+        (chapters.isNotEmpty &&
+            widget.lines.any((line) => widget.chapterOf?.call(line) == null));
+    final showingChapterList = multipleChapters && widget.activeChapter == null;
     final visible = _visibleLines;
     final counts = countLines(visible, widget.reviewMap);
     final matchedChapters = [
@@ -270,14 +275,13 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
           title: widget.activeChapter == null
               ? widget.title
               : _chapterTitle(widget.activeChapter!),
-          subtitle: widget.activeChapter == null
-              ? widget.subtitle
-              : '${visible.length} line${visible.length == 1 ? '' : 's'} in '
-                    'this chapter',
+          subtitle: widget.subtitle,
           counts: counts,
           dense: widget.dense,
-          onBack: widget.activeChapter == null || _selecting
+          onBack: _selecting
               ? null
+              : widget.activeChapter == null || !multipleChapters
+              ? widget.onBrowseChapters
               : () => _openChapter(null),
           onLearn: _selecting ? null : widget.onLearn,
           onReview: _selecting ? null : widget.onReview,

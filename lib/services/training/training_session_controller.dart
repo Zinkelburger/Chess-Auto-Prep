@@ -1123,6 +1123,9 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       afterLineId: currentLine?.id,
     );
     if (next == null) {
+      _lineGeneration++;
+      waitingForUser = false;
+      playingIntro = false;
       phase = TrainingPhase.finished;
       runComplete = true;
       feedback = run.completeMessage(sessionIntent);

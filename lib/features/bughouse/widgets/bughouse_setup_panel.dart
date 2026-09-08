@@ -2,9 +2,8 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../widgets/common/piece_image.dart';
+import '../../../widgets/board_editor/piece_palette.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_state.dart';
 
@@ -38,13 +37,14 @@ class _BughouseSetupPanelState extends State<BughouseSetupPanel> {
         const Text('Place pieces', style: AppTextStyles.subtitle),
         const SizedBox(height: 2),
         const Text(
-          'Drag a piece from here or move one on either board. Right-click a '
-          'square to clear it. Click a reserve slot to add one, right-click '
-          'to take one away.',
+          'Drag pieces where you want them, or click a spare piece and paint '
+          'it onto either board. Right-click clears a square; with a piece in '
+          'hand it switches the colour. Click a reserve slot to add one, '
+          'right-click to take one away.',
           style: AppTextStyles.caption,
         ),
         const SizedBox(height: 8),
-        _Palette(controller: controller),
+        PiecePalette(tool: controller.tool, onSelect: controller.setTool),
         const SizedBox(height: 16),
 
         for (final which in BughouseBoard.values) ...[
@@ -101,101 +101,6 @@ class _BughouseSetupPanelState extends State<BughouseSetupPanel> {
           ],
         ),
       ],
-    );
-  }
-}
-
-/// Every piece that can be placed, plus an eraser.
-class _Palette extends StatelessWidget {
-  const _Palette({required this.controller});
-
-  final BughouseController controller;
-
-  static const _roles = [
-    Role.king,
-    Role.queen,
-    Role.rook,
-    Role.bishop,
-    Role.knight,
-    Role.pawn,
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final tool = controller.tool;
-    return Column(
-      children: [
-        for (final side in Side.values)
-          Row(
-            children: [
-              for (final role in _roles)
-                _PaletteSlot(
-                  selected:
-                      tool is PlaceTool &&
-                      tool.piece.color == side &&
-                      tool.piece.role == role,
-                  onTap: () => controller.setTool(
-                    PlaceTool(Piece(color: side, role: role)),
-                  ),
-                  child: Draggable<Piece>(
-                    data: Piece(color: side, role: role),
-                    dragAnchorStrategy: pointerDragAnchorStrategy,
-                    feedback: Transform.translate(
-                      offset: const Offset(-20, -20),
-                      child: PieceImage(
-                        piece: Piece(color: side, role: role),
-                        size: 40,
-                      ),
-                    ),
-                    child: PieceImage(
-                      piece: Piece(color: side, role: role),
-                      size: 28,
-                    ),
-                  ),
-                ),
-              if (side == Side.black) ...[
-                const Spacer(),
-                _PaletteSlot(
-                  selected: tool is EraseTool,
-                  onTap: () => controller.setTool(const EraseTool()),
-                  child: const Icon(Icons.backspace_outlined, size: 20),
-                ),
-              ],
-            ],
-          ),
-      ],
-    );
-  }
-}
-
-class _PaletteSlot extends StatelessWidget {
-  const _PaletteSlot({
-    required this.selected,
-    required this.onTap,
-    required this.child,
-  });
-
-  final bool selected;
-  final VoidCallback onTap;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        width: 38,
-        height: 38,
-        margin: const EdgeInsets.all(1),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.surfaceHighlight : AppColors.surfaceInset,
-          borderRadius: BorderRadius.circular(4),
-          border: selected
-              ? Border.all(color: Theme.of(context).colorScheme.primary)
-              : null,
-        ),
-        child: child,
-      ),
     );
   }
 }

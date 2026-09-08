@@ -316,17 +316,14 @@ class _SidePanel extends StatelessWidget {
                       BughouseMode.play => 'ANALYSIS',
                     }, style: AppTextStyles.eyebrow),
                   ),
-                  PopupMenuButton<BughouseMode>(
-                    tooltip: 'More bughouse tools',
-                    icon: const Icon(Icons.more_horiz),
-                    onSelected: controller.setMode,
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: BughouseMode.tournament,
-                        child: Text('Engine tournament'),
-                      ),
-                    ],
-                  ),
+                  if (mode != BughouseMode.tournament)
+                    IconButton(
+                      tooltip: 'Engine tournament',
+                      icon: const Icon(Icons.emoji_events_outlined, size: 20),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () =>
+                          controller.setMode(BughouseMode.tournament),
+                    ),
                   _ModeButton(
                     controller: controller,
                     mode: mode == BughouseMode.tournament

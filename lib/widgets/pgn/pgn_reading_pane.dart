@@ -31,6 +31,7 @@ typedef PgnDocumentBuilder =
 /// never changes the board; only a navigation action requests an anchor.
 class PgnReadingPane extends StatefulWidget {
   final Object selection;
+  final Color backgroundColor;
   final bool showReadingOptions;
   final List<MoveNode> analysisPath;
   final int branchPly;
@@ -43,6 +44,7 @@ class PgnReadingPane extends StatefulWidget {
   const PgnReadingPane({
     super.key,
     required this.selection,
+    this.backgroundColor = AppColors.pgnSurface,
     this.showReadingOptions = true,
     required this.analysisPath,
     required this.branchPly,
@@ -52,6 +54,12 @@ class PgnReadingPane extends StatefulWidget {
     required this.onNode,
     required this.documentBuilder,
   });
+
+  static Color surfaceOf(BuildContext context) =>
+      context
+          .findAncestorWidgetOfExactType<PgnReadingPane>()
+          ?.backgroundColor ??
+      AppColors.pgnSurface;
 
   @override
   State<PgnReadingPane> createState() => PgnReadingPaneState();
@@ -267,7 +275,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
     final branches = _branches;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppColors.pgnSurface,
+        color: widget.backgroundColor,
         border: Border.all(color: const Color(0xFF363B43)),
         borderRadius: BorderRadius.circular(8),
       ),

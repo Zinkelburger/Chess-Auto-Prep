@@ -1,15 +1,29 @@
-/// Free-placement editor board.
+/// Free-placement editor board, after the lichess editor.
 ///
-/// Unlike [ChessBoardWidget] there is no legality checking: tapping applies
-/// the palette tool (place/erase) and dragging moves any piece anywhere —
-/// dragging off the board removes it. Position changes are passed to the
-/// owning controller; this widget owns only the active drag.
+/// There is no legality checking. What the pointer does depends on the
+/// [EditorTool] in hand:
+///
+///   * pointer — press a piece and drag it anywhere; dropping it off the
+///     board removes it. A bare click does nothing.
+///   * brush — a press places the piece (a press on a square that already
+///     holds that piece removes it), and keeping the button down paints the
+///     piece over every square the pointer crosses.
+///   * eraser — the same stroke, clearing squares.
+///
+/// A right-click is passed up as [onSecondaryPress]; the owner decides what
+/// it means. Palette pieces dropped onto the board arrive through [onPlace].
+/// Flutter cannot show a piece as the mouse cursor the way lichess does, so
+/// while a brush or the eraser is in hand the cursor is hidden over the
+/// board and a ghost of the tool follows the pointer instead. Position
+/// changes are passed to the owning controller; this widget owns only the
+/// active stroke.
 library;
 
 import 'package:dartchess/dartchess.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 
+import '../../core/board_editor_controller.dart';
 import '../../theme/app_colors.dart';
 import '../common/piece_image.dart';
 
@@ -17,18 +31,39 @@ class EditableBoard extends StatefulWidget {
   const EditableBoard({
     super.key,
     required this.pieceAt,
-    required this.onTap,
+    required this.tool,
+    required this.onPress,
+    required this.onPaint,
+    required this.onSecondaryPress,
     required this.onRemove,
     required this.onMove,
     required this.onPlace,
     this.flipped = false,
   });
+
   final Piece? Function(Square) pieceAt;
-  final ValueChanged<Square> onTap;
+  final EditorTool tool;
+
+  /// Primary button went down on a square while a brush or the eraser is in
+  /// hand.
+  final ValueChanged<Square> onPress;
+
+  /// The held pointer crossed onto a new square during a brush/eraser stroke.
+  final ValueChanged<Square> onPaint;
+
+  /// Secondary (right) button on a square, whatever the tool.
+  final ValueChanged<Square> onSecondaryPress;
+
+  /// A piece was dragged off the board.
   final ValueChanged<Square> onRemove;
+
+  /// A piece was dragged from one square to another (pointer tool).
   final void Function(Square, Square) onMove;
+
+  /// A palette piece was dropped on a square.
   final void Function(Square, Piece) onPlace;
   final bool flipped;
+
   @override
   State<EditableBoard> createState() => _EditableBoardState();
 }
@@ -39,11 +74,24 @@ class _EditableBoardState extends State<EditableBoard> {
   static const Color lightSquareColor = AppColors.boardLightSquare;
   static const Color darkSquareColor = AppColors.boardDarkSquare;
 
+  // Pointer-tool drag of a piece already on the board.
   Square? _dragFrom;
   Piece? _draggedPiece;
   Offset? _dragPosition;
   bool _isDragging = false;
   Offset? _panStart;
+
+  // Brush/eraser stroke. A stroke that began by lifting the brush's own piece
+  // off a square must not start painting it back the moment the pointer
+  // moves, so that press deletes and then the stroke is inert.
+  bool _painting = false;
+  bool _deleteStroke = false;
+  Square? _lastPainted;
+
+  /// Where the pointer is while hovering, for the tool ghost.
+  Offset? _hover;
+
+  bool get _paints => widget.tool is PieceBrush || widget.tool is EraserTool;
 
   /// Map pointer coordinates to either board orientation.
   Square? _squareAt(Offset local, double squareSize) {
@@ -63,10 +111,21 @@ class _EditableBoardState extends State<EditableBoard> {
         : (file * squareSize, (7 - rank) * squareSize);
   }
 
-  void _onPanStart(DragStartDetails details, double squareSize) {
+  /// Every stroke starts here, on the press itself rather than on release:
+  /// that is what lets a held button paint, and it is what lichess does.
+  void _onPanDown(DragDownDetails details, double squareSize) {
     _panStart = details.localPosition;
     final square = _squareAt(details.localPosition, squareSize);
     if (square == null) return;
+    if (_paints) {
+      final tool = widget.tool;
+      _deleteStroke =
+          tool is PieceBrush && widget.pieceAt(square) == tool.piece;
+      _painting = true;
+      _lastPainted = square;
+      widget.onPress(square);
+      return;
+    }
     final piece = widget.pieceAt(square);
     if (piece != null) {
       _dragFrom = square;
@@ -74,8 +133,19 @@ class _EditableBoardState extends State<EditableBoard> {
     }
   }
 
-  void _onPanUpdate(DragUpdateDetails details) {
+  void _onPanUpdate(DragUpdateDetails details, double squareSize) {
     if (!mounted) return;
+    if (_painting) {
+      _hover = details.localPosition;
+      final square = _squareAt(details.localPosition, squareSize);
+      if (!_deleteStroke && square != null && square != _lastPainted) {
+        _lastPainted = square;
+        widget.onPaint(square);
+      } else {
+        setState(() {});
+      }
+      return;
+    }
     if (_draggedPiece == null || _panStart == null) return;
     if (!_isDragging && (details.localPosition - _panStart!).distance > 3) {
       _isDragging = true;
@@ -93,21 +163,33 @@ class _EditableBoardState extends State<EditableBoard> {
       } else if (target != _dragFrom) {
         widget.onMove(_dragFrom!, target);
       }
-    } else if (!_isDragging && _panStart != null) {
-      // Desktop presses usually win the pan arena; treat as a tap.
-      final square = _squareAt(_panStart!, squareSize);
-      if (square != null) widget.onTap(square);
     }
     if (!mounted) return;
-    setState(_clearDrag);
+    setState(_clearStroke);
   }
 
-  void _clearDrag() {
+  void _clearStroke() {
     _dragFrom = null;
     _draggedPiece = null;
     _dragPosition = null;
     _isDragging = false;
     _panStart = null;
+    _painting = false;
+    _deleteStroke = false;
+    _lastPainted = null;
+  }
+
+  MouseCursor _cursor(double squareSize) {
+    if (_paints) return SystemMouseCursors.none;
+    if (_isDragging) return SystemMouseCursors.grabbing;
+    final hover = _hover;
+    if (hover != null) {
+      final square = _squareAt(hover, squareSize);
+      if (square != null && widget.pieceAt(square) != null) {
+        return SystemMouseCursors.grab;
+      }
+    }
+    return SystemMouseCursors.basic;
   }
 
   @override
@@ -132,54 +214,92 @@ class _EditableBoardState extends State<EditableBoard> {
               );
               if (square != null) widget.onPlace(square, details.data);
             },
-            builder: (context, _, _) => GestureDetector(
-              dragStartBehavior: DragStartBehavior.down,
-              onSecondaryTapUp: (d) {
+            builder: (context, _, _) => MouseRegion(
+              cursor: _cursor(squareSize),
+              onHover: (event) {
                 if (!mounted) return;
-                final square = _squareAt(d.localPosition, squareSize);
-                if (square != null) widget.onRemove(square);
+                setState(() => _hover = event.localPosition);
               },
-              onPanCancel: () {
-                if (mounted) setState(_clearDrag);
+              onExit: (_) {
+                if (!mounted) return;
+                setState(() => _hover = null);
               },
-              onPanStart: (d) => _onPanStart(d, squareSize),
-              onPanUpdate: _onPanUpdate,
-              onPanEnd: (_) => _onPanEnd(squareSize),
-              onTapUp: (d) {
-                if (_isDragging) return;
-                final square = _squareAt(d.localPosition, squareSize);
-                if (square != null) widget.onTap(square);
-              },
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  CustomPaint(
-                    painter: _EditorBoardPainter(
-                      lightColor: lightSquareColor,
-                      darkColor: darkSquareColor,
+              child: GestureDetector(
+                // A pan, not a raw pointer listener: the bughouse boards live
+                // in a scrolling column, and the pan is what keeps a stroke
+                // across the board from scrolling the page instead.
+                dragStartBehavior: DragStartBehavior.down,
+                onSecondaryTapDown: (d) {
+                  if (!mounted) return;
+                  final square = _squareAt(d.localPosition, squareSize);
+                  if (square != null) widget.onSecondaryPress(square);
+                },
+                onPanCancel: () {
+                  if (mounted) setState(_clearStroke);
+                },
+                onPanDown: (d) => _onPanDown(d, squareSize),
+                onPanUpdate: (d) => _onPanUpdate(d, squareSize),
+                onPanEnd: (_) => _onPanEnd(squareSize),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    CustomPaint(
+                      painter: _EditorBoardPainter(
+                        lightColor: lightSquareColor,
+                        darkColor: darkSquareColor,
+                      ),
+                      size: Size(boardSize, boardSize),
                     ),
-                    size: Size(boardSize, boardSize),
-                  ),
-                  ..._buildPieces(squareSize),
-                  if (_isDragging &&
-                      _draggedPiece != null &&
-                      _dragPosition != null)
-                    Positioned(
-                      left: _dragPosition!.dx - squareSize / 2,
-                      top: _dragPosition!.dy - squareSize / 2,
-                      child: IgnorePointer(
-                        child: PieceImage(
-                          piece: _draggedPiece!,
-                          size: squareSize,
+                    ..._buildPieces(squareSize),
+                    if (_isDragging &&
+                        _draggedPiece != null &&
+                        _dragPosition != null)
+                      Positioned(
+                        left: _dragPosition!.dx - squareSize / 2,
+                        top: _dragPosition!.dy - squareSize / 2,
+                        child: IgnorePointer(
+                          child: PieceImage(
+                            piece: _draggedPiece!,
+                            size: squareSize,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                    ?_toolGhost(squareSize),
+                  ],
+                ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+
+  /// The tool in hand, drawn where the cursor would be. Smaller than a
+  /// square so the piece underneath stays readable, the way a cursor image
+  /// never covers what it points at.
+  Widget? _toolGhost(double squareSize) {
+    final at = _hover;
+    if (at == null || !_paints) return null;
+    final size = squareSize * 0.8;
+    final Widget ghost = switch (widget.tool) {
+      PieceBrush(:final piece) => PieceImage(piece: piece, size: size),
+      EraserTool() => Icon(
+        Icons.delete_outline,
+        size: size * 0.7,
+        color: AppColors.ink,
+        shadows: const [Shadow(color: Colors.black54, blurRadius: 4)],
+      ),
+      PointerTool() => const SizedBox.shrink(),
+    };
+    return Positioned(
+      left: at.dx - size / 2,
+      top: at.dy - size / 2,
+      width: size,
+      height: size,
+      child: IgnorePointer(
+        child: Opacity(opacity: 0.85, child: Center(child: ghost)),
+      ),
     );
   }
 

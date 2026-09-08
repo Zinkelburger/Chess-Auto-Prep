@@ -1,277 +1,190 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/repertoire_creation.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../utils/app_messages.dart';
 import '../../../utils/safe_file_name.dart';
 import '../../../widgets/pgn_import_dialog.dart';
 
+/// The normal import starts at the native picker and uses the file's name.
+/// Naming and training settings do not block bringing a file into the library.
 Future<RepertoireCreationResult?> showRepertoireImportDialog(
   BuildContext context, {
   required List<String> existingNames,
   Future<PickedPgnImport?> Function() pickPgn = pickPgnImport,
-}) => showDialog<RepertoireCreationResult>(
-  context: context,
-  builder: (_) =>
-      _RepertoireImportDialog(existingNames: existingNames, pickPgn: pickPgn),
-);
-
-class _RepertoireImportDialog extends StatefulWidget {
-  const _RepertoireImportDialog({
-    required this.existingNames,
-    required this.pickPgn,
-  });
-
-  final List<String> existingNames;
-  final Future<PickedPgnImport?> Function() pickPgn;
-
-  @override
-  State<_RepertoireImportDialog> createState() =>
-      _RepertoireImportDialogState();
+}) async {
+  try {
+    final picked = await pickPgn();
+    if (!context.mounted || picked == null) return null;
+    final source = picked.result;
+    if (picked.error != null || source == null) {
+      showAppSnackBar(
+        context,
+        picked.error ?? 'Could not read that file.',
+        isError: true,
+      );
+      return null;
+    }
+    if (source.gameCount == 0 ||
+        pgn.mainlineSansOf(source.pgnContent).isEmpty) {
+      showAppSnackBar(
+        context,
+        'That PGN has no moves to train.',
+        isError: true,
+      );
+      return null;
+    }
+    final name = _availableName(
+      picked.suggestedName ??
+          p.basenameWithoutExtension(source.fileName ?? 'Imported repertoire'),
+      existingNames,
+    );
+    return await createRepertoire(
+      name: name,
+      color: picked.suggestedColor ?? 'White',
+      pgnContent: source.pgnContent,
+      gameCount: source.gameCount,
+    );
+  } catch (e) {
+    debugPrint('Import repertoire failed: $e');
+    if (context.mounted) {
+      showAppSnackBar(
+        context,
+        'Could not import the repertoire. Please try again.',
+        isError: true,
+      );
+    }
+    return null;
+  }
 }
 
-class _RepertoireImportDialogState extends State<_RepertoireImportDialog> {
-  final _name = TextEditingController();
-  final _paste = TextEditingController();
-  PgnImportResult? _file;
-  String _color = 'White';
-  bool _colorChosen = false;
-  bool _pasting = false;
-  bool _reading = false;
-  bool _saving = false;
-  String? _nameError;
-  String? _sourceError;
-  String? _saveError;
+String _availableName(String suggested, List<String> existingNames) {
+  var base = suggested
+      .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_')
+      .trim()
+      .replaceAll(RegExp(r'[. ]+$'), '');
+  // Leave room for a duplicate suffix within the shared 120-character limit.
+  if (base.length > 100) base = base.substring(0, 100);
+  if (validateSafeFileName(base) != null) base = 'Imported repertoire';
+  final used = existingNames.map((name) => name.toLowerCase()).toSet();
+  var name = base;
+  for (var suffix = 2; used.contains(name.toLowerCase()); suffix++) {
+    name = '$base ($suffix)';
+  }
+  return name;
+}
 
-  bool get _busy => _reading || _saving;
-  String get _content =>
-      _pasting ? _paste.text.trim() : _file?.pgnContent ?? '';
-  int get _count =>
-      _pasting ? pgn.countPgnGames(_content) : _file?.gameCount ?? 0;
+Future<RepertoireCreationResult?> showRepertoirePasteDialog(
+  BuildContext context, {
+  required List<String> existingNames,
+}) => showDialog<RepertoireCreationResult>(
+  context: context,
+  builder: (_) => _RepertoirePasteDialog(existingNames: existingNames),
+);
+
+class _RepertoirePasteDialog extends StatefulWidget {
+  const _RepertoirePasteDialog({required this.existingNames});
+
+  final List<String> existingNames;
+
+  @override
+  State<_RepertoirePasteDialog> createState() => _RepertoirePasteDialogState();
+}
+
+class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
+  final _paste = TextEditingController();
+  bool _saving = false;
+  String? _error;
 
   @override
   void dispose() {
-    _name.dispose();
     _paste.dispose();
     super.dispose();
   }
 
-  Future<void> _pickFile() async {
-    setState(() {
-      _reading = true;
-      _sourceError = null;
-      _saveError = null;
-    });
-    try {
-      final picked = await widget.pickPgn();
-      if (!mounted || picked == null) return;
-      setState(() {
-        _sourceError = picked.error;
-        if (picked.result != null) {
-          _file = picked.result;
-          _pasting = false;
-          if (_name.text.trim().isEmpty) {
-            _name.text = picked.suggestedName ?? '';
-            _nameError = null;
-          }
-          if (!_colorChosen && picked.suggestedColor != null) {
-            _color = picked.suggestedColor!;
-          }
-        }
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() => _sourceError = 'Could not read that file. Try again.');
-      }
-    } finally {
-      if (mounted) setState(() => _reading = false);
-    }
-  }
-
   Future<void> _import() async {
-    final name = _name.text.trim();
-    final nameError =
-        validateSafeFileName(name) ??
-        (widget.existingNames.any((n) => n.toLowerCase() == name.toLowerCase())
-            ? 'A repertoire named "$name" already exists.'
-            : null);
-    // A header or a comment alone cannot be trained.
-    final sourceError = _count == 0 || pgn.mainlineSansOf(_content).isEmpty
-        ? 'Choose a PGN file or paste PGN with moves to train.'
-        : null;
+    final content = _paste.text.trim();
+    final count = pgn.countPgnGames(content);
+    if (count == 0 || pgn.mainlineSansOf(content).isEmpty) {
+      setState(() => _error = 'Paste PGN with moves to train.');
+      return;
+    }
     setState(() {
-      _nameError = nameError;
-      _sourceError = sourceError;
-      _saveError = null;
+      _saving = true;
+      _error = null;
     });
-    if (nameError != null || sourceError != null) return;
-
-    setState(() => _saving = true);
     try {
+      final color = await inferImportColor(content);
+      if (!mounted) return;
       final created = await createRepertoire(
-        name: name,
-        color: _color,
-        pgnContent: _content,
-        gameCount: _count,
+        name: _availableName('Pasted repertoire', widget.existingNames),
+        color: color ?? 'White',
+        pgnContent: content,
+        gameCount: count,
       );
       if (mounted) Navigator.of(context).pop(created);
     } catch (e) {
-      debugPrint('Import repertoire failed: $e');
+      debugPrint('Paste repertoire failed: $e');
       if (mounted) {
         setState(() {
           _saving = false;
-          _saveError =
-              'Could not import the repertoire. Your PGN is still here; try again.';
+          _error = 'Could not import. Your PGN is still here; try again.';
         });
       }
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return PopScope(
-      canPop: !_saving,
-      child: AlertDialog(
-        title: const Text('Import repertoire'),
-        scrollable: true,
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                key: const ValueKey('repertoire-import-name'),
-                controller: _name,
-                enabled: !_busy,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'Name',
-                  hintText: 'e.g. Caro-Kann',
-                  errorText: _nameError,
-                  border: const OutlineInputBorder(),
-                ),
-                onChanged: (_) => setState(() {
-                  _nameError = null;
-                  _saveError = null;
-                }),
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_saving,
+    child: AlertDialog(
+      title: const Text('Paste PGN', style: AppTextStyles.title),
+      scrollable: true,
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Add your moves now. You can rename the repertoire later.',
+              style: AppTextStyles.muted,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              key: const ValueKey('repertoire-import-pgn'),
+              controller: _paste,
+              enabled: !_saving,
+              autofocus: true,
+              minLines: 6,
+              maxLines: 10,
+              style: AppTextStyles.mono,
+              decoration: InputDecoration(
+                hintText: '1. e4 e5 2. Nf3 Nc6…',
+                errorText: _error,
+                errorMaxLines: 3,
+                border: const OutlineInputBorder(),
               ),
-              const SizedBox(height: 20),
-              const Text('PGN file', style: AppTextStyles.bodyStrong),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _pickFile,
-                style: OutlinedButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.all(16),
-                  side: BorderSide(color: cs.primary),
-                  foregroundColor: cs.onSurface,
-                ),
-                icon: _reading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(Icons.folder_open, color: cs.primary),
-                label: Text(
-                  _reading
-                      ? 'Reading PGN…'
-                      : !_pasting && _file != null
-                      ? _file!.fileName ?? 'Change PGN file…'
-                      : 'Choose file…',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() {
-                          _pasting = !_pasting;
-                          _sourceError = null;
-                          _saveError = null;
-                        }),
-                  child: Text(
-                    _pasting ? 'Use a file instead' : 'Paste PGN instead',
-                  ),
-                ),
-              ),
-              if (_pasting)
-                TextField(
-                  key: const ValueKey('repertoire-import-pgn'),
-                  controller: _paste,
-                  enabled: !_busy,
-                  minLines: 4,
-                  maxLines: 6,
-                  style: AppTextStyles.mono,
-                  decoration: const InputDecoration(
-                    labelText: 'PGN',
-                    alignLabelWithHint: true,
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => setState(() {
-                    _sourceError = null;
-                    _saveError = null;
-                  }),
-                ),
-              if (_sourceError != null)
-                Text(
-                  _sourceError!,
-                  style: AppTextStyles.body.copyWith(color: cs.error),
-                )
-              else if (_count > 0)
-                Text(
-                  '${_count == 1 ? '1 game' : '$_count games'} ready to import',
-                  style: AppTextStyles.muted,
-                ),
-              const SizedBox(height: 20),
-              const Text('Train as', style: AppTextStyles.bodyStrong),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'White',
-                    label: Text('White'),
-                    icon: Icon(Icons.circle_outlined, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: 'Black',
-                    label: Text('Black'),
-                    icon: Icon(Icons.circle, size: 16),
-                  ),
-                ],
-                selected: {_color},
-                onSelectionChanged: _busy
-                    ? null
-                    : (selection) => setState(() {
-                        _color = selection.first;
-                        _colorChosen = true;
-                      }),
-              ),
-              if (_saveError != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _saveError!,
-                  style: AppTextStyles.body.copyWith(color: cs.error),
-                ),
-              ],
-            ],
-          ),
+              onChanged: (_) {
+                if (!mounted) return;
+                setState(() => _error = null);
+              },
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: _saving ? null : () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: _busy || _content.isEmpty ? null : _import,
-            child: Text(_saving ? 'Importing…' : 'Import'),
-          ),
-        ],
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving || _paste.text.trim().isEmpty ? null : _import,
+          child: Text(_saving ? 'Importing…' : 'Import'),
+        ),
+      ],
+    ),
+  );
 }

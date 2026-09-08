@@ -214,8 +214,8 @@ void main() {
       final moved = before.last;
       csv.reviews =
           'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,'
-          'last_rating,last_reviewed_utc,pass_count,fail_count\n'
-          '${RepertoireReviewEntry(repertoireId: main_, lineId: moved.id, lineName: moved.name, intervalDays: 12, lastRating: 'good', passCount: 3).toCsvRow()}\n';
+          'last_rating,last_reviewed_utc,pass_count,fail_count,excluded\n'
+          '${RepertoireReviewEntry(repertoireId: main_, lineId: moved.id, lineName: moved.name, intervalDays: 12, lastRating: 'good', passCount: 3, excluded: true).toCsvRow()}\n';
 
       final result = await splitter.split(main_, isWhite: false);
       final two = result.createdPaths.last;
@@ -229,6 +229,7 @@ void main() {
       expect(entry.repertoireId, two);
       expect(entry.intervalDays, 12);
       expect(entry.passCount, 3);
+      expect(entry.excluded, isTrue);
     },
   );
 

@@ -13,20 +13,53 @@ import '../utils/fen_utils.dart' show expandFen;
 import '../utils/safe_change_notifier.dart';
 import '../utils/chess_utils.dart';
 
-/// The palette tool currently in hand.
+/// What the pointer does on an editor board — the lichess editor's model,
+/// shared by every board editor in the app (the standard one and bughouse).
+///
+/// The pointer is the resting state: pieces are dragged around, and nothing
+/// happens on a bare click. A [PieceBrush] paints one piece; the [EraserTool]
+/// paints emptiness. Both act on press and keep acting while the button is
+/// held and the pointer crosses squares, so a rank of pawns is one stroke.
 sealed class EditorTool {
   const EditorTool();
 }
 
-/// Place [piece] on tapped squares (tapping the same piece removes it).
+/// Move pieces by dragging; a drop off the board removes the piece.
+class PointerTool extends EditorTool {
+  const PointerTool();
+
+  @override
+  bool operator ==(Object other) => other is PointerTool;
+
+  @override
+  int get hashCode => (PointerTool).hashCode;
+}
+
+/// Place [piece] on pressed squares (pressing the same piece removes it).
 class PieceBrush extends EditorTool {
   final Piece piece;
   const PieceBrush(this.piece);
+
+  /// The same piece in the other colour — what a right-click switches to.
+  PieceBrush get flipped =>
+      PieceBrush(Piece(color: piece.color.opposite, role: piece.role));
+
+  @override
+  bool operator ==(Object other) => other is PieceBrush && other.piece == piece;
+
+  @override
+  int get hashCode => Object.hash(PieceBrush, piece);
 }
 
-/// Remove pieces from tapped squares.
+/// Remove pieces from pressed squares.
 class EraserTool extends EditorTool {
   const EraserTool();
+
+  @override
+  bool operator ==(Object other) => other is EraserTool;
+
+  @override
+  int get hashCode => (EraserTool).hashCode;
 }
 
 class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
@@ -58,8 +91,12 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
   int _halfmoves = 0;
   int _fullmoves = 1;
 
-  EditorTool? _tool;
-  EditorTool? get tool => _tool;
+  EditorTool _tool = const PointerTool();
+  EditorTool get tool => _tool;
+
+  /// Board orientation: `true` shows Black at the bottom.
+  bool _flipped = false;
+  bool get flipped => _flipped;
 
   // ── Piece placement ──────────────────────────────────────────────────
 
@@ -83,9 +120,11 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
     _afterBoardChange();
   }
 
-  /// Apply the active tool to [square]: place the brush piece (tap-again
-  /// removes), or erase.  No-op when no tool is selected.
-  void tapSquare(Square square) {
+  /// A press on [square] with the active tool: the brush places its piece
+  /// (pressing a square that already holds that piece removes it), the
+  /// eraser clears the square, and the pointer does nothing — it moves
+  /// pieces by dragging instead.
+  void pressSquare(Square square) {
     switch (_tool) {
       case PieceBrush(:final piece):
         if (_board.pieceAt(square) == piece) {
@@ -95,13 +134,49 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
         }
       case EraserTool():
         removePiece(square);
-      case null:
+      case PointerTool():
         break;
     }
   }
 
-  void selectTool(EditorTool? tool) {
+  /// The pointer crossed onto [square] with the button still held: keep
+  /// painting with the active tool. Unlike [pressSquare] this never toggles,
+  /// so a stroke across a rank fills every square it touches.
+  void paintSquare(Square square) {
+    switch (_tool) {
+      case PieceBrush(:final piece):
+        if (_board.pieceAt(square) != piece) setPiece(square, piece);
+      case EraserTool():
+        removePiece(square);
+      case PointerTool():
+        break;
+    }
+  }
+
+  /// A right-click on [square]: with a brush in hand it swaps the brush to
+  /// the other colour (lichess' shortcut for setting up both sides without
+  /// walking back to the palette); otherwise it clears the square.
+  void secondaryPressSquare(Square square) {
+    switch (_tool) {
+      case PieceBrush():
+        flipBrushColour();
+      case EraserTool() || PointerTool():
+        removePiece(square);
+    }
+  }
+
+  void flipBrushColour() {
+    if (_tool case PieceBrush(:final flipped)) selectTool(flipped);
+  }
+
+  void selectTool(EditorTool tool) {
+    if (tool == _tool) return;
     _tool = tool;
+    notifyListeners();
+  }
+
+  void toggleFlip() {
+    _flipped = !_flipped;
     notifyListeners();
   }
 

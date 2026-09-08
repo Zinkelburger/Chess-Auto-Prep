@@ -1,4 +1,6 @@
-/// Full board editor in a dialog.  Resolves to the validated [Position] on
+/// Full board editor in a dialog, laid out like the lichess editor: the far
+/// side's spare pieces above the board, the near side's below, and the
+/// position controls beside it. Resolves to the validated [Position] on
 /// confirm, or `null` when cancelled.
 library;
 
@@ -59,27 +61,15 @@ class _BoardEditorDialogState extends State<BoardEditorDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 900, maxHeight: 640),
+        constraints: const BoxConstraints(maxWidth: 960, maxHeight: 720),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth >= 700;
 
-              final boardColumn = Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Expanded(
-                    child: Center(
-                      child: AspectRatio(
-                        aspectRatio: 1,
-                        child: BoardEditorWidget(controller: _controller),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  PiecePalette(controller: _controller),
-                ],
+              final boardColumn = Center(
+                child: BoardWithSpares(controller: _controller),
               );
 
               final setupColumn = Column(
@@ -129,6 +119,69 @@ class _BoardEditorDialogState extends State<BoardEditorDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The board with a strip of spare pieces above and below it, sized so the
+/// three fit the space together. The strips follow the orientation: the
+/// far side's pieces are above the board, the near side's below.
+class BoardWithSpares extends StatelessWidget {
+  const BoardWithSpares({super.key, required this.controller});
+
+  final BoardEditorController controller;
+
+  static const double _gap = 8;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
+        // Strips are an eighth of the board tall until the cap kicks in, so
+        // size for that first and take the cap into account if it applies.
+        var board = width < (height - 2 * _gap) / 1.25
+            ? width
+            : (height - 2 * _gap) / 1.25;
+        final strip = SparePieceRow.heightFor(board);
+        if (strip < board / 8) {
+          final fromHeight = height - 2 * _gap - 2 * strip;
+          board = width < fromHeight ? width : fromHeight;
+        }
+        return ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) {
+            final far = controller.flipped ? Side.white : Side.black;
+            final near = far.opposite;
+            return SizedBox(
+              width: board,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SparePieceRow(
+                    side: far,
+                    tool: controller.tool,
+                    onSelect: controller.selectTool,
+                  ),
+                  const SizedBox(height: _gap),
+                  SizedBox(
+                    width: board,
+                    height: board,
+                    child: BoardEditorWidget(controller: controller),
+                  ),
+                  const SizedBox(height: _gap),
+                  SparePieceRow(
+                    side: near,
+                    tool: controller.tool,
+                    onSelect: controller.selectTool,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

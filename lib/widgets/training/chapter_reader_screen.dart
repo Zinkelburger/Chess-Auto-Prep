@@ -312,7 +312,9 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
           automaticallyImplyLeading: false,
           titleSpacing: 16,
           title: Text(
-            '${widget.repertoireName} ▸ ${widget.chapterTitle}',
+            widget.repertoireName == widget.chapterTitle
+                ? widget.repertoireName
+                : '${widget.repertoireName} ▸ ${widget.chapterTitle}',
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
           ),
@@ -487,6 +489,10 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
                     line.readOnlyLabel == null &&
                     !(widget.reviewMap[line.id]?.excluded ?? false))
                   FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.srsNew,
+                      foregroundColor: AppColors.onWarning,
+                    ),
                     onPressed: () => _train(line),
                     icon: const Icon(Icons.school_outlined, size: 16),
                     label: const Text('Train this line'),
@@ -525,6 +531,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
       padding: const EdgeInsets.all(12),
       child: PgnReadingPane(
         key: _readingPaneKey,
+        backgroundColor: AppColors.surfaceContainer,
         selection: (
           _active,
           model?.mainLineIndex,
