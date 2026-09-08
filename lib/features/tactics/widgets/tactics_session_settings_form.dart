@@ -5,6 +5,8 @@ import '../../../widgets/common/choice_field.dart';
 import '../../../widgets/labeled_toggle.dart';
 import '../models/tactics_session_settings.dart';
 
+enum TacticsSettingsSection { session, selection }
+
 /// Session settings form (recency window, order, mistake-type filter,
 /// 1-star toggle).
 class TacticsSessionSettingsForm extends StatelessWidget {
@@ -13,9 +15,11 @@ class TacticsSessionSettingsForm extends StatelessWidget {
     required this.settings,
     required this.showCustomType,
     required this.onChanged,
+    this.section,
   });
 
   final TacticsSessionSettings settings;
+  final TacticsSettingsSection? section;
 
   /// Whether the database contains any custom puzzles; the checkbox is
   /// hidden otherwise so the dialog only offers choices that exist.
@@ -36,94 +40,111 @@ class TacticsSessionSettingsForm extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _ExpiryField(
-          days: settings.maxAgeDays,
-          onChanged: (days) => onChanged(
-            days == null
-                ? settings.copyWith(clearMaxAgeDays: true)
-                : settings.copyWith(maxAgeDays: days),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            const Text(
-              'Order:',
-              style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+        if (section != TacticsSettingsSection.session) ...[
+          _ExpiryField(
+            days: settings.maxAgeDays,
+            onChanged: (days) => onChanged(
+              days == null
+                  ? settings.copyWith(clearMaxAgeDays: true)
+                  : settings.copyWith(maxAgeDays: days),
             ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 200,
-              child: ChoiceField<TacticsSessionOrder>(
-                value: settings.order,
-                compact: true,
-                style: const TextStyle(fontSize: 13),
-                items: [
-                  for (final entry in _orderLabels.entries)
-                    ChoiceItem(value: entry.key, label: entry.value),
-                ],
-                onChanged: (v) => onChanged(settings.copyWith(order: v)),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (section != TacticsSettingsSection.selection) ...[
+          const Text('Puzzle order', style: AppTextStyles.bodyStrong),
+          const SizedBox(height: 8),
+          const Text(
+            'Start with recent games, revisit neglected puzzles, or focus on the ones you miss most often.',
+            style: AppTextStyles.muted,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text(
+                'Order:',
+                style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 200,
+                child: ChoiceField<TacticsSessionOrder>(
+                  value: settings.order,
+                  compact: true,
+                  style: const TextStyle(fontSize: 13),
+                  items: [
+                    for (final entry in _orderLabels.entries)
+                      ChoiceItem(value: entry.key, label: entry.value),
+                  ],
+                  onChanged: (v) => onChanged(settings.copyWith(order: v)),
+                ),
+              ),
+            ],
+          ),
+          AppCheckbox(
+            label: 'Group by game',
+            value: settings.groupByGame,
+            onChanged: (v) => onChanged(settings.copyWith(groupByGame: v)),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (section != TacticsSettingsSection.session) ...[
+          const Text(
+            'Mistake types to include:',
+            style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
+          ),
+          AppCheckbox(
+            label: 'Blunders (??)',
+            value: settings.mistakeTypes.contains('??'),
+            onChanged: (v) => _toggleMistakeType('??', v),
+          ),
+          AppCheckbox(
+            label: 'Mistakes (?)',
+            value: settings.mistakeTypes.contains('?'),
+            onChanged: (v) => _toggleMistakeType('?', v),
+          ),
+          AppCheckbox(
+            label: 'Inaccuracies (?!)',
+            value: settings.mistakeTypes.contains('?!'),
+            onChanged: (v) => _toggleMistakeType('?!', v),
+          ),
+          if (showCustomType)
+            AppCheckbox(
+              label: 'Custom puzzles',
+              value: settings.mistakeTypes.contains(
+                TacticsSessionSettings.customMistakeType,
+              ),
+              onChanged: (v) => _toggleMistakeType(
+                TacticsSessionSettings.customMistakeType,
+                v,
               ),
             ),
-          ],
-        ),
-        AppCheckbox(
-          label: 'Group by game',
-          value: settings.groupByGame,
-          onChanged: (v) => onChanged(settings.copyWith(groupByGame: v)),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Mistake types to include:',
-          style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
-        ),
-        AppCheckbox(
-          label: 'Blunders (??)',
-          value: settings.mistakeTypes.contains('??'),
-          onChanged: (v) => _toggleMistakeType('??', v),
-        ),
-        AppCheckbox(
-          label: 'Mistakes (?)',
-          value: settings.mistakeTypes.contains('?'),
-          onChanged: (v) => _toggleMistakeType('?', v),
-        ),
-        AppCheckbox(
-          label: 'Inaccuracies (?!)',
-          value: settings.mistakeTypes.contains('?!'),
-          onChanged: (v) => _toggleMistakeType('?!', v),
-        ),
-        if (showCustomType)
-          AppCheckbox(
-            label: 'Custom puzzles',
-            value: settings.mistakeTypes.contains(
-              TacticsSessionSettings.customMistakeType,
-            ),
-            onChanged: (v) =>
-                _toggleMistakeType(TacticsSessionSettings.customMistakeType, v),
+          const SizedBox(height: 8),
+          const Text(
+            'Practice queue:',
+            style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
           ),
-        const SizedBox(height: 8),
-        const Text(
-          'Options:',
-          style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
-        ),
-        AppCheckbox(
-          label: 'Unreviewed only',
-          value: settings.skipReviewed,
-          onChanged: (v) => onChanged(settings.copyWith(skipReviewed: v)),
-        ),
-        AppCheckbox(
-          label: 'Exclude 1-star rated',
-          value: !settings.includeOneStar,
-          onChanged: (v) => onChanged(settings.copyWith(includeOneStar: !v)),
-        ),
-        AppCheckbox(
-          label: 'Accept other winning moves',
-          subtitle:
-              'A move that is not the stored answer is checked by Stockfish '
-              'and counts when it is just as good.',
-          value: settings.acceptAlternatives,
-          onChanged: (v) => onChanged(settings.copyWith(acceptAlternatives: v)),
-        ),
+          AppCheckbox(
+            label: 'Unreviewed only',
+            value: settings.skipReviewed,
+            onChanged: (v) => onChanged(settings.copyWith(skipReviewed: v)),
+          ),
+          AppCheckbox(
+            label: 'Exclude 1-star rated',
+            value: !settings.includeOneStar,
+            onChanged: (v) => onChanged(settings.copyWith(includeOneStar: !v)),
+          ),
+        ],
+        if (section != TacticsSettingsSection.selection)
+          AppCheckbox(
+            label: 'Accept other winning moves',
+            subtitle:
+                'A move that is not the stored answer is checked by Stockfish '
+                'and counts when it is just as good.',
+            value: settings.acceptAlternatives,
+            onChanged: (v) =>
+                onChanged(settings.copyWith(acceptAlternatives: v)),
+          ),
       ],
     );
   }

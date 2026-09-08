@@ -1,4 +1,6 @@
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/models/training_settings.dart';
+import 'package:chess_auto_prep/widgets/training/training_settings_panel.dart';
 import 'package:chess_auto_prep/models/board_display_settings.dart';
 import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/models/eval_database_settings.dart';
@@ -41,6 +43,58 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(finder);
   }
+
+  testWidgets('trainer chapters stay inside one shared settings shell', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final settings = TrainingSettings();
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppState(),
+        child: MaterialApp(
+          home: SettingsScreen(
+            initialMode: AppMode.repertoireTrainer,
+            viewContentBuilder: (_) => TrainingSettingsPanel(
+              settings: settings,
+              trainingMode: TrainingMode.repertoire,
+              repetitionMode: RepetitionMode.spaced,
+              onQueueSettingsChanged: () {},
+              onSettingsChanged: () {},
+              onTrainingModeChanged: (_) {},
+              onRepetitionModeChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('New lines'), findsOneWidget);
+    expect(find.byKey(const Key('training-settings-nav-0')), findsNothing);
+    expect(find.byKey(const Key('settings-view-tactics')), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('New lines')), '12');
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('settings-chapter-repertoireTrainer-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('New lines'), findsNothing);
+    expect(find.byKey(const Key('training-depth')), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('settings-chapter-repertoireTrainer-2')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('training-depth')), findsNothing);
+    await tester.tap(
+      find.byKey(const Key('settings-chapter-repertoireTrainer-0')),
+    );
+    await tester.pumpAndSettle();
+    expect((await TrainingSettings.load()).newLinesPerSession, 12);
+    expect(find.text('12'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('navigation shows one section and preserves account edits', (
     tester,

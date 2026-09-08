@@ -5,15 +5,28 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../screens/settings_screen.dart';
+import 'settings/settings_navigation.dart';
 
 /// Opens shared preferences, including navigation to every view's settings.
-Future<void> openAppSettings(BuildContext context) async {
+Future<void> openAppSettings(
+  BuildContext context, {
+  AppMode? initialMode,
+  int initialChapter = 0,
+  int initialGlobalSection = 0,
+}) async {
   final app = context.read<AppState>();
-  final mode = await Navigator.push<AppMode>(
+  final registry = ViewSettingsRegistry.forApp(app);
+  await Navigator.push<void>(
     context,
-    MaterialPageRoute<AppMode>(builder: (_) => const SettingsScreen()),
+    MaterialPageRoute<void>(
+      builder: (_) => SettingsScreen(
+        initialMode: initialMode,
+        initialChapter: initialChapter,
+        initialGlobalSection: initialGlobalSection,
+      ),
+    ),
   );
-  if (context.mounted && mode != null) app.openViewSettings(mode);
+  registry.entries[app.currentMode]?.onClosed?.call();
 }
 
 /// Consistent trailing gear. Contextual content stays owned by its view.
@@ -37,27 +50,47 @@ class AppSettingsButton extends StatefulWidget {
 class _AppSettingsButtonState extends State<AppSettingsButton> {
   bool _opening = false;
 
+  ViewSettingsRegistry? _registry;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _registry = ViewSettingsRegistry.forApp(context.read<AppState>());
+    _register();
+  }
+
+  @override
+  void didUpdateWidget(AppSettingsButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mode != widget.mode) {
+      _registry?.unregister(oldWidget.mode, this);
+    }
+    _register();
+  }
+
+  void _register() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _registry?.register(
+        widget.mode,
+        this,
+        widget.contentBuilder,
+        widget.onClosed,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _registry?.unregister(widget.mode, this);
+    super.dispose();
+  }
+
   Future<void> _open() async {
     if (!mounted || _opening) return;
     _opening = true;
-    final app = context.read<AppState>();
     try {
-      final mode = await Navigator.push<AppMode>(
-        context,
-        MaterialPageRoute<AppMode>(
-          builder: (_) => SettingsScreen(
-            initialMode: widget.mode,
-            viewContentBuilder: widget.contentBuilder,
-          ),
-        ),
-      );
-      if (mounted) {
-        if (mode != null) {
-          app.openViewSettings(mode);
-        } else {
-          widget.onClosed?.call();
-        }
-      }
+      await openAppSettings(context, initialMode: widget.mode);
     } finally {
       _opening = false;
     }

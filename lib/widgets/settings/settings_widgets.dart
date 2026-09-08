@@ -186,6 +186,7 @@ class SettingsSwitchRow extends StatelessWidget {
 class SettingsSwitchTile extends StatelessWidget {
   final String label;
   final String? tooltip;
+  final String? description;
   final bool value;
   final ValueChanged<bool> onChanged;
 
@@ -193,6 +194,7 @@ class SettingsSwitchTile extends StatelessWidget {
     super.key,
     required this.label,
     this.tooltip,
+    this.description,
     required this.value,
     required this.onChanged,
   });
@@ -201,6 +203,9 @@ class SettingsSwitchTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final tile = SwitchListTile(
       title: Text(label, style: const TextStyle(fontSize: 13)),
+      subtitle: description == null
+          ? null
+          : Text(description!, style: AppTextStyles.muted),
       value: value,
       onChanged: onChanged,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),

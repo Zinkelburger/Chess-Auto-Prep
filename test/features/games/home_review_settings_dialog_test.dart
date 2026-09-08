@@ -53,6 +53,59 @@ void main() {
     addTearDown(() => MiningSettings.instance.setDepth(before));
   }
 
+  testWidgets(
+    'embedded review chapters preserve drafts and Apply keeps settings open',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      restoreDepth();
+      var chapter = 0;
+      HomeReviewSettingsResult? saved;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, refresh) => Column(
+                children: [
+                  TextButton(
+                    onPressed: () => refresh(() => chapter = 1 - chapter),
+                    child: const Text('Switch chapter'),
+                  ),
+                  Expanded(
+                    child: HomeReviewSettingsDialog(
+                      filters: const GamesListFilters(),
+                      window: const GamesWindow(),
+                      embeddedChapter: chapter,
+                      onApply: (result) async {
+                        saved = result;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('review-depth-field')), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('book-check-games-field')),
+        '123',
+      );
+      await tester.tap(find.text('Switch chapter'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('book-check-games-field')), findsNothing);
+      await tester.enterText(find.byKey(const Key('review-depth-field')), '16');
+      await tester.tap(find.text('Apply'));
+      await tester.pumpAndSettle();
+      expect(saved!.window.bookCheckGames, 123);
+      expect(MiningSettings.instance.depth, 16);
+      expect(find.text('Review settings saved.'), findsOneWidget);
+      expect(find.byType(HomeReviewSettingsDialog), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('cores and depth moved in, and Apply saves them', (tester) async {
     SharedPreferences.setMockInitialValues({});
     restoreDepth();

@@ -40,7 +40,7 @@ import '../widgets/repertoire_list_body.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';
 import '../features/repertoire/models/repertoire_reload_summary.dart';
-import '../features/repertoire/widgets/repertoire_options_dialog.dart';
+import '../features/repertoire/widgets/repertoire_settings_body.dart';
 import '../features/repertoire/widgets/repertoire_reload_dialog.dart';
 import '../features/repertoire/widgets/repertoire_toolbar.dart';
 import '../utils/keyboard_shortcut_utils.dart';
@@ -1062,9 +1062,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onOpenAudit: _openAuditDialog,
         onImportPgn: _importPgn,
         trapNavigation: _buildTrapNavigation(),
-        isWhiteRepertoire: _controller.isRepertoireWhite,
-        onOpenRepertoireOptions: () => showRepertoireOptionsDialog(
-          context: context,
+        repertoireSettingsBuilder: (_) => RepertoireSettingsBody(
           isWhiteRepertoire: _controller.isRepertoireWhite,
           sideChangeEnabled: !_generationController.isGenerating,
           onSideChanged: (isWhite) => _controller.setRepertoireColor(isWhite),
