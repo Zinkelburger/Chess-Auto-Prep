@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../widgets/settings/settings_navigation.dart';
 
 import '../../../models/repertoire_metadata.dart';
 import '../../../theme/app_colors.dart';
@@ -51,8 +52,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onPlanBuild,
     this.onOpenAudit,
     this.onImportPgn,
-    this.isWhiteRepertoire,
-    this.onOpenRepertoireOptions,
+    this.repertoireSettingsBuilder,
   });
 
   final Widget title;
@@ -76,12 +76,9 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onPlanBuild;
   final VoidCallback? onOpenAudit;
   final VoidCallback? onImportPgn;
-  final bool? isWhiteRepertoire;
 
-  /// Opens the settings dialog for the open repertoire (side played, board
-  /// size). Deliberately two clicks away — flipping the side rewrites which
-  /// moves count as ours.
-  final VoidCallback? onOpenRepertoireOptions;
+  /// Controls for the selected repertoire, embedded in the shared settings pane.
+  final WidgetBuilder? repertoireSettingsBuilder;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -122,45 +119,28 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         AppSettingsButton(
           mode: AppMode.repertoire,
           onClosed: onSettingsClosed,
-          contentBuilder: onOpenRepertoireOptions == null
-              ? null
-              : (_) => ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    ListTile(
-                      leading: _SideSwatch(isWhite: isWhiteRepertoire ?? true),
-                      title: const Text('Repertoire options'),
-                      subtitle: const Text('Side to play and board size'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: onOpenRepertoireOptions,
+          contentBuilder: (context) => ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              if (SettingsChapterScope.maybeOf(context) == 0)
+                if (repertoireSettingsBuilder != null)
+                  repertoireSettingsBuilder!(context)
+                else
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'Open a repertoire in the builder to change its playing side and board size.',
+                      style: AppTextStyles.muted,
                     ),
-                    const AnalysisPanelsSettingsBody(),
-                    const SizedBox(height: 24),
-                    const StockfishSettingsBody(),
-                  ],
-                ),
+                  ),
+              if (SettingsChapterScope.maybeOf(context) == 1)
+                const AnalysisPanelsSettingsBody(),
+              if (SettingsChapterScope.maybeOf(context) == 2)
+                const StockfishSettingsBody(),
+            ],
+          ),
         ),
       ],
-    );
-  }
-}
-
-/// The side-to-play disc shown beside "Repertoire settings…".
-class _SideSwatch extends StatelessWidget {
-  const _SideSwatch({required this.isWhite});
-
-  final bool isWhite;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 18,
-      height: 18,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: isWhite ? AppColors.sideWhite : AppColors.sideBlack,
-        border: Border.all(color: AppColors.outline),
-      ),
     );
   }
 }

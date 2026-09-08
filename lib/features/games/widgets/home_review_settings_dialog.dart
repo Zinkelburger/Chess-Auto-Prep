@@ -24,44 +24,26 @@ class HomeReviewSettingsResult {
   final GamesWindow window;
 }
 
-/// The dialog behind the review strip's gear — the only one there is. Which
-/// time controls count as "my games", whether startup checks for new games,
-/// and how hard the engine is allowed to work.
-///
-/// Titled "Analysis settings", matching its button: "Review settings" was a
-/// third thing called a review, next to Opening review and the analysis run.
-///
-/// Cores and depth used to be a second button on the same strip, labelled
-/// "Review speed…", which read as a different feature rather than as the same
-/// settings. They are a section here now; the strip still *states* both numbers
-/// on its engine-load row, because how much of the laptop goes away is
-/// something to see without opening anything.
-///
-/// Both are shared, not local to this screen: cores is the app-wide
-/// [EngineSettings.cores] (the same number the Settings screen shows) and
-/// depth is [MiningSettings.depth]. Turning either down here turns it down
-/// everywhere.
-///
-/// **How many games count** lives here too, as the first section: which games
-/// the analysis downloads is one question, and it was odd to answer half of it
-/// here (time controls) and half on a card in the other pane (last 20 games).
-/// The strip still *states* the window beside its button, the way it states
-/// cores and depth, so nothing has to be opened to read it.
-///
-/// Deliberately absent, each because it has an owner elsewhere:
-///
-/// * **Usernames** — a once-per-install job, on the accounts card's button in
-///   the right-hand pane and in Settings, both onto the same dialog.
-/// * **How long mined puzzles stay trainable** — that is puzzle expiry, and it
-///   lives on the Tactics card's Filters dialog next to the queue it governs.
+/// Game download and analysis preferences. The shared settings shell embeds
+/// one chapter at a time; standalone hosts can still use the draft dialog.
+/// Apply saves both chapters together, including global CPU cores and mining
+/// depth. Switching chapters retains the pending edits.
 class HomeReviewSettingsDialog extends StatefulWidget {
   const HomeReviewSettingsDialog({
     super.key,
     required this.filters,
     required this.window,
+    this.embeddedChapter,
+    this.onApply,
   });
 
   final GamesListFilters filters;
+
+  /// Null for a dialog, 0 for downloads, 1 for review performance.
+  final int? embeddedChapter;
+
+  /// Embedded hosts apply changes without closing the shared settings route.
+  final Future<void> Function(HomeReviewSettingsResult)? onApply;
 
   /// The shared window as it stands; edited as a draft here so Cancel leaves
   /// it alone.
@@ -100,10 +82,14 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
     super.dispose();
   }
 
+  bool _saving = false;
+  String? _saveMessage;
+
   /// Out-of-range and unparseable input is clamped rather than rejected: a
   /// dialog that refuses to close over a typo in a box you can see is worse
   /// than one that quietly puts the number back in range.
-  void _apply() {
+  Future<void> _apply() async {
+    if (!mounted || _saving) return;
     final cores = int.tryParse(_cores.text.trim());
     if (cores != null) {
       EngineSettings.instance.cores = cores.clamp(1, _maxCores);
@@ -120,96 +106,147 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
     final window = bookCheck == null
         ? _window
         : _window.copyWith(bookCheckGames: bookCheck);
-    Navigator.of(context).pop(
-      HomeReviewSettingsResult(
-        filters: widget.filters.copyWith(speeds: _speeds, autoRun: _autoRun),
-        window: window,
-      ),
+    final result = HomeReviewSettingsResult(
+      filters: widget.filters.copyWith(speeds: _speeds, autoRun: _autoRun),
+      window: window,
     );
+    if (widget.onApply == null) {
+      Navigator.of(context).pop(result);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _saveMessage = null;
+    });
+    try {
+      await widget.onApply!(result);
+      if (mounted) setState(() => _saveMessage = 'Review settings saved.');
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _saveMessage =
+              'Could not save review settings. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Analysis settings'),
-      content: SizedBox(
-        width: 400,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _label('How many games to analyse'),
-              GamesWindowPicker(
-                window: _window,
-                onChanged: (w) => setState(() => _window = w),
-              ),
-              _label('Time controls to download'),
-              for (final speed in selectableGameSpeeds)
-                AppCheckbox(
-                  label: speed.label,
-                  value: _speeds.contains(speed),
-                  onChanged: (checked) => setState(() {
+    final content = SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.embeddedChapter != 1) ...[
+            _label('How many games to analyse'),
+            GamesWindowPicker(
+              window: _window,
+              onChanged: (w) {
+                if (!mounted) return;
+                setState(() => _window = w);
+              },
+            ),
+            _label('Time controls to download'),
+            for (final speed in selectableGameSpeeds)
+              AppCheckbox(
+                label: speed.label,
+                value: _speeds.contains(speed),
+                onChanged: (checked) {
+                  if (!mounted) return;
+                  setState(() {
                     if (checked == true) {
                       _speeds.add(speed);
                     } else {
                       _speeds.remove(speed);
                     }
-                  }),
-                ),
-              _label('How many games the book check covers'),
-              _numberField(
-                key: const Key('book-check-games-field'),
-                controller: _bookCheck,
-                label: 'Games per site',
-                hint:
-                    'Checked against your books, not analysed by the engine. '
-                    'An opening leak shows over hundreds of games; '
-                    '${GamesWindow.defaultBookCheckGames} is the default.',
+                  });
+                },
               ),
-              _label('When it runs'),
-              AppCheckbox(
-                key: const Key('review-auto-start'),
-                label: 'Check for new games when the app starts',
-                subtitle:
-                    'On by default. New and unfinished games are analysed '
-                    'automatically; the run can be paused from Tactics.',
-                value: _autoRun,
-                onChanged: (v) => setState(() => _autoRun = v),
+            _label('How many games the book check covers'),
+            _numberField(
+              key: const Key('book-check-games-field'),
+              controller: _bookCheck,
+              label: 'Games per site',
+              hint:
+                  'Checked against your books, not analysed by the engine. '
+                  'An opening leak shows over hundreds of games; '
+                  '${GamesWindow.defaultBookCheckGames} is the default.',
+            ),
+            _label('When it runs'),
+            AppCheckbox(
+              key: const Key('review-auto-start'),
+              label: 'Check for new games when the app starts',
+              subtitle:
+                  'On by default. New and unfinished games are analysed '
+                  'automatically; the run can be paused from Tactics.',
+              value: _autoRun,
+              onChanged: (v) {
+                if (!mounted) return;
+                setState(() => _autoRun = v);
+              },
+            ),
+          ],
+          if (widget.embeddedChapter != 0) ...[
+            _label('How hard it works'),
+            _numberField(
+              key: const Key('review-cores-field'),
+              controller: _cores,
+              label: 'CPU cores to use',
+              hint:
+                  'Between 1 and $_maxCores on this machine. More cores '
+                  'analyse your games faster; fewer leave the machine usable '
+                  'while it runs.',
+            ),
+            const SizedBox(height: 14),
+            _numberField(
+              key: const Key('review-depth-field'),
+              controller: _depth,
+              label: 'Engine depth',
+              hint:
+                  'Between ${MiningSettings.minDepth} and '
+                  '${MiningSettings.maxDepth}. Deeper is more accurate about '
+                  'what was really a mistake, and slower.',
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'An analysis already running keeps the settings it started with; '
+              'these apply to the next game it picks up.',
+              style: AppTextStyles.body.copyWith(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
               ),
-              _label('How hard it works'),
-              _numberField(
-                key: const Key('review-cores-field'),
-                controller: _cores,
-                label: 'CPU cores to use',
-                hint:
-                    'Between 1 and $_maxCores on this machine. More cores '
-                    'analyse your games faster; fewer leave the machine usable '
-                    'while it runs.',
-              ),
-              const SizedBox(height: 14),
-              _numberField(
-                key: const Key('review-depth-field'),
-                controller: _depth,
-                label: 'Engine depth',
-                hint:
-                    'Between ${MiningSettings.minDepth} and '
-                    '${MiningSettings.maxDepth}. Deeper is more accurate about '
-                    'what was really a mistake, and slower.',
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'An analysis already running keeps the settings it started with; '
-                'these apply to the next game it picks up.',
-                style: AppTextStyles.body.copyWith(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
+          ],
+        ],
       ),
+    );
+    if (widget.embeddedChapter != null) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: content),
+            const SizedBox(height: 12),
+            if (_saveMessage != null)
+              Text(_saveMessage!, style: AppTextStyles.muted),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                onPressed: _saving ? null : _apply,
+                child: Text(_saving ? 'Saving…' : 'Apply'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return AlertDialog(
+      title: const Text('Analysis settings'),
+      content: SizedBox(width: 400, child: content),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),

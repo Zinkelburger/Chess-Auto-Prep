@@ -1,5 +1,4 @@
-/// Device preferences with focused, independently scrollable sections.
-/// Analysis behaviour stays alongside the analysis panel it affects.
+/// Shared settings shell with expandable view chapters and global preferences.
 library;
 
 import 'dart:async';
@@ -28,13 +27,22 @@ import '../widgets/common/choice_field.dart';
 import '../widgets/common/confirm_dialog.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
+import '../widgets/settings/settings_navigation.dart';
 import '../widgets/settings/keyboard_shortcuts_section.dart';
 import '../widgets/shortcut_tooltip.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.initialMode, this.viewContentBuilder});
+  const SettingsScreen({
+    super.key,
+    this.initialMode,
+    this.initialChapter = 0,
+    this.initialGlobalSection = 0,
+    this.viewContentBuilder,
+  });
 
   final AppMode? initialMode;
+  final int initialChapter;
+  final int initialGlobalSection;
   final WidgetBuilder? viewContentBuilder;
 
   @override
@@ -47,23 +55,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
   );
 
   final _engine = EngineSettings.instance;
-  int _selected = 0;
-  late bool _global = widget.initialMode == null;
+  late int _selected = widget.initialGlobalSection;
+  late AppMode? _mode = widget.initialMode;
+  late int _chapter = widget.initialChapter;
+  bool get _global => _mode == null;
+  late ViewSettingsRegistry _registry;
+  final _navigationScroll = ScrollController();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _registry = ViewSettingsRegistry.forApp(context.read<AppState>());
+    if (_mode != null) {
+      if (!_registry.entries.containsKey(_mode!) &&
+          widget.viewContentBuilder == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _mode != null) _selectView(_mode!, chapter: _chapter);
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _navigationScroll.dispose();
+    super.dispose();
+  }
 
   void _selectGlobal(int index) {
     if (!mounted) return;
     setState(() {
-      _global = true;
+      _mode = null;
       _selected = index;
     });
   }
 
-  void _selectView(AppMode mode) {
-    if (!mounted || context.read<AppState>().isRepertoireGenerating) return;
-    if (mode == widget.initialMode) {
-      setState(() => _global = false);
-    } else {
-      Navigator.pop(context, mode);
+  void _selectView(AppMode mode, {int chapter = 0}) {
+    final app = context.read<AppState>();
+    if (!mounted ||
+        !mode.isAvailable ||
+        (app.isRepertoireGenerating && mode != app.currentMode)) {
+      return;
+    }
+    setState(() {
+      _mode = mode;
+      _chapter = chapter;
+    });
+    // Mount lazy feature controllers while keeping this settings route open.
+    if (mode != app.currentMode) {
+      app.setMode(mode);
     }
   }
 
@@ -104,6 +144,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       description:
           'Key mappings by view, using the same registry as the controls.',
     ),
+    (
+      label: 'Engine analysis',
+      icon: Icons.search,
+      description:
+          'Stockfish search and move-table preferences, shared across analysis views.',
+    ),
+    (
+      label: 'Analysis panels',
+      icon: Icons.view_column_outlined,
+      description:
+          'Choose which engine and reference panels appear alongside your board.',
+    ),
   ];
 
   @override
@@ -114,20 +166,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
         titleSpacing: 8,
-        title: Text(
-          _global ? 'Settings' : widget.initialMode!.label,
-          style: AppTextStyles.title,
-        ),
+        title: const Text('Settings', style: AppTextStyles.title),
         // The way out sits where the gear that opened this screen was, so the
         // pointer is already over it; a back arrow on the far left left users
         // hunting for the exit.
         automaticallyImplyLeading: false,
         actions: [
-          if (!_global)
-            TextButton(
-              onPressed: () => _selectGlobal(0),
-              child: const Text('Global settings'),
-            ),
           ShortcutIconButton(
             description: 'Close settings',
             shortcut: AppShortcut.leave,
@@ -144,38 +188,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 760;
-          if (!_global) {
-            return widget.viewContentBuilder?.call(context) ??
-                _viewPage(widget.initialMode!, compact);
-          }
           final content = Expanded(
             child: ListenableBuilder(
               listenable: _engine,
               builder: (context, _) => IndexedStack(
-                index: _selected,
+                index: _global ? 0 : 1,
                 children: [
-                  _page(0, const [
-                    ChessUsernamesSection(),
-                    LichessLoginSection(),
-                  ], compact),
-                  _page(1, [_buildDisplaySection()], compact),
-                  _page(2, const [MyRepertoiresSection()], compact),
-                  _page(3, [
-                    _buildEngineSection(getLogicalCores()),
-                    const SettingsGroup(
-                      title: 'Looking for analysis settings?',
-                      icon: Icons.settings_outlined,
-                      subtitle:
-                          'Set search depth, lines and panel visibility using the gear next to each analysis panel.',
-                      children: [],
-                    ),
-                  ], compact),
-                  _page(4, [_buildDatabasesSection()], compact),
-                  _page(5, [
-                    _buildAboutSection(),
-                    _buildResetButton(),
-                  ], compact),
-                  _page(6, const [KeyboardShortcutsSection()], compact),
+                  IndexedStack(
+                    index: _selected,
+                    children: [
+                      _page(0, const [
+                        ChessUsernamesSection(),
+                        LichessLoginSection(),
+                      ], compact),
+                      _page(1, [_buildDisplaySection()], compact),
+                      _page(2, const [MyRepertoiresSection()], compact),
+                      _page(3, [
+                        _buildEngineSection(getLogicalCores()),
+                        const SettingsGroup(
+                          title: 'Looking for analysis settings?',
+                          icon: Icons.settings_outlined,
+                          subtitle:
+                              'Choose Engine analysis or Analysis panels in this sidebar for search and panel preferences.',
+                          children: [],
+                        ),
+                      ], compact),
+                      _page(4, [_buildDatabasesSection()], compact),
+                      _page(5, [
+                        _buildAboutSection(),
+                        _buildResetButton(),
+                      ], compact),
+                      _page(6, const [KeyboardShortcutsSection()], compact),
+                      _page(7, const [StockfishSettingsBody()], compact),
+                      _page(8, const [AnalysisPanelsSettingsBody()], compact),
+                    ],
+                  ),
+                  ListenableBuilder(
+                    listenable: _registry,
+                    builder: (context, _) => _global
+                        ? const SizedBox.shrink()
+                        : _viewContent(compact),
+                  ),
                 ],
               ),
             ),
@@ -188,13 +241,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: ChoiceField<int>(
                     key: const Key('settings-section-picker'),
                     label: 'Section',
-                    value: _selected,
+                    helper: context.watch<AppState>().isRepertoireGenerating
+                        ? 'View switching is paused while a repertoire is generating.'
+                        : null,
+                    value: _global
+                        ? _selected
+                        : -availableModeMenuOrder().indexOf(_mode!) - 1,
                     items: [
                       for (var i = 0; i < availableModeMenuOrder().length; i++)
-                        ChoiceItem(
-                          value: -i - 1,
-                          label: 'Views · ${availableModeMenuOrder()[i].label}',
-                        ),
+                        if (!context.watch<AppState>().isRepertoireGenerating ||
+                            availableModeMenuOrder()[i] ==
+                                context.read<AppState>().currentMode)
+                          ChoiceItem(
+                            value: -i - 1,
+                            label:
+                                'Views · ${availableModeMenuOrder()[i].label}',
+                          ),
                       for (var i = 0; i < _sections.length; i++)
                         ChoiceItem(
                           value: i,
@@ -211,6 +273,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     },
                   ),
                 ),
+                if (!_global)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: ChoiceField<int>(
+                      key: ValueKey('settings-chapter-picker-${_mode!.name}'),
+                      label: 'Chapter',
+                      value: _chapter,
+                      items: [
+                        for (
+                          var i = 0;
+                          i < settingsChapters(_mode!).length;
+                          i++
+                        )
+                          ChoiceItem(
+                            value: i,
+                            label: settingsChapters(_mode!)[i].label,
+                          ),
+                      ],
+                      onChanged: (value) => _selectView(_mode!, chapter: value),
+                    ),
+                  ),
                 content,
               ],
             );
@@ -219,59 +302,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 220,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 28, 16, 24),
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(12, 0, 12, 16),
-                      child: Text('VIEWS', style: AppTextStyles.eyebrow),
-                    ),
-                    for (final mode in availableModeMenuOrder())
-                      ListTile(
-                        key: ValueKey('settings-view-${mode.name}'),
-                        minTileHeight: 32,
-                        dense: true,
-                        visualDensity: VisualDensity.compact,
-                        title: Text(mode.label, style: AppTextStyles.body),
-                        enabled: !context
-                            .watch<AppState>()
-                            .isRepertoireGenerating,
-                        onTap: () => _selectView(mode),
+                width: 248,
+                child: Scrollbar(
+                  controller: _navigationScroll,
+                  thumbVisibility: true,
+                  child: ListView(
+                    controller: _navigationScroll,
+                    padding: const EdgeInsets.fromLTRB(16, 28, 16, 24),
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(12, 0, 12, 16),
+                        child: Text('VIEWS', style: AppTextStyles.eyebrow),
                       ),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(12, 24, 12, 16),
-                      child: Text('GLOBAL', style: AppTextStyles.eyebrow),
-                    ),
-                    for (var i = 0; i < _sections.length; i++)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: ListTile(
-                          key: Key('settings-nav-$i'),
-                          minTileHeight: 32,
+                      for (final mode in availableModeMenuOrder()) ...[
+                        ListTile(
+                          key: ValueKey('settings-view-${mode.name}'),
+                          minTileHeight: 40,
                           dense: true,
-                          visualDensity: VisualDensity.compact,
-                          selected: _selected == i,
-                          selectedTileColor: AppColors.accent.withValues(
-                            alpha: 0.12,
-                          ),
-                          selectedColor: AppColors.ink,
-                          iconColor: AppColors.onSurfaceMuted,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          leading: Icon(_sections[i].icon, size: 20),
-                          horizontalTitleGap: 12,
+                          selected: _mode == mode,
                           title: Text(
-                            _sections[i].label,
-                            style: _selected == i
-                                ? AppTextStyles.bodyStrong
-                                : AppTextStyles.body,
+                            mode.label,
+                            style: AppTextStyles.bodyStrong,
                           ),
-                          onTap: () => _selectGlobal(i),
+                          trailing: Icon(
+                            _mode == mode
+                                ? Icons.expand_more
+                                : Icons.chevron_right,
+                            size: 18,
+                          ),
+                          enabled:
+                              !context
+                                  .watch<AppState>()
+                                  .isRepertoireGenerating ||
+                              mode == context.read<AppState>().currentMode,
+                          onTap: () => _selectView(mode),
                         ),
+                        if (_mode == mode)
+                          for (
+                            var i = 0;
+                            i < settingsChapters(mode).length;
+                            i++
+                          )
+                            Padding(
+                              padding: const EdgeInsets.only(left: 16),
+                              child: ListTile(
+                                key: ValueKey(
+                                  'settings-chapter-${mode.name}-$i',
+                                ),
+                                minTileHeight: 36,
+                                dense: true,
+                                selected: _chapter == i,
+                                selectedTileColor: AppColors.accent.withValues(
+                                  alpha: 0.12,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                title: Text(
+                                  settingsChapters(mode)[i].label,
+                                  style: _chapter == i
+                                      ? AppTextStyles.bodyStrong
+                                      : AppTextStyles.body,
+                                ),
+                                onTap: () => _selectView(mode, chapter: i),
+                              ),
+                            ),
+                      ],
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(12, 24, 12, 16),
+                        child: Text('GLOBAL', style: AppTextStyles.eyebrow),
                       ),
-                  ],
+                      for (var i = 0; i < 7; i++) ...[
+                        _globalNavTile(i),
+                        if (i == 3 &&
+                            _global &&
+                            const [3, 7, 8].contains(_selected)) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(left: 24),
+                            child: ListTile(
+                              key: const Key('settings-engine-resources'),
+                              minTileHeight: 36,
+                              dense: true,
+                              selected: _selected == 3,
+                              title: const Text(
+                                'Computer resources',
+                                style: AppTextStyles.body,
+                              ),
+                              onTap: () => _selectGlobal(3),
+                            ),
+                          ),
+                          _globalNavTile(7, nested: true),
+                          _globalNavTile(8, nested: true),
+                        ],
+                      ],
+                    ],
+                  ),
                 ),
               ),
               const VerticalDivider(width: 1, color: AppColors.divider),
@@ -283,24 +408,108 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _globalNavTile(int index, {bool nested = false}) {
+    final selected = _global && _selected == index;
+    return Padding(
+      padding: EdgeInsets.only(left: nested ? 24 : 0, bottom: 2),
+      child: ListTile(
+        key: Key('settings-nav-$index'),
+        minTileHeight: 36,
+        dense: true,
+        selected: selected,
+        selectedTileColor: AppColors.accent.withValues(alpha: 0.12),
+        selectedColor: AppColors.ink,
+        iconColor: AppColors.onSurfaceMuted,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        leading: nested ? null : Icon(_sections[index].icon, size: 20),
+        trailing: index == 3
+            ? Icon(
+                _global && const [3, 7, 8].contains(_selected)
+                    ? Icons.expand_more
+                    : Icons.chevron_right,
+                size: 18,
+              )
+            : null,
+        horizontalTitleGap: 12,
+        title: Text(
+          _sections[index].label,
+          style: selected ? AppTextStyles.bodyStrong : AppTextStyles.body,
+        ),
+        onTap: () => _selectGlobal(index),
+      ),
+    );
+  }
+
+  Widget _viewContent(bool compact) {
+    final mode = _mode!;
+    final chapter = settingsChapters(mode)[_chapter];
+    final entry = _registry.entries[mode];
+    final builder =
+        mode == widget.initialMode && widget.viewContentBuilder != null
+        ? widget.viewContentBuilder
+        : entry?.builder;
+    return SettingsChapterScope(
+      index: _chapter,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 20 : 32,
+              24,
+              compact ? 20 : 32,
+              0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${mode.label} › ${chapter.label}',
+                  style: AppTextStyles.title,
+                ),
+                const SizedBox(height: 8),
+                Text(chapter.description, style: AppTextStyles.muted),
+              ],
+            ),
+          ),
+          Expanded(
+            child: builder != null
+                ? Builder(key: ValueKey(mode), builder: builder)
+                : _viewPage(mode, compact),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _viewPage(AppMode mode, bool compact) {
+    if (mode != AppMode.positionAnalysis &&
+        mode != AppMode.study &&
+        mode != AppMode.databases) {
+      return const Center(
+        child: Text('Loading view settings…', style: AppTextStyles.muted),
+      );
+    }
     return ListView(
+      key: ValueKey('settings-default-${mode.name}-$_chapter'),
       padding: EdgeInsets.all(compact ? 20 : 32),
       children: [
-        if (mode == AppMode.databases) _buildDatabasesSection(),
-        if (mode != AppMode.databases) ...[
+        if (mode == AppMode.databases)
+          _buildDatabasesSection()
+        else if (_chapter == 0)
           const SettingsGroup(
             title: 'Analysis panels',
             icon: Icons.view_column,
             children: [AnalysisPanelsSettingsBody()],
-          ),
+          )
+        else if (_chapter == 1)
           const SettingsGroup(
             title: 'Engine analysis',
             icon: Icons.memory,
             children: [StockfishSettingsBody()],
-          ),
+          )
+        else
           _buildDisplaySection(),
-        ],
       ],
     );
   }

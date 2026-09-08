@@ -67,14 +67,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Preferences for Tactics'), findsOneWidget);
       expect(find.text('Your chess usernames'), findsNothing);
-      await tester.tap(find.text('Global settings'));
-      await tester.pumpAndSettle();
+      final settingsState = tester.state(find.byType(SettingsScreen));
       expect(find.text('VIEWS'), findsOneWidget);
       expect(find.text('GLOBAL'), findsOneWidget);
       await tester.tap(
         find.byKey(const ValueKey('settings-view-repertoireTrainer')),
       );
       await tester.pumpAndSettle();
+      expect(tester.state(find.byType(SettingsScreen)), same(settingsState));
       expect(app.currentMode, AppMode.repertoireTrainer);
       expect(app.settingsMode, isNull);
       expect(find.byType(SettingsScreen), findsOneWidget);
@@ -104,8 +104,7 @@ void main() {
       expect(app.settingsMode, isNull);
       await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Global settings'));
-      await tester.pumpAndSettle();
+
       expect(
         find.byKey(const ValueKey('settings-view-bughouse')),
         findsNothing,

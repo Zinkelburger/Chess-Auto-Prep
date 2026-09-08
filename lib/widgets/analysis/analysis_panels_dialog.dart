@@ -1,9 +1,4 @@
-/// Analysis panels — which live-analysis surfaces are shown.
-///
-/// Visibility toggles only: the engine panel's own knobs live behind its
-/// gear (stockfish_settings_dialog.dart) — deliberately a separate dialog,
-/// not a mode of this one.  The expectimax panel has no knobs: it shows what
-/// the build stored.
+/// Shared analysis preferences, reachable from the app settings sidebar.
 library;
 
 import 'package:flutter/material.dart';
@@ -11,16 +6,11 @@ import 'package:flutter/material.dart';
 import '../../models/engine_settings.dart';
 import '../../theme/app_colors.dart';
 import '../settings/settings_widgets.dart';
+import '../app_settings_button.dart';
 
 /// Opens the analysis-panels visibility dialog.
-Future<void> showAnalysisPanelsDialog(BuildContext context) {
-  return showSettingsDialog(
-    context,
-    icon: Icons.view_column,
-    title: 'Analysis panels',
-    bodyBuilder: (_) => const AnalysisPanelsSettingsBody(),
-  );
-}
+Future<void> showAnalysisPanelsDialog(BuildContext context) =>
+    openAppSettings(context, initialGlobalSection: 8);
 
 class AnalysisPanelsSettingsBody extends StatelessWidget {
   const AnalysisPanelsSettingsBody({super.key});

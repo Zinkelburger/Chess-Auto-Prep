@@ -40,8 +40,7 @@ Future<void> _pump(
             onOpenGeneration: onGenerate,
             onImportPgn: onImportPgn,
             onSelectRepertoire: onChoose,
-            isWhiteRepertoire: true,
-            onOpenRepertoireOptions: () {},
+            repertoireSettingsBuilder: (_) => const Text('Repertoire options'),
           ),
         ),
       ),
@@ -84,7 +83,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Repertoire options'), findsOneWidget);
-        expect(find.text('Global settings'), findsOneWidget);
+        expect(find.text('GLOBAL'), findsOneWidget);
+        expect(find.byKey(const Key('settings-view-tactics')), findsOneWidget);
         expect(find.byIcon(Icons.more_vert), findsNothing);
         expect(find.text('Audit for gaps…'), findsNothing);
         expect(find.text('Train this chapter'), findsNothing);

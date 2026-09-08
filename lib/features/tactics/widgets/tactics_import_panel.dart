@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_state.dart';
-import 'tactics_session_settings_form.dart';
+import '../../../widgets/app_settings_button.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/accounts/accounts_card.dart';
@@ -16,7 +16,6 @@ import '../../games/services/home_review_runner.dart';
 import '../../games/services/opening_review.dart';
 import '../../games/services/recent_game_navigation.dart';
 import '../../games/widgets/analysis_block.dart';
-import '../../games/widgets/home_review_settings_dialog.dart';
 import '../../games/widgets/my_books_block.dart';
 import '../../games/widgets/opening_review_dialog.dart';
 import '../../master_games/widgets/master_practice_dialog.dart';
@@ -99,21 +98,8 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
   Future<void> _showSettingsDialog(
     RecentGamesController controller,
     HomeReviewRunner runner,
-  ) async {
-    final result = await showDialog<HomeReviewSettingsResult>(
-      context: context,
-      builder: (_) => HomeReviewSettingsDialog(
-        filters: controller.filters,
-        window: controller.window,
-      ),
-    );
-    if (result != null) {
-      await controller.setFilters(result.filters, window: result.window);
-      // A different set of games means "analysis complete" was about the old
-      // set — back to the resting state so the button reads honestly.
-      runner.reset();
-    }
-  }
+  ) =>
+      openAppSettings(context, initialMode: AppMode.tactics, initialChapter: 2);
 
   /// All the window's deviations in one dialog — reviewable as a queue, like
   /// tactics, instead of clicking into each game.

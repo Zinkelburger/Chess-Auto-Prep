@@ -3,57 +3,8 @@ part of 'tactics_import_panel.dart';
 mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
   int get _matchingCount => _settings.countMatching(widget.positions);
 
-  /// Mistake types that actually occur in the current database — the Filters
-  /// dialog only offers a "Custom puzzles" checkbox when there are some.
-  Set<String> get _presentMistakeTypes => {
-    for (final pos in widget.positions) pos.mistakeType,
-  };
-
-  Future<void> _showSessionSettingsDialog() async {
-    var draft = _settings;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final matching = draft.countMatching(widget.positions);
-          return AlertDialog(
-            // Titled after the button that opens it, like the analysis
-            // gear: "Session Settings" named a concept the card never uses.
-            title: const Text('Tactics filters'),
-            // Scrollable: the form is a dozen rows tall and this dialog has
-            // to survive a short window without a render overflow.
-            content: SizedBox(
-              width: 360,
-              child: SingleChildScrollView(
-                child: TacticsSessionSettingsForm(
-                  settings: draft,
-                  showCustomType: _presentMistakeTypes.contains(
-                    TacticsSessionSettings.customMistakeType,
-                  ),
-                  onChanged: (s) => setDialogState(() => draft = s),
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  context.read<TacticsSessionController>().setSessionSettings(
-                    draft,
-                  );
-                  Navigator.pop(ctx);
-                },
-                child: Text('Apply ($matching positions)'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
+  Future<void> _showSessionSettingsDialog() =>
+      openAppSettings(context, initialMode: AppMode.tactics, initialChapter: 1);
 
   // ── Play block ─────────────────────────────────────────────────────────
 
