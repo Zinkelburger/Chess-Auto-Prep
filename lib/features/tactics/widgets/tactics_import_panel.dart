@@ -4,14 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_state.dart';
-import '../../../widgets/common/choice_field.dart';
+import 'tactics_session_settings_form.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/accounts/accounts_card.dart';
 import '../../../widgets/common/home_block.dart';
 import '../../../widgets/engine/engine_gate.dart';
 import '../../../services/master_games/master_games_service.dart';
-import '../../../widgets/labeled_toggle.dart';
 import '../../games/controllers/recent_games_controller.dart';
 import '../../games/services/home_review_runner.dart';
 import '../../games/services/opening_review.dart';

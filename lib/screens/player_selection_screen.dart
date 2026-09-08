@@ -420,7 +420,7 @@ class _PlayerTile extends StatelessWidget {
           style: const TextStyle(color: AppColors.onSurfaceMuted),
         ),
         trailing: PopupMenuButton<_PlayerAction>(
-          tooltip: 'More actions',
+          tooltip: 'Player actions',
           onSelected: onAction,
           itemBuilder: (_) => [
             // PGN-file imports have no source to fetch fresh games from.
@@ -454,6 +454,13 @@ class _PlayerTile extends StatelessWidget {
               ),
             ),
           ],
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Actions', style: TextStyle(fontSize: 13)),
+              Icon(Icons.arrow_drop_down, size: 18),
+            ],
+          ),
         ),
       ),
     );

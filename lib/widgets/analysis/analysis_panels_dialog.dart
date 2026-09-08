@@ -18,12 +18,12 @@ Future<void> showAnalysisPanelsDialog(BuildContext context) {
     context,
     icon: Icons.view_column,
     title: 'Analysis panels',
-    bodyBuilder: (_) => const _AnalysisPanelsBody(),
+    bodyBuilder: (_) => const AnalysisPanelsSettingsBody(),
   );
 }
 
-class _AnalysisPanelsBody extends StatelessWidget {
-  const _AnalysisPanelsBody();
+class AnalysisPanelsSettingsBody extends StatelessWidget {
+  const AnalysisPanelsSettingsBody({super.key});
 
   @override
   Widget build(BuildContext context) {

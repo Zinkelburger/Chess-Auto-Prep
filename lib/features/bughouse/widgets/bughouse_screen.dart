@@ -29,6 +29,7 @@ import '../../../utils/keyboard_shortcut_utils.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_settings_button.dart';
+import '../../../widgets/app_overflow_menu.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_state.dart';
 import 'bughouse_analysis_panel.dart';
@@ -90,8 +91,38 @@ class _BughouseScreenState extends State<BughouseScreen> {
       child: Consumer<BughouseController>(
         builder: (context, controller, _) => Scaffold(
           appBar: AppBar(
+            titleSpacing: 16,
             title: const AppBreadcrumbTrail(),
-            actions: const [AppModeSwitcher(), AppSettingsButton()],
+            actions: [
+              AppOverflowMenu(
+                entries: [
+                  AppMenuEntry(
+                    heading: 'Board',
+                    label: 'Flip board A',
+                    shortcut: 'F',
+                    onRun: () => controller.toggleFlip(BughouseBoard.a),
+                  ),
+                  AppMenuEntry(
+                    label: 'Flip board B',
+                    shortcut: 'G',
+                    onRun: () => controller.toggleFlip(BughouseBoard.b),
+                  ),
+                ],
+              ),
+              const AppModeSwitcher(),
+              AppSettingsButton(
+                mode: AppMode.bughouse,
+                contentBuilder: (_) => ListenableBuilder(
+                  listenable: controller,
+                  builder: (context, _) => ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      BughouseEngineSettingsSection(controller: controller),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           body: CallbackShortcuts(
             bindings: {

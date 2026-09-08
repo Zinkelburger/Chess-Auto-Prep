@@ -150,7 +150,7 @@ void main() {
       _player(platform: 'import', username: 'my pgn file', monthsBack: null),
     ]);
 
-    await tester.tap(find.byTooltip('More actions'));
+    await tester.tap(find.byTooltip('Player actions'));
     await tester.pumpAndSettle();
 
     expect(find.text('Remove from this list'), findsOneWidget);
@@ -165,7 +165,7 @@ void main() {
       _player(platform: 'chesscom', username: 'hikaru'),
     ]);
 
-    await tester.tap(find.byTooltip('More actions'));
+    await tester.tap(find.byTooltip('Player actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Remove from this list'));
     await tester.pumpAndSettle();

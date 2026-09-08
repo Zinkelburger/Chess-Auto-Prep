@@ -14,7 +14,9 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../core/app_state.dart';
 import '../features/audit/models/audit_finding.dart';
 import '../features/audit/models/audit_result.dart';
 import '../features/holes/services/hole_hunt_config.dart';
@@ -182,7 +184,9 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     unawaited(_opponents.ensureLoaded());
     _opponents.addListener(_onOpponentsChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _currentPlayer == null) {
+      if (mounted &&
+          _currentPlayer == null &&
+          context.read<AppState>().settingsMode != AppMode.positionAnalysis) {
         unawaited(_showPlayerSelection());
       }
     });
@@ -236,11 +240,18 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: AppBarTitleWithTrail(title: titleBlock),
+        title: AppBarTitleWithTrail(
+          title: Row(
+            children: [
+              Expanded(child: titleBlock),
+              if (player != null) ..._buildColorControls(),
+            ],
+          ),
+        ),
         actions: [
-          if (player != null) ..._buildColorControls(),
-          const AppModeSwitcher(),
           _buildActionsMenu(),
+          const AppModeSwitcher(),
+          const AppSettingsButton(mode: AppMode.positionAnalysis),
         ],
       ),
       body: Column(
@@ -296,9 +307,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     ];
   }
 
-  /// Kebab holding the engine runs, the position handoffs, then switching
-  /// player and opening app settings — the last two were icon buttons of their
-  /// own until the bar grew to six controls. The plain engine pass also has a
+  /// Grouped Actions menu for engine runs, position handoffs and players. The plain engine pass also has a
   /// button where its results show up: the positions list, sorted by eval.
   /// Handoffs save a *line* in a study; puzzle-ness is a marker the user sets
   /// on a move inside the study ("Puzzle starts here"), not a separate
@@ -307,6 +316,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     return AppOverflowMenu(
       entries: [
         AppMenuEntry(
+          heading: 'Analyze',
           label: _hasEvals ? 'Re-analyze with engine…' : 'Analyze with engine…',
           icon: Icons.memory,
           enabled: _canStartEngineJob,
@@ -351,6 +361,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
               'Tactics page) and lists the moves it has no answer to.',
         ),
         AppMenuEntry(
+          heading: 'Study and games',
           label: 'Add line to study…',
           icon: Icons.menu_book_outlined,
           enabled: _boardActions.hasPosition,
@@ -369,15 +380,11 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           onRun: _boardActions.openGamesInPgnViewer,
         ),
         AppMenuEntry(
+          heading: 'Player',
           label: 'Choose a player…',
           icon: Icons.person_search,
           dividerAbove: true,
           onRun: _showPlayerSelection,
-        ),
-        AppMenuEntry(
-          label: 'App settings…',
-          icon: Icons.settings,
-          onRun: () => openAppSettings(context),
         ),
       ],
     );

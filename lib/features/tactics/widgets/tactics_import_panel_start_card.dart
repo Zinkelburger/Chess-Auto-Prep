@@ -25,7 +25,7 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
             content: SizedBox(
               width: 360,
               child: SingleChildScrollView(
-                child: _SessionSettingsForm(
+                child: TacticsSessionSettingsForm(
                   settings: draft,
                   showCustomType: _presentMistakeTypes.contains(
                     TacticsSessionSettings.customMistakeType,

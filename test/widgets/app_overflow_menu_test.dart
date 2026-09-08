@@ -11,7 +11,7 @@ Widget _wrap(List<AppMenuEntry> entries) => MaterialApp(
 );
 
 Future<void> _open(WidgetTester tester) async {
-  await tester.tap(find.byIcon(Icons.more_vert));
+  await tester.tap(find.text('Actions'));
   await tester.pumpAndSettle();
 }
 
@@ -32,7 +32,7 @@ void main() {
       AppMotion.menuAnimation,
     );
 
-    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.tap(find.text('Actions'));
     await tester.pump();
     await tester.pump(AppMotion.menu);
     expect(find.text('Only'), findsOneWidget);

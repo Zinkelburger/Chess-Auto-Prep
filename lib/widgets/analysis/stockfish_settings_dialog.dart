@@ -19,12 +19,12 @@ Future<void> showStockfishSettingsDialog(BuildContext context) {
     context,
     icon: Icons.memory,
     title: 'Stockfish settings',
-    bodyBuilder: (_) => const _StockfishSettingsBody(),
+    bodyBuilder: (_) => const StockfishSettingsBody(),
   );
 }
 
-class _StockfishSettingsBody extends StatelessWidget {
-  const _StockfishSettingsBody();
+class StockfishSettingsBody extends StatelessWidget {
+  const StockfishSettingsBody({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -106,8 +106,8 @@ class _StockfishSettingsBody extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'CPU cores, memory and the opponent rating are in App settings '
-              '(⚙ in the top bar).',
+              'CPU cores, memory and the opponent rating are in '
+              'Global settings → Engine.',
               style: TextStyle(
                 fontSize: 12,
                 color: AppColors.onSurfaceMuted,

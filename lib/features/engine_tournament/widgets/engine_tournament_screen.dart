@@ -116,19 +116,13 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
             titleSpacing: 16,
             title: const AppBreadcrumbTrail(),
             actions: [
-              FilledButton.icon(
-                onPressed: _controller.isRunning ? null : _newTournament,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('New tournament'),
-              ),
-              const SizedBox(width: 8),
-              const AppModeSwitcher(),
               AppOverflowMenu(
                 entries: [
                   AppMenuEntry(
-                    label: 'Engines…',
-                    icon: Icons.memory,
-                    onRun: _manageEngines,
+                    heading: 'Tournament',
+                    label: 'New tournament',
+                    enabled: !_controller.isRunning,
+                    onRun: _newTournament,
                   ),
                   AppMenuEntry(
                     label: 'Refresh',
@@ -136,13 +130,31 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
                     enabled: !_controller.isRunning,
                     onRun: () => unawaited(_controller.refresh()),
                   ),
-                  AppMenuEntry(
-                    label: 'App settings…',
-                    icon: Icons.settings_outlined,
-                    dividerAbove: true,
-                    onRun: () => unawaited(openAppSettings(context)),
-                  ),
                 ],
+              ),
+              const AppModeSwitcher(),
+              AppSettingsButton(
+                mode: AppMode.engineTournament,
+                contentBuilder: (_) => ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    ListTile(
+                      title: const Text('Engines'),
+                      subtitle: const Text(
+                        'Manage engine executables and their options',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _manageEngines,
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'Time controls and match rules are chosen when creating a tournament.',
+                        style: AppTextStyles.muted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

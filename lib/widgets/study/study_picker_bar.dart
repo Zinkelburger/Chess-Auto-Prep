@@ -1,5 +1,5 @@
 /// Study switcher in the app bar: current name (inline rename), picker,
-/// new-study, and manage menu.
+/// with study-wide operations in the app bar’s Actions menu.
 library;
 
 import 'dart:async';
@@ -16,24 +16,12 @@ class StudyPickerBar extends StatefulWidget {
     super.key,
     required this.study,
     required this.focusNode,
-    required this.onNewStudy,
     required this.onPickStudy,
-    required this.onImportUrl,
-    required this.onImportPgn,
-    required this.onExportPgn,
-    required this.onSaveAs,
-    required this.onDeleteStudy,
   });
 
   final StudyController study;
   final FocusNode focusNode;
-  final VoidCallback onNewStudy;
   final VoidCallback onPickStudy;
-  final VoidCallback onImportUrl;
-  final VoidCallback onImportPgn;
-  final VoidCallback onExportPgn;
-  final VoidCallback onSaveAs;
-  final VoidCallback onDeleteStudy;
 
   @override
   State<StudyPickerBar> createState() => _StudyPickerBarState();
@@ -144,54 +132,6 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
           tooltip: 'Switch study',
           visualDensity: VisualDensity.compact,
           onPressed: widget.onPickStudy,
-        ),
-        IconButton(
-          icon: const Icon(Icons.add, size: 20),
-          tooltip: 'New study',
-          onPressed: widget.onNewStudy,
-        ),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, size: 18),
-          tooltip: 'Manage studies',
-          onSelected: (action) {
-            switch (action) {
-              case 'importUrl':
-                widget.onImportUrl();
-              case 'import':
-                widget.onImportPgn();
-              case 'export':
-                widget.onExportPgn();
-              case 'saveAs':
-                widget.onSaveAs();
-              case 'delete':
-                widget.onDeleteStudy();
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(
-              value: 'importUrl',
-              child: Text('Import from URL…'),
-            ),
-            const PopupMenuItem(
-              value: 'import',
-              child: Text('Import PGN file as chapters…'),
-            ),
-            if (current.filePath != null) ...[
-              const PopupMenuItem(
-                value: 'export',
-                child: Text('Copy study PGN'),
-              ),
-              const PopupMenuItem(
-                value: 'saveAs',
-                child: Text('Save study PGN as…'),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Text('Delete study…'),
-              ),
-            ],
-          ],
         ),
       ],
     );

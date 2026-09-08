@@ -28,6 +28,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/app_state.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -174,7 +175,6 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
         titleSpacing: 16,
         title: const AppBarTitleWithTrail(title: Text('Databases')),
         actions: [
-          const AppModeSwitcher(),
           AppOverflowMenu(
             entries: [
               AppMenuEntry(
@@ -183,14 +183,10 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
                 enabled: !_measuring,
                 onRun: () => unawaited(_measure()),
               ),
-              AppMenuEntry(
-                label: 'App settings…',
-                icon: Icons.settings_outlined,
-                dividerAbove: true,
-                onRun: () => unawaited(openAppSettings(context)),
-              ),
             ],
           ),
+          const AppModeSwitcher(),
+          const AppSettingsButton(mode: AppMode.databases),
         ],
       ),
       body: ListView(

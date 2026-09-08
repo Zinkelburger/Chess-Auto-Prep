@@ -87,8 +87,11 @@ mixin _AppBarBuildersMixin
             !_controller.isSolitaireMode)
           _buildAddTabMenu(),
         _buildViewMenu(),
-        const SizedBox(width: 16),
         const AppModeSwitcher(),
+        AppSettingsButton(
+          mode: AppMode.pgnViewer,
+          contentBuilder: (_) => _gameViewSettings(),
+        ),
         const SizedBox(width: 8),
       ],
     );
@@ -134,16 +137,22 @@ mixin _AppBarBuildersMixin
     final hasGame = _controller.filteredGames.isNotEmpty;
     final solitaire = _controller.isSolitaireMode;
     return AppOverflowMenu(
-      label: 'Game options',
-      tooltip: 'Game options',
+      label: 'Actions',
+      tooltip: 'Actions',
       entries: [
-        AppMenuEntry(
-          label: 'Game view…',
-          icon: Icons.tune,
-          onRun: _openGameViewSettings,
-        ),
+        if (!hasGame) ...[
+          AppMenuEntry(
+            label: 'Open PGN file…',
+            onRun: () => unawaited(_pickFile()),
+          ),
+          AppMenuEntry(
+            label: 'Paste PGN',
+            shortcut: 'Ctrl+V',
+            onRun: () => unawaited(_pastePgn()),
+          ),
+        ],
         if (hasGame) ...[
-          if (!solitaire)
+          if (!solitaire && !_onReferenceTab)
             AppMenuEntry(
               label: _editMode ? 'Finish editing' : 'Edit game',
               icon: Icons.edit_outlined,
@@ -182,10 +191,6 @@ mixin _AppBarBuildersMixin
             label: 'Solitaire chess trophies',
             onRun: _showTrophyCabinet,
           ),
-        AppMenuEntry(
-          label: 'App settings…',
-          onRun: () => openAppSettings(context),
-        ),
       ],
     );
   }
@@ -208,27 +213,24 @@ mixin _AppBarBuildersMixin
     onTree: () => _showPanel(PgnWorkspace.tree),
   );
 
-  Future<void> _openGameViewSettings() async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => GameViewSettingsDialog(
-        preferences: _viewPreferences,
-        onAnalysis: () => _showPanel(_analysisTabIndex),
-        perspective: _controller.perspective,
-        onChanged: _setViewPreferences,
-        onFlip: _controller.toggleBoardFlipped,
-        onPerspective: _controller.setPerspective,
-        player: _controller.detectProtagonist(),
-        onReadingOptions: _controller.filteredGames.isEmpty
-            ? null
-            : (_onLineTab ? _lineWidgetController : _pgnWidgetController)
-                  .showReadingOptions,
-        onFullscreen: _controller.filteredGames.isNotEmpty && !_onLineTab
-            ? _controller.toggleFullScreen
-            : null,
-      ),
-    );
-  }
+  Widget _gameViewSettings() => GameViewSettingsDialog(
+    preferences: _viewPreferences,
+    onAnalysis: () => _showPanel(_analysisTabIndex),
+    perspective: _controller.perspective,
+    onChanged: _setViewPreferences,
+    onFlip: _controller.toggleBoardFlipped,
+    onPerspective: _controller.setPerspective,
+    player: _controller.detectProtagonist(),
+    onReadingOptions: _controller.filteredGames.isEmpty
+        ? null
+        : (_onLineTab ? _lineWidgetController : _pgnWidgetController)
+              .showReadingOptions,
+    onFullscreen:
+        _controller.filteredGames.isNotEmpty && !_onLineTab && !_onReferenceTab
+        ? _controller.toggleFullScreen
+        : null,
+    embedded: true,
+  );
 
   /// App-bar file button: shows the loaded file name and opens a menu with
   /// recent files, a file browser, paste-from-clipboard, and — once something

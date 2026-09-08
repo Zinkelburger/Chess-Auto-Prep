@@ -18,9 +18,23 @@ void main() {
     testWidgets('boots into the unified Tactics home', (tester) async {
       await pumpApp(tester);
 
-      // App-bar title. At the root of the history the breadcrumb trail is
-      // deliberately absent — a lone crumb would just repeat this title.
+      // The View selector names the current mode. At the history root,
+      // the breadcrumb trail is absent to avoid repeating it.
+      expect(find.text('View'), findsOneWidget);
       expect(find.text('Tactics'), findsWidgets);
+      final actions = find.text('Actions');
+      final picker = find.byKey(AppModeSwitcher.switcherKey);
+      final settings = find.byKey(const ValueKey('view-settings-tactics'));
+      expect(actions, findsOneWidget);
+      expect(
+        tester.getCenter(actions).dx,
+        lessThan(tester.getCenter(picker).dx),
+      );
+      expect(
+        tester.getCenter(picker).dx,
+        lessThan(tester.getCenter(settings).dx),
+      );
+      expect(find.byTooltip('Settings'), findsWidgets);
 
       // Idle Tactics shows the games home instead of a decorative board;
       // the board returns only when a puzzle session starts.
@@ -151,6 +165,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(getAppState(tester).currentMode, equals(AppMode.repertoire));
+      expect(find.text('Actions'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('view-settings-repertoire')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('switches to Repertoire Trainer', (tester) async {

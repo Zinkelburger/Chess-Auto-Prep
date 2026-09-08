@@ -172,14 +172,15 @@ main.dart
 | `study` | `StudyScreen` | Multi-chapter studies |
 | `engineTournament` | `EngineTournamentScreen` | Engine-vs-engine matches, crosstable, per-game PGN |
 
-Mode switcher: `widgets/app_mode_switcher.dart` — the app-bar *title* (`Tactics ▾`) opens a grouped, text-only menu (Train / Build / Analyse / Lab, order in `kAppModeGroups`); Ctrl/Cmd+1…7 follow the same order and are bound once in `MainScreen`.
+Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens a grouped, text-only menu (Train / Build / Analyse / Lab / Data, order in `kAppModeGroups`); Ctrl/Cmd+1…9 follow the same order and are bound once in `MainScreen`.
 
 #### App bar conventions (unified June 2026)
 
 Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 - **`titleSpacing: 16`** on every `AppBar`.
-- **`AppModeSwitcher` is the title** (leftmost); the app bar's right side holds one primary action, the overflow ⋮, and nothing else.
+- **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with a bordered, two-line View/current-mode anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions use named groups, with no settings-only ellipsis. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
+- **Settings**: `AppSettingsButton(mode: ...)` opens the current view’s preferences first. **Global settings** opens the shared sidebar, grouped into **Views** then **Global** (Accounts, Display, Repertoires, Engine, Data, About, Keyboard shortcuts). Selecting a view opens its settings, including views not yet mounted; navigation respects the repertoire-generation lock. Live view controllers own their settings content. Shared board/engine controls keep their existing scope.
 - **Toolbar buttons collapse** from text+icon to icon-only below `kToolbarCompactBreakpoint` (900 px).
 - **Layout body splits** at `kCompactBreakpoint` (960 px) from side-by-side to stacked.
 - **Action padding** is `right: 8` for all toolbar action widgets.
@@ -228,7 +229,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Planner (`lib/features/planner/`, "Plan a build…")**: full-width planning mode (`PlanBuildScreen`, pushed as a route) that turns a few answers into chapters and then generates them all. `services/eco_trie.dart` lays the ECO book over itself as a SAN trie; `tabiyaScore = entriesBelow × distinctChildren` says whether a position is a fork worth asking about. `controllers/plan_controller.dart` walks from a start position: at *our-move* forks it asks (candidates from `services/plan_data_source.dart`: ECO names, **Maia** probability at the user's Elo (the probability of record — the Lichess explorer is never queried for probabilities, it is too slow and rate-limited), ChessDB eval; overlaid with `services/plan_knowledge.dart`: what the user's chapters already play — taken silently when unique — and what they play in their own Player Analysis games — pre-ticked, on by default); at *their-move* tabiyas it splits replies ≥ `chapterShare` into sibling chapters and cuts a "sidelines" chapter at the same root that excludes them (`TreeBuildConfig.rootReplyExclude`, honored in `node_expander.addOpponentChildren` at ply 0) so no two chapters build the same lines; out of book / `maxPly` it cuts a chapter. Flat chapters only (no sub-folders); duplicate names get the distinguishing move appended ("Queen's Gambit Declined · 4.Bg5"). Screen columns: plan so far | board (interactive in Start; clicking a candidate previews it) with Engine/Database tabs under it | question / coverage / review card. Review embeds `GenerationConfigForm` for engine settings; commit returns `PlanBuildResult` to the repertoire screen, whose `PlanRunner` (`controllers/plan_runner.dart`) creates the chapter files (via `RepertoireOutlineService`) then runs one `GenerationRequest` per chapter through `GenerationSessionController`, badging the outline ("queued", "building…").
 
-**Toolbar**: title/breadcrumb (repertoire ▸ chapter switcher) · `Actions ▾` — one sectioned menu (`AppMenuEntry.heading`): GENERATE (Plan the lines…, Generate from here…) · IMPORT (From a PGN…) · TRAIN (Train this chapter) · CHECK (Audit for gaps…) · mode switcher · ⋮ (Repertoire settings…, App settings…). "Play the moves myself" and "From my games" were removed in Sept 2026: both are the planner's job (moves played on the board at a question; the "My games" walk).
+**Toolbar**: title/breadcrumb (repertoire ▸ chapter switcher) · `Actions ▾` — one sectioned menu (`AppMenuEntry.heading`): GENERATE (Plan the lines…, Generate from here…) · IMPORT (From a PGN…) · TRAIN (Train this chapter) · CHECK (Audit for gaps…) · mode switcher · settings gear (repertoire options and analysis controls, with access to Global settings). "Play the moves myself" and "From my games" were removed in Sept 2026: both are the planner's job (moves played on the board at a question; the "My games" walk).
 
 **Key files:**
 - `lib/core/generation_session_controller.dart` — owns the run and the generated-tree bundle; pause/resume/cancel survive dialog disposal; `dispose()` stops build. Progress UI state lives on `GenerationProgress`; mid-run line export lives on `SnapshotExporter`.
@@ -276,7 +277,7 @@ Digit shortcuts (bottom-pane tab toggles `1`/`2`/`3`, edit-mode NAG `1`–`6`, s
 
 Breakpoints: `constants/ui_breakpoints.dart` (`kCompactBreakpoint=960`, `kWideBreakpoint=1100`).
 
-Overflow menu (⋮): Import PGN (shortcut I), Switch color, Settings → `screens/settings_screen.dart`.
+Actions menu groups view operations; the trailing gear opens `screens/settings_screen.dart` with contextual settings.
 
 ---
 
@@ -477,7 +478,7 @@ Single-chapter files open straight to their lines with a direct route back to
 the repertoire's chapters. A line's Read action opens
 that same chapter reader at the chosen line.
 
-Training settings precede the global mode menu. **Skip** is visible during a
+Training uses Actions → view picker → gear. The gear opens Session, Learning, Playback and Material pages, with a Global settings button. **Skip** is visible during a
 lesson and leaves a line out for the current sitting without rating it.
 **Line → Exclude from training** saves an exclusion alongside review progress;
 excluded lines remain readable and can be restored from their line options.
@@ -516,7 +517,7 @@ Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].
 Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept)
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
 Keyboard: `↑`/`↓` previous/next game, `←`/`→` moves, Home/Page Up and End/Page Down jump, Enter focus variation, Esc return to parent or leave mode, `F` flip, Ctrl+F/F11 fullscreen, `E` engine, Space playback, `W` auto-next, `A` edit in Study, `T` opening tree, Ctrl+S/Shift+S solitaire, `/` search, `G` game number, Ctrl+V paste PGN, `C` comment, `R` mainline (reveal in solitaire), `H` solitaire hint, Tab next panel, and 1–9 fork candidates. Enter starts solitaire during setup. Text fields retain their normal editing behavior.
-Workspace tabs: the main **Game** stays open. **Add tab** opens Analysis, My books, Opening explorer, Collection opening tree, Database operations, or a searchable recent/open-PGN database picker. The strip appears only with two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles only opened tabs. Readers stay mounted and preserve their cursors. Reference databases follow the main game's board position through a FEN index (including variations); matching games open independent reader tabs with their own board cursor. Copy/save game actions refer to the visible reference game; references are read-only. The compact, muted game counter and Search stay below the board; Analysis is an arrow-free toggle into its own tab. The Database tab selects games for study creation and houses collection exports and repertoire generation. Export and generation scope is the current filter; study creation uses the explicit selection. Game options contains only game actions and settings.
+Workspace tabs: the main **Game** stays open. **Add tab** opens Analysis, My books, Opening explorer, Collection opening tree, Database operations, or a searchable recent/open-PGN database picker. The strip appears only with two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles only opened tabs. Readers stay mounted and preserve their cursors. Reference databases follow the main game's board position through a FEN index (including variations); matching games open independent reader tabs with their own board cursor. Copy/save game actions refer to the visible reference game; references are read-only. The compact, muted game counter and Search stay below the board; Analysis is an arrow-free toggle into its own tab. The Database tab selects games for study creation and houses collection exports and repertoire generation. Export and generation scope is the current filter; study creation uses the explicit selection. Actions contains game operations; the settings gear opens view preferences.
 Opening tree (`T`): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). The viewer defaults to one mainline per game. **Include variations** rebuilds both tree frequencies and the matching-game index with all RAVs; the collection game count is shown separately from variation-path counts. Other builder callers retain their existing automatic policy (RAVs for course `Result *`, mainlines for scored games). `*` results count toward frequency without a fake 50% draw bar — the UI says **lines** instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Expand all** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
 
 **Cursor ownership (same rule as Game vs Line tabs, Analysis `_navigateTo`, Repertoire `jump`):** each exploration surface keeps its own place. The merged opening tree is not the current game's move list, and its tab retains the game reader offstage. Re-entering the tree — `T`, or the app-bar back after a games-at-position click — restores the tree cursor onto the board; it does not resync from that remounted game. Clicking a game in the list parks that game at the tree FEN (`pgnInitialFen` → `PgnViewerWidget.initialFen`). Leaving the tree with `T` restores the game cursor snapshotted when the tree was opened. First open (no saved tree cursor) still syncs the tree to the current game FEN. Next/prev/sort/slice clear the landing FEN so those games start at move 1. Repertoire's Tree tab and Analysis's opening-tree tab already share one board cursor and stay mounted, so they do not need this snapshot.
@@ -524,7 +525,7 @@ Opening tree (`T`): `PgnOpeningTreePanel` splits the move tree and a resizable *
 
 #### Edit Mode (Annotation)
 
-Toggled through **Game options → Edit game**. When active:
+Toggled through **Actions → Edit game**. When active:
 
 - **NAG display**: Move-quality NAGs ($1–$6) render inline after the SAN with Lichess-style colors (brilliant=green, good=green, interesting=pink, dubious=blue, mistake=orange, blunder=red). Hidden when edit mode is off.
 - **Annotation toolbar**: Tapping a move in edit mode shows an `_AnnotationToolbar` below it with 6 NAG toggle buttons + comment button. Toggling a NAG replaces any existing move-quality NAG.
@@ -866,12 +867,12 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `main_screen.dart` | Mode `IndexedStack`; engine suspend/resume on leaving/entering interactive-engine modes and on `paused`/`hidden`/`detached` (not `inactive`) |
 | `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; when no repertoire is selected shows `RepertoireListBody` inline instead of a placeholder button; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
 | `repertoire_selection_screen.dart` | Full-screen push wrapper around `RepertoireListBody`; pops with selected `RepertoireMetadata` |
-| `repertoire_training_screen.dart` | Repertoire and study trainer: a stable board beside the source picker, chapter/line browser or current lesson; Learn and Review respect the selected chapter and session size. Read opens the shared chapter reader. Training settings are left of the global mode switcher; Skip is visible, and Line actions include persistent exclusion. The browser restores excluded lines without discarding review history. Keyboard: Space acknowledges the next learning step, arrows skip lines, `/` focuses move input, Escape returns to the browser. |
+| `repertoire_training_screen.dart` | Repertoire and study trainer: a stable board beside the source picker, chapter/line browser or current lesson; Learn and Review respect the selected chapter and session size. Read opens the shared chapter reader. The settings gear follows the global mode switcher; Skip is visible, and Line actions include persistent exclusion. The browser restores excluded lines without discarding review history. Keyboard: Space acknowledges the next learning step, arrows skip lines, `/` focuses move input, Escape returns to the browser. |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: N/P/F/E/W/A/T/S letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen; caches `AppState` so dispose does not `context.read` |
 | `player_selection_screen.dart` | Player pick for analysis: cached game-sets from chess.com / lichess downloads, PGN-file imports, and **opponent lists** (`OpponentListImportDialog` → one merged player per opponent, sourced from every account listed, tagged with the event as `group`; batch download with per-person progress, skip-existing, failures reported not swallowed); search matches name, platform and group |
-| `settings_screen.dart` | Machine-level settings (accounts, **display** — board coordinates and piece notation with a live preview board, my repertoires, engine cores, ChessDB); focused sections have independent scrolling; Keyboard shortcuts lists mappings by view; analysis *behavior* lives on per-panel gears |
+| `settings_screen.dart` | Focused view settings plus grouped Views / Global navigation; shared preferences (accounts, **display** — board coordinates and piece notation with a live preview board, my repertoires, engine cores, ChessDB); focused sections have independent scrolling; Keyboard shortcuts lists mappings by view; analysis *behavior* lives on per-panel gears |
 
 ### `lib/services/` (grouped)
 
@@ -1037,7 +1038,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 |------|---------|
 | `repertoire/repertoire_board_pane.dart` | Board + preview overlay + generation dim |
 | `repertoire/repertoire_shortcuts.dart` | `RepertoireShortcuts` — `CallbackShortcuts` (Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+V paste FEN) + `Focus.onKeyEvent` for letter/arrow bindings; suppresses shortcuts while a text field is focused (`isTextInputFocused()` in `lib/utils/keyboard_shortcut_utils.dart`) |
-| `repertoire/repertoire_toolbar.dart` | App bar: `AppModeSwitcher` + repertoire switcher as the title; actions: contextual buttons → select repertoire → overflow ⋮. |
+| `repertoire/repertoire_toolbar.dart` | App bar: repertoire/chapter breadcrumb title; Actions → view picker → gear. |
 | `repertoire/repertoire_tab_bar.dart` | Compact layout tab bar (PGN | Context) + navigation trail |
 | `repertoire/repertoire_analyze_pane.dart` | Wires analyze zones (lines, coverage, traps) |
 | `repertoire/repertoire_analyze_props.dart` | Prop bag for analyze pane |
@@ -1081,7 +1082,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 
 | File | Purpose |
 |------|---------|
-| `app_mode_switcher.dart` | Top-level mode switcher: the app-bar title with the grouped mode menu behind it |
+| `app_mode_switcher.dart` | Top-level View selector: bordered current-mode button and separator, with the grouped mode menu behind it |
 | `chess_board_widget.dart` | Board rendering, move input; coordinates follow the Display preference unless the caller passes `coordinates:` (thumbnails under 24px squares are always bare; *outside* takes a margin out of the squares — see `board/board_coordinates.dart`, whose `coordinateLabels` is the pure placement rule); `_BoardPainter.shouldRepaint` compares highlight/square/color state (not always `true`). Pieces are `Positioned` on their squares with no implicit animation, so a layout resize (expanding a chapter list, dragging a panel) cannot slide them. Annotation types live in `lib/models/board_annotation.dart`. |
 | `clickable_move_line.dart` | SAN line with tap + hover callbacks |
 | `navigation_trail.dart` | Breadcrumb trail widget (used by repertoire tab bar) |

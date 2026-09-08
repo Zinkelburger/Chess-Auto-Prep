@@ -29,6 +29,19 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> selectGlobal(WidgetTester tester, Finder finder) async {
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 1400));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      finder,
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    await tester.tap(finder);
+  }
+
   testWidgets('navigation shows one section and preserves account edits', (
     tester,
   ) async {
@@ -39,12 +52,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'unsaved-token');
 
-    await tester.tap(find.byKey(const Key('settings-nav-3')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-3')));
     await tester.pumpAndSettle();
     expect(find.text('CPU cores'), findsOneWidget);
     expect(find.text('Your chess usernames'), findsNothing);
 
-    await tester.tap(find.byKey(const Key('settings-nav-0')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-0')));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, 'unsaved-token'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -54,7 +67,7 @@ void main() {
     tester,
   ) async {
     await pumpSettings(tester, const Size(1280, 720));
-    await tester.tap(find.byKey(const Key('settings-nav-6')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-6')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Focus the current variation'),
@@ -83,7 +96,7 @@ void main() {
     );
     await tester.ensureVisible(find.byKey(const Key('settings-nav-5')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('settings-nav-5')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-5')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Reset settings…'),
@@ -121,7 +134,7 @@ void main() {
         // top match.
         await tester.enterText(
           find.byKey(const Key('settings-section-picker')),
-          section.substring(0, 3),
+          'Global · $section',
         );
         await tester.pumpAndSettle();
         await tester.testTextInput.receiveAction(TextInputAction.done);
@@ -163,7 +176,7 @@ void main() {
       );
       await tester.tap(find.text('Open settings'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('settings-nav-4')));
+      await selectGlobal(tester, find.byKey(const Key('settings-nav-4')));
       await tester.pumpAndSettle();
       expect(find.textContaining('Years of games'), findsNothing);
       expect(find.textContaining('ChessDB data directory'), findsNothing);
@@ -185,7 +198,7 @@ void main() {
   ) async {
     addTearDown(() => BoardDisplaySettings.instance.resetToDefaults());
     await pumpSettings(tester, const Size(1280, 720));
-    await tester.tap(find.byKey(const Key('settings-nav-1')));
+    await selectGlobal(tester, find.byKey(const Key('settings-nav-1')));
     await tester.pumpAndSettle();
     expect(find.text('Board coordinates'), findsOneWidget);
     expect(find.text('Piece notation'), findsOneWidget);
