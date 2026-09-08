@@ -94,7 +94,7 @@ class BughouseBoardCard extends StatelessWidget {
                           controller.hover.value == null,
                       recentMoveSquares: recent,
                       annotations: controller.annotationsFor(which),
-                      highlightedSquares: _dropTargets(),
+                      legalMoveSquares: _dropTargets(),
                       onSquareClicked: _onSquareClicked,
                       onMove: (completed) {
                         if (controller.mode != BughouseMode.play) return;
