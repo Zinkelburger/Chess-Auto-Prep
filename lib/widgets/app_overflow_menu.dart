@@ -143,25 +143,23 @@ class AppOverflowMenu extends StatelessWidget {
                   ],
                 ),
               ));
-    if (anchor == null) {
-      return PopupMenuButton<int>(
-        icon: const Icon(Icons.more_vert, size: 20),
+    return Theme(
+      data: Theme.of(context).copyWith(
+        dividerTheme: const DividerThemeData(color: AppColors.divider),
+      ),
+      child: PopupMenuButton<int>(
+        icon: anchor == null ? const Icon(Icons.more_vert, size: 20) : null,
         tooltip: tooltip,
         enabled: enabled,
+        position: anchor == null
+            ? PopupMenuPosition.over
+            : PopupMenuPosition.under,
+        padding: anchor == null ? const EdgeInsets.all(8) : EdgeInsets.zero,
         popUpAnimationStyle: AppMotion.menuAnimation,
         onSelected: (i) => rows[i].onRun(),
         itemBuilder: (_) => items,
-      );
-    }
-    return PopupMenuButton<int>(
-      tooltip: tooltip,
-      enabled: enabled,
-      position: PopupMenuPosition.under,
-      padding: EdgeInsets.zero,
-      popUpAnimationStyle: AppMotion.menuAnimation,
-      onSelected: (i) => rows[i].onRun(),
-      itemBuilder: (_) => items,
-      child: anchor,
+        child: anchor,
+      ),
     );
   }
 }

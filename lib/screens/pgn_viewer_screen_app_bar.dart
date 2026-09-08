@@ -83,9 +83,7 @@ mixin _AppBarBuildersMixin
       ),
       actions: [
         _buildViewMenu(),
-        const SizedBox(width: 20),
-        const SizedBox(height: 24, child: VerticalDivider(width: 1)),
-        const SizedBox(width: 12),
+        const SizedBox(width: 16),
         const AppModeSwitcher(),
         const SizedBox(width: 8),
       ],
@@ -209,6 +207,7 @@ mixin _AppBarBuildersMixin
       context: context,
       builder: (_) => GameViewSettingsDialog(
         preferences: _viewPreferences,
+        perspective: _controller.perspective,
         onChanged: _setViewPreferences,
         onFlip: _controller.toggleBoardFlipped,
         onPerspective: _controller.setPerspective,

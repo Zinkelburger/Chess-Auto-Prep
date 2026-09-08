@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/pgn_viewer_controller.dart'
-    show Perspective, PerspectiveMode;
+import '../../../core/pgn_viewer_controller.dart' show Perspective;
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../widgets/game_nav_bar.dart' show kAutoPlaySpeeds;
@@ -15,6 +14,7 @@ class GameViewSettingsDialog extends StatefulWidget {
     super.key,
     required this.preferences,
     required this.onChanged,
+    this.perspective = const Perspective(),
     required this.onFlip,
     required this.onPerspective,
     this.player,
@@ -23,6 +23,7 @@ class GameViewSettingsDialog extends StatefulWidget {
   });
 
   final GameViewPreferences preferences;
+  final Perspective perspective;
   final ValueChanged<GameViewPreferences> onChanged;
   final VoidCallback onFlip;
   final ValueChanged<Perspective> onPerspective;
@@ -36,6 +37,7 @@ class GameViewSettingsDialog extends StatefulWidget {
 
 class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
   late GameViewPreferences _prefs = widget.preferences;
+  late String _orientation = widget.perspective.toHeaderValue();
 
   void _update(GameViewPreferences value) {
     if (!mounted) return;
@@ -43,20 +45,24 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
     widget.onChanged(value);
   }
 
-  Widget _action(String label, VoidCallback? action, {AppShortcut? shortcut}) =>
-      ListTile(
-        dense: true,
-        title: Text(label, style: AppTextStyles.body),
-        trailing: shortcut == null
-            ? null
-            : Text(shortcut.label, style: AppTextStyles.caption),
-        onTap: action == null
-            ? null
-            : () {
-                Navigator.pop(context);
-                action();
-              },
-      );
+  Widget _action(String label, VoidCallback? action, {AppShortcut? shortcut}) {
+    final tile = ListTile(
+      dense: true,
+      title: Text(label, style: AppTextStyles.body),
+      trailing: shortcut == null
+          ? null
+          : Text(shortcut.label, style: AppTextStyles.caption),
+      onTap: action == null
+          ? null
+          : () {
+              Navigator.pop(context);
+              action();
+            },
+    );
+    return shortcut == null
+        ? tile
+        : ShortcutTooltip(description: label, shortcut: shortcut, child: tile);
+  }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
@@ -132,28 +138,25 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
                   widget.onFlip,
                   shortcut: AppShortcut.flipBoard,
                 ),
-                _action(
-                  'Always view as White',
-                  () => widget.onPerspective(
-                    const Perspective(mode: PerspectiveMode.white),
-                  ),
+                SettingsChoiceTile<String>(
+                  label: 'Board orientation',
+                  value: _orientation,
+                  items: [
+                    ('white', 'Always White'),
+                    ('black', 'Always Black'),
+                    if (widget.player case final player?)
+                      (player, 'Follow $player'),
+                    if (_orientation != 'white' &&
+                        _orientation != 'black' &&
+                        _orientation != widget.player)
+                      (_orientation, 'Follow $_orientation'),
+                  ],
+                  onChanged: (value) {
+                    if (!mounted) return;
+                    setState(() => _orientation = value);
+                    widget.onPerspective(Perspective.fromHeaderValue(value));
+                  },
                 ),
-                _action(
-                  'Always view as Black',
-                  () => widget.onPerspective(
-                    const Perspective(mode: PerspectiveMode.black),
-                  ),
-                ),
-                if (widget.player case final player?)
-                  _action(
-                    'Follow $player',
-                    () => widget.onPerspective(
-                      Perspective(
-                        mode: PerspectiveMode.player,
-                        playerName: player,
-                      ),
-                    ),
-                  ),
                 _action(
                   'Fullscreen',
                   widget.onFullscreen,
