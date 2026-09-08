@@ -81,30 +81,100 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
   }
 
-  testWidgets('one team at a time, with moves grouped by board', (
+  testWidgets('both boards show the lines for their side to move', (
     tester,
   ) async {
     engine.resultsByTeam[Side.white] = result('(e2e4,pass)', '(g1f3,pass)');
     engine.resultsByTeam[Side.black] = result('(pass,d2d4)', '(pass,g1f3)');
     await pumpPanel(tester);
-    expect(find.text('You + Partner'), findsNWidgets(2));
-    expect(find.text('VARIATIONS'), findsNothing);
-    expect(find.text('TO MOVE NOW'), findsNothing);
-    expect(find.text('Board 1'), findsNWidgets(2));
-    expect(find.text('Board 2'), findsNWidgets(2));
+    expect(find.text('Opponents'), findsNothing);
+    expect(find.text('Board 1'), findsOneWidget);
+    expect(find.text('Board 2'), findsOneWidget);
+    expect(find.text('White to move'), findsNWidgets(2));
     expect(find.textContaining('e4', findRichText: true), findsOneWidget);
-    expect(find.textContaining('d4', findRichText: true), findsNothing);
-    for (var i = 0; i < 3; i++) {
-      final slot = find.byKey(ValueKey('bughouse-line-slot-white-$i'));
-      expect(tester.getSize(slot).height, 80);
-      expect(find.byKey(ValueKey('bughouse-line-slot-black-$i')), findsNothing);
-    }
-    await tester.tap(find.text('Opponents'));
-    await tester.pumpAndSettle();
     expect(find.textContaining('d4', findRichText: true), findsOneWidget);
-    expect(find.textContaining('e4', findRichText: true), findsNothing);
+    for (final board in BughouseBoard.values) {
+      for (var i = 0; i < 3; i++) {
+        final slot = find.byKey(
+          ValueKey('bughouse-line-slot-${board.name}-$i'),
+        );
+        expect(tester.getSize(slot).height, 36);
+      }
+    }
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('board lines follow turn changes and play joint continuations', (
+    tester,
+  ) async {
+    controller.playMove(
+      BughouseBoard.a,
+      const NormalMove(from: Square.e2, to: Square.e4),
+    );
+    // Black on 1 and White on 2 now belong to the same team.
+    engine.resultsByTeam[Side.black] = result('(e7e5,d2d4)', '(b8c6,g1f3)');
+    await pumpPanel(tester);
+    expect(find.text('Black to move'), findsOneWidget);
+    expect(find.text('White to move'), findsOneWidget);
+    expect(find.textContaining('e5', findRichText: true), findsOneWidget);
+    expect(find.textContaining('d4', findRichText: true), findsOneWidget);
+    await tester.tap(find.textContaining('d4', findRichText: true));
+    await tester.pump();
+    expect(controller.state.boardA.board.pieceAt(Square.e5)?.role, Role.pawn);
+    expect(controller.state.boardB.board.pieceAt(Square.d4)?.role, Role.pawn);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'comparison opens Engine immediately and shows progress and results',
+    (tester) async {
+      engine.resultsByTeam[Side.white] = result('(e2e4,pass)', '(g1f3,pass)');
+      engine.resultsByTeam[Side.black] = result('(pass,d2d4)', '(pass,g1f3)');
+      await pumpPanel(tester);
+      engine.searchDelay = const Duration(milliseconds: 100);
+      await tester.tap(find.text('Board'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Compare clock scenarios'));
+      await tester.pump();
+      expect(tester.widget<TabBar>(find.byType(TabBar)).controller!.index, 0);
+      expect(find.text('Clock scenarios'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('bughouse-clock-progress')),
+        findsOneWidget,
+      );
+      expect(find.text('Comparing… 0 of 3 ready'), findsOneWidget);
+      expect(
+        tester
+            .getTopLeft(find.byKey(const ValueKey('bughouse-clock-scenarios')))
+            .dy,
+        lessThan(250),
+      );
+      for (var i = 0; i < 30 && controller.scenarios.isEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(find.text('Ahead (may sit)'), findsOneWidget);
+      expect(find.text('Comparing… 1 of 3 ready'), findsOneWidget);
+      for (var i = 0; i < 60 && controller.isComparing; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Comparison complete'), findsOneWidget);
+      expect(find.text('Level or behind'), findsOneWidget);
+      expect(find.text('Forced to move on 1'), findsOneWidget);
+      expect(find.text('Board 1: e4'), findsNWidgets(3));
+      expect(
+        find.byKey(const ValueKey('bughouse-clock-progress')),
+        findsNothing,
+      );
+      controller.playMove(
+        BughouseBoard.a,
+        const NormalMove(from: Square.e2, to: Square.e4),
+      );
+      await tester.pump();
+      expect(find.text('Clock scenarios'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('rules and engine controls open directly', (tester) async {
     await pumpPanel(tester);

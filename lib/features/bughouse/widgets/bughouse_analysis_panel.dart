@@ -33,7 +33,8 @@ class BughouseAnalysisPanel extends StatefulWidget {
 class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  bool _opponents = false;
+  bool _wasComparing = false;
+  final _outputScroll = ScrollController();
   int _tab = 0;
   bool _bookWasOpen = false;
 
@@ -49,6 +50,7 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel>
 
   @override
   void dispose() {
+    _outputScroll.dispose();
     _tabs.dispose();
     super.dispose();
   }
@@ -61,6 +63,16 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel>
       _tabs.index = 0;
     }
     _bookWasOpen = controller.bookOpen;
+    if (controller.isComparing && !_wasComparing) {
+      _tab = 0;
+      _tabs.index = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        controller.hoverAction(null);
+        if (_outputScroll.hasClients) _outputScroll.jumpTo(0);
+      });
+    }
+    _wasComparing = controller.isComparing;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -105,33 +117,28 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel>
         const SizedBox(height: 12),
         Expanded(
           child: ListView(
+            controller: _outputScroll,
             padding: EdgeInsets.zero,
             children: switch (_tab) {
-              1 => [
-                _TableRules(controller: controller),
-                if (controller.scenarios.isNotEmpty)
-                  _ScenarioTable(controller: controller),
-              ],
+              1 => [_TableRules(controller: controller)],
               2 => [_EngineSection(controller: controller)],
               _ => [
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('You + Partner')),
-                    ButtonSegment(value: true, label: Text('Opponents')),
-                  ],
-                  showSelectedIcon: false,
-                  selected: {_opponents},
-                  onSelectionChanged: (values) {
-                    if (!mounted) return;
-                    controller.hoverAction(null);
-                    setState(() => _opponents = values.first);
-                  },
-                ),
-                const SizedBox(height: 8),
-                _TeamLines(
-                  controller: controller,
-                  analysis: _opponents ? controller.theirs : controller.ours,
-                ),
+                if (controller.isComparing ||
+                    controller.scenarios.isNotEmpty) ...[
+                  _ScenarioTable(controller: controller),
+                  const SizedBox(height: 16),
+                  Text(
+                    controller.isComparing
+                        ? 'CURRENT CLOCK SETTINGS · PAUSED'
+                        : 'CURRENT CLOCK SETTINGS',
+                    style: AppTextStyles.eyebrow,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                for (final which in BughouseBoard.values) ...[
+                  _BoardLines(controller: controller, which: which),
+                  const SizedBox(height: 12),
+                ],
                 if (controller.bookOpen) ...[
                   const Divider(height: 24),
                   BughouseBookPanel(controller: controller),
@@ -225,7 +232,7 @@ class _Eval extends StatelessWidget {
         Row(
           children: [
             Expanded(child: Text(_status(), style: AppTextStyles.caption)),
-            if (controller.isThinking)
+            if (controller.isThinking || controller.isComparing)
               const SizedBox(
                 width: 10,
                 height: 10,
@@ -240,8 +247,8 @@ class _Eval extends StatelessWidget {
   /// One line, and it says what the number is worth rather than what the
   /// engine is doing: depth and time thought are the reasons to believe it.
   String _status() {
-    if (controller.isStarting) return 'Loading the network…';
     if (controller.isComparing) return 'Comparing clock scenarios…';
+    if (controller.isStarting) return 'Loading the network…';
     final info = controller.ours.latest ?? controller.theirs.latest;
     if (info == null) {
       return controller.analysisEnabled ? 'Thinking…' : 'Paused';
@@ -267,12 +274,13 @@ class _Eval extends StatelessWidget {
   }
 }
 
-/// One selected team’s ranked continuations, split into board rows.
-class _TeamLines extends StatelessWidget {
-  const _TeamLines({required this.controller, required this.analysis});
+/// Ranked continuations for whoever is to move on one board.
+/// The underlying search still considers both boards and their shared pieces.
+class _BoardLines extends StatelessWidget {
+  const _BoardLines({required this.controller, required this.which});
 
   final BughouseController controller;
-  final BughouseTeamAnalysis analysis;
+  final BughouseBoard which;
 
   /// Width of the score column. Wide enough for `-12.34` and `#-3`, and fixed
   /// so every score in both tables sits on the same axis.
@@ -281,7 +289,10 @@ class _TeamLines extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = controller.state;
-    final onMove = state.hasMoveFor(analysis.team);
+    final turn = state.board(which).turn;
+    final analysis = state.isOurTurn(which)
+        ? controller.ours
+        : controller.theirs;
     // Every row comes from the same finished search. Showing `latest` in the
     // top row while the others held the previous block put numbers from
     // budgets a factor of two apart side by side; `latest` still drives the
@@ -300,18 +311,22 @@ class _TeamLines extends StatelessWidget {
             // Keyed by content, so a row whose line changes under the
             // pointer is a new row: the pointer leaves the old one and
             // enters the new, instead of the old highlight outliving it.
-            key: ValueKey('${analysis.team.name}:$i:${rows[i].pv}'),
+            key: ValueKey(
+              '${which.name}:${analysis.team.name}:$i:${rows[i].pv}',
+            ),
             controller: controller,
-            team: analysis.team,
+            which: which,
             steps: controller.describePv(rows[i], team: analysis.team),
             label: controller.evalOf(rows[i], team: analysis.team).label,
             primary: i == 0,
           ),
       if (rows.every((r) => r.pv.isEmpty) && analysis.best != null)
         _LineRow(
-          key: ValueKey('${analysis.team.name}:best:${analysis.best}'),
+          key: ValueKey(
+            '${which.name}:${analysis.team.name}:best:${analysis.best}',
+          ),
           controller: controller,
-          team: analysis.team,
+          which: which,
           steps: controller.describePv(
             BughouseInfo(
               depth: 0,
@@ -327,20 +342,43 @@ class _TeamLines extends StatelessWidget {
           primary: true,
         ),
     ];
-    final String? message = !onMove
-        ? 'Waiting for the opponents to move.'
-        : lines.isEmpty
+    final String? message = lines.isEmpty
         ? (controller.analysisEnabled ? 'Thinking…' : 'Analysis paused')
         : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              Text(which.label, style: AppTextStyles.bodyStrong),
+              const SizedBox(width: 8),
+              Text(
+                '${turn == Side.white ? 'White' : 'Black'} to move',
+                style: AppTextStyles.caption,
+              ),
+              const Spacer(),
+              const Tooltip(
+                message:
+                    'Best lines for the side to move on this board. '
+                    'Both boards are analysed together; scores are for your team. '
+                    'Hover previews both boards. Clicking plays the full joint sequence.',
+                child: Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: AppColors.onSurfaceMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
         // As many slots as lines the engine is asked for, every one the same
         // height, whether or not there is a line to put in it yet.
         for (var i = 0; i < controller.shortlistSize; i++)
           SizedBox(
-            key: ValueKey('bughouse-line-slot-${analysis.team.name}-$i'),
+            key: ValueKey('bughouse-line-slot-${which.name}-$i'),
             height: _LineRow.height,
             child: i < lines.length
                 ? lines[i]
@@ -356,19 +394,19 @@ class _TeamLines extends StatelessWidget {
   }
 }
 
-/// A stable-height continuation with independent board move strips.
+/// One board’s part of a joint continuation, with stable row height.
 class _LineRow extends StatefulWidget {
   const _LineRow({
     super.key,
     required this.controller,
-    required this.team,
+    required this.which,
     required this.steps,
     required this.label,
     required this.primary,
   });
 
   final BughouseController controller;
-  final Side team;
+  final BughouseBoard which;
 
   /// The line, replayed from the position on screen. Empty when it no longer
   /// fits — what a line from a superseded search looks like.
@@ -380,10 +418,8 @@ class _LineRow extends StatefulWidget {
   /// The line the search settled on, drawn heavier than the ones it beat.
   final bool primary;
 
-  /// Two lines of moves, and then the line is cut off — the way every
-  /// engine pane cuts a long variation rather than growing to hold it. Fixed
-  /// so the slot it sits in is the same height empty or full.
-  static const double height = 80;
+  /// One horizontally scrollable move strip, empty or full.
+  static const double height = 36;
 
   @override
   State<_LineRow> createState() => _LineRowState();
@@ -485,7 +521,7 @@ class _LineRowState extends State<_LineRow> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: _TeamLines.evalWidth,
+                width: _BoardLines.evalWidth,
                 child: Padding(
                   // Sits on the first line of the moves beside it.
                   padding: const EdgeInsets.only(top: 1),
@@ -506,31 +542,9 @@ class _LineRowState extends State<_LineRow> {
                           color: AppColors.onSurfaceMuted,
                         ),
                       )
-                    // Clipped at the row's height rather than wrapped to
-                    // whatever the line needs; the moves past the cut are
-                    // still played by clicking the last visible one and
-                    // stepping forward.
-                    : Column(
-                        children: [
-                          for (final which in BughouseBoard.values)
-                            Row(
-                              children: [
-                                SizedBox(
-                                  width: 58,
-                                  child: Text(
-                                    which.label,
-                                    style: AppTextStyles.caption,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Row(children: _movesOn(which)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
+                    : SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: _movesOn(widget.which)),
                       ),
               ),
             ],
@@ -688,7 +702,8 @@ class _TableRules extends StatelessWidget {
               '• Your team is ahead on time and may wait (sit).\n'
               '• Your team is level or behind on time.\n'
               '• Your team must move on Board 1.\n'
-              'Results appear below. Your clocks and position stay the same.',
+              'Results open in the Engine tab under Clock scenarios. '
+              'Your clocks and position stay the same.',
           child: OutlinedButton.icon(
             icon: const Icon(Icons.compare_arrows, size: 16),
             label: const Text('Compare clock scenarios'),
@@ -946,7 +961,7 @@ class _BannerState extends State<_Banner> {
   }
 }
 
-/// The same position searched under each clock scenario, side by side.
+/// Progress and labeled what-if results for the current position.
 class _ScenarioTable extends StatelessWidget {
   const _ScenarioTable({required this.controller});
 
@@ -954,40 +969,71 @@ class _ScenarioTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('CLOCK SCENARIOS', style: AppTextStyles.eyebrow),
-        const SizedBox(height: 6),
-        for (final row in controller.scenarios)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      key: const ValueKey('bughouse-clock-scenarios'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.divider),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Clock scenarios', style: AppTextStyles.bodyStrong),
+              ),
+              if (controller.isComparing)
+                const SizedBox(
+                  key: ValueKey('bughouse-clock-progress'),
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            controller.isComparing
+                ? 'Comparing… ${controller.scenarios.length} of 3 ready'
+                : controller.scenarios.length == 3
+                ? 'Comparison complete'
+                : 'Comparison stopped · ${controller.scenarios.length} of 3 ready',
+            style: AppTextStyles.caption,
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'What-if results · scores for your team',
+            style: AppTextStyles.caption,
+          ),
+          for (final row in controller.scenarios) ...[
+            const Divider(height: 16),
+            Row(
               children: [
-                SizedBox(
-                  width: 110,
-                  child: Text(row.label, style: AppTextStyles.caption),
-                ),
-                SizedBox(
-                  width: _TeamLines.evalWidth,
-                  child: Text(
-                    row.eval?.label ?? '—',
-                    style: AppTextStyles.monoDense,
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    row.best == null
-                        ? '—'
-                        : controller.describeJoint(row.best!),
-                    style: AppTextStyles.monoDense,
-                  ),
-                ),
+                Expanded(child: Text(row.label, style: AppTextStyles.body)),
+                Text(row.eval?.label ?? '—', style: AppTextStyles.mono),
               ],
             ),
-          ),
-      ],
+            const SizedBox(height: 4),
+            Text(
+              row.best == null ? 'No move available' : _moves(row.best!),
+              style: PgnTextStyles.moveAt(
+                1,
+              ).copyWith(color: AppColors.ink, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ],
+      ),
     );
+  }
+
+  String _moves(BughouseJointMove action) {
+    final seats = controller.describeSeats(action, team: controller.state.team);
+    return seats.isEmpty
+        ? 'No move available'
+        : seats
+              .map((seat) => '${seat.board.label}: ${seat.move}')
+              .join('   ·   ');
   }
 }

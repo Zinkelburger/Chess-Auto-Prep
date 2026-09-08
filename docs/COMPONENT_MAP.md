@@ -55,7 +55,7 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 
 `features/bughouse/widgets/bughouse_screen.dart` keeps Board 1 and Board 2
 beside one analysis/reference panel. Underlined Engine / Board / Engine settings
-tabs provide navigation, distinct from the segmented team and database selectors.
+tabs provide navigation, distinct from the segmented database selectors.
 Engine moves use the PGN notation face at 16px, with consistently semibold white
 continuations, white move numbers and separators between candidates. The layout follows lila's separation of
 boards, engine lines and opening explorer. Smaller windows stack the panel.
@@ -65,13 +65,13 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 | Play or drop a piece | Drag on either board; reserve pieces also support click then square |
 | Identify seats | You / Partner / Opponent / Partner’s opponent, beside each clock |
 | Pause or resume | Analysis toolbar, or Space |
-| Read candidate continuations | One ranked list; select You + Partner or Opponents. Each candidate has separate numbered Board 1 and Board 2 move strips |
+| Read candidate continuations | Board 1 and Board 2 ranked lines appear together, automatically using the side to move on each board. Searches still consider both boards jointly; all scores are from your team’s perspective |
 | Preview a continuation | Hover a move or candidate to show the resulting boards and reserves; exit restores the current position without changing history |
 | Play a continuation | Click a move to play the joint sequence through that point, including its other-board moves |
 | Browse FICS | Book icon opens the archive immediately in the right panel; Board 1 / Board 2 filters the recorded next moves |
 | Interpret archive results | Result bars always describe your team. Move frequencies use the selected board’s recorded continuations; the archive remains keyed by both boards |
 | Change team, sitting or clocks | Board tab; editable clocks remain beside the players |
-| Compare clock assumptions | Board → Compare clock scenarios; hover explains the three cases (ahead and may sit, level or behind, forced to move on Board 1) and the evaluation/best-move results shown below |
+| Compare clock assumptions | Board → Compare clock scenarios opens Engine immediately with a distinct Clock scenarios section, spinner and completed-result count. Each scenario’s evaluation and board-labeled moves appear as it finishes; current-clock lines remain separately labeled below. Hover explains the three cases (ahead and may sit, level or behind, forced to move on Board 1) |
 | Change cores, lines, memory or time | Engine settings tab, with number steppers and typed entry |
 | Edit either board | Pencil icon; shared drag editor supports palette placement, arbitrary piece movement and right-click removal; illegal kingless bughouse positions are rejected |
 | Change turn, castling, reserves, clear/reset | Edit position controls and reserve slots |
