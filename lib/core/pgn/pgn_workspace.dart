@@ -19,6 +19,29 @@ class PgnWorkspace extends ChangeNotifier {
     collection: 'Database',
   };
   int _index = game;
+  bool _selecting = false;
+
+  /// Controller notifications raised while a tab is being selected still
+  /// describe the old board owner. Reconcile them only after the switch.
+  void synchronizeTree(bool visible) {
+    if (_selecting) return;
+    if (visible && index != tree) {
+      index = tree;
+    } else if (!visible && index == tree) {
+      index = game;
+    }
+  }
+
+  void _notifySelection() {
+    final wasSelecting = _selecting;
+    _selecting = true;
+    try {
+      notifyListeners();
+    } finally {
+      _selecting = wasSelecting;
+    }
+  }
+
   int _nextId = 6;
   List<int> get openTabs => List.unmodifiable(_open);
   int get index => _index;
@@ -26,7 +49,7 @@ class PgnWorkspace extends ChangeNotifier {
     if (!titles.containsKey(value)) return;
     if (!_open.contains(value)) _open.add(value);
     _index = value;
-    notifyListeners();
+    _notifySelection();
   }
 
   void animateTo(int value) => index = value;
@@ -43,7 +66,7 @@ class PgnWorkspace extends ChangeNotifier {
     _open.removeAt(position);
     if (_index == id) _index = _open[(position - 1).clamp(0, _open.length - 1)];
     if (id >= 6) titles.remove(id);
-    notifyListeners();
+    _notifySelection();
   }
 
   void next() => index = _open[(_open.indexOf(_index) + 1) % _open.length];
@@ -53,6 +76,6 @@ class PgnWorkspace extends ChangeNotifier {
     if (!_open.contains(id) || !_open.contains(before)) return;
     _open.remove(id);
     _open.insert(_open.indexOf(before), id);
-    notifyListeners();
+    _notifySelection();
   }
 }

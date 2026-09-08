@@ -151,6 +151,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
         ),
         if (_controller.filteredGames.isNotEmpty && !_onReferenceTab)
           _buildCollectionNavigation(),
+        if (_onReferenceTab) const SizedBox(height: 48),
       ],
     );
   }

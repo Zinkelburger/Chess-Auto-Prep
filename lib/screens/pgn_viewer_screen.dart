@@ -344,13 +344,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         _controller.currentGameIndex != _trophyGameIndex) {
       _detectedTrophies = const [];
     }
-    if (_controller.showOpeningTree &&
-        _tabController.index != PgnWorkspace.tree) {
-      _tabController.index = PgnWorkspace.tree;
-    } else if (!_controller.showOpeningTree &&
-        _tabController.index == PgnWorkspace.tree) {
-      _tabController.index = PgnWorkspace.game;
-    }
+    _tabController.synchronizeTree(_controller.showOpeningTree);
     _maybeUpdateDeviation();
     setState(() {});
   }

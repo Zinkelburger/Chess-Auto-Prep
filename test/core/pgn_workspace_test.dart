@@ -17,6 +17,24 @@ void main() {
     expect(tabs.openTabs, [0]);
     expect(tabs.index, 0);
   });
+  test('old tree notifications cannot undo a tab switch or close', () {
+    final tabs = PgnWorkspace();
+    var treeVisible = false;
+    tabs.addListener(() {
+      // Stopping playback notifies before the board's tree flag is changed.
+      tabs.synchronizeTree(treeVisible);
+      treeVisible = tabs.index == PgnWorkspace.tree;
+      tabs.synchronizeTree(treeVisible);
+    });
+    tabs.index = PgnWorkspace.tree;
+    tabs.index = PgnWorkspace.analysis;
+    expect(tabs.index, PgnWorkspace.analysis);
+    expect(treeVisible, isFalse);
+    tabs.index = PgnWorkspace.tree;
+    tabs.close(PgnWorkspace.tree);
+    expect(tabs.index, 0);
+    expect(treeVisible, isFalse);
+  });
   test(
     'closing background and reordered reference tabs preserves selection',
     () {
