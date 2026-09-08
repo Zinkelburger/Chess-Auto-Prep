@@ -85,19 +85,23 @@ done
     expect(engine.name, 'fake');
   }, skip: Platform.isWindows ? 'needs a POSIX shell' : null);
 
-  test('a path that is not there is named, not left to the process', () async {
-    await expectLater(
-      BughouseEngine.launch(
-        executablePath: p.join(root.path, 'nothing here'),
-        modelPath: p.join(root.path, 'engine under test', 'hivemind.onnx'),
-      ),
-      throwsA(
-        isA<BughouseEngineFailure>().having(
-          (e) => e.message,
-          'message',
-          contains('Engine binary not found'),
+  test(
+    'a missing executable preserves the OS error and attempted path',
+    () async {
+      final executable = p.join(root.path, 'nothing here');
+      await expectLater(
+        BughouseEngine.launch(
+          executablePath: executable,
+          modelPath: p.join(root.path, 'engine under test', 'hivemind.onnx'),
         ),
-      ),
-    );
-  });
+        throwsA(
+          isA<BughouseEngineFailure>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('ProcessException'), contains(executable)),
+          ),
+        ),
+      );
+    },
+  );
 }
