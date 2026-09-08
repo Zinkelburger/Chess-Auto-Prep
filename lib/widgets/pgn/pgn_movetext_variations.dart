@@ -105,10 +105,11 @@ List<Widget> _buildVariationRowsAtPly(
 // Keep the nodes intact, but read a leaf repeating the principal move as prose.
 // Editing, NAGs, scratch analysis and actual continuations retain their rows.
 bool _isRepeatedProseReference(PgnMovetextView view, MoveNode node, int ply) =>
-    !view.canEditComments &&
+    !view.editMode &&
     !node.isEphemeral &&
     node.children.isEmpty &&
     (node.nags?.isEmpty ?? true) &&
+    _metricsSpans(node.comment ?? '').isEmpty &&
     ply < view.moveHistory.length &&
     node.san == view.moveHistory[ply].san &&
     filterDisplayComment(node.comment ?? '').isNotEmpty;

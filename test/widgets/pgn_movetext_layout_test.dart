@@ -29,6 +29,7 @@ void main() {
     WidgetTester tester, {
     required List<PgnNodeData> moveHistory,
     Map<int, List<MoveNode>> variationsByPly = const {},
+    bool editMode = false,
   }) {
     return tester.pumpWidget(
       MaterialApp(
@@ -42,6 +43,7 @@ void main() {
               analysisPath: const [],
               editingCommentIndex: null,
               canEditComments: false,
+              editMode: editMode,
               onMainLineMoveClicked: (_) {},
               onShowMoveContextMenu: (_, _) {},
               onSaveComment: (_, _) {},
@@ -109,6 +111,25 @@ void main() {
       expect(continuation.children.single.san, 'c5');
     },
   );
+
+  testWidgets('editing preserves controls on a repeated prose reference', (
+    tester,
+  ) async {
+    final reference = MoveNode(
+      san: 'e4',
+      fen: 'unused',
+      comment: 'in one course.',
+    );
+    await pumpMovetext(
+      tester,
+      editMode: true,
+      moveHistory: [PgnNodeData(san: 'e4')],
+      variationsByPly: {
+        0: [reference],
+      },
+    );
+    expect(find.byKey(ValueKey('pgn-branch-${reference.id}')), findsOneWidget);
+  });
 
   testWidgets('black move after white comment keeps 1... prefix', (
     tester,

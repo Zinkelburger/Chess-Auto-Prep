@@ -93,6 +93,9 @@ class PgnMovetextView extends StatefulWidget {
   /// Whether comments can be edited (click a move to edit its comment).
   final bool canEditComments;
 
+  /// Show every source branch separately while editing its annotations.
+  final bool editMode;
+
   /// Force book-PGN comment formatting for ambiguous source material.
   /// Recognizable Chessable/Forward Chess markup and long multi-paragraph
   /// comments are detected automatically; this flag is only needed when a
@@ -164,6 +167,7 @@ class PgnMovetextView extends StatefulWidget {
     required this.analysisPath,
     required this.editingCommentIndex,
     required this.canEditComments,
+    this.editMode = false,
     this.bookFormatting = false,
     this.startingMoveNumber = 1,
     this.startingWhiteTurn = true,

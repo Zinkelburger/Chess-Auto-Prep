@@ -16,7 +16,6 @@ import 'package:chess_auto_prep/utils/chess_utils.dart'
         recentMoveTrailSquares;
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
-import 'package:chess_auto_prep/theme/app_text_styles.dart';
 import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show commentProse, joinComments, mergeCommentProse;
@@ -654,6 +653,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         analysisPath: _analysisPath,
         editingCommentIndex: _editingCommentIndex,
         canEditComments: widget.onCommentsChanged != null,
+        editMode: widget.editMode,
         bookFormatting: widget.bookFormatting,
         startingMoveNumber: _startPosition.fullmoves,
         startingWhiteTurn: _startPosition.turn == Side.white,
@@ -741,20 +741,6 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
           ),
         ),
         ?_buildBranchChips(),
-        if (_inlineActive)
-          Wrap(
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            children: [
-              const Text('Comment preview', style: AppTextStyles.caption),
-              TextButton.icon(
-                onPressed: _returnToMainline,
-                icon: const Icon(Icons.subdirectory_arrow_left, size: 18),
-                label: const Text('Return to mainline'),
-              ),
-            ],
-          ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
