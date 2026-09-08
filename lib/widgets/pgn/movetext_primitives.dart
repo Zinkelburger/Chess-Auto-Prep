@@ -17,6 +17,7 @@ library;
 import '../../utils/pgn_nags.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_text_styles.dart';
+import '../../theme/app_colors.dart';
 import '../../utils/san_display.dart';
 
 /// A single move in the movetext: the SAN, an optional bold NAG-quality glyph
@@ -155,7 +156,7 @@ class GlyphButton extends StatelessWidget {
             border: Border.all(
               color: isActive
                   ? color.withValues(alpha: 0.7)
-                  : Colors.grey.withValues(alpha: 0.3),
+                  : AppColors.outline,
             ),
           ),
           child: Text(
@@ -165,8 +166,8 @@ class GlyphButton extends StatelessWidget {
               fontWeight: FontWeight.bold,
               fontFamily: AppTextStyles.monoFamily,
               color: onTap == null
-                  ? Colors.grey[700]
-                  : (isActive ? color : Colors.grey[400]),
+                  ? AppColors.onSurfaceDisabled
+                  : (isActive ? color : AppColors.ink),
             ),
           ),
         ),

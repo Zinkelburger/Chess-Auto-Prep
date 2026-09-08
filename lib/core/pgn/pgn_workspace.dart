@@ -16,7 +16,7 @@ class PgnWorkspace extends ChangeNotifier {
     explorer: 'Opening explorer',
     analysis: 'Analysis',
     tree: 'Opening tree',
-    collection: 'Database',
+    collection: 'Collection',
   };
   int _index = game;
   bool _selecting = false;

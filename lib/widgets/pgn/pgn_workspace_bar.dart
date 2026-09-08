@@ -9,12 +9,10 @@ class PgnWorkspaceBar extends StatefulWidget {
     required this.workspace,
     required this.onSelect,
     required this.onClose,
-    required this.addButton,
   });
   final PgnWorkspace workspace;
   final ValueChanged<int> onSelect;
   final ValueChanged<int> onClose;
-  final Widget addButton;
 
   @override
   State<PgnWorkspaceBar> createState() => _PgnWorkspaceBarState();
@@ -139,7 +137,6 @@ class _PgnWorkspaceBarState extends State<PgnWorkspaceBar> {
               ),
             ),
           ),
-          widget.addButton,
         ],
       ),
     );

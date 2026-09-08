@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/services/stored_game_lookup.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';

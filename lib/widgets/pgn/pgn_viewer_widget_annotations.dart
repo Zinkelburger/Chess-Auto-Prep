@@ -43,7 +43,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   /// panel dispose) — hence the object binding and the `mounted` guard.
   void _setPanelNodeComment(MoveNode node, String text) {
     _m.setNodeComment(node, text);
-    if (mounted) setState(() {});
+    _refreshAfterCommentEdit();
     _notifyCommentsChanged();
   }
 
@@ -51,8 +51,22 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   /// [PgnNodeData] so late flushes hit the move they were typed on.
   void _setPanelMainlineComment(PgnNodeData moveData, String text) {
     ViewerGameModel.writeWholeComment(moveData, text);
-    if (mounted) setState(() {});
+    _refreshAfterCommentEdit();
     _notifyCommentsChanged();
+  }
+
+  // A pending comment can flush while its panel is being unmounted by
+  // Finish editing. Save synchronously, but repaint only after that frame.
+  void _refreshAfterCommentEdit() {
+    if (!mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    } else {
+      setState(() {});
+    }
   }
 
   Widget _buildAnnotationPanel() {

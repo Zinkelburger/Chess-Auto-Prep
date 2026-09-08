@@ -1,6 +1,6 @@
 /// Shared header filters widget for PGN slice/search.
 ///
-/// Renders a dynamic list of field/mode/value filter rows with add/remove.
+/// Renders editable one-line conditions with searchable choices and add/remove.
 /// All state lives on the [SliceFilterController] passed in by the host.
 library;
 
@@ -36,39 +36,47 @@ class HeaderFilters extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'Game details',
-            style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
+          if (controller.headerRows.length > 1) ...[
+            Text(
+              'Match all conditions',
+              style: AppTextStyles.subtitle.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           for (int i = 0; i < controller.headerRows.length; i++)
-            _buildFilterRow(i),
+            _buildFilterRow(context, i),
           OutlinedButton.icon(
-            onPressed: controller.addHeaderRow,
+            onPressed: () {
+              if (!context.mounted) return;
+              controller.addHeaderRow();
+              controller.setHeaderField(
+                controller.headerRows.length - 1,
+                kPlayerHeaderField,
+              );
+            },
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.standard,
-              minimumSize: const Size(0, 44),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
             ),
-            icon: const Icon(Icons.add, size: 20),
-            label: const Text('Add filter'),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Filter'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterRow(int index) {
+  Widget _buildFilterRow(BuildContext context, int index) {
     final f = controller.headerRows[index];
-    final availableModes = modesForField(f.field);
-    if (!availableModes.contains(f.mode)) {
-      f.mode = availableModes.first;
-    }
-
     // Hints say what the box wants, not what somebody else typed into it:
     // a sample name is one more thing to read past on the way to your own.
     String hintText;
     if (f.field == kPlayerHeaderField) {
-      hintText = 'either colour — separate spellings with ;';
+      hintText = 'Name; another name';
     } else if (f.field == 'ECO') {
       hintText = 'ECO code or prefix';
     } else if (f.field == 'Date') {
@@ -89,80 +97,83 @@ class HeaderFilters extends StatelessWidget {
 
     return Padding(
       key: ObjectKey(f),
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: ChoiceField<String>(
-                  label: 'Filter by',
-                  value: f.field,
+                child: ChoiceField<({String field, MatchMode mode})>(
+                  hint: 'Choose condition',
+                  value: (field: f.field, mode: f.mode),
                   style: AppTextStyles.body,
+                  autofocus: f.value.isEmpty,
                   items: [
-                    for (final s in kHeaderFieldOptions)
-                      ChoiceItem(value: s, label: s),
-                  ],
-                  onChanged: (v) => controller.setHeaderField(index, v),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: ChoiceField<MatchMode>(
-                  label: 'Match',
-                  value: f.mode,
-                  style: AppTextStyles.body,
-                  items: [
-                    for (final m in availableModes)
-                      ChoiceItem(
-                        value: m,
-                        label: matchModeLabel(
-                          m,
-                          numeric: isNumericField(f.field),
+                    for (final field in kHeaderFieldOptions)
+                      for (final mode in modesForField(field))
+                        ChoiceItem(
+                          value: (field: field, mode: mode),
+                          label: HeaderFilterConfig(
+                            field: field,
+                            mode: mode,
+                            value: '',
+                          ).conditionLabel,
+                          searchText:
+                              '$field ${mode.name} ${HeaderFilterConfig(field: field, mode: mode, value: '').conditionLabel}',
                         ),
-                      ),
                   ],
-                  onChanged: (v) => controller.setHeaderMode(index, v),
+                  onChanged: (choice) {
+                    if (!context.mounted) return;
+                    controller.setHeaderField(index, choice.field);
+                    controller.setHeaderMode(index, choice.mode);
+                    FocusScope.of(context).nextFocus();
+                  },
                 ),
               ),
               const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  key: ObjectKey(f.controller),
+                  controller: f.controller,
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    hintStyle: AppTextStyles.hint,
+                    helperText: f.field == kPlayerHeaderField
+                        ? 'Either colour; separate names with ;'
+                        : null,
+                    isDense: true,
+                    border: const OutlineInputBorder(),
+                    suffixIcon: showEcoWarn
+                        ? const Tooltip(
+                            message: 'Not a standard ECO code (A00–E99)',
+                            child: Icon(
+                              Icons.warning_amber,
+                              size: 20,
+                              color: AppColors.warning,
+                            ),
+                          )
+                        : null,
+                  ),
+                  style: AppTextStyles.body,
+                  onChanged: (v) {
+                    if (!context.mounted) return;
+                    controller.setHeaderValue(index, v);
+                  },
+                ),
+              ),
               IconButton(
-                onPressed: () => controller.removeHeaderRow(index),
+                onPressed: () {
+                  if (!context.mounted) return;
+                  controller.removeHeaderRow(index);
+                },
                 tooltip: 'Remove filter',
                 icon: const Icon(Icons.close, size: 20),
                 constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: f.controller,
-            decoration: InputDecoration(
-              labelText: f.field == kPlayerHeaderField
-                  ? 'Player name'
-                  : f.field,
-              hintText: hintText,
-              hintStyle: AppTextStyles.hint,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 14,
-              ),
-              border: const OutlineInputBorder(),
-              suffixIcon: showEcoWarn
-                  ? const Tooltip(
-                      message: 'Not a standard ECO code (A00–E99)',
-                      child: Icon(
-                        Icons.warning_amber,
-                        size: 20,
-                        color: AppColors.warning,
-                      ),
-                    )
-                  : null,
-            ),
-            style: AppTextStyles.body,
-            onChanged: (v) => controller.setHeaderValue(index, v),
           ),
           if (showEcoWarn)
             const Padding(

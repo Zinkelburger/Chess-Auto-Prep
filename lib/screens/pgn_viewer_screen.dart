@@ -129,6 +129,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   late final PgnWorkspace _tabController;
   final Map<int, String> _databasePaths = {};
+  int? _databasePickerTab;
   final Map<int, PgnDatabasePanelController> _databasePanels = {};
   final Map<int, PgnGameEntry> _referenceGames = {};
   final Map<int, PgnViewerWidgetController> _referenceReaders = {};
@@ -272,6 +273,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     _controller.stopAutoPlay();
     _tabController.close(id);
+    if (_databasePickerTab == id) _databasePickerTab = null;
     _databasePaths.remove(id);
     _databasePanels.remove(id);
     _referenceGames.remove(id);
@@ -283,13 +285,21 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _checkDatabase() async {
-    final path = await showPgnDatabasePicker(context, _controller.recentFiles);
-    if (!mounted || path == null) return;
+    if (!mounted) return;
+    final id = _databasePickerTab ??= _tabController.add('Database');
+    _showPanel(id);
+  }
+
+  void _openDatabase(String path) {
+    if (!mounted) return;
+    final pickerId = _databasePickerTab;
     final existing = _databasePaths.entries
         .where((e) => e.value == path)
         .firstOrNull;
-    final id =
-        existing?.key ?? _tabController.add(p.basenameWithoutExtension(path));
+    final id = existing?.key ?? pickerId ?? _tabController.add('Database');
+    if (pickerId != null && pickerId != id) _tabController.close(pickerId);
+    _databasePickerTab = null;
+    _tabController.titles[id] = p.basenameWithoutExtension(path);
     _databasePaths[id] = path;
     _databasePanels.putIfAbsent(id, PgnDatabasePanelController.new);
     unawaited(_controller.addToRecentFiles(path));
@@ -298,6 +308,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Widget _buildExtraPanel(int id) {
+    if (id == _databasePickerTab) {
+      return PgnDatabasePicker(
+        recent: _controller.recentFiles,
+        onSelected: _openDatabase,
+        onCollection: () => _showPanel(PgnWorkspace.collection),
+      );
+    }
     if (_databasePaths[id] case final path?) {
       return PgnDatabasePanel(
         key: ValueKey('database-$id'),

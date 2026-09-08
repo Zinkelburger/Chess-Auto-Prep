@@ -3,22 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import '../../theme/app_text_styles.dart';
 
-Future<String?> showPgnDatabasePicker(
-  BuildContext context,
-  List<String> recent,
-) => showDialog<String>(
-  context: context,
-  builder: (_) => _DatabasePicker(recent: recent),
-);
-
-class _DatabasePicker extends StatefulWidget {
-  const _DatabasePicker({required this.recent});
+/// Database selection lives in the workspace so the board stays available.
+class PgnDatabasePicker extends StatefulWidget {
+  const PgnDatabasePicker({
+    super.key,
+    required this.recent,
+    required this.onSelected,
+    required this.onCollection,
+  });
   final List<String> recent;
+  final ValueChanged<String> onSelected;
+  final VoidCallback onCollection;
   @override
-  State<_DatabasePicker> createState() => _DatabasePickerState();
+  State<PgnDatabasePicker> createState() => _PgnDatabasePickerState();
 }
 
-class _DatabasePickerState extends State<_DatabasePicker> {
+class _PgnDatabasePickerState extends State<PgnDatabasePicker> {
   final _search = TextEditingController();
   @override
   void dispose() {
@@ -32,7 +32,7 @@ class _DatabasePickerState extends State<_DatabasePicker> {
       allowedExtensions: ['pgn'],
     );
     if (!mounted || result == null || result.path == null) return;
-    Navigator.pop(context, result.path);
+    widget.onSelected(result.path!);
   }
 
   @override
@@ -41,19 +41,35 @@ class _DatabasePickerState extends State<_DatabasePicker> {
     final files = widget.recent
         .where((path) => path.toLowerCase().contains(query))
         .toList();
-    return AlertDialog(
-      title: const Text('Check against database'),
-      content: SizedBox(
-        width: 480,
-        height: 320,
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: SizedBox(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Text('Database', style: AppTextStyles.title),
+            const SizedBox(height: 8),
             const Text(
-              'Open a PGN database in a tab. Matching games follow the position on your board.',
+              'Choose a PGN database to find games matching the position on your board.',
               style: AppTextStyles.muted,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                FilledButton.icon(
+                  onPressed: _browse,
+                  icon: const Icon(Icons.folder_open, size: 18),
+                  label: const Text('Open PGN database…'),
+                ),
+                TextButton(
+                  onPressed: widget.onCollection,
+                  child: const Text('Organize or export this collection'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _search,
               autofocus: true,
@@ -91,24 +107,13 @@ class _DatabasePickerState extends State<_DatabasePicker> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        onTap: () => Navigator.pop(context, files[i]),
+                        onTap: () => widget.onSelected(files[i]),
                       ),
                     ),
             ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        TextButton.icon(
-          onPressed: _browse,
-          icon: const Icon(Icons.folder_open),
-          label: const Text('Open PGN file…'),
-        ),
-      ],
     );
   }
 }

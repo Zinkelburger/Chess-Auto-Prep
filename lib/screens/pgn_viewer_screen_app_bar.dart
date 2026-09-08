@@ -50,42 +50,20 @@ mixin _AppBarBuildersMixin
           ),
           if (loaded && !_controller.isSolitaireMode) ...[
             const SizedBox(width: 12),
-            AppOverflowMenu(
-              label: _controller.hasActiveFilters
-                  ? 'Filters · ${_controller.filteredGames.length}/${_controller.allGames.length}'
-                  : 'Filter games',
-              tooltip: 'Filter games',
-              entries: [
-                AppMenuEntry(
-                  heading: 'Filter',
-                  label: 'Choose filters…',
-                  onRun: _openSliceDialog,
-                ),
-                if (_controller.hasActiveFilters)
-                  AppMenuEntry(
-                    label: 'Clear filters',
-                    onRun: _controller.resetFilters,
-                  ),
-                AppMenuEntry(
-                  heading: 'Sort',
-                  label: 'File order',
-                  checked: _controller.sortMode == GameSortMode.fileOrder,
-                  onRun: () => _controller.setSortMode(GameSortMode.fileOrder),
-                ),
-                AppMenuEntry(
-                  label: 'Newest first',
-                  checked: _controller.sortMode == GameSortMode.dateDesc,
-                  onRun: () => _controller.setSortMode(GameSortMode.dateDesc),
-                ),
-              ],
+            TextButton.icon(
+              key: const Key('pgn-filter-button'),
+              onPressed: _openSliceDialog,
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(
+                _controller.hasActiveFilters
+                    ? 'Filter · ${_controller.filteredGames.length}/${_controller.allGames.length}'
+                    : 'Filter',
+              ),
             ),
           ],
         ],
       ),
       actions: [
-        if (_controller.filteredGames.isNotEmpty &&
-            !_controller.isSolitaireMode)
-          _buildAddTabMenu(),
         _buildViewMenu(),
         const AppModeSwitcher(),
         AppSettingsButton(
@@ -96,42 +74,6 @@ mixin _AppBarBuildersMixin
       ],
     );
   }
-
-  Widget _buildAddTabMenu({bool compact = false}) => AppOverflowMenu(
-    label: compact ? null : 'Add tab',
-    anchor: compact
-        ? const Padding(
-            padding: EdgeInsets.all(8),
-            child: Icon(Icons.add, size: 18, color: AppColors.onSurfaceMuted),
-          )
-        : null,
-    tooltip: 'Add a workspace tab',
-    entries: [
-      AppMenuEntry(
-        label: 'Check against database…',
-        icon: Icons.storage_outlined,
-        onRun: _checkDatabase,
-      ),
-      AppMenuEntry(label: 'My books', onRun: () => _showPanel(_lineTabIndex)),
-      AppMenuEntry(
-        label: 'Opening explorer',
-        onRun: () => _showPanel(_explorerTabIndex),
-      ),
-      AppMenuEntry(
-        label: 'Analysis',
-        onRun: () => _showPanel(_analysisTabIndex),
-      ),
-      AppMenuEntry(
-        label: 'Collection opening tree',
-        shortcut: AppShortcut.toggleOpeningTree.label,
-        onRun: () => _showPanel(PgnWorkspace.tree),
-      ),
-      AppMenuEntry(
-        label: 'Database operations',
-        onRun: () => _showPanel(PgnWorkspace.collection),
-      ),
-    ],
-  );
 
   Widget _buildViewMenu() {
     final hasGame = _controller.filteredGames.isNotEmpty;
@@ -154,7 +96,8 @@ mixin _AppBarBuildersMixin
         if (hasGame) ...[
           if (!solitaire && !_onReferenceTab)
             AppMenuEntry(
-              label: _editMode ? 'Finish editing' : 'Edit game',
+              heading: 'Edit',
+              label: _editMode ? 'Finish editing' : 'Edit PGN',
               icon: Icons.edit_outlined,
               enabled: !_onLineTab,
               onRun: _toggleEditMode,
@@ -184,6 +127,36 @@ mixin _AppBarBuildersMixin
             enabled: !_controller.showOpeningTree && !_onReferenceTab,
             shortcut: AppShortcut.solitaire.label,
             onRun: _toggleSolitaireMode,
+          ),
+        ],
+        if (hasGame && !solitaire) ...[
+          AppMenuEntry(
+            heading: 'Explore',
+            label: 'Analysis',
+            onRun: () => _showPanel(_analysisTabIndex),
+          ),
+          AppMenuEntry(
+            label: 'Database',
+            icon: Icons.storage_outlined,
+            onRun: _checkDatabase,
+          ),
+          AppMenuEntry(
+            label: 'My books',
+            onRun: () => _showPanel(_lineTabIndex),
+          ),
+          AppMenuEntry(
+            label: 'Opening explorer',
+            onRun: () => _showPanel(_explorerTabIndex),
+          ),
+          AppMenuEntry(
+            label: 'Collection opening tree',
+            shortcut: AppShortcut.toggleOpeningTree.label,
+            onRun: () => _showPanel(PgnWorkspace.tree),
+          ),
+          AppMenuEntry(
+            heading: 'Collection',
+            label: 'Organize and export games',
+            onRun: () => _showPanel(PgnWorkspace.collection),
           ),
         ],
         if (_controller.totalTrophyCount > 0 || solitaire)

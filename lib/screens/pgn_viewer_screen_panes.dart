@@ -166,7 +166,6 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             workspace: _tabController,
             onSelect: _showPanel,
             onClose: _closePanel,
-            addButton: _buildAddTabMenu(compact: true),
           ),
         if (_deviationReport case final deviation?
             when showTabs && _tabController.index == 0)
@@ -220,9 +219,10 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   }
 
   Widget _buildCollectionNavigation() => GameNavBar(
-    games: [
-      for (final g in _controller.filteredGames) GameNavItem.fromEntry(g),
-    ],
+    games: GameNavItem.fromEntries(
+      _controller.allGames,
+      visibleGames: _controller.filteredGames,
+    ),
     currentIndex: _controller.currentGameIndex,
     sortMode: _controller.sortMode,
     isAutoPlaying: !_onLineTab && _controller.isAutoPlaying,
@@ -235,27 +235,6 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
     },
     onToggleAutoPlay: _onLineTab ? null : _controller.toggleAutoPlay,
     isSolitaireMode: _controller.isSolitaireMode,
-    trailing: !_controller.isSolitaireMode
-        ? TextButton(
-            key: const Key('game-analysis-toggle'),
-            onPressed: () => _showPanel(
-              _tabController.index == _analysisTabIndex ? 0 : _analysisTabIndex,
-            ),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.onSurfaceMuted,
-              backgroundColor: _tabController.index == _analysisTabIndex
-                  ? AppColors.surfaceElevated
-                  : null,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              minimumSize: const Size(0, 28),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: AppTextStyles.muted.copyWith(
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-            child: const Text('Analysis'),
-          )
-        : null,
   );
 
   /// The Line tab: what my books say about the game on screen, and the prepared
@@ -511,61 +490,49 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
     );
   }
 
-  Widget _buildEditModeBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.08),
-        border: Border(
-          bottom: BorderSide(
-            color: AppColors.warning.withValues(alpha: 0.3),
-            width: 0.5,
+  Widget _buildEditModeBar() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: const BoxDecoration(
+      color: AppColors.surface,
+      border: Border(
+        top: BorderSide(color: AppColors.warningSurface, width: 3),
+        bottom: BorderSide(color: AppColors.warningSurface, width: 2),
+      ),
+    ),
+    child: Wrap(
+      spacing: 12,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        const Icon(Icons.edit, size: 20, color: AppColors.warningSurface),
+        Text(
+          'Editing PGN',
+          style: AppTextStyles.bodyStrong.copyWith(
+            color: AppColors.warningSurface,
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.edit, size: 14, color: AppColors.warning),
-          const SizedBox(width: 6),
-          const Text(
-            'Editing',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.warning,
-            ),
+        Text(
+          _controller.filePath == null
+              ? 'Copy PGN or save to a study to keep changes'
+              : _controller.errorMessage != null
+              ? _controller.errorMessage!
+              : 'Changes to the file are saved',
+          style: AppTextStyles.muted.copyWith(color: AppColors.ink),
+        ),
+        TextButton.icon(
+          onPressed: _toggleEditMode,
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('Finish editing'),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.surface,
+            backgroundColor: AppColors.warningSurface,
+            textStyle: AppTextStyles.bodyStrong,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Changes are saved to the file',
-              style: AppTextStyles.caption.copyWith(fontSize: 12),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: _toggleEditMode,
-            icon: const Icon(
-              Icons.close,
-              size: 14,
-              color: AppColors.onSurfaceMuted,
-            ),
-            label: Text(
-              'Exit',
-              style: AppTextStyles.caption.copyWith(fontSize: 12),
-            ),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 /// One-line banner above the side-panel tabs: where this game first left the

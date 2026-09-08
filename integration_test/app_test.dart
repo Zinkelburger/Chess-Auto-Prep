@@ -20,7 +20,7 @@ void main() {
 
       // The View selector names the current mode. At the history root,
       // the breadcrumb trail is absent to avoid repeating it.
-      expect(find.text('View'), findsOneWidget);
+      expect(find.text('View'), findsNothing);
       expect(find.text('Tactics'), findsWidgets);
       final actions = find.text('Actions');
       final picker = find.byKey(AppModeSwitcher.switcherKey);

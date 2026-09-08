@@ -187,7 +187,7 @@ Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** select
 Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 - **`titleSpacing: 16`** on every `AppBar`.
-- **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with a bordered, two-line View/current-mode anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions use named groups, with no settings-only ellipsis. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
+- **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with the current mode name as its anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions use named groups, with no settings-only ellipsis. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
 - **Settings**: Every `AppSettingsButton(mode: ...)` opens the same persistent settings route at that view. Its sidebar expands the selected view into chapters, with one chapter controlling the right pane; global categories remain accessible. Trainer chapters are Session, Learning, Playback and Material. Tactics separates Session, Puzzle selection, Game downloads and Review performance; its inline Filters and Analysis buttons deep-link here too. Review changes use Apply; session and trainer preferences save automatically. PGN Viewer separates Analysis, Playback and Board and moves. Analysis-panel gears open the shared Engine → Engine analysis / Analysis panels chapters. Narrow windows use searchable view and chapter pickers. `ViewSettingsRegistry` connects mounted view-owned builders; unmounted views initialise underneath the open route, respecting the generation lock. Global account drafts survive category navigation.
 - **Toolbar buttons collapse** from text+icon to icon-only below `kToolbarCompactBreakpoint` (900 px).
 - **Layout body splits** at `kCompactBreakpoint` (960 px) from side-by-side to stacked.
@@ -494,15 +494,12 @@ They do not contribute to Learn/Review counts or either scheduling queue.
 
 ### PGN viewer (Open PGN)
 
-**Game options ▾** and **Filter games ▾** use the shared, quiet
-`AppOverflowMenu.label` anchor also used by repertoire **Actions ▾**.
-Game options groups Settings, Explore, Study and Collection; filters groups
-filter selection/reset and sort order. **Game view…** opens grouped Analysis,
-Playback, and Board and moves settings using the global `SettingsGroup` controls.
-The small **Analysis** disclosure shares the previous/next-game row, costs no
-extra row while collapsed, and mirrors the saved **Analysis overview** choice.
-New profiles start collapsed; existing explicit preferences are retained.
-The separator above the move text and the bright navigation top border are gone.
+**Actions ▾** is the single menu for editing and opening optional workspace
+panels. **+ Filter** opens the compact filter editor directly; active filters
+show the matching/total game count. Filter rows use editable values and readable
+phrases such as **In or after 1960**, with searchable field and condition choices.
+Advanced position, sequence and matching-game preview controls expand on demand.
+The mode selector shows only the current mode name, without a “View” prefix.
 
 In the reader, **Enter** focuses a variation. **←** steps back through its root
 to its parent, restoring any parent focus and reading position. **Esc** first
@@ -525,7 +522,7 @@ Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].
 Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept)
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
 Keyboard: `↑`/`↓` previous/next game, `←`/`→` moves, Home/Page Up and End/Page Down jump, Enter focus variation, Esc return to parent or leave mode, `F` flip, Ctrl+F/F11 fullscreen, `E` engine, Space playback, `W` auto-next, `A` edit in Study, `T` opening tree, Ctrl+S/Shift+S solitaire, `/` search, `G` game number, Ctrl+V paste PGN, `C` comment, `R` mainline (reveal in solitaire), `H` solitaire hint, Tab next panel, and 1–9 fork candidates. Enter starts solitaire during setup. Text fields retain their normal editing behavior.
-Workspace tabs: the main **Game** stays open. **Add tab** opens Analysis, My books, Opening explorer, Collection opening tree, Database operations, or a searchable recent/open-PGN database picker. The strip appears only with two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles only opened tabs. Readers stay mounted and preserve their cursors. Reference databases follow the main game's board position through a FEN index (including variations); matching games open independent reader tabs with their own board cursor. Copy/save game actions refer to the visible reference game; references are read-only. The compact, muted game counter and Search stay below the board; Analysis is an arrow-free toggle into its own tab. The Database tab selects games for study creation and houses collection exports and repertoire generation. Export and generation scope is the current filter; study creation uses the explicit selection. Actions contains game operations; the settings gear opens view preferences.
+Workspace tabs: the main **Game** stays open. **Actions** opens Analysis, My books, Opening explorer, Collection opening tree, Database, or collection organization/export tools. The strip appears only with two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles only opened tabs. Readers stay mounted and preserve their cursors. **Actions → Database** opens a tab with searchable recent PGNs and a file browser; choosing a database loads it in that tab. Reference databases follow the main game's board position through a FEN index (including variations); matching games open independent reader tabs with their own board cursor. Copy/save game actions refer to the visible reference game; references are read-only. The game counter below the board opens searchable detected chapters when available, alongside game search and number navigation. Chapter detection uses the same header rules as repertoire browsing. The Collection tab selects games for study creation and houses collection exports and repertoire generation. Export and generation scope is the current filter; study creation uses the explicit selection. The settings gear opens view preferences.
 Opening tree (`T`): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). The viewer defaults to one mainline per game. **Include variations** rebuilds both tree frequencies and the matching-game index with all RAVs; the collection game count is shown separately from variation-path counts. Other builder callers retain their existing automatic policy (RAVs for course `Result *`, mainlines for scored games). `*` results count toward frequency without a fake 50% draw bar — the UI says **lines** instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Expand all** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
 
 **Cursor ownership (same rule as Game vs Line tabs, Analysis `_navigateTo`, Repertoire `jump`):** each exploration surface keeps its own place. The merged opening tree is not the current game's move list, and its tab retains the game reader offstage. Re-entering the tree — `T`, or the app-bar back after a games-at-position click — restores the tree cursor onto the board; it does not resync from that remounted game. Clicking a game in the list parks that game at the tree FEN (`pgnInitialFen` → `PgnViewerWidget.initialFen`). Leaving the tree with `T` restores the game cursor snapshotted when the tree was opened. First open (no saved tree cursor) still syncs the tree to the current game FEN. Next/prev/sort/slice clear the landing FEN so those games start at move 1. Repertoire's Tree tab and Analysis's opening-tree tab already share one board cursor and stay mounted, so they do not need this snapshot.
@@ -533,16 +530,15 @@ Opening tree (`T`): `PgnOpeningTreePanel` splits the move tree and a resizable *
 
 #### Edit Mode (Annotation)
 
-Toggled through **Actions → Edit game**. When active:
+Toggled through **Actions → Edit PGN**. When active:
 
 - **NAG display**: Move-quality NAGs ($1–$6) render inline after the SAN with Lichess-style colors (brilliant=green, good=green, interesting=pink, dubious=blue, mistake=orange, blunder=red). Hidden when edit mode is off.
-- **Annotation toolbar**: Tapping a move in edit mode shows an `_AnnotationToolbar` below it with 6 NAG toggle buttons + comment button. Toggling a NAG replaces any existing move-quality NAG.
+- **Editing indicator and annotation panel**: Orange borders and a prominent **Editing PGN / Finish editing** bar distinguish editing from reading. The bottom panel shows bright NAG buttons and an editable comment field for the current move. File-backed games say **Changes to the file are saved**; pasted games explain how to keep changes. Toggling a NAG replaces any existing move-quality NAG.
 - **Context menu**: Right-click in edit mode shows Comment, Annotate, Promote (variation), Delete — with promote/delete gated by `protectOriginal`.
-- **Protect original PGN**: Checkbox in the edit mode bar (always resets to checked on activation). When checked, destructive operations on the original game moves are disabled.
 - **Keyboard**: `Escape` exits edit mode.
-- **Persistence**: NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
+- **Persistence**: Pending comments flush when finishing editing, before the annotation panel is removed; repainting waits until the widget tree unlocks. NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
 
-Key files: `pgn_comment_utils.dart` (`buildGameMovetext`, the one serializer for a parsed game), `pgn_viewer_widget.dart` (`editMode`/`protectOriginal` props, `_AnnotationToolbar`, `_NagButton`), `pgn_viewer_screen.dart` (`_editMode`, `_protectOriginal`, `_buildEditModeBar`), `game_nav_bar.dart` (`onToggleEditMode`, `isEditMode`).
+Key files: `pgn_comment_utils.dart` (`buildGameMovetext`, the one serializer for a parsed game), `pgn_viewer_widget.dart` (`editMode`), `pgn/pgn_annotation_panel.dart`, `pgn/pgn_viewer_widget_annotations.dart`, `pgn_viewer_screen.dart` (`_editMode`, `_buildEditModeBar`).
 
 #### Solitaire Mode (Guess-the-Move)
 

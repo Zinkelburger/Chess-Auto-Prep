@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_text_styles.dart';
+import '../../theme/app_colors.dart';
 import 'movetext_primitives.dart' show GlyphButton;
 
 class PgnAnnotationPanel extends StatefulWidget {
@@ -140,21 +141,25 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final enabled = widget.targetKey != null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         border: Border(
-          top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.5)),
+          top: BorderSide(color: AppColors.warningSurface, width: 3),
         ),
-        color: theme.colorScheme.surfaceContainerLow,
+        color: AppColors.surface,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            enabled ? 'Annotate ${widget.moveLabel}' : 'Edit annotations',
+            style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
+          ),
+          const SizedBox(height: 8),
           // The glyph strip wraps instead of overflowing: the panel lives in
           // side panels the user can drag down to ~190px, where six glyphs
           // no longer fit on one line.
@@ -182,28 +187,34 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
             onChanged: _onTextChanged,
             minLines: 2,
             maxLines: 4,
-            style: const TextStyle(fontSize: 13),
+            style: AppTextStyles.body,
+            cursorColor: AppColors.warningSurface,
             decoration: InputDecoration(
               isDense: true,
               hintText: enabled
                   ? 'Comment on ${widget.moveLabel}'
                   : 'Click or play a move to annotate it',
-              hintStyle: AppTextStyles.caption,
+              hintStyle: AppTextStyles.muted.copyWith(color: AppColors.ink),
+              filled: true,
+              fillColor: AppColors.surfaceElevated,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 10,
                 vertical: 8,
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(
-                  color: theme.dividerColor.withValues(alpha: 0.6),
+                borderSide: const BorderSide(color: AppColors.warningSurface),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: const BorderSide(
+                  color: AppColors.warningSurface,
+                  width: 2,
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(
-                  color: theme.dividerColor.withValues(alpha: 0.6),
-                ),
+                borderSide: const BorderSide(color: AppColors.warningSurface),
               ),
             ),
           ),
