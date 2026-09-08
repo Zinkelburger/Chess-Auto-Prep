@@ -564,6 +564,16 @@ The note stays in view during preview. They never become saved mainline moves
 or variations. Explicit move numbers and sides must match the preview position;
 bare square references in prose are not inferred as pawn moves. Move numbers, check signs
 and annotations are preserved in prose; invalid diagram text remains readable.
+Single-spaced comment lines also replay legally, with numbered restarts and
+parenthesized alternatives anchored to their own positions. The chapter reader
+supports the same previews (←/→ to step, Esc to return) without modifying course
+or training data. `[--]` paragraph separators, bullet sections and `**bold**`
+labels are formatted for reading. Known exporter null counters and impossible
+Black-prefixed duplicates of legal White moves are cleaned only for display;
+other invalid notation stays readable. A move and its explanation precede its
+alternatives. In reading mode, a commented leaf repeating the principal move
+reads as an inline reference; annotated or continuing branches and edit mode
+retain full variation controls. The source PGN and every branch remain intact.
 
 Opening tree (**Actions → Tree**): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). The viewer defaults to one mainline per game. **Include variations** rebuilds both tree frequencies and the matching-game index with all RAVs; the collection game count is shown separately from variation-path counts. Other builder callers retain their existing automatic policy (RAVs for course `Result *`, mainlines for scored games). `*` results count toward frequency without a fake 50% draw bar — the UI says **lines** instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Expand all** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
 

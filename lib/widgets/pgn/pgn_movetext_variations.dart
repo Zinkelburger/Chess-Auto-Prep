@@ -86,17 +86,45 @@ List<Widget> _buildVariationRowsAtPly(
 }) => [
   for (final root in view.variationsByPly[ply] ?? <MoveNode>[])
     if (nodeVisible == null || nodeVisible(root))
-      _buildVariationDocument(
-        view,
-        root,
-        ply: ply,
-        branchPly: ply,
-        depth: 1,
-        branchVisibility: branchVisibility,
-        onToggleBranch: onToggleBranch,
-        nodeVisible: nodeVisible,
-      ),
+      if (_isRepeatedProseReference(view, root, ply))
+        _buildProseReference(view, root, ply)
+      else
+        _buildVariationDocument(
+          view,
+          root,
+          ply: ply,
+          branchPly: ply,
+          depth: 1,
+          branchVisibility: branchVisibility,
+          onToggleBranch: onToggleBranch,
+          nodeVisible: nodeVisible,
+        ),
 ];
+
+// Course exporters encode clickable mentions as duplicate one-move RAVs.
+// Keep the nodes intact, but read a leaf repeating the principal move as prose.
+// Editing, NAGs, scratch analysis and actual continuations retain their rows.
+bool _isRepeatedProseReference(PgnMovetextView view, MoveNode node, int ply) =>
+    !view.canEditComments &&
+    !node.isEphemeral &&
+    node.children.isEmpty &&
+    (node.nags?.isEmpty ?? true) &&
+    ply < view.moveHistory.length &&
+    node.san == view.moveHistory[ply].san &&
+    filterDisplayComment(node.comment ?? '').isNotEmpty;
+
+Widget _buildProseReference(PgnMovetextView view, MoveNode node, int ply) {
+  final coords = _coordsAtPly(view, ply);
+  final rendered = _renderProseComment(
+    view,
+    '${coords.moveNumber}${coords.isWhite ? '.' : '...'}${node.san} ${node.comment}',
+    anchorPos: _posAt(_buildPrefixPositions(view), ply),
+  );
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: rendered.block ?? Text.rich(TextSpan(children: rendered.spans)),
+  );
+}
 
 Widget _buildVariationDocument(
   PgnMovetextView view,
@@ -172,6 +200,7 @@ Widget _buildVariationDocument(
   if (open) {
     MoveNode? cursor = root;
     var index = ply;
+    var alternatives = <MoveNode>[];
     while (cursor != null) {
       final node = cursor;
       final pos = _coordsAtPly(view, index);
@@ -247,19 +276,16 @@ Widget _buildVariationDocument(
           ),
         );
       }
-      final next = nodeVisible == null
-          ? node.children
-          : node.children.where(nodeVisible).toList();
-      if (next.length > 1) {
+      if (alternatives.isNotEmpty) {
         flush();
-        for (final alternative in next.skip(1)) {
+        for (final alternative in alternatives) {
           children.add(
             Padding(
               padding: EdgeInsets.only(left: indent),
               child: _buildVariationDocument(
                 view,
                 alternative,
-                ply: index + 1,
+                ply: index,
                 branchPly: branchPly,
                 depth: depth + 1,
                 branchVisibility: branchVisibility,
@@ -270,6 +296,10 @@ Widget _buildVariationDocument(
           );
         }
       }
+      final next = nodeVisible == null
+          ? node.children
+          : node.children.where(nodeVisible).toList();
+      alternatives = next.skip(1).toList();
       cursor = next.firstOrNull;
       index++;
     }

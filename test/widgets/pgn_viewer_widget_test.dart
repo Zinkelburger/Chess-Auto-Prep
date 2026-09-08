@@ -186,12 +186,15 @@ void main() {
       c.goForward();
       await tester.pumpAndSettle();
       expect(
-        find.textContaining(
-          'We are ready against 1.e4 and can play',
-          findRichText: true,
-        ),
+        find.textContaining('We are ready against ', findRichText: true),
         findsOneWidget,
       );
+      expect(find.text('1.e4'), findsOneWidget);
+      expect(
+        find.textContaining(' and can play', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.text('1...e5'), findsOneWidget);
     },
   );
 

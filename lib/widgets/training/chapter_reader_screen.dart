@@ -9,7 +9,8 @@
 /// trainer after closing.
 library;
 
-import 'package:dartchess/dartchess.dart' show PgnGame, Position, Side;
+import 'package:dartchess/dartchess.dart'
+    show Chess, Setup, PgnGame, Position, Side;
 import 'package:flutter/material.dart';
 
 import '../../core/pgn/viewer_game_model.dart';
@@ -19,6 +20,7 @@ import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/app_shortcuts.dart';
+import '../../utils/chess_utils.dart' show plyBeforeMove;
 import '../../utils/keyboard_shortcut_utils.dart';
 import '../chess_board_widget.dart';
 import '../pgn/pgn_movetext_view.dart';
@@ -116,6 +118,85 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
   final FocusNode _focusNode = FocusNode(debugLabel: 'chapter-reader');
   final _readingPaneKey = GlobalKey<PgnReadingPaneState>();
 
+  ({
+    int firstMoveNumber,
+    bool firstIsWhite,
+    List<String> sans,
+    int cursor,
+    String? anchorFen,
+  })?
+  _commentLine;
+  List<Position> _commentPositions = const [];
+
+  void _previewComment(
+    int section,
+    int number,
+    bool white,
+    List<String> sans,
+    int clickedIndex, {
+    String? anchorFen,
+  }) {
+    if (!mounted) return;
+    final model = _sections[section].model;
+    if (model == null) return;
+    Position? base;
+    if (anchorFen != null) {
+      try {
+        base = Chess.fromSetup(Setup.parseFen(anchorFen));
+      } catch (_) {
+        return;
+      }
+    } else {
+      base = model.mainline.tryAt(
+        plyBeforeMove(
+          moveNumber: number,
+          isWhite: white,
+          startFullmoves: model.startPosition.fullmoves,
+          startWhiteToMove: model.startPosition.turn == Side.white,
+        ),
+      );
+    }
+    if (base == null) return;
+    final positions = <Position>[base];
+    for (final san in sans) {
+      final move = positions.last.parseSan(san);
+      if (move == null) return;
+      positions.add(positions.last.play(move));
+    }
+    setState(() {
+      _active = section;
+      _commentPositions = positions;
+      _commentLine = (
+        firstMoveNumber: number,
+        firstIsWhite: white,
+        sans: List.of(sans),
+        cursor: (clickedIndex + 1).clamp(1, sans.length),
+        anchorFen: anchorFen,
+      );
+    });
+  }
+
+  void _stepComment(int cursor) {
+    final line = _commentLine;
+    if (!mounted || line == null) return;
+    setState(() {
+      _commentLine = cursor <= 0
+          ? null
+          : (
+              firstMoveNumber: line.firstMoveNumber,
+              firstIsWhite: line.firstIsWhite,
+              sans: line.sans,
+              cursor: cursor.clamp(1, line.sans.length),
+              anchorFen: line.anchorFen,
+            );
+    });
+  }
+
+  void _start() => _commentLine != null ? _stepComment(0) : _goTo(_active, 0);
+  void _end() => _commentLine != null
+      ? _stepComment(_commentLine!.sans.length)
+      : _goTo(_active, _sections[_active].length);
+
   @override
   void dispose() {
     _focusNode.dispose();
@@ -125,6 +206,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
   _ReaderSection? get _current => _sections.isEmpty ? null : _sections[_active];
 
   Position get _position {
+    if (_commentLine case final line?) return _commentPositions[line.cursor];
     final section = _current;
     if (section == null) return widget.lines.first.startPosition;
     return section.model?.currentPosition ?? section.line.startPosition;
@@ -140,14 +222,20 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
     final target = _sections[section];
     final model = target.model;
     if (model != null && !model.goToMainLineMove(index)) return;
-    setState(() => _active = section);
+    setState(() {
+      _commentLine = null;
+      _active = section;
+    });
   }
 
   void _goToNode(int section, MoveNode node, int branchPly) {
     if (!mounted) return;
     final model = _sections[section].model;
     if (model == null || !model.goToAnalysisNode(node, branchPly)) return;
-    setState(() => _active = section);
+    setState(() {
+      _commentLine = null;
+      _active = section;
+    });
   }
 
   /// Ply to land on when moving from section [from] to section [to]: the
@@ -164,6 +252,10 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
   }
 
   void _forward() {
+    if (_commentLine case final line?) {
+      _stepComment(line.cursor + 1);
+      return;
+    }
     final section = _current;
     if (section == null) return;
     final model = section.model;
@@ -186,6 +278,10 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
   }
 
   void _back() {
+    if (_commentLine case final line?) {
+      _stepComment(line.cursor - 1);
+      return;
+    }
     if (_readingPaneKey.currentState?.backOutOfFocus() ?? false) return;
     final section = _current;
     if (section == null) return;
@@ -222,6 +318,10 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
   }
 
   void _returnToMainline() {
+    if (_commentLine != null) {
+      _stepComment(0);
+      return;
+    }
     final model = _current?.model;
     if (model == null || model.analysisPath.isEmpty) return;
     _goTo(_active, model.activeBranchPly);
@@ -264,13 +364,9 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
     ...KeyBinding.forShortcut(
       AppShortcut.goToStart,
       'Start of this line',
-      () => _goTo(_active, 0),
+      _start,
     ),
-    ...KeyBinding.forShortcut(
-      AppShortcut.goToEnd,
-      'End of this line',
-      () => _goTo(_active, _sections[_active].length),
-    ),
+    ...KeyBinding.forShortcut(AppShortcut.goToEnd, 'End of this line', _end),
     ...KeyBinding.forShortcut(
       AppShortcut.previousItem,
       'Previous line',
@@ -288,6 +384,10 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
       () => setState(() => _flipped = !_flipped),
     ),
     ...KeyBinding.forShortcut(AppShortcut.leave, 'Close', () {
+      if (_commentLine != null) {
+        _stepComment(0);
+        return;
+      }
       if (_readingPaneKey.currentState?.returnToMove() ?? false) return;
       if (_readingPaneKey.currentState?.returnToParent() ?? false) return;
       Navigator.of(context).maybePop();
@@ -394,7 +494,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
                 icon: Icons.first_page,
                 description: 'Start of this line',
                 shortcut: AppShortcut.goToStart,
-                onPressed: () => _goTo(_active, 0),
+                onPressed: _start,
               ),
               _navButton(
                 icon: Icons.chevron_left,
@@ -412,7 +512,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
                 icon: Icons.last_page,
                 description: 'End of this line',
                 shortcut: AppShortcut.goToEnd,
-                onPressed: () => _goTo(_active, section.length),
+                onPressed: _end,
               ),
               const SizedBox(width: 12),
               _navButton(
@@ -532,6 +632,7 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
       child: PgnReadingPane(
         key: _readingPaneKey,
         backgroundColor: AppColors.surfaceContainer,
+        previewingComment: _commentLine != null,
         selection: (
           _active,
           model?.mainLineIndex,
@@ -654,6 +755,17 @@ class _ChapterReaderScreenState extends State<ChapterReaderScreen> {
                 startingMoveNumber: model.startPosition.fullmoves,
                 startingWhiteTurn: model.startPosition.turn == Side.white,
                 startPosition: model.startPosition,
+                activeInlineLine: active ? _commentLine : null,
+                onPlayInlineLine:
+                    (number, white, sans, clickedIndex, {String? anchorFen}) =>
+                        _previewComment(
+                          index,
+                          number,
+                          white,
+                          sans,
+                          clickedIndex,
+                          anchorFen: anchorFen,
+                        ),
                 currentMoveKey:
                     active && (model.mainLineIndex > 0 || scope != null)
                     ? currentMoveKey

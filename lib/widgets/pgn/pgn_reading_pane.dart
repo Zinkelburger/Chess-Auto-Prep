@@ -302,8 +302,12 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                   spacing: 10,
                   runSpacing: 8,
                   children: [
+                    if (widget.previewingComment)
+                      const Text('Comment preview', style: AppTextStyles.muted),
                     TextButton(
-                      onPressed: branches.isEmpty ? null : _mainline,
+                      onPressed: branches.isEmpty && !widget.previewingComment
+                          ? null
+                          : _mainline,
                       child: const Tooltip(
                         message: 'Return to mainline (R)',
                         child: Text('Main line', style: AppTextStyles.muted),

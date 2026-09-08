@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/models/repertoire_line.dart';
+import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/widgets/training/chapter_reader_screen.dart';
-import 'package:dartchess/dartchess.dart' show Chess;
+import 'package:dartchess/dartchess.dart' show Chess, Position;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,7 @@ final _lines = [
 Future<void> _pump(
   WidgetTester tester, {
   void Function(RepertoireLine)? onTrainLine,
+  List<RepertoireLine>? lines,
 }) async {
   tester.view.physicalSize = const Size(1400, 900);
   tester.view.devicePixelRatio = 1.0;
@@ -42,7 +44,7 @@ Future<void> _pump(
       home: ChapterReaderScreen(
         repertoireName: 'French',
         chapterTitle: 'Chapter 1',
-        lines: _lines,
+        lines: lines ?? _lines,
         onTrainLine: onTrainLine,
       ),
     ),
@@ -51,6 +53,68 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets(
+    'null-move overview previews a legal line and returns without changing the course',
+    (tester) async {
+      final line = _line(
+        'intro',
+        'Introduction',
+        '1.e4 {Welcome.} (1.e4 {in one course.}) 1... -- '
+            '{Outline [--] • 1... e4 1.e4 c5 We play 2.Nf3 d6 3.d4. '
+            '[--] • The **French** starts 1.e4 e6.}',
+      );
+      final original = line.fullPgn;
+      await _pump(tester, lines: [line]);
+      expect(find.textContaining('[--]', findRichText: true), findsNothing);
+      expect(
+        find.textContaining('**French**', findRichText: true),
+        findsNothing,
+      );
+      expect(find.textContaining('1... e4', findRichText: true), findsNothing);
+      expect(find.byTooltip('Collapse variation: 1. e4'), findsNothing);
+      final before = tester
+          .widget<ChessBoardWidget>(find.byType(ChessBoardWidget))
+          .position
+          .fen;
+      await tester.tap(find.text('2.Nf3'));
+      await tester.pumpAndSettle();
+      Position expected = Chess.initial;
+      for (final san in ['e4', 'c5', 'Nf3']) {
+        expected = expected.play(expected.parseSan(san)!);
+      }
+      expect(
+        tester
+            .widget<ChessBoardWidget>(find.byType(ChessBoardWidget))
+            .position
+            .fen,
+        expected.fen,
+      );
+      expect(find.text('Comment preview'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expected = expected.play(expected.parseSan('d6')!);
+      expect(
+        tester
+            .widget<ChessBoardWidget>(find.byType(ChessBoardWidget))
+            .position
+            .fen,
+        expected.fen,
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(ChapterReaderScreen), findsOneWidget);
+      expect(
+        tester
+            .widget<ChessBoardWidget>(find.byType(ChessBoardWidget))
+            .position
+            .fen,
+        before,
+      );
+      expect(line.fullPgn, original);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('shows every line of the chapter on one page', (tester) async {
     await _pump(tester);
     expect(find.text('French ▸ Chapter 1'), findsOneWidget);

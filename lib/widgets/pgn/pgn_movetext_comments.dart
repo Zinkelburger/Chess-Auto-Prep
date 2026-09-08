@@ -17,23 +17,81 @@ List<InlineSpan> _metricsSpans(String raw, {int depth = 0}) {
   return [TextSpan(text: '$summary ', style: PgnTextStyles.metricsAt(depth))];
 }
 
-/// Render a comment as plain flowing prose: engine tokens stripped, all
-/// whitespace collapsed, no paragraph or block structure. Moves written in
-/// the prose stay clickable when they are legal from the anchor position.
-List<InlineSpan> _plainCommentSpans(
+/// Ordinary prose, including course exports without double-space markup.
+({Widget? block, List<InlineSpan> spans}) _renderProseComment(
   PgnMovetextView view,
   String raw, {
   Position? anchorPos,
-  int anchorPly = 0,
   bool interactive = true,
 }) {
-  final filtered = filterDisplayComment(raw);
-  if (filtered.isEmpty) return const [];
-  final proseStyle = PgnTextStyles.commentAt(0);
-  if (interactive && anchorPos != null && view.onPlayInlineLine != null) {
-    return _buildProseSpans(view, filtered, anchorPos, anchorPly, proseStyle);
+  final anchor = anchorPos ?? view.startPosition;
+  if (anchor == null) {
+    return (block: null, spans: _emphasisSpans(filterDisplayComment(raw)));
   }
-  return [TextSpan(text: '$filtered ', style: proseStyle)];
+  final paragraphs = parseProseComment(
+    stripEngineTokens(raw).replaceAll(RegExp(r'[ \t]+'), ' '),
+    anchor: anchor,
+    positions: _buildPrefixPositions(view) ?? const [],
+  );
+  final runs = <int, List<CommentMove>>{};
+  for (final move in paragraphs.expand((p) => p).whereType<CommentMove>()) {
+    (runs[move.runId] ??= []).add(move);
+  }
+  List<InlineSpan> spansFor(List<CommentToken> paragraph) => [
+    for (final token in paragraph)
+      if (token is CommentProse)
+        ..._emphasisSpans(token.text)
+      else if (token is CommentMove)
+        _buildCommentMoveSpan(
+          view,
+          token,
+          runs[token.runId]!,
+          interactive: interactive,
+          trailingSpace: false,
+        ),
+  ];
+  if (paragraphs.length <= 1) {
+    return (
+      block: null,
+      spans: paragraphs.isEmpty ? [] : spansFor(paragraphs.single),
+    );
+  }
+  return (
+    block: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < paragraphs.length; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          Text.rich(TextSpan(children: spansFor(paragraphs[i]))),
+        ],
+      ],
+    ),
+    spans: const [],
+  );
+}
+
+List<InlineSpan> _emphasisSpans(String text) {
+  final style = PgnTextStyles.commentAt(0);
+  final spans = <InlineSpan>[];
+  var offset = 0;
+  for (final match in RegExp(r'\*\*([^*]+)\*\*').allMatches(text)) {
+    if (match.start > offset) {
+      spans.add(
+        TextSpan(text: text.substring(offset, match.start), style: style),
+      );
+    }
+    spans.add(
+      TextSpan(
+        text: match[1],
+        style: style.copyWith(fontWeight: FontWeight.w600),
+      ),
+    );
+    offset = match.end;
+  }
+  if (offset < text.length) {
+    spans.add(TextSpan(text: text.substring(offset), style: style));
+  }
+  return spans;
 }
 
 /// Decide how to render a mainline-move comment: a flowing inline span list
@@ -54,14 +112,12 @@ List<InlineSpan> _plainCommentSpans(
   raw = normalizeCourseCommentSpacing(raw);
   final richFormatting = hasChessableFormatting(raw);
   if (!view.bookFormatting && !richFormatting) {
-    final spans = _plainCommentSpans(
+    return _renderProseComment(
       view,
       raw,
       anchorPos: anchorPos,
-      anchorPly: anchorPly,
       interactive: interactive,
     );
-    return (block: null, spans: spans);
   }
   if (richFormatting) {
     // Editorial parentheses belong inside the sentence. Flatten only these
@@ -358,6 +414,7 @@ WidgetSpan _buildCommentMoveSpan(
   List<CommentMove> run, {
   TextStyle? moveStyle,
   bool interactive = true,
+  bool trailingSpace = true,
 }) {
   final clickable =
       interactive && move.isClickable && view.onPlayInlineLine != null;
@@ -413,7 +470,7 @@ WidgetSpan _buildCommentMoveSpan(
                     border: Border.all(color: Colors.transparent, width: 1),
                   ),
             child: Text(
-              '${move.display} ',
+              '${move.display}${trailingSpace ? ' ' : ''}',
               style:
                   (isActiveMove
                           ? baseMoveStyle.copyWith(
