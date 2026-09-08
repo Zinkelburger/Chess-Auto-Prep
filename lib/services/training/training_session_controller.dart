@@ -655,8 +655,9 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   ///
   /// Counted once per notification: the screen reads it several times per
   /// build, and every read walked the queue with a status lookup per line.
-  int get remainingInRun =>
-      _remainingInRun ??= run.remaining(dueQueue, sessionIntent);
+  int get remainingInRun => runComplete
+      ? 0
+      : (_remainingInRun ??= run.remaining(dueQueue, sessionIntent));
 
   int? _remainingInRun;
 
@@ -679,7 +680,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     TrainingIntent? intent,
     bool keepRunScope = false,
   }) {
-    if (line == null) return;
+    if (line == null || (reviewMap[line.id]?.excluded ?? false)) return;
     if (!keepRunScope) run.clear();
     sessionIntent =
         intent ??
@@ -825,12 +826,24 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   void nextLine() => rebuildQueueAndAdvance();
 
-  /// Skip the current line without rating it — it stays in the queue and the
-  /// next line starts immediately.
+  /// Skip for this sitting without changing the saved schedule.
   void skipLine() {
-    if (currentLine == null) return;
+    if (currentLine == null || runComplete) return;
+    run.skip(currentLine!.id);
     learn.cancelPending();
     rebuildQueueAndAdvance();
+  }
+
+  Future<void> setLineExcluded(RepertoireLine line, bool excluded) async {
+    final saved = progress.setExcluded(line, excluded);
+    if (excluded && currentLine?.id == line.id) {
+      learn.cancelPending();
+      rebuildQueueAndAdvance();
+    } else {
+      dueQueue = _buildQueue();
+      notifyListeners();
+    }
+    await saved;
   }
 
   /// Restart the current line from the beginning (learn phase again if the

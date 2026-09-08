@@ -4,6 +4,14 @@ import 'package:chess_auto_prep/services/pgn_parsing_service.dart'
     show splitPgnIntoGames;
 
 void main() {
+  test('Game and Train agree on indented CRLF course boundaries', () {
+    const course =
+        '[Event "?"]\r\n[White "Introduction"]\r\n\r\n1. d4 *\r\n'
+        '  [Event "?"]\r\n[White "Quickstarter"]\r\n\r\n1. d4 Nf6 *';
+    expect(parseMultiGamePgn(course).length, 2);
+    expect(parseMultiGamePgn(course).length, splitPgnIntoGames(course).length);
+  });
+
   group('mergeEditedGamesIntoDiskCopy', () {
     String game(String white, String black, String moves) =>
         '[Event "?"]\n[White "$white"]\n[Black "$black"]\n[Result "*"]\n\n$moves *\n';

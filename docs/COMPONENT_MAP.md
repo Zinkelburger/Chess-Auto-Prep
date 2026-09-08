@@ -444,6 +444,19 @@ RepertoireTrainingScreen
   → TrainingSettings (persisted)
 ```
 
+Train opens multi-chapter imports at the chapter picker instead of silently
+opening the introduction as “Main”. Course headers use the shared repertoire
+chapter detector; Game and Train split PGN collections with `splitPgnIntoGames`.
+The chapter reader reuses `PgnReadingPane` for prose spacing, move anchoring,
+variation focus and return-to-parent navigation. A line's Read action opens
+that same chapter reader at the chosen line.
+
+Training settings precede the global mode menu. **Skip** is visible during a
+lesson and leaves a line out for the current sitting without rating it.
+**Line → Exclude from training** saves an exclusion alongside review progress;
+excluded lines remain readable and can be restored from their line options.
+They do not contribute to Learn/Review counts or either scheduling queue.
+
 ### PGN viewer (Open PGN)
 
 **Game options ▾** and **Filter games ▾** use the shared, quiet

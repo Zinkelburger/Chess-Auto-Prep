@@ -200,6 +200,16 @@ class ReviewProgressStore {
     ]);
   }
 
+  Future<void> setExcluded(RepertoireLine line, bool excluded) async {
+    final sourcePath = repertoireId;
+    final entry = byLine[line.id] ?? _freshEntry(line);
+    byLine[line.id] = entry.copyWith(excluded: excluded);
+    await reviewService.saveAll(
+      byLine.values.toList(),
+      repertoireId: sourcePath,
+    );
+  }
+
   // ── Bulk "I already know these" ──────────────────────────────────────
 
   /// Bulk-set which lines count as learned without training them — for lines
@@ -255,6 +265,7 @@ class ReviewProgressStore {
           difficulty: entry!.difficulty,
           passCount: entry.passCount,
           failCount: entry.failCount,
+          excluded: entry.excluded,
         );
       }
       byLine[line.id] = updated;

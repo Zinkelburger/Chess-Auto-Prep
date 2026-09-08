@@ -8,6 +8,7 @@ import 'common/name_entry_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/repertoire_metadata.dart';
 import '../screens/repertoire_chapters_screen.dart';
@@ -379,10 +380,21 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       existingNames: _repertoires.map((r) => r.name).toList(),
     );
     if (created == null || !mounted) return;
+    if (created.chapterPaths.length > 1) {
+      await _openRepertoire(
+        RepertoireMetadata(
+          filePath: created.directoryPath,
+          name: p.basename(created.directoryPath),
+          gameCount: created.gameCount,
+          lastModified: DateTime.now(),
+        ),
+      );
+      return;
+    }
     widget.onSelected(
       RepertoireMetadata(
         filePath: created.chapterPath,
-        name: 'Main',
+        name: p.basenameWithoutExtension(created.chapterPath),
         gameCount: created.gameCount,
         lastModified: DateTime.now(),
       ),

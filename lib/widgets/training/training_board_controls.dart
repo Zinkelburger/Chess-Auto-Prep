@@ -186,39 +186,11 @@ class _IntroContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: theme.colorScheme.primary.withValues(alpha: 0.25),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.play_circle_outline,
-                  size: 18,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Watch — playing the opening moves. Training starts '
-                    'at the first comment.',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          const Text('Opening moves', style: AppTextStyles.muted),
           if (opponent != null || user != null) ...[
             const SizedBox(height: 12),
             _MovePairCard(opponent: opponent, user: user),
@@ -268,7 +240,7 @@ class _MoveLine extends StatelessWidget {
             comment,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-              height: 1.4,
+              height: 1.65,
             ),
           ),
         ],
@@ -314,7 +286,7 @@ class _MovePairCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
+        color: AppColors.pgnSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),

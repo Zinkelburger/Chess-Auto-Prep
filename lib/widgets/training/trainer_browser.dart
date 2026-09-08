@@ -106,6 +106,7 @@ class TrainerBrowser extends StatefulWidget {
   /// Whether the uncommented intro auto-plays (dims those moves in the row
   /// preview, since they are shown rather than quizzed).
   final bool introEnabled;
+  final void Function(RepertoireLine line, bool excluded)? onExcludeLine;
 
   /// Narrow side-panel rendering: same structure, tighter, no page header.
   final bool dense;
@@ -129,6 +130,7 @@ class TrainerBrowser extends StatefulWidget {
     this.onReadLines,
     this.onApplyLearnedSelection,
     this.introEnabled = false,
+    this.onExcludeLine,
     this.dense = false,
   });
 
@@ -411,6 +413,12 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
           line: line,
           status: lineStatusOf(widget.reviewMap[line.id]),
           entry: widget.reviewMap[line.id],
+          onExclude: widget.onExcludeLine == null
+              ? null
+              : () => widget.onExcludeLine!(
+                  line,
+                  !(widget.reviewMap[line.id]?.excluded ?? false),
+                ),
           // A puzzle-start marker auto-plays its prelude in every mode; the
           // comment-based intro only applies when the setting is on.
           introLength:
@@ -428,7 +436,8 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
               ? () => setState(() {
                   if (!_checked.remove(line.id)) _checked.add(line.id);
                 })
-              : line.isModelGame
+              : line.readOnlyLabel != null ||
+                    (widget.reviewMap[line.id]?.excluded ?? false)
               ? () => widget.onPreviewLine?.call(line)
               : () => widget.onTrainLine(line),
         );

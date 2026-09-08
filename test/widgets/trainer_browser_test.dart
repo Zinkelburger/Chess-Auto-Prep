@@ -152,7 +152,7 @@ void main() {
 
       // "30 untrained" on a bought course reads as a threat; the button has
       // to promise the ten it will actually show.
-      expect(find.text('10 now · 20 to go'), findsOneWidget);
+      expect(find.text('10 lines'), findsOneWidget);
       expect(find.text('30 untrained'), findsNothing);
       // The progress strip still tells the truth about the whole scope.
       expect(find.text('0 learned · 0 due · 30 untrained'), findsOneWidget);
