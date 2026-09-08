@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../utils/chess_utils.dart'
     show parseSquare, toAlgebraic, castlingKingDestination, roleChar;
 import 'board/board_coordinates.dart';
+import 'board/board_square_painter.dart';
 import 'common/piece_image.dart';
 
 export '../models/completed_move.dart' show CompletedMove;
@@ -22,7 +23,13 @@ class ChessBoardWidget extends StatefulWidget {
   final Function(CompletedMove)? onMove;
   final bool enableUserMoves;
   final bool flipped;
+
+  /// Borderless square tints for hints and preview emphasis.
   final Set<String> highlightedSquares;
+
+  /// Additional legal destinations, e.g. bughouse drops. Empty squares use
+  /// dots and occupied squares use rings, just like normal move selection.
+  final Set<String> legalMoveSquares;
 
   /// From/to squares of the most recent half-move (two, in the trainer), kept
   /// subtly tinted. Quieter than [highlightedSquares].
@@ -49,6 +56,7 @@ class ChessBoardWidget extends StatefulWidget {
     this.enableUserMoves = true,
     this.flipped = false,
     this.highlightedSquares = const {},
+    this.legalMoveSquares = const {},
     this.recentMoveSquares = const {},
     this.onSquareClicked,
     this.onPieceSelected,
@@ -63,7 +71,7 @@ class ChessBoardWidget extends StatefulWidget {
 
 class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   String? selectedSquare;
-  final Set<String> _internalHighlights = {};
+  final Set<String> _legalMoveSquares = {};
 
   String? _dragStartSquare;
 
@@ -84,12 +92,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   // setState-rebuilding the whole board (64-square painter + up to 32 piece
   // widgets) on every pointer-move event.
   final ValueNotifier<Offset?> _currentDragPosition = ValueNotifier(null);
-
-  static const Color lightSquareColor = AppColors.boardLightSquare;
-  static const Color darkSquareColor = AppColors.boardDarkSquare;
-  static const Color selectedSquareColor = AppColors.boardSelected;
-  static const Color highlightColor = AppColors.boardHighlight;
-  static const Color recentMoveColor = AppColors.boardRecentMove;
 
   @override
   Widget build(BuildContext context) {
@@ -148,19 +150,19 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
             child: Stack(
               children: [
                 CustomPaint(
-                  painter: _BoardPainter(
+                  painter: BoardSquarePainter(
                     selectedSquare: selectedSquare,
-                    highlightedSquares: {
-                      ...widget.highlightedSquares,
-                      ..._internalHighlights,
+                    highlightedSquares: widget.highlightedSquares,
+                    legalMoveSquares: {
+                      ...widget.legalMoveSquares,
+                      ..._legalMoveSquares,
+                    },
+                    occupiedSquares: {
+                      for (final (square, _) in widget.position.board.pieces)
+                        toAlgebraic(square),
                     },
                     recentMoveSquares: widget.recentMoveSquares,
                     flipped: widget.flipped,
-                    lightColor: lightSquareColor,
-                    darkColor: darkSquareColor,
-                    selectColor: selectedSquareColor,
-                    highlightColor: highlightColor,
-                    recentMoveColor: recentMoveColor,
                   ),
                   size: Size(squaresSize, squaresSize),
                 ),
@@ -292,7 +294,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   }
 
   (int, int) _squareToCoords(String square) {
-    return _BoardPainter._squareToCoords(square, widget.flipped);
+    return BoardSquarePainter.squareToCoords(square, widget.flipped);
   }
 
   String _coordsToSquare(int col, int row) {
@@ -338,7 +340,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         setState(() {
           _isDragging = true;
           selectedSquare = _dragStartSquare;
-          _highlightLegalMoves(_dragStartSquare!);
+          _updateLegalMoves(_dragStartSquare!);
         });
         widget.onPieceSelected?.call(_dragStartSquare!);
       }
@@ -390,7 +392,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     setState(() {
       _clearDragBookkeeping();
       selectedSquare = null;
-      _internalHighlights.clear();
+      _legalMoveSquares.clear();
       _promoting = null;
     });
   }
@@ -405,7 +407,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       if (piece != null && piece.color == widget.position.turn) {
         setState(() {
           selectedSquare = square;
-          _highlightLegalMoves(square);
+          _updateLegalMoves(square);
         });
         widget.onPieceSelected?.call(square);
       }
@@ -413,7 +415,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       if (selectedSquare == square) {
         setState(() {
           selectedSquare = null;
-          _internalHighlights.clear();
+          _legalMoveSquares.clear();
         });
       } else {
         _tryMakeMove(selectedSquare!, square);
@@ -421,8 +423,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     }
   }
 
-  void _highlightLegalMoves(String fromSquare) {
-    _internalHighlights.clear();
+  void _updateLegalMoves(String fromSquare) {
+    _legalMoveSquares.clear();
 
     final fromSq = parseSquare(fromSquare);
     if (fromSq == null) return;
@@ -436,9 +438,9 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     for (final toSq in targets.squares) {
       if (isKing) {
         final mapped = _castlingKingDest(fromSq, toSq);
-        _internalHighlights.add(toAlgebraic(mapped));
+        _legalMoveSquares.add(toAlgebraic(mapped));
       } else {
-        _internalHighlights.add(toAlgebraic(toSq));
+        _legalMoveSquares.add(toAlgebraic(toSq));
       }
     }
   }
@@ -484,7 +486,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     super.didUpdateWidget(oldWidget);
 
     if (widget.position != oldWidget.position ||
-        widget.flipped != oldWidget.flipped) {
+        widget.flipped != oldWidget.flipped ||
+        widget.enableUserMoves != oldWidget.enableUserMoves) {
       _resetDragState();
     }
   }
@@ -527,7 +530,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         // Ask which piece, as lila does, rather than assuming a queen.
         setState(() {
           selectedSquare = null;
-          _internalHighlights.clear();
+          _legalMoveSquares.clear();
           _promoting = _Promoting(
             from: from,
             to: toAlgebraic(toSq!),
@@ -580,7 +583,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   void _clearSelection() {
     setState(() {
       selectedSquare = null;
-      _internalHighlights.clear();
+      _legalMoveSquares.clear();
       _promoting = null;
     });
   }
@@ -702,106 +705,6 @@ class _PromotionSquareState extends State<_PromotionSquare> {
   }
 }
 
-/// Custom painter for board squares and highlights only
-class _BoardPainter extends CustomPainter {
-  final String? selectedSquare;
-  final Set<String> highlightedSquares;
-  final Set<String> recentMoveSquares;
-  final bool flipped;
-  final Color lightColor;
-  final Color darkColor;
-  final Color selectColor;
-  final Color highlightColor;
-  final Color recentMoveColor;
-
-  _BoardPainter({
-    required this.selectedSquare,
-    required this.highlightedSquares,
-    required this.recentMoveSquares,
-    required this.flipped,
-    required this.lightColor,
-    required this.darkColor,
-    required this.selectColor,
-    required this.highlightColor,
-    required this.recentMoveColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final squareSize = size.width / 8;
-
-    for (String file in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
-      for (int rank = 1; rank <= 8; rank++) {
-        final square = '$file$rank';
-
-        final (col, row) = _squareToCoords(square, flipped);
-        final x = col * squareSize;
-        final y = row * squareSize;
-
-        final fileIndex = file.codeUnitAt(0) - 97;
-        final rankIndex = rank - 1;
-        final isLightSquare = (fileIndex + rankIndex) % 2 != 0;
-
-        final Color color;
-        if (square == selectedSquare) {
-          color = selectColor;
-        } else {
-          color = isLightSquare ? lightColor : darkColor;
-        }
-
-        final rect = Rect.fromLTWH(x, y, squareSize, squareSize);
-        canvas.drawRect(rect, Paint()..color = color);
-
-        if (recentMoveSquares.contains(square) && square != selectedSquare) {
-          canvas.drawRect(rect, Paint()..color = recentMoveColor);
-        }
-
-        if (highlightedSquares.contains(square) && square != selectedSquare) {
-          canvas.drawRect(
-            rect,
-            Paint()
-              ..color = highlightColor
-              ..blendMode = BlendMode.multiply,
-          );
-        }
-      }
-    }
-
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()
-        ..color = AppColors.boardOutline
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-  }
-
-  static (int, int) _squareToCoords(String square, bool flipped) {
-    final file = square.codeUnitAt(0) - 97;
-    final rank = int.parse(square[1]) - 1;
-
-    final col = flipped ? (7 - file) : file;
-    final row = flipped ? rank : (7 - rank);
-
-    return (col, row);
-  }
-
-  @override
-  bool shouldRepaint(covariant _BoardPainter old) =>
-      selectedSquare != old.selectedSquare ||
-      flipped != old.flipped ||
-      !_setEquals(highlightedSquares, old.highlightedSquares) ||
-      !_setEquals(recentMoveSquares, old.recentMoveSquares) ||
-      lightColor != old.lightColor ||
-      darkColor != old.darkColor ||
-      selectColor != old.selectColor ||
-      highlightColor != old.highlightColor ||
-      recentMoveColor != old.recentMoveColor;
-
-  static bool _setEquals(Set<String> a, Set<String> b) =>
-      a.length == b.length && a.containsAll(b);
-}
-
 /// Paints arrows, circles, and labels on top of the board and pieces.
 class _AnnotationPainter extends CustomPainter {
   final List<BoardAnnotation> annotations;
@@ -826,7 +729,7 @@ class _AnnotationPainter extends CustomPainter {
   }
 
   Offset _center(String square, double sq) {
-    final (col, row) = _BoardPainter._squareToCoords(square, flipped);
+    final (col, row) = BoardSquarePainter.squareToCoords(square, flipped);
     return Offset((col + 0.5) * sq, (row + 0.5) * sq);
   }
 

@@ -13,6 +13,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/fen_utils.dart';
 import '../../utils/chess_utils.dart' show roleChar;
+import '../board/board_square_painter.dart';
 
 /// One move drawn over a [StaticBoardThumbnail], from-square to to-square.
 @immutable
@@ -191,26 +192,7 @@ class _ThumbnailPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final squareSize = size.width / 8;
-    final paint = Paint();
-
-    for (int file = 0; file < 8; file++) {
-      for (int rank = 0; rank < 8; rank++) {
-        final col = flipped ? 7 - file : file;
-        final row = flipped ? rank : 7 - rank;
-        paint.color = (file + rank) % 2 != 0
-            ? AppColors.boardLightSquare
-            : AppColors.boardDarkSquare;
-        canvas.drawRect(
-          Rect.fromLTWH(
-            col * squareSize,
-            row * squareSize,
-            squareSize,
-            squareSize,
-          ),
-          paint,
-        );
-      }
-    }
+    BoardSquarePainter(flipped: flipped, outlineWidth: 0).paint(canvas, size);
 
     if (spritesLoaded) {
       final piecePaint = Paint()..filterQuality = FilterQuality.medium;
