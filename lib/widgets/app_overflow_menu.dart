@@ -1,20 +1,5 @@
-/// The one overflow menu every screen's app bar uses.
-///
-/// Each screen used to hand-roll its own `PopupMenuButton` — different item
-/// widgets, different icon sizes, some with subtitles, some without — so the
-/// same action looked like a different control depending on where you found
-/// it. This is that menu, once: a `⋮` button, an [AppMenuEntry] per row, and
-/// a rule that rows are labels rather than labels-plus-an-explaining-sentence.
-///
-/// The bar itself is meant to stay at four controls: title, one primary
-/// action, this menu, and the mode switcher. Anything occasional belongs in
-/// here.
-///
-/// A menu with more than a handful of rows groups them under section
-/// headings ([AppMenuEntry.heading]) — the same uppercase eyebrow the mode
-/// switcher uses — rather than under dividers alone, so the reader scans
-/// four words instead of twelve rows. [AppOverflowMenu.anchor] lets a screen
-/// hang the same menu off a labelled control ("Actions ▾") instead of the ⋮.
+/// Shared grouped actions menu. App bars use the visible Actions label;
+/// contextual pickers can supply their own label or anchor.
 library;
 
 import 'package:flutter/material.dart';
@@ -77,25 +62,24 @@ class AppMenuEntry {
   final String? hint;
 }
 
-/// Trailing `⋮` menu for an app bar.
+/// Labelled menu for app bars and contextual operations.
 class AppOverflowMenu extends StatelessWidget {
   const AppOverflowMenu({
     super.key,
     required this.entries,
-    this.tooltip = 'More actions',
+    this.tooltip = 'Actions',
     this.anchor,
-    this.label,
+    this.label = 'Actions',
     this.enabled = true,
   });
 
   final List<AppMenuEntry> entries;
   final String tooltip;
 
-  /// The control the menu hangs off. Null is the `⋮` icon; a labelled
-  /// control ("Actions ▾") opens the same menu under itself.
+  /// Optional custom anchor; otherwise uses [label] (Actions by default).
   final Widget? anchor;
 
-  /// Standard quiet text-and-arrow anchor for in-view menus.
+  /// Quiet text-and-arrow anchor. Explicit null opts into an icon anchor.
   final String? label;
 
   /// False greys the anchor and keeps the menu shut — for a bar that is

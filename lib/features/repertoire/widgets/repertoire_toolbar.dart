@@ -5,6 +5,10 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_switcher.dart';
+import '../../../widgets/app_settings_button.dart';
+import '../../../core/app_state.dart';
+import '../../../widgets/analysis/stockfish_settings_dialog.dart';
+import '../../../widgets/analysis/analysis_panels_dialog.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/layout/board_zone.dart';
@@ -17,7 +21,7 @@ import '../../../widgets/layout/board_zone.dart';
 ///   *does* something to the repertoire, in named groups: the two engine
 ///   builds, the import, training, and the audit,
 /// - the mode switcher,
-/// - the trailing `⋮` holds the two settings dialogs and nothing else.
+/// - the gear opens view settings, with a path to global preferences.
 ///
 /// Train used to be a filled button of its own beside "Add lines". It was
 /// the loudest thing on the bar for an action most sittings never take —
@@ -114,23 +118,25 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           trainEnabled: !generationLocked,
         ),
         const AppModeSwitcher(),
-        AppOverflowMenu(
-          tooltip: 'Settings',
-          entries: [
-            if (onOpenRepertoireOptions != null)
-              AppMenuEntry(
-                label: 'Repertoire settings…',
-                // Bordered swatch, not a bare Icon: the sideBlack disc is
-                // near-invisible on the popup surface without an outline.
-                leading: _SideSwatch(isWhite: isWhiteRepertoire ?? true),
-                onRun: onOpenRepertoireOptions!,
-              ),
-            AppMenuEntry(
-              label: 'App settings…',
-              icon: Icons.settings,
-              onRun: onOpenSettings,
-            ),
-          ],
+        AppSettingsButton(
+          mode: AppMode.repertoire,
+          contentBuilder: onOpenRepertoireOptions == null
+              ? null
+              : (_) => ListView(
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    ListTile(
+                      leading: _SideSwatch(isWhite: isWhiteRepertoire ?? true),
+                      title: const Text('Repertoire options'),
+                      subtitle: const Text('Side to play and board size'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: onOpenRepertoireOptions,
+                    ),
+                    const AnalysisPanelsSettingsBody(),
+                    const SizedBox(height: 24),
+                    const StockfishSettingsBody(),
+                  ],
+                ),
         ),
       ],
     );

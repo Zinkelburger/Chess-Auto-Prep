@@ -649,20 +649,18 @@ class _LineCard extends StatelessWidget {
                       color: AppColors.onSurfaceMuted,
                     ),
                   if (onExclude != null && line.readOnlyLabel == null)
-                    PopupMenuButton<bool>(
-                      tooltip: 'Line options',
-                      icon: const Icon(Icons.more_horiz, size: 18),
-                      onSelected: (_) => onExclude!(),
-                      itemBuilder: (_) => [
-                        PopupMenuItem(
-                          value: true,
-                          child: Text(
-                            (entry?.excluded ?? false)
-                                ? 'Include in training'
-                                : 'Exclude from training',
-                          ),
-                        ),
-                      ],
+                    IconButton(
+                      tooltip: (entry?.excluded ?? false)
+                          ? 'Include in training'
+                          : 'Exclude from training',
+                      icon: Icon(
+                        (entry?.excluded ?? false)
+                            ? Icons.undo
+                            : Icons.playlist_remove,
+                        size: 18,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onExclude,
                     ),
                   const SizedBox(width: 2),
                   _ActionPill(

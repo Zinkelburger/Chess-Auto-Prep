@@ -85,6 +85,10 @@ mixin _AppBarBuildersMixin
         _buildViewMenu(),
         const SizedBox(width: 16),
         const AppModeSwitcher(),
+        AppSettingsButton(
+          mode: AppMode.pgnViewer,
+          contentBuilder: (_) => _gameViewSettings(),
+        ),
         const SizedBox(width: 8),
       ],
     );
@@ -94,19 +98,9 @@ mixin _AppBarBuildersMixin
     final hasGame = _controller.filteredGames.isNotEmpty;
     final solitaire = _controller.isSolitaireMode;
     return AppOverflowMenu(
-      label: 'Game options',
-      tooltip: 'Game options',
+      label: 'Actions',
+      tooltip: 'Actions',
       entries: [
-        AppMenuEntry(
-          heading: 'Settings',
-          label: 'Game view…',
-          icon: Icons.tune,
-          onRun: _openGameViewSettings,
-        ),
-        AppMenuEntry(
-          label: 'App settings…',
-          onRun: () => openAppSettings(context),
-        ),
         if (hasGame && !solitaire) ...[
           AppMenuEntry(
             heading: 'Explore',
@@ -202,26 +196,22 @@ mixin _AppBarBuildersMixin
     );
   }
 
-  Future<void> _openGameViewSettings() async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => GameViewSettingsDialog(
-        preferences: _viewPreferences,
-        perspective: _controller.perspective,
-        onChanged: _setViewPreferences,
-        onFlip: _controller.toggleBoardFlipped,
-        onPerspective: _controller.setPerspective,
-        player: _controller.detectProtagonist(),
-        onReadingOptions: _controller.filteredGames.isEmpty
-            ? null
-            : (_onLineTab ? _lineWidgetController : _pgnWidgetController)
-                  .showReadingOptions,
-        onFullscreen: _controller.filteredGames.isNotEmpty && !_onLineTab
-            ? _controller.toggleFullScreen
-            : null,
-      ),
-    );
-  }
+  Widget _gameViewSettings() => GameViewSettingsDialog(
+    preferences: _viewPreferences,
+    perspective: _controller.perspective,
+    onChanged: _setViewPreferences,
+    onFlip: _controller.toggleBoardFlipped,
+    onPerspective: _controller.setPerspective,
+    player: _controller.detectProtagonist(),
+    onReadingOptions: _controller.filteredGames.isEmpty
+        ? null
+        : (_onLineTab ? _lineWidgetController : _pgnWidgetController)
+              .showReadingOptions,
+    onFullscreen: _controller.filteredGames.isNotEmpty && !_onLineTab
+        ? _controller.toggleFullScreen
+        : null,
+    embedded: true,
+  );
 
   /// App-bar file button: shows the loaded file name and opens a menu with
   /// recent files, a file browser, paste-from-clipboard, and — once something

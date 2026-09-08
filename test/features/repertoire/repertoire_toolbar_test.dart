@@ -74,15 +74,16 @@ void main() {
     });
 
     testWidgets(
-      'the overflow holds the two settings dialogs and nothing else',
+      'the gear opens view settings with access to global preferences',
       (tester) async {
         await _pump(tester, onOpenAudit: () {}, onTrain: () {});
 
-        await tester.tap(find.byIcon(Icons.more_vert));
+        await tester.tap(find.byTooltip('Settings'));
         await tester.pumpAndSettle();
 
-        expect(find.text('Repertoire settings…'), findsOneWidget);
-        expect(find.text('App settings…'), findsOneWidget);
+        expect(find.text('Repertoire options'), findsOneWidget);
+        expect(find.text('Global settings'), findsOneWidget);
+        expect(find.byIcon(Icons.more_vert), findsNothing);
         expect(find.text('Audit for gaps…'), findsNothing);
         expect(find.text('Train this chapter'), findsNothing);
       },

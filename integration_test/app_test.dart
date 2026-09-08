@@ -21,6 +21,19 @@ void main() {
       // App-bar title. At the root of the history the breadcrumb trail is
       // deliberately absent — a lone crumb would just repeat this title.
       expect(find.text('Tactics'), findsWidgets);
+      final actions = find.text('Actions');
+      final picker = find.byKey(AppModeSwitcher.switcherKey);
+      final settings = find.byKey(const ValueKey('view-settings-tactics'));
+      expect(actions, findsOneWidget);
+      expect(
+        tester.getCenter(actions).dx,
+        lessThan(tester.getCenter(picker).dx),
+      );
+      expect(
+        tester.getCenter(picker).dx,
+        lessThan(tester.getCenter(settings).dx),
+      );
+      expect(find.byTooltip('Settings'), findsWidgets);
 
       // Idle Tactics shows the games home instead of a decorative board;
       // the board returns only when a puzzle session starts.

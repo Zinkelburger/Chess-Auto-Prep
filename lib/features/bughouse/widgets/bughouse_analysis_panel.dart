@@ -121,7 +121,7 @@ class _BughouseAnalysisPanelState extends State<BughouseAnalysisPanel>
             padding: EdgeInsets.zero,
             children: switch (_tab) {
               1 => [_TableRules(controller: controller)],
-              2 => [_EngineSection(controller: controller)],
+              2 => [BughouseEngineSettingsSection(controller: controller)],
               _ => [
                 if (controller.isComparing ||
                     controller.scenarios.isNotEmpty) ...[
@@ -711,8 +711,8 @@ class _TableRules extends StatelessWidget {
   }
 }
 
-class _EngineSection extends StatelessWidget {
-  const _EngineSection({required this.controller});
+class BughouseEngineSettingsSection extends StatelessWidget {
+  const BughouseEngineSettingsSection({super.key, required this.controller});
   final BughouseController controller;
 
   @override

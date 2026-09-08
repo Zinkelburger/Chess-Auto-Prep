@@ -368,12 +368,36 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
         ),
       ),
       actions: [
-        TextButton.icon(
-          onPressed: _openSettingsDialog,
-          icon: const Icon(Icons.settings_outlined, size: 18),
-          label: const Text('Training settings'),
+        AppOverflowMenu(
+          entries: [
+            AppMenuEntry(
+              heading: 'Material',
+              label: 'Choose repertoire…',
+              onRun: () => unawaited(_selectRepertoire()),
+            ),
+            if (repertoire != null) ...[
+              AppMenuEntry(
+                label: 'Reload from disk',
+                onRun: () => unawaited(_training.loadRepertoire()),
+              ),
+              AppMenuEntry(
+                heading: 'Edit',
+                label: _training.sourceIsStudy
+                    ? 'Edit study…'
+                    : 'Open in Builder',
+                onRun: _training.sourceIsStudy ? _openInStudy : _openInBuilder,
+              ),
+            ],
+          ],
         ),
         const AppModeSwitcher(),
+        AppSettingsButton(
+          mode: AppMode.repertoireTrainer,
+          contentBuilder: (_) => ListenableBuilder(
+            listenable: _training,
+            builder: (context, _) => _buildSettingsPanel(),
+          ),
+        ),
         const SizedBox(width: 8),
       ],
     );
@@ -564,53 +588,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
   /// Trainer settings as a dialog — the landing page has no tab bar, and
   /// knobs belong behind one labelled entry point either way.
-  Future<void> _openSettingsDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        child: SizedBox(
-          width: 1040,
-          height: 760,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 12, 12),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Training settings',
-                        style: AppTextStyles.title,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Close training settings',
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: ListenableBuilder(
-                  listenable: _training,
-                  builder: (context, _) => _buildSettingsPanel(
-                    onOpenAppSettings: () {
-                      Navigator.of(dialogContext).pop();
-                      unawaited(openAppSettings(this.context));
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (mounted) setState(() {});
-  }
-
   Widget _buildBoardPane() {
     return TrainingBoardPane(
       session: _training.session,

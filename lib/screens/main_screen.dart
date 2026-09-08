@@ -16,6 +16,8 @@ import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_settings_button.dart';
+import '../widgets/app_overflow_menu.dart';
+import '../features/tactics/widgets/tactics_view_settings.dart';
 import '../features/tactics/widgets/tactics_control_panel.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
@@ -407,7 +409,40 @@ class _TacticsModeScaffold extends StatelessWidget {
         // the breadcrumb trail doesn't shift right when the arrow appears
         // and disappears.
         title: const AppBarTitleWithTrail(title: _TacticsAppBarBackButton()),
-        actions: const [AppModeSwitcher(), AppSettingsButton()],
+        actions: [
+          AppOverflowMenu(
+            entries: [
+              AppMenuEntry(
+                heading: 'Practice',
+                label: 'Play tactics',
+                enabled: !hasPuzzle,
+                onRun: () => context
+                    .read<TacticsSessionController>()
+                    .panel
+                    ?.start
+                    ?.call(),
+              ),
+              if (hasPuzzle)
+                AppMenuEntry(
+                  label: 'Leave puzzle',
+                  onRun: () => context
+                      .read<TacticsSessionController>()
+                      .panel
+                      ?.back
+                      ?.call(),
+                ),
+            ],
+          ),
+          const AppModeSwitcher(),
+          AppSettingsButton(
+            mode: AppMode.tactics,
+            contentBuilder: (_) => TacticsViewSettings(
+              session: context.read<TacticsSessionController>(),
+              games: context.read<RecentGamesController>(),
+              runner: context.read<HomeReviewRunner>(),
+            ),
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {

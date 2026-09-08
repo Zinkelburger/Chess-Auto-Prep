@@ -636,56 +636,70 @@ class _StudyScreenState extends State<StudyScreen> {
           title: StudyPickerBar(
             study: _study,
             focusNode: _focusNode,
-            onNewStudy: () => unawaited(_newStudy()),
             onPickStudy: () => unawaited(_pickStudy()),
-            onImportUrl: () => unawaited(_importFromUrl()),
-            onImportPgn: () => unawaited(_importPgn()),
-            onExportPgn: () => unawaited(_exportPgn()),
-            onSaveAs: () => unawaited(_saveStudyAs()),
-            onDeleteStudy: () => unawaited(_deleteCurrentStudy()),
           ),
         ),
         actions: [
           // Only visible while a collection download is running.
           const StudyImportStatusChip(),
-          // Chapter-scoped actions (starting position, rename, delete, order)
-          // all live on the chapter bar in the side pane; the app bar keeps
-          // only what applies to the study or the board as a whole.
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.school_outlined, size: 20),
-            tooltip: 'Train in Repertoire Trainer',
-            onSelected: (action) => _train(wholeStudy: action == 'study'),
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: 'chapter',
-                child: Text('Train this chapter'),
-              ),
-              PopupMenuItem(value: 'study', child: Text('Train whole study')),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.swap_vert, size: 20),
-            tooltip: 'Flip board',
-            onPressed: _study.toggleFlipped,
-          ),
-          const AppModeSwitcher(),
           AppOverflowMenu(
             entries: [
               AppMenuEntry(
+                heading: 'Study',
+                label: 'New study',
+                onRun: () => unawaited(_newStudy()),
+              ),
+              AppMenuEntry(
+                heading: 'Import',
+                label: 'From URL…',
+                onRun: () => unawaited(_importFromUrl()),
+              ),
+              AppMenuEntry(
+                label: 'PGN file as chapters…',
+                onRun: () => unawaited(_importPgn()),
+              ),
+              if (_study.doc.filePath != null) ...[
+                AppMenuEntry(
+                  heading: 'Export',
+                  label: 'Copy study PGN',
+                  onRun: () => unawaited(_exportPgn()),
+                ),
+                AppMenuEntry(
+                  label: 'Save study PGN as…',
+                  onRun: () => unawaited(_saveStudyAs()),
+                ),
+              ],
+              AppMenuEntry(
+                heading: 'Train',
+                label: 'Train this chapter',
+                onRun: () => _train(wholeStudy: false),
+              ),
+              AppMenuEntry(
+                label: 'Train whole study',
+                onRun: () => _train(wholeStudy: true),
+              ),
+              AppMenuEntry(
+                heading: 'Board',
+                label: 'Flip board',
+                onRun: _study.toggleFlipped,
+              ),
+              AppMenuEntry(
+                heading: 'Explore',
                 label: 'Browse in PGN viewer',
-                icon: Icons.menu_book,
                 enabled: _study.doc.filePath != null,
                 shortcut: 'A',
                 onRun: _browseInViewer,
               ),
-              AppMenuEntry(
-                label: 'App settings…',
-                icon: Icons.settings,
-                dividerAbove: true,
-                onRun: () => openAppSettings(context),
-              ),
+              if (_study.doc.filePath != null)
+                AppMenuEntry(
+                  heading: 'Manage',
+                  label: 'Delete study…',
+                  onRun: () => unawaited(_deleteCurrentStudy()),
+                ),
             ],
           ),
+          const AppModeSwitcher(),
+          const AppSettingsButton(mode: AppMode.study),
         ],
       ),
       body: TrainerKeyboardScope(

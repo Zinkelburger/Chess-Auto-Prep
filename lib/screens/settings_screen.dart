@@ -22,6 +22,8 @@ import '../utils/app_shortcuts.dart';
 import '../utils/san_display.dart';
 import '../utils/system_info.dart';
 import '../widgets/chess_board_widget.dart';
+import '../widgets/analysis/stockfish_settings_dialog.dart';
+import '../widgets/analysis/analysis_panels_dialog.dart';
 import '../widgets/common/choice_field.dart';
 import '../widgets/common/confirm_dialog.dart';
 import '../widgets/settings/account_settings_section.dart';
@@ -30,7 +32,10 @@ import '../widgets/settings/keyboard_shortcuts_section.dart';
 import '../widgets/shortcut_tooltip.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.initialMode, this.viewContentBuilder});
+
+  final AppMode? initialMode;
+  final WidgetBuilder? viewContentBuilder;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -43,6 +48,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   final _engine = EngineSettings.instance;
   int _selected = 0;
+  late bool _global = widget.initialMode == null;
+
+  void _selectGlobal(int index) {
+    if (!mounted) return;
+    setState(() {
+      _global = true;
+      _selected = index;
+    });
+  }
+
+  void _selectView(AppMode mode) {
+    if (!mounted) return;
+    if (mode == widget.initialMode) {
+      setState(() => _global = false);
+    } else {
+      Navigator.pop(context, mode);
+    }
+  }
 
   static const _sections = [
     (
@@ -91,12 +114,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
         titleSpacing: 8,
-        title: const Text('Settings', style: AppTextStyles.title),
+        title: Text(
+          _global ? 'Settings' : widget.initialMode!.label,
+          style: AppTextStyles.title,
+        ),
         // The way out sits where the gear that opened this screen was, so the
         // pointer is already over it; a back arrow on the far left left users
         // hunting for the exit.
         automaticallyImplyLeading: false,
         actions: [
+          if (!_global)
+            TextButton(
+              onPressed: () => _selectGlobal(0),
+              child: const Text('Global settings'),
+            ),
           ShortcutIconButton(
             description: 'Close settings',
             shortcut: AppShortcut.leave,
@@ -113,6 +144,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 760;
+          if (!_global) {
+            return widget.viewContentBuilder?.call(context) ??
+                _viewPage(widget.initialMode!, compact);
+          }
           final content = Expanded(
             child: ListenableBuilder(
               listenable: _engine,
@@ -155,14 +190,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: 'Section',
                     value: _selected,
                     items: [
+                      for (var i = 0; i < availableModeMenuOrder().length; i++)
+                        ChoiceItem(
+                          value: -i - 1,
+                          label: 'Views · ${availableModeMenuOrder()[i].label}',
+                        ),
                       for (var i = 0; i < _sections.length; i++)
                         ChoiceItem(
                           value: i,
-                          label: _sections[i].label,
+                          label: 'Global · ${_sections[i].label}',
                           icon: _sections[i].icon,
                         ),
                     ],
-                    onChanged: (value) => setState(() => _selected = value),
+                    onChanged: (value) {
+                      if (value < 0) {
+                        _selectView(availableModeMenuOrder()[-value - 1]);
+                      } else {
+                        _selectGlobal(value);
+                      }
+                    },
                   ),
                 ),
                 content,
@@ -179,7 +225,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     const Padding(
                       padding: EdgeInsets.fromLTRB(12, 0, 12, 16),
-                      child: Text('PREFERENCES', style: AppTextStyles.eyebrow),
+                      child: Text('VIEWS', style: AppTextStyles.eyebrow),
+                    ),
+                    for (final mode in availableModeMenuOrder())
+                      ListTile(
+                        key: ValueKey('settings-view-${mode.name}'),
+                        dense: true,
+                        visualDensity: VisualDensity.compact,
+                        title: Text(mode.label, style: AppTextStyles.body),
+                        enabled: !context
+                            .watch<AppState>()
+                            .isRepertoireGenerating,
+                        onTap: () => _selectView(mode),
+                      ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(12, 24, 12, 16),
+                      child: Text('GLOBAL', style: AppTextStyles.eyebrow),
                     ),
                     for (var i = 0; i < _sections.length; i++)
                       Padding(
@@ -203,7 +264,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ? AppTextStyles.bodyStrong
                                 : AppTextStyles.body,
                           ),
-                          onTap: () => setState(() => _selected = i),
+                          onTap: () => _selectGlobal(i),
                         ),
                       ),
                   ],
@@ -215,6 +276,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _viewPage(AppMode mode, bool compact) {
+    return ListView(
+      padding: EdgeInsets.all(compact ? 20 : 32),
+      children: [
+        if (mode == AppMode.databases) _buildDatabasesSection(),
+        if (mode != AppMode.databases) ...[
+          const SettingsGroup(
+            title: 'Analysis panels',
+            icon: Icons.view_column,
+            children: [AnalysisPanelsSettingsBody()],
+          ),
+          const SettingsGroup(
+            title: 'Engine analysis',
+            icon: Icons.memory,
+            children: [StockfishSettingsBody()],
+          ),
+          _buildDisplaySection(),
+        ],
+      ],
     );
   }
 
