@@ -446,8 +446,6 @@ class _LineRowState extends State<_LineRow> {
         _MoveToken(
           number: number,
           san: san,
-          ink: AppColors.ink,
-          weight: first ? FontWeight.w600 : FontWeight.w400,
           onEnter: () => _controller.hoverStep(steps[i], owner: this),
           onExit: _exitStep,
           onTap: () => _controller.playLine(steps, throughPly: i),
@@ -548,8 +546,6 @@ class _MoveToken extends StatelessWidget {
   const _MoveToken({
     required this.number,
     required this.san,
-    required this.ink,
-    required this.weight,
     required this.onEnter,
     required this.onExit,
     required this.onTap,
@@ -557,8 +553,6 @@ class _MoveToken extends StatelessWidget {
 
   final String number;
   final String san;
-  final Color ink;
-  final FontWeight weight;
   final VoidCallback onEnter;
   final VoidCallback onExit;
   final VoidCallback onTap;
@@ -579,15 +573,15 @@ class _MoveToken extends StatelessWidget {
               children: [
                 TextSpan(
                   text: number.isEmpty ? '' : '$number ',
-                  style: AppTextStyles.monoDense.copyWith(
-                    color: AppColors.onSurfaceMuted,
-                  ),
+                  style: AppTextStyles.monoDense.copyWith(color: AppColors.ink),
                 ),
                 TextSpan(
                   text: san,
-                  style: PgnTextStyles.moveAt(
-                    1,
-                  ).copyWith(height: 1.4, color: ink, fontWeight: weight),
+                  style: PgnTextStyles.moveAt(1).copyWith(
+                    height: 1.4,
+                    color: AppColors.ink,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -687,12 +681,21 @@ class _TableRules extends StatelessWidget {
           onSelectionChanged: (s) => controller.setRequireMoveOn(s.first),
         ),
         const SizedBox(height: 10),
-        OutlinedButton.icon(
-          icon: const Icon(Icons.compare_arrows, size: 16),
-          label: const Text('Compare clock scenarios'),
-          onPressed: controller.isComparing
-              ? null
-              : controller.compareScenarios,
+        Tooltip(
+          message:
+              'See how the best moves and your team’s evaluation change '
+              'in this position when:\n'
+              '• Your team is ahead on time and may wait (sit).\n'
+              '• Your team is level or behind on time.\n'
+              '• Your team must move on Board 1.\n'
+              'Results appear below. Your clocks and position stay the same.',
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.compare_arrows, size: 16),
+            label: const Text('Compare clock scenarios'),
+            onPressed: controller.isComparing
+                ? null
+                : controller.compareScenarios,
+          ),
         ),
       ],
     );
