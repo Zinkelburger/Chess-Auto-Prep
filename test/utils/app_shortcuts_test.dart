@@ -1,5 +1,4 @@
 import 'package:chess_auto_prep/utils/app_shortcuts.dart';
-import 'package:chess_auto_prep/utils/shortcut_reference.dart';
 import 'package:chess_auto_prep/utils/keyboard_shortcut_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -73,15 +72,15 @@ void main() {
   group('labels', () {
     test('render the glyphs tooltips have always shown', () {
       expect(AppShortcut.backOneMove.label, '←');
-      expect(AppShortcut.goToStart.label, 'Home or Page Up');
+      expect(AppShortcut.goToStart.label, 'Home');
       expect(AppShortcut.leave.label, 'Esc');
       expect(AppShortcut.autoPlay.label, 'Space');
-      expect(AppShortcut.searchGames.label, '/');
-      expect(AppShortcut.flipBoard.label, 'F');
+      expect(AppShortcut.searchGames.label, isEmpty);
+      expect(AppShortcut.flipBoard.label, isEmpty);
     });
 
     test('join multiple chords with "or"', () {
-      expect(AppShortcut.fullScreen.label, 'Ctrl+F or F11');
+      expect(AppShortcut.fullScreen.label, 'F11');
       expect(
         const AppShortcut([
           KeyChord(LogicalKeyboardKey.keyS, control: true),
@@ -93,12 +92,59 @@ void main() {
 
     test('modifiers render in front of the key', () {
       expect(AppShortcut.undo.label, 'Ctrl+Z');
-      expect(AppShortcut.previousTrapInLine.label, 'Shift+←');
-      expect(AppShortcut.nextTrapInLine.label, 'Shift+→');
+      expect(AppShortcut.previousTrapInLine.label, isEmpty);
+      expect(AppShortcut.nextTrapInLine.label, isEmpty);
     });
   });
 
   group('KeyBinding.forShortcut', () {
+    test('retired commands cannot dispatch or advertise a binding', () {
+      for (final shortcut in [
+        AppShortcut.flipBoard,
+        AppShortcut.toggleEngine,
+        AppShortcut.nextTab,
+        AppShortcut.searchGames,
+        AppShortcut.revealMove,
+        AppShortcut.toggleExpectimax,
+        AppShortcut.dismissFinding,
+      ]) {
+        expect(shortcut.isAssigned, isFalse);
+        expect(
+          KeyBinding.forShortcut(shortcut, 'Removed', () => fail('Fired')),
+          isEmpty,
+        );
+        expect(
+          KeyBinding.forShortcutIf(shortcut, 'Removed', () => true),
+          isEmpty,
+        );
+        expect(
+          shortcutReference.any((row) => identical(row.shortcut, shortcut)),
+          isFalse,
+        );
+      }
+    });
+    test('only essential chords remain in the active registry', () {
+      final chords = AppShortcut.all.expand((s) => s.chords).toSet();
+      expect(
+        chords,
+        unorderedEquals(const [
+          KeyChord(LogicalKeyboardKey.arrowUp),
+          KeyChord(LogicalKeyboardKey.arrowDown),
+          KeyChord(LogicalKeyboardKey.arrowLeft),
+          KeyChord(LogicalKeyboardKey.arrowRight),
+          KeyChord(LogicalKeyboardKey.home),
+          KeyChord(LogicalKeyboardKey.end),
+          KeyChord(LogicalKeyboardKey.enter),
+          KeyChord(LogicalKeyboardKey.escape),
+          KeyChord(LogicalKeyboardKey.space),
+          KeyChord(LogicalKeyboardKey.f11),
+          KeyChord(LogicalKeyboardKey.keyV, control: true),
+          KeyChord(LogicalKeyboardKey.keyV, control: true, shift: true),
+          KeyChord(LogicalKeyboardKey.keyZ, control: true),
+        ]),
+      );
+    });
+
     test('binds every chord the label advertises', () {
       final bindings = KeyBinding.forShortcut(
         AppShortcut.previousItem,

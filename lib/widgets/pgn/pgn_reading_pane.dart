@@ -305,7 +305,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                     TextButton(
                       onPressed: branches.isEmpty ? null : _mainline,
                       child: const Tooltip(
-                        message: 'Return to mainline (R)',
+                        message: 'Return to mainline',
                         child: Text('Main line', style: AppTextStyles.muted),
                       ),
                     ),

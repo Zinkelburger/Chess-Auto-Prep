@@ -17,7 +17,6 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../constants/chess_constants.dart';
 import '../../../models/board_annotation.dart';
@@ -26,7 +25,6 @@ import '../../../services/generation/generation_config.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart';
-import '../../../utils/keyboard_shortcut_utils.dart';
 import '../../../widgets/chess_board_widget.dart';
 import '../../../widgets/engine/inline_engine_bar.dart';
 import '../../../widgets/generation/generation_config_form.dart';
@@ -112,7 +110,6 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
   late final TextEditingController _movesText = TextEditingController(
     text: _movesLabel(widget.initialMoves),
   );
-  final List<String> _redo = [];
   final FocusNode _keys = FocusNode(debugLabel: 'planner-keys');
   PlanBasis _basis = PlanBasis.book;
   bool _preparing = false;
@@ -306,7 +303,6 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
   void _onStartBoardMove(CompletedMove move) {
     setState(() {
       _startMoves = [..._startMoves, move.san];
-      _redo.clear();
       _movesText.text = _movesLabel(_startMoves);
     });
   }
@@ -325,76 +321,6 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     _plan.addCandidate(move.san);
     final after = _plan.step ?? step;
     _selectRow(after, move.san);
-  }
-
-  void _undoStartMove() {
-    if (_startMoves.isEmpty) return;
-    setState(() {
-      _redo.add(_startMoves.last);
-      _startMoves = _startMoves.sublist(0, _startMoves.length - 1);
-      _movesText.text = _movesLabel(_startMoves);
-    });
-  }
-
-  void _redoStartMove() {
-    if (_redo.isEmpty) return;
-    setState(() {
-      _startMoves = [..._startMoves, _redo.removeLast()];
-      _movesText.text = _movesLabel(_startMoves);
-    });
-  }
-
-  /// ← / → : undo/redo a start move; in the walk, ← leaves a preview.
-  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (isTextInputFocused()) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_plan.phase == PlanPhase.start) {
-        _undoStartMove();
-      } else if (_previewMoves != null) {
-        setState(() {
-          _previewMoves = null;
-        });
-      }
-      return KeyEventResult.handled;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_plan.phase == PlanPhase.start) _redoStartMove();
-      return KeyEventResult.handled;
-    }
-    if (_plan.phase == PlanPhase.start) {
-      if (event.logicalKey == LogicalKeyboardKey.enter) {
-        if (!_preparing && _canBegin) unawaited(_begin());
-        return KeyEventResult.handled;
-      }
-      return KeyEventResult.ignored;
-    }
-    if (_plan.phase == PlanPhase.walking) {
-      final step = _plan.step;
-      if (event.logicalKey == LogicalKeyboardKey.enter) {
-        _continue();
-        return KeyEventResult.handled;
-      }
-      if (event.logicalKey == LogicalKeyboardKey.backspace) {
-        if (_plan.canGoBack) unawaited(_plan.back());
-        return KeyEventResult.handled;
-      }
-      if (event.logicalKey == LogicalKeyboardKey.keyG) {
-        unawaited(_plan.stopHere());
-        return KeyEventResult.handled;
-      }
-      // 1–9 select the nth row.
-      final digit = event.character == null
-          ? null
-          : int.tryParse(event.character!);
-      if (step != null && digit != null && digit >= 1) {
-        if (digit <= step.candidates.length) {
-          _selectRow(step, step.candidates[digit - 1].san);
-        }
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
   }
 
   /// Row tapped: at our move it becomes *the* choice; at theirs it toggles.
@@ -448,7 +374,6 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     }
     setState(() {
       _startMoves = ok;
-      _redo.clear();
     });
   }
 
@@ -490,7 +415,6 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
       body: Focus(
         focusNode: _keys,
         autofocus: true,
-        onKeyEvent: _onKey,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 1000;
@@ -800,7 +724,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             SizedBox(width: 6),
             Tooltip(
               waitDuration: Duration(milliseconds: 300),
-              message: 'Play or type moves · ← undo · → redo',
+              message: 'Play or type moves',
               child: Icon(
                 Icons.info_outline,
                 size: 16,
@@ -823,7 +747,6 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                 selected: _listEq(_startMoves, start),
                 onSelected: (_) => setState(() {
                   _startMoves = List.of(start);
-                  _redo.clear();
                   _movesText.text = _movesLabel(start);
                 }),
               ),
@@ -835,7 +758,6 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               selected: _startMoves.isEmpty,
               onSelected: (_) => setState(() {
                 _startMoves = [];
-                _redo.clear();
                 _movesText.text = '';
               }),
             ),
@@ -951,10 +873,9 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     final manual = _plan.isManual(step.moves);
     final subtitle = manual
         ? 'Setting up by hand — no more prompts on this line. Press '
-              '"Generate from here" (G) when it\'s deep enough.'
+              '"Generate from here" when it\'s deep enough.'
         : ours
-        ? 'Pick your move — click a row or play it on the board. Enter '
-              'continues, Backspace goes back.'
+        ? 'Pick your move — click a row or play it on the board.'
         : _plan.basis == PlanBasis.ownGames
         ? 'Ticked replies are set up as their own lines — the ones you met '
               'in ${_plan.ownFloor} games or more come ticked. Play a move on '
@@ -1077,7 +998,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                     ? null
                     : _continue,
                 icon: const Icon(Icons.keyboard_return, size: 16),
-                label: const Text('Continue  (Enter)'),
+                label: const Text('Continue'),
               ),
               OutlinedButton(
                 onPressed: _plan.canGoBack
@@ -1088,12 +1009,12 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               if (manual)
                 FilledButton.tonal(
                   onPressed: () => unawaited(_plan.stopHere()),
-                  child: const Text('Generate from here (G)'),
+                  child: const Text('Generate from here'),
                 )
               else
                 OutlinedButton(
                   onPressed: () => unawaited(_plan.stopHere()),
-                  child: const Text('Generate from here (G)'),
+                  child: const Text('Generate from here'),
                 ),
             ],
           ),
@@ -1132,7 +1053,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               FilledButton.icon(
                 onPressed: () => unawaited(_plan.skipTransposition()),
                 icon: const Icon(Icons.keyboard_return, size: 16),
-                label: const Text('Use that line  (Enter)'),
+                label: const Text('Use that line'),
               ),
               OutlinedButton(
                 onPressed: () => unawaited(_plan.setUpSeparately()),
@@ -1193,7 +1114,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               FilledButton.icon(
                 onPressed: () => unawaited(_plan.confirmLeaf()),
                 icon: const Icon(Icons.keyboard_return, size: 16),
-                label: const Text('Generate from here  (Enter)'),
+                label: const Text('Generate from here'),
               ),
               OutlinedButton(
                 onPressed: () => unawaited(_plan.continueSetup()),

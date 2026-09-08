@@ -124,7 +124,7 @@ void main() {
     await selectGlobal(tester, find.byKey(const Key('settings-nav-6')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Focus the current variation'),
+      find.text('Focus variation'),
       250,
       scrollable: find
           .descendant(
@@ -134,6 +134,13 @@ void main() {
           .first,
     );
     expect(find.text('Enter'), findsWidgets);
+    expect(find.byType(Table), findsOneWidget);
+    expect(find.text('Action'), findsOneWidget);
+    expect(find.text('Key'), findsOneWidget);
+    expect(find.text('Where'), findsOneWidget);
+    expect(find.text('Ctrl+1'), findsNothing);
+    expect(find.text('Switch view'), findsNothing);
+    expect(find.text('Flip board'), findsNothing);
     expect(find.text('Ctrl+Enter'), findsNothing);
     expect(find.text('Ctrl+←'), findsNothing);
     expect(tester.takeException(), isNull);

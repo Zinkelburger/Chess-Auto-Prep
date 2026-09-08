@@ -137,14 +137,8 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     final candidates = _branchCandidates();
     if (candidates.length < 2) return null;
     final chips = <Widget>[
-      for (final (i, c) in candidates.indexed)
-        _branchChip(
-          c.san,
-          c.color,
-          c.onTap,
-          emphasized: c.emphasized,
-          shortcutNumber: i < 9 ? i + 1 : null,
-        ),
+      for (final c in candidates)
+        _branchChip(c.san, c.color, c.onTap, emphasized: c.emphasized),
     ];
     return Padding(
       padding: const EdgeInsets.only(left: 8, right: 8, top: 6),
@@ -169,7 +163,6 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     Color color,
     VoidCallback onTap, {
     bool emphasized = false,
-    int? shortcutNumber,
   }) {
     return InkWell(
       onTap: onTap,
@@ -184,21 +177,6 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (shortcutNumber != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  // 0.20 keeps the keycap text ≥4.5:1 over the blended fill.
-                  color: color.withValues(alpha: 0.20),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '$shortcutNumber',
-                  style: PgnTextStyles.branchChipBadge.copyWith(color: color),
-                ),
-              ),
-              const SizedBox(width: 6),
-            ],
             Text(
               san,
               style: PgnTextStyles.branchChip.copyWith(

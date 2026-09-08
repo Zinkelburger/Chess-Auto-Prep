@@ -687,7 +687,6 @@ class _StudyScreenState extends State<StudyScreen> {
                 heading: 'Explore',
                 label: 'Browse in PGN viewer',
                 enabled: _study.doc.filePath != null,
-                shortcut: 'A',
                 onRun: _browseInViewer,
               ),
               if (_study.doc.filePath != null)

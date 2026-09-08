@@ -1300,7 +1300,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     setState(() => _editMode = !_editMode);
   }
 
-  /// The Browse↔Edit toggle (A). A study file reopens in Study mode on the
+  /// The Browse↔Edit toggle. A study file reopens in Study mode on the
   /// same chapter and position; any other collection offers the safe path —
   /// copy the current game into a study and edit it there. (In-place study
   /// editing of a shared collection is deliberately not offered: Study
@@ -1583,12 +1583,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         }
       },
     ),
-    for (var i = 0; i < AppShortcut.forkCandidates.length; i++)
-      ...KeyBinding.forShortcutIf(
-        AppShortcut.forkCandidates[i],
-        'Play fork candidate ${i + 1}',
-        () => _pgnWidgetController.selectBranchCandidate(i),
-      ),
     // Jump into the annotation panel's comment field (amend mode only).
     ...KeyBinding.forShortcutIf(
       AppShortcut.commentMove,

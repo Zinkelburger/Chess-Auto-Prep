@@ -124,7 +124,7 @@ class FindingTile extends StatelessWidget {
                         ? AppColors.onSurfaceMuted
                         : AppColors.onSurfaceSoft,
                   ),
-                  tooltip: finding.dismissed ? 'Restore' : 'Dismiss (D)',
+                  tooltip: finding.dismissed ? 'Restore' : 'Dismiss',
                   onPressed: onToggleDismiss,
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.all(4),

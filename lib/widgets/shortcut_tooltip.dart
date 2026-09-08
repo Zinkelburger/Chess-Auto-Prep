@@ -10,7 +10,9 @@ import '../utils/app_shortcuts.dart';
 /// [ShortcutTooltip] / [ShortcutIconButton]) for every control that has a
 /// shortcut handler.
 String actionTooltip(String description, {required AppShortcut shortcut}) =>
-    '${description.trim()} (${shortcut.label})';
+    shortcut.isAssigned
+    ? '${description.trim()} (${shortcut.label})'
+    : description.trim();
 
 /// Like [actionTooltip], but omits the suffix when there is no shortcut.
 String actionTooltipIf(String description, {AppShortcut? shortcut}) =>
@@ -18,7 +20,7 @@ String actionTooltipIf(String description, {AppShortcut? shortcut}) =>
     ? description.trim()
     : actionTooltip(description, shortcut: shortcut);
 
-/// Tooltip that always includes a keyboard shortcut on hover.
+/// Tooltip that includes the assigned shortcut, when the action has one.
 class ShortcutTooltip extends StatelessWidget {
   const ShortcutTooltip({
     super.key,
@@ -48,7 +50,7 @@ class ShortcutTooltip extends StatelessWidget {
   }
 }
 
-/// [IconButton] that requires an associated keyboard shortcut in its tooltip.
+/// [IconButton] whose tooltip follows the action’s central shortcut assignment.
 class ShortcutIconButton extends StatelessWidget {
   const ShortcutIconButton({
     super.key,

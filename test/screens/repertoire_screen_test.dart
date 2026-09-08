@@ -148,7 +148,7 @@ void main() {
 
       // The outline holds chapters and lines on the left; the analysis panel
       // (Engine | Database | Tree) sits on the right. Both start expanded.
-      expect(find.byTooltip('Hide chapters (L)'), findsOneWidget);
+      expect(find.byTooltip('Hide chapters'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'Engine'), findsOneWidget);
       expect(find.text('Database'), findsOneWidget);
       expect(find.text('Tree'), findsOneWidget);
@@ -185,10 +185,10 @@ void main() {
     ) async {
       await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
 
-      await tester.tap(find.byTooltip('Hide chapters (L)'));
+      await tester.tap(find.byTooltip('Hide chapters'));
       await tester.pump();
 
-      expect(find.byTooltip('Show chapters (L)'), findsOneWidget);
+      expect(find.byTooltip('Show chapters'), findsOneWidget);
       expect(find.text('Chapters'), findsOneWidget);
       expect(find.text('Italian Game'), findsNothing);
 
@@ -229,7 +229,7 @@ void main() {
       // No side panels, and no board-size control: the board is stacked
       // above the tools, so shrinking it hands width to nothing.
       expect(find.byTooltip('Hide analysis panel'), findsNothing);
-      expect(find.byTooltip('Hide chapters (L)'), findsNothing);
+      expect(find.byTooltip('Hide chapters'), findsNothing);
       expect(find.byTooltip('Board size: Large'), findsNothing);
     });
   });

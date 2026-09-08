@@ -176,10 +176,10 @@ void main() {
     expect(find.textContaining('replies'), findsNothing);
     expect(find.textContaining('rating'), findsNothing);
 
-    // ← undoes a start move on the board, → redoes it.
+    // Retired arrow shortcuts leave the setup unchanged.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
-    expect(find.text('1.d4 d5'), findsWidgets);
+    expect(find.text('1.d4 d5 2.c4'), findsWidgets);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     expect(find.text('1.d4 d5 2.c4'), findsWidgets);
@@ -198,28 +198,30 @@ void main() {
     await tester.tap(find.textContaining('Slav Defense'));
     await tester.pumpAndSettle();
     expect(find.text('back to question'), findsOneWidget);
-    // Row 1 via keyboard: …e6 becomes the single choice; Enter continues.
+    // Number keys no longer select a row; use the visible choice and button.
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
     await tester.pumpAndSettle();
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.tap(find.textContaining("Queen's Gambit Declined"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
     // Now the White tabiya after 2…e6: coverage card, big replies pre-ticked.
     expect(find.text('Which replies do you want to set up?'), findsOneWidget);
     expect(find.textContaining('Catalan'), findsOneWidget);
-    await tester.tap(find.text('Continue  (Enter)'));
+    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
     // Below the tabiya the book runs out — but the walk never stops
-    // silently: each end is shown and confirmed. Enter confirms; a leaf
+    // silently: each end is shown and confirmed with its button; a leaf
     // confirmation is one per ticked reply.
-    expect(find.text('Generate from here  (Enter)'), findsOneWidget);
+    expect(find.text('Generate from here'), findsOneWidget);
     for (
       var i = 0;
-      i < 6 && find.text('Generate from here  (Enter)').evaluate().isNotEmpty;
+      i < 6 && find.text('Generate from here').evaluate().isNotEmpty;
       i++
     ) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.tap(find.text('Generate from here'));
       await tester.pumpAndSettle();
     }
     expect(find.textContaining(RegExp(r'chapters? to create')), findsOneWidget);
@@ -364,7 +366,7 @@ void main() {
       // says how many games this is.
       expect(find.text('Which replies do you want to set up?'), findsOneWidget);
       expect(find.textContaining('4 of your games'), findsOneWidget);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
       // 2.c4: your move; …e6 (2 games) leads, …c6 (2 games) beside it.

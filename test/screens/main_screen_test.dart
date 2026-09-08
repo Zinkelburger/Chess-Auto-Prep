@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -55,6 +56,17 @@ void main() {
       appState.setMode(AppMode.positionAnalysis);
       await pumpNavigation();
       expect(find.text('Which player?'), findsOneWidget);
+      // Both former primary modifiers must leave the current mode alone.
+      for (final modifier in [
+        LogicalKeyboardKey.controlLeft,
+        LogicalKeyboardKey.metaLeft,
+      ]) {
+        await tester.sendKeyDownEvent(modifier);
+        await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+        await tester.sendKeyUpEvent(modifier);
+        await pumpNavigation();
+        expect(appState.currentMode, AppMode.positionAnalysis);
+      }
 
       await tester.tap(find.byTooltip('Back'));
       await pumpNavigation();
