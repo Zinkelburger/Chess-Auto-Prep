@@ -60,8 +60,7 @@ void main() {
       find.byWidgetPredicate(
         (w) =>
             w is ShortcutTooltip &&
-            w.message.contains('Search games by player, event or opening') &&
-            w.message.contains('/'),
+            w.message == 'Search games by player, event or opening',
       ),
       findsOneWidget,
     );
