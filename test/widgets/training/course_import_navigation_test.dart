@@ -62,8 +62,8 @@ void main() {
       expect(ready(), isTrue);
     }
 
-    await until(() => find.text('Import repertoire').evaluate().isNotEmpty);
-    await tester.tap(find.text('Import repertoire'));
+    await until(() => find.text('Open PGN file…').evaluate().isNotEmpty);
+    await tester.tap(find.text('Open PGN file…'));
     await until(() => find.text('Quickstarter').evaluate().isNotEmpty);
     expect(find.byType(RepertoireChaptersScreen), findsOneWidget);
     expect(find.text('Introduction'), findsOneWidget);
@@ -73,7 +73,7 @@ void main() {
     await until(
       () =>
           selected != null &&
-          find.text('Import repertoire').evaluate().isNotEmpty &&
+          find.text('Open PGN file…').evaluate().isNotEmpty &&
           find.byType(CircularProgressIndicator).evaluate().isEmpty,
     );
     await tester.pump(const Duration(seconds: 1));

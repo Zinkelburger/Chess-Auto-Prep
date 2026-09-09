@@ -43,6 +43,9 @@ class RepertoireListBody extends StatefulWidget {
   /// custom-tactics sets) and tapping one calls this instead.
   final ValueChanged<RepertoireMetadata>? onStudySelected;
 
+  /// Opens the builder to create a repertoire when supplied by the trainer.
+  final VoidCallback? onCreateRepertoire;
+
   final Future<PickedPgnImport?> Function() pickPgn;
 
   const RepertoireListBody({
@@ -50,6 +53,7 @@ class RepertoireListBody extends StatefulWidget {
     required this.onSelected,
     this.onCourseChapterSelected,
     this.onStudySelected,
+    this.onCreateRepertoire,
     this.pickPgn = pickPgnImport,
   });
 
@@ -148,11 +152,13 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
         children: [
           _buildToolbar(),
           const Divider(height: 1, thickness: 1),
-          const Expanded(
+          Expanded(
             child: EmptyStatePlaceholder(
               icon: Icons.library_books,
               title: 'No repertoires yet',
-              subtitle: 'Import a PGN file to start training your repertoire.',
+              subtitle: widget.onCreateRepertoire == null
+                  ? 'Open a PGN file to get started.'
+                  : 'Open a PGN file or create a new repertoire in the builder.',
             ),
           ),
         ],
@@ -210,13 +216,6 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
             children: [
               FilledButton.icon(
                 onPressed: _importing ? null : _importRepertoire,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.ink,
-                  foregroundColor: AppColors.surface,
-                  minimumSize: const Size(0, 46),
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  textStyle: AppTextStyles.bodyStrong,
-                ),
                 icon: importingFile
                     ? const SizedBox(
                         width: 18,
@@ -224,8 +223,14 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.folder_open, size: 20),
-                label: Text(importingFile ? 'Importing…' : 'Import repertoire'),
+                label: Text(importingFile ? 'Importing…' : 'Open PGN file…'),
               ),
+              if (widget.onCreateRepertoire != null)
+                OutlinedButton.icon(
+                  onPressed: _importing ? null : widget.onCreateRepertoire,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Create new repertoire'),
+                ),
               TextButton.icon(
                 onPressed: _importing
                     ? null

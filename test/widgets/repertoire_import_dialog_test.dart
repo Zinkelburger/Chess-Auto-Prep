@@ -203,7 +203,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Import repertoire'));
+      await tester.tap(find.text('Open PGN file…'));
       await tester.pump();
       expect(calls, 1);
       expect(find.byType(AlertDialog), findsNothing);
@@ -214,7 +214,7 @@ void main() {
       pending.complete(_picked);
       await tester.pumpAndSettle();
       expect(selected!.filePath, '/repertoires/Caro-Kann/Main.pgn');
-      expect(find.text('Import repertoire'), findsOneWidget);
+      expect(find.text('Open PGN file…'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
