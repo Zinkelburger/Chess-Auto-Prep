@@ -150,7 +150,11 @@ void main() {
           isA<BughouseRuntimeFailure>().having(
             (e) => e.message,
             'OS error',
-            allOf(contains('FileSystemException'), contains('msvcp140.dll')),
+            allOf(
+              contains('OS Error:'),
+              contains('errno ='),
+              contains(installed('msvcp140.dll').path),
+            ),
           ),
         ),
       );
