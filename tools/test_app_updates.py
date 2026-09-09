@@ -146,7 +146,7 @@ class WindowsUpdateTest(unittest.TestCase):
             raise AssertionError(f'Cannot compile updater probe: {result.stdout}\n{result.stderr}')
 
     def setUp(self):
-        tmp = tempfile.TemporaryDirectory(prefix="updater space 'quoted'-")
+        tmp = tempfile.TemporaryDirectory(prefix="updater café 'quoted'-")
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
         self.state = self.root / 'updates' / 'attempt'
@@ -167,7 +167,7 @@ class WindowsUpdateTest(unittest.TestCase):
         self.request.write_text(json.dumps(dict(
             processId=process_id, payload=str(self.payload),
             sha256=digest or hashlib.sha256(self.payload.read_bytes()).hexdigest(),
-            executable=str(self.app), armed=str(self.armed))), encoding='utf-8')
+            executable=str(self.app), armed=str(self.armed)), ensure_ascii=False), encoding='utf-8')
 
     def preserve_diagnostics(self):
         destination = os.environ.get('APP_UPDATE_TEST_ARTIFACTS')

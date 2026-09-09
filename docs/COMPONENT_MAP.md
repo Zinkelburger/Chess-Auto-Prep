@@ -1135,8 +1135,9 @@ storage identities and legacy folder names; change those assertions only with
 a reviewed data migration. `test_app_updates.py` exercises the shipped helper
 against disposable bundles (wait/cancel, verified replacement, checksum and
 traversal rejection, rollback). Windows cases compile disposable .NET executables
-to exercise the shipped `.exe` launch contract, including paths with spaces and
-apostrophes, checksum rejection, installer failure, waiting and cancellation.
+to exercise the shipped `.exe` launch contract, including paths with spaces,
+apostrophes and non-ASCII characters, checksum rejection, installer failure,
+waiting and cancellation. The Windows helper reads the app's request as UTF-8.
 Helper failures return a nonzero exit code and retain the installation error;
 the Windows quality job uploads diagnostic logs on failure.
 Real Windows Setup and Linux package-manager authorization still need native

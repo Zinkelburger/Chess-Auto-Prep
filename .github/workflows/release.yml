@@ -187,7 +187,9 @@ jobs:
         shell: pwsh
         run: |
           python tools/fetch_vc_redist.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/fetch_vc_redist.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $redist = "packaging\windows\prerequisites\VC_redist.x64.exe"
           $signature = Get-AuthenticodeSignature $redist
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') {
@@ -207,6 +209,7 @@ jobs:
       - name: Fetch Stockfish (Windows)
         run: |
           python tools/fetch_assets.py --only stockfish-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/fetch_assets.py --check --only stockfish-windows
 
       - name: Cache bughouse engine
@@ -218,6 +221,7 @@ jobs:
       - name: Fetch bughouse engine (Windows)
         run: |
           python tools/fetch_bughouse.py --only bughouse-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/fetch_bughouse.py --check --only bughouse-windows
 
       # A release must not ship an engine that cannot start. The audit reads
@@ -227,6 +231,7 @@ jobs:
         timeout-minutes: 10
         run: |
           python tools/test_bughouse_engine.py deps
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tools/test_bughouse_engine.py run
 
       - name: Build Windows release
@@ -321,6 +326,7 @@ jobs:
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) {
             choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           }
           $version = "${{ github.ref_name }}".TrimStart("v")

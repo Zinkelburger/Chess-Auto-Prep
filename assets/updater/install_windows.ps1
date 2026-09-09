@@ -1,6 +1,8 @@
 param([Parameter(Mandatory=$true)][string]$Request)
 $ErrorActionPreference = 'Stop'
-$config = Get-Content -LiteralPath $Request -Raw | ConvertFrom-Json
+# Dart writes UTF-8 JSON. Windows PowerShell 5.1 otherwise decodes it using
+# the system code page, corrupting non-ASCII user/install directory names.
+$config = Get-Content -LiteralPath $Request -Raw -Encoding UTF8 | ConvertFrom-Json
 $stateDir = Split-Path -Parent $Request
 $log = Join-Path $stateDir 'install.log'
 $ready = Join-Path $stateDir 'helper-ready'
