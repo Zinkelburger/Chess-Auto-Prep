@@ -608,6 +608,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
               ? expandFen(_currentFen!)
               : _startingPosition.fen,
           onLineMoveTapped: _onEngineLineTapped,
+          previewFlipped: widget.playerIsWhite == false,
         ),
         const Divider(height: 1),
         // Four tabs, all of them views of the position you are on, so they

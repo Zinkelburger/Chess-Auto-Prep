@@ -480,6 +480,11 @@ InlineEngineBar — lazy dedicated EngineWorkerSlot; normal Stockfish discovery 
 ExpectimaxLinesPane — same floating preview on line hover
 ```
 
+Inline engine hover boards follow the main board perspective in Repertoire,
+PGN Viewer, Player Analysis, Planner, Studies and Tactics. Stepping through a
+line preserves that perspective regardless of whose turn it is; flipping the
+main board also refreshes an already open hover board.
+
 ### Training
 
 ```
