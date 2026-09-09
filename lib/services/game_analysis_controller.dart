@@ -45,7 +45,7 @@ import '../utils/fen_utils.dart';
 
 /// Eval at a single ply (after the move is played).
 class MoveEval {
-  final int ply; // 1-based: 1 = after White's first move
+  final int ply; // 1-based mainline index, including null moves
   final String san;
   final String fenBefore;
   final String fenAfter;
@@ -81,7 +81,7 @@ class MoveEval {
     this.deliversCheckmate = false,
   });
 
-  bool get isWhiteMove => ply % 2 == 1;
+  bool get isWhiteMove => isWhiteToMove(fenBefore);
 
   /// A move worth a card or an inline mark that has no engine line to offer
   /// with it — the `[%pv]` was never stored (a review pass from before lines
@@ -159,11 +159,14 @@ double cpToWinningChance(int? cp, int? mate) =>
 /// movetext's own marker pass all begin from this value.
 double initialWinChance() => cpToWinningChance(0, null);
 
-/// Classify a move based on the change in winning chances.
-MoveClassification classifyMove(double delta) {
+/// Classify by winning-chance loss, then mark rare sound Maia moves interesting.
+MoveClassification classifyMove(double delta, {double? maiaProb}) {
   if (delta >= 0.30) return MoveClassification.blunder;
   if (delta >= 0.20) return MoveClassification.mistake;
   if (delta >= 0.10) return MoveClassification.inaccuracy;
+  if (maiaProb != null && maiaProb < 0.05) {
+    return MoveClassification.interesting;
+  }
   return MoveClassification.normal;
 }
 
@@ -289,13 +292,10 @@ CachedGameAnalysis? parseCachedEvals(String pgnText) {
     final delta = e.isWhiteMove
         ? (prevWinChance - e.winningChance)
         : (e.winningChance - prevWinChance);
-    var classification = classifyMove(delta.clamp(0.0, 1.0));
-
-    if (classification == MoveClassification.normal &&
-        e.maiaProb != null &&
-        e.maiaProb! < 0.05) {
-      classification = MoveClassification.interesting;
-    }
+    final classification = classifyMove(
+      delta.clamp(0.0, 1.0),
+      maiaProb: e.maiaProb,
+    );
 
     classified.add(
       MoveEval(
@@ -731,12 +731,11 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
             );
           }
 
-          // Classify immediately
-          final isWhiteMove = ply % 2 == 1;
+          // Measure the loss from the side that played the move.
+          final isWhiteMove = !p.isWhiteToMove;
           final delta = isWhiteMove
               ? (prevWinChance - winChance)
               : (winChance - prevWinChance);
-          var classification = classifyMove(delta.clamp(0.0, 1.0));
 
           // Run MAIA before choosing the best line, so "interesting" moves
           // (reclassified from normal) also get the pre-move engine line.
@@ -769,11 +768,10 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
             }
           }
 
-          if (classification == MoveClassification.normal &&
-              maiaProb != null &&
-              maiaProb < 0.05) {
-            classification = MoveClassification.interesting;
-          }
+          final classification = classifyMove(
+            delta.clamp(0.0, 1.0),
+            maiaProb: maiaProb,
+          );
 
           // The engine's line from the position *before* the move — what to
           // have played instead. One convention for every move, the same one
