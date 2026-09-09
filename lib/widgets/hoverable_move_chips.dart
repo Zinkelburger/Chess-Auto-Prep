@@ -112,8 +112,12 @@ class _HoverableMoveChipsState extends State<HoverableMoveChips> {
     _disposeRecognizers();
 
     final theme = Theme.of(context);
-    const defaultColor = AppColors.pgnMove;
-    const numColor = AppColors.pgnMoveNumber;
+    final defaultColor = theme.brightness == Brightness.light
+        ? theme.colorScheme.onSurface
+        : AppColors.pgnMove;
+    final numColor = theme.brightness == Brightness.light
+        ? theme.colorScheme.onSurfaceVariant
+        : AppColors.pgnMoveNumber;
     final hlColor = widget.highlightColor ?? theme.colorScheme.primary;
 
     final hasHover = widget.boardPreview != null;

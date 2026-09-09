@@ -6,8 +6,8 @@ part of 'pgn_movetext_view.dart';
 /// A game the engine has been over carries a comment on *every* move, and
 /// rendering each of them puts one move per row — a wall of `eval +0.31` that
 /// buries the game it annotates. So the score itself is never shown inline.
-/// What is shown is the handful of moves where the number is news: the ply
-/// went from [before] to [after] and that swing crossed a mistake threshold.
+/// Every classified move is shown, including Maia's interesting moves, with
+/// the same classification as the analysis graph.
 class _EvalNote {
   const _EvalNote({
     required this.classification,
@@ -16,8 +16,8 @@ class _EvalNote {
     required this.pv,
   });
 
-  /// Inaccuracy, mistake or blunder — never [MoveClassification.normal], which
-  /// is not worth a mark.
+  /// Interesting, inaccuracy, mistake or blunder. [MoveClassification.normal]
+  /// has no mark.
   final MoveClassification classification;
 
   /// The evaluation before and after the move, White-relative, formatted the
@@ -33,7 +33,7 @@ class _EvalNote {
     MoveClassification.blunder => 'Blunder',
     MoveClassification.mistake => 'Mistake',
     MoveClassification.inaccuracy => 'Inaccuracy',
-    MoveClassification.interesting => '',
+    MoveClassification.interesting => 'Interesting',
     MoveClassification.normal => '',
   };
 }
@@ -49,24 +49,30 @@ bool _isEvalOnlyComment(String raw) =>
     MoveMetrics.parse(raw).isEvalOnly && stripPgnTokens(raw).trim().isEmpty;
 
 /// Whether this game has been through an engine pass — nearly every ply
-/// carrying an eval-only comment, the same "counts as analyzed" budget the
-/// eval readers use.
+/// carrying an engine score, using the eval readers' missing-ply budget.
+/// Prose alongside a score must not hide the game's classifications.
 ///
 /// The distinction matters: one `[%eval]` dropped on a single move by a human
 /// annotator is a fact worth reading, and stays visible. Eighty of them are
 /// noise, and get replaced by the mistake marks [_buildEvalNotes] derives.
 bool _isMachineAnnotated(List<PgnNodeData> moveHistory) {
-  if (moveHistory.length < 6) return false;
-  var evalOnly = 0;
+  var realPlies = 0;
+  var scored = 0;
   for (final data in moveHistory) {
+    if (isNullMoveSan(data.san)) continue;
+    realPlies++;
+    if (data.san.endsWith('#')) {
+      scored++;
+      continue;
+    }
     for (final c in data.comments ?? const <String>[]) {
-      if (_isEvalOnlyComment(c)) {
-        evalOnly++;
+      if (MoveMetrics.parse(c).isEvalOnly) {
+        scored++;
         break;
       }
     }
   }
-  return evalOnly >= moveHistory.length - kMaxUnevaluatedPlies;
+  return scored > 0 && scored >= realPlies - kMaxUnevaluatedPlies;
 }
 
 /// The moves worth marking, by mainline index.
@@ -87,8 +93,10 @@ Map<int, _EvalNote> _buildEvalNotes(PgnMovetextView view) {
 
     ({int? cp, int? mate, int? depth})? eval;
     var pv = const <String>[];
+    double? maiaProb;
     for (final c in data.comments ?? const <String>[]) {
       eval ??= parseEvalComment(c);
+      maiaProb ??= parseMaiaComment(c);
       if (pv.isEmpty) pv = parsePvComment(c);
     }
 
@@ -96,24 +104,26 @@ Map<int, _EvalNote> _buildEvalNotes(PgnMovetextView view) {
     // mate-0 has no sign, so trusting it would read the mating move as a
     // catastrophe for the player who delivered it.
     final isWhiteMove = view.startingWhiteTurn ? i.isEven : i.isOdd;
-    if (data.san.endsWith('#')) {
-      prevWinChance = isWhiteMove ? 1.0 : -1.0;
-      prevText = '#';
-      continue;
-    }
+    final deliversCheckmate = data.san.endsWith('#');
     // An unscored ply leaves the chain where it was, so the next scored move
     // is measured against the last number anyone actually has.
-    if (eval == null) continue;
+    if (eval == null && !deliversCheckmate) continue;
 
-    final winChance = cpToWinningChance(eval.cp, eval.mate);
+    final winChance = deliversCheckmate
+        ? (isWhiteMove ? 1.0 : -1.0)
+        : cpToWinningChance(eval!.cp, eval.mate);
     final delta = isWhiteMove
         ? prevWinChance - winChance
         : winChance - prevWinChance;
-    final classification = classifyMove(delta.clamp(0.0, 1.0));
-    final text = formatEvalDisplay(scoreCp: eval.cp, scoreMate: eval.mate);
+    final classification = classifyMove(
+      delta.clamp(0.0, 1.0),
+      maiaProb: maiaProb,
+    );
+    final text = deliversCheckmate
+        ? '#'
+        : formatEvalDisplay(scoreCp: eval!.cp, scoreMate: eval.mate);
 
-    if (classification != MoveClassification.normal &&
-        classification != MoveClassification.interesting) {
+    if (classification != MoveClassification.normal) {
       notes[i] = _EvalNote(
         classification: classification,
         before: prevText,
@@ -128,8 +138,8 @@ Map<int, _EvalNote> _buildEvalNotes(PgnMovetextView view) {
   return notes;
 }
 
-/// The inline mark on a move that cost something: `Blunder +0.3 → +2.1`, in
-/// the quiet metrics ink, riding beside the move instead of breaking the line.
+/// The verdict heading of a classified move's inset analysis block:
+/// `Blunder +0.3 → +2.1`, in the quiet metrics ink.
 List<InlineSpan> _evalNoteSpans(_EvalNote note) => [
   TextSpan(
     text: '${note.label} ${note.before} → ${note.after}  ',

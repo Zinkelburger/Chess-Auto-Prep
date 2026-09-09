@@ -86,6 +86,29 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('flipped board maps palette drops and piece moves correctly', (
+    tester,
+  ) async {
+    await pumpEditor(tester);
+    editor.toggleFlip();
+    await tester.pump();
+    Offset flippedSquare(int file, int rank) =>
+        tester.getTopLeft(find.byType(EditableBoard)) +
+        Offset((7 - file) * 40 + 20, rank * 40 + 20);
+    final origin = tester.getCenter(spare(whiteKnight));
+    await tester.dragFrom(origin, flippedSquare(4, 3) - origin);
+    await tester.pumpAndSettle();
+    expect(editor.pieceAt(Square.e4), whiteKnight);
+    await tester.dragFrom(
+      flippedSquare(4, 3),
+      flippedSquare(3, 4) - flippedSquare(4, 3),
+    );
+    await tester.pumpAndSettle();
+    expect(editor.pieceAt(Square.e4), isNull);
+    expect(editor.pieceAt(Square.d5), whiteKnight);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('clicking a spare piece takes it in hand; a press paints it, '
       'pressing the same piece removes it', (tester) async {
     await pumpEditor(tester);

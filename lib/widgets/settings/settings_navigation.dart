@@ -69,10 +69,6 @@ List<SettingsChapter> settingsChapters(AppMode mode) => switch (mode) {
     ),
   ],
   AppMode.pgnViewer => const [
-    SettingsChapter(
-      'Analysis',
-      'Choose the engine controls shown while reading games.',
-    ),
     SettingsChapter('Playback', 'Choose how games play through automatically.'),
     SettingsChapter(
       'Board and moves',

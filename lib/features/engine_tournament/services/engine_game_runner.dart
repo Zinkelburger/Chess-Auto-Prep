@@ -341,7 +341,7 @@ class EngineGameRunner {
 
       // ── The move itself ────────────────────────────────────────────────
       final move = search.hasMove ? Move.parse(search.bestMoveUci) : null;
-      if (move == null || !position.isLegal(move)) {
+      if (move == null || !_isPlayable(position, move)) {
         return _finish(
           white: white,
           black: black,
@@ -556,6 +556,18 @@ class EngineGameRunner {
           remainingMs: (left < 0 ? 0 : left) + tc.incrementMs,
         );
     }
+  }
+
+  /// Legal, *and* complete. dartchess accepts a pawn move to the last rank
+  /// with no promotion piece and then leaves the pawn standing there; UCI
+  /// requires the piece, so an engine that omits it has made an illegal
+  /// move, not a queen.
+  bool _isPlayable(Position position, Move move) {
+    if (!position.isLegal(move)) return false;
+    return move is! NormalMove ||
+        move.promotion != null ||
+        !position.board.pawns.has(move.from) ||
+        !SquareSet.backranks.has(move.to);
   }
 
   bool _resetsDrawCounter(Position position, Move move) {

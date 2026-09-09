@@ -34,6 +34,7 @@ import '../../utils/pgn_comment_utils.dart'
         parseRichComment,
         parseCommentTokens,
         parseEvalComment,
+        parseMaiaComment,
         parsePvComment,
         stripEngineTokens,
         stripPgnTokens,
@@ -297,15 +298,20 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
     }
 
-    /// The engine's line from before a marked move. Its own row, because
-    /// there are only ever a handful of these in a game — unlike the per-ply
-    /// scores they replace, which is the whole reason those are gone.
-    void emitBestLine(_EvalNote note, int moveIndex) {
-      final spans = _bestLineSpans(view, note.pv, moveIndex);
-      if (spans.isEmpty) return;
+    /// Keep the verdict and suggested line together, inset from the game and
+    /// with enough space below to clearly resume the played moves.
+    void emitEvalNote(_EvalNote note, int moveIndex) {
+      final spans = [
+        ..._evalNoteSpans(note),
+        if (note.pv.isNotEmpty) ...[
+          const TextSpan(text: '\n'),
+          ..._bestLineSpans(view, note.pv, moveIndex),
+        ],
+      ];
       emitFullWidthRow(
         Container(
-          padding: const EdgeInsets.only(left: 8),
+          margin: const EdgeInsets.fromLTRB(20, 6, 0, 14),
+          padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
@@ -318,7 +324,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             text: TextSpan(style: PgnTextStyles.commentAt(0), children: spans),
           ),
         ),
-        vertical: 3,
+        vertical: 0,
       );
     }
 
@@ -360,8 +366,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     final prefix = _buildPrefixPositions(view);
 
     // On a game an engine has been over, the per-ply `[%eval]` comments are
-    // not rendered at all — only the moves whose score actually moved get a
-    // mark. A game with no mistakes in it still hides them, which is why this
+    // not rendered at all — every classified move gets a mark, including
+    // interesting moves identified by Maia. A game with no mistakes in it still hides them, which is why this
     // is a separate flag and not "are there any notes".
     final machineAnnotated = _isMachineAnnotated(view.moveHistory);
     final evalNotes = machineAnnotated
@@ -430,7 +436,9 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
 
       final isCurrentMove =
-          i == view.mainLineIndex - 1 && view.analysisPath.isEmpty;
+          i == view.mainLineIndex - 1 &&
+          view.analysisPath.isEmpty &&
+          view.activeInlineLine == null;
 
       // SAN styling is independent of NAGs and of whether a sideline exists —
       // structure (own-row, indented variations) marks branches, not a hue.
@@ -446,7 +454,12 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       // Build SAN + NAG text (always shown — annotations survive view mode).
       // Every NAG, not just the six editable quality glyphs: `⩲`, `∞`, `→` and
       // friends are the annotator's whole verdict on the position.
-      final nagSuffix = allNagSuffix(moveData.nags);
+      // Cached games may predate persisted quality NAGs. Show the same
+      // symbols immediately from their scores, without rewriting on read.
+      final nags =
+          evalNotes[i]?.classification.annotateNags(moveData.nags) ??
+          moveData.nags;
+      final nagSuffix = allNagSuffix(nags);
 
       final currentDecoration = BoxDecoration(
         color: AppColors.pgnMoveCurrentBg,
@@ -495,10 +508,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           ),
         );
       } else {
-        // The mark on a move that cost something rides inline, right after the
-        // move, so the movetext keeps flowing.
         final note = evalNotes[i];
-        if (note != null) spans.addAll(_evalNoteSpans(note));
 
         // All of them. A PGN may attach several `{}` blocks to one move (a
         // Lichess study export splits prose from a `[%cal]` block, book PGNs
@@ -510,7 +520,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           emitComment(c, anchorPos: _posAt(prefix, i + 1), anchorPly: i + 1);
         }
 
-        if (note != null) emitBestLine(note, i);
+        if (note != null) emitEvalNote(note, i);
       }
 
       if (annotated) {

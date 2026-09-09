@@ -1,6 +1,6 @@
 /// Scrollable, searchable list of PGN game lines with hover board preview.
 ///
-/// Shows matched lines from a PGN collection with fuzzy search, virtualized
+/// Shows matched lines from a PGN collection with literal substring search, virtualized
 /// scrolling, and [HoverableMoveChips] per row for floating board preview.
 library;
 
@@ -22,6 +22,9 @@ class LinesPreviewPanel extends StatefulWidget {
   /// Whether a slice computation is in progress.
   final bool computing;
 
+  /// Disable the local list-only search when a host provides the query editor.
+  final bool showSearch;
+
   /// Board preview controller for hover previews.
   final BoardPreviewController? boardPreview;
 
@@ -39,6 +42,7 @@ class LinesPreviewPanel extends StatefulWidget {
     required this.allGames,
     this.matchedIndices,
     this.computing = false,
+    this.showSearch = true,
     this.boardPreview,
     this.ownerTag,
     this.onGameTapped,
@@ -132,56 +136,57 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
                 ),
               ],
               const Spacer(),
-              SizedBox(
-                width: 160,
-                height: 28,
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search...',
-                    hintStyle: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurfaceVariant,
+              if (widget.showSearch)
+                SizedBox(
+                  width: 160,
+                  height: 28,
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search...',
+                      hintStyle: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        size: 14,
+                        color: cs.onSurfaceVariant,
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? GestureDetector(
+                              onTap: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                              child: Icon(
+                                Icons.close,
+                                size: 14,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            )
+                          : null,
+                      suffixIconConstraints: const BoxConstraints(
+                        minWidth: 24,
+                        minHeight: 24,
+                      ),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      size: 14,
-                      color: cs.onSurfaceVariant,
-                    ),
-                    prefixIconConstraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
-                    ),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? GestureDetector(
-                            onTap: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                            child: Icon(
-                              Icons.close,
-                              size: 14,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          )
-                        : null,
-                    suffixIconConstraints: const BoxConstraints(
-                      minWidth: 24,
-                      minHeight: 24,
-                    ),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
+                    style: const TextStyle(fontSize: 12),
+                    onChanged: (v) => setState(() => _searchQuery = v.trim()),
                   ),
-                  style: const TextStyle(fontSize: 12),
-                  onChanged: (v) => setState(() => _searchQuery = v.trim()),
                 ),
-              ),
             ],
           ),
         ),

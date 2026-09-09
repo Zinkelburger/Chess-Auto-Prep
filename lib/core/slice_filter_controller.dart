@@ -120,6 +120,11 @@ class HeaderFilterRow {
   }) : value = initialValue,
        controller = TextEditingController(text: initialValue);
 
+  bool get hasMultiplePlayerNames =>
+      (field == kPlayerHeaderField || field == 'White' || field == 'Black') &&
+      mode != MatchMode.regex &&
+      value.contains(';');
+
   HeaderFilterConfig toConfig() =>
       HeaderFilterConfig(field: field, mode: mode, value: value);
 }
@@ -266,13 +271,22 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Whether a preset-style player filter ([field] = White/Black) is active.
-  bool hasPresetHeaderFilter(String field, String value) =>
-      headerRows.any((r) => r.field == field && r.value == value);
+  bool hasPresetHeaderFilter(
+    String field,
+    String value, {
+    MatchMode mode = MatchMode.contains,
+  }) => headerRows.any(
+    (r) => r.field == field && r.value == value && r.mode == mode,
+  );
 
   /// Toggle a preset player filter. Applying "«P» as White" removes any
   /// "«P» as Black" row (and vice versa) so the presets swap, not stack.
-  void togglePresetHeaderFilter(String field, String value) {
-    final wasActive = hasPresetHeaderFilter(field, value);
+  void togglePresetHeaderFilter(
+    String field,
+    String value, {
+    MatchMode mode = MatchMode.contains,
+  }) {
+    final wasActive = hasPresetHeaderFilter(field, value, mode: mode);
     for (var i = headerRows.length - 1; i >= 0; i--) {
       final r = headerRows[i];
       if ((r.field == 'White' || r.field == 'Black') && r.value == value) {
@@ -281,7 +295,9 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
       }
     }
     if (!wasActive) {
-      headerRows.add(HeaderFilterRow(field: field, initialValue: value));
+      headerRows.add(
+        HeaderFilterRow(field: field, mode: mode, initialValue: value),
+      );
     }
     if (headerRows.isEmpty) {
       headerRows.add(HeaderFilterRow(field: 'Date', mode: MatchMode.after));

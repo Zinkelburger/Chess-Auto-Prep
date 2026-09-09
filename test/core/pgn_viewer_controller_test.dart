@@ -195,6 +195,68 @@ void main() {
     });
   });
 
+  group('collection player shortcuts', () {
+    test(
+      'detects arbitrary players on either side from the full collection',
+      () {
+        final c = _makeController();
+        addTearDown(c.dispose);
+        _seed(c, [
+          _game(white: 'Polgar, Judit', black: 'Anand, Viswanathan'),
+          _game(white: 'Kramnik, Vladimir', black: 'Polgar, Judit'),
+        ]);
+        expect(c.collectionPlayer, 'Polgar, Judit');
+        c.applySlice([1], const SliceConfig.empty());
+        expect(c.collectionPlayer, 'Polgar, Judit');
+        _seed(c, [
+          _game(white: 'my_username', black: 'Opponent A'),
+          _game(white: 'Opponent B', black: 'my_username'),
+        ]);
+        expect(c.collectionPlayer, 'my_username');
+      },
+    );
+
+    test(
+      'mixed and two-player collections have no single-player shortcuts',
+      () {
+        final c = _makeController();
+        addTearDown(c.dispose);
+        _seed(c, [
+          _game(white: 'A', black: 'B'),
+          _game(white: 'B', black: 'A'),
+        ]);
+        expect(c.collectionPlayer, isNull);
+        _seed(c, [
+          for (var i = 0; i < 4; i++)
+            _game(white: 'Early player', black: 'P$i'),
+          for (var i = 4; i < 8; i++) _game(white: 'P$i', black: 'Q$i'),
+        ]);
+        expect(c.collectionPlayer, isNull);
+        _seed(c, [_game()]);
+        expect(c.collectionPlayer, isNull);
+        _seed(c, []);
+        expect(c.collectionPlayer, isNull);
+      },
+    );
+
+    test(
+      'a clear majority tolerates incidental games and case differences',
+      () {
+        expect(
+          detectSingleCollectionPlayer([
+            for (var i = 0; i < 4; i++)
+              _game(
+                white: i.isEven ? 'Polgar, Judit' : 'POLGAR, JUDIT',
+                black: 'P$i',
+              ),
+            _game(white: 'P4', black: 'P5'),
+          ]),
+          'Polgar, Judit',
+        );
+      },
+    );
+  });
+
   group('perspective', () {
     test('setPerspective updates the field and notifies', () {
       final c = _makeController();

@@ -10,7 +10,6 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   set _singleGameFocus(bool value);
   GameViewPreferences get _viewPreferences;
   void _setViewPreferences(GameViewPreferences value);
-  int get _explorerTabIndex;
   int get _analysisTabIndex;
   void _showPanel(int index);
   PgnViewerHandle get _activeMovetextController;
@@ -20,7 +19,6 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   Future<void> _editInStudy();
   Future<void> _addCurrentGameToStudy();
   Future<void> _copyCurrentGamePgn();
-  Future<void> _copyCollectionPgn();
   void _openSliceDialog();
   Future<void> _exportSlice();
   Future<void> _exportSliceAsScid();
@@ -45,18 +43,6 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               title: _buildOpenPgnMenuButton(fileName),
             ),
           ),
-          if (loaded && !_controller.isSolitaireMode) ...[
-            const SizedBox(width: 12),
-            TextButton(
-              key: const Key('pgn-filter-button'),
-              onPressed: _openSliceDialog,
-              child: Text(
-                _controller.hasActiveFilters
-                    ? 'Filter · ${_controller.filteredGames.length}/${_controller.allGames.length}'
-                    : 'Filter',
-              ),
-            ),
-          ],
         ],
       ),
       actions: [
@@ -77,74 +63,94 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
     return AppOverflowMenu(
       label: 'Actions',
       tooltip: 'Actions',
+      openOnHover: true,
       entries: [
         if (!hasGame) ...[
           AppMenuEntry(
             label: 'Open PGN file…',
+            icon: Icons.folder_open,
             onRun: () => unawaited(_pickFile()),
           ),
           AppMenuEntry(
             label: 'Paste PGN',
+            icon: Icons.content_paste,
             shortcut: AppShortcut.pastePgn.label,
             onRun: () => unawaited(_pastePgn()),
           ),
         ],
+        if (_controller.allGames.isNotEmpty && !solitaire)
+          AppMenuEntry(
+            label: 'Filter games',
+            icon: Icons.filter_alt_outlined,
+            onRun: _openSliceDialog,
+          ),
         if (hasGame) ...[
           if (!solitaire && !_onReferenceTab)
             AppMenuEntry(
-              heading: 'Edit',
+              icon: Icons.edit_outlined,
               label: _editMode ? 'Finish editing' : 'Edit PGN',
               enabled: !_onLineTab,
               onRun: _toggleEditMode,
             ),
-          AppMenuEntry(
-            label: _viewingStudy && !_onReferenceTab
-                ? 'Edit study'
-                : 'Add to Study',
-            onRun: _viewingStudy && !_onReferenceTab
-                ? _editInStudy
-                : _addCurrentGameToStudy,
-          ),
           if (!solitaire) ...[
             AppMenuEntry(
+              label: _viewPreferences.engine ? 'Hide Engine' : 'Show Engine',
+              icon: Icons.memory,
+              onRun: () {
+                final show = !_viewPreferences.engine;
+                _setViewPreferences(_viewPreferences.copyWith(engine: show));
+                if (show) _showPanel(PgnWorkspace.game);
+              },
+            ),
+            AppMenuEntry(
               heading: 'Explore',
-              label: 'Analysis Graph',
+              label: 'Evaluation graph',
+              icon: Icons.show_chart,
               onRun: () => _showPanel(_analysisTabIndex),
             ),
             AppMenuEntry(
               label: 'Tree',
+              icon: Icons.account_tree_outlined,
               onRun: () => _showPanel(PgnWorkspace.tree),
-            ),
-            AppMenuEntry(
-              label: 'Opening Database',
-              onRun: () => _showPanel(_explorerTabIndex),
             ),
           ],
           AppMenuEntry(
-            label: 'Export',
+            label: 'Copy Game PGN',
+            icon: Icons.copy,
             dividerAbove: true,
+            onRun: _copyCurrentGamePgn,
+          ),
+          AppMenuEntry(
+            label: 'Export',
+            icon: Icons.file_upload_outlined,
             onRun: () {},
             children: [
               AppMenuEntry(
                 heading: '${_controller.filteredGames.length} games in view',
                 label: 'Export as PGN…',
+                icon: Icons.description_outlined,
                 onRun: _exportSlice,
               ),
-              AppMenuEntry(label: 'Export as SCID…', onRun: _exportSliceAsScid),
               AppMenuEntry(
-                dividerAbove: true,
-                label: 'Copy Game PGN',
-                onRun: _copyCurrentGamePgn,
+                label: 'Export as SCID…',
+                icon: Icons.storage_outlined,
+                onRun: _exportSliceAsScid,
               ),
               AppMenuEntry(
-                label: 'Copy Collection PGN',
-                onRun: _copyCollectionPgn,
+                icon: Icons.library_add_outlined,
+                label: _viewingStudy && !_onReferenceTab
+                    ? 'Edit study'
+                    : 'Add to Study',
+                onRun: _viewingStudy && !_onReferenceTab
+                    ? _editInStudy
+                    : _addCurrentGameToStudy,
               ),
             ],
           ),
           if (solitaire)
             AppMenuEntry(
               label: 'Leave solitaire chess',
+              icon: Icons.exit_to_app,
               onRun: _toggleSolitaireMode,
             ),
         ],
@@ -171,7 +177,6 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
 
   Widget _gameViewSettings() => GameViewSettingsDialog(
     preferences: _viewPreferences,
-    onAnalysis: () => _showPanel(_analysisTabIndex),
     perspective: _controller.perspective,
     onChanged: _setViewPreferences,
     onFlip: _controller.toggleBoardFlipped,

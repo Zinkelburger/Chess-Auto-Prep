@@ -259,6 +259,28 @@ String? detectFileProtagonist(List<PgnGameEntry> games) {
   return best;
 }
 
+/// A single player present in at least 80% of the complete collection.
+/// Full PGN names (case-insensitive) keep different players with the same
+/// surname distinct. A two-player match has no unambiguous collection player.
+String? detectSingleCollectionPlayer(List<PgnGameEntry> games) {
+  if (games.length < 2) return null;
+  final counts = <String, int>{};
+  final names = <String, String>{};
+  for (final game in games) {
+    final seen = <String>{};
+    for (final field in const ['White', 'Black']) {
+      final name = (game.headers[field] ?? '').trim();
+      if (name.isEmpty || name == '?') continue;
+      final key = name.toLowerCase();
+      names.putIfAbsent(key, () => name);
+      if (seen.add(key)) counts[key] = (counts[key] ?? 0) + 1;
+    }
+  }
+  final threshold = (games.length * .8).ceil();
+  final candidates = counts.keys.where((name) => counts[name]! >= threshold);
+  return candidates.length == 1 ? names[candidates.single] : null;
+}
+
 String? detectProtagonistFrom(List<PgnGameEntry> games) {
   if (games.length < 2) return null;
   final sample = games.take(math.min(4, games.length));

@@ -484,12 +484,19 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     final response = await request.close();
 
     if (offset > 0 && response.statusCode != HttpStatus.partialContent) {
-      // The mirror ignored the range: start the file over rather than
-      // appending a second copy of its head.
       await response.drain<void>();
-      await target.delete();
-      _bytesDone -= offset;
-      throw StateError('Range request refused (${response.statusCode})');
+      if (response.statusCode == HttpStatus.ok ||
+          response.statusCode == HttpStatus.requestedRangeNotSatisfiable) {
+        // The mirror ignored the range, or says our offset is past the end:
+        // start the file over rather than appending a second copy of its
+        // head.
+        await target.delete();
+        _bytesDone -= offset;
+        throw StateError('Range request refused (${response.statusCode})');
+      }
+      // Anything else (a 5xx, a 429) says nothing about the range; retry it
+      // with the partial file intact rather than throwing gigabytes away.
+      throw HttpException('HTTP ${response.statusCode} for ${file.name}');
     }
     if (offset == 0 && response.statusCode != HttpStatus.ok) {
       await response.drain<void>();

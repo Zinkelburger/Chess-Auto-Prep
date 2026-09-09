@@ -186,7 +186,6 @@ class RepertoireAuditService {
 
       final isLeaf = node.children.isEmpty;
       final alreadyChecked = skipFens.contains(node.fen);
-      if (!alreadyChecked) _checkedFens.add(node.fen);
 
       if (alreadyChecked) {
         // Still enqueue children so we reach unchecked nodes.
@@ -239,6 +238,13 @@ class RepertoireAuditService {
           }
         }
       }
+
+      // Only now is the position checked. The session controller snapshots
+      // [checkedFens] together with the findings it has been handed at the
+      // moment of a cancel or app close; marking the node before its engine
+      // calls returned put it in the skip set with its findings still in
+      // flight, so a resumed audit never looked at it again.
+      if (!alreadyChecked) _checkedFens.add(node.fen);
 
       // Enqueue children with updated cumulative probability.
       // Opponent moves attenuate probability; our moves don't (we always play them).

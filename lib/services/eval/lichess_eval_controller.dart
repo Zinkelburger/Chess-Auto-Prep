@@ -424,11 +424,16 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
       // "importing" until the two-day timeout.
       if (message == null) {
         // onExit. Harmless after a `done`/`failed` report; the only signal
-        // there is when the isolate died without sending one.
+        // there is when the isolate died without sending one.  A cancelled
+        // import also exits without one, on purpose — that is a pause.
         if (!finished.isCompleted) {
-          finished.completeError(
-            StateError('the import isolate stopped before it finished'),
-          );
+          if (_stopRequested) {
+            finished.complete();
+          } else {
+            finished.completeError(
+              StateError('the import isolate stopped before it finished'),
+            );
+          }
         }
         return;
       }

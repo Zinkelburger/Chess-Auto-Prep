@@ -799,7 +799,7 @@ Map<String, List<int>> buildFenIndex(
 /// filter.  Uses [fenIndex] for O(1) position lookups when available,
 /// otherwise falls back to per-game replay in an isolate.
 ///
-/// This is the single entry point shared by [PgnSliceDialog],
+/// This is the single entry point shared by [PgnGameFilterWorkspace],
 /// [InlineSliceEditor], and [applySliceConfig].
 Future<List<int>> computeSliceMatches({
   required List<GameRecord> games,

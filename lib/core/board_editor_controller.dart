@@ -9,7 +9,6 @@ library;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../utils/fen_utils.dart' show expandFen;
 import '../utils/safe_change_notifier.dart';
 import '../utils/chess_utils.dart';
 
@@ -90,6 +89,28 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
   // from a real game keeps its move number ("Move 23, White to play").
   int _halfmoves = 0;
   int _fullmoves = 1;
+
+  String? _fenDraft;
+
+  /// Text being edited, or the current board FEN when there is no draft.
+  String get fenInput => _fenDraft ?? fen;
+
+  /// A caller must apply or discard the text before using this position.
+  /// Changes to the draft notify listeners just like board edits.
+  bool get hasUnappliedFen => _fenDraft != null;
+
+  void setFenDraft(String value) {
+    final draft = value == fen ? null : value;
+    if (draft == _fenDraft) return;
+    _fenDraft = draft;
+    notifyListeners();
+  }
+
+  void discardFenDraft() {
+    if (_fenDraft == null) return;
+    _fenDraft = null;
+    notifyListeners();
+  }
 
   EditorTool _tool = const PointerTool();
   EditorTool get tool => _tool;
@@ -186,6 +207,7 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void setStartPosition() {
+    _fenDraft = null;
     _board = Board.standard;
     _turn = Side.white;
     _whiteKingside = true;
@@ -324,9 +346,9 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
         '$_halfmoves $_fullmoves';
   }
 
-  /// The validated position, or `null` when the setup is illegal (see
-  /// [validationError]).
-  Position? get validPosition => tryParseFen(fen);
+  /// The validated position, or `null` when there is unapplied FEN text or
+  /// the setup is illegal (see [validationError]).
+  Position? get validPosition => hasUnappliedFen ? null : tryParseFen(fen);
 
   /// Human-readable reason the current setup is invalid, or `null` when it
   /// is fine.
@@ -352,14 +374,16 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  /// Load a FEN (4 or 6 fields).  Returns `false` and leaves the editor
+  /// Load a FEN (4–6 fields, with omitted counters defaulting to 0 and 1).
+  /// Returns `false` and leaves the editor
   /// untouched when the string cannot be parsed.  Note: the *placement* may
   /// still be an illegal setup — that is intentional so a user can paste a
   /// work-in-progress FEN and fix it on the board.
   bool loadFen(String input) {
-    final fields = expandFen(input.trim()).split(RegExp(r'\s+'));
-    if (fields.length < 4) return false;
+    final fields = input.trim().split(RegExp(r'\s+'));
+    if (fields.length < 4 || fields.length > 6) return false;
     try {
+      if (!RegExp(r'^[prnbqkPRNBQK1-8/]+$').hasMatch(fields[0])) return false;
       final board = Board.parseFen(fields[0]);
       final turn = switch (fields[1]) {
         'w' => Side.white,
@@ -367,12 +391,30 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
         _ => throw const FenException(IllegalFenCause.turn),
       };
       final castling = fields[2];
+      if (castling != '-' &&
+          (!RegExp(r'^[KQkq]+$').hasMatch(castling) ||
+              castling.split('').toSet().length != castling.length)) {
+        return false;
+      }
       Square? ep;
       if (fields[3] != '-') {
+        if (!RegExp(r'^[a-h][36]$').hasMatch(fields[3])) return false;
         ep = Square.parse(fields[3]);
         if (ep == null) throw const FenException(IllegalFenCause.enPassant);
       }
+      final halfmoves = fields.length > 4 ? int.tryParse(fields[4]) : 0;
+      final fullmoves = fields.length > 5 ? int.tryParse(fields[5]) : 1;
+      if ((fields.length > 4 && !RegExp(r'^\d+$').hasMatch(fields[4])) ||
+          (fields.length > 5 && !RegExp(r'^\d+$').hasMatch(fields[5])) ||
+          halfmoves == null ||
+          halfmoves < 0 ||
+          fullmoves == null ||
+          fullmoves < 1) {
+        return false;
+      }
 
+      // Commit only after every field has parsed, preserving the old setup
+      // when a pasted FEN has malformed metadata.
       _board = board;
       _turn = turn;
       _whiteKingside = castling.contains('K');
@@ -380,8 +422,9 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
       _blackKingside = castling.contains('k');
       _blackQueenside = castling.contains('q');
       _epSquare = (ep != null && epCandidates.contains(ep)) ? ep : null;
-      _halfmoves = fields.length > 4 ? (int.tryParse(fields[4]) ?? 0) : 0;
-      _fullmoves = fields.length > 5 ? (int.tryParse(fields[5]) ?? 1) : 1;
+      _halfmoves = halfmoves;
+      _fullmoves = fullmoves;
+      _fenDraft = null;
       notifyListeners();
       return true;
     } catch (_) {

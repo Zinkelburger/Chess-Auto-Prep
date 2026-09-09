@@ -169,6 +169,19 @@ class ToolsTest(unittest.TestCase):
         self.assertEqual(s["games"], 2)
         self.assertEqual(s["first_issue"], 1650)
 
+    def test_rebuilt_file_is_reopened(self):
+        self.assertEqual(self.registry.call("master_status", {})["games"], 2)
+        # Delete and rebuild at the same path, as master_import_pgn.dart does.
+        self.db.unlink()
+        make_db(self.db)
+        c = sqlite3.connect(self.db)
+        try:
+            c.execute("DELETE FROM games WHERE id = 2")
+            c.commit()
+        finally:
+            c.close()
+        self.assertEqual(self.registry.call("master_status", {})["games"], 1)
+
     def test_book_and_citation(self):
         try:
             import chess  # noqa: F401

@@ -19,6 +19,7 @@ mixin _MetadataOps on ChangeNotifier {
   List<PgnGameEntry> get filteredGames;
   int get currentGameIndex;
   PgnFenIndex get _fenIndex;
+  void _markCollectionChanged();
 
   Timer? persistDebounce;
   set errorMessage(String? value);
@@ -69,9 +70,19 @@ mixin _MetadataOps on ChangeNotifier {
     if (filteredGames.isEmpty) return;
     final game = filteredGames[currentGameIndex];
     rememberPersistedGame(game);
+    final ratingHeader = stars > 0 ? '$stars' : null;
+    final changed =
+        game.studyRating != stars ||
+        game.headers['StudyRating'] != ratingHeader;
     game.studyRating = stars;
+    if (ratingHeader == null) {
+      game.headers.remove('StudyRating');
+    } else {
+      game.headers['StudyRating'] = ratingHeader;
+    }
     _dirtyGames.add(game);
     _editedGames.add(game);
+    if (changed) _markCollectionChanged();
     notifyListeners();
     unawaited(persistMetadata());
     onReclaimFocus?.call();
@@ -112,8 +123,15 @@ mixin _MetadataOps on ChangeNotifier {
         for (final g in dirty)
           (pgn: g.pgnText, rating: g.studyRating, summary: g.studySummary),
       ]);
+      var changed = false;
       for (var i = 0; i < dirty.length; i++) {
+        if (dirty[i].pgnText == rewritten[i]) continue;
         dirty[i].pgnText = rewritten[i];
+        changed = true;
+      }
+      if (changed) {
+        _markCollectionChanged();
+        notifyListeners();
       }
     }
 
@@ -234,9 +252,22 @@ mixin _MetadataOps on ChangeNotifier {
     final headerPart = text
         .substring(0, movetextStart(text).clamp(0, text.length))
         .trimRight();
-    game.pgnText = headerPart.isEmpty
+    final updatedText = headerPart.isEmpty
         ? '$updatedPgnMovetext\n'
         : '$headerPart\n\n$updatedPgnMovetext\n';
+    if (game.pgnText != updatedText) {
+      game.pgnText = updatedText;
+      // A bound callback can outlive the collection it was editing. Only
+      // changes to the currently loaded games invalidate its snapshots.
+      if (allGames.contains(game)) {
+        // Movetext can add/remove moves and variations, not just comments.
+        // Cancel an older build too: until a fresh index is built, position
+        // searches must replay the updated PGN instead of using stale hits.
+        _fenIndex.reset();
+        _markCollectionChanged();
+        notifyListeners();
+      }
+    }
 
     if (!writeToFile || filePath == null) return;
     unawaited(persistMetadata());

@@ -1,0 +1,117 @@
+{
+ "merged_games": 75,
+ "tours": {
+  "Aofh44jt": {
+   "dates": [
+    1761488789447
+   ],
+   "fetched_at": 1788961788,
+   "finished": true,
+   "games": 12,
+   "id": "Aofh44jt",
+   "location": "Westford, MA",
+   "name": "2025 Greater Boston Open",
+   "owner": "falstan",
+   "rounds": 4,
+   "slug": "2025-greater-boston-open",
+   "url": "https://lichess.org/broadcast/2025-greater-boston-open/Aofh44jt"
+  },
+  "FIqu0ZCO": {
+   "dates": [
+    1758470700000
+   ],
+   "fetched_at": 1788961797,
+   "finished": true,
+   "games": 7,
+   "id": "FIqu0ZCO",
+   "location": "61 Center St, Burlington, MA 01803",
+   "name": "2025 Massachusetts Masters vs Challengers Invitational",
+   "owner": "falstan",
+   "rounds": 4,
+   "slug": "2025-massachusetts-masters-vs-challengers-invitational",
+   "url": "https://lichess.org/broadcast/2025-massachusetts-masters-vs-challengers-invitational/FIqu0ZCO"
+  },
+  "GiQfOTDu": {
+   "dates": [
+    1779571116804,
+    1779740081003
+   ],
+   "fetched_at": 1788961785,
+   "finished": true,
+   "games": 16,
+   "id": "GiQfOTDu",
+   "location": "",
+   "name": "Massachusetts Open 2026",
+   "owner": "falstan",
+   "rounds": 5,
+   "slug": "massachusetts-open-2026",
+   "url": "https://lichess.org/broadcast/massachusetts-open-2026/GiQfOTDu"
+  },
+  "bWunka7k": {
+   "dates": [
+    1759671000000
+   ],
+   "fetched_at": 1788961793,
+   "finished": true,
+   "games": 17,
+   "id": "bWunka7k",
+   "location": "Medfield, MA",
+   "name": "Massachusetts 1st State OPEN Championship/Spiegel Cup Qualifier",
+   "owner": "falstan",
+   "rounds": 6,
+   "slug": "massachusetts-1st-state-open-championshipspiegel-cup-qualifier",
+   "url": "https://lichess.org/broadcast/massachusetts-1st-state-open-championshipspiegel-cup-qualifier/bWunka7k"
+  },
+  "chesscom-2025-massachusetts-masters-vs-challengers-invitational": {
+   "dates": [
+    1758486600000,
+    1758501000000
+   ],
+   "fetched_at": 1788963024,
+   "finished": false,
+   "games": 7,
+   "id": "2025-massachusetts-masters-vs-challengers-invitational",
+   "location": "61 Center St, Burlington, MA 01803, US",
+   "name": "2025 Massachusetts Masters vs Challengers Invitational",
+   "owner": "chess.com",
+   "rounds": 4,
+   "slug": "2025-massachusetts-masters-vs-challengers-invitational",
+   "source": "chesscom",
+   "url": "https://www.chess.com/events/2025-massachusetts-masters-vs-challengers-invitational"
+  },
+  "chesscom-2025-massachusetts-open": {
+   "dates": [
+    1748102400000,
+    1748310900000
+   ],
+   "fetched_at": 1788963008,
+   "finished": false,
+   "games": 23,
+   "id": "2025-massachusetts-open",
+   "location": "Westford, MA, US",
+   "name": "Massachusetts Open 2025",
+   "owner": "chess.com",
+   "rounds": 6,
+   "slug": "2025-massachusetts-open",
+   "source": "chesscom",
+   "url": "https://www.chess.com/events/2025-massachusetts-open"
+  },
+  "chesscom-greater-boston-open": {
+   "dates": [
+    1761502500000,
+    1761538500000
+   ],
+   "fetched_at": 1788963015,
+   "finished": true,
+   "games": 12,
+   "id": "greater-boston-open",
+   "location": "Westford, MA, US",
+   "name": "Greater Boston Open",
+   "owner": "chess.com",
+   "rounds": 4,
+   "slug": "greater-boston-open",
+   "source": "chesscom",
+   "url": "https://www.chess.com/events/greater-boston-open"
+  }
+ }
+}

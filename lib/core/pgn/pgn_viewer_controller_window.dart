@@ -18,6 +18,7 @@ mixin _WindowOps on ChangeNotifier {
   abstract bool boardFlipped;
   Future<void> persistMetadata();
   void rememberPersistedGame(PgnGameEntry game);
+  void _markCollectionChanged();
 
   bool isFullScreen = false;
 
@@ -69,6 +70,7 @@ mixin _WindowOps on ChangeNotifier {
     final first = allGames.first;
     rememberPersistedGame(first);
     final value = perspective.toHeaderValue();
+    final oldHeader = first.headers['StudyPerspective'];
     first.headers['StudyPerspective'] = value;
 
     var pgn = first.pgnText;
@@ -84,7 +86,12 @@ mixin _WindowOps on ChangeNotifier {
             '${pgn.substring(0, firstNewline)}\n[StudyPerspective "$value"]${pgn.substring(firstNewline)}';
       }
     }
+    final changed = oldHeader != value || first.pgnText != pgn;
     first.pgnText = pgn;
+    if (changed) {
+      _markCollectionChanged();
+      notifyListeners();
+    }
 
     await persistMetadata();
   }

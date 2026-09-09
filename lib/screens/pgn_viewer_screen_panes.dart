@@ -6,6 +6,8 @@ part of 'pgn_viewer_screen.dart';
 /// Board-pane / side-panel / game-tab builders, split out of
 /// [_PgnViewerScreenState].
 mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
+  ({String fen, String? uci})? get _engineThreat;
+  void _setEngineThreat(String fen, String? uci);
   GameAnalysisController get _analysisController;
   PgnWorkspace get _tabController;
   void _closePanel(int id);
@@ -29,11 +31,20 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   bool? _myColorIn(Map<String, String> headers);
   List<String> _currentGameSans(PgnGameEntry entry);
 
+  Set<String> get _boardRecentMoveSquares {
+    if (_controller.showOpeningTree) return _controller.treeRecentMoveSquares;
+    final reader = _activeMovetextController;
+    // A filter position or a newly opened pane may not belong to this reader.
+    // Never carry the hidden reader's last move onto a different board.
+    if (reader.currentFen != _controller.currentPosition.fen) return const {};
+    return reader.recentMoveSquares;
+  }
+
   Widget _buildFullScreenView(ThemeData theme) {
     return FullscreenGameView(
       position: _controller.currentPosition,
       boardFlipped: _controller.boardFlipped,
-      recentMoveSquares: _pgnWidgetController.recentMoveSquares,
+      recentMoveSquares: _boardRecentMoveSquares,
       gameLabel: _controller.filteredGames.isNotEmpty
           ? _controller.filteredGames[_controller.currentGameIndex].label
           : '',
@@ -84,13 +95,23 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                     ChessBoardWidget(
                       position: _controller.currentPosition,
                       flipped: _controller.boardFlipped,
-                      recentMoveSquares:
-                          _activeMovetextController.recentMoveSquares,
+                      recentMoveSquares: _boardRecentMoveSquares,
                       // A solitaire hint rings the piece that moves. A square tint
                       // would be the same mark the board puts under a piece you
                       // picked up yourself, so the hint has to be a different shape,
                       // not a different shade.
                       annotations: [
+                        if (_engineThreat case final threat?
+                            when _viewPreferences.engine &&
+                                !_controller.isSolitaireMode &&
+                                _tabController.index == PgnWorkspace.game &&
+                                threat.fen == _controller.currentPosition.fen &&
+                                (threat.uci?.length ?? 0) >= 4)
+                          BoardAnnotation(
+                            orig: threat.uci!.substring(0, 2),
+                            dest: threat.uci!.substring(2, 4),
+                            brush: AnnotationBrush.red,
+                          ),
                         if (_controller.isSolitaireMode &&
                             solitaire.hintSquare != null)
                           BoardAnnotation(
@@ -204,7 +225,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                           onAnalysisComplete: _detectTrophies,
                           detectedTrophies: _detectedTrophies,
                         ),
-                        4 => PgnOpeningTreePanel(controller: _controller),
+                        4 => _buildTreeTab(),
                         5 => _buildDatabaseTools(),
                         _ => _buildExtraPanel(id),
                       },
@@ -217,6 +238,25 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
       ],
     );
   }
+
+  Widget _buildTreeTab() => Column(
+    children: [
+      PgnTreeToolbar(
+        controller: _controller,
+        database: _tabController.databaseTree,
+        onSourceChanged: (database) {
+          if (!mounted) return;
+          _tabController.databaseTree = database;
+        },
+        onFilter: _openSliceDialog,
+      ),
+      Expanded(
+        child: _tabController.databaseTree
+            ? _buildExplorerTab()
+            : PgnOpeningTreePanel(controller: _controller),
+      ),
+    ],
+  );
 
   Widget _buildCollectionNavigation() => GameNavBar(
     games: GameNavItem.fromEntries(
@@ -428,6 +468,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             !_controller.isSolitaireMode &&
             !_controller.isSolitaireSetup)
           InlineEngineBar(
+            onThreatChanged: _setEngineThreat,
+            isActive: _tabController.index == PgnWorkspace.game,
             fen: _controller.currentPosition.fen,
             onLineMoveTapped: _controller.onEngineLineMoveTapped,
           ),

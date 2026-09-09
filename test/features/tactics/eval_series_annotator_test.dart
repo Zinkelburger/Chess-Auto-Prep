@@ -21,6 +21,42 @@ PgnGame<PgnNodeData> gameOf(String movetext) =>
     PgnGame.parsePgn('$_headers\n$movetext');
 
 void main() {
+  test('saved PGN carries quality glyphs on the classified moves', () {
+    final game = gameOf(
+      '1. e4 e5 2. Nf3 Nc6 {[%maia 0.01]} '
+      '3. Bb5 \$1 \$14 (3. Bc4 \$3 {Author variation}) a6 1-0',
+    );
+    final annotated = annotateMovetextWithEvals(
+      game: game,
+      plyEvals: const [
+        PlyEval(cp: -65, depth: 18),
+        PlyEval(cp: 65, depth: 18),
+        PlyEval(cp: -120, depth: 18),
+        PlyEval(cp: -120, depth: 18),
+        PlyEval(cp: -350, depth: 18),
+        PlyEval(cp: -350, depth: 18),
+      ],
+      lastPlyIsCheckmate: false,
+    )!;
+    final restored = gameOf(annotated);
+    expect(restored.moves.mainline().map((m) => m.nags ?? <int>[]), [
+      [6],
+      [2],
+      [4],
+      [5],
+      [1, 14],
+      <int>[],
+    ]);
+    expect(annotated, contains(r'e4 $6'));
+    expect(annotated, contains(r'e5 $2'));
+    expect(annotated, contains(r'Nf3 $4'));
+    expect(annotated, contains(r'Nc6 $5'));
+    expect(annotated, contains(r'Bc4 $3 { Author variation }'));
+    // Repeated annotation does not duplicate already stored glyphs.
+    annotateGameMoveQuality(restored);
+    expect(restored.makePgn(), gameOf(annotated).makePgn());
+  });
+
   test('each score lands on the move whose position it scores', () {
     final game = gameOf('1. e4 e5 2. Nf3 Nc6 1-0');
     final annotated = annotateMovetextWithEvals(

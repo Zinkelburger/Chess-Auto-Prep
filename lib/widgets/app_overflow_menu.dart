@@ -2,6 +2,8 @@
 /// contextual pickers can supply their own label or anchor.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -43,13 +45,12 @@ class AppMenuEntry {
 
   final bool enabled;
 
-  /// Draws a separator above this row, for grouping settings away from
-  /// actions.
+  /// Draws a subtle inset separator above this row to distinguish groups.
   final bool dividerAbove;
 
   /// Uppercase section heading drawn above this row ("ADD LINES"). The first
-  /// row of each group carries its group's name; a heading above the very
-  /// first row needs no divider, later ones get one for free.
+  /// row of each group carries its group's name, with a hairline above later
+  /// groups. The rule adds no extra gap around the heading.
   final String? heading;
 
   /// Non-null turns the row into a toggle and shows a check when true.
@@ -66,7 +67,7 @@ class AppMenuEntry {
 }
 
 /// Labelled menu for app bars and contextual operations.
-class AppOverflowMenu extends StatelessWidget {
+class AppOverflowMenu extends StatefulWidget {
   const AppOverflowMenu({
     super.key,
     required this.entries,
@@ -74,7 +75,8 @@ class AppOverflowMenu extends StatelessWidget {
     this.anchor,
     this.label = 'Actions',
     this.enabled = true,
-  });
+    bool? openOnHover,
+  }) : openOnHover = openOnHover ?? (label == 'Actions');
 
   final List<AppMenuEntry> entries;
   final String tooltip;
@@ -89,35 +91,132 @@ class AppOverflowMenu extends StatelessWidget {
   /// locked while a long job runs.
   final bool enabled;
 
+  /// Open on pointer entry; defaults to true for Actions anchors.
+  /// Clicks and keyboard activation also work.
+  final bool openOnHover;
+
+  @override
+  State<AppOverflowMenu> createState() => _AppOverflowMenuState();
+}
+
+class _AppOverflowMenuState extends State<AppOverflowMenu> {
+  // Sibling app-bar anchors should behave as one menu strip.
+  static MenuController? _activeMenu;
+  final _controller = MenuController();
+  Timer? _hoverExit;
+  final _anchorFocus = FocusNode();
+  final _firstItemFocus = FocusNode();
+
+  @override
+  void dispose() {
+    if (identical(_activeMenu, _controller)) _activeMenu = null;
+    _hoverExit?.cancel();
+    _anchorFocus.dispose();
+    _firstItemFocus.dispose();
+    super.dispose();
+  }
+
+  void _keepOpen() => _hoverExit?.cancel();
+
+  void _scheduleClose() {
+    if (!widget.openOnHover) return;
+    _hoverExit?.cancel();
+    // Allow the pointer to cross the gap into a submenu.
+    _hoverExit = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _controller.close();
+    });
+  }
+
+  Widget _hoverRegion(Widget child) => MouseRegion(
+    onEnter: (_) => _keepOpen(),
+    onExit: (_) => _scheduleClose(),
+    child: child,
+  );
+
+  void _focusMenu() {
+    if (!identical(_activeMenu, _controller)) _activeMenu?.close();
+    _activeMenu = _controller;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.isOpen) return;
+      _firstItemFocus.requestFocus();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rows = entries;
+    final rows = widget.entries;
+    final enabled = widget.enabled;
+    final openOnHover = widget.openOnHover;
+    final label = widget.label;
+    final tooltip = widget.tooltip;
     if (rows.isEmpty) return const SizedBox.shrink();
-    if (rows.any((row) => row.children.isNotEmpty)) {
+    if (openOnHover || rows.any((row) => row.children.isNotEmpty)) {
       return MenuAnchor(
-        menuChildren: _nestedRows(rows),
-        builder: (context, controller, child) => TextButton(
-          style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
-          onPressed: !enabled
-              ? null
-              : () {
-                  controller.isOpen ? controller.close() : controller.open();
-                },
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label ?? tooltip, style: AppTextStyles.bodyStrong),
-              const SizedBox(width: 8),
-              const Icon(Icons.arrow_drop_down, size: 20),
-            ],
+        style: _menuStyle,
+        controller: _controller,
+        childFocusNode: _anchorFocus,
+        onOpen: _focusMenu,
+        onClose: () {
+          _hoverExit?.cancel();
+          if (identical(_activeMenu, _controller)) _activeMenu = null;
+        },
+        menuChildren: _nestedRows(
+          rows,
+          firstItemFocus: _firstItemFocus,
+          wrap: _hoverRegion,
+        ),
+        builder: (context, controller, child) => MouseRegion(
+          onEnter: enabled && openOnHover
+              ? (_) {
+                  _keepOpen();
+                  controller.open();
+                }
+              : null,
+          onExit: (_) => _scheduleClose(),
+          child: TooltipVisibility(
+            visible: tooltip != label && !controller.isOpen,
+            child: Tooltip(
+              message: tooltip,
+              child: TextButton(
+                focusNode: _anchorFocus,
+                style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
+                onPressed: !enabled
+                    ? null
+                    : () {
+                        if (openOnHover || !controller.isOpen) {
+                          controller.open();
+                        } else {
+                          controller.close();
+                        }
+                      },
+                child:
+                    widget.anchor ??
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          label ?? tooltip,
+                          style: AppTextStyles.bodyStrong.copyWith(
+                            color: enabled
+                                ? AppColors.ink
+                                : AppColors.onSurfaceDisabled,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_drop_down, size: 20),
+                      ],
+                    ),
+              ),
+            ),
           ),
         ),
       );
     }
     final items = <PopupMenuEntry<int>>[
       for (var i = 0; i < rows.length; i++) ...[
-        if ((rows[i].dividerAbove || rows[i].heading != null) && i > 0)
-          const PopupMenuDivider(),
+        if (i > 0 && (rows[i].dividerAbove || rows[i].heading != null))
+          PopupMenuDivider(height: rows[i].heading != null ? 1 : 8),
         if (rows[i].heading != null) appMenuHeadingItem<int>(rows[i].heading!),
         PopupMenuItem<int>(
           value: i,
@@ -130,7 +229,7 @@ class AppOverflowMenu extends StatelessWidget {
     ];
     final isActionsMenu = label == 'Actions';
     final anchor =
-        this.anchor ??
+        widget.anchor ??
         (label == null
             ? null
             : Container(
@@ -143,7 +242,7 @@ class AppOverflowMenu extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      label!,
+                      label,
                       style:
                           (isActionsMenu
                                   ? AppTextStyles.bodyStrong
@@ -167,9 +266,16 @@ class AppOverflowMenu extends StatelessWidget {
               ));
     return Theme(
       data: Theme.of(context).copyWith(
-        dividerTheme: const DividerThemeData(color: AppColors.divider),
+        dividerTheme: const DividerThemeData(
+          color: AppColors.divider,
+          thickness: 1,
+          indent: 16,
+          endIndent: 16,
+        ),
       ),
       child: PopupMenuButton<int>(
+        constraints: const BoxConstraints(minWidth: 240, maxWidth: 480),
+        menuPadding: const EdgeInsets.symmetric(vertical: 6),
         icon: anchor == null ? const Icon(Icons.more_vert, size: 20) : null,
         tooltip: tooltip,
         enabled: enabled,
@@ -186,27 +292,93 @@ class AppOverflowMenu extends StatelessWidget {
   }
 }
 
-List<Widget> _nestedRows(List<AppMenuEntry> entries) => [
+// Desktop menus share compact rows, with enough width and inset for labels,
+// shortcuts and submenu arrows. Minimum sizes still allow scaled text to grow.
+const _menuStyle = MenuStyle(
+  minimumSize: WidgetStatePropertyAll(Size(240, 0)),
+  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+);
+
+const _menuItemStyle = ButtonStyle(
+  minimumSize: WidgetStatePropertyAll(Size(240, 32)),
+  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16)),
+  visualDensity: VisualDensity.standard,
+  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+);
+
+List<Widget> _nestedRows(
+  List<AppMenuEntry> entries, {
+  FocusNode? firstItemFocus,
+  Widget Function(Widget)? wrap,
+}) => [
   for (var i = 0; i < entries.length; i++) ...[
     if (i > 0 && (entries[i].heading != null || entries[i].dividerAbove))
-      const Divider(height: 12),
+      Divider(
+        height: entries[i].heading != null ? 1 : 8,
+        thickness: 1,
+        indent: 16,
+        endIndent: 16,
+        color: AppColors.divider,
+      ),
     if (entries[i].heading case final heading?)
       Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
         child: Text(heading.toUpperCase(), style: AppTextStyles.eyebrow),
       ),
     if (entries[i].children.isNotEmpty)
       SubmenuButton(
-        menuChildren: _nestedRows(entries[i].children),
-        child: Text(entries[i].label, style: AppTextStyles.body),
+        style: _menuItemStyle,
+        menuStyle: _menuStyle,
+        focusNode: i == entries.indexWhere((entry) => entry.enabled)
+            ? firstItemFocus
+            : null,
+        menuChildren: entries[i].enabled
+            ? _nestedRows(entries[i].children, wrap: wrap)
+            : const [],
+        child: _nestedLabel(entries[i]),
       )
     else
       MenuItemButton(
+        style: _menuItemStyle,
+        focusNode: i == entries.indexWhere((entry) => entry.enabled)
+            ? firstItemFocus
+            : null,
         onPressed: entries[i].enabled ? entries[i].onRun : null,
-        child: Text(entries[i].label, style: AppTextStyles.body),
+        child: _nestedLabel(entries[i]),
       ),
   ],
-];
+].map(wrap ?? _identity).toList();
+
+Widget _identity(Widget child) => child;
+
+Widget _nestedLabel(AppMenuEntry entry) => Row(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    if (entry.leading != null || entry.icon != null) ...[
+      entry.leading ?? Icon(entry.icon, size: 18),
+      const SizedBox(width: 12),
+    ],
+    Text(
+      entry.label,
+      style: AppTextStyles.muted.copyWith(
+        fontWeight: FontWeight.w400,
+        color: entry.enabled ? AppColors.ink : AppColors.onSurfaceDisabled,
+      ),
+    ),
+    if (entry.checked == true) ...[
+      const SizedBox(width: 12),
+      const Icon(Icons.check, size: 16, color: AppColors.success),
+    ],
+    if (entry.hint != null) ...[
+      const SizedBox(width: 12),
+      InfoHint(entry.hint!, size: 15),
+    ],
+    if (entry.shortcut != null) ...[
+      const SizedBox(width: 16),
+      Text(entry.shortcut!, style: AppTextStyles.caption),
+    ],
+  ],
+);
 
 /// A non-selectable section heading row for any popup menu: the uppercase
 /// eyebrow the mode switcher introduced, now shared so every grouped menu

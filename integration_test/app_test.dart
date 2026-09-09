@@ -114,35 +114,35 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byType(PopupMenuItem<AppMode>),
+          of: find.byType(MenuItemButton),
           matching: find.text('Tactics'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: find.byType(PopupMenuItem<AppMode>),
+          of: find.byType(MenuItemButton),
           matching: find.text('Player analysis'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: find.byType(PopupMenuItem<AppMode>),
+          of: find.byType(MenuItemButton),
           matching: find.text('Repertoire builder'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: find.byType(PopupMenuItem<AppMode>),
+          of: find.byType(MenuItemButton),
           matching: find.text('Repertoire trainer'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: find.byType(PopupMenuItem<AppMode>),
+          of: find.byType(MenuItemButton),
           matching: find.text('Engine tournament'),
         ),
         findsOneWidget,
@@ -157,7 +157,7 @@ void main() {
 
       final menuItem = find.ancestor(
         of: find.text('Repertoire builder'),
-        matching: find.byType(PopupMenuItem<AppMode>),
+        matching: find.byType(MenuItemButton),
       );
       await tester.tap(menuItem);
       await tester.pump();
@@ -180,7 +180,7 @@ void main() {
 
       final menuItem = find.ancestor(
         of: find.text('Repertoire trainer'),
-        matching: find.byType(PopupMenuItem<AppMode>),
+        matching: find.byType(MenuItemButton),
       );
       await tester.tap(menuItem);
       await tester.pump();

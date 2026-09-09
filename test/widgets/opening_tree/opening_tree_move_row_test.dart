@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/widgets/opening_tree/opening_tree_move_row.dart';
+import 'package:chess_auto_prep/widgets/opening_tree/win_draw_loss_bar.dart';
 
 PositionGroup _entry({required bool scored}) {
   final node = OpeningTreeNode(
@@ -37,5 +38,41 @@ void main() {
     await _pump(tester, _entry(scored: true));
 
     expect(find.text('3 games · 75%'), findsOneWidget);
+  });
+
+  testWidgets('scored rows stay on one line with a bounded result bar', (
+    tester,
+  ) async {
+    for (final width in [220.0, 640.0, 1000.0]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: width,
+                child: OpeningTreeMoveRow(
+                  entry: _entry(scored: true),
+                  parentGamesPlayed: 4,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(WinDrawLossBar)).width,
+        lessThanOrEqualTo(180),
+      );
+      expect(
+        tester.getSize(find.byType(OpeningTreeMoveRow)).height,
+        lessThanOrEqualTo(36),
+      );
+      expect(
+        tester.getCenter(find.text('e4')).dy,
+        closeTo(tester.getCenter(find.byType(WinDrawLossBar)).dy, 1),
+      );
+    }
   });
 }

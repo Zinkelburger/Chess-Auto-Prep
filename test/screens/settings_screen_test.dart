@@ -140,7 +140,7 @@ void main() {
     expect(find.text('Where'), findsOneWidget);
     expect(find.text('Ctrl+1'), findsNothing);
     expect(find.text('Switch view'), findsNothing);
-    expect(find.text('Flip board'), findsNothing);
+    expect(find.text('Flip board'), findsOneWidget);
     expect(find.text('Ctrl+Enter'), findsNothing);
     expect(find.text('Ctrl+←'), findsNothing);
     expect(tester.takeException(), isNull);

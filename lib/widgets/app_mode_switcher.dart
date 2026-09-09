@@ -7,8 +7,6 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_motion.dart';
-import '../theme/app_text_styles.dart';
 import 'app_overflow_menu.dart';
 
 class AppModeSwitcher extends StatelessWidget {
@@ -23,57 +21,24 @@ class AppModeSwitcher extends StatelessWidget {
       (s) => s.isRepertoireGenerating,
     );
     final mode = context.select<AppState, AppMode>((s) => s.currentMode);
-    final picker = PopupMenuButton<AppMode>(
+    final picker = AppOverflowMenu(
       key: switcherKey,
+      label: mode.label,
       tooltip: locked
           ? 'Locked — repertoire generation in progress'
           : 'Switch mode',
       enabled: !locked,
-      onSelected: context.read<AppState>().setMode,
-      position: PopupMenuPosition.under,
-      padding: EdgeInsets.zero,
-      popUpAnimationStyle: AppMotion.menuAnimation,
-      itemBuilder: (context) => [
-        for (final group in availableAppModeGroups()) ...[
-          appMenuHeadingItem<AppMode>(group.heading),
+      openOnHover: true,
+      entries: [
+        for (final group in availableAppModeGroups())
           for (final m in group.modes)
-            PopupMenuItem<AppMode>(
-              value: m,
-              height: 32,
-              child: AppMenuEntryRow(
-                entry: AppMenuEntry(
-                  label: m.label,
-                  onRun: () {},
-                  checked: m == mode ? true : null,
-                ),
-              ),
+            AppMenuEntry(
+              heading: m == group.modes.first ? group.heading : null,
+              label: m.label,
+              checked: m == mode,
+              onRun: () => context.read<AppState>().setMode(m),
             ),
-        ],
       ],
-      // Drawn exactly like the Actions anchor beside it: label, drop arrow,
-      // no box. The current mode's name is the whole label, so the bar
-      // still says where you are without a "View" prefix.
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 44),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              mode.label,
-              style: AppTextStyles.bodyStrong.copyWith(
-                color: locked ? AppColors.onSurfaceDisabled : AppColors.ink,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.arrow_drop_down,
-              size: 20,
-              color: locked ? AppColors.onSurfaceDisabled : AppColors.ink,
-            ),
-          ],
-        ),
-      ),
     );
     // Keep screen actions separate from app navigation on every top bar.
     // The separator and its breathing room are outside the menu's hit area.

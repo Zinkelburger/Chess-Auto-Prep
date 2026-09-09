@@ -15,6 +15,9 @@ heavy checks/builds use `scripts/ci.sh with -- COMMAND`.
 | `tools/test_bughouse_engine.py` | `deps [--all]` checks bundle dependencies; `run` searches with the extracted engine. Bughouse/release CI gates Linux and Windows bundles |
 | `tools/diagnose_bughouse_windows.ps1` | Self-contained diagnostic on the failing Windows machine: published hashes, PE headers, loader resolution, mitigations and actual startup |
 | `tools/bughouse_db/` | Offline FICS opening book; `python3 -m bughouse_db <command>` from `tools/`, with `fetch`, `index`, `explore` or `status`; test with `tools/test_bughouse_db.py` |
+| `tools/lichess_broadcasts.py` | Collect over-the-board games from Lichess broadcasts into `Documents/lichess_broadcasts/<collection>/` (per-broadcast PGNs, manifest, merged PGN); `by USER`, `tour ID`, `search`, `status`. Community broadcasts are found by owner or tour id, not `search`; tests in `tools/test_lichess_broadcasts.py`. Method, APIs and the committed Massachusetts collection (`scripts/data/broadcasts/`): [docs/BROADCAST_GAMES.md](../BROADCAST_GAMES.md) |
+| `tools/chesscom_events.py` | Same collection from chess.com Events (`search`, `event <slug>`, `status`); moves come over the events websocket, spoken with a stdlib Socket.IO client. A game on both sites is kept once; tests in `tools/test_chesscom_events.py` |
+| `tools/master_import_pgn.dart` | Turn PGN files into a master-format database (`games` + `book`) with the app's importer: `MASTER_IMPORT_ARGS="out.db in.pgn" scripts/ci.sh test tools/master_import_pgn.dart`; query it with the chess-prep MCP `db` parameter |
 | `tools/run_engine_tournament.dart` | Headless engine matches; see `docs/ENGINE_TOURNAMENT.md` |
 | `tools/bench/`, `tools/dart_api_test/`, `tools/experiments/` | Standalone benchmarks/API harnesses; nothing here is imported by `lib/` |
 | `tree_builder/` | Standalone C prototype and cdbdirect native build; see its README. The Dart generation pipeline is canonical |

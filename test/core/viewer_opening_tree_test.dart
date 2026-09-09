@@ -38,6 +38,65 @@ void main() {
 
   group('ViewerOpeningTree cursor ownership', () {
     test(
+      'board highlights follow only the tree cursor, including back/reset',
+      () {
+        final board = _Board()..position = _play(['d4', 'd5']);
+        final tree = _make(board);
+        expect(tree.recentMoveSquares, isEmpty);
+        tree.openingTree = _line(['e4', 'e5', 'Nf3']);
+        tree.showOpeningTree = true;
+        expect(tree.recentMoveSquares, isEmpty);
+        tree.onMoveSelected('e4');
+        expect(tree.recentMoveSquares, {'e2', 'e4'});
+        tree.onMoveSelected('e5');
+        expect(tree.recentMoveSquares, {'e7', 'e5'});
+        tree.onMoveSelected('Nf3');
+        expect(tree.recentMoveSquares, {'g1', 'f3'});
+        tree.goBack();
+        expect(tree.recentMoveSquares, {'e7', 'e5'});
+        tree.resetToStart();
+        expect(tree.recentMoveSquares, isEmpty);
+      },
+    );
+
+    test(
+      'first open from an absent variation puts the board at the root',
+      () async {
+        final board = _Board()..position = _play(['d4', 'd5']);
+        final tree = _make(board)..openingTree = _line(['e4', 'e5']);
+        await tree.enter();
+        expect(tree.treeCurrentMoveSequence, isEmpty);
+        expect(board.position.fen, Chess.initial.fen);
+        expect(tree.recentMoveSquares, isEmpty);
+      },
+    );
+
+    test(
+      'a saved root remains the root when returning from another game move',
+      () async {
+        final board = _Board();
+        final tree = _make(board)..openingTree = _line(['e4', 'e5']);
+        await tree.enter();
+        tree.toggle();
+        board.position = _play(['e4']);
+        await tree.enter();
+        expect(tree.treeCurrentMoveSequence, isEmpty);
+        expect(board.position.fen, Chess.initial.fen);
+        expect(tree.recentMoveSquares, isEmpty);
+      },
+    );
+
+    test('highlight uses the played move order after a transposition', () {
+      final board = _Board();
+      final tree = _make(board);
+      tree.openingTree = _line(['Nf3', 'd5', 'd4']);
+      tree.openingTree!.syncToMoveHistory(['d4', 'd5']);
+      tree.onMoveSelected('Nf3');
+      expect(tree.openingTree!.currentNode.move, 'd4');
+      expect(tree.recentMoveSquares, {'g1', 'f3'});
+    });
+
+    test(
       're-entering after a remount restores the tree line, not the start',
       () async {
         final board = _Board();

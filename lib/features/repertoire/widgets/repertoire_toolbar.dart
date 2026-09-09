@@ -514,31 +514,48 @@ class RepertoireActionsMenu extends StatelessWidget {
   List<AppMenuEntry> get _entries {
     final generate = <AppMenuEntry>[
       if (onPlanBuild != null)
-        AppMenuEntry(label: 'Plan the lines…', onRun: onPlanBuild!),
+        AppMenuEntry(
+          label: 'Plan the lines…',
+          icon: Icons.route_outlined,
+          onRun: onPlanBuild!,
+        ),
       // Under GENERATE so it reads as what it is — the tree search (Fast or
       // Pure, chosen on its screen) started from the board — and not as a
       // third way of writing lines by hand.
       if (onGenerate != null)
-        AppMenuEntry(label: 'Generate from here…', onRun: onGenerate!),
+        AppMenuEntry(
+          label: 'Generate from here…',
+          icon: Icons.account_tree_outlined,
+          onRun: onGenerate!,
+        ),
     ];
     final import_ = <AppMenuEntry>[
       // One entry, not the old "Load from disk…" / "Paste PGN…" pair: the
       // dialog it opens offers both, so the menu no longer asks the user to
       // pick a transport before it will show them the import.
       if (onImportPgn != null)
-        AppMenuEntry(label: 'From a PGN…', onRun: onImportPgn!),
+        AppMenuEntry(
+          label: 'From a PGN…',
+          icon: Icons.description_outlined,
+          onRun: onImportPgn!,
+        ),
     ];
     final train = <AppMenuEntry>[
       if (onTrain != null)
         AppMenuEntry(
           label: 'Train this chapter',
+          icon: Icons.school_outlined,
           onRun: onTrain!,
           enabled: trainEnabled,
         ),
     ];
     final check = <AppMenuEntry>[
       if (onAudit != null)
-        AppMenuEntry(label: 'Audit for gaps…', onRun: onAudit!),
+        AppMenuEntry(
+          label: 'Audit for gaps…',
+          icon: Icons.gps_fixed,
+          onRun: onAudit!,
+        ),
     ];
     return [
       ..._headed(_generate, generate),
@@ -549,6 +566,7 @@ class RepertoireActionsMenu extends StatelessWidget {
         AppMenuEntry(
           heading: 'Library',
           label: 'Choose repertoire…',
+          icon: Icons.folder_open,
           onRun: onChoose!,
         ),
     ];
@@ -562,6 +580,7 @@ class RepertoireActionsMenu extends StatelessWidget {
     return [
       AppMenuEntry(
         label: first.label,
+        icon: first.icon,
         onRun: first.onRun,
         enabled: first.enabled,
         heading: heading,

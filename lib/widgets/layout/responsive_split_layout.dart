@@ -13,6 +13,10 @@ class ResponsiveSplitLayout extends StatelessWidget {
   final Widget secondary;
   final double breakpoint;
 
+  /// Let a workspace temporarily use the full area without remounting its
+  /// secondary pane or losing the state of its tabs.
+  final bool hidePrimary;
+
   /// Flex ratio for wide layout: primary / secondary.  Defaults to 5:5.
   final int primaryFlex;
   final int secondaryFlex;
@@ -22,6 +26,7 @@ class ResponsiveSplitLayout extends StatelessWidget {
     required this.primary,
     required this.secondary,
     this.breakpoint = kCompactBreakpoint,
+    this.hidePrimary = false,
     this.primaryFlex = 5,
     this.secondaryFlex = 5,
   });
@@ -33,16 +38,25 @@ class ResponsiveSplitLayout extends StatelessWidget {
         if (constraints.maxWidth >= breakpoint) {
           return Row(
             children: [
-              Expanded(flex: primaryFlex, child: primary),
-              Container(width: 1, color: AppColors.outline),
+              Expanded(
+                flex: hidePrimary ? 0 : primaryFlex,
+                child: hidePrimary ? const SizedBox.shrink() : primary,
+              ),
+              Container(width: hidePrimary ? 0 : 1, color: AppColors.outline),
               Expanded(flex: secondaryFlex, child: secondary),
             ],
           );
         }
         return Column(
           children: [
-            Expanded(flex: 4, child: primary),
-            const Divider(height: 1),
+            Expanded(
+              flex: hidePrimary ? 0 : 4,
+              child: hidePrimary ? const SizedBox.shrink() : primary,
+            ),
+            SizedBox(
+              height: hidePrimary ? 0 : 1,
+              child: const Divider(height: 1),
+            ),
             Expanded(flex: 6, child: secondary),
           ],
         );

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
+import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -62,6 +63,7 @@ void main() {
     final text = renderedText(tester);
 
     expect(text, contains('Blunder'));
+    expect(text, contains('Ng5??'));
     expect(text, contains('+0.3 → -6.0'));
     // Only the one move is marked, not the seven quiet ones.
     expect('Blunder'.allMatches(text).length, 1);
@@ -76,6 +78,119 @@ void main() {
     expect(text, contains('Best:'));
     expect(text, contains('Ba4'));
     expect(text, contains('Nf6'));
+  });
+
+  testWidgets('every graph classification appears for both sides without PVs', (
+    tester,
+  ) async {
+    const pgn =
+        '$header'
+        '1. e4 {[%eval -0.65]} e5 {[%eval 0.65]} '
+        '2. Nf3 {[%eval -1.20]} Nc6 {[%eval -1.20] [%maia 0.01]} '
+        '3. Bb5 {[%eval -1.20] [%maia 0.02]} a6 {[%eval -0.55]} '
+        '4. Ba4 {[%eval -1.85]} Nf6 {[%eval 0.20]} *';
+    final evals = parseCachedEvals(pgn)!.evals;
+    expect(evals.map((e) => e.classification), [
+      MoveClassification.inaccuracy,
+      MoveClassification.mistake,
+      MoveClassification.blunder,
+      MoveClassification.interesting,
+      MoveClassification.interesting,
+      MoveClassification.inaccuracy,
+      MoveClassification.mistake,
+      MoveClassification.blunder,
+    ]);
+    await pumpPgn(tester, pgn);
+    final text = renderedText(tester);
+    for (final label in ['Inaccuracy', 'Mistake', 'Blunder', 'Interesting']) {
+      expect(label.allMatches(text).length, 2, reason: label);
+    }
+    for (final move in [
+      'e4?!',
+      'e5?',
+      'Nf3??',
+      'Nc6!?',
+      'Bb5!?',
+      'a6?!',
+      'Ba4?',
+      'Nf6??',
+    ]) {
+      expect(text, contains(move));
+    }
+    expect(text, isNot(contains('Best:')));
+  });
+
+  testWidgets('analysis preserves author glyphs and positional annotations', (
+    tester,
+  ) async {
+    await pumpPgn(
+      tester,
+      '${header}1. e4 \$1 \$14 {[%eval -2.00]} '
+      'e5 \$4 \$18 {[%eval 2.00]} '
+      '2. Nf3 \$14 {[%eval -2.00]} *',
+    );
+    final text = renderedText(tester);
+    expect(text, contains('e4!⩲'));
+    expect(text, contains('e5??+−'));
+    expect(text, contains('Nf3??⩲'));
+    expect(text, isNot(contains('????')));
+  });
+
+  testWidgets('short games retain every label alongside existing prose', (
+    tester,
+  ) async {
+    await pumpPgn(
+      tester,
+      '$header'
+      '1. e4 {White note [%eval -2.00]} '
+      'e5 {Black note [%eval 2.00]} *',
+    );
+    final text = renderedText(tester);
+    expect('Blunder'.allMatches(text).length, 2);
+    expect(text, contains('White note'));
+    expect(text, contains('Black note'));
+  });
+
+  testWidgets('Black-to-move setup agrees with the graph', (tester) async {
+    const pgn =
+        '[SetUp "1"]\n'
+        '[FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"]\n\n'
+        '1... e5 {[%eval 2.00]} 2. Nf3 {[%eval -2.00]} *';
+    final evals = parseCachedEvals(pgn)!.evals;
+    expect(evals.first.isWhiteMove, isFalse);
+    expect(evals.last.isWhiteMove, isTrue);
+    expect(
+      evals.every((e) => e.classification == MoveClassification.blunder),
+      isTrue,
+    );
+    await pumpPgn(tester, pgn);
+    expect('Blunder'.allMatches(renderedText(tester)).length, 2);
+  });
+
+  testWidgets('null moves do not suppress later annotations', (tester) async {
+    await pumpPgn(
+      tester,
+      '$header'
+      '1. -- e5 {[%eval 0.00] [%maia 0.01]} '
+      '2. -- Nc6 {[%eval 0.00] [%maia 0.01]} '
+      '3. -- Nf6 {[%eval 0.00] [%maia 0.01]} *',
+    );
+    expect('Interesting'.allMatches(renderedText(tester)).length, 3);
+  });
+
+  testWidgets('rare mating move retains the graph interesting classification', (
+    tester,
+  ) async {
+    const pgn =
+        '$header'
+        '1. f3 {[%eval 0.00]} e5 {[%eval 0.00]} '
+        '2. g4 {[%eval #-1]} Qh4# {[%maia 0.01]} *';
+    expect(
+      parseCachedEvals(pgn)!.evals.last.classification,
+      MoveClassification.interesting,
+    );
+    await pumpPgn(tester, pgn);
+    expect(renderedText(tester), contains('Interesting'));
   });
 
   testWidgets('one hand-written eval on a move is still shown', (tester) async {

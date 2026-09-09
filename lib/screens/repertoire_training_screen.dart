@@ -384,15 +384,18 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
             AppMenuEntry(
               heading: 'Material',
               label: 'Choose repertoire…',
+              icon: Icons.folder_open,
               onRun: () => unawaited(_selectRepertoire()),
             ),
             if (repertoire != null) ...[
               AppMenuEntry(
                 label: 'Reload from disk',
+                icon: Icons.refresh,
                 onRun: () => unawaited(_training.loadRepertoire()),
               ),
               AppMenuEntry(
                 heading: 'Edit',
+                icon: Icons.edit_outlined,
                 label: _training.sourceIsStudy
                     ? 'Edit study…'
                     : 'Open in Builder',
@@ -712,7 +715,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
                   ),
                   AppMenuEntry(
                     label: 'Copy FEN',
-                    icon: Icons.content_copy,
+                    icon: Icons.copy,
                     onRun: () => unawaited(_copyFen()),
                   ),
                 ],

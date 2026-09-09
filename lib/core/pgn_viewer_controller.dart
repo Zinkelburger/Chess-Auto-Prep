@@ -103,6 +103,18 @@ class PgnViewerController extends ChangeNotifier
   DateTime? loadedFileModified;
   @override
   List<PgnGameEntry> allGames = [];
+
+  /// Monotonic version of the loaded collection's headers and movetext.
+  /// Cache game-record snapshots by this value as well as [allGames] identity:
+  /// annotations, ratings and opening classification mutate games in place.
+  /// Navigation, sorting and slice changes do not advance it. Content changes
+  /// advance it before notifying listeners, including in-memory-only edits.
+  int get collectionRevision => _collectionRevision;
+  int _collectionRevision = 0;
+
+  @override
+  void _markCollectionChanged() => _collectionRevision++;
+
   @override
   List<PgnGameEntry> filteredGames = [];
   @override
@@ -220,6 +232,7 @@ class PgnViewerController extends ChangeNotifier
   void setTreeIncludeVariations(bool value) =>
       _viewerTree.setIncludeVariations(value);
   OpeningTree? get openingTree => _viewerTree.openingTree;
+  Set<String> get treeRecentMoveSquares => _viewerTree.recentMoveSquares;
   bool get buildingTree => _viewerTree.buildingTree;
   int get treeBuildProcessed => _viewerTree.treeBuildProcessed;
   int get treeBuildTotal => _viewerTree.treeBuildTotal;
@@ -294,7 +307,8 @@ class PgnViewerController extends ChangeNotifier
   }
 
   /// Read-only access to the precomputed FEN → game-indices map.
-  /// Returns null while the index is being built.
+  /// Returns null while building or after movetext edits invalidate it;
+  /// consumers must then search the current game records by replay.
   @override
   Map<String, List<int>>? get fenIndex => _fenIndex.value;
 
@@ -407,6 +421,7 @@ class PgnViewerController extends ChangeNotifier
     // the file it described.
     loadedFileModified = null;
     allGames = entries;
+    _markCollectionChanged();
     adoptPersistedGames(entries);
     collectionPreamble = preamble;
     _detectProtagonist(entries);
@@ -668,7 +683,25 @@ class PgnViewerController extends ChangeNotifier
         changed = true;
       }
     }
-    if (changed) notifyListeners();
+    if (changed) {
+      _markCollectionChanged();
+      notifyListeners();
+    }
+  }
+
+  int? _collectionPlayerRevision;
+  List<PgnGameEntry>? _collectionPlayerSource;
+  String? _collectionPlayer;
+
+  /// Shared by Filter and Tree; based on the complete, unfiltered collection.
+  String? get collectionPlayer {
+    if (_collectionPlayerRevision != collectionRevision ||
+        !identical(_collectionPlayerSource, allGames)) {
+      _collectionPlayerRevision = collectionRevision;
+      _collectionPlayerSource = allGames;
+      _collectionPlayer = detectSingleCollectionPlayer(allGames);
+    }
+    return _collectionPlayer;
   }
 
   String? detectProtagonist() => detectProtagonistFrom(allGames);

@@ -293,7 +293,8 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
 
   @override
   Widget build(BuildContext context) {
-    final style = widget.style ?? AppTextStyles.body;
+    final style =
+        widget.style ?? AppTextStyles.forTheme(context, AppTextStyles.body);
     // Desktop text fields gain focus on mouse-down, opening the list before
     // the arrow's mouse-up. Toggle from the state before that focus change.
     final arrow = Listener(
@@ -321,7 +322,9 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
     final decoration = widget.compact
         ? InputDecoration(
             hintText: widget.hint,
-            hintStyle: style.copyWith(color: AppColors.onSurfaceMuted),
+            hintStyle: style.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
             isDense: true,
             border: InputBorder.none,
             contentPadding: const EdgeInsets.symmetric(
@@ -381,7 +384,7 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Text(
           widget.items.isEmpty ? 'Nothing to choose from' : widget.emptyMessage,
-          style: AppTextStyles.caption,
+          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
         ),
       );
     } else {
@@ -407,10 +410,12 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
           child: TextFieldTapRegion(
             child: Material(
               elevation: 6,
-              color: AppColors.surfaceElevated,
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: AppColors.divider),
+                side: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
               ),
               clipBehavior: Clip.antiAlias,
               child: ConstrainedBox(
@@ -445,7 +450,11 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
           child: Row(
             children: [
               if (item.icon != null) ...[
-                Icon(item.icon, size: 18, color: AppColors.onSurfaceMuted),
+                Icon(
+                  item.icon,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: 10),
               ],
               Expanded(
@@ -457,18 +466,22 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
                       item.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.body.copyWith(
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
-                      ),
+                      style: AppTextStyles.forTheme(context, AppTextStyles.body)
+                          .copyWith(
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
                     ),
                     if (item.subtitle != null)
                       Text(
                         item.subtitle!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.caption,
+                        style: AppTextStyles.forTheme(
+                          context,
+                          AppTextStyles.caption,
+                        ),
                       ),
                   ],
                 ),

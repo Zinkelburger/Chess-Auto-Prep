@@ -45,7 +45,7 @@ import '../utils/fen_utils.dart';
 
 /// Eval at a single ply (after the move is played).
 class MoveEval {
-  final int ply; // 1-based: 1 = after White's first move
+  final int ply; // 1-based mainline index, including null moves
   final String san;
   final String fenBefore;
   final String fenAfter;
@@ -81,7 +81,7 @@ class MoveEval {
     this.deliversCheckmate = false,
   });
 
-  bool get isWhiteMove => ply % 2 == 1;
+  bool get isWhiteMove => isWhiteToMove(fenBefore);
 
   /// A move worth a card or an inline mark that has no engine line to offer
   /// with it — the `[%pv]` was never stored (a review pass from before lines
@@ -134,7 +134,33 @@ class MoveEval {
   );
 }
 
-enum MoveClassification { normal, interesting, inaccuracy, mistake, blunder }
+enum MoveClassification {
+  normal,
+  interesting,
+  inaccuracy,
+  mistake,
+  blunder;
+
+  /// Standard PGN move-quality glyph, shared by display and saved analysis.
+  int? get nag => switch (this) {
+    normal => null,
+    interesting => 5,
+    inaccuracy => 6,
+    mistake => 2,
+    blunder => 4,
+  };
+
+  /// Fill an absent verdict without duplicating or replacing an annotator's
+  /// own move-quality glyph. Positional NAGs remain alongside the verdict.
+  List<int>? annotateNags(List<int>? existing) {
+    final id = nag;
+    if (id == null ||
+        (existing ?? const <int>[]).any((n) => n >= 1 && n <= 6)) {
+      return existing;
+    }
+    return [id, ...?existing];
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Winning-chance model (Lichess logistic)
@@ -159,11 +185,14 @@ double cpToWinningChance(int? cp, int? mate) =>
 /// movetext's own marker pass all begin from this value.
 double initialWinChance() => cpToWinningChance(0, null);
 
-/// Classify a move based on the change in winning chances.
-MoveClassification classifyMove(double delta) {
+/// Classify by winning-chance loss, then mark rare sound Maia moves interesting.
+MoveClassification classifyMove(double delta, {double? maiaProb}) {
   if (delta >= 0.30) return MoveClassification.blunder;
   if (delta >= 0.20) return MoveClassification.mistake;
   if (delta >= 0.10) return MoveClassification.inaccuracy;
+  if (maiaProb != null && maiaProb < 0.05) {
+    return MoveClassification.interesting;
+  }
   return MoveClassification.normal;
 }
 
@@ -185,6 +214,10 @@ typedef CachedGameAnalysis = ({
 CachedGameAnalysis? parseCachedEvals(String pgnText) {
   final parsed = PgnGame.parsePgn(pgnText);
   promoteNullMoveDummyMainline(parsed.moves);
+  return _parseGameEvals(parsed);
+}
+
+CachedGameAnalysis? _parseGameEvals(PgnGame<PgnNodeData> parsed) {
   final mainline = parsed.moves.mainline().toList();
   if (mainline.isEmpty) return null;
 
@@ -289,13 +322,10 @@ CachedGameAnalysis? parseCachedEvals(String pgnText) {
     final delta = e.isWhiteMove
         ? (prevWinChance - e.winningChance)
         : (e.winningChance - prevWinChance);
-    var classification = classifyMove(delta.clamp(0.0, 1.0));
-
-    if (classification == MoveClassification.normal &&
-        e.maiaProb != null &&
-        e.maiaProb! < 0.05) {
-      classification = MoveClassification.interesting;
-    }
+    final classification = classifyMove(
+      delta.clamp(0.0, 1.0),
+      maiaProb: e.maiaProb,
+    );
 
     classified.add(
       MoveEval(
@@ -365,6 +395,19 @@ String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
     fen: parsed.headers['FEN'],
     result: parsed.headers['Result'],
   );
+}
+
+/// Add standard quality NAGs to an analyzed game's mainline using the same
+/// classifications as cached review. Existing author glyphs and sidelines stay
+/// intact; games without enough stored evaluations are left untouched.
+void annotateGameMoveQuality(PgnGame<PgnNodeData> game) {
+  final analysis = _parseGameEvals(game);
+  if (analysis == null) return;
+  final moves = game.moves.mainline().toList();
+  for (final eval in analysis.evals) {
+    final move = moves[eval.ply - 1];
+    move.nags = eval.classification.annotateNags(move.nags);
+  }
 }
 
 class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
@@ -731,12 +774,11 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
             );
           }
 
-          // Classify immediately
-          final isWhiteMove = ply % 2 == 1;
+          // Measure the loss from the side that played the move.
+          final isWhiteMove = !p.isWhiteToMove;
           final delta = isWhiteMove
               ? (prevWinChance - winChance)
               : (winChance - prevWinChance);
-          var classification = classifyMove(delta.clamp(0.0, 1.0));
 
           // Run MAIA before choosing the best line, so "interesting" moves
           // (reclassified from normal) also get the pre-move engine line.
@@ -769,11 +811,10 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
             }
           }
 
-          if (classification == MoveClassification.normal &&
-              maiaProb != null &&
-              maiaProb < 0.05) {
-            classification = MoveClassification.interesting;
-          }
+          final classification = classifyMove(
+            delta.clamp(0.0, 1.0),
+            maiaProb: maiaProb,
+          );
 
           // The engine's line from the position *before* the move — what to
           // have played instead. One convention for every move, the same one
@@ -895,12 +936,15 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   /// the mainline alone deleted every variation and the game's opening
   /// comment from that file. Same writer as the comment editor's
   /// `ViewerGameModel.buildAnnotatedMovetext`, which lands in the same slot.
-  String _rebuildMovetext(PgnGame<PgnNodeData> game) => buildGameMovetext(
-    moves: game.moves,
-    comments: game.comments,
-    fen: game.headers['FEN'],
-    result: game.headers['Result'],
-  );
+  String _rebuildMovetext(PgnGame<PgnNodeData> game) {
+    annotateGameMoveQuality(game);
+    return buildGameMovetext(
+      moves: game.moves,
+      comments: game.comments,
+      fen: game.headers['FEN'],
+      result: game.headers['Result'],
+    );
+  }
 
   void cancel() {
     _generation++;

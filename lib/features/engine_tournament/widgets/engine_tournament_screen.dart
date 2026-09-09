@@ -121,6 +121,7 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
                   AppMenuEntry(
                     heading: 'Tournament',
                     label: 'New tournament',
+                    icon: Icons.emoji_events_outlined,
                     enabled: !_controller.isRunning,
                     onRun: _newTournament,
                   ),

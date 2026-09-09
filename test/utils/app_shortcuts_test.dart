@@ -76,7 +76,7 @@ void main() {
       expect(AppShortcut.leave.label, 'Esc');
       expect(AppShortcut.autoPlay.label, 'Space');
       expect(AppShortcut.searchGames.label, isEmpty);
-      expect(AppShortcut.flipBoard.label, isEmpty);
+      expect(AppShortcut.flipBoard.label, 'F');
     });
 
     test('join multiple chords with "or"', () {
@@ -100,7 +100,6 @@ void main() {
   group('KeyBinding.forShortcut', () {
     test('retired commands cannot dispatch or advertise a binding', () {
       for (final shortcut in [
-        AppShortcut.flipBoard,
         AppShortcut.toggleEngine,
         AppShortcut.nextTab,
         AppShortcut.searchGames,
@@ -138,6 +137,7 @@ void main() {
           KeyChord(LogicalKeyboardKey.escape),
           KeyChord(LogicalKeyboardKey.space),
           KeyChord(LogicalKeyboardKey.f11),
+          KeyChord(LogicalKeyboardKey.keyF),
           KeyChord(LogicalKeyboardKey.keyV, control: true),
           KeyChord(LogicalKeyboardKey.keyV, control: true, shift: true),
           KeyChord(LogicalKeyboardKey.keyZ, control: true),

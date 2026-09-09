@@ -50,13 +50,42 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
           child: Row(
             children: [
               const SizedBox(width: 4),
-              Text(
-                'Opening Tree',
-                style: AppTextStyles.subtitle.copyWith(
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: Text(
+                  '${controller.filteredGames.length} games',
+                  style: AppTextStyles.subtitle.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Spacer(),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Checkbox(
+                    value: controller.treeIncludeVariations,
+                    onChanged: (value) {
+                      if (!mounted || value == null) return;
+                      controller.setTreeIncludeVariations(value);
+                    },
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      if (!mounted) return;
+                      controller.setTreeIncludeVariations(
+                        !controller.treeIncludeVariations,
+                      );
+                    },
+                    child: const Text(
+                      'Include variations',
+                      style: AppTextStyles.muted,
+                    ),
+                  ),
+                ],
+              ),
               if (controller.buildingTree)
                 Flexible(
                   child: Row(
@@ -83,44 +112,6 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
                     ],
                   ),
                 ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            children: [
-              Text(
-                '${controller.filteredGames.length} games in this collection',
-                style: AppTextStyles.caption,
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Checkbox(
-                    value: controller.treeIncludeVariations,
-                    onChanged: (v) => controller.setTreeIncludeVariations(v!),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  GestureDetector(
-                    onTap: () => controller.setTreeIncludeVariations(
-                      !controller.treeIncludeVariations,
-                    ),
-                    child: const Text(
-                      'Include variations',
-                      style: AppTextStyles.muted,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                controller.treeIncludeVariations
-                    ? 'Counts include separate variation paths.'
-                    : 'One mainline per game.',
-                style: AppTextStyles.caption,
-              ),
             ],
           ),
         ),

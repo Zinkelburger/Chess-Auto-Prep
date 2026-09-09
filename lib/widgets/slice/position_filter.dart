@@ -42,7 +42,10 @@ class PositionFilter extends StatelessWidget {
       children: [
         Text(
           'Board position',
-          style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600),
+          style: AppTextStyles.forTheme(
+            context,
+            AppTextStyles.subtitle,
+          ).copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Row(
@@ -52,7 +55,10 @@ class PositionFilter extends StatelessWidget {
                 controller: text,
                 decoration: InputDecoration(
                   hintText: 'FEN or moves',
-                  hintStyle: AppTextStyles.hint,
+                  hintStyle: AppTextStyles.forTheme(
+                    context,
+                    AppTextStyles.hint,
+                  ),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 10,

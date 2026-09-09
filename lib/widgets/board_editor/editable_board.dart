@@ -110,6 +110,7 @@ class _EditableBoardState extends State<EditableBoard> {
   /// Every stroke starts here, on the press itself rather than on release:
   /// that is what lets a held button paint, and it is what lichess does.
   void _onPanDown(DragDownDetails details, double squareSize) {
+    if (!mounted) return;
     _panStart = details.localPosition;
     final square = _squareAt(details.localPosition, squareSize);
     if (square == null) return;
@@ -152,6 +153,7 @@ class _EditableBoardState extends State<EditableBoard> {
   }
 
   void _onPanEnd(double squareSize) {
+    if (!mounted) return;
     if (_isDragging && _dragFrom != null && _dragPosition != null) {
       final target = _squareAt(_dragPosition!, squareSize);
       if (target == null) {

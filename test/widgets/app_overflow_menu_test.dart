@@ -1,13 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/theme/app_motion.dart';
 import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
 
-Widget _wrap(List<AppMenuEntry> entries) => MaterialApp(
+Widget _wrap(
+  List<AppMenuEntry> entries, {
+  bool openOnHover = false,
+  bool enabled = true,
+}) => MaterialApp(
   home: Scaffold(
-    appBar: AppBar(actions: [AppOverflowMenu(entries: entries)]),
+    appBar: AppBar(
+      actions: [
+        AppOverflowMenu(
+          entries: entries,
+          openOnHover: openOnHover,
+          enabled: enabled,
+        ),
+      ],
+    ),
   ),
 );
 
@@ -17,6 +30,135 @@ Future<void> _open(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'hover opens Actions and switches submenus without running actions',
+    (tester) async {
+      final ran = <String>[];
+      await tester.pumpWidget(
+        _wrap([
+          AppMenuEntry(
+            label: 'Tree',
+            onRun: () {},
+            children: [
+              AppMenuEntry(
+                label: 'Collection tree',
+                onRun: () => ran.add('collection'),
+              ),
+              AppMenuEntry(
+                label: 'Database explorer',
+                onRun: () => ran.add('database'),
+              ),
+            ],
+          ),
+          AppMenuEntry(
+            label: 'Export',
+            onRun: () {},
+            children: [
+              AppMenuEntry(label: 'Export PGN', onRun: () => ran.add('export')),
+            ],
+          ),
+        ], openOnHover: true),
+      );
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(10, 100));
+      await mouse.moveTo(tester.getCenter(find.text('Actions')));
+      await tester.pumpAndSettle();
+      expect(find.text('Tree'), findsOneWidget);
+      // A normal click after pointer entry must not undo the hover opening.
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
+      expect(find.text('Tree'), findsOneWidget);
+      await mouse.moveTo(tester.getCenter(find.text('Tree')));
+      await tester.pumpAndSettle();
+      expect(find.text('Collection tree'), findsOneWidget);
+      expect(find.text('Database explorer'), findsOneWidget);
+      await mouse.moveTo(tester.getCenter(find.text('Export')));
+      await tester.pumpAndSettle();
+      expect(find.text('Collection tree'), findsNothing);
+      expect(find.text('Export PGN'), findsOneWidget);
+      expect(ran, isEmpty);
+      await mouse.moveTo(tester.getCenter(find.text('Tree')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Database explorer'));
+      await tester.pumpAndSettle();
+      expect(ran, ['database']);
+      expect(find.text('Tree'), findsNothing);
+      await mouse.removePointer();
+    },
+  );
+
+  testWidgets('hover dismissal follows pointer across the entire submenu', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap([
+        AppMenuEntry(
+          label: 'Export',
+          onRun: () {},
+          children: [
+            AppMenuEntry(
+              heading: 'Current game',
+              label: 'Save PGN',
+              onRun: () {},
+            ),
+          ],
+        ),
+      ], openOnHover: true),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(10, 300));
+    await mouse.moveTo(tester.getCenter(find.text('Actions')));
+    await tester.pumpAndSettle();
+    await mouse.moveTo(tester.getCenter(find.text('Export')));
+    await tester.pumpAndSettle();
+    await mouse.moveTo(tester.getCenter(find.text('Save PGN')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Save PGN'), findsOneWidget);
+    await mouse.moveTo(tester.getCenter(find.text('CURRENT GAME')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Save PGN'), findsOneWidget);
+    await mouse.moveTo(const Offset(10, 300));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Save PGN'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(find.text('Save PGN'), findsNothing);
+    expect(find.text('Export'), findsNothing);
+    await mouse.removePointer();
+  });
+
+  testWidgets(
+    'hover menu supports Escape, outside click and disabled anchors',
+    (tester) async {
+      final entries = [
+        AppMenuEntry(label: 'Paste PGN', shortcut: 'Ctrl+V', onRun: () {}),
+      ];
+      await tester.pumpWidget(_wrap(entries, openOnHover: true));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(10, 100));
+      await mouse.moveTo(tester.getCenter(find.text('Actions')));
+      await tester.pumpAndSettle();
+      expect(find.text('Paste PGN'), findsOneWidget);
+      expect(find.text('Ctrl+V'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Paste PGN'), findsNothing);
+      await mouse.moveTo(const Offset(10, 100));
+      await mouse.moveTo(tester.getCenter(find.text('Actions')));
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(10, 100));
+      await tester.pumpAndSettle();
+      expect(find.text('Paste PGN'), findsNothing);
+      await tester.pumpWidget(
+        _wrap(entries, openOnHover: true, enabled: false),
+      );
+      await mouse.moveTo(const Offset(10, 100));
+      await mouse.moveTo(tester.getCenter(find.text('Actions')));
+      await tester.pumpAndSettle();
+      expect(find.text('Paste PGN'), findsNothing);
+      await mouse.removePointer();
+    },
+  );
+
   testWidgets('export submenu opens on hover and runs only chosen action', (
     tester,
   ) async {
@@ -94,11 +236,11 @@ void main() {
     expect(ran, ['Second']);
   });
 
-  testWidgets('a divider above a row does not shift which row runs', (
+  testWidgets('a group separator does not shift which row runs', (
     tester,
   ) async {
     // The entry list and the popup's item list differ in length once
-    // dividers are in play; the row must still carry its own index.
+    // separators are in play; the row must still carry its own index.
     final ran = <String>[];
     await tester.pumpWidget(
       _wrap([

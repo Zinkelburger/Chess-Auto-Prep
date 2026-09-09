@@ -12,7 +12,8 @@ library;
 import 'dart:async';
 import '../widgets/common/name_entry_dialog.dart';
 import 'dart:convert';
-import 'package:dartchess/dartchess.dart' show PgnGame, PgnNodeData, Position;
+import 'package:dartchess/dartchess.dart'
+    show Chess, Setup, PgnGame, PgnNodeData, Position;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,6 +50,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
+import '../utils/chess_utils.dart' show playSanOrNullMove;
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
@@ -76,9 +78,11 @@ import '../widgets/game_search_dialog.dart';
 import '../widgets/study/add_to_study_flow.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
+import '../widgets/pgn/pgn_tree_toolbar.dart';
 import '../widgets/pgn/solitaire_status_widgets.dart';
 import '../widgets/pgn_viewer_widget.dart';
-import '../widgets/pgn_slice_dialog.dart';
+import '../widgets/pgn/pgn_game_filter_workspace.dart';
+import '../models/pgn_filter_models.dart';
 import '../widgets/solitaire_trophy_cabinet.dart';
 import '../widgets/opening_explorer/opening_explorer_panel.dart';
 
@@ -122,6 +126,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   late final PgnWorkspace _tabController;
   final Map<int, String> _databasePaths = {};
   int? _databasePickerTab;
+  List<PgnGameEntry>? _filterSource;
+  List<GameRecord> _filterRecords = [];
+  int? _filterRevision;
+  String? _filterOriginFen;
   final Map<int, PgnDatabasePanelController> _databasePanels = {};
   final Map<int, PgnGameEntry> _referenceGames = {};
   final Map<int, PgnViewerWidgetController> _referenceReaders = {};
@@ -140,8 +148,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   int get _lineTabIndex => _lineTabVisible ? 1 : -1;
 
-  @override
-  int get _explorerTabIndex => _lineTabVisible ? 2 : 1;
+  int get _explorerTabIndex => PgnWorkspace.explorer;
 
   @override
   int get _analysisTabIndex => _lineTabVisible ? 3 : 2;
@@ -220,6 +227,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   GameViewPreferences _viewPreferences = const GameViewPreferences();
   bool _preferencesChanged = false;
   @override
+  ({String fen, String? uci})? _engineThreat;
+  @override
+  void _setEngineThreat(String fen, String? uci) {
+    if (!mounted || _engineThreat == (fen: fen, uci: uci)) return;
+    setState(() => _engineThreat = (fen: fen, uci: uci));
+  }
+
+  @override
   bool _viewingStudy = false;
   String? _studyPathChecked;
 
@@ -235,7 +250,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _setViewPreferences(GameViewPreferences value) {
     if (!mounted) return;
     _preferencesChanged = true;
-    setState(() => _viewPreferences = value);
+    setState(() {
+      if (_viewPreferences.engine != value.engine) _engineThreat = null;
+      _viewPreferences = value;
+    });
     if (!value.playback) _controller.stopAutoPlay();
     _controller.setAutoPlaySpeed(value.speed);
     _controller.setAutoNextGame(value.autoNext);
@@ -253,6 +271,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _showPanel(int index) {
     _controller.stopAutoPlay();
     if (!mounted) return;
+    if (index == PgnWorkspace.filters && _tabController.index != index) {
+      _filterOriginFen = normalizeFen(_controller.currentPosition.fen);
+    }
     if (index == _lineTabIndex) _lineTabVisited = true;
     _tabController.index = index;
     setState(() {});
@@ -292,6 +313,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Widget _buildExtraPanel(int id) {
+    if (id == PgnWorkspace.filters) return _buildFilterWorkspace();
     if (id == _databasePickerTab) {
       return PgnDatabasePicker(
         recent: _controller.recentFiles,
@@ -461,6 +483,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Solitaire hides the side-panel tabs entirely; don't fight the mode.
   void _applyHandoffTab(OpenPgnViewer handoff) {
     if (_controller.isSolitaireMode) return;
+    // Recent-game clicks keep the annotated Game reader selected, with the
+    // saved graph ready in its own tab. Restoring scores needs no engine pass.
+    if (handoff.gameId != null && _analysisController.evals.isNotEmpty) {
+      _tabController.openInBackground(_analysisTabIndex);
+    }
     switch (handoff.tab) {
       case PgnViewerTab.game:
         _tabController.animateTo(_kGameTab);
@@ -600,7 +627,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _onSideTabChanged() {
     if (!mounted) return;
     _controller.stopAutoPlay();
-    final wantTree = _tabController.index == PgnWorkspace.tree;
+    final wantTree =
+        _tabController.index == PgnWorkspace.tree &&
+        !_tabController.databaseTree;
     if (wantTree != _controller.showOpeningTree) {
       _controller.toggleOpeningTree();
     }
@@ -610,6 +639,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       return;
     }
     if (wantTree) return;
+    if (_tabController.index == PgnWorkspace.filters &&
+        _filterOriginFen != null) {
+      _controller.onPositionChanged(
+        Chess.fromSetup(Setup.parseFen(expandFen(_filterOriginFen!))),
+      );
+      return;
+    }
     if (_tabController.index == _lineTabIndex) {
       // Book has its own cursor. Never leave the hidden Game reader advancing
       // or editing behind it after a tab switch.
@@ -733,28 +769,47 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   @override
-  void _openSliceDialog() {
-    unawaited(
-      showDialog(
-        context: context,
-        builder: (ctx) => PgnSliceDialog(
-          collectionName: _controller.filePath == null
-              ? 'Pasted games'
-              : p.basename(_controller.filePath!),
-          allGames: _controller.allGames
-              .map((g) => (headers: g.headers, pgnText: g.pgnText))
-              .toList(),
-          currentFen: normalizeFen(_controller.currentPosition.fen),
-          initialConfig: _controller.activeSliceConfig.isEmpty
-              ? null
-              : _controller.activeSliceConfig,
-          fenIndex: _controller.fenIndex,
-          presets: _controller.slicePresets,
-          onApply: (indices, config) {
-            _controller.applySlice(indices, config);
-          },
-        ),
-      ).then((_) => _reclaimFocus()),
+  void _openSliceDialog() => _showPanel(PgnWorkspace.filters);
+
+  Widget _buildFilterWorkspace() {
+    final source = _controller.allGames;
+    if (!identical(source, _filterSource) ||
+        _filterRevision != _controller.collectionRevision) {
+      _filterSource = source;
+      _filterRevision = _controller.collectionRevision;
+      _filterRecords = source
+          .map(
+            (game) => (
+              headers: Map<String, String>.of(game.headers),
+              pgnText: game.pgnText,
+            ),
+          )
+          .toList();
+    }
+    return PgnGameFilterWorkspace(
+      key: ObjectKey(source),
+      collectionName: _controller.filePath == null
+          ? 'Pasted games'
+          : p.basename(_controller.filePath!),
+      allGames: _filterRecords,
+      collectionPlayer: _controller.collectionPlayer,
+      currentFen:
+          _filterOriginFen ?? normalizeFen(_controller.currentPosition.fen),
+      initialConfig: _controller.activeSliceConfig,
+      fenIndex: _controller.fenIndex,
+      onApply: (indices, config) {
+        if (!mounted || !identical(source, _controller.allGames)) return;
+        _controller.applySlice(indices, config);
+        _showPanel(PgnWorkspace.game);
+      },
+      onOpenGame: (indices, config, gameIndex) {
+        if (!mounted || !identical(source, _controller.allGames)) return;
+        _controller.applySlice(indices, config);
+        _controller.goToGame(
+          _controller.filteredGames.indexOf(source[gameIndex]),
+        );
+        _showPanel(PgnWorkspace.game);
+      },
     );
   }
 
@@ -881,6 +936,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // TabBarView keeps the Game child alive while Book is visible. Engine or
     // async widget updates from that hidden child must not steal the board.
     if (!_onLineTab &&
+        _tabController.index != PgnWorkspace.filters &&
         !_referenceReaders.containsKey(_tabController.index) &&
         !_controller.showOpeningTree) {
       _controller.onPositionChanged(position);
@@ -1089,16 +1145,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     await Clipboard.setData(ClipboardData(text: pgnText));
     if (!mounted) return;
     showAppSnackBar(context, AppMessages.pgnCopied);
-    _reclaimFocus();
-  }
-
-  @override
-  Future<void> _copyCollectionPgn() async {
-    await Clipboard.setData(
-      ClipboardData(text: _controller.buildExportContent()),
-    );
-    if (!mounted) return;
-    showAppSnackBar(context, 'Collection PGN copied');
     _reclaimFocus();
   }
 
@@ -1391,7 +1437,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   PgnViewerHandle get _activeMovetextController => _paneRouter.active;
 
   @override
-  void _handleBoardMove(String san) => _paneRouter.playBoardMove(san);
+  void _handleBoardMove(String san) {
+    if (_tabController.index == PgnWorkspace.filters) {
+      final next = playSanOrNullMove(_controller.currentPosition, san);
+      if (next != null) {
+        _filterOriginFen = next.fen;
+        _controller.onPositionChanged(next);
+      }
+      return;
+    }
+    _paneRouter.playBoardMove(san);
+  }
 
   /// The viewer's keyboard shortcuts, dispatched through [handleKeyBindings]
   /// (never while typing). Order matters: the solitaire block shadows keys
@@ -1611,7 +1667,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
-      handleKeyBindings(_keyBindings, event, node: node);
+      _tabController.index == PgnWorkspace.filters
+      ? KeyEventResult.ignored
+      : handleKeyBindings(_keyBindings, event, node: node);
 
   @override
   Widget build(BuildContext context) {

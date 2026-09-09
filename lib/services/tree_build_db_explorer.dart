@@ -121,7 +121,13 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
 
       final rootFreq = freqMap.get(rootFen);
       if (rootFreq != null) {
-        root.totalGames = rootFreq.reachCount;
+        // The scan records a reach for every position it plays *into* and
+        // for a custom start position, but not for the standard start, so
+        // the root's count falls back to its played total the same way the
+        // probability denominator does in [_processDbExplorerNode].
+        root.totalGames = rootFreq.reachCount > 0
+            ? rootFreq.reachCount
+            : rootFreq.playedTotal;
       }
 
       final queue = FrontierQueue(bestFirst: config.bestFirst);
@@ -233,7 +239,12 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
       return;
     }
 
-    node.totalGames = pos.reachCount;
+    // Legacy caches recorded moves only, and the scan never records a reach
+    // for the standard start position: the played total stands in for both
+    // the annotation and the probability denominator.
+    int reach = pos.reachCount;
+    if (reach == 0) reach = pos.playedTotal;
+    node.totalGames = reach;
 
     // Transposition detection
     if (TreeBuildService._resolveTranspositionOrRegister(run, node, queue)) {
@@ -242,11 +253,6 @@ extension TreeBuildServiceDbExplorer on TreeBuildService {
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     final basePri = effectiveSearchPriority(node);
-
-    int reach = pos.reachCount;
-    if (reach == 0) {
-      reach = pos.moves.fold(0, (sum, m) => sum + m.count);
-    }
 
     if (isOurMove) {
       // Our move: add all moves from the frequency map.  Search priority
