@@ -204,7 +204,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                           onAnalysisComplete: _detectTrophies,
                           detectedTrophies: _detectedTrophies,
                         ),
-                        4 => PgnOpeningTreePanel(controller: _controller),
+                        4 => _buildTreeTab(),
                         5 => _buildDatabaseTools(),
                         _ => _buildExtraPanel(id),
                       },
@@ -217,6 +217,37 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
       ],
     );
   }
+
+  Widget _buildTreeTab() => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.all(8),
+        child: SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('Collection tree')),
+            ButtonSegment(value: true, label: Text('Database explorer')),
+          ],
+          selected: {_tabController.databaseTree},
+          showSelectedIcon: false,
+          onSelectionChanged: (selection) {
+            if (!mounted) return;
+            _tabController.databaseTree = selection.single;
+          },
+        ),
+      ),
+      Expanded(
+        child: _tabController.databaseTree
+            ? _buildExplorerTab()
+            : PgnOpeningTreePanel(
+                controller: _controller,
+                onFilter: _openSliceDialog,
+                onExportPosition: _exportTreePosition,
+              ),
+      ),
+    ],
+  );
+
+  Future<void> _exportTreePosition();
 
   Widget _buildCollectionNavigation() => GameNavBar(
     games: GameNavItem.fromEntries(

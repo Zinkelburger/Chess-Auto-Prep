@@ -68,7 +68,7 @@ Future<void> _finishMatching(WidgetTester tester) async {
 
 void main() {
   testWidgets(
-    'conditions combine with a user-entered position on a light workspace',
+    'conditions combine with a user-entered position using the app theme',
     (tester) async {
       List<int>? applied;
       SliceConfig? config;
@@ -80,7 +80,6 @@ void main() {
         },
       );
       expect(find.byType(Dialog), findsNothing);
-      expect(find.text('Practice.pgn · 2 games'), findsOneWidget);
       expect(find.byType(LinesPreviewPanel), findsOneWidget);
       expect(
         tester
@@ -90,10 +89,10 @@ void main() {
       );
       expect(find.text('King’s Indian'), findsNothing);
       expect(
-        Theme.of(tester.element(find.text('Find games'))).brightness,
-        Brightness.light,
+        Theme.of(tester.element(find.byType(HeaderFilters))).brightness,
+        Brightness.dark,
       );
-      await tester.tap(find.text('Add condition'));
+      await tester.tap(find.text('Player'));
       await _finishMatching(tester);
       final controller = tester
           .widget<HeaderFilters>(find.byType(HeaderFilters))
@@ -116,8 +115,6 @@ void main() {
       expect(controller.headerRows.single.field, 'Black');
       expect(controller.headerRows.single.controller.text, 'Fischer');
       expect(find.text('Show 1 game'), findsOneWidget);
-      await tester.tap(find.text('Position'));
-      await tester.pumpAndSettle();
       final position = find.widgetWithText(TextField, 'FEN or moves');
       await tester.ensureVisible(position);
       await tester.enterText(
@@ -135,6 +132,33 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('one player per field; comma-separated PGN names stay valid', (
+    tester,
+  ) async {
+    await _open(tester);
+    await tester.tap(find.text('Player'));
+    await tester.pumpAndSettle();
+    final controller = tester
+        .widget<HeaderFilters>(find.byType(HeaderFilters))
+        .controller;
+    final input = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          identical(widget.controller, controller.headerRows.single.controller),
+    );
+    await tester.enterText(input, 'Fischer; Spassky');
+    await tester.pumpAndSettle();
+    expect(find.text('Use one player name per filter'), findsOneWidget);
+    expect(tester.widget<FilledButton>(_apply).onPressed, isNull);
+    await tester.enterText(input, 'Fischer, Robert');
+    await _finishMatching(tester);
+    expect(find.text('Use one player name per filter'), findsNothing);
+    expect(controller.headerRows.single.hasMultiplePlayerNames, isFalse);
+    expect(find.widgetWithText(TextField, 'FEN or moves'), findsOneWidget);
+    expect(find.text('Add condition'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('never applies stale results or an invalid FEN or regex', (
     tester,
@@ -179,8 +203,6 @@ void main() {
     tester,
   ) async {
     await _open(tester);
-    await tester.tap(find.text('Position'));
-    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Set up a board'));
     await tester.tap(find.text('Set up a board'));
     await tester.pumpAndSettle();
@@ -205,9 +227,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('draft survives hiding its tab and expanding the workspace', (
-    tester,
-  ) async {
+  testWidgets('draft survives tab switches beside the board', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     var searching = true;
@@ -224,7 +244,6 @@ void main() {
               ],
             ),
             body: ResponsiveSplitLayout(
-              hidePrimary: searching,
               primary: const Center(child: Text('Game board')),
               secondary: IndexedStack(
                 index: searching ? 1 : 0,

@@ -10,7 +10,6 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   set _singleGameFocus(bool value);
   GameViewPreferences get _viewPreferences;
   void _setViewPreferences(GameViewPreferences value);
-  int get _explorerTabIndex;
   int get _analysisTabIndex;
   void _showPanel(int index);
   PgnViewerHandle get _activeMovetextController;
@@ -104,19 +103,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             ),
             AppMenuEntry(
               label: 'Tree',
-              onRun: () {},
-              children: [
-                AppMenuEntry(
-                  label: 'Collection tree',
-                  onRun: () => _showPanel(PgnWorkspace.tree),
-                ),
-                AppMenuEntry(
-                  label: 'Database explorer',
-                  hint:
-                      'Explore Lichess, Masters, or your local TWIC database.',
-                  onRun: () => _showPanel(_explorerTabIndex),
-                ),
-              ],
+              onRun: () => _showPanel(PgnWorkspace.tree),
             ),
           ],
           AppMenuEntry(

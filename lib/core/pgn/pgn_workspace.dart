@@ -16,20 +16,28 @@ class PgnWorkspace extends ChangeNotifier {
     books: 'My books',
     explorer: 'Database explorer',
     analysis: 'Analysis Graph',
-    tree: 'Collection tree',
+    tree: 'Tree',
     collection: 'Collection',
-    filters: 'Filter games',
+    filters: 'Filter',
   };
   int _index = game;
   bool _selecting = false;
+  bool _databaseTree = false;
+  bool get databaseTree => _databaseTree;
+  set databaseTree(bool value) {
+    if (_databaseTree == value) return;
+    _databaseTree = value;
+    _notifySelection();
+  }
 
   /// Controller notifications raised while a tab is being selected still
   /// describe the old board owner. Reconcile them only after the switch.
   void synchronizeTree(bool visible) {
     if (_selecting) return;
-    if (visible && index != tree) {
+    if (visible && (index != tree || _databaseTree)) {
+      _databaseTree = false;
       index = tree;
-    } else if (!visible && index == tree) {
+    } else if (!visible && index == tree && !_databaseTree) {
       index = game;
     }
   }
@@ -48,6 +56,11 @@ class PgnWorkspace extends ChangeNotifier {
   List<int> get openTabs => List.unmodifiable(_open);
   int get index => _index;
   set index(int value) {
+    if (value == explorer) {
+      _databaseTree = true;
+      value = tree;
+    }
+
     if (!titles.containsKey(value)) return;
     if (!_open.contains(value)) _open.add(value);
     _index = value;

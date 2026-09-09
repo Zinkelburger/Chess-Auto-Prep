@@ -65,7 +65,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       builder: (context, constraints) {
         final wide =
             constraints.maxWidth >=
-            560 * MediaQuery.textScalerOf(context).scale(14) / 14;
+            460 * MediaQuery.textScalerOf(context).scale(14) / 14;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -162,11 +162,12 @@ class _HeaderFiltersState extends State<HeaderFilters> {
     spacing: 8,
     runSpacing: 8,
     children: [
-      OutlinedButton.icon(
-        onPressed: () => _addField(kPlayerHeaderField),
-        icon: const Icon(Icons.add, size: 18),
-        label: const Text('Add condition'),
-      ),
+      if (!widget.simple)
+        TextButton.icon(
+          onPressed: () => _addField(kPlayerHeaderField),
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Add condition'),
+        ),
       if (widget.simple) ...[
         for (final field in [
           kPlayerHeaderField,
@@ -187,7 +188,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
               PopupMenuItem(value: field, child: Text(_fieldLabel(field))),
           ],
           child: const Padding(
-            padding: EdgeInsets.all(12),
+            padding: EdgeInsets.all(8),
             child: Text('More…'),
           ),
         ),
@@ -206,7 +207,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
     }
 
     final field = _NewConditionFocus(
-      focusOnMount: row.value.isEmpty,
+      focusOnMount: row.value.isEmpty && !widget.simple,
       child: ChoiceField<String>(
         label: wide ? null : 'Field',
         hint: 'Choose field',
@@ -236,18 +237,21 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       ],
       onChanged: (mode) => edit((i) => controller.setHeaderMode(i, mode)),
     );
-    final value = _HeaderValueEditor(
-      // Refresh autocomplete when its source/rule changes. In particular,
-      // choosing the same value again after switching rules must set Exact.
-      key: ValueKey((row.controller, row.field, row.mode, _suggestions)),
-      row: row,
-      label: wide ? null : 'Value',
-      suggestions: _suggestions,
-      onChanged: (value) => edit((i) => controller.setHeaderValue(i, value)),
-      onSelected: (value) => edit((i) {
-        controller.setHeaderValue(i, value);
-        controller.setHeaderMode(i, MatchMode.exact);
-      }),
+    final value = _NewConditionFocus(
+      focusOnMount: row.value.isEmpty && widget.simple,
+      child: _HeaderValueEditor(
+        // Refresh autocomplete when its source/rule changes. In particular,
+        // choosing the same value again after switching rules must set Exact.
+        key: ValueKey((row.controller, row.field, row.mode, _suggestions)),
+        row: row,
+        label: wide ? null : 'Value',
+        suggestions: _suggestions,
+        onChanged: (value) => edit((i) => controller.setHeaderValue(i, value)),
+        onSelected: (value) => edit((i) {
+          controller.setHeaderValue(i, value);
+          controller.setHeaderMode(i, MatchMode.exact);
+        }),
+      ),
     );
     final remove = IconButton(
       tooltip: 'Remove filter',
@@ -268,18 +272,19 @@ class _HeaderFiltersState extends State<HeaderFilters> {
             Row(
               children: [
                 Expanded(child: field),
+                const SizedBox(width: 8),
+                Expanded(child: rule),
                 remove,
               ],
             ),
-            const SizedBox(height: 8),
-            rule,
             const SizedBox(height: 8),
             value,
           ],
           if (widget.games != null &&
               row.field == kPlayerHeaderField &&
               row.mode == MatchMode.contains &&
-              row.value.trim().isNotEmpty)
+              row.value.trim().isNotEmpty &&
+              !row.hasMultiplePlayerNames)
             _buildNameMatchesLine(row.value),
         ],
       ),
@@ -308,7 +313,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
   }
 
   static String _nameMatchesLabel(PlayerNameMatchSummary summary) {
-    if (summary.matchedGames == 0) return 'No games match these names';
+    if (summary.matchedGames == 0) return 'No games match this name';
     const maxShown = 8;
     final variants = summary.variantCounts.entries.toList();
     final shown = variants
@@ -364,7 +369,9 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
         row.mode == MatchMode.exact &&
         row.value.isNotEmpty &&
         !_ecoExact.hasMatch(row.value.trim());
-    String? error;
+    String? error = row.hasMultiplePlayerNames
+        ? 'Use one player name per filter'
+        : null;
     if (row.mode == MatchMode.regex && row.value.isNotEmpty) {
       try {
         RegExp(row.value, caseSensitive: false);
@@ -398,11 +405,7 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
               'WhiteElo' || 'BlackElo' || 'StudyRating' => 'Rating',
               _ => 'Type a value',
             },
-            helperText: showEcoWarn
-                ? 'Expected A00–E99'
-                : row.field == kPlayerHeaderField
-                ? 'Either colour; separate names with ;'
-                : null,
+            helperText: showEcoWarn ? 'Expected A00–E99' : null,
             helperMaxLines: 3,
             helperStyle: showEcoWarn
                 ? AppTextStyles.forTheme(

@@ -275,7 +275,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Line metrics view (outline column):** The old `RepertoireLinesBrowser` (search/filter/sort, coverage/ease/coherence columns, gap buttons) plus the Lines/Traps segmented toggle, reached from the outline header's metrics button; "Back to chapters" returns to the outline. The Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges, and expandable detail cards. `BoardPreviewController` is threaded through; a `FloatingBoardPreview` overlay is mounted in the view's `Stack`.
 
-**Tree tab (analysis panel):** The Tree tab shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree → Collection tree). Course-style `*` games fold RAVs in; frequency shows as **lines** when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
+**Tree tab (analysis panel):** The Tree tab shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **lines** when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
 
 
 **"Generate from here" button:** In the nav controls bar, a `+` icon button opens the generation dialog pre-seeded with the current position FEN.
@@ -506,19 +506,21 @@ They do not contribute to Learn/Review counts or either scheduling queue.
 ### PGN viewer (Open PGN)
 
 **Actions ▾** groups **Edit PGN / Add to Study**, **Analysis Graph / Tree**,
-and **Export**. Actions opens on hover or click; its Tree and Export submenus
-also open on hover or click, with keyboard navigation and Escape dismissal.
-**Tree → Collection tree** explores the loaded, filtered games;
-**Tree → Database explorer** opens the Lichess / Masters / local TWIC source
-selector. The tabs use those same names. Export offers PGN, SCID, Copy Game PGN
+and **Export**. Actions and its Export submenu open on hover or click, with
+keyboard navigation and Escape dismissal. **Tree** opens one tab with a
+**Collection tree / Database explorer** selector. Collection tree explores the
+filtered games, offers detected-player White/Black shortcuts, and exports the
+complete games reaching its current position. Database explorer offers Lichess,
+Masters and local TWIC sources. Export offers PGN, SCID, Copy Game PGN
 and Copy Collection PGN. File exports and collection copy use the current filtered games, with the count shown in the
 submenu; pasted collections can also be exported. Repertoire creation belongs
 in the repertoire builder.
 
-**Filter** opens a light editor with Player, Event, Year, Result and Opening
-choices. Each added field has a value and a separate matching-rule menu; More
-contains less common fields. Position & moves and matching-game preview expand
-on demand. Active filters show the matching/total game count.
+**Filter games** opens a normal **Filter** tab beside the board, using the app
+theme. Compact Player, Event, Year, Result and Opening buttons add a field and
+focus its value; More contains less common fields. Each player field takes one
+name (commas within PGN names are preserved). Board position is always expanded;
+Move sequence is optional. Matching games update live below the controls.
 The mode selector shows only the current mode name, without a “View” prefix.
 
 In the reader, **Enter** focuses a variation. **←** steps back through its root
@@ -545,7 +547,7 @@ Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetCon
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
 Keyboard: `↑`/`↓` previous/next game, `←`/`→` moves, Home/End jump, Enter focus variation, Esc return to parent or leave mode, F11 fullscreen, Space playback, and Ctrl/Cmd+V paste PGN. Enter starts solitaire during setup. Text fields retain their normal editing behavior.
 Workspace tabs: the main **Game** stays open. **Actions** opens Analysis Graph,
-Collection tree or Database explorer through its Tree submenu. The strip appears only with
+Filter or Tree; the Tree tab contains the collection/database source selector. The strip appears only with
 two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles
 only opened tabs. Readers stay mounted and preserve their cursors. The settings
 gear opens view preferences.
@@ -581,7 +583,7 @@ alternatives. In reading mode, a commented leaf repeating the principal move
 reads as an inline reference; annotated or continuing branches and edit mode
 retain full variation controls. The source PGN and every branch remain intact.
 
-Opening tree (**Actions → Tree → Collection tree**): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). The viewer defaults to one mainline per game. **Include variations**, in the tree header, rebuilds both tree frequencies and the matching-game index with all RAVs. Other builder callers retain their existing automatic policy (RAVs for course `Result *`, mainlines for scored games). `*` results count toward frequency without a fake 50% draw bar — the UI says **lines** instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Game headers show the players, date and completed result (`1-0`, `0-1`, or `1/2-1/2`); the result stays visible when a long title is truncated. Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Show moves** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
+Opening tree (**Actions → Tree**): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). The viewer defaults to one mainline per game. **Include variations**, in the tree header, rebuilds both tree frequencies and the matching-game index with all RAVs. Other builder callers retain their existing automatic policy (RAVs for course `Result *`, mainlines for scored games). `*` results count toward frequency without a fake 50% draw bar — the UI says **lines** instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Game headers show the players, date and completed result (`1-0`, `0-1`, or `1/2-1/2`); the result stays visible when a long title is truncated. Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Show moves** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
 
 **Cursor ownership (same rule as Game vs Line tabs, Analysis `_navigateTo`, Repertoire `jump`):** each exploration surface keeps its own place. The merged opening tree is not the current game's move list, and its tab retains the game reader offstage. Re-entering the tree — its tab, or the app-bar back after a games-at-position click — restores the tree cursor onto the board; it does not resync from that remounted game. Clicking a game in the list parks that game at the tree FEN (`pgnInitialFen` → `PgnViewerWidget.initialFen`). Leaving the tree for the Game tab restores the game cursor snapshotted when the tree was opened. First open (no saved tree cursor) still syncs the tree to the current game FEN. Next/prev/sort/slice clear the landing FEN so those games start at move 1. Repertoire's Tree tab and Analysis's opening-tree tab already share one board cursor and stay mounted, so they do not need this snapshot.
 ```
@@ -1225,7 +1227,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `slice/position_filter.dart` | Shared position filter widget (FEN/SAN input + Apply/Clear + "Board position" chip); uses `PositionPreviewIcon` for hover board preview |
 | `slice/header_filters.dart` | Reusable Field / Rule / Value table, stacked at narrow widths. Distinct collection headers suggest names/events with game counts; typing uses literal case-insensitive matching and selecting a suggestion sets the visible rule to exact. Presets are ordinary editable rows; shared by collection search and inline import filters |
 | `slice/sequence_filter.dart` | Shared move sequence filter widget ([gap]-separated groups) |
-| `pgn/pgn_game_filter_workspace.dart` | Full-width **Filter games** workspace tab opened from **Actions → Filter games**. A light surface, one Add condition control, and collapsed Position/Move sequence sections keep the initial view simple. Draft conditions and results survive tab switches; a changed collection starts a fresh draft from its saved filters. Conditions use editable field/rule/value rows with collection suggestions. Position accepts FEN/moves, current-board capture, and the embedded board editor. Exact position search includes all pieces, side to move, castling and en passant (mainline and variations). Live results have no separate hidden search; Show games or a result click applies the draft and returns to Game. Debounces by 300ms and hides stale results; invalid input and unfinished board setup block applying. Optional `fenIndex` accelerates position matching. |
+| `pgn/pgn_game_filter_workspace.dart` | **Filter** workspace tab opened from **Actions → Filter games**, beside the board with the shared app theme. Compact named filter buttons focus newly added values; player fields reject multiple semicolon-separated names. Board position stays expanded and accepts FEN/moves, current-board capture and an embedded board editor. Move sequence is collapsible. Draft conditions and results survive tab switches; a changed collection starts a fresh draft from saved filters. Exact position search includes side to move, castling and en passant (mainline and variations). Live results use `LinesPreviewPanel`; Show games or a result click applies the draft and returns to Game. Debounces by 300ms and hides stale results; invalid input and unfinished board setup block applying. Optional `fenIndex` accelerates matching. |
 | `position_preview_icon.dart` | **Shared hover-preview widget** — eye icon that shows a floating 200×200 board overlay on hover via `bestEffortPositionFromInput`; supports FEN, SAN, and `[gap]`-separated sequences; used by `PositionFilter` |
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Engine-analysis setup (depth, min games, thresholds, workers); reached from the positions list's eval-sort empty state or the kebab. Re-downloading games is no longer part of it — that is the subtitle refresh button |

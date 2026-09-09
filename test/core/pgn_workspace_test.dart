@@ -17,6 +17,25 @@ void main() {
     expect(tabs.openTabs, [0]);
     expect(tabs.index, 0);
   });
+  test('database explorer is a source inside the single Tree tab', () {
+    final tabs = PgnWorkspace();
+    tabs.index = PgnWorkspace.explorer;
+    expect(tabs.index, PgnWorkspace.tree);
+    expect(tabs.openTabs, [PgnWorkspace.game, PgnWorkspace.tree]);
+    expect(tabs.databaseTree, isTrue);
+    tabs.synchronizeTree(false);
+    expect(tabs.index, PgnWorkspace.tree);
+    tabs.databaseTree = false;
+    tabs.index = PgnWorkspace.filters;
+    tabs.index = PgnWorkspace.tree;
+    expect(tabs.databaseTree, isFalse);
+    expect(tabs.openTabs, [
+      PgnWorkspace.game,
+      PgnWorkspace.tree,
+      PgnWorkspace.filters,
+    ]);
+  });
+
   test('old tree notifications cannot undo a tab switch or close', () {
     final tabs = PgnWorkspace();
     var treeVisible = false;

@@ -144,38 +144,33 @@ void main() {
     });
   }
 
-  testWidgets('narrow rows stack labelled editable controls without overflow', (
-    tester,
-  ) async {
-    final controller = _controller();
-    await _show(tester, controller, width: 300, simple: true);
-    expect(
-      tester.getRect(_rule).top,
-      greaterThan(tester.getRect(_field).bottom),
-    );
-    expect(
-      tester.getRect(_value(controller)).top,
-      greaterThan(tester.getRect(_rule).bottom),
-    );
-    for (final label in ['Field', 'Rule', 'Value']) {
-      expect(find.text(label), findsOneWidget);
-    }
-    await tester.enterText(_value(controller), 'custom event');
-    await tester.pumpAndSettle();
-    expect(controller.headerConfigs.single.value, 'custom event');
-    expect(tester.takeException(), isNull);
-    await _close(tester, controller);
-  });
+  testWidgets(
+    'narrow rows put the value below field and rule without overflow',
+    (tester) async {
+      final controller = _controller();
+      await _show(tester, controller, width: 300, simple: true);
+      expect(tester.getRect(_rule).top, tester.getRect(_field).top);
+      expect(
+        tester.getRect(_value(controller)).top,
+        greaterThan(tester.getRect(_rule).bottom),
+      );
+      for (final label in ['Field', 'Rule', 'Value']) {
+        expect(find.text(label), findsOneWidget);
+      }
+      await tester.enterText(_value(controller), 'custom event');
+      await tester.pumpAndSettle();
+      expect(controller.headerConfigs.single.value, 'custom event');
+      expect(tester.takeException(), isNull);
+      await _close(tester, controller);
+    },
+  );
 
   testWidgets('large text switches a 620px pane to stacked controls', (
     tester,
   ) async {
     final controller = _controller();
     await _show(tester, controller, textScale: 1.5);
-    expect(
-      tester.getRect(_rule).top,
-      greaterThan(tester.getRect(_field).bottom),
-    );
+    expect(tester.getRect(_rule).top, tester.getRect(_field).top);
     expect(tester.takeException(), isNull);
     await _close(tester, controller);
   });
@@ -311,7 +306,7 @@ void main() {
     expect(tester.widget<TextField>(_field.last).focusNode!.hasFocus, isTrue);
     await tester.enterText(_value(controller, 1), 'Carlsen; Magnus');
     await tester.pumpAndSettle();
-    expect(find.textContaining('Carlsen, Magnus ×2'), findsOneWidget);
+    expect(find.text('Use one player name per filter'), findsOneWidget);
     expect(controller.headerConfigs.first.value, '1960');
     expect(controller.headerConfigs.last.value, 'Carlsen; Magnus');
     expect(tester.takeException(), isNull);

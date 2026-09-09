@@ -1,9 +1,8 @@
-/// A persistent, full-width collection search: editable conditions, position
+/// A persistent collection search beside the board: editable conditions, position
 /// setup and live results. The host owns tab navigation and applying the draft.
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -12,6 +11,7 @@ import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
 import '../../services/pgn_parsing_service.dart' as pgn;
 import '../../theme/app_text_styles.dart';
+import '../../theme/app_colors.dart';
 import '../board_editor/board_editor_panel.dart';
 import '../lines_preview_panel.dart';
 import '../slice/header_filters.dart';
@@ -65,6 +65,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
       _filters.positionParse.error != null ||
       _filters.sequenceError != null ||
       _filters.headerRows.any((row) {
+        if (row.hasMultiplePlayerNames) return true;
         if (row.mode != MatchMode.regex || row.value.isEmpty) return false;
         try {
           RegExp(row.value);
@@ -223,92 +224,26 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   }
 
   @override
-  Widget build(BuildContext context) => Theme(
-    data: ThemeData(
-      useMaterial3: true,
-      fontFamily: AppTextStyles.uiFamily,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF237C70),
-        brightness: Brightness.light,
-        surface: const Color(0xFFFAFCF9),
-      ),
-      inputDecorationTheme: const InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.white,
-      ),
-    ),
-    child: Builder(builder: _buildWorkspace),
-  );
-
-  Widget _buildWorkspace(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surface,
+  Widget build(BuildContext context) => Material(
+    color: AppColors.surfaceElevated,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 18, 24, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Find games',
-                style: AppTextStyles.forTheme(context, AppTextStyles.title),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${widget.collectionName ?? 'This collection'} · ${widget.allGames.length} games',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.forTheme(context, AppTextStyles.muted),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth < 1000) {
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildFilters(context),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        height: _board == null ? 360 : 660,
-                        child: _buildResults(context),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SizedBox(
-                    width: math.min(680, constraints.maxWidth * .57),
-                    child: Scrollbar(
-                      controller: _filterScroll,
-                      thumbVisibility: true,
-                      child: SingleChildScrollView(
-                        controller: _filterScroll,
-                        padding: const EdgeInsets.all(24),
-                        child: _buildFilters(context),
-                      ),
-                    ),
-                  ),
-                  const VerticalDivider(width: 1),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: _buildResults(context),
-                    ),
-                  ),
-                ],
-              );
-            },
+          child: SingleChildScrollView(
+            controller: _filterScroll,
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildFilters(context),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: _board == null ? 300 : 660,
+                  child: _buildResults(context),
+                ),
+              ],
+            ),
           ),
         ),
         _buildFooter(context),
@@ -319,73 +254,37 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   Widget _buildFilters(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Text(
-        'Game details',
-        style: AppTextStyles.forTheme(context, AppTextStyles.bodyStrong),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        'Choose what matters. Results update as you type.',
-        style: AppTextStyles.forTheme(context, AppTextStyles.caption),
-      ),
-      const SizedBox(height: 12),
-      HeaderFilters(
-        controller: _filters,
-        games: widget.allGames,
-        simple: false,
-      ),
-      const SizedBox(height: 20),
-      const Divider(height: 1),
+      HeaderFilters(controller: _filters, games: widget.allGames, simple: true),
       const SizedBox(height: 16),
-      ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        title: Text(
-          'Position',
-          style: AppTextStyles.forTheme(context, AppTextStyles.body),
+      IgnorePointer(
+        ignoring: _board != null,
+        child: Opacity(
+          opacity: _board == null ? 1 : .5,
+          child: PositionFilter(controller: _filters),
         ),
-        subtitle: Text(
-          'Use moves, a FEN or the board',
-          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
-        ),
-        initiallyExpanded: _filters.hasPositionFilter,
+      ),
+      const SizedBox(height: 6),
+      Wrap(
+        spacing: 8,
+        runSpacing: 4,
         children: [
-          IgnorePointer(
-            ignoring: _board != null,
-            child: Opacity(
-              opacity: _board == null ? 1 : .5,
-              child: PositionFilter(controller: _filters),
-            ),
+          TextButton.icon(
+            icon: const Icon(Icons.grid_on, size: 16),
+            label: const Text('Current position'),
+            onPressed: _board != null
+                ? null
+                : () {
+                    if (!mounted) return;
+                    _filters.setPositionFen(widget.currentFen);
+                  },
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ActionChip(
-                label: const Text('Current position'),
-                tooltip: 'Use the board position from the tab you came from',
-                onPressed: _board != null
-                    ? null
-                    : () {
-                        if (!mounted) return;
-                        _filters.setPositionFen(widget.currentFen);
-                      },
-              ),
-              OutlinedButton.icon(
-                onPressed: _board == null ? _editBoard : null,
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('Set up a board'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Find this exact position anywhere in a game, including variations.',
-            style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+          TextButton.icon(
+            onPressed: _board == null ? _editBoard : null,
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            label: const Text('Set up a board'),
           ),
         ],
       ),
-      const SizedBox(height: 12),
       ExpansionTile(
         tilePadding: EdgeInsets.zero,
         title: Text(
@@ -462,17 +361,11 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
               : '${_matchingIndices.length} matching games',
           style: AppTextStyles.forTheme(context, AppTextStyles.bodyStrong),
         ),
-        const SizedBox(height: 4),
-        Text(
-          _boardDirty
-              ? 'Use this position or discard the setup to continue.'
-              : _invalid
-              ? 'Check the highlighted filters to continue.'
-              : _hasFilters
-              ? 'Open a game, or show all matches in the viewer.'
-              : 'Add a condition to narrow the list.',
-          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
-        ),
+        if (_invalid)
+          Text(
+            'Check the highlighted filters.',
+            style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+          ),
         const SizedBox(height: 12),
         Expanded(
           child: _computing
@@ -531,7 +424,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   }
 
   Widget _buildFooter(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     decoration: BoxDecoration(
       color: Theme.of(context).colorScheme.surface,
       border: Border(
@@ -544,12 +437,11 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
       overflowSpacing: 8,
       children: [
         TextButton(onPressed: _reset, child: const Text('Clear filters')),
-        Text(
-          _boardDirty
-              ? 'Board setup has unapplied changes'
-              : 'Your draft stays here when you switch tabs.',
-          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
-        ),
+        if (_boardDirty)
+          Text(
+            'Board setup has unapplied changes',
+            style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+          ),
         FilledButton(
           key: const ValueKey('apply-game-filters'),
           onPressed: _canApply && _matchingIndices.isNotEmpty

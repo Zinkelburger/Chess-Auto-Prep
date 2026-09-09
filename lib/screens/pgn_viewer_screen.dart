@@ -12,7 +12,8 @@ library;
 import 'dart:async';
 import '../widgets/common/name_entry_dialog.dart';
 import 'dart:convert';
-import 'package:dartchess/dartchess.dart' show PgnGame, PgnNodeData, Position;
+import 'package:dartchess/dartchess.dart'
+    show Chess, Setup, PgnGame, PgnNodeData, Position;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,6 +50,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
+import '../utils/chess_utils.dart' show playSanOrNullMove;
 import '../utils/app_shortcuts.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_breadcrumb_trail.dart';
@@ -145,8 +147,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   int get _lineTabIndex => _lineTabVisible ? 1 : -1;
 
-  @override
-  int get _explorerTabIndex => _lineTabVisible ? 2 : 1;
+  int get _explorerTabIndex => PgnWorkspace.explorer;
 
   @override
   int get _analysisTabIndex => _lineTabVisible ? 3 : 2;
@@ -609,7 +610,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _onSideTabChanged() {
     if (!mounted) return;
     _controller.stopAutoPlay();
-    final wantTree = _tabController.index == PgnWorkspace.tree;
+    final wantTree =
+        _tabController.index == PgnWorkspace.tree &&
+        !_tabController.databaseTree;
     if (wantTree != _controller.showOpeningTree) {
       _controller.toggleOpeningTree();
     }
@@ -619,6 +622,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       return;
     }
     if (wantTree) return;
+    if (_tabController.index == PgnWorkspace.filters &&
+        _filterOriginFen != null) {
+      _controller.onPositionChanged(
+        Chess.fromSetup(Setup.parseFen(expandFen(_filterOriginFen!))),
+      );
+      return;
+    }
     if (_tabController.index == _lineTabIndex) {
       // Book has its own cursor. Never leave the hidden Game reader advancing
       // or editing behind it after a tab switch.
@@ -908,6 +918,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // TabBarView keeps the Game child alive while Book is visible. Engine or
     // async widget updates from that hidden child must not steal the board.
     if (!_onLineTab &&
+        _tabController.index != PgnWorkspace.filters &&
         !_referenceReaders.containsKey(_tabController.index) &&
         !_controller.showOpeningTree) {
       _controller.onPositionChanged(position);
@@ -1178,6 +1189,31 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _reclaimFocus();
   }
 
+  @override
+  Future<void> _exportTreePosition() async {
+    final games = [
+      for (final index in _controller.gamesAtTreePosition())
+        _controller.filteredGames[index],
+    ];
+    if (games.isEmpty) return;
+    final content = '${games.map((game) => game.pgnText).join('\n\n')}\n';
+    final outUri = await FilePicker.saveFile(
+      dialogTitle: 'Export ${games.length} games at this position',
+      fileName: 'games-at-position.pgn',
+      type: FileType.custom,
+      allowedExtensions: ['pgn'],
+      bytes: utf8.encode(content),
+    );
+    if (!mounted) return;
+    if (outUri != null) {
+      showAppSnackBar(
+        context,
+        'Exported ${games.length} games to ${p.basename(outUri.toFilePath())}',
+      );
+    }
+    _reclaimFocus();
+  }
+
   /// Write the filtered games as a Scid v5 database.
   ///
   /// PGN stays the default export because everything reads it; this is for
@@ -1418,7 +1454,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   PgnViewerHandle get _activeMovetextController => _paneRouter.active;
 
   @override
-  void _handleBoardMove(String san) => _paneRouter.playBoardMove(san);
+  void _handleBoardMove(String san) {
+    if (_tabController.index == PgnWorkspace.filters) {
+      final next = playSanOrNullMove(_controller.currentPosition, san);
+      if (next != null) {
+        _filterOriginFen = next.fen;
+        _controller.onPositionChanged(next);
+      }
+      return;
+    }
+    _paneRouter.playBoardMove(san);
+  }
 
   /// The viewer's keyboard shortcuts, dispatched through [handleKeyBindings]
   /// (never while typing). Order matters: the solitaire block shadows keys
@@ -1661,7 +1707,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                   children: [
                     ResponsiveSplitLayout(
                       breakpoint: kCompactBreakpoint,
-                      hidePrimary: _tabController.index == PgnWorkspace.filters,
                       primary: _buildBoardPane(),
                       secondary: _buildSidePanel(),
                     ),

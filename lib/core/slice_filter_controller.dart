@@ -120,6 +120,11 @@ class HeaderFilterRow {
   }) : value = initialValue,
        controller = TextEditingController(text: initialValue);
 
+  bool get hasMultiplePlayerNames =>
+      (field == kPlayerHeaderField || field == 'White' || field == 'Black') &&
+      mode != MatchMode.regex &&
+      value.contains(';');
+
   HeaderFilterConfig toConfig() =>
       HeaderFilterConfig(field: field, mode: mode, value: value);
 }
