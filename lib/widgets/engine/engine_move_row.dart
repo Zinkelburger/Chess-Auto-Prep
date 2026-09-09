@@ -10,7 +10,7 @@ import '../../utils/san_display.dart';
 import '../clickable_move_line.dart';
 import '../../models/merged_move.dart';
 
-/// One row of the unified engine table: move SAN + eval chip + PV continuation
+/// One row of the unified engine table: eval + move SAN + PV continuation
 /// (+ Maia%). Extracted from `unified_engine_pane.dart`. Hover/preview and
 /// tap callbacks are driven through the injected [boardPreview] and callbacks;
 /// [previewStackKey] is the parent's preview stack anchor.
@@ -73,6 +73,21 @@ class EngineMoveRow extends StatelessWidget {
                   ? CrossAxisAlignment.start
                   : CrossAxisAlignment.center,
               children: [
+                SizedBox(
+                  width: evalWidth,
+                  child: Text(
+                    move.evalString,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: evalColor,
+                      fontFamily: AppTextStyles.monoFamily,
+                    ),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (!narrow) const SizedBox(width: 8),
                 Builder(
                   builder: (anchorContext) {
                     return MouseRegion(
@@ -106,21 +121,6 @@ class EngineMoveRow extends StatelessWidget {
                     );
                   },
                 ),
-                SizedBox(
-                  width: evalWidth,
-                  child: Text(
-                    move.evalString,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: evalColor,
-                      fontFamily: AppTextStyles.monoFamily,
-                    ),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (!narrow) const SizedBox(width: 8),
                 Expanded(
                   child: _buildContinuation(
                     move,

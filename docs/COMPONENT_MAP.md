@@ -468,6 +468,10 @@ CoherenceService.compute(lines)
 
 ### Engine analysis
 
+Engine rows in `UnifiedEnginePane` and `InlineEngineBar` show the evaluation
+first, followed by the first move and PV continuation. Evaluations stay aligned
+in a left column; move taps and hover previews work throughout the line.
+
 ```
 Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off
 UnifiedEnginePane (when lifecycle ≠ off)
@@ -479,6 +483,11 @@ UnifiedEnginePane (when lifecycle ≠ off)
 InlineEngineBar — lazy dedicated EngineWorkerSlot; normal Stockfish discovery writes best eval to EvalCache on completion; hypothetical threat searches use threatPositionFen and skip cache writes
 ExpectimaxLinesPane — same floating preview on line hover
 ```
+
+Inline engine hover boards follow the main board perspective in Repertoire,
+PGN Viewer, Player Analysis, Planner, Studies and Tactics. Stepping through a
+line preserves that perspective regardless of whose turn it is; flipping the
+main board also refreshes an already open hover board.
 
 ### Training
 
@@ -507,8 +516,9 @@ They do not contribute to Learn/Review counts or either scheduling queue.
 ### PGN viewer (Open PGN)
 
 **Actions ▾** offers icon-labelled **Edit PGN**, **Show Engine / Hide Engine**,
-**Evaluation graph / Tree**, and **Copy Game PGN** (the overlapping-squares
-copy icon). **Export** contains **Export as PGN…**, **Export as SCID…**, and
+**Evaluation graph / Tree**, **Copy Game PGN**, and **Copy FEN** (the overlapping-squares
+copy icon). Copy FEN copies the currently displayed board position, including
+when viewing a variation or reference game. **Export** contains **Export as PGN…**, **Export as SCID…**, and
 **Add to Study** (or **Edit study** for an open study). File exports use the
 current filtered collection, whose count appears in the submenu; pasted
 collections can also be exported. There is no collection clipboard action.
@@ -1210,7 +1220,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `engine/unified_engine_pane.dart` | MultiPV table, hoverable PV via `ClickableMoveLineWidget`; FEN changes schedule analysis post-frame (avoids setState-during-build); DB column hidden; best eval persisted to `EvalCache` via `_persistBestEvalToCache()` |
 | `engine/expectimax_lines_pane.dart` | Position table from the built tree: every move with practical (expectimax) value beside engine eval, ★ on the chosen move, continuation; honest empty states (no tree / not in tree / leaf). Never runs the engine |
 | `engine/expectimax_panel_host.dart` | Thin wrapper binding [ExpectimaxLinesPane] to a [RepertoireController] cursor (or `fenOverride`); used by [EditContextZone], [InlineExpectimaxBar] and [RepertoireAnalysisDock] |
-| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
+| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; reserves a fixed height for the configured MultiPV count while enabled, including loading and positions with fewer legal moves; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
 | `engine/inline_expectimax_bar.dart` | Compact toggleable expectimax bar for right pane; wraps `ExpectimaxPanelHost(compact: true)` with toggle switch and settings gear |
 | `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |
 | `engine/engine_pane_footer.dart` | Engine pane footer controls |

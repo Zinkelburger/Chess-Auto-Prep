@@ -676,7 +676,11 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
                       SingleChildScrollView(
-                        child: InlineEngineBar(fen: fen, isActive: true),
+                        child: InlineEngineBar(
+                          fen: fen,
+                          isActive: true,
+                          previewFlipped: !widget.isWhite,
+                        ),
                       ),
                       RepertoireDatabasePane(
                         fen: fen,
