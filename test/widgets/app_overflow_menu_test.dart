@@ -87,6 +87,45 @@ void main() {
     },
   );
 
+  testWidgets('hover dismissal follows pointer across the entire submenu', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap([
+        AppMenuEntry(
+          label: 'Export',
+          onRun: () {},
+          children: [
+            AppMenuEntry(
+              heading: 'Current game',
+              label: 'Save PGN',
+              onRun: () {},
+            ),
+          ],
+        ),
+      ], openOnHover: true),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(10, 300));
+    await mouse.moveTo(tester.getCenter(find.text('Actions')));
+    await tester.pumpAndSettle();
+    await mouse.moveTo(tester.getCenter(find.text('Export')));
+    await tester.pumpAndSettle();
+    await mouse.moveTo(tester.getCenter(find.text('Save PGN')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Save PGN'), findsOneWidget);
+    await mouse.moveTo(tester.getCenter(find.text('CURRENT GAME')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Save PGN'), findsOneWidget);
+    await mouse.moveTo(const Offset(10, 300));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Save PGN'), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(find.text('Save PGN'), findsNothing);
+    expect(find.text('Export'), findsNothing);
+    await mouse.removePointer();
+  });
+
   testWidgets(
     'hover menu supports Escape, outside click and disabled anchors',
     (tester) async {

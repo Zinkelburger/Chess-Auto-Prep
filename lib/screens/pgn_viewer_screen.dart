@@ -227,6 +227,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   GameViewPreferences _viewPreferences = const GameViewPreferences();
   bool _preferencesChanged = false;
   @override
+  ({String fen, String? uci})? _engineThreat;
+  @override
+  void _setEngineThreat(String fen, String? uci) {
+    if (!mounted || _engineThreat == (fen: fen, uci: uci)) return;
+    setState(() => _engineThreat = (fen: fen, uci: uci));
+  }
+
+  @override
   bool _viewingStudy = false;
   String? _studyPathChecked;
 
@@ -242,7 +250,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _setViewPreferences(GameViewPreferences value) {
     if (!mounted) return;
     _preferencesChanged = true;
-    setState(() => _viewPreferences = value);
+    setState(() {
+      if (_viewPreferences.engine != value.engine) _engineThreat = null;
+      _viewPreferences = value;
+    });
     if (!value.playback) _controller.stopAutoPlay();
     _controller.setAutoPlaySpeed(value.speed);
     _controller.setAutoNextGame(value.autoNext);
@@ -1129,16 +1140,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     await Clipboard.setData(ClipboardData(text: pgnText));
     if (!mounted) return;
     showAppSnackBar(context, AppMessages.pgnCopied);
-    _reclaimFocus();
-  }
-
-  @override
-  Future<void> _copyCollectionPgn() async {
-    await Clipboard.setData(
-      ClipboardData(text: _controller.buildExportContent()),
-    );
-    if (!mounted) return;
-    showAppSnackBar(context, 'Collection PGN copied');
     _reclaimFocus();
   }
 

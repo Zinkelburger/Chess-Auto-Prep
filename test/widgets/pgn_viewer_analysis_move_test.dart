@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
+import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
+import 'package:chess_auto_prep/theme/app_colors.dart';
 
 Future<PgnViewerWidgetController> _pumpViewer(
   WidgetTester tester,
@@ -24,6 +26,48 @@ Future<PgnViewerWidgetController> _pumpViewer(
 }
 
 void main() {
+  testWidgets('inline preview selects only its move and replaces board trail', (
+    tester,
+  ) async {
+    final controller = await _pumpViewer(
+      tester,
+      '1. e4 {[%eval 0.2]} e5 {[%eval 0.2]} '
+      '2. Nf3 {[%eval -6.0] [%pv Bc4,Nf6,d3]} Nc6 {[%eval -6.0]} '
+      '3. Bb5 {[%eval -6.0]} a6 {[%eval -6.0]}',
+    );
+    controller.goToMainLineIndex(3);
+    await tester.pumpAndSettle();
+    expect(controller.recentMoveSquares, {'g1', 'f3'});
+
+    await tester.tap(find.byTooltip('Preview comment move').at(1));
+    await tester.pumpAndSettle();
+    expect(controller.inVariation, isTrue);
+    expect(controller.recentMoveSquares, {'g8', 'f6'});
+    final mainlineSelections = tester
+        .widgetList<MoveChip>(find.byType(MoveChip))
+        .where((chip) => chip.decoration?.color == AppColors.pgnMoveCurrentBg);
+    expect(
+      mainlineSelections,
+      isEmpty,
+      reason: 'the parked mainline move is not the position on the board',
+    );
+
+    controller.goBack();
+    await tester.pumpAndSettle();
+    expect(controller.recentMoveSquares, {'f1', 'c4'});
+    controller.goBack();
+    await tester.pumpAndSettle();
+    expect(controller.inVariation, isFalse);
+    expect(controller.recentMoveSquares, {'e7', 'e5'});
+    expect(
+      tester
+          .widgetList<MoveChip>(find.byType(MoveChip))
+          .where((chip) => chip.decoration?.color == AppColors.pgnMoveCurrentBg)
+          .map((chip) => chip.san),
+      ['e5'],
+    );
+  });
+
   testWidgets('a move matching the mainline follows it instead of forking', (
     tester,
   ) async {

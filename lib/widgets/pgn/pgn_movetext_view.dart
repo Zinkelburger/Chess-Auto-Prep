@@ -34,6 +34,7 @@ import '../../utils/pgn_comment_utils.dart'
         parseRichComment,
         parseCommentTokens,
         parseEvalComment,
+        parseMaiaComment,
         parsePvComment,
         stripEngineTokens,
         stripPgnTokens,
@@ -297,9 +298,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
     }
 
-    /// The engine's line from before a marked move. Its own row, because
-    /// there are only ever a handful of these in a game — unlike the per-ply
-    /// scores they replace, which is the whole reason those are gone.
+    /// The engine's line from before each classified move, on its own row.
     void emitBestLine(_EvalNote note, int moveIndex) {
       final spans = _bestLineSpans(view, note.pv, moveIndex);
       if (spans.isEmpty) return;
@@ -360,8 +359,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     final prefix = _buildPrefixPositions(view);
 
     // On a game an engine has been over, the per-ply `[%eval]` comments are
-    // not rendered at all — only the moves whose score actually moved get a
-    // mark. A game with no mistakes in it still hides them, which is why this
+    // not rendered at all — every classified move gets a mark, including
+    // interesting moves identified by Maia. A game with no mistakes in it still hides them, which is why this
     // is a separate flag and not "are there any notes".
     final machineAnnotated = _isMachineAnnotated(view.moveHistory);
     final evalNotes = machineAnnotated
@@ -430,7 +429,9 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
 
       final isCurrentMove =
-          i == view.mainLineIndex - 1 && view.analysisPath.isEmpty;
+          i == view.mainLineIndex - 1 &&
+          view.analysisPath.isEmpty &&
+          view.activeInlineLine == null;
 
       // SAN styling is independent of NAGs and of whether a sideline exists —
       // structure (own-row, indented variations) marks branches, not a hue.

@@ -136,6 +136,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
 
             final chart = LineChart(
               LineChartData(
+                backgroundColor: AppColors.surfaceContainer,
                 minY: -yBound,
                 maxY: yBound,
                 minX: 0,
@@ -305,13 +306,13 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                     ),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: _whiteAreaFill.withAlpha(30),
+                      color: _whiteAreaFill,
                       cutOffY: 0,
                       applyCutOffY: true,
                     ),
                     aboveBarData: BarAreaData(
                       show: true,
-                      color: _blackAreaFill.withAlpha(40),
+                      color: _blackAreaFill,
                       cutOffY: 0,
                       applyCutOffY: true,
                     ),
