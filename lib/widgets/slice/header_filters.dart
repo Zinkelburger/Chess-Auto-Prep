@@ -71,9 +71,12 @@ class _HeaderFiltersState extends State<HeaderFilters> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (controller.headerRows.length > 1) ...[
-              const Text(
+              Text(
                 'Match all conditions',
-                style: AppTextStyles.bodyStrong,
+                style: AppTextStyles.forTheme(
+                  context,
+                  AppTextStyles.bodyStrong,
+                ),
               ),
               const SizedBox(height: 8),
             ],
@@ -81,9 +84,27 @@ class _HeaderFiltersState extends State<HeaderFilters> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _columns(
-                  const Text('Field', style: AppTextStyles.bodyStrong),
-                  const Text('Rule', style: AppTextStyles.bodyStrong),
-                  const Text('Value', style: AppTextStyles.bodyStrong),
+                  Text(
+                    'Field',
+                    style: AppTextStyles.forTheme(
+                      context,
+                      AppTextStyles.bodyStrong,
+                    ),
+                  ),
+                  Text(
+                    'Rule',
+                    style: AppTextStyles.forTheme(
+                      context,
+                      AppTextStyles.bodyStrong,
+                    ),
+                  ),
+                  Text(
+                    'Value',
+                    style: AppTextStyles.forTheme(
+                      context,
+                      AppTextStyles.bodyStrong,
+                    ),
+                  ),
                   const SizedBox(width: 44),
                 ),
               ),
@@ -144,7 +165,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       OutlinedButton.icon(
         onPressed: () => _addField(kPlayerHeaderField),
         icon: const Icon(Icons.add, size: 18),
-        label: const Text('Filter'),
+        label: const Text('Add condition'),
       ),
       if (widget.simple) ...[
         for (final field in [
@@ -277,10 +298,10 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       padding: const EdgeInsets.only(left: 4, top: 4),
       child: Text(
         _nameMatchesLabel(summary),
-        style: AppTextStyles.caption.copyWith(
+        style: AppTextStyles.forTheme(context, AppTextStyles.caption).copyWith(
           color: summary.matchedGames == 0
-              ? AppColors.warning
-              : AppColors.onSurfaceMuted,
+              ? Theme.of(context).colorScheme.error
+              : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
     );
@@ -365,7 +386,7 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
         fieldViewBuilder: (context, text, focus, submit) => TextField(
           controller: text,
           focusNode: focus,
-          style: AppTextStyles.body,
+          style: AppTextStyles.forTheme(context, AppTextStyles.body),
           decoration: InputDecoration(
             labelText: widget.label,
             errorText: error,
@@ -384,8 +405,11 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
                 : null,
             helperMaxLines: 3,
             helperStyle: showEcoWarn
-                ? AppTextStyles.caption.copyWith(color: AppColors.warning)
-                : AppTextStyles.caption,
+                ? AppTextStyles.forTheme(
+                    context,
+                    AppTextStyles.caption,
+                  ).copyWith(color: Theme.of(context).colorScheme.error)
+                : AppTextStyles.forTheme(context, AppTextStyles.caption),
             isDense: true,
             border: const OutlineInputBorder(),
           ),
@@ -418,7 +442,7 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
             alignment: Alignment.topLeft,
             child: Material(
               elevation: 6,
-              color: AppColors.surfaceElevated,
+              color: Theme.of(context).colorScheme.surfaceContainerLow,
               borderRadius: BorderRadius.circular(8),
               clipBehavior: Clip.antiAlias,
               child: SizedBox(
@@ -429,11 +453,14 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.all(10),
+                      Padding(
+                        padding: const EdgeInsets.all(10),
                         child: Text(
                           'Values in games · select for Exact',
-                          style: AppTextStyles.caption,
+                          style: AppTextStyles.forTheme(
+                            context,
+                            AppTextStyles.caption,
+                          ),
                         ),
                       ),
                       Flexible(
@@ -457,12 +484,18 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
                                   option.value,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.body,
+                                  style: AppTextStyles.forTheme(
+                                    context,
+                                    AppTextStyles.body,
+                                  ),
                                 ),
                               ),
                               subtitle: Text(
                                 '${option.count} ${option.count == 1 ? 'game' : 'games'}',
-                                style: AppTextStyles.caption,
+                                style: AppTextStyles.forTheme(
+                                  context,
+                                  AppTextStyles.caption,
+                                ),
                               ),
                               onTap: () {
                                 if (!mounted) return;

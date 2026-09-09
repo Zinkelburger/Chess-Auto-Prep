@@ -11,7 +11,6 @@ import '../../core/board_editor_controller.dart';
 import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
 import '../../services/pgn_parsing_service.dart' as pgn;
-import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../board_editor/board_editor_panel.dart';
 import '../lines_preview_panel.dart';
@@ -32,7 +31,6 @@ class PgnGameFilterWorkspace extends StatefulWidget {
     this.initialConfig,
     this.collectionName,
     this.fenIndex,
-    this.presets = const [],
   });
 
   final List<GameRecord> allGames;
@@ -43,8 +41,6 @@ class PgnGameFilterWorkspace extends StatefulWidget {
   onOpenGame;
   final SliceConfig? initialConfig;
   final Map<String, List<int>>? fenIndex;
-  final List<({String label, String shortLabel, HeaderFilterConfig filter})>
-  presets;
 
   @override
   State<PgnGameFilterWorkspace> createState() => _PgnGameFilterWorkspaceState();
@@ -227,7 +223,24 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   }
 
   @override
-  Widget build(BuildContext context) => Material(
+  Widget build(BuildContext context) => Theme(
+    data: ThemeData(
+      useMaterial3: true,
+      fontFamily: AppTextStyles.uiFamily,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF237C70),
+        brightness: Brightness.light,
+        surface: const Color(0xFFFAFCF9),
+      ),
+      inputDecorationTheme: const InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+      ),
+    ),
+    child: Builder(builder: _buildWorkspace),
+  );
+
+  Widget _buildWorkspace(BuildContext context) => Material(
     color: Theme.of(context).colorScheme.surface,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -237,13 +250,16 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Find your next game', style: AppTextStyles.title),
+              Text(
+                'Find games',
+                style: AppTextStyles.forTheme(context, AppTextStyles.title),
+              ),
               const SizedBox(height: 4),
               Text(
                 '${widget.collectionName ?? 'This collection'} · ${widget.allGames.length} games',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.muted,
+                style: AppTextStyles.forTheme(context, AppTextStyles.muted),
               ),
             ],
           ),
@@ -258,11 +274,11 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildFilters(),
+                      _buildFilters(context),
                       const SizedBox(height: 24),
                       SizedBox(
                         height: _board == null ? 360 : 660,
-                        child: _buildResults(),
+                        child: _buildResults(context),
                       ),
                     ],
                   ),
@@ -279,7 +295,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                       child: SingleChildScrollView(
                         controller: _filterScroll,
                         padding: const EdgeInsets.all(24),
-                        child: _buildFilters(),
+                        child: _buildFilters(context),
                       ),
                     ),
                   ),
@@ -287,7 +303,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.all(20),
-                      child: _buildResults(),
+                      child: _buildResults(context),
                     ),
                   ),
                 ],
@@ -295,105 +311,86 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
             },
           ),
         ),
-        _buildFooter(),
+        _buildFooter(context),
       ],
     ),
   );
 
-  Widget _buildFilters() => Column(
+  Widget _buildFilters(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      if (widget.presets.isNotEmpty) ...[
-        const Text('Start with a player', style: AppTextStyles.bodyStrong),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final preset in widget.presets)
-              FilterChip(
-                label: Text(preset.label),
-                selected: _filters.hasPresetHeaderFilter(
-                  preset.filter.field,
-                  preset.filter.value,
-                ),
-                onSelected: (_) {
-                  if (!mounted) return;
-                  _filters.togglePresetHeaderFilter(
-                    preset.filter.field,
-                    preset.filter.value,
-                  );
-                  _removeEmptyRows();
-                },
-              ),
-          ],
-        ),
-        const SizedBox(height: 16),
-      ],
-      const Text('Game details', style: AppTextStyles.bodyStrong),
+      Text(
+        'Game details',
+        style: AppTextStyles.forTheme(context, AppTextStyles.bodyStrong),
+      ),
       const SizedBox(height: 4),
-      const Text(
-        'Match all filled rows. Type part of a name or choose a value from this collection.',
-        style: AppTextStyles.caption,
+      Text(
+        'Choose what matters. Results update as you type.',
+        style: AppTextStyles.forTheme(context, AppTextStyles.caption),
       ),
       const SizedBox(height: 12),
-      HeaderFilters(controller: _filters, games: widget.allGames, simple: true),
+      HeaderFilters(
+        controller: _filters,
+        games: widget.allGames,
+        simple: false,
+      ),
       const SizedBox(height: 20),
       const Divider(height: 1),
       const SizedBox(height: 16),
-      IgnorePointer(
-        ignoring: _board != null,
-        child: Opacity(
-          opacity: _board == null ? 1 : .5,
-          child: PositionFilter(controller: _filters),
+      ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        title: Text(
+          'Position',
+          style: AppTextStyles.forTheme(context, AppTextStyles.body),
         ),
-      ),
-      const SizedBox(height: 8),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
+        subtitle: Text(
+          'Use moves, a FEN or the board',
+          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+        ),
+        initiallyExpanded: _filters.hasPositionFilter,
         children: [
-          ActionChip(
-            label: const Text('Current position'),
-            tooltip: 'Use the board position from the tab you came from',
-            onPressed: _board != null
-                ? null
-                : () {
-                    if (!mounted) return;
-                    _filters.setPositionFen(widget.currentFen);
-                  },
+          IgnorePointer(
+            ignoring: _board != null,
+            child: Opacity(
+              opacity: _board == null ? 1 : .5,
+              child: PositionFilter(controller: _filters),
+            ),
           ),
-          OutlinedButton.icon(
-            onPressed: _board == null ? _editBoard : null,
-            icon: const Icon(Icons.edit_outlined, size: 18),
-            label: const Text('Set up a board'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ActionChip(
+                label: const Text('Current position'),
+                tooltip: 'Use the board position from the tab you came from',
+                onPressed: _board != null
+                    ? null
+                    : () {
+                        if (!mounted) return;
+                        _filters.setPositionFen(widget.currentFen);
+                      },
+              ),
+              OutlinedButton.icon(
+                onPressed: _board == null ? _editBoard : null,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Set up a board'),
+              ),
+            ],
           ),
-          ActionChip(
-            label: const Text('King’s Indian'),
-            tooltip:
-                'Set the position after 1.d4 Nf6 2.c4 g6 3.Nc3 Bg7 4.e4 d6',
-            onPressed: _board != null
-                ? null
-                : () {
-                    if (!mounted) return;
-                    _filters.positionText.text =
-                        '1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6';
-                  },
+          const SizedBox(height: 8),
+          Text(
+            'Find this exact position anywhere in a game, including variations.',
+            style: AppTextStyles.forTheme(context, AppTextStyles.caption),
           ),
         ],
-      ),
-      const SizedBox(height: 8),
-      const Text(
-        'Matches the whole position anywhere in a game, including variations: '
-        'all pieces, side to move, castling and en passant.',
-        style: AppTextStyles.caption,
       ),
       const SizedBox(height: 12),
       ExpansionTile(
         tilePadding: EdgeInsets.zero,
-        title: const Text(
-          'Move sequence · advanced',
-          style: AppTextStyles.body,
+        title: Text(
+          'Move sequence',
+          style: AppTextStyles.forTheme(context, AppTextStyles.body),
         ),
         initiallyExpanded: _filters.hasSequenceFilter,
         children: [
@@ -406,17 +403,20 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
     ],
   );
 
-  Widget _buildResults() {
+  Widget _buildResults(BuildContext context) {
     if (_board case final editor?) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Set up your position',
-                  style: AppTextStyles.bodyStrong,
+                  style: AppTextStyles.forTheme(
+                    context,
+                    AppTextStyles.bodyStrong,
+                  ),
                 ),
               ),
               TextButton(
@@ -460,7 +460,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
               : _invalid || _boardDirty
               ? 'Preview paused'
               : '${_matchingIndices.length} matching games',
-          style: AppTextStyles.bodyStrong,
+          style: AppTextStyles.forTheme(context, AppTextStyles.bodyStrong),
         ),
         const SizedBox(height: 4),
         Text(
@@ -469,9 +469,9 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
               : _invalid
               ? 'Check the highlighted filters to continue.'
               : _hasFilters
-              ? 'Every condition applies. Open a result or show the whole selection.'
-              : 'All games are here. Add a player, event or position to narrow them down.',
-          style: AppTextStyles.caption,
+              ? 'Open a game, or show all matches in the viewer.'
+              : 'Add a condition to narrow the list.',
+          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
         ),
         const SizedBox(height: 12),
         Expanded(
@@ -484,7 +484,13 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_computeError!, style: AppTextStyles.body),
+                      Text(
+                        _computeError!,
+                        style: AppTextStyles.forTheme(
+                          context,
+                          AppTextStyles.body,
+                        ),
+                      ),
                       TextButton(
                         onPressed: () {
                           if (!mounted) return;
@@ -497,11 +503,11 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                   ),
                 )
               : _matchingIndices.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
-                    'No games yet. Try a shorter name, remove a row,\nor clear the position to broaden your search.',
+                    'No matches. Try a shorter name or remove a condition.',
                     textAlign: TextAlign.center,
-                    style: AppTextStyles.muted,
+                    style: AppTextStyles.forTheme(context, AppTextStyles.muted),
                   ),
                 )
               : LinesPreviewPanel(
@@ -524,10 +530,13 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
     );
   }
 
-  Widget _buildFooter() => Container(
+  Widget _buildFooter(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-    decoration: const BoxDecoration(
-      border: Border(top: BorderSide(color: AppColors.divider)),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surface,
+      border: Border(
+        top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
     ),
     child: OverflowBar(
       alignment: MainAxisAlignment.spaceBetween,
@@ -539,7 +548,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
           _boardDirty
               ? 'Board setup has unapplied changes'
               : 'Your draft stays here when you switch tabs.',
-          style: AppTextStyles.caption,
+          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
         ),
         FilledButton(
           key: const ValueKey('apply-game-filters'),

@@ -81,7 +81,9 @@ class SparePieceRow extends StatelessWidget {
         return Container(
           height: height,
           decoration: BoxDecoration(
-            color: AppColors.surfaceInset,
+            color: Theme.of(context).brightness == Brightness.light
+                ? Theme.of(context).colorScheme.surfaceContainer
+                : AppColors.surfaceInset,
             borderRadius: BorderRadius.circular(6),
           ),
           clipBehavior: Clip.antiAlias,
@@ -95,7 +97,7 @@ class SparePieceRow extends StatelessWidget {
                   child: Icon(
                     Icons.pan_tool_alt_outlined,
                     size: height * 0.5,
-                    color: AppColors.ink,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ),
@@ -117,7 +119,7 @@ class SparePieceRow extends StatelessWidget {
                   child: Icon(
                     Icons.delete_outline,
                     size: height * 0.5,
-                    color: AppColors.ink,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ),

@@ -19,6 +19,17 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
 abstract final class AppTextStyles {
+  /// Keep shared controls readable when a feature supplies a light surface.
+  static TextStyle forTheme(BuildContext context, TextStyle style) {
+    if (Theme.of(context).brightness == Brightness.dark) return style;
+    final colors = Theme.of(context).colorScheme;
+    return style.copyWith(
+      color: style.color == AppColors.ink || style.color == AppColors.inkSoft
+          ? colors.onSurface
+          : colors.onSurfaceVariant,
+    );
+  }
+
   // ── Faces (bundled in pubspec.yaml; see assets/fonts) ────────────────────
 
   /// UI text. Inter: drawn for screens at small sizes, with real tabular

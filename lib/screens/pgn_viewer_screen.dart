@@ -769,7 +769,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           _filterOriginFen ?? normalizeFen(_controller.currentPosition.fen),
       initialConfig: _controller.activeSliceConfig,
       fenIndex: _controller.fenIndex,
-      presets: _controller.slicePresets,
       onApply: (indices, config) {
         if (!mounted || !identical(source, _controller.allGames)) return;
         _controller.applySlice(indices, config);

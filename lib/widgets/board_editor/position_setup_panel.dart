@@ -142,11 +142,11 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
           ],
         ),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'Drag pieces where you want them, or click a spare piece and '
           'paint it onto squares. Right-click clears a square; with a '
           'piece in hand it switches the colour.',
-          style: AppTextStyles.caption,
+          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
         ),
         const SizedBox(height: 12),
 
@@ -223,7 +223,7 @@ class _PositionSetupPanelState extends State<PositionSetupPanel> {
         // ── FEN in/out ─────────────────────────────────────────────
         TextField(
           controller: _fenCtrl,
-          style: AppTextStyles.mono,
+          style: AppTextStyles.forTheme(context, AppTextStyles.mono),
           minLines: 2,
           maxLines: 4,
           decoration: InputDecoration(

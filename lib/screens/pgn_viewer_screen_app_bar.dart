@@ -45,18 +45,6 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               title: _buildOpenPgnMenuButton(fileName),
             ),
           ),
-          if (loaded && !_controller.isSolitaireMode) ...[
-            const SizedBox(width: 12),
-            TextButton(
-              key: const Key('pgn-filter-button'),
-              onPressed: _openSliceDialog,
-              child: Text(
-                _controller.hasActiveFilters
-                    ? 'Filter · ${_controller.filteredGames.length}/${_controller.allGames.length}'
-                    : 'Filter',
-              ),
-            ),
-          ],
         ],
       ),
       actions: [
@@ -90,6 +78,8 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             onRun: () => unawaited(_pastePgn()),
           ),
         ],
+        if (_controller.allGames.isNotEmpty && !solitaire)
+          AppMenuEntry(label: 'Filter games', onRun: _openSliceDialog),
         if (hasGame) ...[
           if (!solitaire && !_onReferenceTab)
             AppMenuEntry(

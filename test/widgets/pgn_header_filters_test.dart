@@ -305,7 +305,7 @@ void main() {
   ) async {
     final controller = _controller(field: 'Date', value: '1960');
     await _show(tester, controller);
-    await tester.tap(find.text('Filter'));
+    await tester.tap(find.text('Add condition'));
     await tester.pumpAndSettle();
     expect(_field, findsNWidgets(2));
     expect(tester.widget<TextField>(_field.last).focusNode!.hasFocus, isTrue);

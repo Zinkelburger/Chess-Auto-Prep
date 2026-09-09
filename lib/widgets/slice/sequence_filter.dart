@@ -33,13 +33,19 @@ class SequenceFilter extends StatelessWidget {
       children: [
         Text(
           'Move Sequence Filter',
-          style: AppTextStyles.subtitle.copyWith(fontWeight: FontWeight.w600),
+          style: AppTextStyles.forTheme(
+            context,
+            AppTextStyles.subtitle,
+          ).copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 4),
         Text(
           'Find games containing specific moves in order. '
           'Use [gap] between groups that need not be consecutive.',
-          style: AppTextStyles.caption.copyWith(fontSize: 12),
+          style: AppTextStyles.forTheme(
+            context,
+            AppTextStyles.caption,
+          ).copyWith(fontSize: 12),
         ),
         const SizedBox(height: 8),
         TextField(
@@ -91,7 +97,10 @@ class SequenceFilter extends StatelessWidget {
               )
             else
               const Spacer(),
-            const Text('Max gap: ', style: AppTextStyles.caption),
+            Text(
+              'Max gap: ',
+              style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+            ),
             SizedBox(
               width: 40,
               child: TextField(
@@ -113,7 +122,10 @@ class SequenceFilter extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            const Text('ply', style: AppTextStyles.caption),
+            Text(
+              'ply',
+              style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+            ),
           ],
         ),
       ],

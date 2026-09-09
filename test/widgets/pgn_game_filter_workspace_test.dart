@@ -41,32 +41,13 @@ Future<void> _open(
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     MaterialApp(
+      theme: ThemeData.dark(),
       home: Scaffold(
         body: PgnGameFilterWorkspace(
           allGames: _games,
           initialConfig: initialConfig,
           currentFen: _fen,
           collectionName: 'Practice.pgn',
-          presets: const [
-            (
-              label: 'Fischer as White',
-              shortLabel: 'as White',
-              filter: HeaderFilterConfig(
-                field: 'White',
-                mode: MatchMode.contains,
-                value: 'Fischer',
-              ),
-            ),
-            (
-              label: 'Fischer as Black',
-              shortLabel: 'as Black',
-              filter: HeaderFilterConfig(
-                field: 'Black',
-                mode: MatchMode.contains,
-                value: 'Fischer',
-              ),
-            ),
-          ],
           onApply: onApply ?? (_, _) {},
         ),
       ),
@@ -87,7 +68,7 @@ Future<void> _finishMatching(WidgetTester tester) async {
 
 void main() {
   testWidgets(
-    'presets create visible editable rows and combine with a KID position',
+    'conditions combine with a user-entered position on a light workspace',
     (tester) async {
       List<int>? applied;
       SliceConfig? config;
@@ -107,16 +88,42 @@ void main() {
             .showSearch,
         isFalse,
       );
-      await tester.tap(find.text('Fischer as Black'));
+      expect(find.text('King’s Indian'), findsNothing);
+      expect(
+        Theme.of(tester.element(find.text('Find games'))).brightness,
+        Brightness.light,
+      );
+      await tester.tap(find.text('Add condition'));
       await _finishMatching(tester);
       final controller = tester
           .widget<HeaderFilters>(find.byType(HeaderFilters))
           .controller;
+      controller.setHeaderField(0, 'Black');
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              identical(
+                widget.controller,
+                controller.headerRows.single.controller,
+              ),
+        ),
+        'Fischer',
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await _finishMatching(tester);
       expect(controller.headerRows.single.field, 'Black');
       expect(controller.headerRows.single.controller.text, 'Fischer');
       expect(find.text('Show 1 game'), findsOneWidget);
-      await tester.ensureVisible(find.text('King’s Indian'));
-      await tester.tap(find.text('King’s Indian'));
+      await tester.tap(find.text('Position'));
+      await tester.pumpAndSettle();
+      final position = find.widgetWithText(TextField, 'FEN or moves');
+      await tester.ensureVisible(position);
+      await tester.enterText(
+        position,
+        '1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6',
+      );
       await _finishMatching(tester);
       expect(find.text('Show 1 game'), findsOneWidget);
       await tester.tap(_apply);
@@ -172,6 +179,8 @@ void main() {
     tester,
   ) async {
     await _open(tester);
+    await tester.tap(find.text('Position'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Set up a board'));
     await tester.tap(find.text('Set up a board'));
     await tester.pumpAndSettle();
