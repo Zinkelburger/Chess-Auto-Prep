@@ -288,8 +288,9 @@ RepertoireScreen (composition root — wires controllers to widgets)
 - `Ctrl/Cmd+Z` — undo last repertoire add
 - `Ctrl/Cmd+Shift+V` — paste FEN from clipboard
 - `Escape` — close the current panel
+- `F` — flip the board (outside text input)
 
-View-switching Ctrl/Cmd+number shortcuts, bare letter commands, slash, panel-Tab, numbered fork/planner choices and Shift+arrow trap jumps have been removed. Their mouse controls remain available. Unassigned actions have no chords, dispatch no keys and show no shortcut suffix in shared tooltips.
+View-switching Ctrl/Cmd+number shortcuts, bare letter commands other than `F` (flip board), slash, panel-Tab, numbered fork/planner choices and Shift+arrow trap jumps have been removed. Their mouse controls remain available. Unassigned actions have no chords, dispatch no keys and show no shortcut suffix in shared tooltips.
 
 Digit shortcuts (bottom-pane tab toggles `1`/`2`/`3`, edit-mode NAG `1`–`6`, star ratings, etc.) are **not** bound.
 

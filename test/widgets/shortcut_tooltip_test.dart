@@ -9,7 +9,7 @@ void main() {
     test('appends the registry label in parentheses', () {
       expect(
         actionTooltip('Flip board', shortcut: AppShortcut.flipBoard),
-        'Flip board',
+        'Flip board (F)',
       );
       expect(
         actionTooltip('Undo last add', shortcut: AppShortcut.undo),
