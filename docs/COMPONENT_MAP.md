@@ -468,6 +468,10 @@ CoherenceService.compute(lines)
 
 ### Engine analysis
 
+Engine rows in `UnifiedEnginePane` and `InlineEngineBar` show the evaluation
+first, followed by the first move and PV continuation. Evaluations stay aligned
+in a left column; move taps and hover previews work throughout the line.
+
 ```
 Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off
 UnifiedEnginePane (when lifecycle ≠ off)
@@ -479,6 +483,11 @@ UnifiedEnginePane (when lifecycle ≠ off)
 InlineEngineBar — lazy dedicated EngineWorkerSlot; normal Stockfish discovery writes best eval to EvalCache on completion; hypothetical threat searches use threatPositionFen and skip cache writes
 ExpectimaxLinesPane — same floating preview on line hover
 ```
+
+Inline engine hover boards follow the main board perspective in Repertoire,
+PGN Viewer, Player Analysis, Planner, Studies and Tactics. Stepping through a
+line preserves that perspective regardless of whose turn it is; flipping the
+main board also refreshes an already open hover board.
 
 ### Training
 

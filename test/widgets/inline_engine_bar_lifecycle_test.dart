@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
+
+import 'package:dartchess/dartchess.dart';
+import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_connection_factory.dart';
@@ -163,6 +167,44 @@ void main() {
     InlineEngineBar.toggleEngine();
     await tester.pumpAndSettle();
     expect(pgnTop(), lessThan(scaledTop));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('hover lines preserve perspective across turns and board flips', (
+    tester,
+  ) async {
+    StockfishConnectionFactory.createForTest = () async => _Connection();
+    Widget previewHarness(bool flipped) => MaterialApp(
+      home: Scaffold(
+        body: InlineEngineBar(fen: fen, previewFlipped: flipped),
+      ),
+    );
+    await tester.pumpWidget(previewHarness(true));
+    InlineEngineBar.toggleEngine();
+    await tester.pumpAndSettle();
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(799, 599));
+    await mouse.moveTo(tester.getCenter(find.text('e4').first));
+    await tester.pumpAndSettle();
+    ChessBoardWidget preview() =>
+        tester.widget<ChessBoardWidget>(find.byType(ChessBoardWidget));
+    expect(preview().flipped, isTrue);
+    expect(preview().position.turn, Side.black);
+
+    await mouse.moveTo(tester.getCenter(find.text('e5').first));
+    await tester.pumpAndSettle();
+    expect(preview().flipped, isTrue);
+    expect(preview().position.turn, Side.white);
+
+    await tester.pumpWidget(previewHarness(false));
+    await tester.pumpAndSettle();
+    expect(preview().flipped, isFalse);
+    await tester.pumpWidget(previewHarness(true));
+    await tester.pumpAndSettle();
+    expect(preview().flipped, isTrue);
+    await mouse.removePointer();
+    await tester.pumpAndSettle();
+    expect(find.byType(ChessBoardWidget), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

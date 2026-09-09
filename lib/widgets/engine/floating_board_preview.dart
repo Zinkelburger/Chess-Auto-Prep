@@ -51,6 +51,12 @@ class _FloatingBoardPreviewState extends State<FloatingBoardPreview> {
       oldWidget.controller.removeListener(_onPreviewChanged);
       widget.controller.addListener(_onPreviewChanged);
     }
+    if (oldWidget.flipped != widget.flipped) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _overlayEntry?.markNeedsBuild();
+      });
+    }
   }
 
   @override

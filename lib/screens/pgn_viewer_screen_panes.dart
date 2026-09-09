@@ -471,6 +471,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             onThreatChanged: _setEngineThreat,
             isActive: _tabController.index == PgnWorkspace.game,
             fen: _controller.currentPosition.fen,
+            previewFlipped: _controller.boardFlipped,
             onLineMoveTapped: _controller.onEngineLineMoveTapped,
           ),
         // One solitaire strip at a time: the choices, then the session, then

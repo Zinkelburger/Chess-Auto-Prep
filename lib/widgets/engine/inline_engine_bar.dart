@@ -555,6 +555,21 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       child: Row(
         children: [
           SizedBox(
+            width: 52,
+            child: Text(
+              evalStr,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                fontFamily: AppTextStyles.monoFamily,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 6),
+          SizedBox(
             width: 48,
             child: Builder(
               builder: (anchorContext) => MouseRegion(
@@ -594,21 +609,6 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
               ),
             ),
           ),
-          SizedBox(
-            width: 52,
-            child: Text(
-              evalStr,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                fontFamily: AppTextStyles.monoFamily,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 6),
           Expanded(child: _buildClickableContinuation(line, sanMoves)),
         ],
       ),
