@@ -296,10 +296,8 @@ class ViewerOpeningTree {
   /// from the last hide must not yank the user back mid-exploration.
   void _restoreCursorOntoBoard({required bool preferSaved}) {
     final saved = _savedMoveSequence;
-    final seq = (preferSaved && saved != null && saved.isNotEmpty)
-        ? saved
-        : treeCurrentMoveSequence;
-    if (seq.isNotEmpty) {
+    final seq = preferSaved && saved != null ? saved : treeCurrentMoveSequence;
+    if ((preferSaved && saved != null) || seq.isNotEmpty) {
       _walkTo(seq);
       _updatePositionFromTree();
       return;
@@ -326,6 +324,9 @@ class ViewerOpeningTree {
       openingTree!.reset();
       treeCurrentMoveSequence = [];
     }
+    // A missing variation falls back to the root. The board must follow that
+    // fallback too, rather than retaining the hidden Game pane's position.
+    _updatePositionFromTree();
   }
 
   /// Update the board position from the tree's current FEN (off-book

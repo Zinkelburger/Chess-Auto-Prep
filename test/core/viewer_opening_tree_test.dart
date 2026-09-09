@@ -59,6 +59,33 @@ void main() {
       },
     );
 
+    test(
+      'first open from an absent variation puts the board at the root',
+      () async {
+        final board = _Board()..position = _play(['d4', 'd5']);
+        final tree = _make(board)..openingTree = _line(['e4', 'e5']);
+        await tree.enter();
+        expect(tree.treeCurrentMoveSequence, isEmpty);
+        expect(board.position.fen, Chess.initial.fen);
+        expect(tree.recentMoveSquares, isEmpty);
+      },
+    );
+
+    test(
+      'a saved root remains the root when returning from another game move',
+      () async {
+        final board = _Board();
+        final tree = _make(board)..openingTree = _line(['e4', 'e5']);
+        await tree.enter();
+        tree.toggle();
+        board.position = _play(['e4']);
+        await tree.enter();
+        expect(tree.treeCurrentMoveSequence, isEmpty);
+        expect(board.position.fen, Chess.initial.fen);
+        expect(tree.recentMoveSquares, isEmpty);
+      },
+    );
+
     test('highlight uses the played move order after a transposition', () {
       final board = _Board();
       final tree = _make(board);
