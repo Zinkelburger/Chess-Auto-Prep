@@ -184,12 +184,12 @@ class WindowsUpdateTest(unittest.TestCase):
                 parts.append(f'{path.name}:\n{data.decode(encoding, errors="replace")}')
         return '\n'.join(parts)
 
-    def launch(self):
+    def launch(self, env=None):
         helper = subprocess.Popen([
             'powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
             'Bypass', '-File', str(ROOT / 'assets/updater/install_windows.ps1'),
             '-Request', str(self.request),
-        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         self.addCleanup(self.stop_process, helper)
         return helper
 
@@ -241,6 +241,19 @@ class WindowsUpdateTest(unittest.TestCase):
         self.assert_not_installed()
         self.assertFalse(self.armed.exists())
         self.assertFalse((self.state / 'helper-ready').exists())
+
+    def test_inherited_module_path_cannot_hide_windows_powershell_modules(self):
+        # Like a pwsh -> Python -> powershell.exe launch, the helper starts
+        # with a module path that does not resolve its host's built-in modules.
+        # Do not sanitize this in the harness: production must handle it too.
+        unrelated = self.root / 'unrelated modules'
+        unrelated.mkdir()
+        env = {k: v for k, v in os.environ.items() if k.upper() != 'PSMODULEPATH'}
+        env['PSModulePath'] = str(unrelated)
+        helper = self.launch(env=env)
+        self.finish(helper)
+        self.assertTrue((self.state / 'arguments.txt').exists(), self.diagnostics())
+        self.wait_file(self.app.parent / 'restarted.txt', helper)
 
     def test_installer_failure_is_reported_without_restart(self):
         (self.state / 'setup-exit.txt').write_text('23')
