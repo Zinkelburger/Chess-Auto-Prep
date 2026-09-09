@@ -14,6 +14,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Connection implements EngineConnection {
+  _Connection({this.autoReply = true});
+
+  final bool autoReply;
   final output = StreamController<String>.broadcast();
   final closed = Completer<void>();
   bool disposed = false;
@@ -27,7 +30,7 @@ class _Connection implements EngineConnection {
   @override
   void sendCommand(String command) {
     commands.add(command);
-    if (command.startsWith('go ')) {
+    if (autoReply && command.startsWith('go ')) {
       final black = commands
           .lastWhere((c) => c.startsWith('position fen'))
           .contains(' b ');
@@ -63,6 +66,109 @@ void main() {
       ),
     ),
   );
+
+  testWidgets('PV refreshes keep the PGN below the engine at a fixed offset', (
+    tester,
+  ) async {
+    final settings = EngineSettings.instance;
+    final previousMultiPv = settings.multiPv;
+    settings.multiPv = 3;
+    addTearDown(() => settings.multiPv = previousMultiPv);
+    final connection = _Connection(autoReply: false);
+    StockfishConnectionFactory.createForTest = () async => connection;
+    const pgnKey = ValueKey('pgn-content');
+
+    Widget viewer(String position, {double textScale = 1}) => MaterialApp(
+      home: MediaQuery(
+        data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+        child: Scaffold(
+          body: SizedBox(
+            width: 360,
+            child: Column(
+              children: [
+                InlineEngineBar(fen: position),
+                const Expanded(child: SizedBox(key: pgnKey)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    double pgnTop() => tester.getTopLeft(find.byKey(pgnKey)).dy;
+
+    await tester.pumpWidget(viewer(fen));
+    final disabledTop = pgnTop();
+    InlineEngineBar.toggleEngine();
+    await tester.pump();
+    final enabledTop = pgnTop();
+    expect(enabledTop, greaterThan(disabledTop));
+    expect(find.text('Analyzing...'), findsOneWidget);
+
+    connection.output.add(
+      'info depth 1 multipv 1 score cp 20 nodes 10 pv e2e4',
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('e4'), findsOneWidget);
+    expect(pgnTop(), enabledTop);
+
+    connection.output.add(
+      'info depth 2 multipv 1 score cp 20 nodes 20 pv e2e4 e7e5 g1f3 b8c6',
+    );
+    connection.output.add(
+      'info depth 2 multipv 2 score cp 10 nodes 30 pv d2d4 d7d5',
+    );
+    connection.output.add(
+      'info depth 2 multipv 3 score cp 5 nodes 40 pv c2c4 e7e5',
+    );
+    connection.output.add('bestmove e2e4');
+    await tester.pumpAndSettle();
+    expect(find.text('3 lines • depth 2'), findsOneWidget);
+    expect(pgnTop(), enabledTop);
+
+    // Navigating clears the old PVs before the new search responds.
+    const nextFen =
+        'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
+    await tester.pumpWidget(viewer(nextFen));
+    expect(find.text('Analyzing...'), findsOneWidget);
+    expect(find.text('d4'), findsNothing);
+    expect(pgnTop(), enabledTop);
+    connection.output.add(
+      'info depth 1 multipv 1 score cp 10 nodes 10 pv e7e5',
+    );
+    connection.output.add('bestmove e7e5');
+    await tester.pumpAndSettle();
+    expect(find.text('1 lines • depth 1'), findsOneWidget);
+    expect(pgnTop(), enabledTop);
+
+    const mateFen = '7k/6Q1/5K2/8/8/8/8/8 b - - 0 1';
+    await tester.pumpWidget(viewer(mateFen));
+    connection.output.add('bestmove (none)');
+    await tester.pumpAndSettle();
+    expect(find.text('No legal moves.'), findsOneWidget);
+    expect(pgnTop(), enabledTop);
+
+    // Explicit line-count and accessibility changes can resize the panel.
+    settings.multiPv = 1;
+    await tester.pump();
+    expect(pgnTop(), lessThan(enabledTop));
+    connection.output.add('bestmove (none)');
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(viewer(fen, textScale: 2));
+    final scaledTop = pgnTop();
+    connection.output.add(
+      'info depth 1 multipv 1 score cp 20 nodes 10 pv e2e4 e7e5 g1f3',
+    );
+    connection.output.add('bestmove e2e4');
+    await tester.pumpAndSettle();
+    expect(pgnTop(), scaledTop);
+    expect(tester.takeException(), isNull);
+    InlineEngineBar.toggleEngine();
+    await tester.pumpAndSettle();
+    expect(pgnTop(), lessThan(scaledTop));
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('hover lines preserve perspective across turns and board flips', (
     tester,
