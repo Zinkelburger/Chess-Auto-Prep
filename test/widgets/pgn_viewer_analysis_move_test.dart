@@ -43,14 +43,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.inVariation, isTrue);
     expect(controller.recentMoveSquares, {'g8', 'f6'});
-    final mainlineSelections = tester
+    final selections = tester
         .widgetList<MoveChip>(find.byType(MoveChip))
         .where((chip) => chip.decoration?.color == AppColors.pgnMoveCurrentBg);
-    expect(
-      mainlineSelections,
-      isEmpty,
-      reason: 'the parked mainline move is not the position on the board',
-    );
+    expect(selections.map((chip) => chip.san), [
+      'Nf6',
+    ], reason: 'the parked mainline move is not the position on the board');
 
     controller.goBack();
     await tester.pumpAndSettle();
@@ -67,6 +65,52 @@ void main() {
       ['e5'],
     );
   });
+
+  for (final comment in [
+    'Consider 1...c5!? 2.Nf3, then develop.',
+    'Consider …c5!? 2.Nf3, then develop.',
+    '@@HeaderStart@@Alternative@@HeaderEnd@@  1...c5!?  2.Nf3  then develop.',
+  ]) {
+    testWidgets('comment selection covers only SAN: $comment', (tester) async {
+      final controller = await _pumpViewer(tester, '1. e4 {$comment} e5 *');
+      controller.goToMainLineIndex(1);
+      await tester.pumpAndSettle();
+      final mainline = tester
+          .widgetList<MoveChip>(find.byType(MoveChip))
+          .singleWhere((chip) => chip.san == 'e4');
+      final move = find.byWidgetPredicate(
+        (widget) => widget is MoveChip && widget.san == 'c5!?',
+      );
+      expect(
+        move,
+        findsOneWidget,
+        reason: tester
+            .widgetList<MoveChip>(find.byType(MoveChip))
+            .map((chip) => chip.san)
+            .join(', '),
+      );
+      final before = tester.getRect(move);
+      final weight = tester.widget<MoveChip>(move).sanStyle.fontWeight;
+      await tester.tap(move);
+      await tester.pumpAndSettle();
+      final selected = tester.widget<MoveChip>(move);
+      expect(selected.decoration, mainline.decoration);
+      expect(selected.padding, mainline.padding);
+      expect(selected.sanStyle.color, mainline.sanStyle.color);
+      expect(selected.sanStyle.fontWeight, weight);
+      expect(tester.getRect(move).size, before.size);
+      expect(
+        find
+            .descendant(of: move, matching: find.byType(RichText))
+            .evaluate()
+            .map((element) => (element.widget as RichText).text.toPlainText()),
+        ['c5!?'],
+        reason: 'numbers and separator spaces must remain outside the pill',
+      );
+      expect(controller.recentMoveSquares, {'c7', 'c5'});
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('a move matching the mainline follows it instead of forking', (
     tester,

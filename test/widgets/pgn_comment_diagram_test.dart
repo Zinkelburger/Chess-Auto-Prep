@@ -38,7 +38,7 @@ void main() {
       _fen,
     );
     expect(find.textContaining('@@', findRichText: true), findsNothing);
-    final move = find.text('6.Nf3 ');
+    final move = find.text('Nf3', findRichText: true);
     await tester.ensureVisible(move);
     final beforeTap = tester.getTopLeft(move).dy;
     await tester.tap(move);
@@ -120,7 +120,8 @@ void main() {
     expect(text, contains('1...'));
     expect(text, contains('!?'));
     expect(text, contains('or '));
-    expect(text, contains('...d5'));
+    expect(text, contains('...'));
+    expect(find.text('d5', findRichText: true), findsOneWidget);
     expect(find.byTooltip('Preview comment move'), findsWidgets);
   });
   testWidgets('Black ellipsis cannot preview a legal White pawn move', (

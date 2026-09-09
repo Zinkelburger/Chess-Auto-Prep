@@ -605,6 +605,8 @@ boards labelled **Comment position**, including FENs nested inside Chessable
 editorial brackets. Parenthetical prose stays inline; move runs continue across
 notes and replay from their embedded FEN. Dotted-underlined comment moves offer
 **Preview comment move** tooltips and show **Comment preview** while navigating.
+Their active highlight uses the mainline’s borderless pill around the move alone;
+move numbers and separating spaces stay outside, and selection preserves text weight.
 The note stays in view during preview. They never become saved mainline moves
 or variations. Explicit move numbers and sides must match the preview position;
 bare square references in prose are not inferred as pawn moves. Move numbers, check signs

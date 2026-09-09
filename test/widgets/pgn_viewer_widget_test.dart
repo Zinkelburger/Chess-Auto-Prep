@@ -189,12 +189,12 @@ void main() {
         find.textContaining('We are ready against ', findRichText: true),
         findsOneWidget,
       );
-      expect(find.text('1.e4'), findsOneWidget);
+      expect(find.text('e4', findRichText: true), findsNWidgets(2));
       expect(
         find.textContaining(' and can play', findRichText: true),
         findsOneWidget,
       );
-      expect(find.text('1...e5'), findsOneWidget);
+      expect(find.text('e5', findRichText: true), findsNWidgets(2));
     },
   );
 
