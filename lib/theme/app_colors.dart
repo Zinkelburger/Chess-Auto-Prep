@@ -22,7 +22,7 @@ abstract final class AppColors {
   /// Recessed chip/track/snackbar fill, one step above [surfaceContainer].
   static const surfaceInset = Color(0xFF303030);
 
-  /// Default filled/elevated button fill (see main.dart button themes).
+  /// Default filled/elevated button fill (see AppTheme button themes).
   static const buttonSurface = Color(0xFF404040);
 
   /// ColorScheme.secondary — slider tracks, switches, selection chrome.
