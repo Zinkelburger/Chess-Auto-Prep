@@ -38,6 +38,67 @@ Future<PgnViewerWidgetController> _pump(
 }
 
 void main() {
+  for (final note in ['', '{A short explanation.}']) {
+    testWidgets('a fitting game keeps its title visible with note="$note"', (
+      tester,
+    ) async {
+      final controller = await _pump(
+        tester,
+        pgn:
+            '[White "A comfortable fit"]\n'
+            '[Black "A comfortable fit"]\n\n'
+            '1. e4 $note e5 2. Nf3 Nc6 3. Bb5 a6 *',
+      );
+      final title = find.text('A comfortable fit');
+      final titleTop = tester.getTopLeft(title).dy;
+      final scroll = tester
+          .widget<SingleChildScrollView>(_scrollView)
+          .controller!;
+      for (final anchor in [
+        'Anchor near top',
+        'Anchor near middle',
+        'Anchor near bottom',
+      ]) {
+        await tester.tap(find.byTooltip('Reading options'));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.widgetWithText(CheckedPopupMenuItem<String>, anchor),
+        );
+        await tester.pumpAndSettle();
+        for (final ply in [1, 3, 6, 0]) {
+          controller.goToMainLineIndex(ply);
+          await tester.pumpAndSettle();
+          expect(scroll.offset, 0);
+          expect(scroll.position.maxScrollExtent, 0);
+          expect(tester.getTopLeft(title).dy, titleTop);
+          expect(
+            tester.getRect(_scrollView).contains(tester.getCenter(title)),
+            isTrue,
+          );
+        }
+      }
+    });
+  }
+
+  testWidgets(
+    'the final move stops at the document end without a blank screen',
+    (tester) async {
+      final note = List.filled(70, 'Readable prose needs space.').join(' ');
+      final controller = await _pump(tester, pgn: '1. e4 {$note} e5 *');
+      controller.goToMainLineIndex(2);
+      await tester.pumpAndSettle();
+      final scroll = tester
+          .widget<SingleChildScrollView>(_scrollView)
+          .controller!;
+      expect(scroll.offset, greaterThan(0));
+      expect(scroll.offset, closeTo(scroll.position.maxScrollExtent, 1));
+      final viewport = tester.getRect(_scrollView);
+      final lastMove = tester.getRect(_move('e5'));
+      expect(viewport.contains(lastMove.center), isTrue);
+      expect(viewport.bottom - lastMove.bottom, lessThan(80));
+    },
+  );
+
   testWidgets(
     'fold controls reveal notes without moving the board or entering focus',
     (tester) async {
@@ -76,7 +137,15 @@ void main() {
   testWidgets(
     'returning from nested focus restores each parent reading position',
     (tester) async {
-      final controller = await _pump(tester);
+      // Keep enough prose below each bookmark to restore the same offset,
+      // independently of the document-end clamp for short variations.
+      final controller = await _pump(
+        tester,
+        pgn: _tree.replaceAll(
+          'explanation.',
+          'explanation. ${List.filled(30, 'More context for the reader.').join(' ')}',
+        ),
+      );
       final view = tester.widget<PgnMovetextView>(find.byType(PgnMovetextView));
       final sicilian = view.variationsByPly[1]!.single;
       final nested = sicilian.children.first.children[1];
