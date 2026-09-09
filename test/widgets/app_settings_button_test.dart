@@ -4,6 +4,8 @@ import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
 import 'package:chess_auto_prep/widgets/app_settings_button.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -49,6 +51,57 @@ void main() {
     await tester.pumpAndSettle();
     return app;
   }
+
+  testWidgets('hover switches from Actions to views without selecting a view', (
+    tester,
+  ) async {
+    final app = await pumpHost(tester);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(10, 100));
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(find.text('Actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('An action'), findsOneWidget);
+
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(AppModeSwitcher.switcherKey)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('An action'), findsNothing);
+    expect(find.text('Repertoire trainer'), findsOneWidget);
+    expect(find.byIcon(Icons.check), findsOneWidget);
+    expect(app.currentMode, AppMode.tactics);
+    await tester.tap(find.byKey(AppModeSwitcher.switcherKey));
+    await tester.pumpAndSettle();
+    expect(find.text('Repertoire trainer'), findsOneWidget);
+    await tester.tap(find.text('Repertoire trainer'));
+    await tester.pumpAndSettle();
+    expect(app.currentMode, AppMode.repertoireTrainer);
+    expect(find.byType(MenuItemButton), findsNothing);
+
+    await mouse.moveTo(const Offset(10, 100));
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(AppModeSwitcher.switcherKey)),
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(MenuItemButton), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byType(MenuItemButton), findsWidgets);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    app.setRepertoireGenerating(true);
+    await tester.pumpAndSettle();
+    await mouse.moveTo(const Offset(10, 100));
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(AppModeSwitcher.switcherKey)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(MenuItemButton), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'gear opens current view; global navigation reaches an unmounted view',

@@ -74,8 +74,8 @@ class AppOverflowMenu extends StatefulWidget {
     this.anchor,
     this.label = 'Actions',
     this.enabled = true,
-    this.openOnHover = false,
-  });
+    bool? openOnHover,
+  }) : openOnHover = openOnHover ?? (label == 'Actions');
 
   final List<AppMenuEntry> entries;
   final String tooltip;
@@ -90,7 +90,8 @@ class AppOverflowMenu extends StatefulWidget {
   /// locked while a long job runs.
   final bool enabled;
 
-  /// Open the anchor on pointer entry; clicks and keyboard activation also work.
+  /// Open on pointer entry; defaults to true for Actions anchors.
+  /// Clicks and keyboard activation also work.
   final bool openOnHover;
 
   @override
@@ -98,18 +99,23 @@ class AppOverflowMenu extends StatefulWidget {
 }
 
 class _AppOverflowMenuState extends State<AppOverflowMenu> {
+  // Sibling app-bar anchors should behave as one menu strip.
+  static MenuController? _activeMenu;
   final _controller = MenuController();
   final _anchorFocus = FocusNode();
   final _firstItemFocus = FocusNode();
 
   @override
   void dispose() {
+    if (identical(_activeMenu, _controller)) _activeMenu = null;
     _anchorFocus.dispose();
     _firstItemFocus.dispose();
     super.dispose();
   }
 
   void _focusMenu() {
+    if (!identical(_activeMenu, _controller)) _activeMenu?.close();
+    _activeMenu = _controller;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_controller.isOpen) return;
       _firstItemFocus.requestFocus();
@@ -129,31 +135,47 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
         controller: _controller,
         childFocusNode: _anchorFocus,
         onOpen: _focusMenu,
+        onClose: () {
+          if (identical(_activeMenu, _controller)) _activeMenu = null;
+        },
         menuChildren: _nestedRows(rows, firstItemFocus: _firstItemFocus),
         builder: (context, controller, child) => MouseRegion(
           onEnter: enabled && openOnHover ? (_) => controller.open() : null,
-          child: TextButton(
-            focusNode: _anchorFocus,
-            style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
-            onPressed: !enabled
-                ? null
-                : () {
-                    if (openOnHover || !controller.isOpen) {
-                      controller.open();
-                    } else {
-                      controller.close();
-                    }
-                  },
-            child:
-                widget.anchor ??
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(label ?? tooltip, style: AppTextStyles.bodyStrong),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_drop_down, size: 20),
-                  ],
-                ),
+          child: TooltipVisibility(
+            visible: tooltip != label && !controller.isOpen,
+            child: Tooltip(
+              message: tooltip,
+              child: TextButton(
+                focusNode: _anchorFocus,
+                style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
+                onPressed: !enabled
+                    ? null
+                    : () {
+                        if (openOnHover || !controller.isOpen) {
+                          controller.open();
+                        } else {
+                          controller.close();
+                        }
+                      },
+                child:
+                    widget.anchor ??
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          label ?? tooltip,
+                          style: AppTextStyles.bodyStrong.copyWith(
+                            color: enabled
+                                ? AppColors.ink
+                                : AppColors.onSurfaceDisabled,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_drop_down, size: 20),
+                      ],
+                    ),
+              ),
+            ),
           ),
         ),
       );
@@ -266,7 +288,20 @@ List<Widget> _nestedRows(
 Widget _nestedLabel(AppMenuEntry entry) => Row(
   mainAxisSize: MainAxisSize.min,
   children: [
-    Text(entry.label, style: AppTextStyles.body),
+    if (entry.leading != null || entry.icon != null) ...[
+      entry.leading ?? Icon(entry.icon, size: 18),
+      const SizedBox(width: 12),
+    ],
+    Text(
+      entry.label,
+      style: AppTextStyles.body.copyWith(
+        color: entry.enabled ? AppColors.ink : AppColors.onSurfaceDisabled,
+      ),
+    ),
+    if (entry.checked == true) ...[
+      const SizedBox(width: 12),
+      const Icon(Icons.check, size: 16, color: AppColors.success),
+    ],
     if (entry.hint != null) ...[
       const SizedBox(width: 12),
       InfoHint(entry.hint!, size: 15),

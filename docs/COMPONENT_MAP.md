@@ -194,14 +194,14 @@ main.dart
 | `study` | `StudyScreen` | Multi-chapter studies |
 | `engineTournament` | `EngineTournamentScreen` | Engine-vs-engine matches, crosstable, per-game PGN |
 
-Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens a grouped, text-only menu (Train / Build / Analyse / Lab / Data, order in `kAppModeGroups`); switching views uses this menu, with no Ctrl/Cmd+number bindings.
+Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens on hover or click with a grouped, text-only menu (Train / Build / Analyse / Lab / Data, order in `kAppModeGroups`); switching views uses this menu, with no Ctrl/Cmd+number bindings.
 
 #### App bar conventions (unified June 2026)
 
 Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 - **`titleSpacing: 16`** on every `AppBar`.
-- **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with the current mode name as its anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions use named groups, with no settings-only ellipsis. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
+- **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with the current mode name as its anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions open on hover or click and use named groups, with no settings-only ellipsis. Both Actions and the view selector support keyboard navigation, Escape and outside-click dismissal. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
 - **Settings**: Every `AppSettingsButton(mode: ...)` opens the same persistent settings route at that view. Its sidebar expands the selected view into chapters, with one chapter controlling the right pane; global categories remain accessible. Trainer chapters are Session, Learning, Playback and Material. Tactics separates Session, Puzzle selection, Game downloads and Review performance; its inline Filters and Analysis buttons deep-link here too. Review changes use Apply; session and trainer preferences save automatically. PGN Viewer separates Analysis, Playback and Board and moves. Analysis-panel gears open the shared Engine → Engine analysis / Analysis panels chapters. Narrow windows use searchable view and chapter pickers. `ViewSettingsRegistry` connects mounted view-owned builders; unmounted views initialise underneath the open route, respecting the generation lock. Global account drafts survive category navigation.
 - **Toolbar buttons collapse** from text+icon to icon-only below `kToolbarCompactBreakpoint` (900 px).
 - **Layout body splits** at `kCompactBreakpoint` (960 px) from side-by-side to stacked.
