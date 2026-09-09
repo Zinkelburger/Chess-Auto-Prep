@@ -400,11 +400,14 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                             child: SingleChildScrollView(
                               key: const ValueKey('pgn-reading-scroll'),
                               controller: _scroll,
+                              // Bound move anchoring to the real document. A
+                              // viewport of trailing space lets even a short
+                              // game scroll its title away to reveal nothing.
                               padding: EdgeInsets.fromLTRB(
                                 inset,
                                 32,
                                 inset,
-                                constraints.maxHeight,
+                                32,
                               ),
                               child: Align(
                                 alignment: Alignment.topLeft,

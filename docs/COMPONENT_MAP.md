@@ -525,6 +525,11 @@ to its parent, restoring any parent focus and reading position. **Esc** first
 returns to a manually scrolled reading position, then returns to the parent
 variation, then follows the existing mode-exit behavior. Parent and focus
 controls use quiet text buttons with registry-backed shortcut tooltips.
+Move anchoring is bounded by the document with a 32px bottom margin: games
+whose title, moves and notes fit stay at the top for every anchor setting.
+Long chapters retain the selected anchor while content remains below it;
+near the end, scrolling stops at the document boundary instead of revealing
+a screen of blank space.
 Global **Settings → Keyboard shortcuts** shows a compact, bordered Action / Key / Where table with keycaps. Bindings and reference rows live together in `app_shortcuts.dart`; there is no separate list of handwritten mappings. Shared settings cards use 10px vertical row/header padding and 12px group gaps, with a 680px content cap to keep labels and values close together.
 
 ```
