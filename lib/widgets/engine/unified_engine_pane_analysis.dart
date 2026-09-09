@@ -20,6 +20,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
 
   void _onLifecycleChanged() {
     if (!mounted) return;
+    _syncBoardEngine();
     final state = EngineLifecycle.instance.state;
     final prev = _lastLifecycleState;
     _lastLifecycleState = state;
@@ -45,6 +46,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
   }
 
   void _onSettingsChanged() {
+    _syncBoardEngine();
     final revision = _settings.analysisConfigRevision;
     final configChanged = revision != _analysisConfigRevision;
     if (configChanged) {
@@ -72,7 +74,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
   // ── Analysis Pipeline ─────────────────────────────────────────────────
 
   Future<void> _startInitialAnalysis() async {
-    if (!mounted || _initialAnalysisStarted) return;
+    if (!mounted || !_isActive || _initialAnalysisStarted) return;
     _initialAnalysisStarted = true;
     _selectedMoveUcis = [];
     _maiaProbs = null;

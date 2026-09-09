@@ -5,6 +5,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
+import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_connection_factory.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_bar.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +22,7 @@ class _Connection implements EngineConnection {
   final closed = Completer<void>();
   bool disposed = false;
   final commands = <String>[];
+  bool searching = false;
   @override
   Stream<String> get stdout => output.stream;
   @override
@@ -30,12 +32,18 @@ class _Connection implements EngineConnection {
   @override
   void sendCommand(String command) {
     commands.add(command);
+    if (command == 'stop' && searching && !disposed) {
+      searching = false;
+      output.add('bestmove (none)');
+    }
+    if (command.startsWith('go ')) searching = true;
     if (autoReply && command.startsWith('go ')) {
       final black = commands
           .lastWhere((c) => c.startsWith('position fen'))
           .contains(' b ');
       final pv = black ? 'e7e5 e2e4' : 'e2e4 e7e5';
       output.add('info depth 1 multipv 1 score cp 20 nodes 10 pv $pv');
+      searching = false;
       output.add('bestmove ${pv.split(' ').first}');
     }
     if (command == 'isready' && !disposed) output.add('readyok');
@@ -52,8 +60,12 @@ class _Connection implements EngineConnection {
 
 void main() {
   const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    StockfishConnectionFactory.createForTest = () async => _Connection();
+  });
   tearDown(() {
+    BoardEngine.instance.dispose();
     StockfishConnectionFactory.createForTest = null;
     if (InlineEngineBar.isEngineEnabled) InlineEngineBar.toggleEngine();
   });
@@ -65,6 +77,45 @@ void main() {
         child: const InlineEngineBar(fen: fen),
       ),
     ),
+  );
+
+  testWidgets(
+    'off prepares one engine and repeated toggles keep its configuration',
+    (tester) async {
+      final connections = <_Connection>[];
+      StockfishConnectionFactory.createForTest = () async {
+        final connection = _Connection();
+        connections.add(connection);
+        return connection;
+      };
+      await tester.pumpWidget(harness(active: true));
+      await tester.pumpAndSettle();
+      expect(connections, hasLength(1));
+      final connection = connections.single;
+      expect(connection.commands.where((c) => c.startsWith('go ')), isEmpty);
+      for (var i = 0; i < 3; i++) {
+        InlineEngineBar.toggleEngine();
+        await tester.pumpAndSettle();
+        expect(find.text('e4'), findsOneWidget);
+        InlineEngineBar.toggleEngine();
+        await tester.pumpAndSettle();
+        expect(connection.disposed, isFalse);
+      }
+      expect(connections, hasLength(1));
+      expect(
+        connection.commands.where(
+          (c) => c.startsWith('setoption name Threads'),
+        ),
+        hasLength(1),
+      );
+      expect(
+        connection.commands.where((c) => c.startsWith('setoption name Hash')),
+        hasLength(1),
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(connection.disposed, isTrue);
+    },
   );
 
   testWidgets('PV refreshes keep the PGN below the engine at a fixed offset', (

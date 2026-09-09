@@ -122,10 +122,28 @@ abstract class _UnifiedEnginePaneStateBase extends State<UnifiedEnginePane> {
 
   /// Whether analysis should run right now. Generation owns the engine, so
   /// the pane goes dormant (and shows [EngineBusyNotice]) while it runs.
+  bool _modeActive = true;
+
+  bool get _surfaceActive => widget.isActive && _modeActive;
+
   bool get _isActive =>
-      widget.isActive &&
+      _surfaceActive &&
       EngineLifecycle.instance.state != EngineState.off &&
       !EngineGate.isLocked;
+
+  void _syncBoardEngine() {
+    if (_surfaceActive && !EngineGate.isLocked) {
+      unawaited(
+        _analysis.prepare(this).catchError((Object error) {
+          if (kDebugMode) log.e('[Engine] Preparation failed: $error');
+        }),
+      );
+    } else {
+      _analysisGeneration++;
+      _analysis.cancel();
+      _analysis.detach(this);
+    }
+  }
 
   bool get _engineEnabled => EngineLifecycle.instance.state != EngineState.off;
 }
@@ -150,8 +168,19 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active = TickerMode.valuesOf(context).enabled;
+    final becameActive = !_modeActive && active;
+    _modeActive = active;
+    _syncBoardEngine();
+    if (becameActive && _isActive) _scheduleAnalysis();
+  }
+
+  @override
   void didUpdateWidget(UnifiedEnginePane oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _syncBoardEngine();
     if (!_isActive) return;
 
     final fenChanged = widget.fen != oldWidget.fen;
@@ -168,6 +197,7 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
     _analysis.poolStatus.removeListener(_onPoolStatusChanged);
     EngineLifecycle.instance.removeListener(_onLifecycleChanged);
     _analysis.cancel();
+    _analysis.detach(this);
     super.dispose();
   }
 
