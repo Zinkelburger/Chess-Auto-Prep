@@ -1,7 +1,7 @@
 /// Games that reach the opening-tree cursor, with search and expandable PVs.
 ///
 /// Each row is a title plus the comment-free mainline from this position,
-/// truncated to one line. [expandAll] (default on) keeps every PV visible
+/// truncated to one line. **Show moves** (default on) keeps every PV visible
 /// and treats the blue triangle as a bullet; turning it off makes the
 /// triangle a per-row preview toggle and the title opens the game.
 library;
@@ -39,7 +39,7 @@ class PgnTreeGamesList extends StatefulWidget {
 }
 
 class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
-  bool _expandAll = true;
+  bool _showMoves = true;
   final Set<int> _previewed = {};
   final Map<PgnGameEntry, String> _pvCache = {};
   String? _cachedFen;
@@ -54,7 +54,7 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
     }
   }
 
-  bool _isExpanded(int index) => _expandAll || _previewed.contains(index);
+  bool _isExpanded(int index) => _showMoves || _previewed.contains(index);
 
   String _pvFor(PgnGameEntry game) {
     if (_cachedFen != widget.currentFen) {
@@ -77,14 +77,16 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
     });
   }
 
-  void _setExpandAll(bool value) {
+  void _setShowMoves(bool value) {
+    if (!mounted) return;
     setState(() {
-      _expandAll = value;
-      if (!_expandAll) _previewed.clear();
+      _showMoves = value;
+      if (!_showMoves) _previewed.clear();
     });
   }
 
   void _togglePreview(int index) {
+    if (!mounted) return;
     setState(() {
       if (!_previewed.remove(index)) _previewed.add(index);
     });
@@ -105,43 +107,26 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Wrap(
+              alignment: WrapAlignment.start,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                Text(
-                  'At this position',
-                  style: AppTextStyles.caption.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onSurfaceSoft,
-                  ),
+                GameNumberField(
+                  currentIndex: current < 0 ? 0 : current,
+                  gameCount: games.length,
+                  onGoToGame: widget.onGameSelected,
+                  tooltip:
+                      'Games that reach this opening-tree position, '
+                      'in the current sort.\n'
+                      'Type a number and press Enter to open that game',
                 ),
-                const SizedBox(height: 4),
-                Wrap(
-                  alignment: WrapAlignment.start,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    GameNumberField(
-                      currentIndex: current < 0 ? 0 : current,
-                      gameCount: games.length,
-                      onGoToGame: widget.onGameSelected,
-                      tooltip:
-                          'Games that reach this opening-tree position, '
-                          'in the current sort.\n'
-                          'Type a number and press Enter to open that game',
-                    ),
-                    GameSearchButton(
-                      shortcut: AppShortcut.searchGames,
-                      onPressed: widget.onSearch,
-                    ),
-                    _ExpandAllToggle(
-                      value: _expandAll,
-                      onChanged: _setExpandAll,
-                    ),
-                  ],
+                GameSearchButton(
+                  shortcut: AppShortcut.searchGames,
+                  onPressed: widget.onSearch,
                 ),
+                _ShowMovesToggle(value: _showMoves, onChanged: _setShowMoves),
               ],
             ),
           ),
@@ -152,7 +137,7 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
               itemBuilder: (context, idx) => _GameRow(
                 game: games[idx],
                 expanded: _isExpanded(idx),
-                expandAll: _expandAll,
+                showMoves: _showMoves,
                 pv: _isExpanded(idx) ? _pvFor(games[idx]) : '',
                 onOpen: () => widget.onGameSelected(idx),
                 onTogglePreview: () => _togglePreview(idx),
@@ -165,18 +150,18 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
   }
 }
 
-class _ExpandAllToggle extends StatelessWidget {
+class _ShowMovesToggle extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _ExpandAllToggle({required this.value, required this.onChanged});
+  const _ShowMovesToggle({required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: value
-          ? 'Uncheck to collapse lines; the blue arrow then previews one'
-          : 'Show every game\'s mainline from this position',
+          ? 'Hide moves; use a game’s arrow to preview its continuation'
+          : 'Show each game’s continuation from this position',
       child: InkWell(
         onTap: () => onChanged(!value),
         borderRadius: BorderRadius.circular(4),
@@ -192,7 +177,7 @@ class _ExpandAllToggle extends StatelessWidget {
                 onChanged: (v) => onChanged(v ?? true),
               ),
               Text(
-                'Expand all',
+                'Show moves',
                 style: AppTextStyles.caption.copyWith(fontSize: 12),
               ),
             ],
@@ -206,7 +191,7 @@ class _ExpandAllToggle extends StatelessWidget {
 class _GameRow extends StatelessWidget {
   final PgnGameEntry game;
   final bool expanded;
-  final bool expandAll;
+  final bool showMoves;
   final String pv;
   final VoidCallback onOpen;
   final VoidCallback onTogglePreview;
@@ -214,7 +199,7 @@ class _GameRow extends StatelessWidget {
   const _GameRow({
     required this.game,
     required this.expanded,
-    required this.expandAll,
+    required this.showMoves,
     required this.pv,
     required this.onOpen,
     required this.onTogglePreview,
@@ -226,7 +211,7 @@ class _GameRow extends StatelessWidget {
     final body = _titleAndPv();
     final stars = _rating();
 
-    if (expandAll) {
+    if (showMoves) {
       return InkWell(
         onTap: onOpen,
         child: Padding(
@@ -274,14 +259,26 @@ class _GameRow extends StatelessWidget {
   }
 
   Widget _titleAndPv() {
+    final result = game.headers['Result']?.trim();
+    final hasResult = const {'1-0', '0-1', '1/2-1/2'}.contains(result);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          game.label,
-          style: const TextStyle(fontSize: 12),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                game.label,
+                style: AppTextStyles.caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (hasResult) ...[
+              const SizedBox(width: 8),
+              Text(result!, style: AppTextStyles.caption),
+            ],
+          ],
         ),
         if (expanded && pv.isNotEmpty)
           Padding(
