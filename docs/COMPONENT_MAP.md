@@ -1205,7 +1205,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `game_analysis_chart.dart` | Eval chart for game review |
 | `game_nav_item.dart` | `GameNavItem` — label, study rating/summary, PGN `headers` for nav bar and search dialog; `fromEntry(PgnGameEntry)` |
 | `game_number_field.dart` | **Game N of Total** jump box: the counter *is* the input (digits only, Enter jumps, Escape restores, `G` focuses). Search-by-name stays on the Search button so the current position stays visible while you type |
-| `game_nav_bar.dart` | Previous/next game, editable game number (`G`), and Search (`/`). The counter and Search open the same chapter/event/game browser. Optional playback uses a labelled Play/Pause button; solitaire hides browsing. |
+| `game_nav_bar.dart` | Previous/next game, editable game number (`G`), and Search (`/`). Search opens the chapter/event/game browser; the counter only supports direct number entry. Optional playback uses a labelled Play/Pause button; solitaire hides browsing. |
 | `game_search_dialog.dart` | Responsive Browse Games dialog with chapter/event cards, scoped text search, All games, numeric jump, Enter selection and Escape dismissal; shared by game navigation and the opening-tree games list. Grouping lives in `game_chapter_dialog.dart`. |
 | `games_list_widget.dart` | Selectable games list |
 | `fullscreen_game_view.dart` | Fullscreen game + board view |
