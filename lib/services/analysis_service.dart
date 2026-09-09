@@ -1,7 +1,7 @@
 /// Interactive analysis pipeline for the engine pane.
 ///
 /// Orchestrates: discovery (MultiPV) -> candidate filtering -> per-move
-/// eval.  Uses [StockfishPool] for Stockfish workers and exposes
+/// eval. Uses one shared [BoardEngine] with the selected threads and exposes
 /// [ValueNotifier]s for the UI to subscribe to.
 ///
 /// Replaces the old [MoveAnalysisPool] for the interactive analysis use case.
@@ -14,7 +14,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../models/engine_settings.dart';
-import 'engine/stockfish_pool.dart';
+import '../models/analysis/discovery_result.dart';
+import 'engine/board_engine.dart';
 import '../models/analysis/move_analysis_result.dart';
 import '../utils/chess_utils.dart' show playUciMove;
 import '../utils/fen_utils.dart';
@@ -30,11 +31,12 @@ class AnalysisService {
 
   /// Create an independent instance (unit tests only).
   @visibleForTesting
-  AnalysisService.fresh() : this._();
+  AnalysisService.fresh({BoardEngine? engine})
+    : _engine = engine ?? BoardEngine.instance;
 
-  AnalysisService._();
+  AnalysisService._() : _engine = BoardEngine.instance;
 
-  final StockfishPool _pool = StockfishPool.instance;
+  final BoardEngine _engine;
 
   int _generation = 0;
 
@@ -56,7 +58,7 @@ class AnalysisService {
     const PoolStatus(),
   );
 
-  int get workerCount => _pool.workerCount;
+  int get workerCount => _engine.workerCount;
 
   /// Applies [apply] synchronously when idle; otherwise after the current frame.
   /// Avoids "widget tree was locked" when notifiers rebuild [ListenableBuilder]s.
@@ -68,11 +70,9 @@ class AnalysisService {
     }
   }
 
-  // ── Warm-up ───────────────────────────────────────────────────────────
+  Future<void> prepare(Object pane) => _engine.prepare(pane);
 
-  Future<void> warmUp() async {
-    await _pool.warmUp();
-  }
+  void detach(Object pane) => _engine.detach(pane);
 
   // ── Discovery: MultiPV on root position ───────────────────────────────
 
@@ -84,7 +84,7 @@ class AnalysisService {
     _generation++;
     final myGen = _generation;
 
-    _pool.stopAll();
+    _engine.pause(this);
     _workerCurrentMoves.clear();
     _currentBaseFen = null;
     _publishUi(() {
@@ -92,18 +92,12 @@ class AnalysisService {
       discoveryResult.value = const DiscoveryResult();
     });
 
-    await _pool.ensureWorkers();
-
-    if (_generation != myGen || _pool.workerCount == 0) {
-      return const DiscoveryResult();
-    }
-
     final whiteToMove = isWhiteToMove(fen);
 
     _publishUi(() {
       poolStatus.value = PoolStatus(
         phase: 'discovering',
-        activeWorkers: _pool.workerCount,
+        activeWorkers: _engine.workerCount,
         hashPerWorkerMb: EngineSettings.instance.hashMb,
       );
     });
@@ -111,7 +105,7 @@ class AnalysisService {
     if (kDebugMode) {
       debugPrint(
         '[Analysis] Discovery START — MultiPV=$multiPv, depth=$depth, '
-        'workers=${_pool.workerCount}, '
+        'workers=${_engine.workerCount}, '
         'fen=${fen.split(' ').take(2).join(' ')}',
       );
     }
@@ -119,11 +113,12 @@ class AnalysisService {
     var lastLoggedDiscoveryDepth = 0;
 
     try {
-      final result = await _pool.discoverMoves(
+      final result = await _engine.discover(
+        this,
         fen: fen,
         depth: depth,
         multiPv: multiPv,
-        isWhiteToMove: whiteToMove,
+        whiteToMove: whiteToMove,
         onProgress: (intermediate) {
           if (_generation != myGen) return;
           _publishUi(() {
@@ -133,7 +128,7 @@ class AnalysisService {
               discoveryDepth: intermediate.depth,
               discoveryNodes: intermediate.nodes,
               discoveryNps: intermediate.nps,
-              activeWorkers: _pool.workerCount,
+              activeWorkers: _engine.workerCount,
               hashPerWorkerMb: EngineSettings.instance.hashMb,
             );
           });
@@ -150,7 +145,9 @@ class AnalysisService {
         },
       );
 
-      if (_generation != myGen) return const DiscoveryResult();
+      if (_generation != myGen || result == null) {
+        return const DiscoveryResult();
+      }
 
       _publishUi(() => discoveryResult.value = result);
       if (kDebugMode) {
@@ -177,7 +174,7 @@ class AnalysisService {
     _generation++;
     final myGen = _generation;
 
-    _pool.stopAll();
+    _engine.pause(this);
 
     _currentBaseFen = baseFen;
     _moveQueue = List.from(moveUcis);
@@ -198,24 +195,11 @@ class AnalysisService {
 
     _evalDepth = evalDepth;
 
-    await _pool.ensureWorkers();
-
-    if (_generation != myGen || _pool.workerCount == 0) {
-      _publishUi(() {
-        poolStatus.value = PoolStatus(
-          phase: 'complete',
-          totalMoves: moveUcis.length,
-          completedMoves: 0,
-        );
-      });
-      return;
-    }
-
     _publishUi(() {
       poolStatus.value = PoolStatus(
         phase: 'evaluating',
         totalMoves: moveUcis.length,
-        activeWorkers: _pool.workerCount,
+        activeWorkers: _engine.workerCount,
         hashPerWorkerMb: EngineSettings.instance.hashMb,
       );
     });
@@ -223,7 +207,7 @@ class AnalysisService {
     if (kDebugMode) {
       debugPrint(
         '[Analysis] Evaluation START — ${moveUcis.length} moves, '
-        'depth=$evalDepth, workers=${_pool.workerCount}',
+        'depth=$evalDepth, workers=${_engine.workerCount}',
       );
     }
 
@@ -236,7 +220,7 @@ class AnalysisService {
     _currentBaseFen = null;
     _moveQueue = [];
     _nextMoveIndex = 0;
-    _pool.stopAll();
+    _engine.pause(this);
     _publishUi(() {
       discoveryResult.value = const DiscoveryResult();
       results.value = {};
@@ -258,23 +242,15 @@ class AnalysisService {
         evaluatingUcis: _workerCurrentMoves.values.toList(),
         totalMoves: _moveQueue.length,
         completedMoves: results.value.length,
-        activeWorkers: _pool.workerCount,
+        activeWorkers: _engine.workerCount,
         hashPerWorkerMb: EngineSettings.instance.hashMb,
       );
     });
   }
 
   void _startWorkerLoops(int generation) {
-    final workerCount = _pool.workerCount;
-    if (workerCount == 0) return;
-
-    final futures = <Future<void>>[];
-    for (int i = 0; i < workerCount; i++) {
-      futures.add(_workerLoop(i, generation));
-    }
-
     unawaited(
-      Future.wait(futures).then((_) {
+      _workerLoop(0, generation).then((_) {
         if (_generation == generation) {
           _workerCurrentMoves.clear();
           _publishUi(() {
@@ -282,7 +258,7 @@ class AnalysisService {
               phase: 'complete',
               totalMoves: _moveQueue.length,
               completedMoves: results.value.length,
-              activeWorkers: _pool.workerCount,
+              activeWorkers: _engine.workerCount,
               hashPerWorkerMb: EngineSettings.instance.hashMb,
             );
           });
@@ -304,17 +280,18 @@ class AnalysisService {
       _workerCurrentMoves[workerIndex] = uci;
       _emitPoolStatus();
 
-      EvalWorker? worker;
       try {
-        worker = await _pool.acquire();
         if (_generation != generation) return;
 
         final resultingFen = playUciMove(baseFen, uci);
         if (resultingFen == null) continue;
 
         // ── Eval ──
-        final eval = await worker.evaluateFen(resultingFen, _evalDepth);
-        if (_generation != generation) return;
+        final eval = await _engine.run(
+          this,
+          (worker) => worker.evaluateFen(resultingFen, _evalDepth),
+        );
+        if (_generation != generation || eval == null) return;
 
         final whiteCp = eval.scoreCp != null
             ? (whiteToMove ? -eval.scoreCp! : eval.scoreCp!)
@@ -347,7 +324,6 @@ class AnalysisService {
           debugPrint('[Analysis] Evaluation FAILED for $uci: $e');
         }
       } finally {
-        if (worker != null) _pool.release(worker);
         // A cancel or a newer request has already published its own status
         // and may have re-used this worker index; a stale loop unwinding must
         // not remove the new entry or overwrite that status.
@@ -371,6 +347,5 @@ class AnalysisService {
 
   void dispose() {
     cancel();
-    _pool.dispose();
   }
 }

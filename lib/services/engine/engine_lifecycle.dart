@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../analysis_service.dart';
 import 'stockfish_pool.dart';
+import 'board_engine.dart';
 import '../../utils/safe_change_notifier.dart';
 
 enum EngineState { off, idle, analyzing, generating }
@@ -76,7 +77,10 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   Future<void> toggleOff() => _serialExec(_doToggleOff);
 
   /// Free the engine without changing the user's persisted preference.
-  Future<void> suspend() => _serialExec(_doShutdown);
+  Future<void> suspend() => _serialExec(() async {
+    BoardEngine.instance.suspend();
+    await _doShutdown();
+  });
 
   /// Number of background jobs currently borrowing the shared pool (e.g. a
   /// tactics import). While positive, [suspend]/[toggleOff] cancel
@@ -97,16 +101,26 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
 
   /// Restart after [suspend] when the user preference allows it.
   Future<void> resume() => _serialExec(() async {
+    _resumeBoard();
     if (_userWantsEngine) await _doToggleOn();
   });
+
+  void _resumeBoard() {
+    if (testMode) return;
+    unawaited(
+      BoardEngine.instance.resume().catchError((Object error) {
+        debugPrint('[EngineLifecycle] Board preparation failed: $error');
+      }),
+    );
+  }
 
   Future<void> _doToggleOn() async {
     _userWantsEngine = true;
     _persistToggle(true);
+    _resumeBoard();
     if (_state != EngineState.off) return;
-    // Workers are spawned lazily on first use (ensureWorkers is called by
-    // AnalysisService, EngineWeaknessService, etc. before any eval work).
-    // This avoids N Stockfish processes sitting idle after app launch.
+    // Mounted boards prepare one shared process. Bulk workers are only
+    // provisioned by jobs that need them; enabling analysis never starts a pool.
     _state = EngineState.idle;
     notifyListeners();
   }
@@ -122,9 +136,6 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     if (_state == EngineState.off) return;
     if (_state == EngineState.generating) return;
     _analysis.cancel();
-    if (!testMode) {
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
     // A leased pool belongs to a running background job — leave its workers
     // alive. On app close the orphaned engines still exit on their own:
     // stdin hits EOF when this process dies and UCI engines quit on EOF.
@@ -158,6 +169,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   Future<void> _doEnterGeneration(int threads) async {
     _toggleStateBeforeGeneration = _state != EngineState.off;
     _analysis.cancel();
+    BoardEngine.instance.suspend();
     if (!testMode) {
       await _pool.prepareForTreeBuild(threads);
     }
@@ -169,12 +181,13 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   ///
   /// The pool and its thread configuration stay untouched — the paused build
   /// picks the same workers back up when it resumes (via [enterGeneration]);
-  /// interactive analysis just borrows them meanwhile. Restores the state
+  /// interactive analysis resumes its separate single process. Restores the state
   /// the user's toggle implies, so an engine that was off stays off.
   Future<void> pauseGeneration() => _serialExec(_doPauseGeneration);
 
   Future<void> _doPauseGeneration() async {
     if (_state != EngineState.generating) return;
+    _resumeBoard();
     _state = _toggleStateBeforeGeneration ? EngineState.idle : EngineState.off;
     notifyListeners();
   }
@@ -183,15 +196,11 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   Future<void> exitGeneration() => _serialExec(_doExitGeneration);
 
   Future<void> _doExitGeneration() async {
-    if (_toggleStateBeforeGeneration) {
-      if (!testMode && _pool.workerCount > 0) {
-        await _pool.reconfigureAllWorkers(1);
-      }
-      _state = EngineState.idle;
-    } else {
-      _pool.dispose();
-      _state = EngineState.off;
-    }
+    _resumeBoard();
+    // Interactive analysis no longer borrows the generation pool. Keep only
+    // workers leased by another job after the build has ended.
+    if (_poolLeases == 0) _pool.dispose();
+    _state = _toggleStateBeforeGeneration ? EngineState.idle : EngineState.off;
     notifyListeners();
   }
 
@@ -213,6 +222,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   void resetForTest() {
     _analysis.cancel();
     _pool.dispose();
+    BoardEngine.instance.dispose();
     _state = EngineState.off;
     _userWantsEngine = true;
     _toggleStateBeforeGeneration = false;

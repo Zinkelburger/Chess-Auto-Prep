@@ -18,6 +18,12 @@ class EngineWorkerSlot {
   int? _threads;
   int? _hashMb;
 
+  bool get hasWorker => _worker != null && !_worker!.isDead;
+
+  void stop() => _worker?.stop();
+
+  Future<void> waitUntilStopped() async => await _worker?.waitUntilStopped();
+
   Future<EvalWorker?> ensure({required int threads, int hashMb = 128}) {
     if (_threads != threads ||
         _hashMb != hashMb ||

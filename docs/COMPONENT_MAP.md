@@ -476,13 +476,24 @@ in a left column; move taps and hover previews work throughout the line.
 Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off
 UnifiedEnginePane (when lifecycle ≠ off)
   → post-frame _runAnalysis on FEN / lifecycle changes (not during parent build)
-  → AnalysisService.ensureWorkers() (lazy spawn on first use) → StockfishPool / EvalWorker
+  → AnalysisService → shared BoardEngine / EvalWorker (one process; cores = threads)
   → Eval chain: session cache → CdbDirect → Stockfish (Lichess Explorer mothballed; DB column hidden, _fetchDbData never called)
   → Best-line eval persisted to EvalCache via _persistBestEvalToCache()
   → Hover on MOVE or PV line → BoardPreviewController (floating) → FloatingBoardPreview overlay
-InlineEngineBar — lazy dedicated EngineWorkerSlot; normal Stockfish discovery writes best eval to EvalCache on completion; hypothetical threat searches use threatPositionFen and skip cache writes
+InlineEngineBar — shares BoardEngine with the analysis pane; normal Stockfish discovery writes best eval to EvalCache on completion; hypothetical threat searches use threatPositionFen and skip cache writes
 ExpectimaxLinesPane — same floating preview on line hover
 ```
+
+Active board panes prepare one shared Stockfish process with the selected cores
+and hash before the first toggle. Toggle-off sends `stop`, retaining those
+threads, the network and hash in memory without background searches or a thread
+ramp-down. Same-position views share streamed discovery results. Candidate evals
+in the larger pane run sequentially in that process; interactive analysis never
+prepares the bulk worker pool. A new search waits for the previous `bestmove`
+acknowledgement, and an old pane cannot stop another owner's search. Leaving the
+last board, backgrounding the app, or starting generation releases the process;
+returning prepares one again. Generation and other bulk jobs create their own
+workers on demand; finished generation releases unleased workers.
 
 Inline engine hover boards follow the main board perspective in Repertoire,
 PGN Viewer, Player Analysis, Planner, Studies and Tactics. Stepping through a
