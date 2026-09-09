@@ -147,7 +147,7 @@ class WindowsUpdateTest(unittest.TestCase):
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="updater café 'quoted'-")
-        self.addCleanup(tmp.cleanup)
+        self.addCleanup(self.cleanup_directory, tmp)
         self.root = Path(tmp.name)
         self.state = self.root / 'updates' / 'attempt'
         self.state.mkdir(parents=True)
@@ -162,6 +162,22 @@ class WindowsUpdateTest(unittest.TestCase):
         self.write_request()
         # Preserve logs before TemporaryDirectory cleanup, including on failure.
         self.addCleanup(self.preserve_diagnostics)
+
+    @staticmethod
+    def cleanup_directory(tmp):
+        # The restarted native probe writes its marker immediately before
+        # exiting. Windows can still hold app.exe open after we see that
+        # marker; wait for the actual file release instead of racing rmtree.
+        # Persistent permission failures still fail the test after a deadline.
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                tmp.cleanup()
+                return
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(.05)
 
     def write_request(self, process_id=2147483647, digest=None):
         self.request.write_text(json.dumps(dict(
