@@ -126,12 +126,16 @@ brush's colour and otherwise clears the square. Flutter cannot show a piece
 as the cursor, so the board hides the cursor and draws a ghost of the tool.
 `widgets/board_editor/piece_palette.dart` is the spare-piece strip (pointer,
 king to pawn, bin): a drag places once and leaves the pointer in hand, a click
-takes the piece as the brush. `BoardWithSpares` in the editor dialog stacks
+takes the piece as the brush. `BoardWithSpares` in `widgets/board_editor/board_editor_panel.dart` stacks
 the far side's strip, the board and the near side's strip, following the
 flip. `BoardEditorWidget` binds the surface to `BoardEditorController`; the
 bughouse cards bind it to their dual-board state and share the same tool
 model and palette. Bughouse king moves update the board atomically before
-validating the position.
+validating the position. `BoardEditorPanel` composes board, palette and
+`PositionSetupPanel` for embedding in both the editor dialog and collection
+search. Castling and en passant sit under Advanced. FEN text is a controller
+owned draft (`fenInput`, `hasUnappliedFen`); apply or discard it before using
+the position, so a malformed paste can never silently select the previous board.
 
 The app driver sets `BUGHOUSE_DB_HOME` to its disposable profile. An explicit
 archive override is authoritative and cannot fall through to the user's book.
@@ -650,7 +654,7 @@ PgnSourcesPanel (lib/widgets/pgn_sources_panel.dart)
        │    ├─ HeaderFilters (lib/widgets/slice/header_filters.dart)
        │    ├─ Isolate-based slice compute → matchedIndices
        │    └─ "Preview lines" → LinesPreviewPanel
-       │         ├─ Fuzzy search bar
+       │         ├─ Literal substring search bar
        │         ├─ Virtualized game line list
        │         └─ HoverableMoveChips per row → BoardPreviewController → FloatingBoardPreview
        └─ Remove button
@@ -658,7 +662,7 @@ PgnSourcesPanel (lib/widgets/pgn_sources_panel.dart)
 
 Used by:
 - `RepertoireGenerationTab` (DB Explorer mode) — replaces `_buildPgnFilePickerSection()`
-- `PgnSliceDialog` — optional matching-games preview embeds `LinesPreviewPanel` with hover board
+- `PgnGameFilterWorkspace` — live matching-games results embed `LinesPreviewPanel` with hover board and direct game opening
 - `LineItemRow._MovesPreview` — upgraded to `HoverableMoveChips` for hover board on lines browser
 
 ---
@@ -686,7 +690,7 @@ Used by:
 | `coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
-| `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `detectProtagonist`, `detectBothPlayers` (two-player matchup detection); `loadCurrentGame` parks at `pgnInitialFen` when set (tree landing / restored game cursor), else game start; `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); loads persisted `.fenidx` companion file on open (validated against PGN file size + mtime + game count; FENIDX2, RAVs included), or builds `fenIndex` in background, for instant position-filter and tree-position lookups; re-persists `.fenidx` after PGN metadata writes to keep stat values fresh; solitaire mode (`toggleSolitaire`, `SolitaireController`); used by `PgnViewerScreen` |
+| `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `collectionRevision` invalidates search snapshots after in-place header/movetext changes; movetext edits invalidate the FEN index and use replay until rebuilt; `detectProtagonist`, `detectBothPlayers` (two-player matchup detection); `loadCurrentGame` parks at `pgnInitialFen` when set (tree landing / restored game cursor), else game start; `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); loads persisted `.fenidx` companion file on open (validated against PGN file size + mtime + game count; FENIDX2, RAVs included), or builds `fenIndex` in background, for instant position-filter and tree-position lookups; re-persists `.fenidx` after PGN metadata writes to keep stat values fresh; solitaire mode (`toggleSolitaire`, `SolitaireController`); used by `PgnViewerScreen` |
 | `pgn/viewer_opening_tree.dart` | PGN-viewer opening-tree mode: build progress, cursor, games-at-position lookup | `toggle`/`enter` restore the saved tree cursor instead of syncing from the remounted game; `snapshotCursor(leavingForGame:)` for games-at-position return; `hasSavedPosition` gates the app-bar back button |
 | `pgn/viewer_game_model.dart` | Parsed game + mainline spine + sidelines for the viewer widget | `load` promotes Chessable dummy-null mainlines (`pgn_dummy_mainline.dart`) before extracting variations |
 | `pgn/pgn_dummy_mainline.dart` | `promoteNullMoveDummyMainline` — splice a childless `Z0`/`--` dummy whose only sibling is the real lesson onto the mainline | used by the viewer, FEN index, and opening-tree walk |
@@ -1210,13 +1214,13 @@ release smoke testing. No release or update is triggered by these tests.
 | `pgn_import_dialog.dart` | Compact PGN import `AlertDialog` — file picker pill + paste textarea with live line count via `countPgnGames`; used for repertoire append and create-with-PGN flows. Multi-source contexts use `PgnSourcesPanel` instead |
 | `pgn_sources_panel.dart` | **Compact multi-source PGN attachment panel** — replaces the oversized import dialog; supports multiple PGN files/pastes, per-source slicing via `InlineSliceEditor`, embedded `LinesPreviewPanel` |
 | `pgn_inline_slice_editor.dart` | **Inline slice editor** — "All Lines" / "Slice" radio + position/header/sequence filters + match count via `computeSliceMatches` + preview panel; accepts optional `fenIndex` for instant position lookups; used inside `PgnSourcesPanel` per source |
-| `lines_preview_panel.dart` | **Browseable line list** — fuzzy search, virtualized scrolling, `HoverableMoveChips` per row with `FloatingBoardPreview` on hover; shows full-panel loading spinner while `computing` (replaces stale count + list); used in slice dialog and inline slice editor |
+| `lines_preview_panel.dart` | **Browseable line list** — literal substring search, virtualized scrolling, `HoverableMoveChips` per row with `FloatingBoardPreview` on hover; shows full-panel loading spinner while `computing` (replaces stale count + list); used in collection search and inline slice editor |
 | `hoverable_move_chips.dart` | **Inline move chips with hover board preview** — renders SAN moves as compact chips, computes FEN on hover, triggers `BoardPreviewController.setPreview`; shared by `LinesPreviewPanel`, `LineItemRow`, PGN Viewer |
 | `slice/position_filter.dart` | Shared position filter widget (FEN/SAN input + Apply/Clear + "Board position" chip); uses `PositionPreviewIcon` for hover board preview |
-| `slice/header_filters.dart` | Shared header filters widget (labelled field/mode selectors above full-width values; 44px add/remove controls) |
+| `slice/header_filters.dart` | Reusable Field / Rule / Value table, stacked at narrow widths. Distinct collection headers suggest names/events with game counts; typing uses literal case-insensitive matching and selecting a suggestion sets the visible rule to exact. Presets are ordinary editable rows; shared by collection search and inline import filters |
 | `slice/sequence_filter.dart` | Shared move sequence filter widget ([gap]-separated groups) |
-| `pgn_slice_dialog.dart` | Game filter dialog, opened beside the collection name at the top left | Shows the collection name and a live “Filter for” summary; roomy game-detail and position controls, move sequences under Advanced. Default header row starts as Date ≥. Preview is opt-in after filters are set; clearing filters hides it. Skips unchanged effective filters and debounces edits by 300ms; Apply waits for current results and valid position/sequence input. Accepts optional `fenIndex` for O(1) position filtering |
-| `position_preview_icon.dart` | **Shared hover-preview widget** — eye icon that shows a floating 200×200 board overlay on hover via `bestEffortPositionFromInput`; supports FEN, SAN, and `[gap]`-separated sequences; used by `PositionFilter` and `PgnSliceDialog` |
+| `pgn/pgn_game_filter_workspace.dart` | Full-width **Filter games** workspace tab opened beside the collection name. Draft conditions and results survive tab switches; a changed collection starts a fresh draft from its saved filters. Player presets fill editable rows. Position accepts FEN/moves, current-board capture, a King's Indian quick start, and the embedded board editor. Exact position search includes all pieces, side to move, castling and en passant (mainline and variations). Live results have no separate hidden search; Show games or a result click applies the draft and returns to Game. Debounces by 300ms and hides stale results; invalid input and unfinished board setup block applying. Optional `fenIndex` accelerates position matching. |
+| `position_preview_icon.dart` | **Shared hover-preview widget** — eye icon that shows a floating 200×200 board overlay on hover via `bestEffortPositionFromInput`; supports FEN, SAN, and `[gap]`-separated sequences; used by `PositionFilter` |
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Engine-analysis setup (depth, min games, thresholds, workers); reached from the positions list's eval-sort empty state or the kebab. Re-downloading games is no longer part of it — that is the subtitle refresh button |
 | `lichess_db_info_icon.dart` | Lichess DB info + OAuth entry point |

@@ -125,6 +125,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   int? _databasePickerTab;
   List<PgnGameEntry>? _filterSource;
   List<GameRecord> _filterRecords = [];
+  int? _filterRevision;
+  String? _filterOriginFen;
   final Map<int, PgnDatabasePanelController> _databasePanels = {};
   final Map<int, PgnGameEntry> _referenceGames = {};
   final Map<int, PgnViewerWidgetController> _referenceReaders = {};
@@ -256,6 +258,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _showPanel(int index) {
     _controller.stopAutoPlay();
     if (!mounted) return;
+    if (index == PgnWorkspace.filters && _tabController.index != index) {
+      _filterOriginFen = normalizeFen(_controller.currentPosition.fen);
+    }
     if (index == _lineTabIndex) _lineTabVisited = true;
     _tabController.index = index;
     setState(() {});
@@ -741,10 +746,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Widget _buildFilterWorkspace() {
     final source = _controller.allGames;
-    if (!identical(source, _filterSource)) {
+    if (!identical(source, _filterSource) ||
+        _filterRevision != _controller.collectionRevision) {
       _filterSource = source;
+      _filterRevision = _controller.collectionRevision;
       _filterRecords = source
-          .map((game) => (headers: game.headers, pgnText: game.pgnText))
+          .map(
+            (game) => (
+              headers: Map<String, String>.of(game.headers),
+              pgnText: game.pgnText,
+            ),
+          )
           .toList();
     }
     return PgnGameFilterWorkspace(
@@ -753,7 +765,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           ? 'Pasted games'
           : p.basename(_controller.filePath!),
       allGames: _filterRecords,
-      currentFen: normalizeFen(_controller.currentPosition.fen),
+      currentFen:
+          _filterOriginFen ?? normalizeFen(_controller.currentPosition.fen),
       initialConfig: _controller.activeSliceConfig,
       fenIndex: _controller.fenIndex,
       presets: _controller.slicePresets,
@@ -765,7 +778,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       onOpenGame: (indices, config, gameIndex) {
         if (!mounted || !identical(source, _controller.allGames)) return;
         _controller.applySlice(indices, config);
-        _controller.goToGame(indices.indexOf(gameIndex));
+        _controller.goToGame(
+          _controller.filteredGames.indexOf(source[gameIndex]),
+        );
         _showPanel(PgnWorkspace.game);
       },
     );

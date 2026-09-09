@@ -14,7 +14,7 @@ import 'position_setup_panel.dart';
 /// for board changes and [BoardEditorController.hasUnappliedFen]. This panel
 /// scrolls vertically and needs a bounded width. In a bounded-height parent,
 /// give it the available height with Expanded or SizedBox.
-class BoardEditorPanel extends StatelessWidget {
+class BoardEditorPanel extends StatefulWidget {
   const BoardEditorPanel({
     super.key,
     required this.controller,
@@ -31,11 +31,25 @@ class BoardEditorPanel extends StatelessWidget {
   final double maxBoardSize;
 
   @override
+  State<BoardEditorPanel> createState() => _BoardEditorPanelState();
+}
+
+class _BoardEditorPanelState extends State<BoardEditorPanel> {
+  final _scroll = ScrollController();
+  BoardEditorController get controller => widget.controller;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 700;
       final boardSize = math.min(
-        maxBoardSize,
+        widget.maxBoardSize,
         wide ? (constraints.maxWidth - 16) / 2 : constraints.maxWidth,
       );
       final board = SizedBox(
@@ -45,29 +59,34 @@ class BoardEditorPanel extends StatelessWidget {
       );
       final controls = PositionSetupPanel(
         controller: controller,
-        actionLabel: actionLabel,
-        onAction: onAction,
-        advancedInitiallyExpanded: advancedInitiallyExpanded,
+        actionLabel: widget.actionLabel,
+        onAction: widget.onAction,
+        advancedInitiallyExpanded: widget.advancedInitiallyExpanded,
         scrollable: false,
       );
-      return SingleChildScrollView(
-        child: wide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  board,
-                  const SizedBox(width: 16),
-                  Expanded(child: controls),
-                ],
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(child: board),
-                  const SizedBox(height: 12),
-                  controls,
-                ],
-              ),
+      return Scrollbar(
+        controller: _scroll,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _scroll,
+          child: wide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    board,
+                    const SizedBox(width: 16),
+                    Expanded(child: controls),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(child: board),
+                    const SizedBox(height: 12),
+                    controls,
+                  ],
+                ),
+        ),
       );
     },
   );

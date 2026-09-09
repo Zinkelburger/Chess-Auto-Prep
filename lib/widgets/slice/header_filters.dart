@@ -1,30 +1,31 @@
-/// Shared header filters widget for PGN slice/search.
+/// Shared spreadsheet-style header filters for PGN slice/search.
 ///
-/// Renders editable one-line conditions with searchable choices and add/remove.
-/// All state lives on the [SliceFilterController] passed in by the host.
+/// Both hosts render editable Field / Rule / Value rows. State and presets
+/// remain owned by the supplied [SliceFilterController].
 library;
 
 import 'package:flutter/material.dart';
 
 import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
-import '../common/choice_field.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
 import '../../services/pgn_tree_core.dart'
     show PlayerNameMatchSummary, summarizePlayerNameMatches;
+import '../../theme/app_colors.dart';
+import '../../theme/app_text_styles.dart';
+import '../common/choice_field.dart';
+import 'header_suggestions.dart';
 
 final _ecoExact = RegExp(r'^[A-E]\d{2}$');
-bool _isValidEco(String value) => _ecoExact.hasMatch(value.trim());
 
-class HeaderFilters extends StatelessWidget {
+class HeaderFilters extends StatefulWidget {
   final SliceFilterController controller;
+
+  /// Retains the dialog's quick-add buttons; rows use the same editor in both
+  /// modes, including editable preset rows and an explicit matching rule.
   final bool simple;
 
-  /// When provided, [kPlayerHeaderField] rows show which header spellings
-  /// their names currently match across these games (and how often), so the
-  /// user can see e.g. "Carlsen, Magnus ×54 · Carlsen,M ×33" instead of
-  /// trusting substring matching blind.
+  /// Source games for distinct header suggestions and their game counts.
+  /// Pass a new list when the source collection changes.
   final List<GameRecord>? games;
 
   const HeaderFilters({
@@ -35,83 +36,82 @@ class HeaderFilters extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: controller,
-      builder: (context, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (controller.headerRows.length > 1) ...[
-            Text(
-              'Match all conditions',
-              style: AppTextStyles.subtitle.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-          for (int i = 0; i < controller.headerRows.length; i++)
-            simple ? _buildSimpleRow(context, i) : _buildFilterRow(context, i),
-          if (simple)
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final field in [
-                  kPlayerHeaderField,
-                  'Event',
-                  'Date',
-                  'Result',
-                  'Opening',
-                ])
-                  TextButton(
-                    onPressed: () => _addField(context, field),
-                    child: Text(field == 'Date' ? 'Year' : field),
-                  ),
-                PopupMenuButton<String>(
-                  tooltip: 'More filters',
-                  onSelected: (field) => _addField(context, field),
-                  itemBuilder: (_) => [
-                    for (final field in kHeaderFieldOptions)
-                      PopupMenuItem(
-                        value: field,
-                        child: Text(_fieldLabel(field)),
-                      ),
-                  ],
-                  child: const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('More…'),
-                  ),
-                ),
-              ],
-            )
-          else
-            OutlinedButton.icon(
-              onPressed: () {
-                if (!context.mounted) return;
-                controller.addHeaderRow();
-                controller.setHeaderField(
-                  controller.headerRows.length - 1,
-                  kPlayerHeaderField,
-                );
-              },
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.standard,
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-              ),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Filter'),
-            ),
-        ],
-      ),
-    );
+  State<HeaderFilters> createState() => _HeaderFiltersState();
+}
+
+class _HeaderFiltersState extends State<HeaderFilters> {
+  late HeaderSuggestions _suggestions;
+
+  SliceFilterController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _suggestions = HeaderSuggestions(widget.games ?? const []);
   }
 
+  @override
+  void didUpdateWidget(HeaderFilters oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.games, widget.games)) {
+      _suggestions = HeaderSuggestions(widget.games ?? const []);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: controller,
+    builder: (context, _) => LayoutBuilder(
+      builder: (context, constraints) {
+        final wide =
+            constraints.maxWidth >=
+            560 * MediaQuery.textScalerOf(context).scale(14) / 14;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (controller.headerRows.length > 1) ...[
+              const Text(
+                'Match all conditions',
+                style: AppTextStyles.bodyStrong,
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (wide && controller.headerRows.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _columns(
+                  const Text('Field', style: AppTextStyles.bodyStrong),
+                  const Text('Rule', style: AppTextStyles.bodyStrong),
+                  const Text('Value', style: AppTextStyles.bodyStrong),
+                  const SizedBox(width: 44),
+                ),
+              ),
+            for (var i = 0; i < controller.headerRows.length; i++)
+              _buildRow(i, wide: wide),
+            _buildAddButtons(),
+          ],
+        );
+      },
+    ),
+  );
+
+  Widget _columns(Widget field, Widget rule, Widget value, Widget remove) =>
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 3, child: field),
+          const SizedBox(width: 8),
+          Expanded(flex: 4, child: rule),
+          const SizedBox(width: 8),
+          Expanded(flex: 5, child: value),
+          remove,
+        ],
+      );
+
   String _fieldLabel(String field) => switch (field) {
-    'Date' => 'Year',
+    kPlayerHeaderField => 'Player',
+    'Date' => 'Date / year',
     'WhiteElo' => 'White rating',
     'BlackElo' => 'Black rating',
     'StudyRating' => 'Study rating',
@@ -120,240 +120,164 @@ class HeaderFilters extends StatelessWidget {
     _ => field,
   };
 
-  void _addField(BuildContext context, String field) {
-    if (!context.mounted) return;
+  String _ruleLabel(String field, MatchMode mode) => switch (mode) {
+    MatchMode.contains => 'Contains',
+    MatchMode.notContains => 'Does not contain',
+    MatchMode.exact => 'Exact',
+    MatchMode.regex => 'Matches regex',
+    MatchMode.after => field == 'Date' ? 'In or after' : 'At least',
+    MatchMode.before => field == 'Date' ? 'In or before' : 'At most',
+  };
+
+  void _addField(String field) {
+    if (!mounted) return;
     controller.addHeaderRow();
     final index = controller.headerRows.length - 1;
     controller.setHeaderField(index, field);
     if (field == 'Result') controller.setHeaderMode(index, MatchMode.exact);
   }
 
-  Widget _buildSimpleRow(BuildContext context, int index) {
-    final row = controller.headerRows[index];
-    return Padding(
-      key: ObjectKey(row),
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Text(_fieldLabel(row.field), style: AppTextStyles.bodyStrong),
-              const Spacer(),
-              PopupMenuButton<MatchMode>(
-                tooltip: 'Change matching rule',
-                initialValue: row.mode,
-                onSelected: (mode) {
-                  if (!context.mounted) return;
-                  controller.setHeaderMode(index, mode);
-                },
-                itemBuilder: (_) => [
-                  for (final mode in modesForField(row.field))
-                    PopupMenuItem(
-                      value: mode,
-                      child: Text(
-                        HeaderFilterConfig(
-                          field: row.field,
-                          mode: mode,
-                          value: '',
-                        ).conditionLabel,
-                      ),
-                    ),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 10,
-                  ),
-                  child: Text(
-                    row.toConfig().conditionLabel,
-                    style: AppTextStyles.caption,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Remove filter',
-                onPressed: () {
-                  if (!context.mounted) return;
-                  controller.removeHeaderRow(index);
-                },
-                icon: const Icon(Icons.close, size: 18),
-              ),
-            ],
-          ),
-          TextField(
-            controller: row.controller,
-            autofocus: row.value.isEmpty,
-            style: AppTextStyles.body,
-            decoration: InputDecoration(
-              hintText: switch (row.field) {
-                kPlayerHeaderField => 'Player name, either colour',
-                'Date' => 'Year, e.g. 2020',
-                'Event' => 'Event or match name',
-                'Result' => '1-0, 0-1, 1/2-1/2 or *',
-                _ => _fieldLabel(row.field),
-              },
-              filled: true,
-              fillColor: AppColors.surfaceElevated,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-            ),
-            onChanged: (value) {
-              if (!context.mounted) return;
-              controller.setHeaderValue(index, value);
-            },
-          ),
-          if (_showsNameMatches(row)) _buildNameMatchesLine(row.value),
-        ],
+  Widget _buildAddButtons() => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    children: [
+      OutlinedButton.icon(
+        onPressed: () => _addField(kPlayerHeaderField),
+        icon: const Icon(Icons.add, size: 18),
+        label: const Text('Filter'),
       ),
-    );
-  }
+      if (widget.simple) ...[
+        for (final field in [
+          kPlayerHeaderField,
+          'Event',
+          'Date',
+          'Result',
+          'Opening',
+        ])
+          TextButton(
+            onPressed: () => _addField(field),
+            child: Text(field == 'Date' ? 'Year' : field),
+          ),
+        PopupMenuButton<String>(
+          tooltip: 'More filters',
+          onSelected: _addField,
+          itemBuilder: (_) => [
+            for (final field in kHeaderFieldOptions)
+              PopupMenuItem(value: field, child: Text(_fieldLabel(field))),
+          ],
+          child: const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text('More…'),
+          ),
+        ),
+      ],
+    ],
+  );
 
-  Widget _buildFilterRow(BuildContext context, int index) {
-    final f = controller.headerRows[index];
-    // Hints say what the box wants, not what somebody else typed into it:
-    // a sample name is one more thing to read past on the way to your own.
-    String hintText;
-    if (f.field == kPlayerHeaderField) {
-      hintText = 'Name; another name';
-    } else if (f.field == 'ECO') {
-      hintText = 'ECO code or prefix';
-    } else if (f.field == 'Date') {
-      hintText = 'Year';
-    } else if (f.field == 'StudyRating') {
-      hintText = 'Rating';
-    } else if (f.field == 'WhiteElo' || f.field == 'BlackElo') {
-      hintText = 'Rating';
-    } else {
-      hintText = 'Value';
+  Widget _buildRow(int index, {required bool wide}) {
+    final row = controller.headerRows[index];
+    // Resolve the row at callback time: removing a preceding row must not
+    // redirect a retained overlay callback to a different condition.
+    void edit(void Function(int) action) {
+      if (!mounted) return;
+      final current = controller.headerRows.indexOf(row);
+      if (current >= 0) action(current);
     }
 
-    final showEcoWarn =
-        f.field == 'ECO' &&
-        f.mode == MatchMode.exact &&
-        f.value.isNotEmpty &&
-        !_isValidEco(f.value);
-
+    final field = _NewConditionFocus(
+      focusOnMount: row.value.isEmpty,
+      child: ChoiceField<String>(
+        label: wide ? null : 'Field',
+        hint: 'Choose field',
+        value: row.field,
+        items: [
+          for (final field in kHeaderFieldOptions)
+            ChoiceItem(
+              value: field,
+              label: _fieldLabel(field),
+              searchText: '$field ${_fieldLabel(field)}',
+            ),
+        ],
+        onChanged: (field) => edit((i) => controller.setHeaderField(i, field)),
+      ),
+    );
+    final rule = ChoiceField<MatchMode>(
+      label: wide ? null : 'Rule',
+      hint: 'Choose rule',
+      value: row.mode,
+      items: [
+        for (final mode in modesForField(row.field))
+          ChoiceItem(
+            value: mode,
+            label: _ruleLabel(row.field, mode),
+            searchText: '${mode.name} ${_ruleLabel(row.field, mode)}',
+          ),
+      ],
+      onChanged: (mode) => edit((i) => controller.setHeaderMode(i, mode)),
+    );
+    final value = _HeaderValueEditor(
+      // Refresh autocomplete when its source/rule changes. In particular,
+      // choosing the same value again after switching rules must set Exact.
+      key: ValueKey((row.controller, row.field, row.mode, _suggestions)),
+      row: row,
+      label: wide ? null : 'Value',
+      suggestions: _suggestions,
+      onChanged: (value) => edit((i) => controller.setHeaderValue(i, value)),
+      onSelected: (value) => edit((i) {
+        controller.setHeaderValue(i, value);
+        controller.setHeaderMode(i, MatchMode.exact);
+      }),
+    );
+    final remove = IconButton(
+      tooltip: 'Remove filter',
+      onPressed: () => edit(controller.removeHeaderRow),
+      icon: const Icon(Icons.close, size: 20),
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+    );
     return Padding(
-      key: ObjectKey(f),
-      padding: const EdgeInsets.only(bottom: 8),
+      key: ObjectKey(row),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _NewConditionFocus(
-                  focusOnMount: f.value.isEmpty,
-                  child: ChoiceField<({String field, MatchMode mode})>(
-                    hint: 'Choose condition',
-                    value: (field: f.field, mode: f.mode),
-                    style: AppTextStyles.body,
-                    items: [
-                      for (final field in kHeaderFieldOptions)
-                        for (final mode in modesForField(field))
-                          ChoiceItem(
-                            value: (field: field, mode: mode),
-                            label: HeaderFilterConfig(
-                              field: field,
-                              mode: mode,
-                              value: '',
-                            ).conditionLabel,
-                            searchText:
-                                '$field ${mode.name} ${HeaderFilterConfig(field: field, mode: mode, value: '').conditionLabel}',
-                          ),
-                    ],
-                    onChanged: (choice) {
-                      if (!context.mounted) return;
-                      controller.setHeaderField(index, choice.field);
-                      controller.setHeaderMode(index, choice.mode);
-                      FocusScope.of(context).nextFocus();
-                    },
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  key: ObjectKey(f.controller),
-                  controller: f.controller,
-                  decoration: InputDecoration(
-                    hintText: hintText,
-                    hintStyle: AppTextStyles.hint,
-                    helperText: f.field == kPlayerHeaderField
-                        ? 'Either colour; separate names with ;'
-                        : null,
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    suffixIcon: showEcoWarn
-                        ? const Tooltip(
-                            message: 'Not a standard ECO code (A00–E99)',
-                            child: Icon(
-                              Icons.warning_amber,
-                              size: 20,
-                              color: AppColors.warning,
-                            ),
-                          )
-                        : null,
-                  ),
-                  style: AppTextStyles.body,
-                  onChanged: (v) {
-                    if (!context.mounted) return;
-                    controller.setHeaderValue(index, v);
-                  },
-                ),
-              ),
-              IconButton(
-                onPressed: () {
-                  if (!context.mounted) return;
-                  controller.removeHeaderRow(index);
-                },
-                tooltip: 'Remove filter',
-                icon: const Icon(Icons.close, size: 20),
-                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              ),
-            ],
-          ),
-          if (showEcoWarn)
-            const Padding(
-              padding: EdgeInsets.only(left: 4, top: 4),
-              child: Text(
-                'Expected A00–E99',
-                style: TextStyle(fontSize: 12, color: AppColors.warning),
-              ),
+          if (wide)
+            _columns(field, rule, value, remove)
+          else ...[
+            Row(
+              children: [
+                Expanded(child: field),
+                remove,
+              ],
             ),
-          if (_showsNameMatches(f)) _buildNameMatchesLine(f.value),
+            const SizedBox(height: 8),
+            rule,
+            const SizedBox(height: 8),
+            value,
+          ],
+          if (widget.games != null &&
+              row.field == kPlayerHeaderField &&
+              row.mode == MatchMode.contains &&
+              row.value.trim().isNotEmpty)
+            _buildNameMatchesLine(row.value),
         ],
       ),
     );
   }
-
-  /// Matched-spellings feedback only makes sense for substring name search;
-  /// exact/regex/not-contains modes are left alone.
-  bool _showsNameMatches(HeaderFilterRow f) =>
-      games != null &&
-      f.field == kPlayerHeaderField &&
-      f.mode == MatchMode.contains &&
-      f.value.trim().isNotEmpty;
 
   Widget _buildNameMatchesLine(String namesInput) {
     final summary = summarizePlayerNameMatches(
       headerPairs: [
-        for (final g in games!)
+        for (final g in widget.games!)
           (white: g.headers['White'] ?? '', black: g.headers['Black'] ?? ''),
       ],
       namesInput: namesInput,
     );
     return Padding(
-      padding: const EdgeInsets.only(left: 4, top: 2),
+      padding: const EdgeInsets.only(left: 4, top: 4),
       child: Text(
         _nameMatchesLabel(summary),
-        style: TextStyle(
-          fontSize: 12,
+        style: AppTextStyles.caption.copyWith(
           color: summary.matchedGames == 0
               ? AppColors.warning
               : AppColors.onSurfaceMuted,
@@ -363,9 +287,7 @@ class HeaderFilters extends StatelessWidget {
   }
 
   static String _nameMatchesLabel(PlayerNameMatchSummary summary) {
-    if (summary.matchedGames == 0) {
-      return 'No games match these names';
-    }
+    if (summary.matchedGames == 0) return 'No games match these names';
     const maxShown = 8;
     final variants = summary.variantCounts.entries.toList();
     final shown = variants
@@ -377,6 +299,188 @@ class HeaderFilters extends StatelessWidget {
         : '';
     return 'Matches ${summary.matchedGames} of ${summary.totalGames} games '
         'as: $shown$more';
+  }
+}
+
+/// Free text remains a filter; only explicitly picking an actual value makes
+/// it exact. RawAutocomplete supplies keyboard navigation and dismissal.
+class _HeaderValueEditor extends StatefulWidget {
+  const _HeaderValueEditor({
+    super.key,
+    required this.row,
+    required this.label,
+    required this.suggestions,
+    required this.onChanged,
+    required this.onSelected,
+  });
+
+  final HeaderFilterRow row;
+  final String? label;
+  final HeaderSuggestions suggestions;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSelected;
+
+  @override
+  State<_HeaderValueEditor> createState() => _HeaderValueEditorState();
+}
+
+class _HeaderValueEditorState extends State<_HeaderValueEditor> {
+  final _focus = FocusNode(debugLabel: 'Header filter value');
+  final _optionsScroll = ScrollController();
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _optionsScroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = widget.row;
+    final showEcoWarn =
+        row.field == 'ECO' &&
+        row.mode == MatchMode.exact &&
+        row.value.isNotEmpty &&
+        !_ecoExact.hasMatch(row.value.trim());
+    String? error;
+    if (row.mode == MatchMode.regex && row.value.isNotEmpty) {
+      try {
+        RegExp(row.value, caseSensitive: false);
+      } on FormatException {
+        error = 'Invalid regular expression';
+      }
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) => RawAutocomplete<HeaderSuggestion>(
+        textEditingController: row.controller,
+        focusNode: _focus,
+        displayStringForOption: (option) => option.value,
+        optionsBuilder: (value) =>
+            widget.suggestions.matching(row.field, value.text),
+        onSelected: (option) {
+          if (!mounted) return;
+          widget.onSelected(option.value);
+        },
+        fieldViewBuilder: (context, text, focus, submit) => TextField(
+          controller: text,
+          focusNode: focus,
+          style: AppTextStyles.body,
+          decoration: InputDecoration(
+            labelText: widget.label,
+            errorText: error,
+            errorMaxLines: 2,
+            hintText: switch (row.field) {
+              kPlayerHeaderField => 'Player name, either colour',
+              'Date' => 'Year or date',
+              'ECO' => 'ECO code or prefix',
+              'WhiteElo' || 'BlackElo' || 'StudyRating' => 'Rating',
+              _ => 'Type a value',
+            },
+            helperText: showEcoWarn
+                ? 'Expected A00–E99'
+                : row.field == kPlayerHeaderField
+                ? 'Either colour; separate names with ;'
+                : null,
+            helperMaxLines: 3,
+            helperStyle: showEcoWarn
+                ? AppTextStyles.caption.copyWith(color: AppColors.warning)
+                : AppTextStyles.caption,
+            isDense: true,
+            border: const OutlineInputBorder(),
+          ),
+          onChanged: (value) {
+            if (!mounted) return;
+            widget.onChanged(value);
+          },
+          onSubmitted: (_) {
+            if (!mounted) return;
+            submit();
+          },
+        ),
+        optionsViewBuilder: (context, select, options) {
+          final visible = options.toList();
+          final highlighted = AutocompleteHighlightedOption.of(context);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_optionsScroll.hasClients) return;
+            const itemHeight = 64.0;
+            final top = highlighted * itemHeight;
+            final bottom = top + itemHeight;
+            final position = _optionsScroll.position;
+            final offset = top < position.pixels
+                ? top
+                : bottom > position.pixels + position.viewportDimension
+                ? bottom - position.viewportDimension
+                : position.pixels;
+            _optionsScroll.jumpTo(offset.clamp(0.0, position.maxScrollExtent));
+          });
+          return Align(
+            alignment: Alignment.topLeft,
+            child: Material(
+              elevation: 6,
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(8),
+              clipBehavior: Clip.antiAlias,
+              child: SizedBox(
+                width: constraints.maxWidth,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Text(
+                          'Values in games · select for Exact',
+                          style: AppTextStyles.caption,
+                        ),
+                      ),
+                      Flexible(
+                        child: ListView.builder(
+                          controller: _optionsScroll,
+                          itemExtent: 64,
+                          shrinkWrap: true,
+                          padding: EdgeInsets.zero,
+                          itemCount: visible.length,
+                          itemBuilder: (context, index) {
+                            final option = visible[index];
+                            return ListTile(
+                              dense: true,
+                              selected: index == highlighted,
+                              selectedTileColor: AppColors.accent.withValues(
+                                alpha: 0.14,
+                              ),
+                              title: Tooltip(
+                                message: option.value,
+                                child: Text(
+                                  option.value,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.body,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${option.count} ${option.count == 1 ? 'game' : 'games'}',
+                                style: AppTextStyles.caption,
+                              ),
+                              onTap: () {
+                                if (!mounted) return;
+                                select(option);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 }
 

@@ -51,7 +51,8 @@ class PgnGameFilterWorkspace extends StatefulWidget {
 }
 
 class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
-  late final SliceFilterController _filters;
+  late SliceFilterController _filters;
+  late String _initialConfigJson;
   BoardEditorController? _board;
   String? _boardBaseline;
   bool _boardDirty = false;
@@ -59,6 +60,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   bool _computing = false;
   String? _computeError;
   String? _scheduledConfig;
+  final _filterScroll = ScrollController();
   Timer? _debounce;
   int _generation = 0;
 
@@ -81,6 +83,8 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   @override
   void initState() {
     super.initState();
+    _initialConfigJson = (widget.initialConfig ?? const SliceConfig.empty())
+        .toJsonString();
     _filters = SliceFilterController(initialConfig: widget.initialConfig);
     _removeEmptyRows();
     if (_filters.hasSequenceFilter) _filters.validateSequence();
@@ -91,6 +95,28 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   @override
   void didUpdateWidget(covariant PgnGameFilterWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final incomingConfig = (widget.initialConfig ?? const SliceConfig.empty())
+        .toJsonString();
+    if (incomingConfig != _initialConfigJson) {
+      // A saved slice can arrive after a new file's first frame. Refresh only
+      // an untouched draft; user edits on this tab always take precedence.
+      final untouched =
+          _board == null &&
+          !_invalid &&
+          _filters.buildConfig().toJsonString() == _initialConfigJson;
+      _initialConfigJson = incomingConfig;
+      if (untouched) {
+        final previous = _filters;
+        previous.removeListener(_onFiltersChanged);
+        _filters = SliceFilterController(initialConfig: widget.initialConfig);
+        _removeEmptyRows();
+        if (_filters.hasSequenceFilter) _filters.validateSequence();
+        _filters.addListener(_onFiltersChanged);
+        WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+        _scheduledConfig = null;
+        _onFiltersChanged();
+      }
+    }
     if (!identical(oldWidget.allGames, widget.allGames)) {
       _scheduledConfig = null;
       _onFiltersChanged();
@@ -100,6 +126,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _filterScroll.dispose();
     _board?.dispose();
     _filters.dispose();
     super.dispose();
@@ -246,9 +273,14 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                 children: [
                   SizedBox(
                     width: math.min(680, constraints.maxWidth * .57),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: _buildFilters(),
+                    child: Scrollbar(
+                      controller: _filterScroll,
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        controller: _filterScroll,
+                        padding: const EdgeInsets.all(24),
+                        child: _buildFilters(),
+                      ),
                     ),
                   ),
                   const VerticalDivider(width: 1),
@@ -313,23 +345,24 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
         ignoring: _board != null,
         child: Opacity(
           opacity: _board == null ? 1 : .5,
-          child: PositionFilter(
-            controller: _filters,
-            currentFen: widget.currentFen,
-          ),
+          child: PositionFilter(controller: _filters),
         ),
-      ),
-      const SizedBox(height: 8),
-      const Text(
-        'Find this exact position anywhere in a game, including variations. '
-        'All pieces, side to move and castling rights must match.',
-        style: AppTextStyles.caption,
       ),
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
+          ActionChip(
+            label: const Text('Current position'),
+            tooltip: 'Use the board position from the tab you came from',
+            onPressed: _board != null
+                ? null
+                : () {
+                    if (!mounted) return;
+                    _filters.setPositionFen(widget.currentFen);
+                  },
+          ),
           OutlinedButton.icon(
             onPressed: _board == null ? _editBoard : null,
             icon: const Icon(Icons.edit_outlined, size: 18),
@@ -348,6 +381,12 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                   },
           ),
         ],
+      ),
+      const SizedBox(height: 8),
+      const Text(
+        'Matches the whole position anywhere in a game, including variations: '
+        'all pieces, side to move, castling and en passant.',
+        style: AppTextStyles.caption,
       ),
       const SizedBox(height: 12),
       ExpansionTile(
@@ -390,14 +429,24 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
           Expanded(
             child: BoardEditorPanel(
               controller: editor,
-              maxBoardSize: 340,
-              actionLabel: 'Use this position',
-              onAction: (position) {
-                if (!mounted) return;
-                _filters.setPositionFen(position.fen);
-                _closeBoard();
-              },
+              maxBoardSize: (MediaQuery.sizeOf(context).height - 470).clamp(
+                200,
+                340,
+              ),
             ),
+          ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: editor.validPosition == null
+                ? null
+                : () {
+                    if (!mounted) return;
+                    final position = editor.validPosition;
+                    if (position == null) return;
+                    _filters.setPositionFen(position.fen);
+                    _closeBoard();
+                  },
+            child: const Text('Use this position'),
           ),
         ],
       );

@@ -2,6 +2,7 @@ import 'package:chess_auto_prep/core/board_editor_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/widgets/board_editor/board_editor_widget.dart';
 import 'package:chess_auto_prep/widgets/lines_preview_panel.dart';
+import 'package:chess_auto_prep/widgets/layout/responsive_split_layout.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_game_filter_workspace.dart';
 import 'package:chess_auto_prep/widgets/slice/header_filters.dart';
 import 'package:dartchess/dartchess.dart';
@@ -194,6 +195,96 @@ void main() {
     expect(find.text('Show 1 game'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('draft survives hiding its tab and expanding the workspace', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var searching = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) => Scaffold(
+            appBar: AppBar(
+              actions: [
+                TextButton(
+                  onPressed: () => setState(() => searching = !searching),
+                  child: const Text('Switch tab'),
+                ),
+              ],
+            ),
+            body: ResponsiveSplitLayout(
+              hidePrimary: searching,
+              primary: const Center(child: Text('Game board')),
+              secondary: IndexedStack(
+                index: searching ? 1 : 0,
+                children: [
+                  const Text('Game reader'),
+                  PgnGameFilterWorkspace(
+                    allGames: _games,
+                    currentFen: _fen,
+                    onApply: (_, _) {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await _finishMatching(tester);
+    final controller = tester
+        .widget<HeaderFilters>(find.byType(HeaderFilters))
+        .controller;
+    controller.addHeaderRow();
+    controller.setHeaderField(0, 'Black');
+    controller.setHeaderValue(0, 'Fischer');
+    await _finishMatching(tester);
+    await tester.tap(find.text('Switch tab'));
+    await tester.pumpAndSettle();
+    expect(find.text('Game reader'), findsOneWidget);
+    await tester.tap(find.text('Switch tab'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<HeaderFilters>(find.byType(HeaderFilters)).controller,
+      same(controller),
+    );
+    expect(controller.headerConfigs.single.value, 'Fischer');
+    expect(find.text('Show 1 game'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'late saved filters refresh an untouched draft but preserve user edits',
+    (tester) async {
+      await _open(tester);
+      const saved = SliceConfig(
+        headerFilters: [
+          HeaderFilterConfig(
+            field: 'Black',
+            mode: MatchMode.contains,
+            value: 'Fischer',
+          ),
+        ],
+      );
+      await _open(tester, initialConfig: saved);
+      await _finishMatching(tester);
+      var controller = tester
+          .widget<HeaderFilters>(find.byType(HeaderFilters))
+          .controller;
+      expect(controller.headerConfigs.single.value, 'Fischer');
+      expect(find.text('Show 1 game'), findsOneWidget);
+      controller.setHeaderValue(0, 'Spassky');
+      await _finishMatching(tester);
+      await _open(tester, initialConfig: const SliceConfig.empty());
+      controller = tester
+          .widget<HeaderFilters>(find.byType(HeaderFilters))
+          .controller;
+      expect(controller.headerConfigs.single.value, 'Spassky');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'compact workspace keeps apply and reset visible with many rows',
