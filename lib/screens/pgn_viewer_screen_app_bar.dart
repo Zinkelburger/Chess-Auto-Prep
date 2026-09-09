@@ -77,6 +77,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
     return AppOverflowMenu(
       label: 'Actions',
       tooltip: 'Actions',
+      openOnHover: true,
       entries: [
         if (!hasGame) ...[
           AppMenuEntry(
@@ -113,11 +114,19 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             ),
             AppMenuEntry(
               label: 'Tree',
-              onRun: () => _showPanel(PgnWorkspace.tree),
-            ),
-            AppMenuEntry(
-              label: 'Opening Database',
-              onRun: () => _showPanel(_explorerTabIndex),
+              onRun: () {},
+              children: [
+                AppMenuEntry(
+                  label: 'Collection tree',
+                  onRun: () => _showPanel(PgnWorkspace.tree),
+                ),
+                AppMenuEntry(
+                  label: 'Database explorer',
+                  hint:
+                      'Explore Lichess, Masters, or your local TWIC database.',
+                  onRun: () => _showPanel(_explorerTabIndex),
+                ),
+              ],
             ),
           ],
           AppMenuEntry(
