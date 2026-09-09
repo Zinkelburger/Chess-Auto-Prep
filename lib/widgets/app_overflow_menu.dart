@@ -43,13 +43,13 @@ class AppMenuEntry {
 
   final bool enabled;
 
-  /// Draws a separator above this row, for grouping settings away from
-  /// actions.
+  /// Adds a small gap above this row when there is no section heading.
+  /// Kept as a grouping hint; menus no longer draw separator rules.
   final bool dividerAbove;
 
   /// Uppercase section heading drawn above this row ("ADD LINES"). The first
-  /// row of each group carries its group's name; a heading above the very
-  /// first row needs no divider, later ones get one for free.
+  /// row of each group carries its group's name. Headings provide separation
+  /// without an additional divider.
   final String? heading;
 
   /// Non-null turns the row into a toggle and shows a check when true.
@@ -132,6 +132,7 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
     if (rows.isEmpty) return const SizedBox.shrink();
     if (openOnHover || rows.any((row) => row.children.isNotEmpty)) {
       return MenuAnchor(
+        style: _menuStyle,
         controller: _controller,
         childFocusNode: _anchorFocus,
         onOpen: _focusMenu,
@@ -182,8 +183,13 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
     }
     final items = <PopupMenuEntry<int>>[
       for (var i = 0; i < rows.length; i++) ...[
-        if ((rows[i].dividerAbove || rows[i].heading != null) && i > 0)
-          const PopupMenuDivider(),
+        if (rows[i].dividerAbove && rows[i].heading == null && i > 0)
+          const PopupMenuItem<int>(
+            enabled: false,
+            height: 8,
+            padding: EdgeInsets.zero,
+            child: SizedBox.shrink(),
+          ),
         if (rows[i].heading != null) appMenuHeadingItem<int>(rows[i].heading!),
         PopupMenuItem<int>(
           value: i,
@@ -236,6 +242,8 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
         dividerTheme: const DividerThemeData(color: AppColors.divider),
       ),
       child: PopupMenuButton<int>(
+        constraints: const BoxConstraints(minWidth: 240, maxWidth: 480),
+        menuPadding: const EdgeInsets.symmetric(vertical: 6),
         icon: anchor == null ? const Icon(Icons.more_vert, size: 20) : null,
         tooltip: tooltip,
         enabled: enabled,
@@ -252,20 +260,36 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
   }
 }
 
+// Desktop menus share compact rows, with enough width and inset for labels,
+// shortcuts and submenu arrows. Minimum sizes still allow scaled text to grow.
+const _menuStyle = MenuStyle(
+  minimumSize: WidgetStatePropertyAll(Size(240, 0)),
+  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+);
+
+const _menuItemStyle = ButtonStyle(
+  minimumSize: WidgetStatePropertyAll(Size(240, 32)),
+  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16)),
+  visualDensity: VisualDensity.standard,
+  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+);
+
 List<Widget> _nestedRows(
   List<AppMenuEntry> entries, {
   FocusNode? firstItemFocus,
 }) => [
   for (var i = 0; i < entries.length; i++) ...[
-    if (i > 0 && (entries[i].heading != null || entries[i].dividerAbove))
-      const Divider(height: 12),
+    if (i > 0 && entries[i].heading == null && entries[i].dividerAbove)
+      const SizedBox(height: 8),
     if (entries[i].heading case final heading?)
       Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
         child: Text(heading.toUpperCase(), style: AppTextStyles.eyebrow),
       ),
     if (entries[i].children.isNotEmpty)
       SubmenuButton(
+        style: _menuItemStyle,
+        menuStyle: _menuStyle,
         focusNode: i == entries.indexWhere((entry) => entry.enabled)
             ? firstItemFocus
             : null,
@@ -276,6 +300,7 @@ List<Widget> _nestedRows(
       )
     else
       MenuItemButton(
+        style: _menuItemStyle,
         focusNode: i == entries.indexWhere((entry) => entry.enabled)
             ? firstItemFocus
             : null,
@@ -294,7 +319,8 @@ Widget _nestedLabel(AppMenuEntry entry) => Row(
     ],
     Text(
       entry.label,
-      style: AppTextStyles.body.copyWith(
+      style: AppTextStyles.muted.copyWith(
+        fontWeight: FontWeight.w400,
         color: entry.enabled ? AppColors.ink : AppColors.onSurfaceDisabled,
       ),
     ),

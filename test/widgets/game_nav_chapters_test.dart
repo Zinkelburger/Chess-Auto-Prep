@@ -47,7 +47,7 @@ Finder get _chapterSearch => find.descendant(
 );
 
 Future<void> _openChapters(WidgetTester tester) async {
-  await tester.tap(find.text('of 5'));
+  await tester.tap(find.text('Search'));
   await tester.pumpAndSettle();
 }
 
@@ -191,7 +191,7 @@ void main() {
     );
     final jumps = <int>[];
     await tester.pumpWidget(_host(games: visible, onGoToGame: jumps.add));
-    await tester.tap(find.text('Game'));
+    await tester.tap(find.text('Search'));
     await tester.pumpAndSettle();
     await tester.enterText(_chapterSearch, 'French');
     await tester.pumpAndSettle();
@@ -243,21 +243,20 @@ void main() {
     expect(gameBrowserGroups(games).last.gameIndices, [5, 6, 7, 8, 9]);
   });
 
-  testWidgets(
-    'number input and its focus shortcut survive the clickable counter',
-    (tester) async {
-      final jumps = <int>[];
-      await tester.pumpWidget(_host(onGoToGame: jumps.add));
-      await tester.tap(find.byType(TextField));
-      await tester.pumpAndSettle();
-      expect(find.byType(GameSearchDialog), findsNothing);
-      expect(GameNumberField.focusActive(), isTrue);
-      await tester.enterText(find.byType(TextField), '4');
-      await tester.testTextInput.receiveAction(TextInputAction.go);
-      await tester.pumpAndSettle();
-      expect(jumps, [3]);
-    },
-  );
+  testWidgets('number input and its focus shortcut jump directly to a game', (
+    tester,
+  ) async {
+    final jumps = <int>[];
+    await tester.pumpWidget(_host(onGoToGame: jumps.add));
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    expect(find.byType(GameSearchDialog), findsNothing);
+    expect(GameNumberField.focusActive(), isTrue);
+    await tester.enterText(find.byType(TextField), '4');
+    await tester.testTextInput.receiveAction(TextInputAction.go);
+    await tester.pumpAndSettle();
+    expect(jumps, [3]);
+  });
 
   testWidgets('previous and next navigation callbacks are preserved', (
     tester,
@@ -290,13 +289,13 @@ void main() {
     expect(jumps, [1]);
   });
 
-  testWidgets('flat collections browse games from the counter', (tester) async {
+  testWidgets('flat collections browse games from Search', (tester) async {
     final games = _course();
     for (final game in games) {
       game.headers['Result'] = '1-0';
     }
     await tester.pumpWidget(_host(games: GameNavItem.fromEntries(games)));
-    await tester.tap(find.text('of 5'));
+    await tester.tap(find.text('Search'));
     await tester.pumpAndSettle();
     expect(find.byType(GameSearchDialog), findsOneWidget);
   });
