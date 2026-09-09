@@ -68,14 +68,11 @@ Future<void> importAndWaitForPositions(
   Duration pollInterval = const Duration(seconds: 2),
   int maxPolls = 60,
 }) async {
-  // How many games to fetch is a section of the review strip's analysis
-  // settings. Set it *before* the account exists: with auto-start on by
-  // default, saving a username begins the run immediately, and a window
-  // changed after that would apply to the next run instead of this one. The
-  // strip is on screen from boot, with no account, for exactly this kind of
-  // reason. The window defaults to "my last N games", so the count field is
-  // already the active one; it carries no label, hence the key.
-  await tester.tap(find.byTooltip('Analysis settings…'));
+  // Set the download window before adding an account: auto-start begins the
+  // review as soon as the username is saved.
+  await tester.tap(find.byKey(const Key('view-settings-tactics')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Game downloads'));
   await tester.pumpAndSettle();
   await tester.enterText(
     find.byKey(const Key('window-games-field')),
@@ -83,6 +80,9 @@ Future<void> importAndWaitForPositions(
   );
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
+  await tester.pumpAndSettle();
+
+  await tester.tap(find.byTooltip('Close settings (Esc)'));
   await tester.pumpAndSettle();
 
   // Usernames are typed in the accounts dialog now, behind the home card's

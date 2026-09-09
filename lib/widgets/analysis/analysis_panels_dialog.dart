@@ -2,14 +2,24 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../core/app_state.dart';
+import '../../constants/engine_defaults.dart';
 
 import '../../models/engine_settings.dart';
 import '../settings/settings_widgets.dart';
 import '../app_settings_button.dart';
 
 /// Opens the analysis-panels visibility dialog.
-Future<void> showAnalysisPanelsDialog(BuildContext context) =>
-    openAppSettings(context, initialGlobalSection: 8);
+Future<void> showAnalysisPanelsDialog(BuildContext context) => openAppSettings(
+  context,
+  initialMode: context.read<AppState>().currentMode,
+  initialChapter: switch (context.read<AppState>().currentMode) {
+    AppMode.repertoire => 1,
+    AppMode.pgnViewer => 2,
+    _ => 0,
+  },
+);
 
 class AnalysisPanelsSettingsBody extends StatelessWidget {
   const AnalysisPanelsSettingsBody({super.key});
@@ -48,12 +58,18 @@ class AnalysisPanelsSettingsBody extends StatelessWidget {
               value: settings.showMaia,
               onChanged: (v) => settings.showMaia = v,
             ),
-            // Mothballed: Lichess Explorer DB column hidden.
-            // SettingsSwitchRow(
-            //   label: 'Show DB % column',
-            //   value: settings.showProbability,
-            //   onChanged: (v) => settings.showProbability = v,
-            // ),
+            SettingsSwitchRow(
+              label: 'Stockfish evals in move table',
+              value: settings.showStockfish,
+              onChanged: (v) => settings.showStockfish = v,
+            ),
+            SettingsStepperTile(
+              label: 'Max table moves',
+              value: settings.maxAnalysisMoves,
+              min: kMinMaxAnalysisMoves,
+              max: kMaxMaxAnalysisMoves,
+              onChanged: (v) => settings.maxAnalysisMoves = v,
+            ),
           ],
         ),
       ),

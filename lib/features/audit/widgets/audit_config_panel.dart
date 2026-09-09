@@ -8,6 +8,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../../models/bulk_analysis_settings.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../models/opening_tree.dart';
@@ -72,9 +73,6 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   final TextEditingController _minMaiaProbCtrl = TextEditingController(
     text: '0.10',
   );
-  final TextEditingController _evalDepthCtrl = TextEditingController(
-    text: '14',
-  );
   final TextEditingController _maxPlyCtrl = TextEditingController(text: '30');
   final TextEditingController _maiaEloCtrl = TextEditingController(
     text: '2200',
@@ -108,7 +106,6 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     _inaccuracyCtrl.dispose();
     _minGamesCtrl.dispose();
     _minMaiaProbCtrl.dispose();
-    _evalDepthCtrl.dispose();
     _maxPlyCtrl.dispose();
     _maiaEloCtrl.dispose();
     _strongReplyWindowCtrl.dispose();
@@ -130,7 +127,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       inaccuracyThresholdCp: int.tryParse(_inaccuracyCtrl.text) ?? 40,
       minGames: int.tryParse(_minGamesCtrl.text) ?? 50,
       minMaiaProb: double.tryParse(_minMaiaProbCtrl.text) ?? 0.10,
-      evalDepth: int.tryParse(_evalDepthCtrl.text) ?? 14,
+      evalDepth: BulkAnalysisSettings.instance.depth,
       maxPly: int.tryParse(_maxPlyCtrl.text) ?? 30,
       maiaElo: int.tryParse(_maiaEloCtrl.text) ?? 2200,
       useStockfish: true,
@@ -278,12 +275,6 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _numField(
-                _evalDepthCtrl,
-                'Engine depth',
-                tooltip:
-                    'Stockfish search depth used to evaluate each position.',
-              ),
               _numField(
                 _maxPlyCtrl,
                 'Max depth (half-moves)',

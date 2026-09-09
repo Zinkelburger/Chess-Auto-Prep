@@ -315,7 +315,9 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: AppColors.stockfish.withValues(alpha: 0.55),
+                color: nagColor(
+                  note.classification.nag ?? 0,
+                ).withValues(alpha: 0.55),
                 width: 2,
               ),
             ),
@@ -476,6 +478,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             nagSuffix: nagSuffix,
             sanStyle: moveStyle,
             nagStyle: moveStyle.copyWith(
+              color: nagColor(primaryQualityNag(nags) ?? 0),
               fontSize: PgnTextStyles.sizeAt(0) - 1,
               fontWeight: FontWeight.bold,
             ),

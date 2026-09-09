@@ -20,7 +20,7 @@ import '../core/pgn/pgn_dummy_mainline.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../models/engine_settings.dart';
+import '../models/bulk_analysis_settings.dart';
 import '../utils/chess_utils.dart'
     show
         uciPvToSan,
@@ -439,7 +439,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   /// Stockfish "Depth" setting — full-game analysis has no depth knob of its
   /// own; it follows the one in the Stockfish settings dialog.
   int? _activeDepth;
-  int get depth => _activeDepth ?? EngineSettings.instance.depth;
+  int get depth => _activeDepth ?? BulkAnalysisSettings.instance.depth;
 
   bool _isCancelled = false;
 
@@ -507,7 +507,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
     // The depth the graph was drawn at, so the lines agree with the scores
     // beside them; the engine setting when the series does not say.
-    var depth = EngineSettings.instance.depth;
+    var depth = BulkAnalysisSettings.instance.depth;
     for (final e in missing) {
       final d = e.depth;
       if (d != null && d < depth) depth = d;
@@ -577,7 +577,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     _isCancelled = false;
     notifyListeners();
 
-    final useDepth = analysisDepth ?? EngineSettings.instance.depth;
+    final useDepth = analysisDepth ?? BulkAnalysisSettings.instance.depth;
     _activeDepth = useDepth;
     final pool = StockfishPool.instance;
     bool runIsCurrent() =>

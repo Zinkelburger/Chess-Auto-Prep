@@ -36,7 +36,8 @@ part 'tactics_import_panel_widgets.dart';
 /// twin on the left ("Study tactics") and the analysis lived in a strip over
 /// the games list with a checkbox, a refresh, a gear, a CPU sentence and a
 /// pulsing green button; that strip is gone. The left pane is only ever your
-/// games, and everything configurational is behind the Analysis block's gear.
+/// games. The Analysis gear opens shared engine controls; app settings owns
+/// game downloads and session preferences.
 ///
 /// The analysis and openings blocks read the games controller, the runner and
 /// the import coordinator from context, nullably: the panel is also pumped in
@@ -94,12 +95,6 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
     if (!EngineGate.ensureAvailable(context)) return;
     unawaited(runner.start());
   }
-
-  Future<void> _showSettingsDialog(
-    RecentGamesController controller,
-    HomeReviewRunner runner,
-  ) =>
-      openAppSettings(context, initialMode: AppMode.tactics, initialChapter: 3);
 
   /// All the window's deviations in one dialog — reviewable as a queue, like
   /// tactics, instead of clicking into each game.
@@ -162,7 +157,6 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
       windowLabel: games.window.label,
       onStart: () => _startReview(runner),
       onPause: runner.pause,
-      onSettings: () => _showSettingsDialog(games, runner),
     );
   }
 

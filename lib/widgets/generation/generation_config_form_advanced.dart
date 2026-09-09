@@ -110,17 +110,15 @@ mixin _GenerationConfigAdvanced
       'Pure enumerates the complete action set at each expanded position. '
       'Time and node limits produce an explicitly incomplete result; they do not prune rare replies.',
     ),
-    EngineResourcesSection(
-      threadsController: _engineThreadsCtrl,
-      isGenerating: widget.isGenerating,
-      isDbExplorer: _buildMode == BuildMode.dbExplorer,
-      enabled: _usesEngineDepth,
+    TextButton(
+      onPressed: () => openAppSettings(context, initialGlobalSection: 3),
+      child: const Text('Engine settings'),
     ),
   ];
 
   List<Widget> _verificationSection(VoidCallback refresh) => [
     _caption(
-      'Pure evaluates every legal candidate at the engine depth on the main form. '
+      'Pure evaluates every legal candidate at the bulk depth in Engine settings. '
       'There is no separate mixed-depth verification pass and no claim of an objective chess proof.',
     ),
   ];

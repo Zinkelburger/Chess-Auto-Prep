@@ -382,6 +382,7 @@ InlineSpan _variationMoveSpan(
       nagSuffix: nagSuffix,
       sanStyle: sanStyle,
       nagStyle: sanStyle.copyWith(
+        color: nagColor(primaryQualityNag(node.nags) ?? 0),
         fontSize: PgnTextStyles.sizeAt(depth) - 1,
         fontWeight: FontWeight.bold,
       ),

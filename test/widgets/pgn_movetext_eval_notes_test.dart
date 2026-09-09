@@ -9,6 +9,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chess_auto_prep/theme/app_colors.dart';
+import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
+
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 
@@ -116,6 +119,36 @@ void main() {
       'Nf6??',
     ]) {
       expect(text, contains(move));
+    }
+    const colors = {
+      'Inaccuracy': AppColors.nagDubious,
+      'Mistake': AppColors.nagMistake,
+      'Blunder': AppColors.nagBlunder,
+      'Interesting': AppColors.nagInteresting,
+    };
+    final verdicts = <String, Color?>{};
+    for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
+      rich.text.visitChildren((span) {
+        if (span is TextSpan) {
+          for (final label in colors.keys) {
+            if (span.text?.startsWith('$label ') ?? false) {
+              verdicts[label] = span.style?.color;
+            }
+          }
+        }
+        return true;
+      });
+    }
+    expect(verdicts, colors);
+    for (final chip in tester.widgetList<MoveChip>(find.byType(MoveChip))) {
+      final expected = switch (chip.nagSuffix) {
+        '?!' => AppColors.nagDubious,
+        '?' => AppColors.nagMistake,
+        '??' => AppColors.nagBlunder,
+        '!?' => AppColors.nagInteresting,
+        _ => null,
+      };
+      if (expected != null) expect(chip.nagStyle.color, expected);
     }
     expect(text, isNot(contains('Best:')));
   });
