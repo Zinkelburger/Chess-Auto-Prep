@@ -66,7 +66,7 @@ class AppMenuEntry {
 }
 
 /// Labelled menu for app bars and contextual operations.
-class AppOverflowMenu extends StatelessWidget {
+class AppOverflowMenu extends StatefulWidget {
   const AppOverflowMenu({
     super.key,
     required this.entries,
@@ -74,6 +74,7 @@ class AppOverflowMenu extends StatelessWidget {
     this.anchor,
     this.label = 'Actions',
     this.enabled = true,
+    this.openOnHover = false,
   });
 
   final List<AppMenuEntry> entries;
@@ -89,27 +90,70 @@ class AppOverflowMenu extends StatelessWidget {
   /// locked while a long job runs.
   final bool enabled;
 
+  /// Open the anchor on pointer entry; clicks and keyboard activation also work.
+  final bool openOnHover;
+
+  @override
+  State<AppOverflowMenu> createState() => _AppOverflowMenuState();
+}
+
+class _AppOverflowMenuState extends State<AppOverflowMenu> {
+  final _controller = MenuController();
+  final _anchorFocus = FocusNode();
+  final _firstItemFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _anchorFocus.dispose();
+    _firstItemFocus.dispose();
+    super.dispose();
+  }
+
+  void _focusMenu() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.isOpen) return;
+      _firstItemFocus.requestFocus();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rows = entries;
+    final rows = widget.entries;
+    final enabled = widget.enabled;
+    final openOnHover = widget.openOnHover;
+    final label = widget.label;
+    final tooltip = widget.tooltip;
     if (rows.isEmpty) return const SizedBox.shrink();
-    if (rows.any((row) => row.children.isNotEmpty)) {
+    if (openOnHover || rows.any((row) => row.children.isNotEmpty)) {
       return MenuAnchor(
-        menuChildren: _nestedRows(rows),
-        builder: (context, controller, child) => TextButton(
-          style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
-          onPressed: !enabled
-              ? null
-              : () {
-                  controller.isOpen ? controller.close() : controller.open();
-                },
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(label ?? tooltip, style: AppTextStyles.bodyStrong),
-              const SizedBox(width: 8),
-              const Icon(Icons.arrow_drop_down, size: 20),
-            ],
+        controller: _controller,
+        childFocusNode: _anchorFocus,
+        onOpen: _focusMenu,
+        menuChildren: _nestedRows(rows, firstItemFocus: _firstItemFocus),
+        builder: (context, controller, child) => MouseRegion(
+          onEnter: enabled && openOnHover ? (_) => controller.open() : null,
+          child: TextButton(
+            focusNode: _anchorFocus,
+            style: TextButton.styleFrom(minimumSize: const Size(0, 44)),
+            onPressed: !enabled
+                ? null
+                : () {
+                    if (openOnHover || !controller.isOpen) {
+                      controller.open();
+                    } else {
+                      controller.close();
+                    }
+                  },
+            child:
+                widget.anchor ??
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(label ?? tooltip, style: AppTextStyles.bodyStrong),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_drop_down, size: 20),
+                  ],
+                ),
           ),
         ),
       );
@@ -130,7 +174,7 @@ class AppOverflowMenu extends StatelessWidget {
     ];
     final isActionsMenu = label == 'Actions';
     final anchor =
-        this.anchor ??
+        widget.anchor ??
         (label == null
             ? null
             : Container(
@@ -143,7 +187,7 @@ class AppOverflowMenu extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      label!,
+                      label,
                       style:
                           (isActionsMenu
                                   ? AppTextStyles.bodyStrong
@@ -186,7 +230,10 @@ class AppOverflowMenu extends StatelessWidget {
   }
 }
 
-List<Widget> _nestedRows(List<AppMenuEntry> entries) => [
+List<Widget> _nestedRows(
+  List<AppMenuEntry> entries, {
+  FocusNode? firstItemFocus,
+}) => [
   for (var i = 0; i < entries.length; i++) ...[
     if (i > 0 && (entries[i].heading != null || entries[i].dividerAbove))
       const Divider(height: 12),
@@ -197,16 +244,39 @@ List<Widget> _nestedRows(List<AppMenuEntry> entries) => [
       ),
     if (entries[i].children.isNotEmpty)
       SubmenuButton(
-        menuChildren: _nestedRows(entries[i].children),
-        child: Text(entries[i].label, style: AppTextStyles.body),
+        focusNode: i == entries.indexWhere((entry) => entry.enabled)
+            ? firstItemFocus
+            : null,
+        menuChildren: entries[i].enabled
+            ? _nestedRows(entries[i].children)
+            : const [],
+        child: _nestedLabel(entries[i]),
       )
     else
       MenuItemButton(
+        focusNode: i == entries.indexWhere((entry) => entry.enabled)
+            ? firstItemFocus
+            : null,
         onPressed: entries[i].enabled ? entries[i].onRun : null,
-        child: Text(entries[i].label, style: AppTextStyles.body),
+        child: _nestedLabel(entries[i]),
       ),
   ],
 ];
+
+Widget _nestedLabel(AppMenuEntry entry) => Row(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    Text(entry.label, style: AppTextStyles.body),
+    if (entry.hint != null) ...[
+      const SizedBox(width: 12),
+      InfoHint(entry.hint!, size: 15),
+    ],
+    if (entry.shortcut != null) ...[
+      const SizedBox(width: 16),
+      Text(entry.shortcut!, style: AppTextStyles.caption),
+    ],
+  ],
+);
 
 /// A non-selectable section heading row for any popup menu: the uppercase
 /// eyebrow the mode switcher introduced, now shared so every grouped menu

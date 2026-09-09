@@ -51,7 +51,7 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
             children: [
               const SizedBox(width: 4),
               Text(
-                'Opening Tree',
+                'Collection tree',
                 style: AppTextStyles.subtitle.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
