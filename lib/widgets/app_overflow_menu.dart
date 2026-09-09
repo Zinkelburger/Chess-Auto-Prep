@@ -43,13 +43,12 @@ class AppMenuEntry {
 
   final bool enabled;
 
-  /// Adds a small gap above this row when there is no section heading.
-  /// Kept as a grouping hint; menus no longer draw separator rules.
+  /// Draws a subtle inset separator above this row to distinguish groups.
   final bool dividerAbove;
 
   /// Uppercase section heading drawn above this row ("ADD LINES"). The first
-  /// row of each group carries its group's name. Headings provide separation
-  /// without an additional divider.
+  /// row of each group carries its group's name, with a hairline above later
+  /// groups. The rule adds no extra gap around the heading.
   final String? heading;
 
   /// Non-null turns the row into a toggle and shows a check when true.
@@ -183,13 +182,8 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
     }
     final items = <PopupMenuEntry<int>>[
       for (var i = 0; i < rows.length; i++) ...[
-        if (rows[i].dividerAbove && rows[i].heading == null && i > 0)
-          const PopupMenuItem<int>(
-            enabled: false,
-            height: 8,
-            padding: EdgeInsets.zero,
-            child: SizedBox.shrink(),
-          ),
+        if (i > 0 && (rows[i].dividerAbove || rows[i].heading != null))
+          PopupMenuDivider(height: rows[i].heading != null ? 1 : 8),
         if (rows[i].heading != null) appMenuHeadingItem<int>(rows[i].heading!),
         PopupMenuItem<int>(
           value: i,
@@ -239,7 +233,12 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
               ));
     return Theme(
       data: Theme.of(context).copyWith(
-        dividerTheme: const DividerThemeData(color: AppColors.divider),
+        dividerTheme: const DividerThemeData(
+          color: AppColors.divider,
+          thickness: 1,
+          indent: 16,
+          endIndent: 16,
+        ),
       ),
       child: PopupMenuButton<int>(
         constraints: const BoxConstraints(minWidth: 240, maxWidth: 480),
@@ -279,8 +278,14 @@ List<Widget> _nestedRows(
   FocusNode? firstItemFocus,
 }) => [
   for (var i = 0; i < entries.length; i++) ...[
-    if (i > 0 && entries[i].heading == null && entries[i].dividerAbove)
-      const SizedBox(height: 8),
+    if (i > 0 && (entries[i].heading != null || entries[i].dividerAbove))
+      Divider(
+        height: entries[i].heading != null ? 1 : 8,
+        thickness: 1,
+        indent: 16,
+        endIndent: 16,
+        color: AppColors.divider,
+      ),
     if (entries[i].heading case final heading?)
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
