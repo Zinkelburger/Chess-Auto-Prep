@@ -111,6 +111,25 @@ class NormaliseTest(unittest.TestCase):
         self.assertEqual(g.tags["Site"], "?")
 
 
+class GameKeyTest(unittest.TestCase):
+    def _game(self, white, black, date, moves, result="1-0"):
+        return lb.parse_pgn(
+            f'[Event "E"]\n[Date "{date}"]\n[White "{white}"]\n[Black "{black}"]\n'
+            f'[Result "{result}"]\n\n{moves} {result}\n'
+        )[0]
+
+    def test_name_order_initials_and_dates_do_not_split_a_game(self):
+        a = self._game("Zhou, Jianchao", "Pan, Zachary", "2025.09.15", "1. e4 c5 2. Nf3 a6")
+        b = self._game("Jianchao Zhou", "Zachary A Pan", "2025.09.21", "1. e4 { [%clk 1:00:00] } 1... c5 2. Nf3 a6")
+        self.assertEqual(lb.game_key(a), lb.game_key(b))
+
+    def test_different_result_or_moves_stay_apart(self):
+        a = self._game("Wong, Wyatt", "Ivanov, Alexander", "2025.01.01", "1. e4 e5")
+        self.assertNotEqual(lb.game_key(a), lb.game_key(self._game("Wong, Wyatt", "Ivanov, Alexander", "2025.01.01", "1. e4 e5", "0-1")))
+        self.assertNotEqual(lb.game_key(a), lb.game_key(self._game("Wong, Wyatt", "Ivanov, Alexander", "2025.01.01", "1. d4 e5")))
+        self.assertNotEqual(lb.game_key(a), lb.game_key(self._game("Ivanov, Alexander", "Wong, Wyatt", "2025.01.01", "1. e4 e5")))
+
+
 class MergeTest(unittest.TestCase):
     def test_merge_drops_moveless_dedupes_and_sorts(self):
         games = [lb.normalise_game(g, TOUR, None) for g in lb.parse_pgn(PGN)]

@@ -44,6 +44,14 @@ _MASK64 = (1 << 64) - 1
 MASTER_DB_NAME = "master_games.db"
 
 
+def _file_identity(path: Path) -> tuple[int, int] | None:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_dev, st.st_ino)
+
+
 def position_key(fen4: str) -> int:
     """Signed 64-bit FNV-1a of a 4-field FEN (must match Dart `positionKey`)."""
     h = _FNV_OFFSET
@@ -88,6 +96,7 @@ class MasterGamesDb:
             )
         self._conn = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
         self._conn.row_factory = sqlite3.Row
+        self.identity = _file_identity(self.path)
         self._zdict: bytes | None = None
         try:
             r = self._conn.execute(
@@ -108,6 +117,15 @@ class MasterGamesDb:
 
     def close(self) -> None:
         self._conn.close()
+
+    def is_stale(self) -> bool:
+        """Whether the file was replaced since this handle opened.
+
+        An open connection keeps reading the old inode after a delete and
+        rebuild (`tools/master_import_pgn.dart` does exactly that), so a
+        cached handle must be reopened when the path points elsewhere.
+        """
+        return _file_identity(self.path) != self.identity
 
     # ── Queries ───────────────────────────────────────────────────────────
 
@@ -250,9 +268,14 @@ def register_master_games_tools(registry: Any) -> None:
 
     def _db(args: dict) -> MasterGamesDb:
         key = str(args.get("db") or "")
-        if key not in handles:
-            handles[key] = MasterGamesDb(args.get("db"))
-        return handles[key]
+        db = handles.get(key)
+        if db is not None and db.is_stale():
+            db.close()
+            del handles[key]
+            db = None
+        if db is None:
+            db = handles[key] = MasterGamesDb(args.get("db"))
+        return db
 
     def master_status(args: dict) -> dict:
         s = _db(args).stats()
