@@ -4,7 +4,6 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
-import '../../theme/app_colors.dart';
 import '../settings/settings_widgets.dart';
 import '../app_settings_button.dart';
 
@@ -25,18 +24,6 @@ class AnalysisPanelsSettingsBody extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Live analysis shown above the PGN notation. Each panel\'s own '
-              'settings are behind the gear (⚙) in that panel. You can also '
-              'tap a column header in the move table to dim it without '
-              'hiding it.',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-                height: 1.3,
-              ),
-            ),
-            const SizedBox(height: 10),
             SettingsSwitchRow(
               label: 'Stockfish PV',
               tooltip:

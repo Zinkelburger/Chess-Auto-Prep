@@ -109,53 +109,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   static const _sections = [
-    (
-      label: 'Accounts',
-      icon: Icons.person_outline,
-      description: 'Your chess identities and connected services.',
-    ),
-    (
-      label: 'Display',
-      icon: Icons.grid_on_outlined,
-      description: 'How boards and moves are drawn, everywhere in the app.',
-    ),
-    (
-      label: 'Repertoires',
-      icon: Icons.menu_book_outlined,
-      description: 'Choose the opening books you play.',
-    ),
-    (
-      label: 'Engine',
-      icon: Icons.tune,
-      description: 'How much of this computer Stockfish may use.',
-    ),
-    (
-      label: 'Data',
-      icon: Icons.storage_outlined,
-      description: 'Manage local databases and online lookups.',
-    ),
-    (
-      label: 'About',
-      icon: Icons.info_outline,
-      description: 'Project information and app maintenance.',
-    ),
-    (
-      label: 'Keyboard shortcuts',
-      icon: Icons.keyboard_outlined,
-      description: 'The essentials for the current view.',
-    ),
-    (
-      label: 'Engine analysis',
-      icon: Icons.search,
-      description:
-          'Stockfish search and move-table preferences, shared across analysis views.',
-    ),
-    (
-      label: 'Analysis panels',
-      icon: Icons.view_column_outlined,
-      description:
-          'Choose which engine and reference panels appear alongside your board.',
-    ),
+    (label: 'Accounts', icon: Icons.person_outline),
+    (label: 'Display', icon: Icons.grid_on_outlined),
+    (label: 'Repertoires', icon: Icons.menu_book_outlined),
+    (label: 'Engine', icon: Icons.tune),
+    (label: 'Data', icon: Icons.storage_outlined),
+    (label: 'About', icon: Icons.info_outline),
+    (label: 'Keyboard shortcuts', icon: Icons.keyboard_outlined),
+    (label: 'Engine analysis', icon: Icons.search),
+    (label: 'Analysis panels', icon: Icons.view_column_outlined),
   ];
 
   @override
@@ -472,8 +434,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       '${mode.label} › ${chapter.label}',
                       style: AppTextStyles.title,
                     ),
-                    const SizedBox(height: 8),
-                    Text(chapter.description, style: AppTextStyles.muted),
                   ],
                 ),
               ),
@@ -541,8 +501,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(section.label, style: AppTextStyles.title),
-                const SizedBox(height: 8),
-                Text(section.description, style: AppTextStyles.muted),
                 const SizedBox(height: 16),
                 ...children,
               ],
@@ -576,7 +534,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SettingsGroup(
       title: 'About & open source',
       icon: Icons.info_outline,
-      subtitle: 'Built in the open, for your chess preparation.',
       children: [
         ListTile(
           titleTextStyle: AppTextStyles.bodyStrong,
@@ -634,11 +591,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return SettingsGroup(
           title: 'Board and moves',
           icon: Icons.grid_on_outlined,
-          subtitle: 'Changes apply immediately, to every board and move list.',
           children: [
             SettingsChoiceTile<BoardCoordinates>(
               label: 'Board coordinates',
-              description: 'Where the file letters and rank numbers go.',
               value: display.coordinates,
               items: const [
                 (BoardCoordinates.none, 'No'),
@@ -650,7 +605,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             SettingsChoiceTile<PieceNotation>(
               label: 'Piece notation',
-              description: 'How a piece is written in a move.',
               value: display.pieceNotation,
               items: const [
                 (PieceNotation.letters, 'Letters (KQRBN)'),
@@ -685,14 +639,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // No on/off switch here on purpose: starting and stopping Stockfish is
       // an action you want to see the result of, so it lives on the ⚡ button
       // next to the board.
-      subtitle: 'Changes apply straight away. Type a number or use − and +.',
       children: [
         SettingsStepperTile(
           label: 'CPU cores',
-          description:
-              'This computer has $cores. Stockfish uses this many to analyse '
-              'the board and to review your games. Leave some free if you run '
-              'other programs at the same time.',
+          description: 'Shared by board analysis and game reviews.',
           value: _engine.cores,
           min: 1,
           max: cores,
@@ -701,10 +651,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         SettingsStepperTile(
           label: 'Memory per engine',
-          description:
-              'RAM each Stockfish process keeps for positions it has already '
-              'searched. Reviewing games runs one process per core, so that '
-              'is up to $peakMb MB at once with the settings above.',
+          description: 'Up to $peakMb MB total during game reviews.',
           value: _engine.hashMb,
           min: kMinHashMb,
           max: kMaxHashMb,
@@ -714,9 +661,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         SettingsStepperTile(
           label: 'Opponent rating',
-          description:
-              'Maia predicts what a human of this rating would play. Set it '
-              'close to the opponents you actually face.',
+          description: 'Rating used for Maia predictions.',
           value: _engine.maiaElo,
           min: kMinMaiaElo,
           max: kMaxMaiaElo,
@@ -743,7 +688,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SettingsGroup(
       title: 'Databases',
       icon: Icons.storage,
-      subtitle: 'Review downloads, disk usage and updates in one place.',
       children: [
         ListTile(
           titleTextStyle: AppTextStyles.bodyStrong,
@@ -754,9 +698,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           leading: const Icon(Icons.dns_outlined, size: 22),
           title: const Text('Open Databases'),
-          subtitle: const Text(
-            'Everything the app keeps on this machine, on one page',
-          ),
           trailing: const Icon(Icons.chevron_right, size: 20),
           // Settings is a pushed route over the mode host, so switching mode
           // without popping would change the screen underneath and leave the
@@ -779,8 +720,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             final settings = EvalDatabaseSettings.instance;
             return SettingsValueRow(
               label: 'Online evaluation lookups',
-              description:
-                  'Allow on-demand expectimax to query ChessDB. Uses your daily API quota; repertoire builds have a separate setting.',
+              description: 'Uses your daily ChessDB quota.',
               control: Switch(
                 value: settings.chessDbApiForExpectimax,
                 onChanged: (value) =>

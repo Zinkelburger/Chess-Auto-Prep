@@ -35,88 +35,39 @@ class ViewSettingsRegistry extends ChangeNotifier {
 }
 
 class SettingsChapter {
-  const SettingsChapter(this.label, this.description);
+  const SettingsChapter(this.label);
   final String label;
-  final String description;
 }
 
 List<SettingsChapter> settingsChapters(AppMode mode) => switch (mode) {
   AppMode.repertoireTrainer => const [
-    SettingsChapter('Session', 'Choose what to practise and how much to do.'),
-    SettingsChapter('Learning', 'Choose how moves are learned and reviewed.'),
-    SettingsChapter('Playback', 'Set the pace and when to move on.'),
-    SettingsChapter(
-      'Material',
-      'Choose your playing side and organise your chapters and lines.',
-    ),
+    SettingsChapter('Session'),
+    SettingsChapter('Learning'),
+    SettingsChapter('Playback'),
+    SettingsChapter('Material'),
   ],
   AppMode.tactics => const [
-    SettingsChapter(
-      'Session',
-      'Choose puzzle order and how your answers are checked. Changes apply to your next session.',
-    ),
-    SettingsChapter(
-      'Puzzle selection',
-      'Choose which mistakes stay in your practice queue. Your saved puzzles are kept.',
-    ),
-    SettingsChapter(
-      'Game downloads',
-      'Choose which games to fetch and when to review them. Apply saves your changes.',
-    ),
-    SettingsChapter(
-      'Review performance',
-      'Balance analysis accuracy with time and computer resources. Apply saves your changes.',
-    ),
+    SettingsChapter('Session'),
+    SettingsChapter('Puzzle selection'),
+    SettingsChapter('Game downloads'),
+    SettingsChapter('Review performance'),
   ],
   AppMode.pgnViewer => const [
-    SettingsChapter('Playback', 'Choose how games play through automatically.'),
-    SettingsChapter(
-      'Board and moves',
-      'Choose orientation and reading options for this game view.',
-    ),
+    SettingsChapter('Playback'),
+    SettingsChapter('Board and moves'),
   ],
   AppMode.repertoire => const [
-    SettingsChapter(
-      'Repertoire',
-      'Choose the side to play and the board size for your repertoire.',
-    ),
-    SettingsChapter(
-      'Analysis panels',
-      'Choose which reference panels appear beside the board.',
-    ),
-    SettingsChapter(
-      'Engine analysis',
-      'Choose how Stockfish searches positions. These analysis preferences are shared across views.',
-    ),
+    SettingsChapter('Repertoire'),
+    SettingsChapter('Analysis panels'),
+    SettingsChapter('Engine analysis'),
   ],
-  AppMode.databases => const [
-    SettingsChapter('Data', 'Manage downloads and online evaluation lookups.'),
-  ],
-  AppMode.bughouse => const [
-    SettingsChapter(
-      'Engine',
-      'Configure the engine used to analyse the two boards.',
-    ),
-  ],
-  AppMode.engineTournament => const [
-    SettingsChapter(
-      'Engines',
-      'Manage the engines available for your tournaments.',
-    ),
-  ],
+  AppMode.databases => const [SettingsChapter('Data')],
+  AppMode.bughouse => const [SettingsChapter('Engine')],
+  AppMode.engineTournament => const [SettingsChapter('Engines')],
   _ => const [
-    SettingsChapter(
-      'Analysis panels',
-      'Choose which reference panels appear beside the board.',
-    ),
-    SettingsChapter(
-      'Engine analysis',
-      'Choose how Stockfish searches positions. These analysis preferences are shared across views.',
-    ),
-    SettingsChapter(
-      'Display',
-      'Choose how boards and moves appear throughout the app.',
-    ),
+    SettingsChapter('Analysis panels'),
+    SettingsChapter('Engine analysis'),
+    SettingsChapter('Display'),
   ],
 };
 
