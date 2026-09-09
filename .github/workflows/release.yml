@@ -183,12 +183,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Test Windows updater and storage upgrade contracts
-        run: |
-          flutter pub get
-          flutter test test/features/updates test/services/storage/upgrade_contract_test.dart
-          python tools/test_app_updates.py
-
       - name: Fetch the pinned Microsoft VC++ prerequisite
         shell: pwsh
         run: |

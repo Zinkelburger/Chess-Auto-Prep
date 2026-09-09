@@ -1,4 +1,4 @@
-# Runs the same quality gates as scripts/ci.sh, plus the Linux boot test.
+# Runs the local quality gates, Linux boot and native Windows update contracts.
 
 name: CI
 
@@ -69,6 +69,42 @@ jobs:
 
       - name: Run deterministic offline tool tests
         run: scripts/test_tools.sh
+
+  windows-update-contracts:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # Run early alongside the other gates, before expensive release builds.
+      # Separate steps prevent a later command masking an earlier failure in pwsh.
+      - name: Test native Windows update helper
+        env:
+          APP_UPDATE_TEST_ARTIFACTS: ${{ runner.temp }}/updater-diagnostics
+        run: python tools/test_app_updates.py -v
+
+      - name: Preserve Windows updater diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-updater-diagnostics
+          path: ${{ runner.temp }}/updater-diagnostics
+          if-no-files-found: warn
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Test Windows updater and storage upgrade contracts
+        run: flutter test test/features/updates test/services/storage/upgrade_contract_test.dart
 
   integration-test:
     runs-on: ubuntu-latest

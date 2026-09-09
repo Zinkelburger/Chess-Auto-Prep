@@ -1129,12 +1129,16 @@ there is no universal version envelope for every file format.
 `test/fixtures/storage/app_games_v1.sql` is frozen independently of current
 writers. `upgrade_contract_test.dart` tests preservation, reopening, migration
 failure rollback and future-schema refusal. Existing data-integrity and eval
-migration tests run in the release quality gate. Windows release builds also
-run the updater/upgrade contract tests. Offline `test_storage_contract.py` pins
+migration tests run in the release quality gate. A separate Windows quality job
+runs updater/upgrade contracts before release builds. Offline `test_storage_contract.py` pins
 storage identities and legacy folder names; change those assertions only with
 a reviewed data migration. `test_app_updates.py` exercises the shipped helper
 against disposable bundles (wait/cancel, verified replacement, checksum and
-traversal rejection, rollback); its Windows case uses fake installer/app files.
+traversal rejection, rollback). Windows cases compile disposable .NET executables
+to exercise the shipped `.exe` launch contract, including paths with spaces and
+apostrophes, checksum rejection, installer failure, waiting and cancellation.
+Helper failures return a nonzero exit code and retain the installation error;
+the Windows quality job uploads diagnostic logs on failure.
 Real Windows Setup and Linux package-manager authorization still need native
 release smoke testing. No release or update is triggered by these tests.
 
