@@ -16,7 +16,9 @@ database) or for opening in the app.
 Finding broadcasts: `search` only sees the official (tiered) broadcasts;
 community broadcasts such as a state association's are reachable by the
 account that ran them (`by USER`) or by tour id from the broadcast URL
-(`lichess.org/broadcast/<slug>/<tourId>`).
+(`lichess.org/broadcast/<slug>/<tourId>`).  `tools/chesscom_events.py`
+feeds the same collection from chess.com Events; a game broadcast on both
+sites is kept once.
 
 Collections live under `Documents/lichess_broadcasts/<collection>/`
 (override with --out).  A broadcast whose rounds are all finished is not
@@ -124,13 +126,46 @@ def parse_pgn(text: str) -> list[Game]:
     return games
 
 
+def _name_key(name: str) -> str:
+    """Order-free name identity: "Zhou, Jianchao" == "Jianchao Zhou" == "Zhou Jianchao".
+
+    Single letters (a middle initial one broadcaster adds) are ignored.
+    """
+    tokens = [t for t in re.findall(r"[a-z]+", name.lower()) if len(t) > 1]
+    return " ".join(sorted(tokens))
+
+
+def first_sans(movetext: str, n: int) -> list[str]:
+    """The first [n] SAN tokens, comments and move numbers stripped."""
+    body = re.sub(r"\{[^}]*\}", " ", movetext)
+    body = re.sub(r"\([^)]*\)", " ", body)
+    out = []
+    for tok in body.split():
+        if re.match(r"^\d+\.+$", tok) or tok in ("1-0", "0-1", "1/2-1/2", "*"):
+            continue
+        tok = re.sub(r"^\d+\.+", "", tok)
+        if tok:
+            out.append(tok.rstrip("!?"))
+        if len(out) >= n:
+            break
+    return out
+
+
 def game_key(g: Game) -> str:
-    """Identity for de-duplication across re-fetches and overlapping tours."""
-    url = g.tags.get("GameURL")
-    if url:
-        return url
+    """Identity for de-duplication across re-fetches, tours and sources.
+
+    The same board reaches the corpus from Lichess and from chess.com with
+    different URLs, name orders and even dates (one site stamps the round,
+    the other the broadcast), so identity is the two players, the result and
+    the first sixteen plies rather than any tag the broadcaster set.
+    """
     return "|".join(
-        g.tags.get(k, "") for k in ("White", "Black", "Date", "Round", "Event")
+        [
+            _name_key(g.tags.get("White", "")),
+            _name_key(g.tags.get("Black", "")),
+            g.tags.get("Result", ""),
+            " ".join(first_sans(g.movetext, 16)),
+        ]
     )
 
 
@@ -175,7 +210,10 @@ def merge_games(per_tour: Iterable[tuple[dict[str, Any], list[Game]]]) -> list[G
         for g in games:
             if not g.has_moves:
                 continue
-            seen[game_key(g)] = g
+            key = game_key(g)
+            kept = seen.get(key)
+            if kept is None or len(g.movetext) > len(kept.movetext):
+                seen[key] = g
     return sorted(seen.values(), key=_sort_key)
 
 
@@ -288,24 +326,37 @@ class Collection:
     def tour_path(self, tour_id: str) -> Path:
         return self.dir / TOURS_DIR / f"{tour_id}.pgn"
 
+    def is_complete(self, key: str, refresh: bool = False) -> bool:
+        """Whether [key] was already fetched with every round finished."""
+        entry = self.manifest["tours"].get(key)
+        return bool(
+            entry and entry.get("finished") and not refresh and self.tour_path(key).exists()
+        )
+
+    def store(self, key: str, entry: dict[str, Any], games: list[Game]) -> dict[str, Any]:
+        """Write one broadcast's games and record it in the manifest."""
+        path = self.tour_path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(g.render() + "\n" for g in games), encoding="utf-8")
+        entry = dict(entry)
+        entry["games"] = sum(1 for g in games if g.has_moves)
+        entry["fetched_at"] = int(time.time())
+        self.manifest["tours"][key] = entry
+        print(f"{key}: {entry['name']} — {entry['games']} games", file=sys.stderr)
+        return entry
+
     def fetch(self, fetcher: Fetcher, tour_id: str, refresh: bool = False) -> dict[str, Any]:
-        entry = self.manifest["tours"].get(tour_id)
-        if entry and entry.get("finished") and not refresh and self.tour_path(tour_id).exists():
+        if self.is_complete(tour_id, refresh):
+            entry = self.manifest["tours"][tour_id]
             print(f"{tour_id}: {entry['name']} — already complete, skipped", file=sys.stderr)
             return entry
         data = fetcher.tour(tour_id)
         tour = data["tour"]
         rounds = data.get("rounds", [])
         games = [normalise_game(g, tour, self.site) for g in parse_pgn(fetcher.tour_pgn(tour_id))]
-        path = self.tour_path(tour_id)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("".join(g.render() + "\n" for g in games), encoding="utf-8")
         entry = tour_summary(tour, rounds)
-        entry["games"] = sum(1 for g in games if g.has_moves)
-        entry["fetched_at"] = int(time.time())
-        self.manifest["tours"][tour_id] = entry
-        print(f"{tour_id}: {entry['name']} — {entry['games']} games", file=sys.stderr)
-        return entry
+        entry["source"] = "lichess"
+        return self.store(tour_id, entry, games)
 
     def merge(self) -> int:
         per_tour = []
@@ -316,6 +367,7 @@ class Collection:
         games = merge_games(per_tour)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.merged_path.write_text("".join(g.render() + "\n" for g in games), encoding="utf-8")
+        self.manifest["merged_games"] = len(games)
         return len(games)
 
     def save(self) -> None:
@@ -331,10 +383,15 @@ class Collection:
             date = _date_of(entry)
             total += entry.get("games", 0)
             lines.append(
-                f"{entry['id']}  {date}  {entry.get('games', 0):4d} games  "
-                f"{entry['name']}  ({entry.get('location') or 'no location'})"
+                f"{entry.get('source', 'lichess'):8s} {entry['id']:<26} {date}  "
+                f"{entry.get('games', 0):4d} games  {entry['name']}  "
+                f"({entry.get('location') or 'no location'})"
             )
-        lines.append(f"{len(self.manifest['tours'])} broadcasts, {total} games -> {self.merged_path}")
+        unique = self.manifest.get("merged_games", total)
+        lines.append(
+            f"{len(self.manifest['tours'])} broadcasts, {total} games fetched, "
+            f"{unique} unique -> {self.merged_path}"
+        )
         return lines
 
 
