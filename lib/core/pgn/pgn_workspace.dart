@@ -67,6 +67,14 @@ class PgnWorkspace extends ChangeNotifier {
     _notifySelection();
   }
 
+  /// Make a panel available alongside the current reader without moving its
+  /// board cursor or switching the selected tab.
+  void openInBackground(int id) {
+    if (!titles.containsKey(id) || _open.contains(id)) return;
+    _open.add(id);
+    _notifySelection();
+  }
+
   void animateTo(int value) => index = value;
   int add(String title) {
     final id = _nextId++;

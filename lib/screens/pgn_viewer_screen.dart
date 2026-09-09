@@ -483,6 +483,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// Solitaire hides the side-panel tabs entirely; don't fight the mode.
   void _applyHandoffTab(OpenPgnViewer handoff) {
     if (_controller.isSolitaireMode) return;
+    // Recent-game clicks keep the annotated Game reader selected, with the
+    // saved graph ready in its own tab. Restoring scores needs no engine pass.
+    if (handoff.gameId != null && _analysisController.evals.isNotEmpty) {
+      _tabController.openInBackground(_analysisTabIndex);
+    }
     switch (handoff.tab) {
       case PgnViewerTab.game:
         _tabController.animateTo(_kGameTab);

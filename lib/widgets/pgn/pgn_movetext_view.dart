@@ -298,13 +298,20 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
     }
 
-    /// The engine's line from before each classified move, on its own row.
-    void emitBestLine(_EvalNote note, int moveIndex) {
-      final spans = _bestLineSpans(view, note.pv, moveIndex);
-      if (spans.isEmpty) return;
+    /// Keep the verdict and suggested line together, inset from the game and
+    /// with enough space below to clearly resume the played moves.
+    void emitEvalNote(_EvalNote note, int moveIndex) {
+      final spans = [
+        ..._evalNoteSpans(note),
+        if (note.pv.isNotEmpty) ...[
+          const TextSpan(text: '\n'),
+          ..._bestLineSpans(view, note.pv, moveIndex),
+        ],
+      ];
       emitFullWidthRow(
         Container(
-          padding: const EdgeInsets.only(left: 8),
+          margin: const EdgeInsets.fromLTRB(20, 6, 0, 14),
+          padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
@@ -317,7 +324,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             text: TextSpan(style: PgnTextStyles.commentAt(0), children: spans),
           ),
         ),
-        vertical: 3,
+        vertical: 0,
       );
     }
 
@@ -496,10 +503,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           ),
         );
       } else {
-        // The mark on a move that cost something rides inline, right after the
-        // move, so the movetext keeps flowing.
         final note = evalNotes[i];
-        if (note != null) spans.addAll(_evalNoteSpans(note));
 
         // All of them. A PGN may attach several `{}` blocks to one move (a
         // Lichess study export splits prose from a `[%cal]` block, book PGNs
@@ -511,7 +515,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           emitComment(c, anchorPos: _posAt(prefix, i + 1), anchorPly: i + 1);
         }
 
-        if (note != null) emitBestLine(note, i);
+        if (note != null) emitEvalNote(note, i);
       }
 
       if (annotated) {

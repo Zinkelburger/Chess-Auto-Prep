@@ -138,8 +138,8 @@ Map<int, _EvalNote> _buildEvalNotes(PgnMovetextView view) {
   return notes;
 }
 
-/// The inline mark on a move that cost something: `Blunder +0.3 → +2.1`, in
-/// the quiet metrics ink, riding beside the move instead of breaking the line.
+/// The verdict heading of a classified move's inset analysis block:
+/// `Blunder +0.3 → +2.1`, in the quiet metrics ink.
 List<InlineSpan> _evalNoteSpans(_EvalNote note) => [
   TextSpan(
     text: '${note.label} ${note.before} → ${note.after}  ',
