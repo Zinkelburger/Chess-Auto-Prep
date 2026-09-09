@@ -68,17 +68,18 @@ void main() {
         expect(appState.currentMode, AppMode.positionAnalysis);
       }
 
-      await tester.tap(find.byTooltip('Back'));
-      await pumpNavigation();
-      expect(find.text('No player selected'), findsOneWidget);
+      // Picking material stays inside this mode, beneath the app controls.
+      expect(find.byTooltip('Settings').hitTestable(), findsOneWidget);
+      expect(find.text('Actions').hitTestable(), findsOneWidget);
+      expect(find.text('No player selected'), findsNothing);
 
       appState.setMode(AppMode.tactics);
       await pumpNavigation();
       appState.setMode(AppMode.positionAnalysis);
       await pumpNavigation();
 
-      expect(find.text('Which player?'), findsNothing);
-      expect(find.text('No player selected'), findsOneWidget);
+      expect(find.text('Which player?'), findsOneWidget);
+      expect(find.byTooltip('Settings').hitTestable(), findsOneWidget);
     },
   );
 }
