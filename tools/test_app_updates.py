@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 import stat
 import sys
@@ -125,30 +126,148 @@ class LinuxUpdateTest(unittest.TestCase):
 
 @unittest.skipUnless(os.name == 'nt', 'Windows helper')
 class WindowsUpdateTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        tmp = tempfile.TemporaryDirectory(prefix='updater probe-')
+        cls.addClassCleanup(tmp.cleanup)
+        cls.probe = Path(tmp.name) / 'probe.exe'
+        # Windows PowerShell uses the installed .NET Framework compiler. No
+        # downloaded compiler, shell-script association or real installer.
+        result = subprocess.run([
+            'powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
+            "$ErrorActionPreference = 'Stop'; "
+            'Add-Type -Path $env:UPDATER_PROBE_SOURCE '
+            '-OutputAssembly $env:UPDATER_PROBE_OUTPUT -OutputType ConsoleApplication',
+        ], env={**os.environ,
+                'UPDATER_PROBE_SOURCE': str(ROOT / 'tools/fixtures/updater_probe.cs'),
+                'UPDATER_PROBE_OUTPUT': str(cls.probe)},
+            capture_output=True, text=True, timeout=60)
+        if result.returncode or not cls.probe.exists():
+            raise AssertionError(f'Cannot compile updater probe: {result.stdout}\n{result.stderr}')
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="updater café 'quoted'-")
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.state = self.root / 'updates' / 'attempt'
+        self.state.mkdir(parents=True)
+        self.payload = self.state / 'setup.exe'
+        shutil.copyfile(self.probe, self.payload)
+        self.app = self.root / 'Chess app' / 'app.exe'
+        self.app.parent.mkdir()
+        shutil.copyfile(self.probe, self.app)
+        self.armed = self.state / 'install-requested'
+        self.armed.write_text('1')
+        self.request = self.state / 'request.json'
+        self.write_request()
+        # Preserve logs before TemporaryDirectory cleanup, including on failure.
+        self.addCleanup(self.preserve_diagnostics)
+
+    def write_request(self, process_id=2147483647, digest=None):
+        self.request.write_text(json.dumps(dict(
+            processId=process_id, payload=str(self.payload),
+            sha256=digest or hashlib.sha256(self.payload.read_bytes()).hexdigest(),
+            executable=str(self.app), armed=str(self.armed)), ensure_ascii=False), encoding='utf-8')
+
+    def preserve_diagnostics(self):
+        destination = os.environ.get('APP_UPDATE_TEST_ARTIFACTS')
+        if destination:
+            shutil.copytree(self.root / 'updates',
+                            Path(destination) / self._testMethodName, dirs_exist_ok=True)
+
+    def diagnostics(self):
+        parts = []
+        for path in sorted((self.root / 'updates').rglob('*')):
+            if path.is_file() and path.suffix in ('.txt', '.log', '.json'):
+                data = path.read_bytes()
+                encoding = 'utf-16' if data.startswith((b'\xff\xfe', b'\xfe\xff')) else 'utf-8-sig'
+                parts.append(f'{path.name}:\n{data.decode(encoding, errors="replace")}')
+        return '\n'.join(parts)
+
+    def launch(self):
+        helper = subprocess.Popen([
+            'powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
+            'Bypass', '-File', str(ROOT / 'assets/updater/install_windows.ps1'),
+            '-Request', str(self.request),
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.addCleanup(self.stop_process, helper)
+        return helper
+
+    @staticmethod
+    def stop_process(process):
+        if process.poll() is None:
+            process.kill()
+        process.communicate(timeout=10)
+
+    def finish(self, helper, expected_code=0):
+        stdout, stderr = helper.communicate(timeout=30)
+        (self.state / 'helper-output.txt').write_text(
+            f'stdout:\n{stdout}\nstderr:\n{stderr}', encoding='utf-8')
+        self.assertEqual(helper.returncode, expected_code, self.diagnostics())
+
+    def wait_file(self, path, helper):
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if path.exists():
+                return
+            if helper.poll() is not None and path.name == 'helper-ready':
+                self.finish(helper)
+                break
+            time.sleep(.05)
+        self.fail(f'Timed out waiting for {path}\n{self.diagnostics()}')
+
+    def assert_not_installed(self):
+        self.assertFalse((self.state / 'arguments.txt').exists(), self.diagnostics())
+        self.assertFalse((self.app.parent / 'restarted.txt').exists(), self.diagnostics())
+
     def test_native_helper_verifies_then_launches_setup_and_restarts(self):
-        with tempfile.TemporaryDirectory(prefix='updater space-') as tmp:
-            root = Path(tmp)
-            state = root / 'updates' / 'attempt'
-            state.mkdir(parents=True)
-            payload = state / 'setup.cmd'
-            payload.write_text('@echo off\r\necho %* > "%~dp0arguments.txt"\r\nexit /b 0\r\n')
-            app = root / 'app.cmd'
-            app.write_text('@echo off\r\necho restarted > "%~dp0restarted.txt"\r\n')
-            armed = state / 'install-requested'
-            armed.write_text('1')
-            request = state / 'request.json'
-            request.write_text(json.dumps(dict(processId=2147483647, payload=str(payload),
-                sha256=hashlib.sha256(payload.read_bytes()).hexdigest(), executable=str(app), armed=str(armed))))
-            subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-                str(ROOT / 'assets/updater/install_windows.ps1'), '-Request', str(request)], check=True, timeout=30)
-            args = (state / 'arguments.txt').read_text()
-            self.assertIn('/NOCLOSEAPPLICATIONS', args)
-            self.assertIn('/NORESTART', args)
-            for _ in range(100):
-                if (root / 'restarted.txt').exists():
-                    break
-                time.sleep(.05)
-            self.assertTrue((root / 'restarted.txt').exists())
+        helper = self.launch()
+        self.finish(helper)
+        arguments = self.state / 'arguments.txt'
+        self.assertTrue(arguments.exists(), self.diagnostics())
+        self.assertEqual(arguments.read_text(encoding='utf-8-sig').splitlines(), [
+            '/SILENT', '/NORESTART', '/NOCLOSEAPPLICATIONS', '/NORESTARTAPPLICATIONS',
+            f'/DIR={self.app.parent}', f'/LOG={self.state / "setup.log"}',
+        ])
+        self.wait_file(self.app.parent / 'restarted.txt', helper)
+        self.assertFalse(self.armed.exists())
+        self.assertFalse((self.state / 'helper-ready').exists())
+        self.assertFalse((self.state.parent / 'last-error.txt').exists())
+
+    def test_corruption_rejected_before_installer_launch(self):
+        self.write_request(digest='0' * 64)
+        self.finish(self.launch(), expected_code=1)
+        self.assertIn('Update checksum mismatch', self.diagnostics())
+        self.assert_not_installed()
+        self.assertFalse(self.armed.exists())
+        self.assertFalse((self.state / 'helper-ready').exists())
+
+    def test_installer_failure_is_reported_without_restart(self):
+        (self.state / 'setup-exit.txt').write_text('23')
+        self.finish(self.launch(), expected_code=1)
+        self.assertIn('Installer exited with 23', self.diagnostics())
+        self.assertTrue((self.state / 'arguments.txt').exists(), self.diagnostics())
+        self.assertFalse((self.app.parent / 'restarted.txt').exists())
+        self.assertFalse(self.armed.exists())
+
+    def test_cancelled_request_does_not_launch_installer(self):
+        self.armed.unlink()
+        self.finish(self.launch())
+        self.assert_not_installed()
+        self.assertFalse((self.state.parent / 'last-error.txt').exists())
+
+    def test_waits_for_app_close_and_honors_cancellation(self):
+        app = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+        self.addCleanup(self.stop_process, app)
+        self.write_request(process_id=app.pid)
+        helper = self.launch()
+        self.wait_file(self.state / 'helper-ready', helper)
+        self.assertIsNone(helper.poll())
+        self.assert_not_installed()
+        self.armed.unlink()
+        self.finish(helper)
+        self.assertIsNone(app.poll())
+        self.assert_not_installed()
 
 
 if __name__ == '__main__':

@@ -1,10 +1,13 @@
 param([Parameter(Mandatory=$true)][string]$Request)
 $ErrorActionPreference = 'Stop'
-$config = Get-Content -LiteralPath $Request -Raw | ConvertFrom-Json
+# Dart writes UTF-8 JSON. Windows PowerShell 5.1 otherwise decodes it using
+# the system code page, corrupting non-ASCII user/install directory names.
+$config = Get-Content -LiteralPath $Request -Raw -Encoding UTF8 | ConvertFrom-Json
 $stateDir = Split-Path -Parent $Request
 $log = Join-Path $stateDir 'install.log'
 $ready = Join-Path $stateDir 'helper-ready'
 $lock = $null
+$exitCode = 0
 try {
     $lock = [System.IO.File]::Open((Join-Path (Split-Path -Parent $stateDir) 'install.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
     # Readiness is published only after capturing the old process handle.
@@ -27,10 +30,14 @@ try {
     Add-Content -LiteralPath $log -Value 'Installation completed.'
     Start-Process -FilePath $config.executable
 } catch {
-    Add-Content -LiteralPath $log -Value $_.ToString()
+    $exitCode = 1
+    Add-Content -LiteralPath $log -Value ($_ | Out-String)
+    Add-Content -LiteralPath $log -Value $_.ScriptStackTrace
     Set-Content -LiteralPath (Join-Path (Split-Path -Parent $stateDir) 'last-error.txt') -Value ("Update installation failed: " + $_.ToString() + ". Details: " + $log)
+    Write-Error -Message $_.ToString() -ErrorAction Continue
 } finally {
     Remove-Item -LiteralPath $ready -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $config.armed -ErrorAction SilentlyContinue
     if ($lock) { $lock.Dispose() }
 }
+exit $exitCode
