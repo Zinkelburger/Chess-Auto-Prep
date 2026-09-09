@@ -27,7 +27,7 @@ import '../../../models/engine_settings.dart';
 import '../../../services/games_library/games_library_service.dart'
     show GamesLibraryService, GamesPlatform;
 import '../../../utils/log.dart';
-import '../../tactics/services/mining_settings.dart';
+import '../../../models/bulk_analysis_settings.dart';
 import '../../tactics/services/tactics_import_coordinator.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../controllers/recent_games_controller.dart';
@@ -72,16 +72,16 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
     required this._lichessUsername,
     required this._chesscomUsername,
     GamesWindowSettings? windowSettings,
-    MiningSettings? miningSettings,
+    BulkAnalysisSettings? bulkSettings,
     EngineSettings? engine,
   }) : _import = importCoordinator,
        _windowSettings = windowSettings ?? GamesWindowSettings.instance,
-       _mining = miningSettings ?? MiningSettings.instance,
+       _bulk = bulkSettings ?? BulkAnalysisSettings.instance,
        _engine = engine ?? EngineSettings.instance {
     // The home block states cores and depth beside its gear; turning either
     // down on the Settings screen has to move that read-out too.
     _engine.addListener(notifyListeners);
-    _mining.addListener(notifyListeners);
+    _bulk.addListener(notifyListeners);
   }
 
   final RecentGamesController _games;
@@ -89,7 +89,7 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   final String? Function() _lichessUsername;
   final String? Function() _chesscomUsername;
   final GamesWindowSettings _windowSettings;
-  final MiningSettings _mining;
+  final BulkAnalysisSettings _bulk;
   final EngineSettings _engine;
 
   HomeReviewStage _stage = HomeReviewStage.idle;
@@ -132,12 +132,12 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   /// How much of the machine this review is allowed to use, for the block
   /// that says so out loud.
   int get cores => _engine.cores;
-  int get depth => _mining.depth;
+  int get depth => _bulk.depth;
 
   @override
   void dispose() {
     _engine.removeListener(notifyListeners);
-    _mining.removeListener(notifyListeners);
+    _bulk.removeListener(notifyListeners);
     super.dispose();
   }
 
@@ -307,7 +307,7 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   /// runs, so these cannot be parallel.
   Future<void> _review() async {
     await _windowSettings.ensureLoaded();
-    await _mining.ensureLoaded();
+    await _bulk.ensureLoaded();
     final window = _windowSettings.window;
     final sources = <(TacticsImportSource, String)>[
       if (_lichessUsername()?.trim().isNotEmpty ?? false)
@@ -343,7 +343,7 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
               : TacticsImportMode.sinceDate,
           maxGames: window.gameLimit,
           since: window.cutoffFrom(DateTime.now()),
-          depth: _mining.depth,
+          depth: _bulk.depth,
           cores: _engine.cores,
         ),
       );

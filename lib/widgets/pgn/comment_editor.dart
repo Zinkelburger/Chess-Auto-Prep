@@ -65,11 +65,6 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
                   vertical: 4,
                 ),
                 border: InputBorder.none,
-                hintText: 'Comment',
-                hintStyle: TextStyle(
-                  color: AppColors.onSurfaceMuted,
-                  fontSize: 13,
-                ),
               ),
               onSubmitted: (v) => widget.onSave(v),
             ),

@@ -75,12 +75,6 @@ abstract class _GenerationConfigFormStateBase
 
   late final TextEditingController _cutoffCtrl = _ctrl('0.01');
   late final TextEditingController _maxPlyCtrl = _ctrl('4');
-  late final TextEditingController _engineDepthCtrl = _ctrl(
-    '$kDefaultGenerationEvalDepth',
-  );
-  late final TextEditingController _engineThreadsCtrl = _ctrl(
-    defaultEngineThreads().toString(),
-  );
   late final TextEditingController _evalGuardCtrl = _ctrl('30');
   // Offsets from the root eval ([_relativeEval] is on by default), so the
   // same numbers for both colours — see [TreeBuildConfig.formDefaults] for
@@ -183,18 +177,6 @@ abstract class _GenerationConfigFormStateBase
       isInt: true,
       min: 1,
       max: 200,
-    ),
-    _engineDepthCtrl: const _NumSpec(
-      'Engine depth',
-      isInt: true,
-      min: 1,
-      max: 99,
-    ),
-    _engineThreadsCtrl: const _NumSpec(
-      'Engine threads',
-      isInt: true,
-      min: 1,
-      max: 512,
     ),
     _evalGuardCtrl: const _NumSpec(
       'Max eval loss vs best',

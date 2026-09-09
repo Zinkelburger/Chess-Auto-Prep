@@ -1,71 +1,38 @@
 import 'package:flutter/material.dart';
 
-import '../../constants/engine_defaults.dart';
-import '../../models/engine_settings.dart';
 import '../../theme/app_text_styles.dart';
-import '../common/number_stepper.dart';
+import '../analysis/stockfish_settings_dialog.dart';
 
 /// Compact controls using the same persisted preferences as global settings.
-class InlineEngineSettings extends StatelessWidget {
+class InlineEngineSettings extends StatefulWidget {
   const InlineEngineSettings({super.key});
 
   @override
+  State<InlineEngineSettings> createState() => _InlineEngineSettingsState();
+}
+
+class _InlineEngineSettingsState extends State<InlineEngineSettings> {
+  final _formKey = GlobalKey<FormState>();
+
+  @override
   Widget build(BuildContext context) => MenuAnchor(
+    onClose: () => _formKey.currentState?.save(),
     menuChildren: [
       SizedBox(
         width: 320,
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: ListenableBuilder(
-            listenable: EngineSettings.instance,
-            builder: (context, _) {
-              final settings = EngineSettings.instance;
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Engine settings',
-                    style: AppTextStyles.bodyStrong,
-                  ),
-                  const SizedBox(height: 8),
-                  _row(
-                    'Cores',
-                    settings.cores,
-                    1,
-                    EngineSettings.systemCores,
-                    (v) => settings.cores = v,
-                  ),
-                  _row(
-                    'Lines',
-                    settings.multiPv,
-                    kMinMultiPv,
-                    kMaxMultiPv,
-                    (v) => settings.multiPv = v,
-                  ),
-                  _row(
-                    'Depth',
-                    settings.depth,
-                    kMinDepth,
-                    kMaxDepth,
-                    (v) => settings.depth = v,
-                  ),
-                  _row(
-                    'Memory (MB)',
-                    settings.hashMb,
-                    kMinHashMb,
-                    kMaxHashMb,
-                    (v) => settings.hashMb = v,
-                    step: 16,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Shared with global engine settings.',
-                    style: AppTextStyles.caption,
-                  ),
-                ],
-              );
-            },
+          child: Form(
+            key: _formKey,
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Engine settings', style: AppTextStyles.bodyStrong),
+                SizedBox(height: 8),
+                StockfishSettingsBody(showBulkDepth: false),
+              ],
+            ),
           ),
         ),
       ),
@@ -76,29 +43,6 @@ class InlineEngineSettings extends StatelessWidget {
       onPressed: () =>
           controller.isOpen ? controller.close() : controller.open(),
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-    ),
-  );
-
-  Widget _row(
-    String label,
-    int value,
-    int min,
-    int max,
-    ValueChanged<int> onChanged, {
-    int step = 1,
-  }) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Row(
-      children: [
-        Expanded(child: Text(label, style: AppTextStyles.body)),
-        NumberStepper(
-          value: value,
-          min: min,
-          max: max,
-          step: step,
-          onChanged: onChanged,
-        ),
-      ],
     ),
   );
 }

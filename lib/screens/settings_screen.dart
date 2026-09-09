@@ -14,13 +14,13 @@ import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
 import '../models/board_display_settings.dart';
 import '../models/engine_settings.dart';
+import '../models/bulk_analysis_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/san_display.dart';
-import '../utils/system_info.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/analysis/stockfish_settings_dialog.dart';
 import '../widgets/analysis/analysis_panels_dialog.dart';
@@ -109,53 +109,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   static const _sections = [
-    (
-      label: 'Accounts',
-      icon: Icons.person_outline,
-      description: 'Your chess identities and connected services.',
-    ),
-    (
-      label: 'Display',
-      icon: Icons.grid_on_outlined,
-      description: 'How boards and moves are drawn, everywhere in the app.',
-    ),
-    (
-      label: 'Repertoires',
-      icon: Icons.menu_book_outlined,
-      description: 'Choose the opening books you play.',
-    ),
-    (
-      label: 'Engine',
-      icon: Icons.tune,
-      description: 'How much of this computer Stockfish may use.',
-    ),
-    (
-      label: 'Data',
-      icon: Icons.storage_outlined,
-      description: 'Manage local databases and online lookups.',
-    ),
-    (
-      label: 'About',
-      icon: Icons.info_outline,
-      description: 'Project information and app maintenance.',
-    ),
-    (
-      label: 'Keyboard shortcuts',
-      icon: Icons.keyboard_outlined,
-      description: 'The essentials for the current view.',
-    ),
-    (
-      label: 'Engine analysis',
-      icon: Icons.search,
-      description:
-          'Stockfish search and move-table preferences, shared across analysis views.',
-    ),
-    (
-      label: 'Analysis panels',
-      icon: Icons.view_column_outlined,
-      description:
-          'Choose which engine and reference panels appear alongside your board.',
-    ),
+    (label: 'Accounts', icon: Icons.person_outline),
+    (label: 'Display', icon: Icons.grid_on_outlined),
+    (label: 'Repertoires', icon: Icons.menu_book_outlined),
+    (label: 'Engine', icon: Icons.tune),
+    (label: 'Data', icon: Icons.storage_outlined),
+    (label: 'About', icon: Icons.info_outline),
+    (label: 'Keyboard shortcuts', icon: Icons.keyboard_outlined),
   ];
 
   @override
@@ -166,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
         titleSpacing: 8,
-        title: const Text('Settings', style: AppTextStyles.title),
+        title: const Text('Settings', style: AppTextStyles.bodyStrong),
         // The way out sits where the gear that opened this screen was, so the
         // pointer is already over it; a back arrow on the far left left users
         // hunting for the exit.
@@ -204,14 +164,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _page(1, [_buildDisplaySection()], compact),
                       _page(2, const [MyRepertoiresSection()], compact),
                       _page(3, [
-                        _buildEngineSection(getLogicalCores()),
-                        const SettingsGroup(
-                          title: 'Looking for analysis settings?',
-                          icon: Icons.settings_outlined,
-                          subtitle:
-                              'Choose Engine analysis or Analysis panels in this sidebar for search and panel preferences.',
-                          children: [],
-                        ),
+                        const StockfishSettingsBody(),
+                        _buildMaiaSection(),
                       ], compact),
                       _page(4, [_buildDatabasesSection()], compact),
                       _page(5, [
@@ -220,8 +174,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _buildResetButton(),
                       ], compact),
                       _page(6, const [KeyboardShortcutsSection()], compact),
-                      _page(7, const [StockfishSettingsBody()], compact),
-                      _page(8, const [AnalysisPanelsSettingsBody()], compact),
                     ],
                   ),
                   ListenableBuilder(
@@ -373,29 +325,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         padding: EdgeInsets.fromLTRB(12, 16, 12, 8),
                         child: Text('GLOBAL', style: AppTextStyles.eyebrow),
                       ),
-                      for (var i = 0; i < 7; i++) ...[
+                      for (var i = 0; i < _sections.length; i++)
                         _globalNavTile(i),
-                        if (i == 3 &&
-                            _global &&
-                            const [3, 7, 8].contains(_selected)) ...[
-                          Padding(
-                            padding: const EdgeInsets.only(left: 24),
-                            child: ListTile(
-                              key: const Key('settings-engine-resources'),
-                              minTileHeight: 36,
-                              dense: true,
-                              selected: _selected == 3,
-                              title: const Text(
-                                'Computer resources',
-                                style: AppTextStyles.body,
-                              ),
-                              onTap: () => _selectGlobal(3),
-                            ),
-                          ),
-                          _globalNavTile(7, nested: true),
-                          _globalNavTile(8, nested: true),
-                        ],
-                      ],
                     ],
                   ),
                 ),
@@ -423,14 +354,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         iconColor: AppColors.onSurfaceMuted,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         leading: nested ? null : Icon(_sections[index].icon, size: 20),
-        trailing: index == 3
-            ? Icon(
-                _global && const [3, 7, 8].contains(_selected)
-                    ? Icons.expand_more
-                    : Icons.chevron_right,
-                size: 18,
-              )
-            : null,
         horizontalTitleGap: 12,
         title: Text(
           _sections[index].label,
@@ -470,10 +393,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Text(
                       '${mode.label} › ${chapter.label}',
-                      style: AppTextStyles.title,
+                      style: AppTextStyles.bodyStrong,
                     ),
-                    const SizedBox(height: 8),
-                    Text(chapter.description, style: AppTextStyles.muted),
                   ],
                 ),
               ),
@@ -503,17 +424,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         if (mode == AppMode.databases)
           _buildDatabasesSection()
+        else if (mode == AppMode.study && _chapter == 0)
+          const SettingsGroup(
+            title: 'Board analysis',
+            icon: Icons.tune,
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: StockfishSettingsBody(showBulkDepth: false),
+              ),
+            ],
+          )
         else if (_chapter == 0)
           const SettingsGroup(
             title: 'Analysis panels',
             icon: Icons.view_column,
             children: [AnalysisPanelsSettingsBody()],
-          )
-        else if (_chapter == 1)
-          const SettingsGroup(
-            title: 'Engine analysis',
-            icon: Icons.memory,
-            children: [StockfishSettingsBody()],
           )
         else
           _buildDisplaySection(),
@@ -540,9 +466,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(section.label, style: AppTextStyles.title),
-                const SizedBox(height: 8),
-                Text(section.description, style: AppTextStyles.muted),
+                Text(section.label, style: AppTextStyles.bodyStrong),
                 const SizedBox(height: 16),
                 ...children,
               ],
@@ -576,7 +500,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SettingsGroup(
       title: 'About & open source',
       icon: Icons.info_outline,
-      subtitle: 'Built in the open, for your chess preparation.',
       children: [
         ListTile(
           titleTextStyle: AppTextStyles.bodyStrong,
@@ -634,11 +557,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return SettingsGroup(
           title: 'Board and moves',
           icon: Icons.grid_on_outlined,
-          subtitle: 'Changes apply immediately, to every board and move list.',
           children: [
             SettingsChoiceTile<BoardCoordinates>(
               label: 'Board coordinates',
-              description: 'Where the file letters and rank numbers go.',
               value: display.coordinates,
               items: const [
                 (BoardCoordinates.none, 'No'),
@@ -650,7 +571,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             SettingsChoiceTile<PieceNotation>(
               label: 'Piece notation',
-              description: 'How a piece is written in a move.',
               value: display.pieceNotation,
               items: const [
                 (PieceNotation.letters, 'Letters (KQRBN)'),
@@ -673,60 +593,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ── Engine section ─────────────────────────────────────────────────────────
 
-  /// One number for CPU and one for memory. There used to be separate
-  /// "workers" and "threads" rows, which are the same cores spent two ways
-  /// (one process with N threads on the board, N processes reviewing games)
-  /// and read as two different things to anyone who is not a programmer.
-  Widget _buildEngineSection(int cores) {
-    final peakMb = _engine.cores * _engine.hashMb;
-    return SettingsGroup(
-      title: 'Stockfish',
-      icon: Icons.bolt,
-      // No on/off switch here on purpose: starting and stopping Stockfish is
-      // an action you want to see the result of, so it lives on the ⚡ button
-      // next to the board.
-      subtitle: 'Changes apply straight away. Type a number or use − and +.',
-      children: [
-        SettingsStepperTile(
-          label: 'CPU cores',
-          description:
-              'This computer has $cores. Stockfish uses this many to analyse '
-              'the board and to review your games. Leave some free if you run '
-              'other programs at the same time.',
-          value: _engine.cores,
-          min: 1,
-          max: cores,
-          suffix: 'of $cores',
-          onChanged: (v) => _engine.cores = v,
-        ),
-        SettingsStepperTile(
-          label: 'Memory per engine',
-          description:
-              'RAM each Stockfish process keeps for positions it has already '
-              'searched. Reviewing games runs one process per core, so that '
-              'is up to $peakMb MB at once with the settings above.',
-          value: _engine.hashMb,
-          min: kMinHashMb,
-          max: kMaxHashMb,
-          step: 128,
-          suffix: 'MB',
-          onChanged: (v) => _engine.hashMb = v,
-        ),
-        SettingsStepperTile(
-          label: 'Opponent rating',
-          description:
-              'Maia predicts what a human of this rating would play. Set it '
-              'close to the opponents you actually face.',
-          value: _engine.maiaElo,
-          min: kMinMaiaElo,
-          max: kMaxMaiaElo,
-          step: 100,
-          suffix: 'Elo',
-          onChanged: (v) => _engine.maiaElo = v,
-        ),
-      ],
-    );
-  }
+  Widget _buildMaiaSection() => SettingsStepperTile(
+    label: 'Opponent rating',
+    description: 'Maia predictions',
+    value: _engine.maiaElo,
+    min: kMinMaiaElo,
+    max: kMaxMaiaElo,
+    step: 100,
+    suffix: 'Elo',
+    onChanged: (v) => _engine.maiaElo = v,
+  );
 
   // ── Databases section ──────────────────────────────────────────────────────
 
@@ -743,7 +619,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return SettingsGroup(
       title: 'Databases',
       icon: Icons.storage,
-      subtitle: 'Review downloads, disk usage and updates in one place.',
       children: [
         ListTile(
           titleTextStyle: AppTextStyles.bodyStrong,
@@ -754,9 +629,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           leading: const Icon(Icons.dns_outlined, size: 22),
           title: const Text('Open Databases'),
-          subtitle: const Text(
-            'Everything the app keeps on this machine, on one page',
-          ),
           trailing: const Icon(Icons.chevron_right, size: 20),
           // Settings is a pushed route over the mode host, so switching mode
           // without popping would change the screen underneath and leave the
@@ -779,8 +651,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             final settings = EvalDatabaseSettings.instance;
             return SettingsValueRow(
               label: 'Online evaluation lookups',
-              description:
-                  'Allow on-demand expectimax to query ChessDB. Uses your daily API quota; repertoire builds have a separate setting.',
+              description: 'Uses your daily ChessDB quota.',
               control: Switch(
                 value: settings.chessDbApiForExpectimax,
                 onChanged: (value) =>
@@ -810,6 +681,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (!confirmed) return;
     _engine.resetToDefaults();
+    await BulkAnalysisSettings.instance.setDepth(
+      BulkAnalysisSettings.defaultDepth,
+    );
     await EvalDatabaseSettings.instance.resetToDefaults();
     await BoardDisplaySettings.instance.resetToDefaults();
     if (mounted) showAppSnackBar(context, 'Settings restored to defaults');

@@ -8,7 +8,6 @@ import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_settings_button.dart';
 import '../../../core/app_state.dart';
-import '../../../widgets/analysis/stockfish_settings_dialog.dart';
 import '../../../widgets/analysis/analysis_panels_dialog.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
@@ -135,8 +134,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
                   ),
               if (SettingsChapterScope.maybeOf(context) == 1)
                 const AnalysisPanelsSettingsBody(),
-              if (SettingsChapterScope.maybeOf(context) == 2)
-                const StockfishSettingsBody(),
             ],
           ),
         ),

@@ -521,6 +521,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   Widget _buildPanel() {
     if (_training.repertoire == null && !_training.isLoading) {
       return RepertoireListBody(
+        onCreateRepertoire: () {
+          if (!mounted) return;
+          context.read<AppState>().setMode(AppMode.repertoire);
+        },
         onSelected: _onRepertoireSelected,
         onCourseChapterSelected: _onCourseChapterSelected,
         onStudySelected: _onStudySelected,

@@ -33,6 +33,9 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 
 | Item | Status | Notes |
 |------|--------|-------|
+| Preserve mode toolbar in material pickers | **Partial** | Player Analysis now embeds its picker. `RepertoireSelectionScreen` and `RepertoireChaptersScreen` still push full-screen routes with only a Back action, hiding Actions / View / Settings; embed them beneath their owning mode toolbar. |
+| Bound simple lists and forms | **Partial** | Player Analysis caps its picker at 1040px; Settings and Databases already cap forms. Repertoire/chapter lists and `TournamentsScreen` group cards still fill the window; bound these, while retaining room for multi-column player tables and board workspaces. |
+| Preserve navigation in prep and planning workflows | **Not started** | `TournamentsScreen`, `PeopleScreen`, `TournamentScreen`, `BuildConfigScreen` and `PlanBuildScreen` replace the mode bar with route-specific controls. Keep their navigation under a persistent mode bar; planner boards/tables benefit from width, but the question/review form should have its own readable cap. |
 | Ultrawide four-zone layout (≥ 1600 px) | **Not started** | `kWideBreakpoint` exists; no fourth column |
 | Draggable zone dividers | **Not started** | Fixed flex ratios only (`RepertoireLayout`) |
 | Eval bar docked on board (Lichess-style) | **Not started** | Engine output lives in context panel / analysis dock, not under board |

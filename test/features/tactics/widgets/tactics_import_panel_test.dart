@@ -15,6 +15,12 @@ import 'package:chess_auto_prep/features/tactics/models/tactics_session_settings
 import 'package:chess_auto_prep/features/tactics/controllers/tactics_session_controller.dart';
 import 'package:chess_auto_prep/features/tactics/widgets/tactics_import_panel.dart';
 
+import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
+import 'package:chess_auto_prep/features/games/services/home_review_runner.dart';
+import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
+import 'package:chess_auto_prep/features/tactics/widgets/tactics_view_settings.dart';
+import 'package:chess_auto_prep/models/engine_settings.dart';
+
 /// A puzzle mined today, so no expiry window can filter it out.
 TacticsPosition _position({required String id, String mistakeType = '??'}) {
   final now = DateTime.now();
@@ -242,6 +248,87 @@ void main() {
       session.sessionSettings.maxAgeDays,
       30,
       reason: 'an empty box is mid-edit, not "expire after zero days"',
+    );
+  });
+  testWidgets('Analysis gear opens cores and saved values reach the runner', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final before = EngineSettings.instance.cores;
+    addTearDown(() => EngineSettings.instance.cores = before);
+    EngineSettings.instance.cores = 1;
+    final session = TacticsSessionController();
+    final games = RecentGamesController(
+      lichessUsername: () => null,
+      chesscomUsername: () => null,
+    );
+    final coordinator = TacticsImportCoordinator();
+    final runner = HomeReviewRunner(
+      games: games,
+      importCoordinator: coordinator,
+      lichessUsername: () => null,
+      chesscomUsername: () => null,
+    );
+    addTearDown(session.dispose);
+    addTearDown(games.dispose);
+    addTearDown(coordinator.dispose);
+    addTearDown(runner.dispose);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AppState()),
+          ChangeNotifierProvider.value(value: session),
+          ChangeNotifierProvider.value(value: games),
+          ChangeNotifierProvider.value(value: coordinator),
+          ChangeNotifierProvider.value(value: runner),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            appBar: AppBar(
+              actions: [
+                AppSettingsButton(
+                  mode: AppMode.tactics,
+                  contentBuilder: (_) => TacticsViewSettings(
+                    session: session,
+                    games: games,
+                    runner: runner,
+                  ),
+                ),
+              ],
+            ),
+            body: SingleChildScrollView(
+              child: TacticsImportPanel(
+                isImporting: false,
+                positions: const [],
+                onBrowseTactics: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Engine settings'));
+    await tester.pumpAndSettle();
+    final cores = find.byKey(const Key('engine-cores'));
+    expect(cores, findsOneWidget);
+    expect(find.byKey(const Key('engine-bulk-depth')), findsOneWidget);
+    expect(find.byKey(const Key('book-check-games-field')), findsNothing);
+    await tester.enterText(
+      find.descendant(of: cores, matching: find.byType(TextField)),
+      '2',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    final expected = EngineSettings.systemCores > 1 ? 2 : 1;
+    expect(runner.cores, expected);
+    await tester.tap(find.byTooltip('Engine settings'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<Text>(find.byKey(const Key('review-cores-readout'))).data,
+      '$expected ${expected == 1 ? 'core' : 'cores'}',
     );
   });
 }

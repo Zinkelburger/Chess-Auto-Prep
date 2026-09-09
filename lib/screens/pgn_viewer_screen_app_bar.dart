@@ -19,6 +19,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   Future<void> _editInStudy();
   Future<void> _addCurrentGameToStudy();
   Future<void> _copyCurrentGamePgn();
+  Future<void> _copyCurrentFen();
   void _openSliceDialog();
   Future<void> _exportSlice();
   Future<void> _exportSliceAsScid();
@@ -119,6 +120,11 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             icon: Icons.copy,
             dividerAbove: true,
             onRun: _copyCurrentGamePgn,
+          ),
+          AppMenuEntry(
+            label: 'Copy FEN',
+            icon: Icons.copy,
+            onRun: _copyCurrentFen,
           ),
           AppMenuEntry(
             label: 'Export',

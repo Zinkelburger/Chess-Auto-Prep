@@ -2,9 +2,8 @@
 # `flutter run` / `flutter build` can bundle it. fetch_assets.py is a no-op
 # when the .gz already matches tools/assets.lock.json (CI fetches first).
 #
-# macOS is handled in the Flutter Assemble script (fetch only if the .gz is
-# missing) so the Intel CI job on Apple Silicon runners cannot overwrite a
-# pre-fetched x86_64 engine.
+# macOS is handled in the Flutter Assemble script. Both paths leave the
+# explicit target fetch to the workflow when running in GitHub Actions.
 function(chess_auto_prep_fetch_stockfish target_name)
   # Release CI fetches with --only before `flutter build`. Integration tests
   # must not download ~110 MB during CMake configure (5-minute timeout).

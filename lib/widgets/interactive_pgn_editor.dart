@@ -19,7 +19,7 @@ import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
 import 'package:chess_auto_prep/utils/chess_utils.dart' show isNullMoveSan;
 import 'package:chess_auto_prep/utils/training_markers.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'
-    show MoveChip;
+    show MoveChip, PgnMoveDecorations;
 import 'pgn/comment_editor.dart';
 import 'pgn/comment_prose_spans.dart';
 import 'pgn/pgn_annotation_panel.dart';
@@ -160,6 +160,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   @override
+  void reassemble() {
+    super.reassemble();
+    // Hot reload must pick up layout changes even when the model is unchanged.
+    // Cursor navigation still keeps the cached paragraphs in normal builds.
+    _cachedMoveWidgets = null;
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _selection.dispose();
@@ -169,18 +177,25 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   // ── Callbacks into controller ─────────────────────────────────────
 
-  void _jumpTo(TreePath path) => widget.onJump?.call(path);
+  void _jumpTo(TreePath path) {
+    if (!mounted) return;
+    widget.onJump?.call(path);
+  }
 
   void _startEditingComment(TreePath path) {
+    if (!mounted) return;
     _jumpTo(path);
+    if (!mounted) return;
     setState(() => _editingCommentPath = path);
   }
 
   void _saveInlineComment(TreePath path, String comment) {
+    if (!mounted) return;
     final trimmed = comment.trim();
     widget.onCommentChanged?.call(path, trimmed.isEmpty ? null : trimmed);
     widget.onDirty?.call();
     _scheduleAutoSave();
+    if (!mounted) return;
     setState(() => _editingCommentPath = null);
   }
 
@@ -324,6 +339,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // ── Context menu ──────────────────────────────────────────────────
 
   void _showContextMenu(TreePath path, Offset globalPosition) {
+    if (!mounted) return;
     unawaited(_runContextMenu(path, globalPosition));
   }
 
@@ -481,7 +497,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             decoration: BoxDecoration(
               color: AppColors.pgnSurface,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.divider),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -575,6 +590,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final atRoot = path.isEmpty;
     final raw = widget.tree.commentAt(path) ?? '';
     return PgnAnnotationPanel(
+      key: ObjectKey(widget.tree),
+      // Tree mutations are cheap and the host already debounces disk saves.
+      // Commit before a chapter switch changes the controller's target tree.
+      commentDebounce: Duration.zero,
       targetKey: atRoot ? 'root' : (node == null ? null : 'n${node.id}'),
       moveLabel: atRoot
           ? 'the start position'
@@ -616,12 +635,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // editor used to thread a Position through the whole recursion (a full
   // parseSan/play replay of every node on each rebuild) without ever using it.
   //
-  // Everything inline lives in Text.rich paragraphs: move numbers, parens and
-  // comments are TextSpans; move chips are baseline-aligned WidgetSpans — the
-  // same construction as the PGN viewer's movetext. A plain Wrap of
-  // mixed-height widgets top-aligns each run, which floated every number a
-  // few pixels above its move. Only the block comment editor breaks a
-  // paragraph.
+  // Move runs use baseline-aligned WidgetSpans, as in the viewer. Prose and
+  // variations break the run into full-width rows with bounded indentation.
+  // The tree and callback paths are untouched by this presentation layer.
   List<Widget> _buildMoveRows(int startMoveNumber, bool startIsWhite) {
     // The context-path highlight and the inline editor are transient render
     // state, so neither may be served from nor written to the cache.
@@ -636,21 +652,49 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final rows = <Widget>[];
     final spans = <InlineSpan>[];
 
-    void flushSpans() {
-      if (spans.isEmpty) return;
+    void addRow(Widget child, int depth, {double vertical = 3}) {
       rows.add(
-        Text.rich(
-          TextSpan(style: PgnTextStyles.rowRootAt(0), children: List.of(spans)),
+        Padding(
+          padding: EdgeInsets.only(
+            left:
+                PgnTextStyles.depthIndent *
+                depth.clamp(0, PgnTextStyles.maxStyledDepth),
+            top: vertical,
+            bottom: vertical,
+          ),
+          child: SizedBox(width: double.infinity, child: child),
         ),
+      );
+    }
+
+    void flushSpans(int depth) {
+      if (spans.isEmpty) return;
+      addRow(
+        Text.rich(
+          TextSpan(
+            style: PgnTextStyles.rowRootAt(depth),
+            children: List.of(spans),
+          ),
+        ),
+        depth,
       );
       spans.clear();
     }
 
-    // Drops the separator space before a closing paren so variations read
-    // "(1... c5)" rather than "(1... c5 )".
-    void trimSeparator() {
-      final last = spans.isEmpty ? null : spans.last;
-      if (last is TextSpan && last.text == ' ') spans.removeLast();
+    bool appendProse(String raw, int depth) {
+      if (raw.isEmpty) return false;
+      var emitted = false;
+      for (final paragraph in raw.split(RegExp(r'\n\s*\n'))) {
+        final prose = commentProseSpans(
+          paragraph,
+          style: PgnTextStyles.commentAt(depth),
+        );
+        if (prose.isEmpty) continue;
+        flushSpans(depth);
+        addRow(Text.rich(TextSpan(children: prose)), depth, vertical: 4);
+        emitted = true;
+      }
+      return emitted;
     }
 
     void appendNumber(int moveNumber, bool white, int depth) {
@@ -681,19 +725,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     // the flow was interrupted — a following Black move restates "N...".
     bool appendAnnotations(MoveNode node, TreePath path, int depth) {
       if (_editingCommentPath == path) {
-        flushSpans();
-        rows.add(_buildInlineCommentEditor(node, path));
+        flushSpans(depth);
+        addRow(_buildInlineCommentEditor(node, path), depth);
         return true;
       }
-      final comment = node.comment;
-      if (comment == null || comment.isEmpty) return false;
-      final prose = commentProseSpans(
-        comment,
-        style: PgnTextStyles.commentAt(depth),
-      );
-      if (prose.isEmpty) return false;
-      spans.addAll(prose);
-      return true;
+      return appendProse(node.comment ?? '', depth);
     }
 
     void appendSiblings(
@@ -725,10 +761,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
       if (siblings.length > 1) {
         interrupted = true;
-        final parenStyle = PgnTextStyles.moveNumberAt(depth + 1);
+        flushSpans(depth);
         for (int i = 1; i < siblings.length; i++) {
-          spans.add(TextSpan(text: '(', style: parenStyle));
-
           final variant = siblings[i];
           final variantPath = parentPath.child(i);
 
@@ -752,8 +786,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             parentPath: variantPath,
           );
 
-          trimSeparator();
-          spans.add(TextSpan(text: ') ', style: parenStyle));
+          flushSpans(depth + 1);
         }
       }
 
@@ -770,8 +803,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     // The chapter introduction reads first, as its own paragraph.
     final intro = widget.tree.rootComment;
     if (intro != null) {
-      spans.addAll(commentProseSpans(intro, style: PgnTextStyles.commentAt(0)));
-      flushSpans();
+      appendProse(intro, 0);
     }
     appendSiblings(
       widget.tree.roots,
@@ -781,7 +813,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       isFirstMove: true,
       parentPath: TreePath.empty,
     );
-    flushSpans();
+    flushSpans(0);
 
     if (canCache) {
       _cachedMoveWidgets = rows;
@@ -820,7 +852,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       initialText: commentProse(node.comment ?? ''),
       onSave: (text) =>
           _saveInlineComment(path, mergeCommentProse(node.comment ?? '', text)),
-      onCancel: () => setState(() => _editingCommentPath = null),
+      onCancel: () {
+        if (!mounted) return;
+        setState(() => _editingCommentPath = null);
+      },
     );
   }
 
@@ -843,7 +878,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   /// selected state actually flipped rebuild, not every chip on the page.
   Widget _buildSingleMoveWidget(MoveNode node, TreePath nodePath, int depth) {
     final isOnCtxPath = _isOnContextPath(nodePath);
-    final nagSuffix = qualityNagSuffix(node.nags);
+    final nagSuffix = allNagSuffix(node.nags);
     return _SelectionAwareChip(
       selection: _selection,
       path: nodePath,
@@ -866,39 +901,37 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     required bool isSelected,
     required bool isOnCtxPath,
   }) {
-    Color? bgColor;
-    Color borderColor = Colors.transparent;
-
-    if (isSelected) {
-      bgColor = AppColors.pgnMoveCurrentBg;
-      borderColor = AppColors.pgnMoveCurrent;
-    } else if (isOnCtxPath) {
-      bgColor = AppColors.pgnMoveCurrentBg.withValues(alpha: 0.35);
-    }
-
     // Depth carries the type treatment (semibold mainline, receding
     // sidelines); selection changes ink only — the pill marks the current
     // move, and a weight change here would reflow the wrapped movetext.
-    final base = PgnTextStyles.moveAt(depth);
+    final base = PgnTextStyles.moveAt(
+      depth,
+      ephemeral: node.isEphemeral,
+      quiet: commentProse(node.comment ?? '').isEmpty,
+    );
     final sanStyle = isSelected
         ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
         : base;
-    // No per-move underline: every move here is tappable, so a link underline
-    // on each one is noise. The glyph suffix renders in exactly the same style
-    // as the SAN ("Nf3!?" is one piece of text) — both match the PGN viewer.
     return MoveChip(
       san: node.san,
       nagSuffix: nagSuffix,
       sanStyle: sanStyle,
-      nagStyle: sanStyle,
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(3),
-        // Always reserve the 1px border so selecting a move never resizes
-        // it (which would reflow the wrapped move list) — same trick as the
-        // PGN viewer.
-        border: Border.all(color: borderColor, width: 1),
+      nagStyle: PgnTextStyles.nagAt(
+        depth,
+        moveStyle: sanStyle,
+        nags: node.nags,
       ),
+      decoration: PgnMoveDecorations.resolve(
+        selected: isSelected,
+        isEphemeral: node.isEphemeral,
+        onContextPath: isOnCtxPath,
+      ),
+      hoverDecoration: PgnMoveDecorations.resolve(
+        selected: isSelected,
+        isEphemeral: node.isEphemeral,
+        hovered: true,
+      ),
+      behavior: HitTestBehavior.opaque,
       onTap: () => _jumpTo(nodePath),
       onSecondaryTapDown: (d) => _showContextMenu(nodePath, d.globalPosition),
     );
@@ -952,6 +985,7 @@ class _SelectionAwareChipState extends State<_SelectionAwareChip> {
   }
 
   void _onSelectionChanged() {
+    if (!mounted) return;
     final selected = widget.selection.value == widget.path;
     if (selected == _selected) return;
     setState(() => _selected = selected);
@@ -974,7 +1008,7 @@ class _PopupMenuRow extends StatelessWidget {
       children: [
         Icon(icon, size: 16),
         const SizedBox(width: 8),
-        Text(text, style: const TextStyle(fontSize: 12)),
+        Flexible(child: Text(text, style: const TextStyle(fontSize: 12))),
       ],
     );
   }

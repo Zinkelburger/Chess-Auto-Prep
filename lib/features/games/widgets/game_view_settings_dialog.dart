@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../widgets/analysis/analysis_panels_dialog.dart';
 
 import '../../../core/pgn_viewer_controller.dart' show Perspective;
 import '../../../theme/app_text_styles.dart';
@@ -93,6 +94,8 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (SettingsChapterScope.maybeOf(context) == 2)
+          const AnalysisPanelsSettingsBody(),
         if (SettingsChapterScope.maybeOf(context) == null ||
             SettingsChapterScope.maybeOf(context) == 0)
           SettingsGroup(

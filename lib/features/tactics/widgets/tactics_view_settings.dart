@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../theme/app_text_styles.dart';
 import '../../../widgets/settings/settings_navigation.dart';
 import '../../games/controllers/recent_games_controller.dart';
 import '../../games/services/home_review_runner.dart';
@@ -27,7 +26,7 @@ class TacticsViewSettings extends StatelessWidget {
       return HomeReviewSettingsDialog(
         filters: games.filters,
         window: games.window,
-        embeddedChapter: chapter - 2,
+        embedded: true,
         onApply: (result) async {
           await games.setFilters(result.filters, window: result.window);
           runner.reset();
@@ -47,11 +46,6 @@ class TacticsViewSettings extends StatelessWidget {
                 ? TacticsSettingsSection.session
                 : TacticsSettingsSection.selection,
             onChanged: session.setSessionSettings,
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Changes are saved automatically.',
-            style: AppTextStyles.muted,
           ),
         ],
       ),

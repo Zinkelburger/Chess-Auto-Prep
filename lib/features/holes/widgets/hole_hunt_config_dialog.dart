@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../../models/bulk_analysis_settings.dart';
 
 import '../../../services/maia/maia_factory.dart';
 import '../../../theme/app_text_styles.dart';
@@ -35,16 +36,13 @@ class HoleHuntConfigDialog extends StatefulWidget {
 }
 
 class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
-  late final TextEditingController _discoveryDepthCtrl;
   late final TextEditingController _maxPlyCtrl;
   late final TextEditingController _maiaEloCtrl;
   late final TextEditingController _probeBudgetCtrl;
   late final TextEditingController _strongWindowCtrl;
   late final TextEditingController _refutationCtrl;
-  late final TextEditingController _verifyDepthCtrl;
   late final TextEditingController _windowCtrl;
   late final TextEditingController _probePlyCtrl;
-  late final TextEditingController _probeEvalDepthCtrl;
   late final TextEditingController _minNetGainCtrl;
 
   bool _showAdvanced = false;
@@ -57,31 +55,25 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
   void initState() {
     super.initState();
     final c = widget.initialConfig ?? const HoleHuntConfig();
-    _discoveryDepthCtrl = TextEditingController(text: '${c.discoveryDepth}');
     _maxPlyCtrl = TextEditingController(text: '${c.maxPly}');
     _maiaEloCtrl = TextEditingController(text: '${c.maiaElo}');
     _probeBudgetCtrl = TextEditingController(text: '${c.probeBudget}');
     _strongWindowCtrl = TextEditingController(text: '${c.strongMoveWindowCp}');
     _refutationCtrl = TextEditingController(text: '${c.refutationThresholdCp}');
-    _verifyDepthCtrl = TextEditingController(text: '${c.verifyDepth}');
     _windowCtrl = TextEditingController(text: '${c.candidateWindowCp}');
     _probePlyCtrl = TextEditingController(text: '${c.probePly}');
-    _probeEvalDepthCtrl = TextEditingController(text: '${c.probeEvalDepth}');
     _minNetGainCtrl = TextEditingController(text: '${c.minNetGainCp}');
   }
 
   @override
   void dispose() {
-    _discoveryDepthCtrl.dispose();
     _maxPlyCtrl.dispose();
     _maiaEloCtrl.dispose();
     _probeBudgetCtrl.dispose();
     _strongWindowCtrl.dispose();
     _refutationCtrl.dispose();
-    _verifyDepthCtrl.dispose();
     _windowCtrl.dispose();
     _probePlyCtrl.dispose();
-    _probeEvalDepthCtrl.dispose();
     _minNetGainCtrl.dispose();
     super.dispose();
   }
@@ -89,8 +81,7 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
   HoleHuntConfig _buildConfig() {
     final defaults = widget.initialConfig ?? const HoleHuntConfig();
     return defaults.copyWith(
-      discoveryDepth:
-          int.tryParse(_discoveryDepthCtrl.text) ?? defaults.discoveryDepth,
+      discoveryDepth: BulkAnalysisSettings.instance.depth,
       maxPly: int.tryParse(_maxPlyCtrl.text) ?? defaults.maxPly,
       maiaElo: int.tryParse(_maiaEloCtrl.text) ?? defaults.maiaElo,
       probeBudget: _canProbe
@@ -100,12 +91,11 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
           int.tryParse(_strongWindowCtrl.text) ?? defaults.strongMoveWindowCp,
       refutationThresholdCp:
           int.tryParse(_refutationCtrl.text) ?? defaults.refutationThresholdCp,
-      verifyDepth: int.tryParse(_verifyDepthCtrl.text) ?? defaults.verifyDepth,
+      verifyDepth: BulkAnalysisSettings.instance.depth,
       candidateWindowCp:
           int.tryParse(_windowCtrl.text) ?? defaults.candidateWindowCp,
       probePly: int.tryParse(_probePlyCtrl.text) ?? defaults.probePly,
-      probeEvalDepth:
-          int.tryParse(_probeEvalDepthCtrl.text) ?? defaults.probeEvalDepth,
+      probeEvalDepth: BulkAnalysisSettings.instance.depth,
       minNetGainCp: int.tryParse(_minNetGainCtrl.text) ?? defaults.minNetGainCp,
     );
   }
@@ -156,13 +146,6 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _numField(
-                    _discoveryDepthCtrl,
-                    'Engine depth',
-                    tooltip:
-                        'Stockfish search depth when discovering candidate '
-                        'moves at each position.',
-                  ),
                   _numField(
                     _maxPlyCtrl,
                     'Max depth (half-moves)',
@@ -216,13 +199,6 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                           'Eval loss versus the engine best move needed to '
                           'flag a repertoire move as refuted.',
                     ),
-                    _numField(
-                      _verifyDepthCtrl,
-                      'Verification depth',
-                      tooltip:
-                          'Deeper single-line Stockfish check that confirms '
-                          'a refutation before it is reported.',
-                    ),
                     if (_canProbe) ...[
                       _numField(
                         _windowCtrl,
@@ -237,13 +213,6 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                         tooltip:
                             'How far past each candidate move the '
                             'expectimax probe looks, in half-moves.',
-                      ),
-                      _numField(
-                        _probeEvalDepthCtrl,
-                        'Probe eval depth',
-                        tooltip:
-                            'Stockfish depth for position evals inside the '
-                            'expectimax probes.',
                       ),
                       _numField(
                         _minNetGainCtrl,

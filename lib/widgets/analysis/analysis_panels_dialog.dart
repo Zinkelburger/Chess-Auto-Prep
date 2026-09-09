@@ -2,15 +2,24 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../core/app_state.dart';
+import '../../constants/engine_defaults.dart';
 
 import '../../models/engine_settings.dart';
-import '../../theme/app_colors.dart';
 import '../settings/settings_widgets.dart';
 import '../app_settings_button.dart';
 
 /// Opens the analysis-panels visibility dialog.
-Future<void> showAnalysisPanelsDialog(BuildContext context) =>
-    openAppSettings(context, initialGlobalSection: 8);
+Future<void> showAnalysisPanelsDialog(BuildContext context) => openAppSettings(
+  context,
+  initialMode: context.read<AppState>().currentMode,
+  initialChapter: switch (context.read<AppState>().currentMode) {
+    AppMode.repertoire => 1,
+    AppMode.pgnViewer => 2,
+    _ => 0,
+  },
+);
 
 class AnalysisPanelsSettingsBody extends StatelessWidget {
   const AnalysisPanelsSettingsBody({super.key});
@@ -25,18 +34,6 @@ class AnalysisPanelsSettingsBody extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Live analysis shown above the PGN notation. Each panel\'s own '
-              'settings are behind the gear (⚙) in that panel. You can also '
-              'tap a column header in the move table to dim it without '
-              'hiding it.',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-                height: 1.3,
-              ),
-            ),
-            const SizedBox(height: 10),
             SettingsSwitchRow(
               label: 'Stockfish PV',
               tooltip:
@@ -61,12 +58,18 @@ class AnalysisPanelsSettingsBody extends StatelessWidget {
               value: settings.showMaia,
               onChanged: (v) => settings.showMaia = v,
             ),
-            // Mothballed: Lichess Explorer DB column hidden.
-            // SettingsSwitchRow(
-            //   label: 'Show DB % column',
-            //   value: settings.showProbability,
-            //   onChanged: (v) => settings.showProbability = v,
-            // ),
+            SettingsSwitchRow(
+              label: 'Stockfish evals in move table',
+              value: settings.showStockfish,
+              onChanged: (v) => settings.showStockfish = v,
+            ),
+            SettingsStepperTile(
+              label: 'Max table moves',
+              value: settings.maxAnalysisMoves,
+              min: kMinMaxAnalysisMoves,
+              max: kMaxMaxAnalysisMoves,
+              onChanged: (v) => settings.maxAnalysisMoves = v,
+            ),
           ],
         ),
       ),

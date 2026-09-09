@@ -1,19 +1,9 @@
 /// The player picker for Player Analysis.
 library;
 
-///
-/// Pushed as a full-screen route from [AnalysisScreen]. One job: choose whose
-/// games to analyse. It lists every saved game-set — downloaded from an
-/// account, opened from PGN files, or belonging to someone in a tournament
-/// field — and pops with the chosen [AnalysisPlayerInfo].
-///
-/// Adding a player goes through exactly one control: **Add player** in the
-/// app bar, whose menu names the three sources (see [AddPlayerSource]). On
-/// first run, with nothing to pick, those three are spelled out in the body
-/// instead of hidden behind the menu. The screen used to carry five
-/// overlapping buttons — three stacked FABs over the list plus two more in
-/// the empty state — whose labels ("Download New", "Download Games", "Import
-/// Opponents", "Load from disk") did not distinguish a download from a file.
+/// Embedded below the Player Analysis toolbar so app actions, navigation and
+/// settings remain available while choosing games. The list uses a readable
+/// width and exposes each saved player's maintenance actions directly.
 
 import 'dart:async';
 
@@ -24,6 +14,7 @@ import '../core/app_state.dart';
 import '../models/analysis_player_info.dart';
 import '../services/analysis_games_service.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../widgets/analysis/add_player_sources.dart';
 import '../widgets/analysis/player_downloads.dart';
@@ -33,7 +24,15 @@ import '../widgets/common/list_search_field.dart';
 import '../features/opponents/widgets/tournaments_screen.dart';
 
 class PlayerSelectionScreen extends StatefulWidget {
-  const PlayerSelectionScreen({super.key, this.gamesService});
+  const PlayerSelectionScreen({
+    super.key,
+    this.gamesService,
+    required this.onSelected,
+    this.onCancel,
+  });
+
+  final ValueChanged<AnalysisPlayerInfo> onSelected;
+  final VoidCallback? onCancel;
 
   /// Injectable so a widget test can list players without real disk I/O —
   /// `testWidgets` runs in a fake-async zone where a `dart:io` read never
@@ -75,6 +74,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   }
 
   Future<void> _loadCachedPlayers() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _loadError = null;
@@ -104,21 +104,37 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Which player?'),
-        actions: [
-          TextButton(
-            onPressed: _openTournaments,
-            child: const Text('Players & groups'),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: AddPlayerButton(onSelected: _addPlayerFrom),
-          ),
-        ],
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1040),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text('Which player?', style: AppTextStyles.title),
+                  ),
+                  if (widget.onCancel != null)
+                    TextButton(
+                      onPressed: widget.onCancel,
+                      child: const Text('Back to analysis'),
+                    ),
+                  TextButton(
+                    onPressed: _openTournaments,
+                    child: const Text('Players & groups'),
+                  ),
+                  const SizedBox(width: 8),
+                  AddPlayerButton(onSelected: _addPlayerFrom),
+                ],
+              ),
+            ),
+            Expanded(child: _buildBody()),
+          ],
+        ),
       ),
-      body: _buildBody(),
     );
   }
 
@@ -135,7 +151,9 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
           child: ListSearchField(
             hintText: 'Search players',
             autofocus: true,
-            onChanged: (v) => setState(() => _search = v),
+            onChanged: (v) {
+              if (mounted) setState(() => _search = v);
+            },
           ),
         ),
         Expanded(
@@ -151,7 +169,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                   itemCount: visible.length,
                   itemBuilder: (_, i) => _PlayerTile(
                     player: visible[i],
-                    onSelect: () => Navigator.of(context).pop(visible[i]),
+                    onSelect: () => _pick(visible[i]),
                     onAction: (action) => _runTileAction(visible[i], action),
                   ),
                 ),
@@ -184,7 +202,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
 
   /// Nothing saved yet. The three ways in are on the screen, not in a menu —
   /// a first-run user has no reason to open a menu they cannot see the point
-  /// of. The app bar already asks the question; the body is just the answer.
+  /// of. The heading already asks the question; the body is just the answer.
   Widget _buildFirstRun() {
     return Center(
       child: SingleChildScrollView(
@@ -195,6 +213,11 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         ),
       ),
     );
+  }
+
+  void _pick(AnalysisPlayerInfo player) {
+    if (!mounted) return;
+    widget.onSelected(player);
   }
 
   // ── Adding a player ──────────────────────────────────────────────
@@ -290,7 +313,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
     if (!mounted) return;
     if (picked != null) {
-      Navigator.of(context).pop(picked);
+      _pick(picked);
       return;
     }
     await _loadCachedPlayers();
@@ -373,12 +396,11 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   }
 }
 
-/// What the row's overflow menu offers.
+/// Maintenance actions exposed on each saved player.
 enum _PlayerAction { update, changeRange, delete }
 
-/// One saved game-set, as a plain [ListTile]: who, how many games, where from
-/// and how old — then get out of the way. Tapping the row picks the player,
-/// which is the only reason the screen exists.
+/// Select a player by name; maintenance buttons stay beside the metadata on
+/// wide windows and wrap below it when there is less room.
 class _PlayerTile extends StatelessWidget {
   const _PlayerTile({
     required this.player,
@@ -408,60 +430,57 @@ class _PlayerTile extends StatelessWidget {
         '${a.username} (${_shortPlatform(a.platform)})',
     ].join(' · ');
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        onTap: onSelect,
-        leading: Icon(_icon, color: _color),
-        title: Text(player.displayName),
-        isThreeLine: true,
-        subtitle: Text(
-          '$facts\n$origin',
-          style: const TextStyle(color: AppColors.onSurfaceMuted),
-        ),
-        trailing: PopupMenuButton<_PlayerAction>(
-          tooltip: 'Player actions',
-          onSelected: onAction,
-          itemBuilder: (_) => [
-            // PGN-file imports have no source to fetch fresh games from.
-            if (player.canRedownload) ...const [
-              PopupMenuItem(
-                value: _PlayerAction.update,
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.refresh, size: 20),
-                  title: Text('Download the latest games'),
-                ),
-              ),
-              PopupMenuItem(
-                value: _PlayerAction.changeRange,
-                child: ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.tune, size: 20),
-                  title: Text('Download a different range…'),
-                ),
-              ),
-            ],
-            const PopupMenuItem(
-              value: _PlayerAction.delete,
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.delete_outline, size: 20),
-                title: Text('Remove from this list'),
-              ),
+    final details = ListTile(
+      onTap: onSelect,
+      leading: Icon(_icon, color: _color),
+      title: Text(player.displayName, style: AppTextStyles.body),
+      subtitle: Text(
+        '$facts\n$origin',
+        style: AppTextStyles.muted.copyWith(color: AppColors.onSurfaceMuted),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    );
+    final actions = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          if (player.canRedownload) ...[
+            TextButton.icon(
+              onPressed: () => onAction(_PlayerAction.update),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Update games'),
+            ),
+            TextButton.icon(
+              onPressed: () => onAction(_PlayerAction.changeRange),
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('Change range…'),
             ),
           ],
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Actions', style: TextStyle(fontSize: 13)),
-              Icon(Icons.arrow_drop_down, size: 18),
-            ],
+          TextButton.icon(
+            onPressed: () => onAction(_PlayerAction.delete),
+            icon: const Icon(Icons.delete_outline, size: 18),
+            label: const Text('Remove'),
           ),
-        ),
+        ],
+      ),
+    );
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(
+        builder: (context, constraints) => constraints.maxWidth >= 900
+            ? Row(
+                children: [
+                  Expanded(child: details),
+                  actions,
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [details, actions],
+              ),
       ),
     );
   }

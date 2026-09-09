@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../utils/pgn_nags.dart';
 import 'app_colors.dart';
 import 'app_text_styles.dart';
 
@@ -64,6 +65,17 @@ abstract final class PgnTextStyles {
     // "unsaved" is orthogonal to depth, so it gets an orthogonal axis.
     fontStyle: ephemeral ? FontStyle.italic : FontStyle.normal,
     color: inkAt(depth),
+  );
+
+  /// Complete NAG suffix, with the viewer's quality color and stable size.
+  static TextStyle nagAt(
+    int depth, {
+    required TextStyle moveStyle,
+    List<int>? nags,
+  }) => moveStyle.copyWith(
+    color: nagColor(primaryQualityNag(nags) ?? 0),
+    fontSize: sizeAt(depth) - 1,
+    fontWeight: FontWeight.bold,
   );
 
   /// `1.` / `2...` at [depth] — always regular weight, always a step below its

@@ -471,6 +471,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             onThreatChanged: _setEngineThreat,
             isActive: _tabController.index == PgnWorkspace.game,
             fen: _controller.currentPosition.fen,
+            previewFlipped: _controller.boardFlipped,
             onLineMoveTapped: _controller.onEngineLineMoveTapped,
           ),
         // One solitaire strip at a time: the choices, then the session, then
@@ -537,22 +538,21 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     decoration: const BoxDecoration(
       color: AppColors.surface,
-      border: Border(
-        top: BorderSide(color: AppColors.warningSurface, width: 3),
-        bottom: BorderSide(color: AppColors.warningSurface, width: 2),
-      ),
+      border: Border(bottom: BorderSide(color: AppColors.divider)),
     ),
     child: Wrap(
       spacing: 12,
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        const Icon(Icons.edit, size: 20, color: AppColors.warningSurface),
+        const Icon(
+          Icons.edit_outlined,
+          size: 18,
+          color: AppColors.onSurfaceMuted,
+        ),
         Text(
           'Editing PGN',
-          style: AppTextStyles.bodyStrong.copyWith(
-            color: AppColors.warningSurface,
-          ),
+          style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
         ),
         Text(
           _controller.filePath == null
@@ -567,8 +567,8 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
           icon: const Icon(Icons.check, size: 18),
           label: const Text('Finish editing'),
           style: TextButton.styleFrom(
-            foregroundColor: AppColors.surface,
-            backgroundColor: AppColors.warningSurface,
+            foregroundColor: AppColors.ink,
+            backgroundColor: AppColors.surfaceContainer,
             textStyle: AppTextStyles.bodyStrong,
           ),
         ),

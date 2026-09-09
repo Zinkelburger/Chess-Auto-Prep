@@ -78,8 +78,13 @@ void main() {
                 onPressed: () async {
                   picked = await Navigator.of(context).push<AnalysisPlayerInfo>(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          PlayerSelectionScreen(gamesService: service),
+                      builder: (context) => Scaffold(
+                        body: PlayerSelectionScreen(
+                          gamesService: service,
+                          onSelected: (player) =>
+                              Navigator.of(context).pop(player),
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -150,12 +155,9 @@ void main() {
       _player(platform: 'import', username: 'my pgn file', monthsBack: null),
     ]);
 
-    await tester.tap(find.byTooltip('Player actions'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Remove from this list'), findsOneWidget);
-    expect(find.text('Download the latest games'), findsNothing);
-    expect(find.text('Download a different range…'), findsNothing);
+    expect(find.text('Remove'), findsOneWidget);
+    expect(find.text('Update games'), findsNothing);
+    expect(find.text('Change range…'), findsNothing);
   });
 
   testWidgets('removing a player asks first, then drops it from the list', (
@@ -165,17 +167,46 @@ void main() {
       _player(platform: 'chesscom', username: 'hikaru'),
     ]);
 
-    await tester.tap(find.byTooltip('Player actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove from this list'));
+    await tester.tap(find.text('Remove'));
     await tester.pumpAndSettle();
 
     expect(find.text('Remove hikaru?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(TextButton, 'Remove'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(service.deleted, ['chesscom_hikaru']);
     expect(find.text('hikaru'), findsNothing);
     expect(find.text('Online…'), findsOneWidget);
+  });
+  testWidgets('direct actions stay visible and rows use a bounded width', (
+    tester,
+  ) async {
+    await pumpPicker(tester, [
+      _player(platform: 'lichess', username: 'a_long_player_username'),
+    ]);
+    tester.view.physicalSize = const Size(2200, 1000);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(Card)).width, lessThanOrEqualTo(1040));
+    expect(find.text('Actions'), findsNothing);
+    expect(find.text('Update games'), findsOneWidget);
+    expect(find.text('Change range…'), findsOneWidget);
+    expect(find.text('Remove'), findsOneWidget);
+
+    tester.view.physicalSize = const Size(640, 800);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Update games').hitTestable(), findsOneWidget);
+    expect(find.text('Change range…').hitTestable(), findsOneWidget);
+    expect(find.text('Remove').hitTestable(), findsOneWidget);
+
+    await tester.tap(find.text('Change range…'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(picked, isNull);
   });
 }

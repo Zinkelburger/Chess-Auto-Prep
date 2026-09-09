@@ -25,6 +25,9 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
+import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -83,7 +86,8 @@ const Map<String, String> _knownLossy = {
   // ── Resolved against the host machine ────────────────────────────────
   // Same reason tree_build_config_roundtrip_test exempts it: the value is
   // clamped to this machine's core count on the way out.
-  'engine_threads': 'clamped to the host core count',
+  'engine_threads': 'read from global engine settings',
+  'eval_depth': 'read from shared bulk analysis settings',
 
   // ── Derived, not stored ──────────────────────────────────────────────
   // A getter over search_algorithm, serialized for readability. It follows
@@ -285,8 +289,36 @@ void main() {
       final result = await _throughForm(tester, seed);
 
       expect(result.minAcceptableEvalDepth, 0);
-      expect(result.evalDepth, 26);
+      expect(result.evalDepth, BulkAnalysisSettings.instance.depth);
     });
+  });
+
+  testWidgets('new builds capture global bulk depth and cores', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final bulk = BulkAnalysisSettings.instance;
+    final engine = EngineSettings.instance;
+    final oldBulk = bulk.depth;
+    final oldBoard = engine.depth;
+    final oldCores = engine.cores;
+    addTearDown(() async {
+      await bulk.setDepth(oldBulk);
+      engine.depth = oldBoard;
+      engine.cores = oldCores;
+    });
+    await bulk.setDepth(19);
+    engine.depth = 12;
+    engine.cores = 1;
+    const seed = TreeBuildConfig(
+      startFen: _startFen,
+      playAsWhite: true,
+      evalDepth: 26,
+      engineThreads: 8,
+    );
+    final result = await _throughForm(tester, seed);
+    expect(result.evalDepth, 19);
+    expect(result.engineThreads, 1);
+    expect(engine.depth, 12);
+    expect(seed.evalDepth, 26, reason: 'saved runs keep their original config');
   });
 
   testWidgets('Pure is Maia-only even when reopening a master-enabled preset', (

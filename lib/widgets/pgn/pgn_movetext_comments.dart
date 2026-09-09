@@ -358,57 +358,57 @@ WidgetSpan _buildProseMoveSpan(
       active.sans.length == 1 &&
       active.sans.first == san;
 
+  return _commentMoveChip(
+    san: san,
+    baseStyle: PgnTextStyles.move,
+    active: isActive,
+    onTap: () =>
+        view.onPlayInlineLine!(coords.moveNumber, coords.isWhite, [san], 0),
+  );
+}
+
+/// Keep preview selection on the notation, using the mainline's borderless
+/// pill. Preserve the comment's type weight so navigation cannot reflow prose.
+WidgetSpan _commentMoveChip({
+  required String san,
+  required TextStyle baseStyle,
+  required bool active,
+  required VoidCallback? onTap,
+}) {
+  final style = baseStyle.copyWith(
+    fontSize: 16,
+    height: 1.72,
+    color: active ? AppColors.pgnMoveCurrentFg : baseStyle.color,
+    decoration: onTap != null && !active ? TextDecoration.underline : null,
+    decorationColor: AppColors.onSurfaceMuted.withValues(alpha: 0.5),
+    decorationStyle: TextDecorationStyle.dotted,
+  );
+  final currentDecoration = BoxDecoration(
+    color: AppColors.pgnMoveCurrentBg,
+    borderRadius: BorderRadius.circular(3),
+    border: Border.all(color: Colors.transparent, width: 1),
+  );
   return WidgetSpan(
     alignment: PlaceholderAlignment.baseline,
     baseline: TextBaseline.alphabetic,
     child: Tooltip(
-      message: 'Preview comment move',
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => view.onPlayInlineLine!(
-            coords.moveNumber,
-            coords.isWhite,
-            [san],
-            0,
-          ),
-          child: Container(
-            decoration: isActive
-                ? BoxDecoration(
-                    color: AppColors.pgnMoveCurrentBg,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: AppColors.pgnMoveCurrent,
-                      width: 1,
-                    ),
-                  )
-                : BoxDecoration(
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(color: Colors.transparent, width: 1),
-                  ),
-            child: Text(
-              san,
-              style: (isActive ? PgnTextStyles.currentMove : PgnTextStyles.move)
-                  .copyWith(
-                    fontSize: 16,
-                    height: 1.72,
-                    decoration: isActive ? null : TextDecoration.underline,
-                    decorationColor: AppColors.onSurfaceMuted.withValues(
-                      alpha: 0.5,
-                    ),
-                    decorationStyle: TextDecorationStyle.dotted,
-                  ),
-            ),
-          ),
-        ),
+      message: onTap != null ? 'Preview comment move' : 'Move in comment',
+      child: MoveChip(
+        san: san,
+        nagSuffix: '',
+        sanStyle: style,
+        nagStyle: style,
+        decoration: active ? currentDecoration : _kReservedBorder,
+        hoverDecoration: active ? currentDecoration : _kHoverDecoration,
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
       ),
     ),
   );
 }
 
 /// A single clickable move chip inside a comment.
-WidgetSpan _buildCommentMoveSpan(
+InlineSpan _buildCommentMoveSpan(
   PgnMovetextView view,
   CommentMove move,
   List<CommentMove> run, {
@@ -433,67 +433,33 @@ WidgetSpan _buildCommentMoveSpan(
       listEquals(active.sans, run.map((m) => m.san).toList());
 
   final baseMoveStyle = moveStyle ?? PgnTextStyles.move;
-  return WidgetSpan(
-    alignment: PlaceholderAlignment.baseline,
-    baseline: TextBaseline.alphabetic,
-    child: Tooltip(
-      message: clickable ? 'Preview comment move' : 'Move in comment',
-      child: MouseRegion(
-        cursor: clickable ? SystemMouseCursors.click : MouseCursor.defer,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: clickable
-              ? () {
-                  final sans = run.map((m) => m.san).toList();
-                  view.onPlayInlineLine!(
-                    run.first.moveNumber,
-                    run.first.isWhite,
-                    sans,
-                    idxInRun,
-                    anchorFen: run.first.anchorFen,
-                  );
-                }
-              : null,
-          child: Container(
-            decoration: isActiveMove
-                ? BoxDecoration(
-                    color: AppColors.pgnMoveCurrentBg,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: AppColors.pgnMoveCurrent,
-                      width: 1,
-                    ),
-                  )
-                // Reserve the border width so activating a move doesn't reflow.
-                : BoxDecoration(
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(color: Colors.transparent, width: 1),
-                  ),
-            child: Text(
-              '${move.display}${trailingSpace ? ' ' : ''}',
-              style:
-                  (isActiveMove
-                          ? baseMoveStyle.copyWith(
-                              color: AppColors.pgnMoveCurrentFg,
-                              fontWeight: FontWeight.w600,
-                            )
-                          : baseMoveStyle)
-                      .copyWith(
-                        fontSize: 16,
-                        height: 1.72,
-                        decoration: clickable && !isActiveMove
-                            ? TextDecoration.underline
-                            : null,
-                        decorationColor: AppColors.onSurfaceMuted.withValues(
-                          alpha: 0.5,
-                        ),
-                        decorationStyle: TextDecorationStyle.dotted,
-                      ),
-            ),
-          ),
-        ),
+  // Display includes the author's move number and annotations. Leave the
+  // number outside the chip; keep check/mate and quality glyphs with the SAN.
+  final prefix = RegExp(
+    r'^(?:\d+\s*)?(?:\.{1,3}|…)\s*',
+  ).firstMatch(move.display);
+  final number = prefix?.group(0) ?? '';
+  final notation = move.display.substring(number.length).trimRight();
+  return TextSpan(
+    children: [
+      if (number.isNotEmpty)
+        TextSpan(text: number, style: PgnTextStyles.moveNumberAt(0)),
+      _commentMoveChip(
+        san: notation,
+        baseStyle: baseMoveStyle,
+        active: isActiveMove,
+        onTap: clickable
+            ? () => view.onPlayInlineLine!(
+                run.first.moveNumber,
+                run.first.isWhite,
+                run.map((m) => m.san).toList(),
+                idxInRun,
+                anchorFen: run.first.anchorFen,
+              )
+            : null,
       ),
-    ),
+      if (trailingSpace) const TextSpan(text: ' '),
+    ],
   );
 }
 

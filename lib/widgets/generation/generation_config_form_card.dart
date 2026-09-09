@@ -169,21 +169,6 @@ mixin _GenerationConfigCard
         runSpacing: 8,
         children: [
           _numField(
-            _engineDepthCtrl,
-            'Engine depth',
-            defaultText: '$kDefaultGenerationEvalDepth',
-            onEdited: () => setState(() {}),
-            enabled: _usesEngineDepth,
-            disabledReason: _buildMode == BuildMode.chessDbBook
-                ? 'ChessDB supplies the moves; turn on the Stockfish '
-                      'fallback (Advanced → ChessDB book) to use the engine'
-                : 'Evals come from databases in this build source',
-            tooltip:
-                'Stockfish search depth at every evaluated position — '
-                'during the build, or in the eval pass run after a '
-                'PGN-file tree is built.',
-          ),
-          _numField(
             _maxPlyCtrl,
             'Max line length (half-moves)',
             defaultText: '4',
@@ -446,9 +431,7 @@ mixin _GenerationConfigCard
   String _summaryText() {
     final elo = int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200;
     final ply = int.tryParse(_maxPlyCtrl.text.trim()) ?? 20;
-    final depth =
-        int.tryParse(_engineDepthCtrl.text.trim()) ??
-        kDefaultGenerationEvalDepth;
+    final depth = BulkAnalysisSettings.instance.depth;
     final budget = int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0;
     final source = switch (_buildMode) {
       BuildMode.stockfishExpectimax => 'Stockfish + Maia',

@@ -1,12 +1,7 @@
-/// The review strip's one gear dialog: which games and how hard the engine
-/// works, applied by one button, including the startup check preference.
-library;
-
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
 import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/features/games/widgets/home_review_settings_dialog.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
-import 'package:chess_auto_prep/features/tactics/services/mining_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,112 +42,41 @@ void main() {
     return closed;
   }
 
-  /// Every case edits the shared depth setting; put it back afterwards.
-  void restoreDepth() {
-    final before = MiningSettings.instance.depth;
-    addTearDown(() => MiningSettings.instance.setDepth(before));
-  }
-
-  testWidgets(
-    'embedded review chapters preserve drafts and Apply keeps settings open',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      restoreDepth();
-      var chapter = 0;
-      HomeReviewSettingsResult? saved;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: StatefulBuilder(
-              builder: (context, refresh) => Column(
-                children: [
-                  TextButton(
-                    onPressed: () => refresh(() => chapter = 1 - chapter),
-                    child: const Text('Switch chapter'),
-                  ),
-                  Expanded(
-                    child: HomeReviewSettingsDialog(
-                      filters: const GamesListFilters(),
-                      window: const GamesWindow(),
-                      embeddedChapter: chapter,
-                      onApply: (result) async {
-                        saved = result;
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
+  testWidgets('embedded downloads save without closing', (tester) async {
+    HomeReviewSettingsResult? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: HomeReviewSettingsDialog(
+            filters: const GamesListFilters(),
+            window: const GamesWindow(),
+            embedded: true,
+            onApply: (result) async {
+              saved = result;
+            },
           ),
         ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('review-depth-field')), findsNothing);
-      await tester.enterText(
-        find.byKey(const Key('book-check-games-field')),
-        '123',
-      );
-      await tester.tap(find.text('Switch chapter'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('book-check-games-field')), findsNothing);
-      await tester.enterText(find.byKey(const Key('review-depth-field')), '16');
-      await tester.tap(find.text('Apply'));
-      await tester.pumpAndSettle();
-      expect(saved!.window.bookCheckGames, 123);
-      expect(MiningSettings.instance.depth, 16);
-      expect(find.text('Review settings saved.'), findsOneWidget);
-      expect(find.byType(HomeReviewSettingsDialog), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('cores and depth moved in, and Apply saves them', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    restoreDepth();
-    final before = MiningSettings.instance.depth;
-
-    final closed = await open(tester);
-    expect(find.text('Analysis settings'), findsOneWidget);
-    expect(find.byKey(const Key('review-cores-field')), findsOneWidget);
-
+      ),
+    );
     await tester.enterText(
-      find.byKey(const Key('review-depth-field')),
-      '${before + 2}',
+      find.byKey(const Key('book-check-games-field')),
+      '123',
     );
     await tester.tap(find.text('Apply'));
     await tester.pumpAndSettle();
-
-    expect(MiningSettings.instance.depth, before + 2);
-    expect(closed.single, isNotNull, reason: 'Apply hands the filters back');
+    expect(saved!.window.bookCheckGames, 123);
+    expect(find.byType(HomeReviewSettingsDialog), findsOneWidget);
+    expect(find.text('Bulk depth'), findsNothing);
   });
 
-  testWidgets('out-of-range depth is clamped, not refused', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    restoreDepth();
-
-    await open(tester);
-    await tester.enterText(find.byKey(const Key('review-depth-field')), '99');
-    await tester.tap(find.text('Apply'));
-    await tester.pumpAndSettle();
-
-    expect(MiningSettings.instance.depth, MiningSettings.maxDepth);
-    expect(find.text('Analysis settings'), findsNothing, reason: 'it closed');
-  });
-
-  testWidgets('Cancel changes nothing, including the numbers', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    restoreDepth();
-    final before = MiningSettings.instance.depth;
-
+  testWidgets('Cancel discards download edits', (tester) async {
     final closed = await open(tester);
     await tester.enterText(
-      find.byKey(const Key('review-depth-field')),
-      '${before + 3}',
+      find.byKey(const Key('book-check-games-field')),
+      '123',
     );
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-
-    expect(MiningSettings.instance.depth, before);
     expect(closed.single, isNull);
   });
 
@@ -160,12 +84,11 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    restoreDepth();
 
     final closed = await open(tester);
     // It is the first thing in the dialog: which games, before how hard the
     // engine works on them.
-    expect(find.text('How many games to analyse'), findsOneWidget);
+    expect(find.text('Games to analyse'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('window-games-field')), '35');
     await tester.pump();
@@ -178,7 +101,6 @@ void main() {
 
   testWidgets('switching to days keeps the game count typed', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    restoreDepth();
 
     final closed = await open(tester);
     await tester.enterText(find.byKey(const Key('window-games-field')), '35');
@@ -195,7 +117,6 @@ void main() {
 
   testWidgets('the edited time controls come back on Apply', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    restoreDepth();
 
     final closed = await open(
       tester,
@@ -211,7 +132,6 @@ void main() {
 
   testWidgets('startup check is explicit and can be disabled', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    restoreDepth();
 
     final closed = await open(tester);
     expect(

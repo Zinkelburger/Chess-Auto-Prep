@@ -64,10 +64,8 @@ void main() {
       // there are puzzles — "Play tactics (134)" on a machine that has been
       // used, a bare "Play tactics" on a fresh one.
       expect(find.textContaining('Play tactics'), findsOneWidget);
-      // The engine-settings gear is gone: cores and depth are steppers on the
-      // review strip, and downloading is the review's play button, so this card
-      // has neither a gear nor a per-site Import button.
-      expect(find.byTooltip('Engine settings…'), findsNothing);
+      // Tactics uses the same compact engine popup as the PGN viewer.
+      expect(find.byTooltip('Engine settings'), findsOneWidget);
       expect(find.widgetWithText(ElevatedButton, 'Import'), findsNothing);
       // Nor a play button of its own: both live on the review strip in the left
       // pane, one under the other.
@@ -191,6 +189,10 @@ void main() {
         getAppState(tester).currentMode,
         equals(AppMode.repertoireTrainer),
       );
+      expect(find.text('Open PGN file…'), findsOneWidget);
+      await tester.tap(find.text('Create new repertoire'));
+      await tester.pumpAndSettle();
+      expect(getAppState(tester).currentMode, equals(AppMode.repertoire));
     });
   });
 }

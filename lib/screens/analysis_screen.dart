@@ -2,11 +2,8 @@
 library;
 
 ///
-/// Designed to be embedded as the `body` of [MainScreen]'s Scaffold while
-/// providing its own compact toolbar so the mode switcher stays available
-/// without an extra app-wide app bar.
-///
-/// Layout: toolbar row  ➜  three-panel [PositionAnalysisWidget].
+/// Keeps one toolbar above both the embedded player picker and the
+/// three-panel [PositionAnalysisWidget].
 
 import 'dart:async';
 import '../utils/isolate_task.dart';
@@ -14,7 +11,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../features/audit/models/audit_finding.dart';
@@ -73,6 +69,7 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   final PositionAnalysisActions _boardActions = PositionAnalysisActions();
 
   AnalysisPlayerInfo? _currentPlayer;
+  bool _choosingPlayer = true;
 
   // ── Opponent prep (directory + tournament context) ────────────────
   final OpponentStore _opponents = OpponentStore.instance;
@@ -163,13 +160,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     super.initState();
     unawaited(_opponents.ensureLoaded());
     _opponents.addListener(_onOpponentsChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
-          _currentPlayer == null &&
-          context.read<AppState>().settingsMode != AppMode.positionAnalysis) {
-        unawaited(_showPlayerSelection());
-      }
-    });
   }
 
   IsolateTask? _analysisTask;
@@ -237,7 +227,30 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         children: [
           _buildPrepToolbar(),
           ..._buildJobProgressStrip(theme),
-          Expanded(child: _buildBody(context)),
+          Expanded(
+            child: IndexedStack(
+              index: _choosingPlayer ? 0 : 1,
+              children: [
+                if (_choosingPlayer)
+                  PlayerSelectionScreen(
+                    gamesService: _gamesService,
+                    onSelected: (player) {
+                      if (!mounted) return;
+                      unawaited(_selectPlayer(player));
+                    },
+                    onCancel: player == null
+                        ? null
+                        : () {
+                            if (!mounted) return;
+                            setState(() => _choosingPlayer = false);
+                          },
+                  )
+                else
+                  const SizedBox.shrink(),
+                _buildBody(context),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -516,21 +529,20 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   }
 
   Future<void> _showPlayerSelection() async {
-    final result = await Navigator.of(context).push<AnalysisPlayerInfo>(
-      MaterialPageRoute(builder: (_) => const PlayerSelectionScreen()),
-    );
-
-    if (result != null && mounted) await _selectPlayer(result);
+    if (!mounted) return;
+    setState(() => _choosingPlayer = true);
   }
 
   /// Make [player] the analysed player: stop whatever is running for the
   /// previous one, resolve their place in the opponents directory, build.
   @override
   Future<void> _selectPlayer(AnalysisPlayerInfo player) async {
+    if (!mounted) return;
     _cancelEvalAnalysis();
     if (_isHunting) _cancelHoleHunt();
     setState(() {
       _currentPlayer = player;
+      _choosingPlayer = false;
       _resetAnalysisState();
       _resolvePrep();
     });

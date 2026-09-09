@@ -13,7 +13,7 @@ import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../support/hunt_harness.dart';
+import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import '../support/scripted_engine.dart';
 
 const kInitialFEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -26,6 +26,7 @@ const _blackMatesIn1 = '1r4k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1';
 void main() {
   late ScriptedEngine engine;
   late AnalysisService service;
+  late BoardEngine boardEngine;
 
   /// Script the single-PV answer for the position reached by [uci] from
   /// [baseFen]. Scores are side-to-move relative, as the engine reports them.
@@ -56,18 +57,16 @@ void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
-    // One worker asked for, one injected: `ensureWorkers()` spawns nothing.
+    // Interactive analysis uses a single injected process.
     EngineSettings.instance.cores = 1;
     engine = ScriptedEngine();
-    await installScriptedWorker(engine);
-    service = AnalysisService.fresh();
+    boardEngine = BoardEngine(createConnection: () async => engine);
+    service = AnalysisService.fresh(engine: boardEngine);
   });
 
   tearDown(() {
-    // Not `service.dispose()`: that would also dispose the shared pool the
-    // harness owns, which `resetPool` does deliberately.
-    service.cancel();
-    resetPool();
+    service.dispose();
+    boardEngine.dispose();
   });
 
   group('per-move evaluation', () {

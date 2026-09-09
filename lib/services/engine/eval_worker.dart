@@ -78,6 +78,7 @@ class EvalWorker {
   int _depth = 0;
 
   // ── Discovery (MultiPV) state ──
+  Completer<void>? _searchDone;
   Completer<DiscoveryResult>? _discoveryCompleter;
   final Map<int, DiscoveryLine> _discoveryLines = {};
   bool _discoveryIsWhiteToMove = true;
@@ -107,6 +108,7 @@ class EvalWorker {
     if (_dead || _disposed) return;
     _dead = true;
     final err = error ?? StateError('Stockfish process exited');
+    _finishSearch();
     if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
       _evalCompleter!.completeError(err);
     }
@@ -220,9 +222,11 @@ class EvalWorker {
       throw StateError('Discovery cancelled');
     }
 
-    // Set up completer AFTER readyok drains any stale bestmove from stop()
+    // Options are ready. BoardEngine also waits for the previous bestmove
+    // before assigning this worker to a new interactive search.
     _discoveryCompleter = Completer<DiscoveryResult>();
 
+    _searchDone = Completer<void>();
     engine.sendCommand('position fen $fen');
     engine.sendCommand(
       searchMoves == null || searchMoves.isEmpty
@@ -253,9 +257,10 @@ class EvalWorker {
     }
     _evalCompleter = null;
 
-    // Drain any stale output (bestmove) from a previous stop/search.
-    // readyok is guaranteed to arrive AFTER all pending output.
+    // Synchronize pending options. BoardEngine separately waits for bestmove
+    // when handing a stopped search to its next owner.
     engine.sendCommand('stop');
+    engine.sendCommand('setoption name MultiPV value 1');
     await _syncReady();
 
     // A stop() that landed during the handshake above had no completer to
@@ -270,6 +275,7 @@ class EvalWorker {
     _pv = [];
     _depth = 0;
 
+    _searchDone = Completer<void>();
     engine.sendCommand('position fen $fen');
     engine.sendCommand('go depth $depth');
 
@@ -294,6 +300,25 @@ class EvalWorker {
     _discoveryOnProgress = null;
   }
 
+  void _finishSearch() {
+    final done = _searchDone;
+    _searchDone = null;
+    if (done != null && !done.isCompleted) done.complete();
+  }
+
+  /// `readyok` may arrive while Stockfish is still stopping its search thread.
+  /// A shared worker must consume that search's bestmove before its next go.
+  Future<void> waitUntilStopped() async {
+    final done = _searchDone;
+    if (done == null) return;
+    try {
+      await done.future.timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      dispose();
+      rethrow;
+    }
+  }
+
   void _onOutput(String line) {
     line = line.trim();
     if (line.isEmpty) return;
@@ -305,6 +330,8 @@ class EvalWorker {
       }
       return;
     }
+
+    if (line.startsWith('bestmove')) _finishSearch();
 
     // ── Discovery mode (MultiPV) ──
     if (_discoveryCompleter != null && !_discoveryCompleter!.isCompleted) {
@@ -422,6 +449,7 @@ class EvalWorker {
   }
 
   void dispose() {
+    _finishSearch();
     if (_disposed) return;
     _disposed = true;
     onDied = null;

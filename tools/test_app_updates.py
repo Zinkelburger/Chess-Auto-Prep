@@ -147,7 +147,7 @@ class WindowsUpdateTest(unittest.TestCase):
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="updater café 'quoted'-")
-        self.addCleanup(tmp.cleanup)
+        self.addCleanup(self.cleanup_directory, tmp)
         self.root = Path(tmp.name)
         self.state = self.root / 'updates' / 'attempt'
         self.state.mkdir(parents=True)
@@ -162,6 +162,22 @@ class WindowsUpdateTest(unittest.TestCase):
         self.write_request()
         # Preserve logs before TemporaryDirectory cleanup, including on failure.
         self.addCleanup(self.preserve_diagnostics)
+
+    @staticmethod
+    def cleanup_directory(tmp):
+        # The restarted native probe writes its marker immediately before
+        # exiting. Windows can still hold app.exe open after we see that
+        # marker; wait for the actual file release instead of racing rmtree.
+        # Persistent permission failures still fail the test after a deadline.
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                tmp.cleanup()
+                return
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(.05)
 
     def write_request(self, process_id=2147483647, digest=None):
         self.request.write_text(json.dumps(dict(
@@ -184,12 +200,12 @@ class WindowsUpdateTest(unittest.TestCase):
                 parts.append(f'{path.name}:\n{data.decode(encoding, errors="replace")}')
         return '\n'.join(parts)
 
-    def launch(self):
+    def launch(self, env=None):
         helper = subprocess.Popen([
             'powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
             'Bypass', '-File', str(ROOT / 'assets/updater/install_windows.ps1'),
             '-Request', str(self.request),
-        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         self.addCleanup(self.stop_process, helper)
         return helper
 
@@ -241,6 +257,19 @@ class WindowsUpdateTest(unittest.TestCase):
         self.assert_not_installed()
         self.assertFalse(self.armed.exists())
         self.assertFalse((self.state / 'helper-ready').exists())
+
+    def test_inherited_module_path_cannot_hide_windows_powershell_modules(self):
+        # Like a pwsh -> Python -> powershell.exe launch, the helper starts
+        # with a module path that does not resolve its host's built-in modules.
+        # Do not sanitize this in the harness: production must handle it too.
+        unrelated = self.root / 'unrelated modules'
+        unrelated.mkdir()
+        env = {k: v for k, v in os.environ.items() if k.upper() != 'PSMODULEPATH'}
+        env['PSModulePath'] = str(unrelated)
+        helper = self.launch(env=env)
+        self.finish(helper)
+        self.assertTrue((self.state / 'arguments.txt').exists(), self.diagnostics())
+        self.wait_file(self.app.parent / 'restarted.txt', helper)
 
     def test_installer_failure_is_reported_without_restart(self):
         (self.state / 'setup-exit.txt').write_text('23')

@@ -201,8 +201,8 @@ Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** select
 Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 - **`titleSpacing: 16`** on every `AppBar`.
-- **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with the current mode name as its anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions open on hover or click and use named groups with leading Material icons across modes, with no settings-only ellipsis. Shared operations reuse the PGN viewer’s symbols for copy, import, edit and study actions. Shared Actions and view menus use 32px minimum rows, 13px labels, a 240px minimum width and 16px horizontal insets; faint inset 1px dividers separate groups, adding only 1px before section headings. Both Actions and the view selector support keyboard navigation, Escape and outside-click dismissal. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
-- **Settings**: Every `AppSettingsButton(mode: ...)` opens the same persistent settings route at that view. Its sidebar expands the selected view into chapters, with one chapter controlling the right pane; global categories remain accessible. Trainer chapters are Session, Learning, Playback and Material. Tactics separates Session, Puzzle selection, Game downloads and Review performance; its inline Filters and Analysis buttons deep-link here too. Review changes use Apply; session and trainer preferences save automatically. PGN Viewer separates Analysis, Playback and Board and moves. Analysis-panel gears open the shared Engine → Engine analysis / Analysis panels chapters. Narrow windows use searchable view and chapter pickers. `ViewSettingsRegistry` connects mounted view-owned builders; unmounted views initialise underneath the open route, respecting the generation lock. Global account drafts survive category navigation.
+- **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with the current mode name as its anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions open on hover or click and use named groups with leading Material icons across modes, with no settings-only ellipsis. Shared operations reuse the PGN viewer’s symbols for copy, import, edit and study actions. Shared Actions and view menus use 32px minimum rows, 13px labels, a 240px minimum width and 16px horizontal insets; faint inset 1px dividers separate groups, adding only 1px before section headings. Both Actions and the view selector support keyboard navigation, Escape and outside-click dismissal. Player Analysis keeps its player picker inside the mode body, below the same Actions / View / Settings bar; selecting or changing a player never replaces that bar. The picker is centered at a maximum width of 1040px, with one Add player button and direct Update games / Change range / Remove buttons per card (file imports only offer Remove). Cards wrap their actions below the metadata on narrower windows. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
+- **Settings**: Every `AppSettingsButton(mode: ...)` opens the same persistent settings route at that view. Trainer chapters are Session, Learning, Playback and Material; Tactics has Session, Puzzle selection and Game downloads. Global Engine contains cores, memory, board depth, bulk depth, lines and PV rows together. The PGN viewer and tactics Analysis gear use the same compact engine popup and save shared preferences immediately. `BulkAnalysisSettings` owns the persisted depth for game reviews, full-game analysis, audits, hole hunts and new repertoire builds, migrating the old tactics depth; `EngineSettings.depth` controls live board analysis. Saved build configurations retain their captured depth for resume. Panel visibility and move-table controls remain in view settings. Settings use concise labels without introductory paragraphs. Game downloads use Apply; session and trainer preferences save automatically. PGN Viewer separates Playback, Board and moves, and Analysis panels. Narrow windows use searchable view and chapter pickers. `ViewSettingsRegistry` connects mounted view-owned builders; unmounted views initialise underneath the open route, respecting the generation lock. Global account drafts survive category navigation.
 - **Toolbar buttons collapse** from text+icon to icon-only below `kToolbarCompactBreakpoint` (900 px).
 - **Layout body splits** at `kCompactBreakpoint` (960 px) from side-by-side to stacked.
 - **Action padding** is `right: 8` for all toolbar action widgets.
@@ -319,10 +319,11 @@ RepertoireListBody (embedded inline or in RepertoireSelectionScreen)
 
 ```
 Stockfish:
-  tools/fetch_assets.py | CMake/Xcode (if .gz missing) | in-app download
+  tools/fetch_assets.py | CMake/Xcode (if .gz missing or stale) | in-app download
   → assets/executables/*.gz  (gitignored; pubspec bundles the directory)
   → StockfishBundle.ensureExecutable
-      → gunzip (or unpack upstream tar/zip) into AppPaths.supportDirectory()
+      → verify checksums, gunzip (or unpack upstream tar.gz/zip) into AppPaths.supportDirectory()
+      → refresh cached engines when the platform + release checksum stamp changes
 
 Maia:
   assets/maia3_simplified.onnx + vocab JSON  (tracked in git)
@@ -331,7 +332,7 @@ Maia:
 ```
 
 macOS GitHub Releases are two zips (`macos-arm64` / `macos-x86_64`). Each has the
-matching Stockfish; `ditto --arch` also thins the universal ONNX Runtime dylib.
+same universal Stockfish 19 engine; `ditto --arch` also thins the universal ONNX Runtime dylib.
 Release packaging uses `zip -ry` so framework `Versions/Current` symlinks are
 stored as links (plain `zip -r` packed Stockfish/Maia/Flutter three times).
 
@@ -366,7 +367,7 @@ RepertoireGenerationTab (config UI + build orchestration)
 - `dbExplorer` ("From Added PGN Files") — requires PGN files added via `PgnSourcesPanel` (file picker or paste); does **not** use lines already in the repertoire PGN; parsing → frequency map → BFS tree → eval enrichment
 - `chessDbBook` ("ChessDB mainline book") — one move per position, whichever ChessDB ranks best (exact ties to the more-played master move); opponent replies from master practice only, unsmoothed; off practice (or past `maxPly`) the line continues as a single ChessDB mainline to `bookTailMaxPly`; a line ends where ChessDB's knowledge ends unless `bookEngineFallback` puts the engine underneath as a floor (off by default — it is what makes the mode need Stockfish at all, and it is slow); Phase 2.5 never runs. Needs the local TerarkDB dump or the ChessDB API. See the mode's section in `lib/services/generation/README.md`
 
-**Generation config, two layers.** The always-visible form is three titled blocks — Opponent (rating), What to build (build source, novelties, traps-only, PGN sources), Search (Fast/Pure plus engine depth, max line length, candidate moves, time budget) — then the collapsed skeleton-plan and eval-database expanders, a saved-preset menu, and a live one-line summary of the whole config.
+**Generation config, two layers.** The always-visible form is three titled blocks — Opponent (rating), What to build (build source, novelties, traps-only, PGN sources), Search (Fast/Pure plus max line length, candidate moves, time budget) — then the collapsed skeleton-plan and eval-database expanders, a saved-preset menu, and a live one-line summary of the whole config.
 
 Everything else is in the **Advanced** dialog (`AdvancedSettingsDialog`), ten focused sections in build order: Opponent model · Move choice · Search tuning · Master games · ChessDB book · Verification · Coverage & line order · Chapters · Explanatory variations · PGN source filters. Both layers edit the same controllers, so they cannot disagree.
 
@@ -467,17 +468,37 @@ CoherenceService.compute(lines)
 
 ### Engine analysis
 
+Engine rows in `UnifiedEnginePane` and `InlineEngineBar` show the evaluation
+first, followed by the first move and PV continuation. Evaluations stay aligned
+in a left column; move taps and hover previews work throughout the line.
+
 ```
 Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off
 UnifiedEnginePane (when lifecycle ≠ off)
   → post-frame _runAnalysis on FEN / lifecycle changes (not during parent build)
-  → AnalysisService.ensureWorkers() (lazy spawn on first use) → StockfishPool / EvalWorker
+  → AnalysisService → shared BoardEngine / EvalWorker (one process; cores = threads)
   → Eval chain: session cache → CdbDirect → Stockfish (Lichess Explorer mothballed; DB column hidden, _fetchDbData never called)
   → Best-line eval persisted to EvalCache via _persistBestEvalToCache()
   → Hover on MOVE or PV line → BoardPreviewController (floating) → FloatingBoardPreview overlay
-InlineEngineBar — lazy dedicated EngineWorkerSlot; normal Stockfish discovery writes best eval to EvalCache on completion; hypothetical threat searches use threatPositionFen and skip cache writes
+InlineEngineBar — shares BoardEngine with the analysis pane; normal Stockfish discovery writes best eval to EvalCache on completion; hypothetical threat searches use threatPositionFen and skip cache writes
 ExpectimaxLinesPane — same floating preview on line hover
 ```
+
+Active board panes prepare one shared Stockfish process with the selected cores
+and hash before the first toggle. Toggle-off sends `stop`, retaining those
+threads, the network and hash in memory without background searches or a thread
+ramp-down. Same-position views share streamed discovery results. Candidate evals
+in the larger pane run sequentially in that process; interactive analysis never
+prepares the bulk worker pool. A new search waits for the previous `bestmove`
+acknowledgement, and an old pane cannot stop another owner's search. Leaving the
+last board, backgrounding the app, or starting generation releases the process;
+returning prepares one again. Generation and other bulk jobs create their own
+workers on demand; finished generation releases unleased workers.
+
+Inline engine hover boards follow the main board perspective in Repertoire,
+PGN Viewer, Player Analysis, Planner, Studies and Tactics. Stepping through a
+line preserves that perspective regardless of whose turn it is; flipping the
+main board also refreshes an already open hover board.
 
 ### Training
 
@@ -506,8 +527,9 @@ They do not contribute to Learn/Review counts or either scheduling queue.
 ### PGN viewer (Open PGN)
 
 **Actions ▾** offers icon-labelled **Edit PGN**, **Show Engine / Hide Engine**,
-**Evaluation graph / Tree**, and **Copy Game PGN** (the overlapping-squares
-copy icon). **Export** contains **Export as PGN…**, **Export as SCID…**, and
+**Evaluation graph / Tree**, **Copy Game PGN**, and **Copy FEN** (the overlapping-squares
+copy icon). Copy FEN copies the currently displayed board position, including
+when viewing a variation or reference game. **Export** contains **Export as PGN…**, **Export as SCID…**, and
 **Add to Study** (or **Edit study** for an open study). File exports use the
 current filtered collection, whose count appears in the submenu; pasted
 collections can also be exported. There is no collection clipboard action.
@@ -535,6 +557,10 @@ the real game's move list, and their evals are not cached as game evaluations.
 Turning the engine off, hiding it, or leaving the active Game tab releases its
 worker. View settings now contain Playback and Board and moves; view settings
 content is capped at 728px including padding so controls remain beside labels.
+Move-quality glyphs on mainlines and variations, inline analysis verdicts and their borders, and
+the analysis move list use the shared NAG palette: blue inaccuracies, amber
+mistakes, red blunders and pink interesting moves. Selecting a move preserves
+its glyph color.
 The evaluation graph uses opaque near-white and near-black advantage fills
 on a charcoal plot background so both sides remain distinct.
 
@@ -594,6 +620,8 @@ boards labelled **Comment position**, including FENs nested inside Chessable
 editorial brackets. Parenthetical prose stays inline; move runs continue across
 notes and replay from their embedded FEN. Dotted-underlined comment moves offer
 **Preview comment move** tooltips and show **Comment preview** while navigating.
+Their active highlight uses the mainline’s borderless pill around the move alone;
+move numbers and separating spaces stay outside, and selection preserves text weight.
 The note stays in view during preview. They never become saved mainline moves
 or variations. Explicit move numbers and sides must match the preview position;
 bare square references in prose are not inferred as pawn moves. Move numbers, check signs
@@ -618,8 +646,8 @@ Opening tree (**Actions → Tree**): `PgnOpeningTreePanel` splits the move tree 
 
 Toggled through **Actions → Edit PGN**. When active:
 
-- **NAG display**: Move-quality NAGs ($1–$6) render inline after the SAN with Lichess-style colors (brilliant=green, good=green, interesting=pink, dubious=blue, mistake=orange, blunder=red). Hidden when edit mode is off.
-- **Editing indicator and annotation panel**: Orange borders and a prominent **Editing PGN / Finish editing** bar distinguish editing from reading. The bottom panel shows bright NAG buttons and an editable comment field for the current move. File-backed games say **Changes to the file are saved**; pasted games explain how to keep changes. Toggling a NAG replaces any existing move-quality NAG.
+- **NAG display**: Move-quality NAGs ($1–$6) render inline after the SAN with Lichess-style colors (brilliant=green, good=green, interesting=pink, dubious=blue, mistake=orange, blunder=red). Annotations remain visible outside edit mode.
+- **Editing indicator and annotation panel**: A neutral **Editing PGN / Finish editing** bar identifies editing. The shared Notes panel uses a plain comment field without a move-specific placeholder; the target move is labelled above it. NAG buttons retain their move-quality colors. File-backed games say **Changes to the file are saved**; pasted games explain how to keep changes. Toggling a NAG replaces any existing move-quality NAG.
 - **Context menu**: Right-click in edit mode shows Comment, Annotate, Promote (variation), Delete — with promote/delete gated by `protectOriginal`.
 - **Keyboard**: `Escape` exits edit mode.
 - **Persistence**: Pending comments flush when finishing editing, before the annotation panel is removed; repainting waits until the widget tree unlocks. NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
@@ -961,7 +989,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: arrows, Home/End, Enter, Space, Escape, Ctrl/Cmd+V paste, F11 fullscreen; caches `AppState` so dispose does not `context.read` |
-| `player_selection_screen.dart` | Player pick for analysis: cached game-sets from chess.com / lichess downloads, PGN-file imports, and **opponent lists** (`OpponentListImportDialog` → one merged player per opponent, sourced from every account listed, tagged with the event as `group`; batch download with per-person progress, skip-existing, failures reported not swallowed); search matches name, platform and group |
+| `player_selection_screen.dart` | Embedded player pick for analysis, with a bounded list and direct per-player actions: cached game-sets from chess.com / lichess downloads, PGN-file imports, and **opponent lists** (`OpponentListImportDialog` → one merged player per opponent, sourced from every account listed, tagged with the event as `group`; batch download with per-person progress, skip-existing, failures reported not swallowed); search matches name, platform and group |
 | `settings_screen.dart` | Persistent shared settings route with expandable view chapters and grouped Views / Global navigation; shared preferences (accounts, **display** — board coordinates and piece notation with a live preview board, my repertoires, engine cores, ChessDB); focused sections have independent scrolling; Keyboard shortcuts lists mappings by view; per-panel gears deep-link to shared analysis chapters |
 
 ### `lib/services/` (grouped)
@@ -1138,6 +1166,9 @@ traversal rejection, rollback). Windows cases compile disposable .NET executable
 to exercise the shipped `.exe` launch contract, including paths with spaces,
 apostrophes and non-ASCII characters, checksum rejection, installer failure,
 waiting and cancellation. The Windows helper reads the app's request as UTF-8.
+It uses its host's bundled PowerShell modules so a parent PowerShell 7 process
+cannot hide Windows PowerShell 5.1's checksum command with incompatible modules;
+the native tests also cover an inherited module path without the host modules.
 Helper failures return a nonzero exit code and retain the installation error;
 the Windows quality job uploads diagnostic logs on failure.
 Real Windows Setup and Linux package-manager authorization still need native
@@ -1172,7 +1203,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
 | `layout/empty_state_placeholder.dart` | Shared empty states |
-| `repertoire_list_body.dart` | Embeddable repertoire list with import/rename/delete; the primary Import repertoire action opens the native file picker immediately, saves under a safe unique filename-derived name, and opens the imported chapter. A quieter Paste PGN action accepts text without setup; naming stays on the library cards and training side/settings remain available in Train. `features/repertoire/widgets/repertoire_import_dialog.dart` owns both flows; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
+| `repertoire_list_body.dart` | Embeddable repertoire list with import/rename/delete; the standard dark Open PGN file… action (matching the PGN viewer label) opens the native file picker immediately, saves under a safe unique filename-derived name, and opens the imported chapter. The trainer also offers Create new repertoire, which switches to the repertoire builder. A quieter Paste PGN action accepts text without setup; naming stays on the library cards and training side/settings remain available in Train. `features/repertoire/widgets/repertoire_import_dialog.dart` owns both flows; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
 | `layout/responsive_split_layout.dart` | Generic split helper |
 
 #### Repertoire-specific
@@ -1192,7 +1223,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `repertoire_generation_tab.dart` | Build orchestration + progress UI; embeds `GenerationConfigForm` via `GlobalKey`; receives `GenerationSessionController`; sets `controller.setPartialSaveContext()` at build start so pause/cancel from any source saves partial tree |
 | `repertoire_analysis_dock.dart` | Resizable Engine/Expectimax dock above PGN |
 | `repertoire_lines_browser.dart` | Filter/sort/group lines; 300 ms search debounce; typed `LineSortBy`/`LineMetricsFilter`; filter reset uses single `setState` |
-| `interactive_pgn_editor.dart` | Tree-structured PGN editor with Overlay-based context menu (promote, make main line, duplicate line, copy PGN, view in lines, delete), trap dots, hover preview hooks; memoizes `_buildMoveWidgets` when tree+path unchanged and context menu closed; highlights root-to-target path when context menu is open; I/O via `onAutoSave`/`onDirty`/`onCopyToClipboard`/`onViewInLines` callbacks (wired in `EditMainZone`); Save button removed |
+| `interactive_pgn_editor.dart` | Tree-structured PGN editor sharing the viewer's borderless move selection, hover, and NAG styling; prose and indented variations break into reading rows. Context menu supports comments, promotion, copy and delete; memoizes movetext by tree identity/version while selection repaints only affected chips. I/O via `onAutoSave`/`onDirty`/`onCopyToClipboard`/`onViewInLines` callbacks; shared Notes editor below the moves |
 | `opening_tree_widget.dart` | Compact tree navigator. Continuations come from `OpeningTree.continuations` (played moves plus one-ply transpositions, marked `≈` / "transp.") |
 | `opening_tree/opening_tree_move_row.dart` | Tree row |
 | `opening_tree/coverage_annotation.dart` | Coverage badges on tree |
@@ -1206,7 +1237,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `engine/unified_engine_pane.dart` | MultiPV table, hoverable PV via `ClickableMoveLineWidget`; FEN changes schedule analysis post-frame (avoids setState-during-build); DB column hidden; best eval persisted to `EvalCache` via `_persistBestEvalToCache()` |
 | `engine/expectimax_lines_pane.dart` | Position table from the built tree: every move with practical (expectimax) value beside engine eval, ★ on the chosen move, continuation; honest empty states (no tree / not in tree / leaf). Never runs the engine |
 | `engine/expectimax_panel_host.dart` | Thin wrapper binding [ExpectimaxLinesPane] to a [RepertoireController] cursor (or `fenOverride`); used by [EditContextZone], [InlineExpectimaxBar] and [RepertoireAnalysisDock] |
-| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
+| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; reserves a fixed height for the configured MultiPV count while enabled, including loading and positions with fewer legal moves; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
 | `engine/inline_expectimax_bar.dart` | Compact toggleable expectimax bar for right pane; wraps `ExpectimaxPanelHost(compact: true)` with toggle switch and settings gear |
 | `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |
 | `engine/engine_pane_footer.dart` | Engine pane footer controls |
@@ -1233,8 +1264,8 @@ release smoke testing. No release or update is triggered by these tests.
 | `generation_config_dialog.dart` | Modal dialog wrapping RepertoireGenerationTab; pops on generation start via controller listener; opened by sparkles button |
 | `layout/jobs_panel.dart` | Jobs tab: single rich card per active generation or audit job (name, build mode config summary, phase icon/label, C-style live stats, thread/hash chips, linear progress, elapsed, pause/resume/cancel/finish-now); completed jobs as compact list tiles |
 | `services/jobs/generation_job_display.dart` | Phase labels, stats-line formatting, and progress fraction helpers for generation job cards |
-| `analysis/analysis_settings_sheet.dart` | Context-aware analysis/engine settings dialog. Accepts `AnalysisSettingsContext` (`full` or `tacticsEngine`) to gate which sections are shown: engine depth + multiPv always; panel visibility in `full` mode ("Show DB % column" toggle and Lichess DB filter section hidden — Explorer mothballed). |
-| `analysis_download_dialog.dart` | Download games for analysis: site, username, range (months or last N games) and time controls. Given a saved `player`, site and username are fixed and it pops that player with the new range — the refresh button beside "downloaded … ago" in Player Analysis and "Download a different range…" on the picker both use it |
+| `analysis/stockfish_settings_dialog.dart` | Shared engine controls for global Engine settings and `InlineEngineSettings` popups; board and bulk depths persist independently. |
+| `analysis_download_dialog.dart` | Download games for analysis: site, username, range (months or last N games) and time controls. Given a saved `player`, site and username are fixed and it pops that player with the new range — the refresh button beside "downloaded … ago" in Player Analysis and "Change range…" on the picker both use it |
 | `game_analysis_tab.dart` | PGN viewer closable Analysis tab: opening a recent tactics game with stored evaluations also opens this tab in the background, keeping the annotated Game reader selected; saved evaluation coverage explains missing played positions and offers a full pass; null PGN moves are excluded from coverage totals while ply coordinates stay unchanged. chart, classified move list, best-line / Maia taps; each tap adds an **ephemeral RAV** at that ply (accumulates; does not clear prior lines); move list scrolls only when the nearest classified row changes (instant `ensureVisible`, no per-ply jump+animate) |
 | `game_analysis_chart.dart` | Eval chart for game review |
 | `game_nav_item.dart` | `GameNavItem` — label, study rating/summary, PGN `headers` for nav bar and search dialog; `fromEntry(PgnGameEntry)` |
@@ -1271,13 +1302,14 @@ release smoke testing. No release or update is triggered by these tests.
 | `tactics/tactics_delayed_tooltip.dart` | Delayed tooltip for puzzle hints |
 | `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **Chessable-style move display** shows opponent/user moves with full notation ("White's move 1. e4", "Your move 2. Nf3"), comments inline, and **Next button** (Space shortcut) when opponent moves have comments; **J** toggles learn auto-advance (`learnRequiresClick`) on training screen + settings tooltip; `MoveInputWidget` below board accepts SAN/UCI text input, auto-submits on unique legal-move match (Escape clears & blurs) |
 | `study/study_board_pane.dart` | Study board + SAN input; board-shape helpers (`applyStudyBoardShape`) |
-| `study/study_side_pane.dart` | Engine bar + compact chapter bar + PGN editor |
-| `study/study_picker_bar.dart` | App-bar study switcher with inline rename |
+| `study/study_side_pane.dart` | Engine bar + compact chapter bar + PGN editor; shared borderless move selection/hover and neutral Notes field with no move-specific placeholder |
+| `study/study_picker_bar.dart` | App-bar study switcher with an explicit Rename study pencil and inline name editing |
+| `study/study_chapter_sidebar.dart` | Searchable, reorderable chapter list; New chapter sits above the filter and rows, with per-chapter actions in a trailing menu |
 | `study/study_name_dialog.dart` | Shared name prompt for studies and chapters |
 | `features/opponents/` | Players and Groups: shared autosaving `PlayerTable`, multiple online accounts, stable links to saved game sets, inline list import and study/chapter linking, persistent group studies and visible prep navigation. `OpponentStore` serializes writes; legacy people/tournament files remain readable. See [Players and groups](OPPONENT_PREP.md#in-the-app). |
 | `opponent_list_import_dialog.dart` | Import an opponent-list JSON into Player Analysis |
 | `training/training_lines_panel.dart` | **Training Lines browser** — replaces raw `RepertoireLinesBrowser` in the trainer Lines tab; top action bar with **Learn** (new lines) / **Review** (due lines) buttons with count badges; lines grouped into three sections: **Due for Review** (sorted weakest-first), **New** (unseen), **Learned** (collapsed by default, sorted by next due date); each row shows color chip, line name, status label ("Due 2h ago" / "New" / "Next: 3d"), pass/fail ratio, and move mastery bar; tapping a row starts that line |
-| `settings/settings_widgets.dart` | Reusable settings tiles |
+| `settings/settings_widgets.dart` | Reusable settings tiles; Study exposes Engine (cores, memory, board depth, lines) and Display preferences. Maia/Expectimax move-table toggles remain with the analysis views that consume them |
 | `eval_database_settings_panel.dart` | CdbDirect configuration and the download card: start / pause / resume / check / delete, live progress with rate and ETA, the data-directory picker with a **Show in file manager** button, and a collapsed "Download it yourself instead" section carrying the rsync command for the current snapshot. On non-Linux, shows that the dump reader is unavailable instead of hiding the section. |
 | `lichess_eval_settings_panel.dart` | The Lichess evaluations card: download, progress through both stages, pause/resume, open folder, free the archive once the store is built, rebuild from a newer file. Separate from the ChessDB panel because that one is gated on the Linux-only native reader while this store is plain Dart |
 | `lichess_eval_download_dialog.dart` | States the three numbers the download page does not: 21.7 GB to fetch, ~28 GB needed while building, ~5.9 GB kept. Measures drives against the peak rather than the download size |
@@ -1418,7 +1450,7 @@ release smoke testing. No release or update is triggered by these tests.
 |------|------|
 | `tree_builder/` | C expectimax tree builder (`--eval-depth` default 14), CdbDirect reader; MultiPV line-0 PV reply stash + opponent injection (`engine_injected`, PGN `{engine-injected}`). **Build modes** (`--build-mode` in `tree.h`): `stockfish-expectimax` (default interleaved BFS), `maia-db-explore`, `db-explorer`, `trap-finder` (unimplemented). **SQLite cache** (`database.c`): explorer/eval/Maia/repertoire tables plus `build_metadata`. **`cli_args` persistence:** each run calls `save_config_to_db()` → `rdb_save_cli_config()` with the effective CLI as JSON (color, depth, build mode, PGN paths, eval sources, presets, etc.). **`--resume`:** `load_config_from_db()` in `main.c` restores from `cli_args`; `CliExplicit` records flags passed on the command line — saved values apply only for options *not* explicitly set (e.g. `--resume --threads 8` overrides stored thread count). Restores `-c` when omitted; DBs without `cli_args` fail with a clear error. **`build_now` is sticky:** `save_config_to_db()` persists it and `load_config_from_db()` re-applies it whenever the CLI passes neither `--build-now` nor `--skip-build` (`main.c` ~L564), so once a DB has seen one `--build-now`, every later `--resume` silently skips building. Pass the original flags explicitly instead of `--resume` if you need to alternate between scoring and building. **`--resume` skips** the legacy `check_build_metadata` color/ratings/speeds gate; without `--resume`, reopening an existing `.db` still **refuses** on mismatch (prints stored vs current settings and example `--resume` / fresh / `--input-db` commands). Legacy DBs with data but no metadata get a one-time note and recorded settings. **`--input-db` / `-I`:** copy eval/explorer cache tables (`evaluations`, `explorer_positions`/`explorer_moves`, `multipv_cache`, `maia_cache`) from another DB into a new/empty target via `rdb_import_cache_from` (ATTACH + INSERT OR IGNORE); not `repertoire_moves`. **Threads:** `-t` / `--threads` default is `default_thread_count()` — half of `_SC_NPROCESSORS_ONLN`, minimum 1 (not a fixed 4). **Build progress (TTY):** live line via `progress_line.c` — `[Depth N] X new + Y transpositions | total | rate/min | ~ETA`; depth-complete line uses unique node count at that ply (`g_nodes_created_at_depth`). **Tree resume** (stockfish-expectimax / maia-db-explore): if `<name>.tree.json` exists and `build_complete` is false, stage 1 continues BFS from unexplored frontier leaves (`resume_prepare_frontier` in `tree.c`); only `build_complete: true` skips building. SIGINT saves partial trees; nodes interrupted mid-expansion stay `explored: false` and are retried. **Engine pool:** Stockfish children call `setsid()` (Ctrl+C does not kill engines); `engine_pool_request_stop` from the signal handler sets `shutting_down` and wakes waiters so batch/single eval exits without spamming "all Stockfish engines are dead". `--build-now` / `--skip-build` still export without expanding. **DB explorer:** `--build-mode db-explorer --pgn <file>` (repeatable) → `pgn_freq.c` replays each game from the standard start position; when `--fen` or `--moves` defines a target, counting starts only after the canonical 4-field FEN matches (not SAN-prefix string matching). `--min-elo` (default 2100) skips games where both `[WhiteElo]` and `[BlackElo]` are present and below threshold; missing or partial Elo tags are kept. Games that never reach the target are skipped (aggregate log). Parallel per-file parse when multiple PGNs; binary cache `<name>.freq.bin` with manifest incl. `min_elo`, `--no-freq-cache` to force reparse; OOM aborts parse → `tree_build_from_freqmap` → deferred Stockfish pool start → `tree_enrich_evals` (project DB → external chain → Stockfish; abort if >50% nodes still unevaluated, else warn) → expectimax + PGN export. `fen_map_put` / PGN hash tables propagate resize OOM. Opponent `move_probability` = count/reach; our-move children = 1.0; `tree_recalculate_probabilities` chains cumulative probability. See `tree_builder/ALGORITHM.md`. |
 | `python/twic-position-finder/` | TWIC Position Finder — the live site/API at `api.chessautoprep.com` (FastAPI + Astro frontend, weekly ingest cron, lesson booking). Dashboard lists matched games per TWIC issue with a Lichess link on each game. Independent of the Flutter app. |
-| `tools/fetch_assets.py` | Stdlib fetch of pinned Stockfish (`sf_18`) into `assets/executables/*.gz` (gitignored). Default is **host OS/arch only**. Linux/Windows CMake and macOS Assemble invoke it when the `.gz` is missing; Release CI always `--only`s the job’s target. In-app fallback is `StockfishBundle`. Checksums in `tools/assets.lock.json`. |
+| `tools/fetch_assets.py` | Stdlib fetch of pinned Stockfish (`sf_19`, universal CPU-dispatch binaries) into `assets/executables/*.gz` (gitignored). Default is **host OS/arch only**. Linux/Windows CMake and macOS Assemble invoke it when the `.gz` is missing or stale; Release CI always `--only`s the job’s target. In-app fallback is `StockfishBundle`. Checksums in `tools/assets.lock.json`. |
 | `tools/mcp/chess_prep/` | Local MCP server (`python3 tools/mcp/chess_prep/__main__.py`). **Opponent prep** (zero extra deps): directory, USCF, roster, Swiss sim, `opponents_export`. **PGN opening tree** (`pgn_open` / `pgn_position` / `pgn_walk` / `pgn_eval` / `pgn_audit`): FEN-keyed graph so transpositions merge; needs `python-chess` (`pip install -r tools/mcp/requirements.txt`) and Stockfish for eval. **ChessDB** (`chessdb.py`: `chessdb_query`, and the reply-gap half of `pgn_audit`): chessdb.cn `queryall` over `urllib`, cached per position, fetch injectable; the one source that rates a move nobody plays. **Engine tournaments** (`tournament_run` / `_status` / `_list` / `_crosstable` / `_games` / `_game_pgn` / `_stop` / `_open` / `_engines` / `_add_engine`): starts a match from any FEN and opens the app on it. Needs the Flutter SDK's `dart` (`CHESS_PREP_DART` overrides) because it shells out to `tools/run_engine_tournament.dart` rather than re-implementing the chess or the standings maths. `tournament_run` returns as soon as the runner prints its `TOURNAMENT {…}` handshake line and leaves the games playing detached, recording the pid in `run.json` so `tournament_stop` can SIGINT it. **Expectimax runs** (`expectimax_run` / `_result` / `_status` / `_list` / `_stop` / `_resume`): builds a Maia+Stockfish expectimax tree via `tree_builder/` and returns the root ranking — every candidate with its practical win probability, its eval, and how much of the tree it got. Takes a move list or FEN; refuses a `color` that is not the side to move (a line ending on Black's move is White to move) rather than scoring the wrong side. `expectimax_result` can also include a cached root `engine_shortlist` for candidates not expanded in the tree. `prepare_toolchain()` rebuilds stale binaries lacking ONNX linkage and refuses a resulting binary without ONNX support; it compiles `tree_builder` on first use, unpacks `assets/executables/stockfish-*.gz`, and symlinks `libonnxruntime`/`libcurl` out of the pub cache and `/usr/lib64` into `CHESS_PREP_EXPECTIMAX_TOOLCHAIN` — Fedora ships neither `-devel` symlink. Runs are directories under `CHESS_PREP_EXPECTIMAX_DIR` (default `Documents/expectimax_runs`). Never passes `--resume` (see the `tree_builder/` row); it re-runs the `build_argv` stored in `run.json` instead, adding `--build-now` to score a partial tree. `_pid_alive` treats zombies as dead — the server is the builder's parent, so an unreaped child otherwise reads as running for ever. The server is registered for Claude Code in `.mcp.json` at the repo root. See [`OPPONENT_PREP.md`](OPPONENT_PREP.md). Tests: `python3 tools/mcp/test_chess_prep.py`, `python3 tools/mcp/test_opening_tree.py`, `python3 tools/mcp/test_chessdb.py`, `python3 tools/mcp/test_engine_tournament.py`, `python3 tools/mcp/test_expectimax.py`. |
 | `packages/cdbdirect_flutter_libs/` | Native ChessDB bindings |
 | `scripts/` | One-off data/analysis scripts (chess.com titled-player stats, USCF mapping, epub/pdf game extraction) |

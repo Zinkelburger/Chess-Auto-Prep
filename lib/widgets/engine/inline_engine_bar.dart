@@ -4,9 +4,8 @@
 /// Designed to sit above a [PgnViewerWidget] in any screen that displays a
 /// game PGN without its own engine integration.
 ///
-/// Spawns its own dedicated [EvalWorker] with configurable threads (via
-/// [EngineSettings.cores]) so it doesn't compete with the pool
-/// workers used by the repertoire pane.
+/// Uses the shared [BoardEngine], keeping its configured threads asleep while
+/// analysis is toggled off. Background jobs use their own on-demand pool.
 library;
 
 import 'dart:async';
@@ -19,8 +18,7 @@ import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/eval_cache.dart';
 import '../../services/engine/engine_lifecycle.dart';
-import '../../services/engine/eval_worker.dart';
-import '../../services/engine/engine_worker_slot.dart';
+import '../../services/engine/board_engine.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart'
@@ -139,7 +137,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   int _lastInlineThreads = 0;
   int _lastHashMb = 0;
 
-  final _workerSlot = EngineWorkerSlot();
+  final _boardEngine = BoardEngine.instance;
   bool _modeActive = true;
 
   bool get _isActive => widget.isActive && _modeActive;
@@ -166,8 +164,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     }
   }
 
-  /// Generation starting/ending: free our dedicated worker so the build gets
-  /// the CPU, then re-run discovery once the engine is ours again.
+  /// Leave the shared board session while generation owns the CPU, then
+  /// prepare and resume discovery when the build releases it.
   void _onEngineGateChanged() {
     if (!mounted) return;
     final locked = EngineGate.isLocked;
@@ -175,12 +173,13 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _gateLocked = locked;
     if (locked) {
       _generation++;
-      _disposeWorker();
+      _boardEngine.detach(this);
       _lastAnalyzedFen = null;
       setState(() => _isSearching = false);
       _publishThreat();
     } else {
       setState(() {});
+      _prepareEngine();
       if (_engineEnabled && _isActive) unawaited(_runDiscovery());
     }
   }
@@ -194,12 +193,16 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final active = TickerMode.valuesOf(context).enabled;
-    if (_modeActive == active) return;
+    if (_modeActive == active) {
+      _prepareEngine();
+      return;
+    }
     _modeActive = active;
     if (!_isActive) {
       _stopDiscovery();
-    } else if (_engineEnabled) {
-      unawaited(_runDiscovery());
+    } else {
+      _prepareEngine();
+      if (_engineEnabled) unawaited(_runDiscovery());
     }
   }
 
@@ -216,6 +219,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       _stopDiscovery();
       return;
     }
+    _prepareEngine();
     if (_engineEnabled &&
         (widget.fen != oldWidget.fen || !oldWidget.isActive)) {
       unawaited(_runDiscovery());
@@ -227,7 +231,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _progressThrottle?.cancel();
     _progressThrottle = null;
     _pendingProgress = null;
-    _disposeWorker();
+    _boardEngine.detach(this);
     _lastAnalyzedFen = null;
     _discovery = const DiscoveryResult();
     _isSearching = false;
@@ -241,7 +245,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _externalToggleNotifier.remove(_onExternalToggle);
     EngineLifecycle.instance.removeListener(_onEngineGateChanged);
     _settings.removeListener(_onSettingsChanged);
-    _disposeWorker();
+    _boardEngine.detach(this);
     _boardPreview.dispose();
     super.dispose();
   }
@@ -262,6 +266,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _lastHashMb = _settings.hashMb;
 
     _lastAnalyzedFen = null;
+    _prepareEngine();
     if (_engineEnabled && _isActive) {
       unawaited(_runDiscovery());
     }
@@ -300,7 +305,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         _discovery = const DiscoveryResult();
         _isSearching = false;
         _lastAnalyzedFen = null;
-        _disposeWorker();
+        _boardEngine.pause(this);
       }
     });
     _publishThreat();
@@ -309,10 +314,14 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     }
   }
 
-  Future<EvalWorker?> _ensureWorker() =>
-      _workerSlot.ensure(threads: _settings.cores, hashMb: _settings.hashMb);
-
-  void _disposeWorker() => _workerSlot.release();
+  void _prepareEngine() {
+    if (!_isActive || EngineGate.isLocked) return;
+    unawaited(
+      _boardEngine.prepare(this).catchError((Object error) {
+        if (kDebugMode) debugPrint('[InlineEngine] Preparation failed: $error');
+      }),
+    );
+  }
 
   Future<void> _runDiscovery() async {
     if (!mounted || !_isActive || !_engineEnabled || EngineGate.isLocked) {
@@ -339,27 +348,21 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     final whiteToMove = isWhiteToMove(fen);
 
     try {
-      final worker = await _ensureWorker();
-      if (!mounted || _generation != myGen) {
-        return;
-      }
-      if (worker == null) {
-        setState(() {
-          _isSearching = false;
-          _error = 'Engine unavailable. Toggle it to retry.';
-        });
-        return;
-      }
-
-      final result = await worker.runDiscovery(
-        fen,
-        _settings.depth,
-        _settings.multiPv,
-        whiteToMove,
+      final result = await _boardEngine.discover(
+        this,
+        fen: fen,
+        depth: _settings.depth,
+        multiPv: _settings.multiPv,
+        whiteToMove: whiteToMove,
         onProgress: (intermediate) => _onDiscoveryProgress(intermediate, myGen),
       );
 
       if (!mounted || _generation != myGen) {
+        return;
+      }
+      if (result == null) {
+        setState(() => _isSearching = false);
+        _lastAnalyzedFen = null;
         return;
       }
       setState(() {
@@ -395,10 +398,20 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         _buildToggleBar(context),
         if (_engineEnabled) ...[
           const Divider(height: 1),
-          if (EngineGate.isLocked)
-            const EngineBusyNotice(dense: true)
-          else
-            _buildLines(context),
+          // Reserve every configured PV slot even while a new position has
+          // no results (or fewer legal moves). Navigation must not move the
+          // PGN below us as streamed lines disappear and arrive.
+          SizedBox(
+            height: (_lineHeight(context) * _settings.multiPv).clamp(
+              40.0,
+              double.infinity,
+            ),
+            child: SingleChildScrollView(
+              child: EngineGate.isLocked
+                  ? const EngineBusyNotice(dense: true)
+                  : _buildLines(context),
+            ),
+          ),
         ],
         // Renders nothing inline; drives the hover mini-board via Overlay.
         FloatingBoardPreview(
@@ -527,6 +540,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     );
   }
 
+  double _lineHeight(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(14) * 1.5 + 8;
+
   Widget _buildLineRow(BuildContext context, DiscoveryLine line) {
     final sanMoves = _pvToSanList(_searchFen, line.pv);
     final san = sanMoves.isNotEmpty ? sanMoves.first : '?';
@@ -536,10 +552,26 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       scoreMate: line.scoreMate,
     );
 
-    return Padding(
+    return Container(
+      height: _lineHeight(context),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Row(
         children: [
+          SizedBox(
+            width: 52,
+            child: Text(
+              evalStr,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                fontFamily: AppTextStyles.monoFamily,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 6),
           SizedBox(
             width: 48,
             child: Builder(
@@ -572,25 +604,14 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                         fontFamily: AppTextStyles.monoFamily,
                         fontSize: 14,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
               ),
             ),
           ),
-          SizedBox(
-            width: 52,
-            child: Text(
-              evalStr,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                fontFamily: AppTextStyles.monoFamily,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(width: 6),
           Expanded(child: _buildClickableContinuation(line, sanMoves)),
         ],
       ),
