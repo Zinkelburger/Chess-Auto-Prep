@@ -139,62 +139,73 @@ class _OpeningTreeMoveRowState extends State<OpeningTreeMoveRow> {
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      if (widget.coverageStatus != null)
-                        CoverageIndicator(status: widget.coverageStatus!),
-                      SizedBox(
-                        width: 60,
-                        child: Text(
-                          entry.viaTransposition
-                              ? '${entry.move}≈'
-                              : entry.move,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            fontFamily: AppTextStyles.monoFamily,
-                          ),
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  children: [
+                    if (widget.coverageStatus != null)
+                      CoverageIndicator(status: widget.coverageStatus!),
+                    SizedBox(
+                      width: 60,
+                      child: Text(
+                        entry.viaTransposition ? '${entry.move}≈' : entry.move,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.mono.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Tooltip(
+                        message: reach == null
+                            ? frequency
+                            : '$frequency · ${reach.percentLabel}% reached',
                         child: Text(
                           reach == null
                               ? frequency
                               : '$frequency · ${reach.percentLabel}% reached',
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.caption,
                         ),
                       ),
-                      if (entry.hasWdl)
-                        Text(
-                          '${(displayRate * 100).toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: winRateColor,
+                    ),
+                    if (entry.hasWdl) ...[
+                      if (constraints.maxWidth >= 300) ...[
+                        const SizedBox(width: 8),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 48),
+                          child: Text(
+                            '${(displayRate * 100).toStringAsFixed(1)}%',
+                            maxLines: 1,
+                            textAlign: TextAlign.right,
+                            style: AppTextStyles.caption.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: winRateColor,
+                            ),
                           ),
                         ),
-                    ],
-                  ),
-                  if (entry.hasWdl) ...[
-                    const SizedBox(height: 5),
-                    Tooltip(
-                      message: _countsTooltip(entry),
-                      waitDuration: const Duration(milliseconds: 600),
-                      child: WinDrawLossBar(
-                        wins: entry.wins,
-                        draws: entry.draws,
-                        losses: entry.losses,
-                        perspective: perspective,
-                        showPercentages: true,
+                      ],
+                      const SizedBox(width: 12),
+                      Tooltip(
+                        message: _countsTooltip(entry),
+                        waitDuration: const Duration(milliseconds: 600),
+                        child: SizedBox(
+                          width: (constraints.maxWidth * 0.32).clamp(0, 180),
+                          child: WinDrawLossBar(
+                            wins: entry.wins,
+                            draws: entry.draws,
+                            losses: entry.losses,
+                            perspective: perspective,
+                            height: 18,
+                            showPercentages: true,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

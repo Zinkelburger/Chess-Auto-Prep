@@ -21,6 +21,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   Future<void> _copyCurrentGamePgn();
   Future<void> _copyCollectionPgn();
   void _openSliceDialog();
+  Future<void> _exportTreePosition();
   Future<void> _exportSlice();
   Future<void> _exportSliceAsScid();
   Future<void> _pickFile();
@@ -117,6 +118,13 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
                 onRun: _exportSlice,
               ),
               AppMenuEntry(label: 'Export as SCID…', onRun: _exportSliceAsScid),
+              AppMenuEntry(
+                label: 'Export games at tree position…',
+                enabled:
+                    !_controller.buildingTree &&
+                    _controller.gamesAtTreePosition().isNotEmpty,
+                onRun: _exportTreePosition,
+              ),
               AppMenuEntry(
                 dividerAbove: true,
                 label: 'Copy Game PGN',

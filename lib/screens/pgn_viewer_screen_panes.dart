@@ -220,34 +220,22 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
 
   Widget _buildTreeTab() => Column(
     children: [
-      Padding(
-        padding: const EdgeInsets.all(8),
-        child: SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, label: Text('Collection tree')),
-            ButtonSegment(value: true, label: Text('Database explorer')),
-          ],
-          selected: {_tabController.databaseTree},
-          showSelectedIcon: false,
-          onSelectionChanged: (selection) {
-            if (!mounted) return;
-            _tabController.databaseTree = selection.single;
-          },
-        ),
+      PgnTreeToolbar(
+        controller: _controller,
+        database: _tabController.databaseTree,
+        onSourceChanged: (database) {
+          if (!mounted) return;
+          _tabController.databaseTree = database;
+        },
+        onFilter: _openSliceDialog,
       ),
       Expanded(
         child: _tabController.databaseTree
             ? _buildExplorerTab()
-            : PgnOpeningTreePanel(
-                controller: _controller,
-                onFilter: _openSliceDialog,
-                onExportPosition: _exportTreePosition,
-              ),
+            : PgnOpeningTreePanel(controller: _controller),
       ),
     ],
   );
-
-  Future<void> _exportTreePosition();
 
   Widget _buildCollectionNavigation() => GameNavBar(
     games: GameNavItem.fromEntries(

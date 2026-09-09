@@ -508,9 +508,12 @@ They do not contribute to Learn/Review counts or either scheduling queue.
 **Actions ▾** groups **Edit PGN / Add to Study**, **Analysis Graph / Tree**,
 and **Export**. Actions and its Export submenu open on hover or click, with
 keyboard navigation and Escape dismissal. **Tree** opens one tab with a
-**Collection tree / Database explorer** selector. Collection tree explores the
-filtered games, offers detected-player White/Black shortcuts, and exports the
-complete games reaching its current position. Database explorer offers Lichess,
+**Collection / Database** selector. The collection toolbar puts **Filter** and
+the detected player’s **White / Black** toggles on the same row, with horizontal
+scrolling in narrow panes. Collection tree explores the filtered games with
+single-line move rows and result bars capped at 180 pixels. Complete games
+reaching its current position can be exported through **Actions → Export →
+Export games at tree position…**. Database explorer offers Lichess,
 Masters and local TWIC sources. Export offers PGN, SCID, Copy Game PGN
 and Copy Collection PGN. File exports and collection copy use the current filtered games, with the count shown in the
 submenu; pasted collections can also be exported. Repertoire creation belongs

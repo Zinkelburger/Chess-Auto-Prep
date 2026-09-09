@@ -78,6 +78,7 @@ import '../widgets/game_search_dialog.dart';
 import '../widgets/study/add_to_study_flow.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
+import '../widgets/pgn/pgn_tree_toolbar.dart';
 import '../widgets/pgn/solitaire_status_widgets.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn/pgn_game_filter_workspace.dart';

@@ -8,12 +8,10 @@
 library;
 
 import 'dart:math' as math;
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
-import '../../models/pgn_filter_models.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../game_nav_item.dart';
@@ -25,15 +23,7 @@ import 'pgn_tree_games_list.dart';
 class PgnOpeningTreePanel extends StatefulWidget {
   final PgnViewerController controller;
 
-  final VoidCallback? onFilter;
-  final Future<void> Function()? onExportPosition;
-
-  const PgnOpeningTreePanel({
-    super.key,
-    required this.controller,
-    this.onFilter,
-    this.onExportPosition,
-  });
+  const PgnOpeningTreePanel({super.key, required this.controller});
 
   static const minTreeHeight = 80.0;
   static const minGamesHeight = 180.0;
@@ -52,78 +42,6 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (widget.onFilter != null || widget.onExportPosition != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                if (controller.collectionPlayer case final player?)
-                  for (final side in ['White', 'Black'])
-                    FilterChip(
-                      label: Text('${player.split(',').first} as $side'),
-                      selected: controller.activeSliceConfig.headerFilters.any(
-                        (filter) =>
-                            filter.field == side &&
-                            filter.value == player &&
-                            filter.mode == MatchMode.exact,
-                      ),
-                      onSelected: controller.isLoading
-                          ? null
-                          : (selected) {
-                              if (!mounted) return;
-                              if (selected) {
-                                unawaited(
-                                  controller.applySlicePreset(
-                                    HeaderFilterConfig(
-                                      field: side,
-                                      mode: MatchMode.exact,
-                                      value: player,
-                                    ),
-                                  ),
-                                );
-                              } else {
-                                final config = controller.activeSliceConfig;
-                                unawaited(
-                                  controller.recomputeAndApplyConfig(
-                                    SliceConfig(
-                                      positionInput: config.positionInput,
-                                      headerFilters: config.headerFilters
-                                          .where(
-                                            (filter) =>
-                                                !(filter.field == side &&
-                                                    filter.value == player),
-                                          )
-                                          .toList(),
-                                      sequencePattern: config.sequencePattern,
-                                      sequenceGap: config.sequenceGap,
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                    ),
-                if (widget.onFilter != null)
-                  TextButton.icon(
-                    onPressed: widget.onFilter,
-                    icon: const Icon(Icons.filter_list, size: 16),
-                    label: const Text('Filter'),
-                  ),
-                if (widget.onExportPosition != null)
-                  TextButton.icon(
-                    onPressed:
-                        controller.buildingTree ||
-                            controller.gamesAtTreePosition().isEmpty
-                        ? null
-                        : () => unawaited(widget.onExportPosition!()),
-                    icon: const Icon(Icons.file_download_outlined, size: 16),
-                    label: const Text('Export games here…'),
-                  ),
-              ],
-            ),
-          ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: const BoxDecoration(
