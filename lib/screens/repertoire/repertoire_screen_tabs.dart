@@ -146,7 +146,11 @@ mixin _RepertoireTabContent
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InlineEngineBar(fen: _controller.fen, isActive: true),
+          InlineEngineBar(
+            fen: _controller.fen,
+            isActive: true,
+            previewFlipped: _boardFlipped,
+          ),
           const Divider(height: 1),
           InlineExpectimaxBar(
             controller: _controller,
@@ -182,7 +186,11 @@ mixin _RepertoireTabContent
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: InlineEngineBar(fen: _controller.fen, isActive: true),
+                child: InlineEngineBar(
+                  fen: _controller.fen,
+                  isActive: true,
+                  previewFlipped: _boardFlipped,
+                ),
               ),
               VerticalDivider(
                 width: 1,
