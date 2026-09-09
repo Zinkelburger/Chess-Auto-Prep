@@ -133,6 +133,33 @@ void main() {
       await tester.pump();
     }
 
+    testWidgets('F flips after leaving text input but never while typing', (
+      tester,
+    ) async {
+      var flipped = false;
+      await pumpScreen(tester, [
+        ...KeyBinding.forShortcut(
+          AppShortcut.flipBoard,
+          'Flip board',
+          () => flipped = !flipped,
+        ),
+      ]);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.pump();
+      expect(flipped, isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.pump();
+      expect(flipped, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.pump();
+      expect(flipped, isFalse);
+    });
+
     testWidgets('Escape blurs the field instead of firing bindings', (
       tester,
     ) async {

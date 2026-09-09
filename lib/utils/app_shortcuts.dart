@@ -138,7 +138,7 @@ class AppShortcut {
 
   // ── Board and panels ───────────────────────────────────────────────────
 
-  static const flipBoard = AppShortcut.unassigned();
+  static const flipBoard = AppShortcut([KeyChord(LogicalKeyboardKey.keyF)]);
   static const toggleEngine = AppShortcut.unassigned();
   static const toggleExpectimax = AppShortcut.unassigned();
   static const toggleLinesPanel = AppShortcut.unassigned();
@@ -212,6 +212,7 @@ class AppShortcut {
     startSolitaire,
     pasteFen,
     returnToParentLine,
+    flipBoard,
     fullScreen,
     leave,
     autoPlay,
@@ -255,6 +256,7 @@ const shortcutReference = [
   ShortcutReference('Boards', 'Next move', AppShortcut.forwardOneMove),
   ShortcutReference('Boards', 'Start of line', AppShortcut.goToStart),
   ShortcutReference('Boards', 'End of line', AppShortcut.goToEnd),
+  ShortcutReference('Boards', 'Flip board', AppShortcut.flipBoard),
   ShortcutReference(
     'App',
     'Close dialog, leave panel or exit mode',
