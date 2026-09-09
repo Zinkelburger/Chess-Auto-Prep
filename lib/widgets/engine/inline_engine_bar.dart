@@ -395,10 +395,20 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         _buildToggleBar(context),
         if (_engineEnabled) ...[
           const Divider(height: 1),
-          if (EngineGate.isLocked)
-            const EngineBusyNotice(dense: true)
-          else
-            _buildLines(context),
+          // Reserve every configured PV slot even while a new position has
+          // no results (or fewer legal moves). Navigation must not move the
+          // PGN below us as streamed lines disappear and arrive.
+          SizedBox(
+            height: (_lineHeight(context) * _settings.multiPv).clamp(
+              40.0,
+              double.infinity,
+            ),
+            child: SingleChildScrollView(
+              child: EngineGate.isLocked
+                  ? const EngineBusyNotice(dense: true)
+                  : _buildLines(context),
+            ),
+          ),
         ],
         // Renders nothing inline; drives the hover mini-board via Overlay.
         FloatingBoardPreview(
@@ -527,6 +537,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     );
   }
 
+  double _lineHeight(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(14) * 1.5 + 8;
+
   Widget _buildLineRow(BuildContext context, DiscoveryLine line) {
     final sanMoves = _pvToSanList(_searchFen, line.pv);
     final san = sanMoves.isNotEmpty ? sanMoves.first : '?';
@@ -536,7 +549,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       scoreMate: line.scoreMate,
     );
 
-    return Padding(
+    return Container(
+      height: _lineHeight(context),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Row(
         children: [
@@ -572,6 +586,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                         fontFamily: AppTextStyles.monoFamily,
                         fontSize: 14,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -588,6 +604,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                 fontFamily: AppTextStyles.monoFamily,
               ),
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 6),

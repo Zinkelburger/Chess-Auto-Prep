@@ -1210,7 +1210,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `engine/unified_engine_pane.dart` | MultiPV table, hoverable PV via `ClickableMoveLineWidget`; FEN changes schedule analysis post-frame (avoids setState-during-build); DB column hidden; best eval persisted to `EvalCache` via `_persistBestEvalToCache()` |
 | `engine/expectimax_lines_pane.dart` | Position table from the built tree: every move with practical (expectimax) value beside engine eval, ★ on the chosen move, continuation; honest empty states (no tree / not in tree / leaf). Never runs the engine |
 | `engine/expectimax_panel_host.dart` | Thin wrapper binding [ExpectimaxLinesPane] to a [RepertoireController] cursor (or `fenOverride`); used by [EditContextZone], [InlineExpectimaxBar] and [RepertoireAnalysisDock] |
-| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
+| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; reserves a fixed height for the configured MultiPV count while enabled, including loading and positions with fewer legal moves; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
 | `engine/inline_expectimax_bar.dart` | Compact toggleable expectimax bar for right pane; wraps `ExpectimaxPanelHost(compact: true)` with toggle switch and settings gear |
 | `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |
 | `engine/engine_pane_footer.dart` | Engine pane footer controls |
