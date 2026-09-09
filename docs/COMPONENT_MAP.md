@@ -512,8 +512,9 @@ They do not contribute to Learn/Review counts or either scheduling queue.
 ### PGN viewer (Open PGN)
 
 **Actions ▾** offers icon-labelled **Edit PGN**, **Show Engine / Hide Engine**,
-**Evaluation graph / Tree**, and **Copy Game PGN** (the overlapping-squares
-copy icon). **Export** contains **Export as PGN…**, **Export as SCID…**, and
+**Evaluation graph / Tree**, **Copy Game PGN**, and **Copy FEN** (the overlapping-squares
+copy icon). Copy FEN copies the currently displayed board position, including
+when viewing a variation or reference game. **Export** contains **Export as PGN…**, **Export as SCID…**, and
 **Add to Study** (or **Edit study** for an open study). File exports use the
 current filtered collection, whose count appears in the submenu; pasted
 collections can also be exported. There is no collection clipboard action.

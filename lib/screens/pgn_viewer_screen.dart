@@ -1149,6 +1149,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   @override
+  Future<void> _copyCurrentFen() async {
+    if (_controller.filteredGames.isEmpty) return;
+    await Clipboard.setData(
+      ClipboardData(text: _controller.currentPosition.fen),
+    );
+    if (!mounted) return;
+    showAppSnackBar(context, AppMessages.fenCopied);
+    _reclaimFocus();
+  }
+
+  @override
   Future<void> _addCurrentGameToStudy() async {
     await addGamesToStudy(
       context,
