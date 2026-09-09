@@ -15,8 +15,7 @@ import 'models/engine_settings.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
-import 'theme/app_motion.dart';
-import 'theme/app_text_styles.dart';
+import 'theme/app_theme.dart';
 
 import 'services/default_pgn_service.dart';
 import 'services/engine/engine_lifecycle.dart';
@@ -114,16 +113,7 @@ class StartupErrorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      theme: ThemeData(
-        colorScheme: const ColorScheme.dark(
-          surface: AppColors.surface,
-          onSurface: AppColors.ink,
-          error: AppColors.danger,
-        ),
-        scaffoldBackgroundColor: AppColors.surface,
-        fontFamily: AppTextStyles.uiFamily,
-        useMaterial3: true,
-      ),
+      theme: AppTheme.dark(),
       home: Scaffold(
         body: SafeArea(
           child: Padding(
@@ -212,62 +202,7 @@ class ChessAutoPrepApp extends StatelessWidget {
         settings: BoardDisplaySettings.instance,
         child: MaterialApp(
           title: 'Chess Auto Prep',
-          theme: ThemeData(
-            colorScheme: const ColorScheme.dark(
-              surface: AppColors.surface,
-              onSurface: AppColors.ink,
-              primary: AppColors.ink,
-              onPrimary: AppColors.surface,
-              primaryContainer: AppColors.surfaceContainer,
-              onPrimaryContainer: AppColors.ink,
-              secondary: AppColors.surfaceHighlight,
-              onSecondary: AppColors.ink,
-              tertiary: AppColors.expectimax,
-              onTertiary: AppColors.surface,
-              error: AppColors.danger,
-              onError: AppColors.ink,
-            ),
-            scaffoldBackgroundColor: AppColors.surface,
-            fontFamily: AppTextStyles.uiFamily,
-            dividerColor: AppColors.divider,
-            // The figurine face only has the chess glyphs, so it is a fallback:
-            // ♘ comes from it, every other character from Inter or the mono face.
-            textTheme: AppTextStyles.materialTextTheme().apply(
-              fontFamilyFallback: const [AppTextStyles.figurineFamily],
-            ),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: AppColors.surfaceElevated,
-              foregroundColor: AppColors.ink,
-            ),
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ElevatedButton.styleFrom(
-                foregroundColor: AppColors.ink,
-                backgroundColor: AppColors.buttonSurface,
-              ),
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(foregroundColor: AppColors.ink),
-            ),
-            outlinedButtonTheme: OutlinedButtonThemeData(
-              style: OutlinedButton.styleFrom(foregroundColor: AppColors.ink),
-            ),
-            filledButtonTheme: FilledButtonThemeData(
-              style: FilledButton.styleFrom(
-                foregroundColor: AppColors.ink,
-                backgroundColor: AppColors.buttonSurface,
-              ),
-            ),
-            snackBarTheme: SnackBarThemeData(
-              backgroundColor: AppColors.surfaceInset,
-              contentTextStyle: AppTextStyles.body.copyWith(fontSize: 15),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            pageTransitionsTheme: AppMotion.pageTransitions,
-            useMaterial3: true,
-          ),
+          theme: AppTheme.dark(),
           // Keep the semantics tree empty unless explicitly enabled —
           // GNOME's accessibility bus can enable Flutter's semantics tree
           // and then assert every frame on our recognizer-per-span movetext

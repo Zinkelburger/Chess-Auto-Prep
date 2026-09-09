@@ -1309,8 +1309,9 @@ release smoke testing. No release or update is triggered by these tests.
 
 | File | Purpose |
 |------|---------|
+| `app_theme.dart` | Production dark theme, including Material 3 surface tiers. Menus, engine popovers and tooltips use raised charcoal surfaces with outlines; light text/icons remain readable through hover and focus. Shared by the app and contrast regression tests. |
 | `app_colors.dart` | Dark theme palette, semantic colors; canonical `success`/`danger`/`warning` with eval/analysis aliases (`evalPositive`, `evalNegative`, `difficulty`). PGN movetext tokens (`pgnMove`, `pgnMoveNumber`, `pgnComment`, `pgnVariation`) are a near-white hierarchy — sidelines are distinguished by structure, not mint/teal hue. |
-| `app_text_styles.dart` | Shared text roles (`body`, `muted`, `caption`, `mono`, `title`, …) built from `AppColors` / near-white ink. `forTheme(context, style)` adapts these roles to dark ink on light feature surfaces while retaining the dark palette. Wired into `ThemeData.textTheme` in `main.dart`. Prefer these over ad-hoc `Colors.grey` / hard-coded sizes. |
+| `app_text_styles.dart` | Shared text roles (`body`, `muted`, `caption`, `mono`, `title`, …) built from `AppColors` / near-white ink. `forTheme(context, style)` adapts these roles to dark ink on light feature surfaces while retaining the dark palette. Wired into `ThemeData.textTheme` in `app_theme.dart`. Prefer these over ad-hoc `Colors.grey` / hard-coded sizes. |
 | `pgn_text_styles.dart` | Movetext domain styles (`move`, `moveNumber`, `comment` upright, `variation`, `branchChip`, …) on top of `AppColors` + `AppTextStyles`. Single knobs file for PGN viewer/editor look. Ephemeral (scratch/solitaire) moves stay italic. |
 
 **Style convention:** new and touched UI should use `AppColors` / `AppTextStyles` / `theme.textTheme` (and domain packs like `PgnTextStyles`) instead of inline `Colors.grey[n]` or one-off `TextStyle(fontSize: …)`. Gradual migration of legacy call sites is tracked in FUTURE_FEATURES.
