@@ -468,6 +468,10 @@ CoherenceService.compute(lines)
 
 ### Engine analysis
 
+Engine rows in `UnifiedEnginePane` and `InlineEngineBar` show the evaluation
+first, followed by the first move and PV continuation. Evaluations stay aligned
+in a left column; move taps and hover previews work throughout the line.
+
 ```
 Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off
 UnifiedEnginePane (when lifecycle ≠ off)

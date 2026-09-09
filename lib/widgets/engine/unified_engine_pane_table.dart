@@ -148,6 +148,14 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
           padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 6),
           child: Row(
             children: [
+              _buildColumnHeader(
+                columnId: EngineSettings.colEval,
+                label: 'EVAL',
+                textAlign: TextAlign.center,
+                width: evalWidth,
+                tooltipExtra: 'Stockfish evaluation',
+              ),
+              if (!narrow) const SizedBox(width: 8),
               SizedBox(
                 width: moveWidth,
                 child: const Text(
@@ -161,14 +169,6 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              _buildColumnHeader(
-                columnId: EngineSettings.colEval,
-                label: 'EVAL',
-                textAlign: TextAlign.center,
-                width: evalWidth,
-                tooltipExtra: 'Stockfish evaluation',
-              ),
-              if (!narrow) const SizedBox(width: 8),
               _buildColumnHeader(
                 columnId: EngineSettings.colLine,
                 label: 'LINE',
