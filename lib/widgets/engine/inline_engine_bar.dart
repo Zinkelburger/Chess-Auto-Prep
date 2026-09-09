@@ -27,7 +27,10 @@ import '../../utils/chess_utils.dart'
     show fenAfterMoves, formatEvalDisplay, formatNodes, uciPvToSanCached;
 import '../../utils/fen_utils.dart';
 import '../clickable_move_line.dart';
-import '../analysis/stockfish_settings_dialog.dart';
+import 'inline_engine_settings.dart';
+import '../../services/engine/threat_position.dart';
+import '../../utils/app_shortcuts.dart';
+import '../shortcut_tooltip.dart';
 import 'engine_gate.dart';
 import 'floating_board_preview.dart';
 
@@ -42,6 +45,7 @@ class InlineEngineBar extends StatefulWidget {
 
   /// Orientation of the floating hover-preview board.
   final bool previewFlipped;
+  final void Function(String fen, String? uci)? onThreatChanged;
 
   const InlineEngineBar({
     super.key,
@@ -49,6 +53,7 @@ class InlineEngineBar extends StatefulWidget {
     this.isActive = true,
     this.onLineMoveTapped,
     this.previewFlipped = false,
+    this.onThreatChanged,
   });
 
   /// Whether the engine is currently enabled (static, shared across instances).
@@ -79,6 +84,41 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     for (final cb in List<VoidCallback>.of(_externalToggleNotifier)) {
       cb();
     }
+  }
+
+  bool _threatMode = false;
+  String? _error;
+  String get _searchFen =>
+      _threatMode ? threatPositionFen(widget.fen) ?? widget.fen : widget.fen;
+
+  void _publishThreat() {
+    final generation = _generation;
+    final fen = widget.fen;
+    final uci =
+        !EngineGate.isLocked &&
+            _threatMode &&
+            _engineEnabled &&
+            _isActive &&
+            _discovery.lines.isNotEmpty &&
+            _discovery.lines.first.pv.isNotEmpty
+        ? _discovery.lines.first.pv.first
+        : null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.fen != fen || _generation != generation) return;
+      widget.onThreatChanged?.call(fen, uci);
+    });
+  }
+
+  void _toggleThreat() {
+    if (!mounted) return;
+    setState(() {
+      _threatMode = !_threatMode;
+      _discovery = const DiscoveryResult();
+      _lastAnalyzedFen = null;
+    });
+    _boardPreview.clearPreview();
+    _publishThreat();
+    unawaited(_runDiscovery());
   }
 
   int _generation = 0;
@@ -138,6 +178,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       _disposeWorker();
       _lastAnalyzedFen = null;
       setState(() => _isSearching = false);
+      _publishThreat();
     } else {
       setState(() {});
       if (_engineEnabled && _isActive) unawaited(_runDiscovery());
@@ -165,6 +206,12 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   @override
   void didUpdateWidget(InlineEngineBar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.fen != oldWidget.fen) {
+      _threatMode = false;
+      _discovery = const DiscoveryResult();
+      _boardPreview.clearPreview();
+      _publishThreat();
+    }
     if (!_isActive) {
       _stopDiscovery();
       return;
@@ -182,7 +229,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _pendingProgress = null;
     _disposeWorker();
     _lastAnalyzedFen = null;
+    _discovery = const DiscoveryResult();
     _isSearching = false;
+    _publishThreat();
   }
 
   @override
@@ -227,20 +276,26 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _pendingProgress = intermediate;
     if (_progressThrottle != null) return; // trailing edge will flush it
     setState(() => _discovery = _pendingProgress!);
+    _publishThreat();
     _pendingProgress = null;
     _progressThrottle = Timer(const Duration(milliseconds: 80), () {
       _progressThrottle = null;
       if (!mounted || _generation != myGen) return;
       final pending = _pendingProgress;
       _pendingProgress = null;
-      if (pending != null) setState(() => _discovery = pending);
+      if (pending != null) {
+        setState(() => _discovery = pending);
+        _publishThreat();
+      }
     });
   }
 
   void _toggleEngine(bool value) {
+    if (!mounted) return;
     setState(() {
       _engineEnabled = value;
       if (!value) {
+        _threatMode = false;
         _generation++;
         _discovery = const DiscoveryResult();
         _isSearching = false;
@@ -248,6 +303,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         _disposeWorker();
       }
     });
+    _publishThreat();
     if (_engineEnabled && _isActive) {
       unawaited(_runDiscovery());
     }
@@ -262,7 +318,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     if (!mounted || !_isActive || !_engineEnabled || EngineGate.isLocked) {
       return;
     }
-    if (widget.fen == _lastAnalyzedFen && _discovery.lines.isNotEmpty) return;
+    if (_searchFen == _lastAnalyzedFen && _discovery.lines.isNotEmpty) return;
 
     final myGen = ++_generation;
     // Drop any pending throttled progress from the previous search so a stale
@@ -270,10 +326,15 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _progressThrottle?.cancel();
     _progressThrottle = null;
     _pendingProgress = null;
-    final fen = widget.fen;
+    final fen = _searchFen;
     _lastAnalyzedFen = fen;
 
-    setState(() => _isSearching = true);
+    setState(() {
+      _isSearching = true;
+      _error = null;
+      _discovery = const DiscoveryResult();
+    });
+    _publishThreat();
 
     final whiteToMove = isWhiteToMove(fen);
 
@@ -283,7 +344,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         return;
       }
       if (worker == null) {
-        setState(() => _isSearching = false);
+        setState(() {
+          _isSearching = false;
+          _error = 'Engine unavailable. Toggle it to retry.';
+        });
         return;
       }
 
@@ -302,11 +366,16 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         _discovery = result;
         _isSearching = false;
       });
-      _persistBestEvalToCache(fen, result);
+      _publishThreat();
+      if (!_threatMode) _persistBestEvalToCache(fen, result);
     } catch (e) {
       if (!mounted || _generation != myGen) return;
       if (kDebugMode) debugPrint('[InlineEngine] Discovery failed: $e');
-      setState(() => _isSearching = false);
+      setState(() {
+        _isSearching = false;
+        _lastAnalyzedFen = null;
+        _error = 'Engine failed. Toggle it to retry.';
+      });
     }
   }
 
@@ -351,12 +420,16 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
           SizedBox(
             height: 24,
             child: FittedBox(
-              child: Switch(
-                value: _engineEnabled,
-                onChanged: (value) {
-                  if (value && !EngineGate.ensureAvailable(context)) return;
-                  _setEngineEnabled(value);
-                },
+              child: ShortcutTooltip(
+                description: 'Toggle engine',
+                shortcut: AppShortcut.toggleEngine,
+                child: Switch(
+                  value: _engineEnabled,
+                  onChanged: (value) {
+                    if (value && !EngineGate.ensureAvailable(context)) return;
+                    _setEngineEnabled(value);
+                  },
+                ),
               ),
             ),
           ),
@@ -367,9 +440,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                     EngineGate.isLocked
                         ? 'Engine busy'
                         : _isSearching
-                        ? 'Depth ${_discovery.depth} • '
+                        ? '${_threatMode ? 'Threat · ' : ''}Depth ${_discovery.depth} • '
                               '${formatNodes(_discovery.nodes)} nodes'
-                        : '${_discovery.lines.length} lines • '
+                        : '${_threatMode ? 'Threat · ' : ''}${_discovery.lines.length} lines • '
                               'depth ${_discovery.depth}',
                     style: AppTextStyles.caption,
                     overflow: TextOverflow.ellipsis,
@@ -379,14 +452,19 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                     child: Text('Engine', style: AppTextStyles.caption),
                   ),
           ),
-          if (_engineEnabled)
-            IconButton(
-              icon: const Icon(Icons.settings, size: 18),
-              tooltip: 'Stockfish settings',
-              onPressed: () => showStockfishSettingsDialog(context),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            ),
+          IconButton(
+            icon: const Icon(Icons.gps_fixed, size: 18),
+            tooltip: _threatMode ? 'Hide threat' : 'Show threat',
+            isSelected: _threatMode,
+            onPressed:
+                _engineEnabled &&
+                    !EngineGate.isLocked &&
+                    threatPositionFen(widget.fen) != null
+                ? _toggleThreat
+                : null,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          const InlineEngineSettings(),
         ],
       ),
     );
@@ -395,6 +473,12 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   Widget _buildLines(BuildContext context) {
     final lines = _discovery.lines;
 
+    if (lines.isEmpty && !_isSearching) {
+      return Padding(
+        padding: const EdgeInsets.all(8),
+        child: Text(_error ?? 'No legal moves.', style: AppTextStyles.caption),
+      );
+    }
     if (lines.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 8),
@@ -434,7 +518,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   ) {
     if (sanMoves.isEmpty) return;
     _boardPreview.setPreview(
-      fenAfterMoves(widget.fen, sanMoves, idx),
+      fenAfterMoves(_searchFen, sanMoves, idx),
       moves: sanMoves.sublist(0, idx + 1),
       target: BoardPreviewTarget.floating,
       lastMoveUci: idx < line.pv.length ? line.pv[idx] : null,
@@ -444,7 +528,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   Widget _buildLineRow(BuildContext context, DiscoveryLine line) {
-    final sanMoves = _pvToSanList(widget.fen, line.pv);
+    final sanMoves = _pvToSanList(_searchFen, line.pv);
     final san = sanMoves.isNotEmpty ? sanMoves.first : '?';
 
     final evalStr = formatEvalDisplay(
@@ -460,7 +544,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             width: 48,
             child: Builder(
               builder: (anchorContext) => MouseRegion(
-                cursor: widget.onLineMoveTapped != null
+                cursor: !_threatMode && widget.onLineMoveTapped != null
                     ? SystemMouseCursors.click
                     : MouseCursor.defer,
                 onEnter: (_) {
@@ -473,7 +557,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                 },
                 onExit: (_) => _boardPreview.clearPreview(),
                 child: GestureDetector(
-                  onTap: widget.onLineMoveTapped != null
+                  onTap: !_threatMode && widget.onLineMoveTapped != null
                       ? () {
                           widget.onLineMoveTapped!(sanMoves, 0);
                           _boardPreview.clearPreview();
@@ -520,7 +604,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     if (sanMoves.length <= 1) return const SizedBox.shrink();
 
     // Ply of the first move in the PV (index 0)
-    final firstMovePly = plyFromFen(widget.fen);
+    final firstMovePly = plyFromFen(_searchFen);
 
     return ClickableMoveLineWidget(
       sanMoves: sanMoves,
@@ -528,7 +612,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       startIndex: 1,
       maxMoves: 7,
       fontSize: 12,
-      onMoveTapped: widget.onLineMoveTapped != null
+      onMoveTapped: !_threatMode && widget.onLineMoveTapped != null
           ? (idx) {
               widget.onLineMoveTapped!(sanMoves, idx);
               _boardPreview.clearPreview();

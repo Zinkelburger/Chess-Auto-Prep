@@ -22,11 +22,9 @@ class GameViewSettingsDialog extends StatefulWidget {
     this.onReadingOptions,
     this.onFullscreen,
     this.embedded = false,
-    this.onAnalysis,
   });
 
   final bool embedded;
-  final VoidCallback? onAnalysis;
   final GameViewPreferences preferences;
   final Perspective perspective;
   final ValueChanged<GameViewPreferences> onChanged;
@@ -98,22 +96,6 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
         if (SettingsChapterScope.maybeOf(context) == null ||
             SettingsChapterScope.maybeOf(context) == 0)
           SettingsGroup(
-            title: 'Analysis',
-            icon: Icons.analytics_outlined,
-            children: [
-              _action('Open analysis tab', widget.onAnalysis),
-              SettingsSwitchTile(
-                label: 'Live engine controls',
-                description:
-                    'Show engine start, stop and evaluation controls alongside the game.',
-                value: _prefs.engine,
-                onChanged: (v) => _update(_prefs.copyWith(engine: v)),
-              ),
-            ],
-          ),
-        if (SettingsChapterScope.maybeOf(context) == null ||
-            SettingsChapterScope.maybeOf(context) == 1)
-          SettingsGroup(
             title: 'Playback',
             icon: Icons.play_arrow_outlined,
             children: [
@@ -146,7 +128,7 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
             ],
           ),
         if (SettingsChapterScope.maybeOf(context) == null ||
-            SettingsChapterScope.maybeOf(context) == 2)
+            SettingsChapterScope.maybeOf(context) == 1)
           SettingsGroup(
             title: 'Board and moves',
             icon: Icons.grid_on_outlined,

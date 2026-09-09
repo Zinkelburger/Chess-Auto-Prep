@@ -338,8 +338,8 @@ abstract final class AppColors {
   static const chartGridline = Color(0xFF757575);
 
   /// Area fills for the white/black advantage regions of the eval chart.
-  static const chartAreaWhite = Color(0xB3FFFFFF);
-  static const chartAreaBlack = Color(0xFF303030);
+  static const chartAreaWhite = ink;
+  static const chartAreaBlack = Color(0xFF080808);
 
   // ── Eval-tree node fills (Repertoire → Tree tab) ─────────────────────────
   // Muted, desaturated fills hand-tuned so white node labels stay legible;

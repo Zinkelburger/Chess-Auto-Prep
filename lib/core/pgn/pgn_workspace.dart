@@ -15,7 +15,7 @@ class PgnWorkspace extends ChangeNotifier {
     game: 'Game',
     books: 'My books',
     explorer: 'Database explorer',
-    analysis: 'Analysis Graph',
+    analysis: 'Evaluation graph',
     tree: 'Tree',
     collection: 'Collection',
     filters: 'Filter',
