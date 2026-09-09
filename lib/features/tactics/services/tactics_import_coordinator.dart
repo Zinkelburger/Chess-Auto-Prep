@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import '../../../constants/engine_defaults.dart';
 
 import '../../games/services/games_window.dart';
 import '../models/tactics_position.dart';
@@ -307,7 +308,7 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     }
 
     final importService = activeImport = importFactory(database);
-    final depth = params.depth.clamp(1, 25);
+    final depth = params.depth.clamp(kMinDepth, kMaxDepth);
     final cores = params.cores.clamp(1, TacticsImportService.availableCores);
 
     // Open the run before the first `await` — see [resumeAnalysis].

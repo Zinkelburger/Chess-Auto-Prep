@@ -78,12 +78,12 @@ void main() {
   testWidgets('an empty field is refused', (tester) async {
     await pumpForm(tester);
 
-    await tester.enterText(_field('Engine depth'), '');
+    await tester.enterText(_field('Max line length'), '');
     await tester.pump();
 
     expect(
       formKey.currentState!.validateBeforeStart(),
-      contains('Engine depth: enter a number'),
+      contains('Max line length: enter a number'),
     );
   });
 }

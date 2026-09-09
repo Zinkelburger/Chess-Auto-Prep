@@ -108,7 +108,7 @@ void main() {
 
     await selectGlobal(tester, find.byKey(const Key('settings-nav-3')));
     await tester.pumpAndSettle();
-    expect(find.text('CPU cores'), findsOneWidget);
+    expect(find.text('Cores'), findsOneWidget);
     expect(find.text('Your chess usernames'), findsNothing);
 
     await selectGlobal(tester, find.byKey(const Key('settings-nav-0')));
@@ -202,9 +202,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: section);
         if (section == 'Engine') {
-          expect(find.text('CPU cores'), findsOneWidget);
-          expect(find.text('Memory per engine'), findsOneWidget);
-          expect(find.byType(SettingsStepperTile), findsNWidgets(3));
+          expect(find.text('Cores'), findsOneWidget);
+          expect(find.text('Memory (MB)'), findsOneWidget);
+          expect(find.text('Board depth'), findsOneWidget);
+          expect(find.text('Bulk depth'), findsOneWidget);
+          expect(find.text('Search'), findsNothing);
+          expect(find.text('Review performance'), findsNothing);
+          expect(find.byKey(const Key('settings-nav-7')), findsNothing);
+          expect(find.byType(SettingsStepperTile), findsOneWidget);
         }
       }
     },

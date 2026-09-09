@@ -9,7 +9,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/solitaire_trophy.dart';
-import '../models/engine_settings.dart';
+import '../models/bulk_analysis_settings.dart';
 import '../services/game_analysis_controller.dart';
 import 'clickable_move_line.dart';
 import 'engine/engine_gate.dart';
@@ -222,7 +222,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
   /// there is no graph at all, which is to say: none.
   Widget _buildDeepenBar(List<MoveEval> evals) {
     final stored = _storedDepth(evals);
-    final target = EngineSettings.instance.depth;
+    final target = BulkAnalysisSettings.instance.depth;
     if (stored == null || stored >= target) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),

@@ -310,21 +310,21 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Analysis settings…'));
+    await tester.tap(find.byTooltip('Engine settings'));
     await tester.pumpAndSettle();
-    final cores = find.byKey(const Key('review-cores-field'));
+    final cores = find.byKey(const Key('engine-cores'));
     expect(cores, findsOneWidget);
-    expect(find.byKey(const Key('review-depth-field')), findsOneWidget);
+    expect(find.byKey(const Key('engine-bulk-depth')), findsOneWidget);
     expect(find.byKey(const Key('book-check-games-field')), findsNothing);
     await tester.enterText(
       find.descendant(of: cores, matching: find.byType(TextField)),
       '2',
     );
-    await tester.tap(find.text('Apply'));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     final expected = EngineSettings.systemCores > 1 ? 2 : 1;
     expect(runner.cores, expected);
-    await tester.tap(find.byTooltip('Close settings (Esc)'));
+    await tester.tap(find.byTooltip('Engine settings'));
     await tester.pumpAndSettle();
     expect(
       tester.widget<Text>(find.byKey(const Key('review-cores-readout'))).data,

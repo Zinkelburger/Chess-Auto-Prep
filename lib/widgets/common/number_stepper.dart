@@ -117,24 +117,27 @@ class _NumberStepperState extends State<NumberStepper> {
         ),
         SizedBox(
           width: widget.fieldWidth,
-          child: TextField(
-            controller: _ctrl,
-            focusNode: _focus,
-            enabled: enabled,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              fontFamily: AppTextStyles.monoFamily,
+          child: FormField<int>(
+            onSaved: (_) => _commit(),
+            builder: (_) => TextField(
+              controller: _ctrl,
+              focusNode: _focus,
+              enabled: enabled,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                fontFamily: AppTextStyles.monoFamily,
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 8),
+              ),
+              onSubmitted: (_) => _commit(),
             ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(
-              isDense: true,
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(vertical: 8),
-            ),
-            onSubmitted: (_) => _commit(),
           ),
         ),
         if (widget.suffix != null)

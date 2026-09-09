@@ -11,7 +11,7 @@ import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/game_review_store.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
-import 'package:chess_auto_prep/features/tactics/services/mining_settings.dart';
+import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -213,7 +213,7 @@ void main() {
         lichessUsername: () => lichess,
         chesscomUsername: () => chesscom,
         windowSettings: GamesWindowSettings.forTest(),
-        miningSettings: MiningSettings.forTest(),
+        bulkSettings: BulkAnalysisSettings.forTest(),
       ),
       games: games,
       coordinator: coordinator,
@@ -275,7 +275,7 @@ void main() {
       expect(params.mode, TacticsImportMode.recent);
       expect(params.maxGames, GamesWindow.defaultGames);
       expect(params.since, isNull);
-      expect(params.depth, MiningSettings.defaultDepth);
+      expect(params.depth, BulkAnalysisSettings.defaultDepth);
     },
   );
 
@@ -365,7 +365,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      miningSettings: MiningSettings.forTest(),
+      bulkSettings: BulkAnalysisSettings.forTest(),
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -390,7 +390,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      miningSettings: MiningSettings.forTest(),
+      bulkSettings: BulkAnalysisSettings.forTest(),
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -426,7 +426,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      miningSettings: MiningSettings.forTest(),
+      bulkSettings: BulkAnalysisSettings.forTest(),
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -459,7 +459,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      miningSettings: MiningSettings.forTest(),
+      bulkSettings: BulkAnalysisSettings.forTest(),
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -497,7 +497,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      miningSettings: MiningSettings.forTest(),
+      bulkSettings: BulkAnalysisSettings.forTest(),
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -542,7 +542,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      miningSettings: MiningSettings.forTest(),
+      bulkSettings: BulkAnalysisSettings.forTest(),
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -593,7 +593,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      miningSettings: MiningSettings.forTest(),
+      bulkSettings: BulkAnalysisSettings.forTest(),
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);
@@ -624,7 +624,7 @@ void main() {
         lichessUsername: () => 'me',
         chesscomUsername: () => null,
         windowSettings: GamesWindowSettings.forTest(),
-        miningSettings: MiningSettings.forTest(),
+        bulkSettings: BulkAnalysisSettings.forTest(),
       );
       addTearDown(games.dispose);
       addTearDown(runner.dispose);

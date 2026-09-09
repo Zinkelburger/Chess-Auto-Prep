@@ -13,16 +13,14 @@
 ///   a button is the attention signal; the button does not glow or pulse.
 /// * **Pause is the same button, and there is no cancel.** Nothing already
 ///   analysed is thrown away.
-/// * **Settings are not on the block.** Auto-start, cores, depth, window and
-///   time controls are one gear dialog. The block carries only what you can
-///   do next and what is happening — plus one read-out beside the gear, the
-///   core count, because how much of the laptop the run takes is something
-///   to see without opening anything.
+/// * **Engine settings** use the same compact popup as the PGN viewer. The
+///   core read-out stays visible beside it; game downloads live in app settings.
 /// * **Static.** Every control is always present; labels, enabled states and
 ///   the progress bar change.
 library;
 
 import 'package:flutter/material.dart';
+import '../../../widgets/engine/inline_engine_settings.dart';
 
 import '../../tactics/services/tactics_import_coordinator.dart';
 import '../../../theme/app_colors.dart';
@@ -43,7 +41,6 @@ class AnalysisBlock extends StatelessWidget {
     required this.windowLabel,
     required this.onStart,
     required this.onPause,
-    required this.onSettings,
   });
 
   final HomeReviewRunner runner;
@@ -62,7 +59,6 @@ class AnalysisBlock extends StatelessWidget {
 
   final VoidCallback onStart;
   final VoidCallback onPause;
-  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -81,8 +77,7 @@ class AnalysisBlock extends StatelessWidget {
             builder: (context, _) => Tooltip(
               message:
                   'Stockfish runs on ${runner.cores} of ${getLogicalCores()} '
-                  'cores at depth ${runner.depth}. Change it in Analysis '
-                  'settings.',
+                  'cores at depth ${runner.depth}.',
               child: Text(
                 '${runner.cores} ${runner.cores == 1 ? 'core' : 'cores'}',
                 key: const Key('review-cores-readout'),
@@ -90,12 +85,7 @@ class AnalysisBlock extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings, size: 18),
-            tooltip: 'Analysis settings…',
-            visualDensity: VisualDensity.compact,
-            onPressed: onSettings,
-          ),
+          const InlineEngineSettings(),
         ],
       ),
       children: [

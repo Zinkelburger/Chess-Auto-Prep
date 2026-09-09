@@ -12,6 +12,7 @@ import 'features/bughouse/services/bughouse_bundle.dart';
 import 'debug/agent_driver.dart';
 import 'models/board_display_settings.dart';
 import 'models/engine_settings.dart';
+import 'models/bulk_analysis_settings.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
@@ -68,6 +69,7 @@ Future<void> _initializeApp() async {
   // a manifest parse rather than a disk round-trip.
   await Future.wait([
     EngineSettings.instance.loadFromPrefs(),
+    BulkAnalysisSettings.instance.ensureLoaded(),
     EvalDatabaseSettings.instance.load(),
     BoardDisplaySettings.instance.load(),
     EngineLifecycle.instance.loadPersistedState(),
