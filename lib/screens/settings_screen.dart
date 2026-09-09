@@ -424,6 +424,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         if (mode == AppMode.databases)
           _buildDatabasesSection()
+        else if (mode == AppMode.study && _chapter == 0)
+          const SettingsGroup(
+            title: 'Board analysis',
+            icon: Icons.tune,
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: StockfishSettingsBody(showBulkDepth: false),
+              ),
+            ],
+          )
         else if (_chapter == 0)
           const SettingsGroup(
             title: 'Analysis panels',

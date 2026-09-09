@@ -60,6 +60,10 @@ List<SettingsChapter> settingsChapters(AppMode mode) => switch (mode) {
     SettingsChapter('Repertoire'),
     SettingsChapter('Analysis panels'),
   ],
+  AppMode.study => const [
+    SettingsChapter('Engine'),
+    SettingsChapter('Display'),
+  ],
   AppMode.databases => const [SettingsChapter('Data')],
   AppMode.bughouse => const [SettingsChapter('Engine')],
   AppMode.engineTournament => const [SettingsChapter('Engines')],

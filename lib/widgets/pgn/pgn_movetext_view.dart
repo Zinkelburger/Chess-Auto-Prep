@@ -23,7 +23,7 @@ import '../../utils/course_comment_spacing.dart';
 import '../../utils/prose_comment_parser.dart';
 import 'pgn_reading_pane.dart';
 import 'pgn_reading_passage.dart';
-import 'movetext_primitives.dart' show MoveChip;
+import 'movetext_primitives.dart' show MoveChip, PgnMoveDecorations;
 import '../../utils/chess_utils.dart'
     show coordsAtPly, formatEvalDisplay, isNullMoveSan;
 import '../../utils/pgn_comment_utils.dart'
@@ -54,21 +54,9 @@ part 'pgn_movetext_comments.dart';
 part 'pgn_movetext_eval_notes.dart';
 part 'pgn_movetext_variations.dart';
 
-/// Border reserved on every non-highlighted move chip so that highlighting or
-/// hovering one never changes its size — which would reflow the whole wrap.
-final _kReservedBorder = BoxDecoration(
-  borderRadius: BorderRadius.circular(3),
-  border: Border.all(color: Colors.transparent, width: 1),
-);
-
-/// Hover affordance for a move chip. This replaces the former always-on dotted
-/// underline: in movetext *every* token is a move, so a permanent per-move
-/// decoration is hundreds of marks carrying zero information.
-final _kHoverDecoration = BoxDecoration(
-  color: AppColors.pgnMoveHoverBg,
-  borderRadius: BorderRadius.circular(3),
-  border: Border.all(color: Colors.transparent, width: 1),
-);
+// Also used by the prose-preview chips in the comment renderer.
+const _kReservedBorder = PgnMoveDecorations.idle;
+final _kHoverDecoration = PgnMoveDecorations.hover;
 
 class PgnMovetextView extends StatefulWidget {
   /// The parsed game (for game-level comments before any move).
@@ -463,12 +451,6 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
           moveData.nags;
       final nagSuffix = allNagSuffix(nags);
 
-      final currentDecoration = BoxDecoration(
-        color: AppColors.pgnMoveCurrentBg,
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: Colors.transparent, width: 1),
-      );
-
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
@@ -477,15 +459,12 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
             san: san,
             nagSuffix: nagSuffix,
             sanStyle: moveStyle,
-            nagStyle: moveStyle.copyWith(
-              color: nagColor(primaryQualityNag(nags) ?? 0),
-              fontSize: PgnTextStyles.sizeAt(0) - 1,
-              fontWeight: FontWeight.bold,
+            nagStyle: PgnTextStyles.nagAt(0, moveStyle: moveStyle, nags: nags),
+            decoration: PgnMoveDecorations.resolve(selected: isCurrentMove),
+            hoverDecoration: PgnMoveDecorations.resolve(
+              selected: isCurrentMove,
+              hovered: true,
             ),
-            decoration: isCurrentMove ? currentDecoration : _kReservedBorder,
-            hoverDecoration: isCurrentMove
-                ? currentDecoration
-                : _kHoverDecoration,
             containerKey: isCurrentMove && !annotated
                 ? view.currentMoveKey
                 : null,

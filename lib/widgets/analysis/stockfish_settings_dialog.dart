@@ -12,7 +12,9 @@ Future<void> showStockfishSettingsDialog(BuildContext context) =>
 
 /// The same controls in global settings and the compact engine popup.
 class StockfishSettingsBody extends StatelessWidget {
-  const StockfishSettingsBody({super.key});
+  const StockfishSettingsBody({super.key, this.showBulkDepth = true});
+
+  final bool showBulkDepth;
 
   @override
   Widget build(BuildContext context) {
@@ -49,14 +51,15 @@ class StockfishSettingsBody extends StatelessWidget {
             kMaxDepth,
             (v) => settings.depth = v,
           ),
-          _row(
-            'Bulk depth',
-            'engine-bulk-depth',
-            bulk.depth,
-            BulkAnalysisSettings.minDepth,
-            BulkAnalysisSettings.maxDepth,
-            bulk.setDepth,
-          ),
+          if (showBulkDepth)
+            _row(
+              'Bulk depth',
+              'engine-bulk-depth',
+              bulk.depth,
+              BulkAnalysisSettings.minDepth,
+              BulkAnalysisSettings.maxDepth,
+              bulk.setDepth,
+            ),
           _row(
             'Lines',
             'engine-lines',

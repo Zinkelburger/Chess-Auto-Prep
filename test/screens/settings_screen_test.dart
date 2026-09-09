@@ -96,6 +96,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Study settings control its board engine without table options', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final settings = EngineSettings.instance;
+    final depth = settings.depth;
+    addTearDown(() => settings.depth = depth);
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppState(),
+        child: const MaterialApp(
+          home: SettingsScreen(initialMode: AppMode.study),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Study › Engine'), findsOneWidget);
+    expect(find.text('Board depth'), findsOneWidget);
+    expect(find.text('Lines'), findsOneWidget);
+    expect(find.text('Show Maia % column'), findsNothing);
+    expect(find.text('Expectimax'), findsNothing);
+    expect(find.text('Bulk depth'), findsNothing);
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('engine-board-depth')),
+        matching: find.byType(TextField),
+      ),
+      '18',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(settings.depth, 18);
+    await tester.tap(find.byKey(const Key('settings-chapter-study-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Board coordinates'), findsOneWidget);
+    expect(find.byKey(const Key('display-preview-board')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('navigation shows one section and preserves account edits', (
     tester,
   ) async {

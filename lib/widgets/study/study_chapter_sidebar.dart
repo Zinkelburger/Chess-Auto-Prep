@@ -1,7 +1,7 @@
 /// Persistent chapter sidebar for Study mode, modeled on Lichess studies:
 /// every chapter is always visible in a left-hand column — click a row to
-/// switch, drag the ordinal to reorder, gear for chapter actions, and a
-/// pinned "New chapter" footer. The filter box narrows big course imports
+/// switch, drag the ordinal to reorder, and open the row menu for chapter actions.
+/// "New chapter" sits above the list. The filter box narrows big course imports
 /// (reordering is disabled while filtering, since row indices no longer
 /// match chapter indices).
 library;
@@ -116,11 +116,23 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
             style: theme.textTheme.titleSmall,
           ),
         ),
+        TextButton.icon(
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('New chapter', style: AppTextStyles.body),
+          style: TextButton.styleFrom(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          onPressed: widget.onAddChapter,
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
           child: TextField(
             controller: _filter,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) {
+              if (!mounted) return;
+              setState(() => _revealedIndex = -1);
+            },
             style: const TextStyle(fontSize: 12),
             decoration: InputDecoration(
               isDense: true,
@@ -137,8 +149,9 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                       tooltip: 'Clear filter',
                       visualDensity: VisualDensity.compact,
                       onPressed: () {
+                        if (!mounted) return;
                         _filter.clear();
-                        setState(() {});
+                        setState(() => _revealedIndex = -1);
                       },
                     )
                   : null,
@@ -184,16 +197,6 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                     canReorder: chapters.length > 1,
                   ),
                 ),
-        ),
-        const Divider(height: 1),
-        TextButton.icon(
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('New chapter', style: TextStyle(fontSize: 12)),
-          style: TextButton.styleFrom(
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-          onPressed: widget.onAddChapter,
         ),
       ],
     );
@@ -252,11 +255,9 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
               ),
             PopupMenuButton<ChapterAction>(
               icon: Icon(
-                Icons.settings,
+                Icons.more_horiz,
                 size: 14,
-                color: theme.colorScheme.onSurfaceVariant.withValues(
-                  alpha: 0.55,
-                ),
+                color: theme.colorScheme.onSurfaceVariant,
               ),
               tooltip: 'Chapter actions',
               padding: EdgeInsets.zero,

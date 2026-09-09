@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   testWidgets(
-    'popup saves independent depths and shares controls with global settings',
+    'popup saves board depth without exposing bulk analysis settings',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final engine = EngineSettings.instance;
@@ -30,20 +30,15 @@ void main() {
       expect(find.text('Search'), findsNothing);
       expect(find.text('8–25'), findsNothing);
       final field = find.descendant(
-        of: find.byKey(const Key('engine-bulk-depth')),
+        of: find.byKey(const Key('engine-board-depth')),
         matching: find.byType(TextField),
       );
       await tester.enterText(field, '22');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
-      expect(engine.depth, 12);
-      expect(bulk.depth, 22);
-      expect(
-        (await SharedPreferences.getInstance()).getInt(
-          BulkAnalysisSettings.prefKey,
-        ),
-        22,
-      );
+      expect(engine.depth, 22);
+      expect(bulk.depth, 18);
+      expect(find.byKey(const Key('engine-bulk-depth')), findsNothing);
       await tester.tap(find.byTooltip('Engine settings'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Engine settings'));

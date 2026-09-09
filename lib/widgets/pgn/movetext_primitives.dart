@@ -1,17 +1,8 @@
 /// Shared movetext render primitives.
 ///
-/// Both movetext surfaces — the editable [InteractivePgnEditor] (over a
-/// [MoveTree]) and the read/analysis [PgnMovetextView] (over a dartchess
-/// [PgnGame]) — draw the same two pixels: a tappable SAN chip with an optional
-/// bold move-quality-glyph suffix, and the glyph toggle buttons of the
-/// annotation bar. They historically reimplemented both, which is exactly where
-/// the NAG-rendering contract drifted (and a serialization bug hid). These
-/// widgets are the single implementation; each surface supplies its own fully
-/// resolved styles/decoration so their distinct looks (font size, selection
-/// highlight, ephemeral colours) are preserved.
-///
-/// Pure NAG helpers ([primaryQualityNag], [qualityNagSuffix], [toggleQualityNag])
-/// live in `pgn_comment_utils.dart` so the model layer can share them too.
+/// The tree editor and PGN viewer share move-chip assembly, borderless
+/// selection/hover decoration, and annotation glyph controls. Hosts supply
+/// depth-aware text styles and callbacks without duplicating the visuals.
 library;
 
 import '../../utils/pgn_nags.dart';
@@ -20,22 +11,41 @@ import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/san_display.dart';
 
-/// A single move in the movetext: the SAN, an optional bold NAG-quality glyph
-/// suffix (`Nf3` → `Nf3!?`), wrapped in a tappable rounded container.
-///
-/// The caller resolves all styling: [sanStyle] for the SAN, [nagStyle] for the
-/// suffix (only used when [nagSuffix] is non-empty), and [decoration] for the
-/// container (selection highlight / reserved border). This keeps one assembly
-/// site for the SAN+suffix contract without flattening each surface's look.
-///
-/// Pass [hoverDecoration] to signal clickability on hover instead of painting
-/// a permanent underline on every move. Both decorations must reserve the same
-/// border width, or hovering reflows the wrapped movetext.
+/// Borderless move states shared by the editor, mainline and sidelines.
+/// A transparent border keeps the existing one-pixel inset in every state;
+/// selecting or hovering a move must never resize or reflow its paragraph.
+abstract final class PgnMoveDecorations {
+  static const idle = BoxDecoration(
+    borderRadius: BorderRadius.all(Radius.circular(3)),
+    border: Border.fromBorderSide(BorderSide(color: Colors.transparent)),
+  );
+
+  static final hover = idle.copyWith(color: AppColors.pgnMoveHoverBg);
+  static final current = idle.copyWith(color: AppColors.pgnMoveCurrentBg);
+  static final ephemeral = idle.copyWith(color: AppColors.pgnEphemeralBg);
+  static final contextPath = idle.copyWith(
+    color: AppColors.pgnMoveCurrentBg.withValues(alpha: 0.35),
+  );
+
+  static BoxDecoration resolve({
+    bool selected = false,
+    bool hovered = false,
+    bool isEphemeral = false,
+    bool onContextPath = false,
+  }) {
+    if (selected) return isEphemeral ? ephemeral : current;
+    if (hovered) return hover;
+    return onContextPath ? contextPath : idle;
+  }
+}
+
+/// A tappable SAN chip with the complete NAG suffix (`Nf3!⩲`).
+/// Hosts use [PgnMoveDecorations] for matching selection and hover geometry.
 class MoveChip extends StatefulWidget {
   final String san;
 
-  /// Concatenated quality-glyph symbols, or `''` for none (see
-  /// [qualityNagSuffix]).
+  /// Concatenated annotation symbols, or `''` for none (see
+  /// [allNagSuffix]).
   final String nagSuffix;
 
   final TextStyle sanStyle;
@@ -113,8 +123,14 @@ class _MoveChipState extends State<MoveChip> {
     if (!interactive) return chip;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
+      onEnter: (_) {
+        if (!mounted) return;
+        setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (!mounted) return;
+        setState(() => _hovered = false);
+      },
       child: chip,
     );
   }

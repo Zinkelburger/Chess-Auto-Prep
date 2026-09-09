@@ -38,6 +38,7 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
   }
 
   void _startNameEdit() {
+    if (!mounted) return;
     _nameEditController.text = widget.study.doc.name;
     _nameEditController.selection = TextSelection(
       baseOffset: 0,
@@ -47,7 +48,7 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
   }
 
   Future<void> _commitNameEdit() async {
-    if (!_editingName) return;
+    if (!mounted || !_editingName) return;
     setState(() => _editingName = false);
     final safe = sanitizeStudyName(_nameEditController.text);
     if (safe.isEmpty || safe == widget.study.doc.name) return;
@@ -78,6 +79,7 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
             width: 220,
             child: Focus(
               onKeyEvent: (node, event) {
+                if (!mounted) return KeyEventResult.ignored;
                 if (event is KeyDownEvent &&
                     event.logicalKey == LogicalKeyboardKey.escape) {
                   setState(() => _editingName = false);
@@ -107,7 +109,7 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
           )
         else
           Tooltip(
-            message: canRename ? 'Click to rename' : '',
+            message: canRename ? 'Rename study' : '',
             child: InkWell(
               onTap: canRename ? _startNameEdit : null,
               borderRadius: BorderRadius.circular(4),
@@ -126,6 +128,13 @@ class _StudyPickerBarState extends State<StudyPickerBar> {
                 ),
               ),
             ),
+          ),
+        if (canRename && !_editingName)
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            tooltip: 'Rename study',
+            visualDensity: VisualDensity.compact,
+            onPressed: _startNameEdit,
           ),
         IconButton(
           icon: const Icon(Icons.arrow_drop_down, size: 22),

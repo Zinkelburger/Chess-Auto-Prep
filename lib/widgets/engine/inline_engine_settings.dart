@@ -30,7 +30,7 @@ class _InlineEngineSettingsState extends State<InlineEngineSettings> {
               children: [
                 Text('Engine settings', style: AppTextStyles.bodyStrong),
                 SizedBox(height: 8),
-                StockfishSettingsBody(),
+                StockfishSettingsBody(showBulkDepth: false),
               ],
             ),
           ),

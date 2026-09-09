@@ -50,6 +50,9 @@ class PgnAnnotationPanel extends StatefulWidget {
   /// not a `!?`.
   final bool glyphsEnabled;
 
+  /// Tree editors commit immediately; PGN-file hosts debounce serialization.
+  final Duration commentDebounce;
+
   const PgnAnnotationPanel({
     super.key,
     required this.targetKey,
@@ -59,6 +62,7 @@ class PgnAnnotationPanel extends StatefulWidget {
     required this.onToggleNag,
     required this.onCommentChanged,
     this.glyphsEnabled = true,
+    this.commentDebounce = const Duration(milliseconds: 400),
   });
 
   @override
@@ -133,7 +137,12 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
 
   void _onTextChanged(String text) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () {
+    if (widget.commentDebounce == Duration.zero) {
+      _debounce = null;
+      widget.onCommentChanged(text);
+      return;
+    }
+    _debounce = Timer(widget.commentDebounce, () {
       _debounce = null;
       widget.onCommentChanged(text);
     });
@@ -146,9 +155,7 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
       decoration: const BoxDecoration(
-        border: Border(
-          top: BorderSide(color: AppColors.warningSurface, width: 3),
-        ),
+        border: Border(top: BorderSide(color: AppColors.divider)),
         color: AppColors.surface,
       ),
       child: Column(
@@ -156,7 +163,7 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            enabled ? 'Annotate ${widget.moveLabel}' : 'Edit annotations',
+            enabled ? 'Notes · ${widget.moveLabel}' : 'Notes',
             style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
           ),
           const SizedBox(height: 8),
@@ -188,13 +195,10 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
             minLines: 2,
             maxLines: 4,
             style: AppTextStyles.body,
-            cursorColor: AppColors.warningSurface,
+            cursorColor: AppColors.ink,
             decoration: InputDecoration(
               isDense: true,
-              hintText: enabled
-                  ? 'Comment on ${widget.moveLabel}'
-                  : 'Click or play a move to annotate it',
-              hintStyle: AppTextStyles.muted.copyWith(color: AppColors.ink),
+              hintText: enabled ? null : 'Select a move to add notes',
               filled: true,
               fillColor: AppColors.surfaceElevated,
               contentPadding: const EdgeInsets.symmetric(
@@ -203,18 +207,15 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: AppColors.warningSurface),
+                borderSide: BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(
-                  color: AppColors.warningSurface,
-                  width: 2,
-                ),
+                borderSide: const BorderSide(color: AppColors.outline),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: AppColors.warningSurface),
+                borderSide: BorderSide.none,
               ),
             ),
           ),

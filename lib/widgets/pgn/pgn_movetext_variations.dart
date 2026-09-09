@@ -324,9 +324,18 @@ Widget _buildVariationDocument(
                         style: PgnTextStyles.moveNumberAt(depth),
                       ),
                       TextSpan(
-                        text: '${root.san}${allNagSuffix(root.nags)}',
+                        text: root.san,
                         style: PgnTextStyles.moveAt(depth),
                       ),
+                      if (allNagSuffix(root.nags).isNotEmpty)
+                        TextSpan(
+                          text: allNagSuffix(root.nags),
+                          style: PgnTextStyles.nagAt(
+                            depth,
+                            moveStyle: PgnTextStyles.moveAt(depth),
+                            nags: root.nags,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -365,13 +374,6 @@ InlineSpan _variationMoveSpan(
   final sanStyle = isCurrentNode
       ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
       : base;
-  final currentDecoration = BoxDecoration(
-    color: node.isEphemeral
-        ? AppColors.pgnEphemeralBg
-        : AppColors.pgnMoveCurrentBg,
-    borderRadius: BorderRadius.circular(3),
-    border: Border.all(color: Colors.transparent, width: 1),
-  );
 
   return WidgetSpan(
     alignment: PlaceholderAlignment.baseline,
@@ -381,13 +383,20 @@ InlineSpan _variationMoveSpan(
       san: node.san,
       nagSuffix: nagSuffix,
       sanStyle: sanStyle,
-      nagStyle: sanStyle.copyWith(
-        color: nagColor(primaryQualityNag(node.nags) ?? 0),
-        fontSize: PgnTextStyles.sizeAt(depth) - 1,
-        fontWeight: FontWeight.bold,
+      nagStyle: PgnTextStyles.nagAt(
+        depth,
+        moveStyle: sanStyle,
+        nags: node.nags,
       ),
-      decoration: isCurrentNode ? currentDecoration : _kReservedBorder,
-      hoverDecoration: isCurrentNode ? currentDecoration : _kHoverDecoration,
+      decoration: PgnMoveDecorations.resolve(
+        selected: isCurrentNode,
+        isEphemeral: node.isEphemeral,
+      ),
+      hoverDecoration: PgnMoveDecorations.resolve(
+        selected: isCurrentNode,
+        isEphemeral: node.isEphemeral,
+        hovered: true,
+      ),
       behavior: HitTestBehavior.opaque,
       onTap: () => view.onGoToAnalysisNode(node, branchPly),
       onSecondaryTapDown: view.onShowVariationContextMenu != null
