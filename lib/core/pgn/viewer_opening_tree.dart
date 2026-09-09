@@ -22,6 +22,7 @@ import '../../models/opening_tree.dart';
 import '../../services/opening_tree_builder.dart';
 import '../../services/pgn_parsing_service.dart' as pgn;
 import '../../utils/fen_utils.dart';
+import '../../utils/chess_utils.dart' show recentMoveTrailSquares;
 import '../../models/pgn_game_entry.dart';
 
 class ViewerOpeningTree {
@@ -77,6 +78,21 @@ class ViewerOpeningTree {
   int treeBuildTotal = 0;
   int _generation = 0;
   List<String> treeCurrentMoveSequence = [];
+
+  /// Only the move that produced the tree's current board. Replay the walked
+  /// path, since a transposition's stored parent can describe another move.
+  Set<String> get recentMoveSquares {
+    final tree = openingTree;
+    if (tree == null) return const {};
+    try {
+      return recentMoveTrailSquares(
+        Chess.fromSetup(Setup.parseFen(tree.root.fen)),
+        tree.currentMovePath,
+      );
+    } catch (_) {
+      return const {};
+    }
+  }
 
   /// Tree cursor saved when leaving the tree (toggle off, or opening a game
   /// from the games-at-position list). Re-entering walks this sequence instead

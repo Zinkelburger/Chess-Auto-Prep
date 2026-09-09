@@ -232,6 +232,7 @@ class PgnViewerController extends ChangeNotifier
   void setTreeIncludeVariations(bool value) =>
       _viewerTree.setIncludeVariations(value);
   OpeningTree? get openingTree => _viewerTree.openingTree;
+  Set<String> get treeRecentMoveSquares => _viewerTree.recentMoveSquares;
   bool get buildingTree => _viewerTree.buildingTree;
   int get treeBuildProcessed => _viewerTree.treeBuildProcessed;
   int get treeBuildTotal => _viewerTree.treeBuildTotal;
