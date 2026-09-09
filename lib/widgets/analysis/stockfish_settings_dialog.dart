@@ -29,8 +29,6 @@ class StockfishSettingsBody extends StatelessWidget {
             SettingsSection(
               icon: Icons.search,
               title: 'Search',
-              subtitle:
-                  'Greater depth spends longer checking each position. More lines compares more candidate moves. PV rows controls how much of each continuation you can read.',
               child: SettingsIntGrid(
                 fields: [
                   SettingsIntSpec(
@@ -66,8 +64,6 @@ class StockfishSettingsBody extends StatelessWidget {
             SettingsSection(
               icon: Icons.table_chart_outlined,
               title: 'Move table',
-              subtitle:
-                  'Stockfish evaluations add engine scores to candidate moves. Turn them off to rely on Maia and database information. The move limit keeps the table short.',
               showDivider: false,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

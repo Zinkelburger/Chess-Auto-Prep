@@ -99,7 +99,7 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
     RecentGamesController controller,
     HomeReviewRunner runner,
   ) =>
-      openAppSettings(context, initialMode: AppMode.tactics, initialChapter: 2);
+      openAppSettings(context, initialMode: AppMode.tactics, initialChapter: 3);
 
   /// All the window's deviations in one dialog — reviewable as a queue, like
   /// tactics, instead of clicking into each game.

@@ -1,26 +1,26 @@
 {
   "stockfish-linux": {
-    "output_bytes": 77140584,
-    "output_sha256": "b9690a80b3d6501c629f4b4cc652527f0d826cca5377dee209e8f91f0c6a6c0b",
-    "source_sha256": "5c6f38b02a4da5f3ffe763f27da6c3e743eebefd92b50cb3661623b96696adff",
-    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-ubuntu-x86-64.tar"
+    "output_bytes": 81442657,
+    "output_sha256": "d3e3eb55074635225fdd159cd82b23a899f0d958119ef39bab6113c142758831",
+    "source_sha256": "9defc0d4e55d49c65a6d042f3e571a39fcea499ade6dbe741b53b8c65e03611f",
+    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_19/stockfish-linux-x86-64-universal.tar.gz"
   },
   "stockfish-macos-arm64": {
-    "output_bytes": 78027809,
-    "output_sha256": "dfd4aa83a837fd35185b3534b6807103a05629c32af1325f3758be9a4529e774",
-    "source_sha256": "4d77c4aa3ad9bd1ea8111f2ac5a4620fe7ebf998d6893bf828d49ccd579c8cb0",
-    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-macos-m1-apple-silicon.tar"
+    "output_bytes": 82390427,
+    "output_sha256": "3e14a4f69d9bba0d7e0b8fd54162a4fc450e7f5bc87a91458d6bdd59904f2bfe",
+    "source_sha256": "a1f0e3bcc5a6927a11fe6fc8e54a779754645f3c2bae2cf13420fd1957adaa77",
+    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_19/stockfish-macos-universal.tar.gz"
   },
   "stockfish-macos-x86_64": {
-    "output_bytes": 75869397,
-    "output_sha256": "d4f7a39cf00ec1174411002da351cfe70f487eeb38d50fbaf5c9bfcbd55a73c6",
-    "source_sha256": "e7d7a2bca13915419d41ac6cb8cedb123dd2ba1c39a22c574df7a2aa3f526592",
-    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-macos-x86-64.tar"
+    "output_bytes": 82390427,
+    "output_sha256": "3e14a4f69d9bba0d7e0b8fd54162a4fc450e7f5bc87a91458d6bdd59904f2bfe",
+    "source_sha256": "a1f0e3bcc5a6927a11fe6fc8e54a779754645f3c2bae2cf13420fd1957adaa77",
+    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_19/stockfish-macos-universal.tar.gz"
   },
   "stockfish-windows": {
-    "output_bytes": 76229305,
-    "output_sha256": "6c3df0fa7756e410b2c206e478f9637ed9fe3be442cc68b7ea07c7889b0f960c",
-    "source_sha256": "40cc975817e7eee270b03f354810d20956df565420d320f6dd37d454dc81a139",
-    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_18/stockfish-windows-x86-64.zip"
+    "output_bytes": 81422489,
+    "output_sha256": "be7d437b2dcf5e36452c27586af0913bc642489b461fd355a26efd1249fdbc34",
+    "source_sha256": "3c8bf1f9ea66a09350a40df4f632288285ac206d99f33ab5842c408fc30b48a7",
+    "url": "https://github.com/official-stockfish/Stockfish/releases/download/sf_19/stockfish-windows-x86-64-universal.zip"
   }
 }

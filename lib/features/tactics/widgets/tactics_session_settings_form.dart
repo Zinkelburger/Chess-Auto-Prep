@@ -54,11 +54,6 @@ class TacticsSessionSettingsForm extends StatelessWidget {
         if (section != TacticsSettingsSection.selection) ...[
           const Text('Puzzle order', style: AppTextStyles.bodyStrong),
           const SizedBox(height: 8),
-          const Text(
-            'Start with recent games, revisit neglected puzzles, or focus on the ones you miss most often.',
-            style: AppTextStyles.muted,
-          ),
-          const SizedBox(height: 12),
           Row(
             children: [
               const Text(
@@ -138,9 +133,7 @@ class TacticsSessionSettingsForm extends StatelessWidget {
         if (section != TacticsSettingsSection.selection)
           AppCheckbox(
             label: 'Accept other winning moves',
-            subtitle:
-                'A move that is not the stored answer is checked by Stockfish '
-                'and counts when it is just as good.',
+            subtitle: 'Stockfish checks alternative answers.',
             value: settings.acceptAlternatives,
             onChanged: (v) =>
                 onChanged(settings.copyWith(acceptAlternatives: v)),
@@ -266,11 +259,7 @@ class _ExpiryFieldState extends State<_ExpiryField> {
                       TacticsSessionSettings.defaultMaxAgeDays),
           ),
         ),
-        const Text(
-          'How long a mined mistake stays in the queue, counted from the day '
-          'the game was played. Separate from which games get fetched.',
-          style: AppTextStyles.caption,
-        ),
+        const Text('Counted from the game date.', style: AppTextStyles.caption),
       ],
     );
   }

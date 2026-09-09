@@ -9,6 +9,7 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/system_info.dart';
 import '../../../widgets/labeled_toggle.dart';
+import '../../../widgets/common/number_stepper.dart';
 import '../controllers/recent_games_controller.dart';
 import '../services/games_window.dart';
 import 'games_window_picker.dart';
@@ -58,7 +59,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   late Set<GameSpeed> _speeds;
   late bool _autoRun;
   late GamesWindow _window;
-  late final TextEditingController _cores;
+  late int _cores;
   late final TextEditingController _depth;
   late final TextEditingController _bookCheck;
   final int _maxCores = getLogicalCores();
@@ -69,14 +70,13 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
     _speeds = {...widget.filters.speeds};
     _autoRun = widget.filters.autoRun;
     _window = widget.window;
-    _cores = TextEditingController(text: '${EngineSettings.instance.cores}');
+    _cores = EngineSettings.instance.cores;
     _depth = TextEditingController(text: '${MiningSettings.instance.depth}');
     _bookCheck = TextEditingController(text: '${_window.bookCheckGames}');
   }
 
   @override
   void dispose() {
-    _cores.dispose();
     _depth.dispose();
     _bookCheck.dispose();
     super.dispose();
@@ -90,10 +90,11 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   /// than one that quietly puts the number back in range.
   Future<void> _apply() async {
     if (!mounted || _saving) return;
-    final cores = int.tryParse(_cores.text.trim());
-    if (cores != null) {
-      EngineSettings.instance.cores = cores.clamp(1, _maxCores);
-    }
+    // Commit any pending typed stepper value before saving the draft.
+    FocusManager.instance.primaryFocus?.unfocus();
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    EngineSettings.instance.cores = _cores;
     final depth = int.tryParse(_depth.text.trim());
     if (depth != null) {
       unawaited(
@@ -141,7 +142,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (widget.embeddedChapter != 1) ...[
-            _label('How many games to analyse'),
+            _label('Games to analyse'),
             GamesWindowPicker(
               window: _window,
               onChanged: (w) {
@@ -149,7 +150,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
                 setState(() => _window = w);
               },
             ),
-            _label('Time controls to download'),
+            _label('Time controls'),
             for (final speed in selectableGameSpeeds)
               AppCheckbox(
                 label: speed.label,
@@ -165,23 +166,16 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
                   });
                 },
               ),
-            _label('How many games the book check covers'),
+            _label('Book check'),
             _numberField(
               key: const Key('book-check-games-field'),
               controller: _bookCheck,
               label: 'Games per site',
-              hint:
-                  'Checked against your books, not analysed by the engine. '
-                  'An opening leak shows over hundreds of games; '
-                  '${GamesWindow.defaultBookCheckGames} is the default.',
             ),
             _label('When it runs'),
             AppCheckbox(
               key: const Key('review-auto-start'),
               label: 'Check for new games when the app starts',
-              subtitle:
-                  'On by default. New and unfinished games are analysed '
-                  'automatically; the run can be paused from Tactics.',
               value: _autoRun,
               onChanged: (v) {
                 if (!mounted) return;
@@ -190,30 +184,31 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
             ),
           ],
           if (widget.embeddedChapter != 0) ...[
-            _label('How hard it works'),
-            _numberField(
-              key: const Key('review-cores-field'),
-              controller: _cores,
-              label: 'CPU cores to use',
-              hint:
-                  'Between 1 and $_maxCores on this machine. More cores '
-                  'analyse your games faster; fewer leave the machine usable '
-                  'while it runs.',
+            _label('CPU cores'),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: NumberStepper(
+                key: const Key('review-cores-field'),
+                value: _cores,
+                min: 1,
+                max: _maxCores,
+                suffix: 'of $_maxCores',
+                onChanged: (value) {
+                  if (!mounted) return;
+                  setState(() => _cores = value);
+                },
+              ),
             ),
             const SizedBox(height: 14),
             _numberField(
               key: const Key('review-depth-field'),
               controller: _depth,
               label: 'Engine depth',
-              hint:
-                  'Between ${MiningSettings.minDepth} and '
-                  '${MiningSettings.maxDepth}. Deeper is more accurate about '
-                  'what was really a mistake, and slower.',
+              hint: '${MiningSettings.minDepth}–${MiningSettings.maxDepth}',
             ),
             const SizedBox(height: 14),
             Text(
-              'An analysis already running keeps the settings it started with; '
-              'these apply to the next game it picks up.',
+              'Applies to the next game analysed.',
               style: AppTextStyles.body.copyWith(
                 fontSize: 12,
                 color: AppColors.onSurfaceMuted,
@@ -263,7 +258,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
     required Key key,
     required TextEditingController controller,
     required String label,
-    required String hint,
+    String? hint,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,14 +287,16 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
             ),
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          hint,
-          style: AppTextStyles.body.copyWith(
-            fontSize: 12,
-            color: AppColors.onSurfaceMuted,
+        if (hint != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            hint,
+            style: AppTextStyles.body.copyWith(
+              fontSize: 12,
+              color: AppColors.onSurfaceMuted,
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

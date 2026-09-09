@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'package:archive/archive.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
@@ -37,13 +38,15 @@ String stockfishLockKey() {
   throw UnsupportedError('Unsupported desktop platform');
 }
 
-/// Pull the engine out of an upstream Stockfish zip/tar (largest regular file).
+/// Pull the engine out of an upstream Stockfish zip/tar/tar.gz archive.
 Uint8List stockfishLargestArchiveMember(Uint8List bytes, String url) {
   final Archive archive;
   if (url.toLowerCase().endsWith('.zip')) {
     archive = ZipDecoder().decodeBytes(bytes);
   } else {
-    archive = TarDecoder().decodeBytes(bytes);
+    archive = TarDecoder().decodeBytes(
+      url.toLowerCase().endsWith('.gz') ? gzip.decode(bytes) : bytes,
+    );
   }
   ArchiveFile? biggest;
   for (final f in archive) {
@@ -60,6 +63,9 @@ Uint8List stockfishLargestArchiveMember(Uint8List bytes, String url) {
 class StockfishBundle {
   static String? _cachedPath;
 
+  @visibleForTesting
+  static void resetForTest() => _cachedPath = null;
+
   /// Resolve the Stockfish binary path, extracting from the asset bundle or
   /// downloading the pinned upstream release if the bundle has no engine.
   ///
@@ -70,6 +76,16 @@ class StockfishBundle {
 
     final binaryName = stockfishBinaryName();
     final key = stockfishLockKey();
+    final lock = await _loadLock();
+    final entry = lock[key];
+    if (entry is! Map ||
+        entry['source_sha256'] is! String ||
+        entry['output_sha256'] is! String) {
+      throw StateError(
+        'Missing Stockfish checksums for $key in $kStockfishLockAsset',
+      );
+    }
+    final identity = '$key:${entry['source_sha256']}';
     final dir = await AppPaths.supportDirectory();
     final file = File(p.join(dir.path, binaryName));
     final stamp = File('${file.path}.origin');
@@ -78,16 +94,11 @@ class StockfishBundle {
       final stamped = await stamp.exists()
           ? (await stamp.readAsString()).trim()
           : null;
-      if (stamped == key) {
+      if (stamped == identity) {
         _cachedPath = file.path;
         return _cachedPath!;
       }
-      if (stamped == null && !Platform.isMacOS) {
-        await stamp.writeAsString(key);
-        _cachedPath = file.path;
-        return _cachedPath!;
-      }
-      log.i('Refreshing Stockfish ($stamped → $key)');
+      log.i('Refreshing Stockfish ($stamped → $identity)');
       await file.delete();
     }
 
@@ -96,7 +107,11 @@ class StockfishBundle {
 
     Object? bundleError;
     try {
-      await _extractFromAssetBundle(binaryName, file.path);
+      await _extractFromAssetBundle(
+        binaryName,
+        file.path,
+        entry['output_sha256'] as String,
+      );
     } catch (e) {
       bundleError = e;
       log.i(
@@ -108,7 +123,7 @@ class StockfishBundle {
     if (!Platform.isWindows) {
       await Process.run('chmod', ['+x', file.path]);
     }
-    await stamp.writeAsString(key);
+    await stamp.writeAsString(identity);
     _cachedPath = file.path;
     if (bundleError != null) {
       log.i('Stockfish downloaded for local/unbundled run');
@@ -119,6 +134,7 @@ class StockfishBundle {
   static Future<void> _extractFromAssetBundle(
     String binaryName,
     String targetPath,
+    String expectedSha,
   ) async {
     final byteData = await rootBundle.load('assets/executables/$binaryName.gz');
     final compressed = Uint8List.fromList(
@@ -128,6 +144,11 @@ class StockfishBundle {
       ),
     );
     await Isolate.run(() {
+      if (sha256.convert(compressed).toString() != expectedSha) {
+        throw StateError(
+          'Bundled Stockfish does not match $kStockfishLockAsset',
+        );
+      }
       final decompressed = gzip.decode(compressed);
       File(targetPath).writeAsBytesSync(decompressed, flush: true);
     });

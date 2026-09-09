@@ -8,6 +8,8 @@ import 'package:chess_auto_prep/features/games/widgets/home_review_settings_dial
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/features/tactics/services/mining_settings.dart';
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:chess_auto_prep/widgets/common/number_stepper.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -106,6 +108,47 @@ void main() {
     },
   );
 
+  testWidgets('typed cores are clamped and saved by Apply', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final before = EngineSettings.instance.cores;
+    addTearDown(() => EngineSettings.instance.cores = before);
+    await open(tester);
+    final stepper = find.byKey(const Key('review-cores-field'));
+    await tester.ensureVisible(stepper);
+    await tester.enterText(
+      find.descendant(of: stepper, matching: find.byType(TextField)),
+      '9999',
+    );
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(EngineSettings.instance.cores, EngineSettings.systemCores);
+    expect(
+      (await SharedPreferences.getInstance()).getInt('engine_settings.cores'),
+      EngineSettings.systemCores,
+    );
+  });
+
+  testWidgets('Cancel discards a nudged core count', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final before = EngineSettings.instance.cores;
+    addTearDown(() => EngineSettings.instance.cores = before);
+    EngineSettings.instance.cores = 1;
+    await open(tester);
+    final stepper = find.byKey(const Key('review-cores-field'));
+    await tester.ensureVisible(stepper);
+    await tester.tap(
+      find.descendant(of: stepper, matching: find.byTooltip('More')),
+    );
+    await tester.pump();
+    expect(
+      tester.widget<NumberStepper>(stepper).value,
+      EngineSettings.systemCores > 1 ? 2 : 1,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(EngineSettings.instance.cores, 1);
+  });
+
   testWidgets('cores and depth moved in, and Apply saves them', (tester) async {
     SharedPreferences.setMockInitialValues({});
     restoreDepth();
@@ -165,7 +208,7 @@ void main() {
     final closed = await open(tester);
     // It is the first thing in the dialog: which games, before how hard the
     // engine works on them.
-    expect(find.text('How many games to analyse'), findsOneWidget);
+    expect(find.text('Games to analyse'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('window-games-field')), '35');
     await tester.pump();
