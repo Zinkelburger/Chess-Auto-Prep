@@ -29,11 +29,20 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
   bool? _myColorIn(Map<String, String> headers);
   List<String> _currentGameSans(PgnGameEntry entry);
 
+  Set<String> get _boardRecentMoveSquares {
+    if (_controller.showOpeningTree) return _controller.treeRecentMoveSquares;
+    final reader = _activeMovetextController;
+    // A filter position or a newly opened pane may not belong to this reader.
+    // Never carry the hidden reader's last move onto a different board.
+    if (reader.currentFen != _controller.currentPosition.fen) return const {};
+    return reader.recentMoveSquares;
+  }
+
   Widget _buildFullScreenView(ThemeData theme) {
     return FullscreenGameView(
       position: _controller.currentPosition,
       boardFlipped: _controller.boardFlipped,
-      recentMoveSquares: _pgnWidgetController.recentMoveSquares,
+      recentMoveSquares: _boardRecentMoveSquares,
       gameLabel: _controller.filteredGames.isNotEmpty
           ? _controller.filteredGames[_controller.currentGameIndex].label
           : '',
@@ -84,8 +93,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
                     ChessBoardWidget(
                       position: _controller.currentPosition,
                       flipped: _controller.boardFlipped,
-                      recentMoveSquares:
-                          _activeMovetextController.recentMoveSquares,
+                      recentMoveSquares: _boardRecentMoveSquares,
                       // A solitaire hint rings the piece that moves. A square tint
                       // would be the same mark the board puts under a piece you
                       // picked up yourself, so the hint has to be a different shape,

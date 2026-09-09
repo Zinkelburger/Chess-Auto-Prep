@@ -117,6 +117,11 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     _prevVariationDepth = widget.variationDepth;
   }
 
+  // The mainline cursor stays at the branch point while a variation or
+  // comment preview owns the board. It is a return address, not a selection.
+  bool get _onMainline =>
+      widget.variationDepth == 0 && !widget.pgnController.inVariation;
+
   /// Classified moves only (inaccuracy and worse, plus interesting).
   static List<MoveEval> _interestingMoves(List<MoveEval> evals) {
     return [
@@ -409,7 +414,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
           GameAnalysisChart(
             evals: evals,
             startWinChance: widget.analysisController.startWinChance,
-            currentPly: widget.currentPly,
+            currentPly: _onMainline ? widget.currentPly : null,
             onPlySelected: _onChartPlySelected,
           ),
           if (!isAnalyzing) _buildDeepenBar(evals),
@@ -484,7 +489,8 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
             interesting[index],
             index: index,
             nearestIdx: nearestIdx,
-            isCurrent: interesting[index].ply == widget.currentPly,
+            isCurrent:
+                _onMainline && interesting[index].ply == widget.currentPly,
             evalByPly: evalByPly,
             hasTrophy: trophyFens.contains(interesting[index].fenBefore),
           ),

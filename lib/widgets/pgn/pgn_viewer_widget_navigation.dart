@@ -267,7 +267,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     String? anchorFen,
   }) {
     // FEN-anchored lines start from the FEN, not a mainline position; keep the
-    // mainline highlight where the user is so exiting returns there. Otherwise
+    // mainline cursor where the user is so exiting returns there. Otherwise
     // locate the branch point by move number as before.
     final baseIndex = anchorFen != null
         ? _mainLineIndex

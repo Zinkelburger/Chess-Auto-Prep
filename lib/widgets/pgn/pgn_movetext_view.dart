@@ -430,7 +430,9 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
 
       final isCurrentMove =
-          i == view.mainLineIndex - 1 && view.analysisPath.isEmpty;
+          i == view.mainLineIndex - 1 &&
+          view.analysisPath.isEmpty &&
+          view.activeInlineLine == null;
 
       // SAN styling is independent of NAGs and of whether a sideline exists —
       // structure (own-row, indented variations) marks branches, not a hue.
