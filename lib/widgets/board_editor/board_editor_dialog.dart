@@ -8,9 +8,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/board_editor_controller.dart';
-import 'board_editor_widget.dart';
-import 'piece_palette.dart';
-import 'position_setup_panel.dart';
+import 'board_editor_panel.dart';
 
 class BoardEditorDialog extends StatefulWidget {
   /// Seed the editor with this FEN (defaults to the standard start position).
@@ -64,124 +62,38 @@ class _BoardEditorDialogState extends State<BoardEditorDialog> {
         constraints: const BoxConstraints(maxWidth: 960, maxHeight: 720),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 700;
-
-              final boardColumn = Center(
-                child: BoardWithSpares(controller: _controller),
-              );
-
-              final setupColumn = Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        'Set up position',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        tooltip: 'Cancel',
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
+                  Text(
+                    'Set up position',
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: PositionSetupPanel(
-                      controller: _controller,
-                      actionLabel: widget.actionLabel,
-                      onAction: (position) => Navigator.pop(context, position),
-                    ),
-                  ),
-                ],
-              );
-
-              return wide
-                  ? Row(
-                      children: [
-                        Expanded(flex: 5, child: boardColumn),
-                        const SizedBox(width: 16),
-                        Expanded(flex: 4, child: setupColumn),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        Expanded(flex: 5, child: boardColumn),
-                        const SizedBox(height: 12),
-                        Expanded(flex: 4, child: setupColumn),
-                      ],
-                    );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The board with a strip of spare pieces above and below it, sized so the
-/// three fit the space together. The strips follow the orientation: the
-/// far side's pieces are above the board, the near side's below.
-class BoardWithSpares extends StatelessWidget {
-  const BoardWithSpares({super.key, required this.controller});
-
-  final BoardEditorController controller;
-
-  static const double _gap = 8;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = constraints.maxHeight;
-        // Strips are an eighth of the board tall until the cap kicks in, so
-        // size for that first and take the cap into account if it applies.
-        var board = width < (height - 2 * _gap) / 1.25
-            ? width
-            : (height - 2 * _gap) / 1.25;
-        final strip = SparePieceRow.heightFor(board);
-        if (strip < board / 8) {
-          final fromHeight = height - 2 * _gap - 2 * strip;
-          board = width < fromHeight ? width : fromHeight;
-        }
-        return ListenableBuilder(
-          listenable: controller,
-          builder: (context, _) {
-            final far = controller.flipped ? Side.white : Side.black;
-            final near = far.opposite;
-            return SizedBox(
-              width: board,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SparePieceRow(
-                    side: far,
-                    tool: controller.tool,
-                    onSelect: controller.selectTool,
-                  ),
-                  const SizedBox(height: _gap),
-                  SizedBox(
-                    width: board,
-                    height: board,
-                    child: BoardEditorWidget(controller: controller),
-                  ),
-                  const SizedBox(height: _gap),
-                  SparePieceRow(
-                    side: near,
-                    tool: controller.tool,
-                    onSelect: controller.selectTool,
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Cancel',
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
-            );
-          },
-        );
-      },
+              const SizedBox(height: 8),
+              Expanded(
+                child: BoardEditorPanel(
+                  controller: _controller,
+                  actionLabel: widget.actionLabel,
+                  onAction: (position) {
+                    if (!mounted) return;
+                    Navigator.pop(context, position);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

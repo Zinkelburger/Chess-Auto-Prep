@@ -160,8 +160,14 @@ class _SparePiece extends StatelessWidget {
         // piece, so the pointer is what is left in hand afterwards. A drag
         // that ends off the board is a click that wandered: lichess takes
         // it as picking the piece up, and so do we.
-        onDragStarted: () => onSelect(const PointerTool()),
-        onDraggableCanceled: (_, _) => onSelect(brush),
+        onDragStarted: () {
+          if (!context.mounted) return;
+          onSelect(const PointerTool());
+        },
+        onDraggableCanceled: (_, _) {
+          if (!context.mounted) return;
+          onSelect(brush);
+        },
         feedback: Transform.translate(
           offset: Offset(-size / 2, -size / 2),
           child: PieceImage(piece: piece, size: size),
@@ -191,23 +197,29 @@ class _SpareSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     final tint = danger ? AppColors.danger : primary;
-    return Tooltip(
-      message: tooltip,
-      waitDuration: const Duration(milliseconds: 600),
-      child: InkWell(
-        onTap: onTap,
-        hoverColor: tint.withValues(alpha: 0.12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: selected ? tint.withValues(alpha: 0.3) : null,
-            border: Border(
-              bottom: BorderSide(
-                color: selected ? tint : Colors.transparent,
-                width: 2,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: tooltip,
+      child: Tooltip(
+        message: tooltip,
+        excludeFromSemantics: true,
+        waitDuration: const Duration(milliseconds: 600),
+        child: InkWell(
+          onTap: onTap,
+          hoverColor: tint.withValues(alpha: 0.12),
+          child: Container(
+            decoration: BoxDecoration(
+              color: selected ? tint.withValues(alpha: 0.3) : null,
+              border: Border(
+                bottom: BorderSide(
+                  color: selected ? tint : Colors.transparent,
+                  width: 2,
+                ),
               ),
             ),
+            child: Center(child: child),
           ),
-          child: Center(child: child),
         ),
       ),
     );

@@ -266,8 +266,9 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Whether a preset-style player filter ([field] = White/Black) is active.
-  bool hasPresetHeaderFilter(String field, String value) =>
-      headerRows.any((r) => r.field == field && r.value == value);
+  bool hasPresetHeaderFilter(String field, String value) => headerRows.any(
+    (r) => r.field == field && r.value == value && r.mode == MatchMode.contains,
+  );
 
   /// Toggle a preset player filter. Applying "«P» as White" removes any
   /// "«P» as Black" row (and vice versa) so the presets swap, not stack.

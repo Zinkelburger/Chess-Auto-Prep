@@ -1,7 +1,6 @@
 /// Serializable filter/slice models for PGN game collections.
 ///
-/// Extracted from `pgn_slice_dialog.dart` so that `core/` and `services/` can
-/// depend on these types without importing a widget file.
+/// Shared by collection search, inline import filters and their services.
 library;
 
 import 'dart:convert';

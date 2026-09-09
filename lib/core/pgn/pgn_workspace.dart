@@ -8,6 +8,7 @@ class PgnWorkspace extends ChangeNotifier {
   static const analysis = 3;
   static const tree = 4;
   static const collection = 5;
+  static const filters = 6;
 
   final List<int> _open = [game];
   final Map<int, String> titles = {
@@ -17,6 +18,7 @@ class PgnWorkspace extends ChangeNotifier {
     analysis: 'Analysis Graph',
     tree: 'Collection tree',
     collection: 'Collection',
+    filters: 'Filter games',
   };
   int _index = game;
   bool _selecting = false;
@@ -42,7 +44,7 @@ class PgnWorkspace extends ChangeNotifier {
     }
   }
 
-  int _nextId = 6;
+  int _nextId = 7;
   List<int> get openTabs => List.unmodifiable(_open);
   int get index => _index;
   set index(int value) {
@@ -65,7 +67,7 @@ class PgnWorkspace extends ChangeNotifier {
     if (position < 0) return;
     _open.removeAt(position);
     if (_index == id) _index = _open[(position - 1).clamp(0, _open.length - 1)];
-    if (id >= 6) titles.remove(id);
+    if (id >= 7) titles.remove(id);
     _notifySelection();
   }
 

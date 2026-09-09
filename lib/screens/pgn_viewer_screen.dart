@@ -78,7 +78,8 @@ import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
 import '../widgets/pgn/solitaire_status_widgets.dart';
 import '../widgets/pgn_viewer_widget.dart';
-import '../widgets/pgn_slice_dialog.dart';
+import '../widgets/pgn/pgn_game_filter_workspace.dart';
+import '../models/pgn_filter_models.dart';
 import '../widgets/solitaire_trophy_cabinet.dart';
 import '../widgets/opening_explorer/opening_explorer_panel.dart';
 
@@ -122,6 +123,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   late final PgnWorkspace _tabController;
   final Map<int, String> _databasePaths = {};
   int? _databasePickerTab;
+  List<PgnGameEntry>? _filterSource;
+  List<GameRecord> _filterRecords = [];
   final Map<int, PgnDatabasePanelController> _databasePanels = {};
   final Map<int, PgnGameEntry> _referenceGames = {};
   final Map<int, PgnViewerWidgetController> _referenceReaders = {};
@@ -292,6 +295,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Widget _buildExtraPanel(int id) {
+    if (id == PgnWorkspace.filters) return _buildFilterWorkspace();
     if (id == _databasePickerTab) {
       return PgnDatabasePicker(
         recent: _controller.recentFiles,
@@ -733,28 +737,37 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   @override
-  void _openSliceDialog() {
-    unawaited(
-      showDialog(
-        context: context,
-        builder: (ctx) => PgnSliceDialog(
-          collectionName: _controller.filePath == null
-              ? 'Pasted games'
-              : p.basename(_controller.filePath!),
-          allGames: _controller.allGames
-              .map((g) => (headers: g.headers, pgnText: g.pgnText))
-              .toList(),
-          currentFen: normalizeFen(_controller.currentPosition.fen),
-          initialConfig: _controller.activeSliceConfig.isEmpty
-              ? null
-              : _controller.activeSliceConfig,
-          fenIndex: _controller.fenIndex,
-          presets: _controller.slicePresets,
-          onApply: (indices, config) {
-            _controller.applySlice(indices, config);
-          },
-        ),
-      ).then((_) => _reclaimFocus()),
+  void _openSliceDialog() => _showPanel(PgnWorkspace.filters);
+
+  Widget _buildFilterWorkspace() {
+    final source = _controller.allGames;
+    if (!identical(source, _filterSource)) {
+      _filterSource = source;
+      _filterRecords = source
+          .map((game) => (headers: game.headers, pgnText: game.pgnText))
+          .toList();
+    }
+    return PgnGameFilterWorkspace(
+      key: ObjectKey(source),
+      collectionName: _controller.filePath == null
+          ? 'Pasted games'
+          : p.basename(_controller.filePath!),
+      allGames: _filterRecords,
+      currentFen: normalizeFen(_controller.currentPosition.fen),
+      initialConfig: _controller.activeSliceConfig,
+      fenIndex: _controller.fenIndex,
+      presets: _controller.slicePresets,
+      onApply: (indices, config) {
+        if (!mounted || !identical(source, _controller.allGames)) return;
+        _controller.applySlice(indices, config);
+        _showPanel(PgnWorkspace.game);
+      },
+      onOpenGame: (indices, config, gameIndex) {
+        if (!mounted || !identical(source, _controller.allGames)) return;
+        _controller.applySlice(indices, config);
+        _controller.goToGame(indices.indexOf(gameIndex));
+        _showPanel(PgnWorkspace.game);
+      },
     );
   }
 
@@ -1611,7 +1624,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
-      handleKeyBindings(_keyBindings, event, node: node);
+      _tabController.index == PgnWorkspace.filters
+      ? KeyEventResult.ignored
+      : handleKeyBindings(_keyBindings, event, node: node);
 
   @override
   Widget build(BuildContext context) {
@@ -1632,6 +1647,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                   children: [
                     ResponsiveSplitLayout(
                       breakpoint: kCompactBreakpoint,
+                      hidePrimary: _tabController.index == PgnWorkspace.filters,
                       primary: _buildBoardPane(),
                       secondary: _buildSidePanel(),
                     ),

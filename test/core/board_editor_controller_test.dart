@@ -37,6 +37,78 @@ void main() {
       final c = BoardEditorController(initialFen: fen);
       expect(c.fen, fen);
     });
+
+    test('malformed metadata is rejected atomically', () {
+      final c = BoardEditorController();
+      addTearDown(c.dispose);
+      final before = c.fen;
+      var changes = 0;
+      c.addListener(() => changes++);
+      for (final metadata in [
+        'w banana - 0 1',
+        'w KK - 0 1',
+        'w K- - 0 1',
+        'w - e4 0 1',
+        'w - - nope 1',
+        'w - - -1 1',
+        'w - - 0 nope',
+        'w - - 0 0',
+        'w - - 0 -1',
+        'w - - 0 1 extra',
+      ]) {
+        expect(
+          c.loadFen('4k3/8/8/8/8/8/8/4K3 $metadata'),
+          isFalse,
+          reason: metadata,
+        );
+        expect(c.fen, before, reason: metadata);
+      }
+      expect(changes, 0);
+      expect(c.loadFen('4k3/08/8/8/8/8/8/4K3 w - - 0 1'), isFalse);
+    });
+
+    test('whitespace and omitted counters are supported', () {
+      final c = BoardEditorController();
+      addTearDown(c.dispose);
+      expect(c.loadFen('  4k3/8/8/8/8/8/8/4K3\tb   - -  '), isTrue);
+      expect(c.fen, '4k3/8/8/8/8/8/8/4K3 b - - 0 1');
+      expect(c.loadFen('4k3/8/8/8/8/8/8/4K3 b - - 12'), isTrue);
+      expect(c.fen, '4k3/8/8/8/8/8/8/4K3 b - - 12 1');
+    });
+
+    test('an illegal but syntactically valid setup remains editable', () {
+      final c = BoardEditorController();
+      addTearDown(c.dispose);
+      expect(c.loadFen('8/8/8/8/8/8/8/8 w - - 0 1'), isTrue);
+      expect(c.validPosition, isNull);
+      expect(c.validationError, contains('empty'));
+    });
+
+    test('draft text notifies the parent and gates use until resolved', () {
+      final c = BoardEditorController();
+      addTearDown(c.dispose);
+      var changes = 0;
+      c.addListener(() => changes++);
+      final before = c.fen;
+      c.setFenDraft('invalid');
+      expect(changes, 1);
+      expect(c.hasUnappliedFen, isTrue);
+      expect(c.validPosition, isNull);
+      expect(c.loadFen(c.fenInput), isFalse);
+      expect(c.fen, before);
+      c.toggleFlip();
+      c.setTurn(Side.black);
+      expect(c.fenInput, 'invalid');
+      expect(c.validPosition, isNull);
+      c.discardFenDraft();
+      expect(c.hasUnappliedFen, isFalse);
+      expect(c.validPosition?.turn, Side.black);
+
+      c.setFenDraft('4k3/8/8/8/8/8/8/4K3 w - -');
+      expect(c.loadFen(c.fenInput), isTrue);
+      expect(c.hasUnappliedFen, isFalse);
+      expect(c.validPosition, isNotNull);
+    });
   });
 
   group('piece placement', () {
