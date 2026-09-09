@@ -60,13 +60,15 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
               runSpacing: 4,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                if (controller.detectProtagonist() case final player?)
+                if (controller.collectionPlayer case final player?)
                   for (final side in ['White', 'Black'])
                     FilterChip(
                       label: Text('${player.split(',').first} as $side'),
                       selected: controller.activeSliceConfig.headerFilters.any(
                         (filter) =>
-                            filter.field == side && filter.value == player,
+                            filter.field == side &&
+                            filter.value == player &&
+                            filter.mode == MatchMode.exact,
                       ),
                       onSelected: controller.isLoading
                           ? null

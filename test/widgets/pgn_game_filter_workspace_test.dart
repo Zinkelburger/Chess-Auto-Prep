@@ -35,6 +35,8 @@ Future<void> _open(
   WidgetTester tester, {
   SliceApplyCallback? onApply,
   SliceConfig? initialConfig,
+  List<GameRecord> games = _games,
+  String? collectionPlayer,
   Size size = const Size(1280, 900),
 }) async {
   await tester.binding.setSurfaceSize(size);
@@ -44,7 +46,8 @@ Future<void> _open(
       theme: ThemeData.dark(),
       home: Scaffold(
         body: PgnGameFilterWorkspace(
-          allGames: _games,
+          allGames: games,
+          collectionPlayer: collectionPlayer,
           initialConfig: initialConfig,
           currentFen: _fen,
           collectionName: 'Practice.pgn',
@@ -67,6 +70,69 @@ Future<void> _finishMatching(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('detected player shortcuts swap sides and keep other filters', (
+    tester,
+  ) async {
+    const games = <GameRecord>[
+      (
+        headers: {'White': 'Polgar, Judit', 'Black': 'Anand', 'Event': 'Rapid'},
+        pgnText: '1. e4 e5 *',
+      ),
+      (
+        headers: {
+          'White': 'Kramnik',
+          'Black': 'Polgar, Judit',
+          'Event': 'Rapid',
+        },
+        pgnText: '1. d4 d5 *',
+      ),
+    ];
+    await _open(
+      tester,
+      games: games,
+      collectionPlayer: 'Polgar, Judit',
+      initialConfig: const SliceConfig(
+        positionInput: _fen,
+        headerFilters: [
+          HeaderFilterConfig(
+            field: 'Event',
+            mode: MatchMode.exact,
+            value: 'Rapid',
+          ),
+        ],
+      ),
+    );
+    final controller = tester
+        .widget<HeaderFilters>(find.byType(HeaderFilters))
+        .controller;
+    await tester.tap(find.text('Polgar as White'));
+    await _finishMatching(tester);
+    expect(find.text('Show 1 game'), findsOneWidget);
+    expect(controller.headerConfigs.last.field, 'White');
+    expect(controller.headerConfigs.last.mode, MatchMode.exact);
+    await tester.tap(find.text('Polgar as Black'));
+    await _finishMatching(tester);
+    expect(find.text('Show 1 game'), findsOneWidget);
+    expect(controller.headerConfigs.map((f) => f.field), ['Event', 'Black']);
+    expect(controller.positionFen, _fen);
+    expect(
+      tester
+          .widget<FilterChip>(
+            find.widgetWithText(FilterChip, 'Polgar as Black'),
+          )
+          .selected,
+      isTrue,
+    );
+    await tester.tap(find.text('Polgar as Black'));
+    await _finishMatching(tester);
+    expect(controller.headerConfigs.single.field, 'Event');
+    expect(find.text('Show 2 games'), findsOneWidget);
+    await _open(tester);
+    expect(find.text('Polgar as White'), findsNothing);
+    expect(find.text('Polgar as Black'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'conditions combine with a user-entered position using the app theme',
     (tester) async {

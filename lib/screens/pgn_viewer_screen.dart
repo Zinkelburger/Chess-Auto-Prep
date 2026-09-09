@@ -775,6 +775,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           ? 'Pasted games'
           : p.basename(_controller.filePath!),
       allGames: _filterRecords,
+      collectionPlayer: _controller.collectionPlayer,
       currentFen:
           _filterOriginFen ?? normalizeFen(_controller.currentPosition.fen),
       initialConfig: _controller.activeSliceConfig,

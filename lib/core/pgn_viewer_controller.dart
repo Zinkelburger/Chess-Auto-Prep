@@ -688,6 +688,21 @@ class PgnViewerController extends ChangeNotifier
     }
   }
 
+  int? _collectionPlayerRevision;
+  List<PgnGameEntry>? _collectionPlayerSource;
+  String? _collectionPlayer;
+
+  /// Shared by Filter and Tree; based on the complete, unfiltered collection.
+  String? get collectionPlayer {
+    if (_collectionPlayerRevision != collectionRevision ||
+        !identical(_collectionPlayerSource, allGames)) {
+      _collectionPlayerRevision = collectionRevision;
+      _collectionPlayerSource = allGames;
+      _collectionPlayer = detectSingleCollectionPlayer(allGames);
+    }
+    return _collectionPlayer;
+  }
+
   String? detectProtagonist() => detectProtagonistFrom(allGames);
 
   /// Returns both player names when all games are between the same two players.

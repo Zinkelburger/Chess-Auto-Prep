@@ -518,7 +518,10 @@ in the repertoire builder.
 
 **Filter games** opens a normal **Filter** tab beside the board, using the app
 theme. Compact Player, Event, Year, Result and Opening buttons add a field and
-focus its value; More contains less common fields. Each player field takes one
+focus its value; More contains less common fields. Filter and Tree both offer
+**[Player] as White / as Black** when exactly one named player appears in at
+least 80% of the complete collection. Switching sides replaces the other side
+while retaining other filters; clicking the selected side clears it. Each player field takes one
 name (commas within PGN names are preserved). Board position is always expanded;
 Move sequence is optional. Matching games update live below the controls.
 The mode selector shows only the current mode name, without a “View” prefix.

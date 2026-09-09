@@ -30,12 +30,14 @@ class PgnGameFilterWorkspace extends StatefulWidget {
     this.onOpenGame,
     this.initialConfig,
     this.collectionName,
+    this.collectionPlayer,
     this.fenIndex,
   });
 
   final List<GameRecord> allGames;
   final String currentFen;
   final String? collectionName;
+  final String? collectionPlayer;
   final SliceApplyCallback onApply;
   final void Function(List<int> indices, SliceConfig config, int gameIndex)?
   onOpenGame;
@@ -254,6 +256,33 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   Widget _buildFilters(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      if (widget.collectionPlayer case final player?) ...[
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (final side in const ['White', 'Black'])
+              FilterChip(
+                label: Text('${player.split(',').first} as $side'),
+                selected: _filters.hasPresetHeaderFilter(
+                  side,
+                  player,
+                  mode: MatchMode.exact,
+                ),
+                onSelected: (_) {
+                  if (!mounted) return;
+                  _filters.togglePresetHeaderFilter(
+                    side,
+                    player,
+                    mode: MatchMode.exact,
+                  );
+                  _removeEmptyRows();
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+      ],
       HeaderFilters(controller: _filters, games: widget.allGames, simple: true),
       const SizedBox(height: 16),
       IgnorePointer(
