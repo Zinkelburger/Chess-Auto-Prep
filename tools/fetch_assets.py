@@ -14,8 +14,8 @@ root as a build prerequisite, including in CI.
 
 Default is the current OS/arch so a Linux checkout does not pull Windows and
 macOS engines. Release CI fetches one target per job and Flutter bundles that
-file into the app. macOS ships two downloads (Apple Silicon vs Intel), each
-with the matching engine in the same `stockfish-macos.gz` slot.
+file into the app. macOS ships two app downloads (Apple Silicon vs Intel), both
+with the universal engine in the same `stockfish-macos.gz` slot.
 
 Standard library only, so CI needs no pip install step.
 """
@@ -45,28 +45,22 @@ LOCKFILE = REPO_ROOT / "tools" / "assets.lock.json"
 #
 # Pinned deliberately. Tracking "latest" would make builds non-reproducible and
 # let an upstream release break the app with no commit to point at. To upgrade:
-# bump STOCKFISH_TAG, run with --force, verify the app still starts, and commit
-# the regenerated assets.lock.json in the same commit.
-STOCKFISH_TAG = "sf_18"
+# bump STOCKFISH_TAG and asset names, seed assets.lock.json with the official
+# release URLs and source SHA-256 digests, then fetch every target with --force.
+# Verify the app still starts and commit the regenerated lockfile together.
+STOCKFISH_TAG = "sf_19"
 STOCKFISH_BASE = (
     f"https://github.com/official-stockfish/Stockfish/releases/download/{STOCKFISH_TAG}"
 )
 
-# CPU-baseline builds. Stockfish also publishes avx2/bmi2/avx512 variants that
-# are meaningfully faster, but a binary built for an instruction set the user's
-# CPU lacks dies with SIGILL at startup. Since this ships to end users rather
-# than to a known machine, baseline is the correct default. If you only target
-# modern hardware, swap in the -avx2 asset names below.
-#
-# macOS: Apple Silicon and Intel are different upstream archives, but both
-# write `stockfish-macos.gz`. process_connection.dart has one macOS slot; the
-# release workflow builds two apps and fetches the matching archive into that
-# slot so users download the right architecture instead of a universal binary.
+# Stockfish 19 universal binaries select the best supported CPU instructions
+# at runtime. The macOS archive supports both Apple Silicon and Intel; retain
+# the existing lock keys and shared asset slot for the two app build targets.
 STOCKFISH_ASSETS = {
-    "stockfish-linux": "stockfish-ubuntu-x86-64.tar",
-    "stockfish-macos-arm64": "stockfish-macos-m1-apple-silicon.tar",
-    "stockfish-macos-x86_64": "stockfish-macos-x86-64.tar",
-    "stockfish-windows.exe": "stockfish-windows-x86-64.zip",
+    "stockfish-linux": "stockfish-linux-x86-64-universal.tar.gz",
+    "stockfish-macos-arm64": "stockfish-macos-universal.tar.gz",
+    "stockfish-macos-x86_64": "stockfish-macos-universal.tar.gz",
+    "stockfish-windows.exe": "stockfish-windows-x86-64-universal.zip",
 }
 
 # Maia is NOT fetched. `assets/maia3_simplified.onnx` is a local torch.onnx.export
