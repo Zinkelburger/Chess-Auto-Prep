@@ -327,7 +327,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         AppMenuEntry(
           heading: 'Study and games',
           label: 'Add line to study…',
-          icon: Icons.menu_book_outlined,
+          icon: Icons.library_add_outlined,
           enabled: _boardActions.hasPosition,
           dividerAbove: true,
           onRun: () => unawaited(_boardActions.addCurrentLineToStudy()),

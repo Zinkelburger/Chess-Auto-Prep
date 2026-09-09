@@ -20,7 +20,6 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   Future<void> _addCurrentGameToStudy();
   Future<void> _copyCurrentGamePgn();
   void _openSliceDialog();
-  Future<void> _exportTreePosition();
   Future<void> _exportSlice();
   Future<void> _exportSliceAsScid();
   Future<void> _pickFile();
@@ -138,14 +137,6 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
                 onRun: _exportSliceAsScid,
               ),
               AppMenuEntry(
-                label: 'Export games at tree position…',
-                icon: Icons.file_download_outlined,
-                enabled:
-                    !_controller.buildingTree &&
-                    _controller.gamesAtTreePosition().isNotEmpty,
-                onRun: _exportTreePosition,
-              ),
-              AppMenuEntry(
                 icon: Icons.library_add_outlined,
                 label: _viewingStudy && !_onReferenceTab
                     ? 'Edit study'
@@ -159,6 +150,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
           if (solitaire)
             AppMenuEntry(
               label: 'Leave solitaire chess',
+              icon: Icons.exit_to_app,
               onRun: _toggleSolitaireMode,
             ),
         ],

@@ -647,45 +647,54 @@ class _StudyScreenState extends State<StudyScreen> {
               AppMenuEntry(
                 heading: 'Study',
                 label: 'New study',
+                icon: Icons.library_add_outlined,
                 onRun: () => unawaited(_newStudy()),
               ),
               AppMenuEntry(
                 heading: 'Import',
                 label: 'From URL…',
+                icon: Icons.link,
                 onRun: () => unawaited(_importFromUrl()),
               ),
               AppMenuEntry(
                 label: 'PGN file as chapters…',
+                icon: Icons.description_outlined,
                 onRun: () => unawaited(_importPgn()),
               ),
               if (_study.doc.filePath != null) ...[
                 AppMenuEntry(
                   heading: 'Export',
                   label: 'Copy study PGN',
+                  icon: Icons.copy,
                   onRun: () => unawaited(_exportPgn()),
                 ),
                 AppMenuEntry(
                   label: 'Save study PGN as…',
+                  icon: Icons.description_outlined,
                   onRun: () => unawaited(_saveStudyAs()),
                 ),
               ],
               AppMenuEntry(
                 heading: 'Train',
                 label: 'Train this chapter',
+                icon: Icons.school_outlined,
                 onRun: () => _train(wholeStudy: false),
               ),
               AppMenuEntry(
                 label: 'Train whole study',
+                icon: Icons.school_outlined,
                 onRun: () => _train(wholeStudy: true),
               ),
               AppMenuEntry(
                 heading: 'Board',
                 label: 'Flip board',
+                icon: Icons.swap_vert,
                 onRun: _study.toggleFlipped,
               ),
               AppMenuEntry(
                 heading: 'Explore',
                 label: 'Browse in PGN viewer',
+                icon: Icons.open_in_new,
                 enabled: _study.doc.filePath != null,
                 onRun: _browseInViewer,
               ),
@@ -693,6 +702,7 @@ class _StudyScreenState extends State<StudyScreen> {
                 AppMenuEntry(
                   heading: 'Manage',
                   label: 'Delete study…',
+                  icon: Icons.delete_outline,
                   onRun: () => unawaited(_deleteCurrentStudy()),
                 ),
             ],

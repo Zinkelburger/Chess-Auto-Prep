@@ -377,6 +377,7 @@ class _TacticsModeScaffold extends StatelessWidget {
               AppMenuEntry(
                 heading: 'Practice',
                 label: 'Play tactics',
+                icon: Icons.extension_outlined,
                 enabled: !hasPuzzle,
                 onRun: () => context
                     .read<TacticsSessionController>()
@@ -387,6 +388,7 @@ class _TacticsModeScaffold extends StatelessWidget {
               if (hasPuzzle)
                 AppMenuEntry(
                   label: 'Leave puzzle',
+                  icon: Icons.exit_to_app,
                   onRun: () => context
                       .read<TacticsSessionController>()
                       .panel

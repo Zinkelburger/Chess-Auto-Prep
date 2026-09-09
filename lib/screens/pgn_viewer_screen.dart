@@ -1197,31 +1197,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _reclaimFocus();
   }
 
-  @override
-  Future<void> _exportTreePosition() async {
-    final games = [
-      for (final index in _controller.gamesAtTreePosition())
-        _controller.filteredGames[index],
-    ];
-    if (games.isEmpty) return;
-    final content = '${games.map((game) => game.pgnText).join('\n\n')}\n';
-    final outUri = await FilePicker.saveFile(
-      dialogTitle: 'Export ${games.length} games at this position',
-      fileName: 'games-at-position.pgn',
-      type: FileType.custom,
-      allowedExtensions: ['pgn'],
-      bytes: utf8.encode(content),
-    );
-    if (!mounted) return;
-    if (outUri != null) {
-      showAppSnackBar(
-        context,
-        'Exported ${games.length} games to ${p.basename(outUri.toFilePath())}',
-      );
-    }
-    _reclaimFocus();
-  }
-
   /// Write the filtered games as a Scid v5 database.
   ///
   /// PGN stays the default export because everything reads it; this is for

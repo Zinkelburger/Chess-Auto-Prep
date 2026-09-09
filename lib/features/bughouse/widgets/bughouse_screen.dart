@@ -99,10 +99,12 @@ class _BughouseScreenState extends State<BughouseScreen> {
                   AppMenuEntry(
                     heading: 'Board',
                     label: 'Flip board A',
+                    icon: Icons.swap_vert,
                     onRun: () => controller.toggleFlip(BughouseBoard.a),
                   ),
                   AppMenuEntry(
                     label: 'Flip board B',
+                    icon: Icons.swap_vert,
                     onRun: () => controller.toggleFlip(BughouseBoard.b),
                   ),
                 ],
