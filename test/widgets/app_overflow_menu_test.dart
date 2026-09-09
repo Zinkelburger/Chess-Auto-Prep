@@ -197,11 +197,9 @@ void main() {
     expect(ran, ['Second']);
   });
 
-  testWidgets('a divider above a row does not shift which row runs', (
-    tester,
-  ) async {
+  testWidgets('a group gap does not shift which row runs', (tester) async {
     // The entry list and the popup's item list differ in length once
-    // dividers are in play; the row must still carry its own index.
+    // group gaps are in play; the row must still carry its own index.
     final ran = <String>[];
     await tester.pumpWidget(
       _wrap([
@@ -215,7 +213,7 @@ void main() {
     );
 
     await _open(tester);
-    expect(find.byType(PopupMenuDivider), findsOneWidget);
+    expect(find.byType(PopupMenuDivider), findsNothing);
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
