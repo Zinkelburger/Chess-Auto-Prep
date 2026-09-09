@@ -189,6 +189,10 @@ void main() {
         getAppState(tester).currentMode,
         equals(AppMode.repertoireTrainer),
       );
+      expect(find.text('Open PGN file…'), findsOneWidget);
+      await tester.tap(find.text('Create new repertoire'));
+      await tester.pumpAndSettle();
+      expect(getAppState(tester).currentMode, equals(AppMode.repertoire));
     });
   });
 }
