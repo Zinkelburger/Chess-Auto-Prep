@@ -1138,6 +1138,9 @@ traversal rejection, rollback). Windows cases compile disposable .NET executable
 to exercise the shipped `.exe` launch contract, including paths with spaces,
 apostrophes and non-ASCII characters, checksum rejection, installer failure,
 waiting and cancellation. The Windows helper reads the app's request as UTF-8.
+It uses its host's bundled PowerShell modules so a parent PowerShell 7 process
+cannot hide Windows PowerShell 5.1's checksum command with incompatible modules;
+the native tests also cover an inherited module path without the host modules.
 Helper failures return a nonzero exit code and retain the installation error;
 the Windows quality job uploads diagnostic logs on failure.
 Real Windows Setup and Linux package-manager authorization still need native

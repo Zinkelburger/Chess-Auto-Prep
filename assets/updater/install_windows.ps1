@@ -1,5 +1,10 @@
 param([Parameter(Mandatory=$true)][string]$Request)
 $ErrorActionPreference = 'Stop'
+# A pwsh -> app/Python -> powershell.exe launch inherits PowerShell 7's module
+# paths without the normal direct-child cleanup. Windows PowerShell 5.1 then
+# finds incompatible modules and even Get-FileHash becomes unavailable. This
+# standalone helper needs only the modules shipped with its own host.
+$env:PSModulePath = [System.IO.Path]::Combine($PSHOME, 'Modules')
 # Dart writes UTF-8 JSON. Windows PowerShell 5.1 otherwise decodes it using
 # the system code page, corrupting non-ASCII user/install directory names.
 $config = Get-Content -LiteralPath $Request -Raw -Encoding UTF8 | ConvertFrom-Json
