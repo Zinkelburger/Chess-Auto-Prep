@@ -475,7 +475,7 @@ UnifiedEnginePane (when lifecycle ≠ off)
   → Eval chain: session cache → CdbDirect → Stockfish (Lichess Explorer mothballed; DB column hidden, _fetchDbData never called)
   → Best-line eval persisted to EvalCache via _persistBestEvalToCache()
   → Hover on MOVE or PV line → BoardPreviewController (floating) → FloatingBoardPreview overlay
-InlineEngineBar — Stockfish discovery writes best eval to EvalCache on completion
+InlineEngineBar — lazy dedicated EngineWorkerSlot; normal Stockfish discovery writes best eval to EvalCache on completion; hypothetical threat searches use threatPositionFen and skip cache writes
 ExpectimaxLinesPane — same floating preview on line hover
 ```
 
@@ -505,16 +505,33 @@ They do not contribute to Learn/Review counts or either scheduling queue.
 
 ### PGN viewer (Open PGN)
 
-**Actions ▾** groups **Edit PGN / Add to Study**, **Analysis Graph / Tree**,
-and **Export**. Actions and its Export submenu open on hover or click, with
-keyboard navigation and Escape dismissal. **Tree** opens one tab with a
-**Collection tree / Database explorer** selector. Collection tree explores the
-filtered games, offers detected-player White/Black shortcuts, and exports the
-complete games reaching its current position. Database explorer offers Lichess,
-Masters and local TWIC sources. Export offers PGN, SCID, Copy Game PGN
-and Copy Collection PGN. File exports and collection copy use the current filtered games, with the count shown in the
-submenu; pasted collections can also be exported. Repertoire creation belongs
-in the repertoire builder.
+**Actions ▾** offers icon-labelled **Edit PGN**, **Show Engine / Hide Engine**,
+**Evaluation graph / Tree**, and **Copy Game PGN** (the overlapping-squares
+copy icon). **Export** contains **Export as PGN…**, **Export as SCID…**, and
+**Add to Study** (or **Edit study** for an open study). File exports use the
+current filtered collection, whose count appears in the submenu; pasted
+collections can also be exported. There is no collection clipboard action.
+Actions and the mode picker open on hover or click and dismiss 250ms after
+the pointer leaves the anchor and menu rows, including nested submenus;
+keyboard navigation, Escape and outside-click dismissal remain available.
+**Tree** opens one tab with a **Collection tree / Database explorer** selector.
+Collection tree explores the filtered games, offers detected-player White/Black
+shortcuts, and exports complete games reaching its current position. Database
+explorer offers Lichess, Masters and local TWIC sources.
+
+The engine is hidden by default. **Show Engine** opens the Game tab with an
+inline switch, a **Show threat** target button and compact settings for **Cores,
+Lines, Depth and Memory**. These controls use `EngineSettings.instance`, shared
+and persisted with global engine preferences. Threat mode evaluates a hypothetical
+pass (opponent to move, en passant cleared), displays threat lines and a red
+board arrow, and resets when the position changes. It is unavailable in check
+or at game end. Threat lines offer board previews but cannot be inserted into
+the real game's move list, and their evals are not cached as game evaluations.
+Turning the engine off, hiding it, or leaving the active Game tab releases its
+worker. View settings now contain Playback and Board and moves; view settings
+content is capped at 728px including padding so controls remain beside labels.
+The evaluation graph uses opaque near-white and near-black advantage fills
+on a charcoal plot background so both sides remain distinct.
 
 **Filter games** opens a normal **Filter** tab beside the board, using the app
 theme. Compact Player, Event, Year, Result and Opening buttons add a field and
@@ -549,7 +566,7 @@ Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].
 Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept)
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
 Keyboard: `↑`/`↓` previous/next game, `←`/`→` moves, Home/End jump, Enter focus variation, Esc return to parent or leave mode, F11 fullscreen, Space playback, and Ctrl/Cmd+V paste PGN. Enter starts solitaire during setup. Text fields retain their normal editing behavior.
-Workspace tabs: the main **Game** stays open. **Actions** opens Analysis Graph,
+Workspace tabs: the main **Game** stays open. **Actions** opens Evaluation graph,
 Filter or Tree; the Tree tab contains the collection/database source selector. The strip appears only with
 two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles
 only opened tabs. Readers stay mounted and preserve their cursors. The settings

@@ -31,10 +31,7 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    expect(find.text('Open analysis tab'), findsOneWidget);
-    await tester.tap(find.text('Live engine controls'));
-    await tester.pumpAndSettle();
-    expect(prefs.engine, isTrue);
+    expect(find.text('Live engine controls'), findsNothing);
     await tester.tap(find.text('Playback controls'));
     await tester.pumpAndSettle();
     expect(prefs.playback, isTrue);

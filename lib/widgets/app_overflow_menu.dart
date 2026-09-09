@@ -2,6 +2,8 @@
 /// contextual pickers can supply their own label or anchor.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -101,16 +103,36 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
   // Sibling app-bar anchors should behave as one menu strip.
   static MenuController? _activeMenu;
   final _controller = MenuController();
+  Timer? _hoverExit;
   final _anchorFocus = FocusNode();
   final _firstItemFocus = FocusNode();
 
   @override
   void dispose() {
     if (identical(_activeMenu, _controller)) _activeMenu = null;
+    _hoverExit?.cancel();
     _anchorFocus.dispose();
     _firstItemFocus.dispose();
     super.dispose();
   }
+
+  void _keepOpen() => _hoverExit?.cancel();
+
+  void _scheduleClose() {
+    if (!widget.openOnHover) return;
+    _hoverExit?.cancel();
+    // Allow the pointer to cross the gap into a submenu.
+    _hoverExit = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _controller.close();
+    });
+  }
+
+  Widget _hoverRegion(Widget child) => MouseRegion(
+    onEnter: (_) => _keepOpen(),
+    onExit: (_) => _scheduleClose(),
+    child: child,
+  );
 
   void _focusMenu() {
     if (!identical(_activeMenu, _controller)) _activeMenu?.close();
@@ -136,11 +158,22 @@ class _AppOverflowMenuState extends State<AppOverflowMenu> {
         childFocusNode: _anchorFocus,
         onOpen: _focusMenu,
         onClose: () {
+          _hoverExit?.cancel();
           if (identical(_activeMenu, _controller)) _activeMenu = null;
         },
-        menuChildren: _nestedRows(rows, firstItemFocus: _firstItemFocus),
+        menuChildren: _nestedRows(
+          rows,
+          firstItemFocus: _firstItemFocus,
+          wrap: _hoverRegion,
+        ),
         builder: (context, controller, child) => MouseRegion(
-          onEnter: enabled && openOnHover ? (_) => controller.open() : null,
+          onEnter: enabled && openOnHover
+              ? (_) {
+                  _keepOpen();
+                  controller.open();
+                }
+              : null,
+          onExit: (_) => _scheduleClose(),
           child: TooltipVisibility(
             visible: tooltip != label && !controller.isOpen,
             child: Tooltip(
@@ -276,6 +309,7 @@ const _menuItemStyle = ButtonStyle(
 List<Widget> _nestedRows(
   List<AppMenuEntry> entries, {
   FocusNode? firstItemFocus,
+  Widget Function(Widget)? wrap,
 }) => [
   for (var i = 0; i < entries.length; i++) ...[
     if (i > 0 && (entries[i].heading != null || entries[i].dividerAbove))
@@ -299,7 +333,7 @@ List<Widget> _nestedRows(
             ? firstItemFocus
             : null,
         menuChildren: entries[i].enabled
-            ? _nestedRows(entries[i].children)
+            ? _nestedRows(entries[i].children, wrap: wrap)
             : const [],
         child: _nestedLabel(entries[i]),
       )
@@ -313,7 +347,9 @@ List<Widget> _nestedRows(
         child: _nestedLabel(entries[i]),
       ),
   ],
-];
+].map(wrap ?? _identity).toList();
+
+Widget _identity(Widget child) => child;
 
 Widget _nestedLabel(AppMenuEntry entry) => Row(
   mainAxisSize: MainAxisSize.min,

@@ -449,36 +449,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
         mode == widget.initialMode && widget.viewContentBuilder != null
         ? widget.viewContentBuilder
         : entry?.builder;
-    return SettingsChapterScope(
-      index: _chapter,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              compact ? 16 : 24,
-              24,
-              compact ? 16 : 24,
-              0,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${mode.label} › ${chapter.label}',
-                  style: AppTextStyles.title,
+    return Align(
+      alignment: Alignment.topLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 728),
+        child: SettingsChapterScope(
+          index: _chapter,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 16 : 24,
+                  24,
+                  compact ? 16 : 24,
+                  0,
                 ),
-                const SizedBox(height: 8),
-                Text(chapter.description, style: AppTextStyles.muted),
-              ],
-            ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${mode.label} › ${chapter.label}',
+                      style: AppTextStyles.title,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(chapter.description, style: AppTextStyles.muted),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: builder != null
+                    ? Builder(key: ValueKey(mode), builder: builder)
+                    : _viewPage(mode, compact),
+              ),
+            ],
           ),
-          Expanded(
-            child: builder != null
-                ? Builder(key: ValueKey(mode), builder: builder)
-                : _viewPage(mode, compact),
-          ),
-        ],
+        ),
       ),
     );
   }
