@@ -139,11 +139,13 @@ Map<int, _EvalNote> _buildEvalNotes(PgnMovetextView view) {
 }
 
 /// The verdict heading of a classified move's inset analysis block:
-/// `Blunder +0.3 → +2.1`, in the quiet metrics ink.
+/// `Blunder +0.3 → +2.1`, in the same quality color as its glyph.
 List<InlineSpan> _evalNoteSpans(_EvalNote note) => [
   TextSpan(
     text: '${note.label} ${note.before} → ${note.after}  ',
-    style: PgnTextStyles.metricsAt(0),
+    style: PgnTextStyles.metricsAt(
+      0,
+    ).copyWith(color: nagColor(note.classification.nag ?? 0)),
   ),
 ];
 

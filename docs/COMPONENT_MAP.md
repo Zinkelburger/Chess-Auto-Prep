@@ -546,6 +546,10 @@ the real game's move list, and their evals are not cached as game evaluations.
 Turning the engine off, hiding it, or leaving the active Game tab releases its
 worker. View settings now contain Playback and Board and moves; view settings
 content is capped at 728px including padding so controls remain beside labels.
+Move-quality glyphs on mainlines and variations, inline analysis verdicts and their borders, and
+the analysis move list use the shared NAG palette: blue inaccuracies, amber
+mistakes, red blunders and pink interesting moves. Selecting a move preserves
+its glyph color.
 The evaluation graph uses opaque near-white and near-black advantage fills
 on a charcoal plot background so both sides remain distinct.
 

@@ -18,6 +18,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import 'pgn_viewer_widget.dart';
 import '../utils/movetext_builder.dart';
+import '../utils/pgn_nags.dart';
 
 class GameAnalysisTab extends StatefulWidget {
   final GameAnalysisController analysisController;
@@ -553,13 +554,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     };
 
     final evalStr = e.evalDisplay;
-    final classificationColor = switch (e.classification) {
-      MoveClassification.blunder => AppColors.danger,
-      MoveClassification.mistake => AppColors.warning,
-      MoveClassification.inaccuracy => AppColors.info,
-      MoveClassification.interesting => AppColors.maia,
-      MoveClassification.normal => AppColors.onSurfaceMuted,
-    };
+    final classificationColor = nagColor(e.classification.nag ?? 0);
 
     return Container(
       key: isNearest ? _nearestItemKey : null,
