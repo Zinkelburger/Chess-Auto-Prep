@@ -134,7 +134,33 @@ class MoveEval {
   );
 }
 
-enum MoveClassification { normal, interesting, inaccuracy, mistake, blunder }
+enum MoveClassification {
+  normal,
+  interesting,
+  inaccuracy,
+  mistake,
+  blunder;
+
+  /// Standard PGN move-quality glyph, shared by display and saved analysis.
+  int? get nag => switch (this) {
+    normal => null,
+    interesting => 5,
+    inaccuracy => 6,
+    mistake => 2,
+    blunder => 4,
+  };
+
+  /// Fill an absent verdict without duplicating or replacing an annotator's
+  /// own move-quality glyph. Positional NAGs remain alongside the verdict.
+  List<int>? annotateNags(List<int>? existing) {
+    final id = nag;
+    if (id == null ||
+        (existing ?? const <int>[]).any((n) => n >= 1 && n <= 6)) {
+      return existing;
+    }
+    return [id, ...?existing];
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Winning-chance model (Lichess logistic)
@@ -188,6 +214,10 @@ typedef CachedGameAnalysis = ({
 CachedGameAnalysis? parseCachedEvals(String pgnText) {
   final parsed = PgnGame.parsePgn(pgnText);
   promoteNullMoveDummyMainline(parsed.moves);
+  return _parseGameEvals(parsed);
+}
+
+CachedGameAnalysis? _parseGameEvals(PgnGame<PgnNodeData> parsed) {
   final mainline = parsed.moves.mainline().toList();
   if (mainline.isEmpty) return null;
 
@@ -365,6 +395,19 @@ String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
     fen: parsed.headers['FEN'],
     result: parsed.headers['Result'],
   );
+}
+
+/// Add standard quality NAGs to an analyzed game's mainline using the same
+/// classifications as cached review. Existing author glyphs and sidelines stay
+/// intact; games without enough stored evaluations are left untouched.
+void annotateGameMoveQuality(PgnGame<PgnNodeData> game) {
+  final analysis = _parseGameEvals(game);
+  if (analysis == null) return;
+  final moves = game.moves.mainline().toList();
+  for (final eval in analysis.evals) {
+    final move = moves[eval.ply - 1];
+    move.nags = eval.classification.annotateNags(move.nags);
+  }
 }
 
 class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
@@ -893,12 +936,15 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   /// the mainline alone deleted every variation and the game's opening
   /// comment from that file. Same writer as the comment editor's
   /// `ViewerGameModel.buildAnnotatedMovetext`, which lands in the same slot.
-  String _rebuildMovetext(PgnGame<PgnNodeData> game) => buildGameMovetext(
-    moves: game.moves,
-    comments: game.comments,
-    fen: game.headers['FEN'],
-    result: game.headers['Result'],
-  );
+  String _rebuildMovetext(PgnGame<PgnNodeData> game) {
+    annotateGameMoveQuality(game);
+    return buildGameMovetext(
+      moves: game.moves,
+      comments: game.comments,
+      fen: game.headers['FEN'],
+      result: game.headers['Result'],
+    );
+  }
 
   void cancel() {
     _generation++;

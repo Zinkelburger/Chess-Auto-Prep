@@ -454,7 +454,12 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       // Build SAN + NAG text (always shown — annotations survive view mode).
       // Every NAG, not just the six editable quality glyphs: `⩲`, `∞`, `→` and
       // friends are the annotator's whole verdict on the position.
-      final nagSuffix = allNagSuffix(moveData.nags);
+      // Cached games may predate persisted quality NAGs. Show the same
+      // symbols immediately from their scores, without rewriting on read.
+      final nags =
+          evalNotes[i]?.classification.annotateNags(moveData.nags) ??
+          moveData.nags;
+      final nagSuffix = allNagSuffix(nags);
 
       final currentDecoration = BoxDecoration(
         color: AppColors.pgnMoveCurrentBg,

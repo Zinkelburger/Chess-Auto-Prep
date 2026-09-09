@@ -63,6 +63,7 @@ void main() {
     final text = renderedText(tester);
 
     expect(text, contains('Blunder'));
+    expect(text, contains('Ng5??'));
     expect(text, contains('+0.3 → -6.0'));
     // Only the one move is marked, not the seven quiet ones.
     expect('Blunder'.allMatches(text).length, 1);
@@ -104,7 +105,35 @@ void main() {
     for (final label in ['Inaccuracy', 'Mistake', 'Blunder', 'Interesting']) {
       expect(label.allMatches(text).length, 2, reason: label);
     }
+    for (final move in [
+      'e4?!',
+      'e5?',
+      'Nf3??',
+      'Nc6!?',
+      'Bb5!?',
+      'a6?!',
+      'Ba4?',
+      'Nf6??',
+    ]) {
+      expect(text, contains(move));
+    }
     expect(text, isNot(contains('Best:')));
+  });
+
+  testWidgets('analysis preserves author glyphs and positional annotations', (
+    tester,
+  ) async {
+    await pumpPgn(
+      tester,
+      '${header}1. e4 \$1 \$14 {[%eval -2.00]} '
+      'e5 \$4 \$18 {[%eval 2.00]} '
+      '2. Nf3 \$14 {[%eval -2.00]} *',
+    );
+    final text = renderedText(tester);
+    expect(text, contains('e4!⩲'));
+    expect(text, contains('e5??+−'));
+    expect(text, contains('Nf3??⩲'));
+    expect(text, isNot(contains('????')));
   });
 
   testWidgets('short games retain every label alongside existing prose', (

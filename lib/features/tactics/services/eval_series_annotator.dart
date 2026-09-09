@@ -13,6 +13,8 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../../../utils/pgn_comment_utils.dart';
+import '../../../services/game_analysis_controller.dart'
+    show annotateGameMoveQuality;
 
 /// One ply's engine score, normalized to White's perspective — the sign
 /// convention `[%eval]` comments use, regardless of whose move it was.
@@ -97,6 +99,7 @@ String? annotateMovetextWithEvals({
       node.comments = [comment];
     }
   }
+  annotateGameMoveQuality(game);
   return buildGameMovetext(
     moves: game.moves,
     comments: game.comments,
