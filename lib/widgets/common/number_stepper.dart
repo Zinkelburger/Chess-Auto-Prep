@@ -117,7 +117,7 @@ class _NumberStepperState extends State<NumberStepper> {
         ),
         SizedBox(
           width: widget.fieldWidth,
-          child: TextField(
+          child: TextFormField(
             controller: _ctrl,
             focusNode: _focus,
             enabled: enabled,
@@ -134,7 +134,8 @@ class _NumberStepperState extends State<NumberStepper> {
               border: InputBorder.none,
               contentPadding: EdgeInsets.symmetric(vertical: 8),
             ),
-            onSubmitted: (_) => _commit(),
+            onFieldSubmitted: (_) => _commit(),
+            onSaved: (_) => _commit(),
           ),
         ),
         if (widget.suffix != null)

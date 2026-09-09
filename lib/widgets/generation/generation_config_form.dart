@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../constants/engine_defaults.dart';
 import '../../models/eval_database_settings.dart';
 import '../../services/eval/cdbdirect_eval_provider.dart';
 import '../../services/generation/generation_config.dart';
@@ -19,7 +18,9 @@ import '../labeled_toggle.dart';
 import '../pgn_sources_controller.dart';
 import '../pgn_sources_panel.dart';
 import 'advanced_settings_dialog.dart';
-import 'engine_resources_section.dart';
+import '../app_settings_button.dart';
+import '../../models/engine_settings.dart';
+import '../../models/bulk_analysis_settings.dart';
 import 'eval_sources_controller.dart';
 import 'eval_sources_section.dart';
 import 'skeleton_plan_card.dart';
@@ -68,6 +69,7 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
   @override
   void initState() {
     super.initState();
+    BulkAnalysisSettings.instance.addListener(_refreshEngineSettings);
     if (widget.initialConfig != null) {
       _applyInitialConfig(widget.initialConfig!);
     }
@@ -80,6 +82,16 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
     // The usage line reads today's spend even while the section is collapsed.
     unawaited(_evalSources.refreshApiUsage());
     unawaited(_reloadPresets());
+  }
+
+  void _refreshEngineSettings() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    BulkAnalysisSettings.instance.removeListener(_refreshEngineSettings);
+    super.dispose();
   }
 
   @override

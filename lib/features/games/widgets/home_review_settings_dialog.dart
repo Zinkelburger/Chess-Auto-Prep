@@ -1,15 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
-import '../../../models/engine_settings.dart';
 import '../../../services/games_library/game_filter.dart';
-import '../../tactics/services/mining_settings.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../utils/system_info.dart';
 import '../../../widgets/labeled_toggle.dart';
-import '../../../widgets/common/number_stepper.dart';
 import '../controllers/recent_games_controller.dart';
 import '../services/games_window.dart';
 import 'games_window_picker.dart';
@@ -25,23 +19,19 @@ class HomeReviewSettingsResult {
   final GamesWindow window;
 }
 
-/// Game download and analysis preferences. The shared settings shell embeds
-/// one chapter at a time; standalone hosts can still use the draft dialog.
-/// Apply saves both chapters together, including global CPU cores and mining
-/// depth. Switching chapters retains the pending edits.
+/// Game downloads, edited as a draft until Apply.
 class HomeReviewSettingsDialog extends StatefulWidget {
   const HomeReviewSettingsDialog({
     super.key,
     required this.filters,
     required this.window,
-    this.embeddedChapter,
+    this.embedded = false,
     this.onApply,
   });
 
   final GamesListFilters filters;
 
-  /// Null for a dialog, 0 for downloads, 1 for review performance.
-  final int? embeddedChapter;
+  final bool embedded;
 
   /// Embedded hosts apply changes without closing the shared settings route.
   final Future<void> Function(HomeReviewSettingsResult)? onApply;
@@ -59,10 +49,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
   late Set<GameSpeed> _speeds;
   late bool _autoRun;
   late GamesWindow _window;
-  late int _cores;
-  late final TextEditingController _depth;
   late final TextEditingController _bookCheck;
-  final int _maxCores = getLogicalCores();
 
   @override
   void initState() {
@@ -70,14 +57,11 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
     _speeds = {...widget.filters.speeds};
     _autoRun = widget.filters.autoRun;
     _window = widget.window;
-    _cores = EngineSettings.instance.cores;
-    _depth = TextEditingController(text: '${MiningSettings.instance.depth}');
     _bookCheck = TextEditingController(text: '${_window.bookCheckGames}');
   }
 
   @override
   void dispose() {
-    _depth.dispose();
     _bookCheck.dispose();
     super.dispose();
   }
@@ -94,15 +78,6 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
     FocusManager.instance.primaryFocus?.unfocus();
     await Future<void>.delayed(Duration.zero);
     if (!mounted) return;
-    EngineSettings.instance.cores = _cores;
-    final depth = int.tryParse(_depth.text.trim());
-    if (depth != null) {
-      unawaited(
-        MiningSettings.instance.setDepth(
-          depth.clamp(MiningSettings.minDepth, MiningSettings.maxDepth),
-        ),
-      );
-    }
     final bookCheck = int.tryParse(_bookCheck.text.trim());
     final window = bookCheck == null
         ? _window
@@ -141,84 +116,50 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (widget.embeddedChapter != 1) ...[
-            _label('Games to analyse'),
-            GamesWindowPicker(
-              window: _window,
-              onChanged: (w) {
-                if (!mounted) return;
-                setState(() => _window = w);
-              },
-            ),
-            _label('Time controls'),
-            for (final speed in selectableGameSpeeds)
-              AppCheckbox(
-                label: speed.label,
-                value: _speeds.contains(speed),
-                onChanged: (checked) {
-                  if (!mounted) return;
-                  setState(() {
-                    if (checked == true) {
-                      _speeds.add(speed);
-                    } else {
-                      _speeds.remove(speed);
-                    }
-                  });
-                },
-              ),
-            _label('Book check'),
-            _numberField(
-              key: const Key('book-check-games-field'),
-              controller: _bookCheck,
-              label: 'Games per site',
-            ),
-            _label('When it runs'),
+          _label('Games to analyse'),
+          GamesWindowPicker(
+            window: _window,
+            onChanged: (w) {
+              if (!mounted) return;
+              setState(() => _window = w);
+            },
+          ),
+          _label('Time controls'),
+          for (final speed in selectableGameSpeeds)
             AppCheckbox(
-              key: const Key('review-auto-start'),
-              label: 'Check for new games when the app starts',
-              value: _autoRun,
-              onChanged: (v) {
+              label: speed.label,
+              value: _speeds.contains(speed),
+              onChanged: (checked) {
                 if (!mounted) return;
-                setState(() => _autoRun = v);
+                setState(() {
+                  if (checked == true) {
+                    _speeds.add(speed);
+                  } else {
+                    _speeds.remove(speed);
+                  }
+                });
               },
             ),
-          ],
-          if (widget.embeddedChapter != 0) ...[
-            _label('CPU cores'),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: NumberStepper(
-                key: const Key('review-cores-field'),
-                value: _cores,
-                min: 1,
-                max: _maxCores,
-                suffix: 'of $_maxCores',
-                onChanged: (value) {
-                  if (!mounted) return;
-                  setState(() => _cores = value);
-                },
-              ),
-            ),
-            const SizedBox(height: 14),
-            _numberField(
-              key: const Key('review-depth-field'),
-              controller: _depth,
-              label: 'Engine depth',
-              hint: '${MiningSettings.minDepth}–${MiningSettings.maxDepth}',
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Applies to the next game analysed.',
-              style: AppTextStyles.body.copyWith(
-                fontSize: 12,
-                color: AppColors.onSurfaceMuted,
-              ),
-            ),
-          ],
+          _label('Book check'),
+          _numberField(
+            key: const Key('book-check-games-field'),
+            controller: _bookCheck,
+            label: 'Games per site',
+          ),
+          _label('When it runs'),
+          AppCheckbox(
+            key: const Key('review-auto-start'),
+            label: 'Check for new games when the app starts',
+            value: _autoRun,
+            onChanged: (v) {
+              if (!mounted) return;
+              setState(() => _autoRun = v);
+            },
+          ),
         ],
       ),
     );
-    if (widget.embeddedChapter != null) {
+    if (widget.embedded) {
       return Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -240,7 +181,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
       );
     }
     return AlertDialog(
-      title: const Text('Analysis settings'),
+      title: const Text('Game downloads', style: AppTextStyles.bodyStrong),
       content: SizedBox(width: 400, child: content),
       actions: [
         TextButton(

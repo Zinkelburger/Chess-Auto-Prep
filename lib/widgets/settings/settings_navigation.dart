@@ -50,25 +50,20 @@ List<SettingsChapter> settingsChapters(AppMode mode) => switch (mode) {
     SettingsChapter('Session'),
     SettingsChapter('Puzzle selection'),
     SettingsChapter('Game downloads'),
-    SettingsChapter('Review performance'),
   ],
   AppMode.pgnViewer => const [
     SettingsChapter('Playback'),
     SettingsChapter('Board and moves'),
+    SettingsChapter('Analysis panels'),
   ],
   AppMode.repertoire => const [
     SettingsChapter('Repertoire'),
     SettingsChapter('Analysis panels'),
-    SettingsChapter('Engine analysis'),
   ],
   AppMode.databases => const [SettingsChapter('Data')],
   AppMode.bughouse => const [SettingsChapter('Engine')],
   AppMode.engineTournament => const [SettingsChapter('Engines')],
-  _ => const [
-    SettingsChapter('Analysis panels'),
-    SettingsChapter('Engine analysis'),
-    SettingsChapter('Display'),
-  ],
+  _ => const [SettingsChapter('Analysis panels'), SettingsChapter('Display')],
 };
 
 /// The shared shell owns chapter selection; feature widgets own live controls.

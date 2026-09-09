@@ -14,13 +14,13 @@ import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
 import '../models/board_display_settings.dart';
 import '../models/engine_settings.dart';
+import '../models/bulk_analysis_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/san_display.dart';
-import '../utils/system_info.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/analysis/stockfish_settings_dialog.dart';
 import '../widgets/analysis/analysis_panels_dialog.dart';
@@ -116,8 +116,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     (label: 'Data', icon: Icons.storage_outlined),
     (label: 'About', icon: Icons.info_outline),
     (label: 'Keyboard shortcuts', icon: Icons.keyboard_outlined),
-    (label: 'Engine analysis', icon: Icons.search),
-    (label: 'Analysis panels', icon: Icons.view_column_outlined),
   ];
 
   @override
@@ -128,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
         titleSpacing: 8,
-        title: const Text('Settings', style: AppTextStyles.title),
+        title: const Text('Settings', style: AppTextStyles.bodyStrong),
         // The way out sits where the gear that opened this screen was, so the
         // pointer is already over it; a back arrow on the far left left users
         // hunting for the exit.
@@ -166,14 +164,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _page(1, [_buildDisplaySection()], compact),
                       _page(2, const [MyRepertoiresSection()], compact),
                       _page(3, [
-                        _buildEngineSection(getLogicalCores()),
-                        const SettingsGroup(
-                          title: 'Looking for analysis settings?',
-                          icon: Icons.settings_outlined,
-                          subtitle:
-                              'Choose Engine analysis or Analysis panels in this sidebar for search and panel preferences.',
-                          children: [],
-                        ),
+                        const StockfishSettingsBody(),
+                        _buildMaiaSection(),
                       ], compact),
                       _page(4, [_buildDatabasesSection()], compact),
                       _page(5, [
@@ -182,8 +174,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _buildResetButton(),
                       ], compact),
                       _page(6, const [KeyboardShortcutsSection()], compact),
-                      _page(7, const [StockfishSettingsBody()], compact),
-                      _page(8, const [AnalysisPanelsSettingsBody()], compact),
                     ],
                   ),
                   ListenableBuilder(
@@ -335,29 +325,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         padding: EdgeInsets.fromLTRB(12, 16, 12, 8),
                         child: Text('GLOBAL', style: AppTextStyles.eyebrow),
                       ),
-                      for (var i = 0; i < 7; i++) ...[
+                      for (var i = 0; i < _sections.length; i++)
                         _globalNavTile(i),
-                        if (i == 3 &&
-                            _global &&
-                            const [3, 7, 8].contains(_selected)) ...[
-                          Padding(
-                            padding: const EdgeInsets.only(left: 24),
-                            child: ListTile(
-                              key: const Key('settings-engine-resources'),
-                              minTileHeight: 36,
-                              dense: true,
-                              selected: _selected == 3,
-                              title: const Text(
-                                'Computer resources',
-                                style: AppTextStyles.body,
-                              ),
-                              onTap: () => _selectGlobal(3),
-                            ),
-                          ),
-                          _globalNavTile(7, nested: true),
-                          _globalNavTile(8, nested: true),
-                        ],
-                      ],
                     ],
                   ),
                 ),
@@ -385,14 +354,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         iconColor: AppColors.onSurfaceMuted,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         leading: nested ? null : Icon(_sections[index].icon, size: 20),
-        trailing: index == 3
-            ? Icon(
-                _global && const [3, 7, 8].contains(_selected)
-                    ? Icons.expand_more
-                    : Icons.chevron_right,
-                size: 18,
-              )
-            : null,
         horizontalTitleGap: 12,
         title: Text(
           _sections[index].label,
@@ -432,7 +393,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Text(
                       '${mode.label} › ${chapter.label}',
-                      style: AppTextStyles.title,
+                      style: AppTextStyles.bodyStrong,
                     ),
                   ],
                 ),
@@ -469,12 +430,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.view_column,
             children: [AnalysisPanelsSettingsBody()],
           )
-        else if (_chapter == 1)
-          const SettingsGroup(
-            title: 'Engine analysis',
-            icon: Icons.memory,
-            children: [StockfishSettingsBody()],
-          )
         else
           _buildDisplaySection(),
       ],
@@ -500,7 +455,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(section.label, style: AppTextStyles.title),
+                Text(section.label, style: AppTextStyles.bodyStrong),
                 const SizedBox(height: 16),
                 ...children,
               ],
@@ -627,51 +582,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ── Engine section ─────────────────────────────────────────────────────────
 
-  /// One number for CPU and one for memory. There used to be separate
-  /// "workers" and "threads" rows, which are the same cores spent two ways
-  /// (one process with N threads on the board, N processes reviewing games)
-  /// and read as two different things to anyone who is not a programmer.
-  Widget _buildEngineSection(int cores) {
-    final peakMb = _engine.cores * _engine.hashMb;
-    return SettingsGroup(
-      title: 'Stockfish',
-      icon: Icons.bolt,
-      // No on/off switch here on purpose: starting and stopping Stockfish is
-      // an action you want to see the result of, so it lives on the ⚡ button
-      // next to the board.
-      children: [
-        SettingsStepperTile(
-          label: 'CPU cores',
-          description: 'Shared by board analysis and game reviews.',
-          value: _engine.cores,
-          min: 1,
-          max: cores,
-          suffix: 'of $cores',
-          onChanged: (v) => _engine.cores = v,
-        ),
-        SettingsStepperTile(
-          label: 'Memory per engine',
-          description: 'Up to $peakMb MB total during game reviews.',
-          value: _engine.hashMb,
-          min: kMinHashMb,
-          max: kMaxHashMb,
-          step: 128,
-          suffix: 'MB',
-          onChanged: (v) => _engine.hashMb = v,
-        ),
-        SettingsStepperTile(
-          label: 'Opponent rating',
-          description: 'Rating used for Maia predictions.',
-          value: _engine.maiaElo,
-          min: kMinMaiaElo,
-          max: kMaxMaiaElo,
-          step: 100,
-          suffix: 'Elo',
-          onChanged: (v) => _engine.maiaElo = v,
-        ),
-      ],
-    );
-  }
+  Widget _buildMaiaSection() => SettingsStepperTile(
+    label: 'Opponent rating',
+    description: 'Maia predictions',
+    value: _engine.maiaElo,
+    min: kMinMaiaElo,
+    max: kMaxMaiaElo,
+    step: 100,
+    suffix: 'Elo',
+    onChanged: (v) => _engine.maiaElo = v,
+  );
 
   // ── Databases section ──────────────────────────────────────────────────────
 
@@ -750,6 +670,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (!confirmed) return;
     _engine.resetToDefaults();
+    await BulkAnalysisSettings.instance.setDepth(
+      BulkAnalysisSettings.defaultDepth,
+    );
     await EvalDatabaseSettings.instance.resetToDefaults();
     await BoardDisplaySettings.instance.resetToDefaults();
     if (mounted) showAppSnackBar(context, 'Settings restored to defaults');

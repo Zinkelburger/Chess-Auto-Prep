@@ -13,7 +13,7 @@ import 'package:chess_auto_prep/features/games/services/opening_review.dart';
 import 'package:chess_auto_prep/features/games/widgets/analysis_block.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
-import 'package:chess_auto_prep/features/tactics/services/mining_settings.dart';
+import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
 import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter/material.dart';
@@ -57,7 +57,7 @@ class _PausedRunner extends HomeReviewRunner {
     required super.lichessUsername,
     required super.chesscomUsername,
     super.windowSettings,
-    super.miningSettings,
+    super.bulkSettings,
   });
 
   @override
@@ -86,7 +86,7 @@ void main() {
         lichessUsername: () => lichess,
         chesscomUsername: () => null,
         windowSettings: GamesWindowSettings.forTest(),
-        miningSettings: MiningSettings.forTest(),
+        bulkSettings: BulkAnalysisSettings.forTest(),
       ),
       games: games,
       co: co,
@@ -99,7 +99,6 @@ void main() {
     required TacticsImportCoordinator coordinator,
     VoidCallback? onStart,
     VoidCallback? onPause,
-    VoidCallback? onSettings,
     VoidCallback? onOpeningReview,
     VoidCallback? onMasterPractice,
     List<OpeningReviewEntry> repeated = const [],
@@ -123,7 +122,6 @@ void main() {
                 windowLabel: 'last 20 games',
                 onStart: onStart ?? () {},
                 onPause: onPause ?? () {},
-                onSettings: onSettings ?? () {},
               ),
               OpeningsBlock(
                 openingIssueCount: openingIssues,
@@ -228,21 +226,17 @@ void main() {
     expect(find.text('2 cores'), findsOneWidget);
   });
 
-  testWidgets('the gear is the one way into the settings', (tester) async {
+  testWidgets('the gear opens the shared engine popup', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final h = build();
     addTearDown(h.games.dispose);
     addTearDown(h.runner.dispose);
-    var opened = 0;
-
-    await pump(
-      tester,
-      runner: h.runner,
-      coordinator: h.co,
-      onSettings: () => opened++,
-    );
-    await tester.tap(find.byTooltip('Analysis settings…'));
-    expect(opened, 1);
+    await pump(tester, runner: h.runner, coordinator: h.co);
+    await tester.tap(find.byTooltip('Engine settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Board depth'), findsOneWidget);
+    expect(find.text('Bulk depth'), findsOneWidget);
+    expect(find.text('Review performance'), findsNothing);
   });
 
   testWidgets('opening review is a button with its leak count, and opens', (
@@ -325,7 +319,7 @@ void main() {
       lichessUsername: () => 'me',
       chesscomUsername: () => null,
       windowSettings: GamesWindowSettings.forTest(),
-      miningSettings: MiningSettings.forTest(),
+      bulkSettings: BulkAnalysisSettings.forTest(),
     );
     addTearDown(games.dispose);
     addTearDown(runner.dispose);

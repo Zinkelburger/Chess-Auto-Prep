@@ -15,6 +15,8 @@ import 'dart:io';
 import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
+import 'package:chess_auto_prep/features/tactics/services/tactics_import_service.dart';
+import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/services/game_store/game_store.dart';
 import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
 import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
@@ -38,6 +40,31 @@ class _FakePathProvider extends PathProviderPlatform
 
   @override
   Future<String?> getApplicationSupportPath() async => root;
+}
+
+class _RecordingImport extends TacticsImportService {
+  int? requestedDepth;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<ImportResult> reviewFetchedGames({
+    required String pgnContent,
+    required String username,
+    required int depth,
+    int? maxCores,
+    bool mapChessComEloForMaia = false,
+    Set<String> forceDedupKeys = const {},
+    ProgressCallback? progressCallback,
+    OnPositionFoundCallback? onPositionFound,
+    GameProgressCallback? onGameProgress,
+    GameReviewedCallback? onGameReviewed,
+    GameAnnotatedCallback? onGameAnnotated,
+  }) async {
+    requestedDepth = depth;
+    return (positions: <TacticsPosition>[], gamesAnalyzed: 0, gamesSkipped: 0);
+  }
 }
 
 String lichessGame(String id) =>
@@ -101,6 +128,18 @@ void main() {
       (throw StateError('no tactics import job is registered'));
 
   // ────────────────────────────────────────────────────────────────────────
+  test('bulk depths above 25 reach the game analyzer unchanged', () async {
+    final service = _RecordingImport();
+    final coordinator = makeCoordinator()..importFactory = (_) => service;
+    addTearDown(coordinator.dispose);
+    await coordinator.import(
+      source: TacticsImportSource.lichess,
+      params: const TacticsImportParams(username: 'userA', depth: 30),
+      pgnContent: lichessGame('depth30'),
+    );
+    expect(service.requestedDepth, 30);
+  });
+
   group('starting a run', () {
     test('an empty username is refused before any job is registered', () async {
       final coordinator = makeCoordinator();

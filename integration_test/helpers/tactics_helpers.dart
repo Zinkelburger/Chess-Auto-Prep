@@ -75,7 +75,9 @@ Future<void> importAndWaitForPositions(
   // strip is on screen from boot, with no account, for exactly this kind of
   // reason. The window defaults to "my last N games", so the count field is
   // already the active one; it carries no label, hence the key.
-  await tester.tap(find.byTooltip('Analysis settings…'));
+  await tester.tap(find.byTooltip('App settings'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Game downloads'));
   await tester.pumpAndSettle();
   await tester.enterText(
     find.byKey(const Key('window-games-field')),
@@ -83,6 +85,9 @@ Future<void> importAndWaitForPositions(
   );
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(FilledButton, 'Apply'));
+  await tester.pumpAndSettle();
+
+  await tester.tap(find.byTooltip('Close settings (Esc)'));
   await tester.pumpAndSettle();
 
   // Usernames are typed in the accounts dialog now, behind the home card's

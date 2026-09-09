@@ -9,10 +9,7 @@ mixin _GenerationConfigIo
         : SearchAlgorithm.pure;
     _cutoffCtrl.text = (config.minProbability * 100).toString();
     _maxPlyCtrl.text = config.maxPly.toString();
-    _engineDepthCtrl.text = config.evalDepth.toString();
-    _engineThreadsCtrl.text = config.engineThreads > 0
-        ? config.engineThreads.toString()
-        : defaultEngineThreads().toString();
+
     _evalGuardCtrl.text = config.maxEvalLossCp.toString();
     _minEvalCtrl.text = config.minEvalCp.toString();
     _maxEvalCtrl.text = config.maxEvalCp.toString();
@@ -152,13 +149,8 @@ mixin _GenerationConfigIo
     required String startFen,
     required bool playAsWhite,
   }) {
-    final evalDepth =
-        int.tryParse(_engineDepthCtrl.text.trim()) ??
-        kDefaultGenerationEvalDepth;
-    final rawThreads = int.tryParse(_engineThreadsCtrl.text.trim());
-    final engineThreads = rawThreads != null
-        ? clampEngineThreads(rawThreads)
-        : defaultEngineThreads();
+    final evalDepth = BulkAnalysisSettings.instance.depth;
+    final engineThreads = EngineSettings.instance.cores;
 
     final seed =
         _seedConfig ??

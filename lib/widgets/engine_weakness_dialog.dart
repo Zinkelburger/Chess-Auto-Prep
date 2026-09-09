@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/engine_settings.dart';
+import '../models/bulk_analysis_settings.dart';
 import '../theme/app_colors.dart';
 import 'info_hint.dart';
 
@@ -28,10 +29,6 @@ class EngineWeaknessConfig {
   });
 }
 
-/// Depth that actually gets used: deep enough to be trusted for opening
-/// positions, shallow enough that a few hundred of them finish in minutes.
-const int _kDefaultDepth = 15;
-
 class EngineWeaknessConfigDialog extends StatefulWidget {
   /// True when the player already has engine evals, i.e. this run replaces
   /// them. Only changes the wording of the header.
@@ -46,42 +43,34 @@ class EngineWeaknessConfigDialog extends StatefulWidget {
 
 class _EngineWeaknessConfigDialogState
     extends State<EngineWeaknessConfigDialog> {
-  late final TextEditingController _depthCtrl;
   late final TextEditingController _minGamesCtrl;
   late final TextEditingController _whiteCpCtrl;
   late final TextEditingController _blackCpCtrl;
-  late final TextEditingController _workersCtrl;
 
   @override
   void initState() {
     super.initState();
-    final settings = EngineSettings.instance;
-    _depthCtrl = TextEditingController(text: '$_kDefaultDepth');
     _minGamesCtrl = TextEditingController(text: '3');
     _whiteCpCtrl = TextEditingController(text: '-50');
     _blackCpCtrl = TextEditingController(text: '100');
-    _workersCtrl = TextEditingController(text: '${settings.cores}');
   }
 
   @override
   void dispose() {
-    _depthCtrl.dispose();
     _minGamesCtrl.dispose();
     _whiteCpCtrl.dispose();
     _blackCpCtrl.dispose();
-    _workersCtrl.dispose();
     super.dispose();
   }
 
   void _submit() {
     Navigator.of(context).pop(
       EngineWeaknessConfig(
-        depth: int.tryParse(_depthCtrl.text) ?? _kDefaultDepth,
+        depth: BulkAnalysisSettings.instance.depth,
         minGames: int.tryParse(_minGamesCtrl.text) ?? 3,
         whiteCp: int.tryParse(_whiteCpCtrl.text) ?? -50,
         blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
-        workers:
-            int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.cores,
+        workers: EngineSettings.instance.cores,
       ),
     );
   }
@@ -103,16 +92,6 @@ class _EngineWeaknessConfigDialogState
                 spacing: 16,
                 runSpacing: 12,
                 children: [
-                  _field(
-                    'Depth',
-                    _depthCtrl,
-                    80,
-                    hint:
-                        'How deep Stockfish searches every position.\n'
-                        'Each extra ply costs roughly double the time, so $_kDefaultDepth '
-                        'keeps a\nfew hundred positions to minutes. Raise it to '
-                        '20+ only for a\nfinal pass over a short list.',
-                  ),
                   _field(
                     'Min games',
                     _minGamesCtrl,
@@ -143,15 +122,6 @@ class _EngineWeaknessConfigDialogState
                         'Evaluations are always from White\'s side, so a positive\n'
                         'number means Black stands worse: 100 marks "a pawn down\n'
                         'or worse". Only affects highlighting, not what is evaluated.',
-                  ),
-                  _field(
-                    'Workers',
-                    _workersCtrl,
-                    80,
-                    hint:
-                        'How many Stockfish processes evaluate positions in parallel.\n'
-                        'More finishes sooner but leaves less CPU for the rest of\n'
-                        'the machine. The default follows your engine settings.',
                   ),
                 ],
               ),
