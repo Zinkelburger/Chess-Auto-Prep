@@ -28,6 +28,7 @@ import '../utils/open_in_file_manager.dart';
 import '../core/pgn_viewer_controller.dart';
 import '../core/pgn/pgn_viewer_handle.dart';
 import '../core/pgn/pgn_pane_router.dart';
+import '../core/pgn/pgn_copy.dart';
 import '../core/pgn/solitaire_controller.dart';
 import '../features/games/services/game_deviation_service.dart';
 import '../features/games/services/opening_review.dart' show deviationVerdict;
@@ -1169,13 +1170,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   @override
-  Future<void> _copyCurrentGamePgn() async {
+  Future<void> _copyCurrentGamePgn({bool mainlineOnly = false}) async {
     if (_controller.filteredGames.isEmpty) return;
     final pgnText =
         (_referenceGames[_tabController.index] ??
                 _controller.filteredGames[_controller.currentGameIndex])
             .pgnText;
-    await Clipboard.setData(ClipboardData(text: pgnText));
+    await Clipboard.setData(
+      ClipboardData(
+        text: mainlineOnly ? mainlinePgnWithoutComments(pgnText) : pgnText,
+      ),
+    );
     if (!mounted) return;
     showAppSnackBar(context, AppMessages.pgnCopied);
     _reclaimFocus();

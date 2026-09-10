@@ -18,7 +18,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   void _toggleEditMode();
   Future<void> _editInStudy();
   Future<void> _addCurrentGameToStudy();
-  Future<void> _copyCurrentGamePgn();
+  Future<void> _copyCurrentGamePgn({bool mainlineOnly = false});
   Future<void> _copyCurrentFen();
   void _openSliceDialog();
   Future<void> _exportSlice();
@@ -120,6 +120,11 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             icon: Icons.copy,
             dividerAbove: true,
             onRun: _copyCurrentGamePgn,
+          ),
+          AppMenuEntry(
+            label: 'Copy mainline PGN (no comments)',
+            icon: Icons.copy,
+            onRun: () => _copyCurrentGamePgn(mainlineOnly: true),
           ),
           AppMenuEntry(
             label: 'Copy FEN',
