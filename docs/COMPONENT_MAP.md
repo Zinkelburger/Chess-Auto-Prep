@@ -616,7 +616,9 @@ Again rating schedules later review without reintroducing earlier lines into
 the current run. Every answer is durably recorded before progression in
 `repertoire_move_attempts.jsonl`, including source, line, position, played and
 expected moves and phase. The trainer's searchable Mistakes panel opens the
-matching line for reading.
+matching line for reading. `MoveAttemptStore` keeps this history attached when
+lines move or split into chapters, and when an owned chapter or repertoire
+folder is renamed or moved.
 
 Trainer view organization: source browser, lesson and results share the same
 board/panel frame. One phase panel replaces separate intro/learn/drill/replay
