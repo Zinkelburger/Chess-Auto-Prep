@@ -158,6 +158,8 @@ void main() {
         Theme.of(tester.element(find.byType(HeaderFilters))).brightness,
         Brightness.dark,
       );
+      await tester.tap(find.byTooltip('Add filter'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Player'));
       await _finishMatching(tester);
       final controller = tester
@@ -203,6 +205,8 @@ void main() {
     tester,
   ) async {
     await _open(tester);
+    await tester.tap(find.byTooltip('Add filter'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Player'));
     await tester.pumpAndSettle();
     final controller = tester

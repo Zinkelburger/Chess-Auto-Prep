@@ -73,8 +73,8 @@ class HeaderFilterConfig {
   /// Bounds remain inclusive, just as in the persisted matching modes.
   String get conditionLabel {
     if (field == 'Date') {
-      if (mode == MatchMode.after) return 'In or after';
-      if (mode == MatchMode.before) return 'In or before';
+      if (mode == MatchMode.after) return 'After';
+      if (mode == MatchMode.before) return 'Before';
     }
     final subject = switch (field) {
       'WhiteElo' => 'White rating',

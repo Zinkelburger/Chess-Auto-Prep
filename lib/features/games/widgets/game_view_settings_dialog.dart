@@ -136,6 +136,14 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
             title: 'Board and moves',
             icon: Icons.grid_on_outlined,
             children: [
+              SettingsSwitchTile(
+                label: 'Auto-detect ECO and opening',
+                description:
+                    'Identify openings in every game and save missing ECO and Opening tags to the PGN. Existing tags are kept.',
+                value: _prefs.autoDetectOpenings,
+                onChanged: (v) =>
+                    _update(_prefs.copyWith(autoDetectOpenings: v)),
+              ),
               _action('Move list…', widget.onReadingOptions),
               _action(
                 'Flip board',

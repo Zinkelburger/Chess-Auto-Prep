@@ -219,6 +219,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         // The screen may have been created by the very mode switch that set
         // the pending file (listener not registered yet) — consume it now.
         _consumePendingViewerFile(appState);
+        unawaited(_controller.restoreLastSession());
       }
     });
   }
@@ -244,6 +245,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     setState(() => _viewPreferences = saved);
     _controller.setAutoPlaySpeed(saved.speed);
     _controller.setAutoNextGame(saved.autoNext);
+    _controller.setAutoDetectOpenings(saved.autoDetectOpenings);
   }
 
   @override
@@ -257,6 +259,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!value.playback) _controller.stopAutoPlay();
     _controller.setAutoPlaySpeed(value.speed);
     _controller.setAutoNextGame(value.autoNext);
+    _controller.setAutoDetectOpenings(value.autoDetectOpenings);
     unawaited(value.save());
   }
 
@@ -950,6 +953,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void _onGamePosition(Position position) {
+    if (!mounted) return;
+    _controller.rememberReadingPosition();
     _gamePanePosition = position;
     // TabBarView keeps the Game child alive while Book is visible. Engine or
     // async widget updates from that hidden child must not steal the board.
