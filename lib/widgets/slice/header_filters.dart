@@ -132,7 +132,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
 
   String _fieldLabel(String field) => switch (field) {
     kPlayerHeaderField => 'Player',
-    'Date' => 'Date / year',
+    'Date' => 'Date',
     'WhiteElo' => 'White rating',
     'BlackElo' => 'Black rating',
     'StudyRating' => 'Study rating',
@@ -156,6 +156,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
     final index = controller.headerRows.length - 1;
     controller.setHeaderField(index, field);
     if (field == 'Result') controller.setHeaderMode(index, MatchMode.exact);
+    if (field == 'Date') controller.setHeaderMode(index, MatchMode.after);
   }
 
   Widget _buildAddButtons() => Align(

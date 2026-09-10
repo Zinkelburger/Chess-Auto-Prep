@@ -323,7 +323,7 @@ void main() {
     await tester.enterText(_value(controller), '2200');
     await tester.pumpAndSettle();
     expect(controller.headerConfigs.single.mode, MatchMode.after);
-    await _choose(tester, _field, 'Date', 'Date / year');
+    await _choose(tester, _field, 'Date', 'Date');
     await _choose(tester, _rule, 'before', 'Before');
     await tester.enterText(_value(controller), '1960');
     await tester.pumpAndSettle();
