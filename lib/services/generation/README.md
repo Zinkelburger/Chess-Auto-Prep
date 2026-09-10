@@ -175,3 +175,21 @@ each generated continuation. For example, `START_MOVES="d4 Nf6 c4 g6 Nc3 Bg7
 e4 d6"` builds from the KID position but writes a PGN beginning `1. d4 Nf6`.
 The harness records that prefix on its saved tree as well. A custom FEN without
 move history stays a setup-position PGN; no move order is invented.
+
+For several systems in one repertoire, use **Generate → Plan starting lines…**.
+Enter a move sequence per row, optionally prefixed with a chapter name and `|`.
+The board previews and edits the selected row; Add starting position keeps the
+others. For example:
+
+```text
+Main KID | 1.d4 Nf6 2.c4 g6 3.Nc3 Bg7 4.e4 d6
+Fianchetto KID | 1.d4 Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 d6
+London | 1.d4 Nf6 2.Bf4 d5
+```
+
+**Guided choices** asks setup questions under each root. **Use these positions**
+goes directly to chapter review with the ChessDB compact profile. Each root
+gets a separate chapter and queued build; budgets are per build point. Roots
+must be legal, distinct and not prefixes of one another. Shared setup moves
+are preserved in every PGN. This does not imply coverage of systems outside
+the supplied roots.

@@ -447,7 +447,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                     ),
                   TextButton(
                     onPressed: widget.onPlanLines,
-                    child: const Text('Plan lines from here'),
+                    child: const Text('Plan starting lines…'),
                   ),
                   if (widget.onCutLines != null)
                     TextButton(

@@ -34,6 +34,9 @@ import '../../repertoire/models/repertoire_outline.dart';
 import '../../repertoire/widgets/repertoire_database_pane.dart';
 import '../controllers/plan_controller.dart';
 import '../models/plan_models.dart';
+import '../models/plan_starting_line.dart';
+import '../../../services/generation/generation_presets.dart';
+import '../../../utils/app_messages.dart';
 import '../services/plan_data_source.dart';
 import '../services/plan_knowledge.dart';
 import 'plan_candidate_table.dart';
@@ -106,6 +109,15 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     isWhite: widget.isWhite,
     elo: widget.defaultElo,
   );
+
+  // Each row is a complete move path; the board edits the selected row.
+  late List<PlanStartingLine> _startingLines = [
+    PlanStartingLine(moves: widget.initialMoves),
+  ];
+  int _selectedStart = 0;
+  String? _startError;
+  bool _startTextValid = true;
+  bool _guided = true;
 
   // Start-phase inputs.
   late List<String> _startMoves = List.of(widget.initialMoves);
@@ -187,15 +199,29 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
   // ── Phase transitions ──────────────────────────────────────────────────
 
   Future<void> _begin() async {
-    if (_basis == PlanBasis.ownGames && (_ownGamesCount ?? 0) == 0) return;
+    if (!_canBegin) return;
     setState(() => _preparing = true);
     _plan.elo = widget.defaultElo;
     _plan.minShare = kPlanMinShare;
     _plan.basis = _basis;
-    _plan.knowledge = await _buildKnowledge();
+    if (_guided) _plan.knowledge = await _buildKnowledge();
     if (!mounted) return;
-    setState(() => _preparing = false);
-    await _plan.start(_startMoves);
+    try {
+      if (!_guided) {
+        _reviewConfig ??= chessDbRepertoirePreset(playAsWhite: widget.isWhite);
+      }
+      await _plan.startMany(_startingLines, askQuestions: _guided);
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          'Could not prepare the plan: $e',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _preparing = false);
+    }
   }
 
   Future<PlanKnowledge> _buildKnowledge() async {
@@ -276,8 +302,15 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     final plan = _finished;
     if (plan == null) return;
     final formState = _configKey.currentState;
+    if (generate) {
+      final error = formState?.validateBeforeStart();
+      if (error != null) {
+        showAppSnackBar(context, error, isError: true);
+        return;
+      }
+    }
     final config = formState == null
-        ? widget.baseConfig
+        ? _reviewConfig ?? widget.baseConfig
         : formState.toConfig(
             startFen: kStandardStartFen,
             playAsWhite: widget.isWhite,
@@ -302,11 +335,85 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
     return pos;
   }
 
-  void _onStartBoardMove(CompletedMove move) {
+  void _onStartBoardMove(CompletedMove move) =>
+      _replaceStartMoves([..._startMoves, move.san]);
+
+  void _replaceStartMoves(List<String> moves) {
+    if (!mounted || _preparing || !_startTextValid) return;
     setState(() {
-      _startMoves = [..._startMoves, move.san];
-      _movesText.text = _movesLabel(_startMoves);
+      final current = _startingLines[_selectedStart];
+      _startingLines[_selectedStart] = PlanStartingLine(
+        name: current.name,
+        moves: moves,
+      );
+      _startMoves = List.of(moves);
+      _movesText.text = _startingLines
+          .map((line) => line.text.isEmpty ? 'Start position |' : line.text)
+          .join('\n');
+      _validateStarts();
     });
+  }
+
+  void _addStart() {
+    if (!mounted || _preparing || !_startTextValid) return;
+    setState(() {
+      _startingLines.add(
+        PlanStartingLine(
+          name: 'Line ${_startingLines.length + 1}',
+          moves: const [],
+        ),
+      );
+      _selectedStart = _startingLines.length - 1;
+      _startMoves = [];
+      _movesText.text = _startingLines
+          .map((line) => line.text.isEmpty ? 'Start position |' : line.text)
+          .join('\n');
+      _validateStarts();
+    });
+  }
+
+  void _removeStart() {
+    if (!mounted ||
+        _preparing ||
+        !_startTextValid ||
+        _startingLines.length < 2) {
+      return;
+    }
+    setState(() {
+      _startingLines.removeAt(_selectedStart);
+      _selectedStart = _selectedStart.clamp(0, _startingLines.length - 1);
+      _startMoves = List.of(_startingLines[_selectedStart].moves);
+      _movesText.text = _startingLines
+          .map((line) => line.text.isEmpty ? 'Start position |' : line.text)
+          .join('\n');
+      _validateStarts();
+    });
+  }
+
+  void _validateStarts() {
+    try {
+      PlanStartingLine.validate(_startingLines);
+      _startError = null;
+    } on FormatException catch (e) {
+      _startError = e.message;
+    }
+  }
+
+  void _editStarts() {
+    if (!mounted) return;
+    _reviewConfig =
+        _configKey.currentState?.toConfig(
+          startFen: kStandardStartFen,
+          playAsWhite: widget.isWhite,
+        ) ??
+        _reviewConfig;
+    setState(() {
+      _finished = null;
+      _reviewing = false;
+      _previewMoves = null;
+      _lastStepMoves = null;
+    });
+    _plan.reset();
   }
 
   bool get _boardAcceptsMoves =>
@@ -361,21 +468,18 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
   }
 
   void _parseTypedMoves(String text) {
-    final tokens = text
-        .replaceAll(RegExp(r'\d+\.(\.\.)?'), ' ')
-        .split(RegExp(r'\s+'))
-        .where((t) => t.isNotEmpty)
-        .toList();
-    Position pos = Chess.initial;
-    final ok = <String>[];
-    for (final t in tokens) {
-      final next = playSanOrNullMove(pos, t);
-      if (next == null) break;
-      ok.add(t);
-      pos = next;
-    }
+    if (!mounted) return;
     setState(() {
-      _startMoves = ok;
+      try {
+        _startingLines = PlanStartingLine.parse(text);
+        _startTextValid = true;
+        _selectedStart = _selectedStart.clamp(0, _startingLines.length - 1);
+        _startMoves = List.of(_startingLines[_selectedStart].moves);
+        _validateStarts();
+      } on FormatException catch (e) {
+        _startTextValid = false;
+        _startError = e.message;
+      }
     });
   }
 
@@ -433,7 +537,8 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             final wide = constraints.maxWidth >= 1000;
             final left = _buildPlanSoFar();
             final board = _buildBoardColumn(
-              interactive: phase == PlanPhase.start,
+              interactive:
+                  phase == PlanPhase.start && !_preparing && _startTextValid,
             );
             final card = switch (phase) {
               PlanPhase.start => _buildStartCard(),
@@ -505,9 +610,9 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             children: [
-              if (_startMoves.isNotEmpty)
+              for (final start in _startingLines)
                 Text(
-                  _movesLabel(_startMoves),
+                  start.text.isEmpty ? 'Initial position' : start.text,
                   style: const TextStyle(
                     fontSize: 12,
                     fontFamily: AppTextStyles.monoFamily,
@@ -651,13 +756,9 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                   tooltip: 'Undo move',
                   icon: const Icon(Icons.undo, size: 16),
                   visualDensity: VisualDensity.compact,
-                  onPressed: () => setState(() {
-                    _startMoves = _startMoves.sublist(
-                      0,
-                      _startMoves.length - 1,
-                    );
-                    _movesText.text = _movesLabel(_startMoves);
-                  }),
+                  onPressed: () => _replaceStartMoves(
+                    _startMoves.sublist(0, _startMoves.length - 1),
+                  ),
                 ),
             ],
           ),
@@ -701,10 +802,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                         repertoireMovesAtPosition: () => const {},
                         onPlayMove: (san) {
                           if (_plan.phase == PlanPhase.start) {
-                            setState(() {
-                              _startMoves = [..._startMoves, san];
-                              _movesText.text = _movesLabel(_startMoves);
-                            });
+                            _replaceStartMoves([..._startMoves, san]);
                           } else {
                             setState(() {
                               _previewMoves = [..._boardMoves, san];
@@ -741,7 +839,8 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             SizedBox(width: 6),
             Tooltip(
               waitDuration: Duration(milliseconds: 300),
-              message: 'Play or type moves',
+              message:
+                  'Enter one move sequence per line, starting at move one. Select a line to preview or extend it on the board.',
               child: Icon(
                 Icons.info_outline,
                 size: 16,
@@ -762,10 +861,9 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                   style: const TextStyle(fontSize: 12),
                 ),
                 selected: _listEq(_startMoves, start),
-                onSelected: (_) => setState(() {
-                  _startMoves = List.of(start);
-                  _movesText.text = _movesLabel(start);
-                }),
+                onSelected: _preparing || !_startTextValid
+                    ? null
+                    : (_) => _replaceStartMoves(start),
               ),
             ChoiceChip(
               label: const Text(
@@ -773,60 +871,136 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                 style: TextStyle(fontSize: 12),
               ),
               selected: _startMoves.isEmpty,
-              onSelected: (_) => setState(() {
-                _startMoves = [];
-                _movesText.text = '';
-              }),
+              onSelected: _preparing || !_startTextValid
+                  ? null
+                  : (_) => _replaceStartMoves([]),
             ),
           ],
         ),
         const SizedBox(height: 12),
         TextField(
+          key: const ValueKey('plan-starting-lines'),
+          enabled: !_preparing,
+          minLines: 3,
+          maxLines: 7,
           controller: _movesText,
           onChanged: _parseTypedMoves,
           style: const TextStyle(
             fontSize: 13,
             fontFamily: AppTextStyles.monoFamily,
           ),
-          decoration: const InputDecoration(
-            labelText: 'Moves',
+          decoration: InputDecoration(
+            labelText: 'Starting lines — one per row',
+            helperText:
+                'Optional name: Main KID | 1.d4 Nf6 2.c4 g6\nEach row starts at move one. Starting moves are included in the PGN.',
+            helperMaxLines: 3,
+            errorText: _startError,
+            errorMaxLines: 4,
             isDense: true,
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 20),
-        const Text(
-          'What should the questions walk?',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
-        // Two walks, not a preference: the book asks at its tabiyas; your
-        // games ask at every position you actually reached, so answering
-        // them all turns your games into a repertoire.
-        SegmentedButton<PlanBasis>(
-          segments: const [
-            ButtonSegment(
-              value: PlanBasis.book,
-              label: Text('Opening book', style: TextStyle(fontSize: 12)),
+        Wrap(
+          spacing: 8,
+          children: [
+            TextButton.icon(
+              key: const ValueKey('plan-add-start'),
+              onPressed: _preparing || !_startTextValid ? null : _addStart,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add starting position'),
             ),
-            ButtonSegment(
-              value: PlanBasis.ownGames,
-              label: Text('My games', style: TextStyle(fontSize: 12)),
-            ),
+            if (_startingLines.length > 1)
+              TextButton(
+                key: const ValueKey('plan-remove-start'),
+                onPressed: _preparing || !_startTextValid ? null : _removeStart,
+                child: const Text('Remove selected position'),
+              ),
           ],
-          selected: {_basis},
+        ),
+        if (_startingLines.length > 1) ...[
+          const SizedBox(height: 8),
+          const Text('Preview a starting line', style: AppTextStyles.caption),
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final (index, line) in _startingLines.indexed)
+                ChoiceChip(
+                  key: ValueKey('plan-preview-$index'),
+                  label: Text(
+                    line.name.isEmpty ? 'Line ${index + 1}' : line.name,
+                  ),
+                  selected: _selectedStart == index,
+                  onSelected: _preparing
+                      ? null
+                      : (_) {
+                          if (!mounted) return;
+                          setState(() {
+                            _selectedStart = index;
+                            _startMoves = List.of(line.moves);
+                            _previewMoves = null;
+                          });
+                        },
+                ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 20),
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: true, label: Text('Guided choices')),
+            ButtonSegment(value: false, label: Text('Use these positions')),
+          ],
+          selected: {_guided},
           showSelectedIcon: false,
           onSelectionChanged: _preparing
               ? null
-              : (sel) => setState(() => _basis = sel.first),
+              : (values) {
+                  if (!mounted) return;
+                  setState(() => _guided = values.first);
+                },
         ),
-        const SizedBox(height: 6),
-        Text(switch (_basis) {
-          PlanBasis.book =>
-            'Asks where the opening book forks: which of the main systems '
-                'you play, and which of the opponent\'s moves get a line.',
-          PlanBasis.ownGames => _ownGamesNote ?? 'Reading your games…',
-        }, style: AppTextStyles.caption),
+        const SizedBox(height: 8),
+        Text(
+          _guided
+              ? 'Ask setup questions for each starting line, then review the whole plan.'
+              : 'Create one chapter per starting line using ChessDB compact repertoire settings. Review and edit the build settings before starting.',
+          style: AppTextStyles.caption,
+        ),
+        if (_guided) ...[
+          const SizedBox(height: 20),
+          const Text(
+            'What should the questions walk?',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          // Two walks, not a preference: the book asks at its tabiyas; your
+          // games ask at every position you actually reached, so answering
+          // them all turns your games into a repertoire.
+          SegmentedButton<PlanBasis>(
+            segments: const [
+              ButtonSegment(
+                value: PlanBasis.book,
+                label: Text('Opening book', style: TextStyle(fontSize: 12)),
+              ),
+              ButtonSegment(
+                value: PlanBasis.ownGames,
+                label: Text('My games', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+            selected: {_basis},
+            showSelectedIcon: false,
+            onSelectionChanged: _preparing
+                ? null
+                : (sel) => setState(() => _basis = sel.first),
+          ),
+          const SizedBox(height: 6),
+          Text(switch (_basis) {
+            PlanBasis.book =>
+              'Asks where the opening book forks: which of the main systems '
+                  'you play, and which of the opponent\'s moves get a line.',
+            PlanBasis.ownGames => _ownGamesNote ?? 'Reading your games…',
+          }, style: AppTextStyles.caption),
+        ],
         const SizedBox(height: 16),
         Row(
           children: [
@@ -842,7 +1016,13 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.arrow_forward, size: 18),
-              label: Text(_preparing ? 'Preparing…' : 'Next'),
+              label: Text(
+                _preparing
+                    ? 'Preparing…'
+                    : _guided
+                    ? 'Next'
+                    : 'Review & build',
+              ),
             ),
           ],
         ),
@@ -851,7 +1031,9 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
   }
 
   /// Walking the book needs nothing; walking your games needs some.
-  bool get _canBegin => _basis == PlanBasis.book || (_ownGamesCount ?? 0) > 0;
+  bool get _canBegin =>
+      _startError == null &&
+      (!_guided || _basis == PlanBasis.book || (_ownGamesCount ?? 0) > 0);
 
   /// White's first move — the same four for both colours: a Black repertoire
   /// is organised by what White does, and the user plays Black's reply on the
@@ -1018,6 +1200,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                 label: const Text('Continue'),
               ),
               OutlinedButton(
+                onPressed: _editStarts,
+                child: const Text('Edit starting lines'),
+              ),
+              OutlinedButton(
                 onPressed: _plan.canGoBack
                     ? () => unawaited(_plan.back())
                     : null,
@@ -1075,6 +1261,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               OutlinedButton(
                 onPressed: () => unawaited(_plan.setUpSeparately()),
                 child: const Text('Set up this move order separately'),
+              ),
+              OutlinedButton(
+                onPressed: _editStarts,
+                child: const Text('Edit starting lines'),
               ),
               OutlinedButton(
                 onPressed: _plan.canGoBack
@@ -1138,6 +1328,10 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                 child: const Text('Keep setting up this line'),
               ),
               OutlinedButton(
+                onPressed: _editStarts,
+                child: const Text('Edit starting lines'),
+              ),
+              OutlinedButton(
                 onPressed: _plan.canGoBack
                     ? () => unawaited(_plan.back())
                     : null,
@@ -1172,8 +1366,9 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
               const SizedBox(height: 4),
               const Text(
                 'A chapter is an opening system; the lines you set up inside '
-                'it are the engine\'s starting points. Rename or drop any '
-                'before anything runs.',
+                'it are the build’s starting points. Rename or drop any '
+                'before anything runs. Builds run in order; the limits below '
+                'apply to each starting position.',
                 style: AppTextStyles.caption,
               ),
               const SizedBox(height: 12),
@@ -1183,13 +1378,18 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
                   chapters: group.value,
                   initiallyExpanded: group.value.length <= 4,
                   row: (c) => _ChapterEditRow(
+                    key: ObjectKey(c),
                     chapter: c,
-                    onRename: (name) => setState(() => c.name = name),
-                    onRemove: () => setState(() => plan.chapters.remove(c)),
+                    onRename: (name) {
+                      if (mounted) setState(() => c.name = name);
+                    },
+                    onRemove: () {
+                      if (mounted) setState(() => plan.chapters.remove(c));
+                    },
                   ),
                 ),
               const SizedBox(height: 20),
-              const _SectionTitle('Engine'),
+              const _SectionTitle('Build settings for every chapter'),
               GenerationConfigForm(
                 key: _configKey,
                 initialConfig: _reviewConfig ?? widget.baseConfig,
@@ -1209,8 +1409,19 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               OutlinedButton(
+                onPressed: _editStarts,
+                child: const Text('Edit starting lines'),
+              ),
+              OutlinedButton(
                 onPressed: _plan.canGoBack
                     ? () {
+                        if (!mounted) return;
+                        _reviewConfig =
+                            _configKey.currentState?.toConfig(
+                              startFen: kStandardStartFen,
+                              playAsWhite: widget.isWhite,
+                            ) ??
+                            _reviewConfig;
                         setState(() {
                           _finished = null;
                           _reviewing = false;
@@ -1371,6 +1582,7 @@ class _ChapterEditRow extends StatelessWidget {
   final ValueChanged<String> onRename;
   final VoidCallback onRemove;
   const _ChapterEditRow({
+    super.key,
     required this.chapter,
     required this.onRename,
     required this.onRemove,
