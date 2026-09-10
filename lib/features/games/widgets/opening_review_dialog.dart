@@ -7,6 +7,7 @@ import '../../../theme/app_text_styles.dart';
 import '../models/recent_game.dart';
 import '../services/opening_review.dart';
 import 'my_repertoires_panel.dart';
+import 'opening_position_preview.dart';
 
 /// All opening mistakes from the recent-games window in one place — the
 /// aggregate complement of the per-game "Left book" line, so leaks can be
@@ -46,9 +47,9 @@ class OpeningReviewDialog extends StatelessWidget {
     return AlertDialog(
       title: const Text('Opening review'),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 520),
+        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 600),
         child: SizedBox(
-          width: 560,
+          width: 720,
           child: SingleChildScrollView(child: _buildBody(context)),
         ),
       ),
@@ -217,42 +218,58 @@ class _EntryTile extends StatelessWidget {
         },
         child: Padding(
           padding: const EdgeInsets.all(10),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${entry.placeName} · move ${entry.moveNumber}',
-                      overflow: TextOverflow.ellipsis,
+              OpeningPositionPreview(
+                pathSans: entry.pathSans,
+                playedSan: entry.playedSan,
+                expectedSans: entry.expectedSans,
+                byMe: entry.byMe,
+                bookEnded: entry.isBookEnd,
+                flipped: entry.games.first.meWhite == false,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${entry.placeName} · move ${entry.moveNumber}',
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body.copyWith(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '$count ${count == 1 ? 'game' : 'games'}',
+                          style: AppTextStyles.body.copyWith(
+                            fontSize: 12,
+                            color: AppColors.onSurfaceMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      entry.lineDisplay,
                       style: AppTextStyles.body.copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        color: AppColors.onSurfaceMuted,
                       ),
                     ),
-                  ),
-                  Text(
-                    '$count ${count == 1 ? 'game' : 'games'}',
-                    style: AppTextStyles.body.copyWith(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                entry.lineDisplay,
-                style: AppTextStyles.body.copyWith(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
+                    const SizedBox(height: 4),
+                    bookEnd ? _buildBookEndLine() : _buildMistakeLine(),
+                    const SizedBox(height: 6),
+                    _GameLinks(entry: entry, onOpenGame: onOpenGame),
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
-              bookEnd ? _buildBookEndLine() : _buildMistakeLine(),
-              const SizedBox(height: 6),
-              _GameLinks(entry: entry, onOpenGame: onOpenGame),
             ],
           ),
         ),
@@ -274,9 +291,7 @@ class _EntryTile extends StatelessWidget {
             style: AppTextStyles.body.copyWith(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              // Amber marks a move of mine to unlearn; an opponent's move
-              // the book lacks is information, not a fault.
-              color: gap ? null : AppColors.warning,
+              color: gap ? AppColors.onSurfaceMuted : AppColors.danger,
             ),
           ),
           TextSpan(
@@ -286,7 +301,8 @@ class _EntryTile extends StatelessWidget {
           TextSpan(
             text: entry.expectedDisplay,
             style: AppTextStyles.body.copyWith(
-              fontSize: 13,
+              fontSize: 14,
+              color: AppColors.success,
               fontWeight: FontWeight.w700,
             ),
           ),

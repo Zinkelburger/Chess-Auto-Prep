@@ -23,6 +23,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
+import '../core/app_history.dart';
 import '../services/scid/scid_writer.dart';
 import '../utils/open_in_file_manager.dart';
 import '../core/pgn_viewer_controller.dart';
@@ -192,12 +193,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (mounted) setState(() {});
   }
 
-  /// Whether the PGN Viewer is the app's visible mode, so that arriving here
-  /// can be told from any other [AppState] change (see [_onAppStateChanged]).
-  bool _isCurrentMode = false;
-
   /// Cached so [dispose] does not [BuildContext.read] after unmount.
   AppState? _appState;
+  VoidCallback? _unregisterHistoryContext;
+  int _navigationRestoreEpoch = 0;
 
   @override
   void initState() {
@@ -235,8 +234,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       if (mounted) {
         final appState = context.read<AppState>();
         _appState = appState;
+        _unregisterHistoryContext = context
+            .read<AppHistory?>()
+            ?.registerContext(AppMode.pgnViewer, _captureNavigationContext);
         appState.addListener(_onAppStateChanged);
-        _isCurrentMode = appState.currentMode == AppMode.pgnViewer;
         // The screen may have been created by the very mode switch that set
         // the pending file (listener not registered yet) — consume it now.
         _consumePendingViewerFile(appState);
@@ -428,12 +429,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final appState = _appState;
     if (appState == null) return;
     final isCurrent = appState.currentMode == AppMode.pgnViewer;
-    final arrived = isCurrent && !_isCurrentMode;
-    _isCurrentMode = isCurrent;
-    if (!isCurrent) return;
-    if (!_consumePendingViewerFile(appState) && arrived) {
-      _dropHandedOffGame();
+    if (!isCurrent) {
+      _navigationRestoreEpoch++;
+      return;
     }
+    _consumePendingViewerFile(appState);
     _reclaimFocus();
   }
 
@@ -447,23 +447,31 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     return true;
   }
 
-  /// Entering the viewer from the mode menu asks for the viewer itself, not
-  /// for the last game something else sent here: "Review" on a game card
-  /// leaves the whole games cache loaded and focused on one game, and meeting
-  /// that file again — instead of the start screen — reads as the viewer
-  /// having opinions about what you want to look at. So a single-game handoff
-  /// is dropped on the way back in; the file stays in the recent list, which
-  /// is the one click back.
-  ///
-  /// A collection *you* opened here (browse, recent, paste, a study, a sliced
-  /// player-analysis dataset) is your own choice and stays put. So does a game
-  /// whose engine review is still running — you left to let it finish.
-  void _dropHandedOffGame() {
-    if (!_singleGameFocus || _analysisController.isAnalyzing) return;
-    unawaited(_closeFile());
+  VoidCallback _captureNavigationContext() {
+    final restoreCollection = _controller.captureNavigationContext();
+    final selectedTab = _tabController.index;
+    final openTabs = _tabController.openTabs;
+    final singleGame = _singleGameFocus;
+    return () {
+      if (!mounted) return;
+      final epoch = ++_navigationRestoreEpoch;
+      unawaited(() async {
+        final restored = await restoreCollection();
+        if (!mounted || !restored || epoch != _navigationRestoreEpoch) return;
+        _singleGameFocus = singleGame;
+        for (final tab in _tabController.openTabs) {
+          if (!openTabs.contains(tab) && tab < 7) _tabController.close(tab);
+        }
+        for (final tab in openTabs) {
+          _tabController.openInBackground(tab);
+        }
+        _tabController.index = selectedTab;
+      }());
+    };
   }
 
   Future<void> _openFromHandoff(OpenPgnViewer handoff) async {
+    _navigationRestoreEpoch++;
     final gameId = handoff.gameId;
     // Arriving with one game named is a different job from opening a
     // collection: the app bar's slice machinery (player presets, add-filter
@@ -717,6 +725,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void dispose() {
+    _unregisterHistoryContext?.call();
     _appState?.removeListener(_onAppStateChanged);
     windowManager.removeListener(this);
     unawaited(windowManager.setPreventClose(false));

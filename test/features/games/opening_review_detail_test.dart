@@ -8,6 +8,8 @@ import 'package:chess_auto_prep/features/games/widgets/opening_review_dialog.dar
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
+import 'package:chess_auto_prep/widgets/common/static_board_thumbnail.dart';
+import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -72,7 +74,23 @@ void main() {
     );
     await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sicilian · move 3'));
+    final preview = tester.widget<StaticBoardThumbnail>(
+      find.byType(StaticBoardThumbnail),
+    );
+    // Both arrows originate from the position before the deviation, so the
+    // book capture and the played knight move can be compared on one board.
+    expect(
+      preview.fen.split(' ').first,
+      'rnbqkbnr/pp2pppp/3p4/2p5/3PP3/5N2/PPP2PPP/RNBQKB1R',
+    );
+    expect(preview.flipped, isFalse);
+    expect(preview.arrows.map((arrow) => arrow.uci), ['c5d4', 'g8f6']);
+    expect(
+      preview.arrows.first.color,
+      AppColors.success.withValues(alpha: 0.85),
+    );
+    expect(preview.arrows.last.color, AppColors.danger.withValues(alpha: 0.9));
+    await tester.tap(find.byType(StaticBoardThumbnail));
     await tester.pumpAndSettle();
     expect(opened, same(entry.games.first));
     expect(find.byType(AlertDialog), findsNothing);
