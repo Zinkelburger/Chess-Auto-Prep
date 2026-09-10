@@ -206,11 +206,55 @@ class ViewerGameModel {
     currentPosition = pos;
   }
 
+  /// Give a comment/PV preview normal ancestry before a user edits it.
+  /// Reuse existing moves and keep the unplayed continuation as scratch nodes.
+  /// Merely viewing a preview does not call this or change the saved PGN.
+  /// Returns false if the preview cannot be reached from this mainline anchor
+  /// (for example, a separate diagram embedded in a comment).
+  bool materializePreviewLine(int baseIndex, List<String> sans, int cursor) {
+    if (cursor <= 0 || cursor > sans.length) return false;
+    final base = mainline.tryAt(baseIndex);
+    if (base == null) return false;
+    var pos = base;
+    for (final san in sans.take(cursor)) {
+      final move = pos.parseSan(san);
+      if (move == null) return false;
+      pos = pos.play(move);
+    }
+    if (normalizeFen(pos.fen) != normalizeFen(currentPosition.fen)) {
+      return false;
+    }
+    if (revealedPly != null && baseIndex > revealedPly!) return false;
+
+    goToMainLineMove(baseIndex);
+    var selectedIndex = mainLineIndex;
+    var selectedBranch = activeBranchPly;
+    var selectedPath = <MoveNode>[];
+    var selectedPosition = currentPosition;
+    for (var i = 0; i < sans.length; i++) {
+      if (addMove(sans[i], editing: false, allowMainline: true) ==
+          ViewerMoveKind.illegal) {
+        break;
+      }
+      if (i + 1 == cursor) {
+        selectedIndex = mainLineIndex;
+        selectedBranch = activeBranchPly;
+        selectedPath = List.of(analysisPath);
+        selectedPosition = currentPosition;
+      }
+    }
+    mainLineIndex = selectedIndex;
+    activeBranchPly = selectedBranch;
+    analysisPath = selectedPath;
+    currentPosition = selectedPosition;
+    return true;
+  }
+
   // ── Adding moves ─────────────────────────────────────────────────────
 
   /// Play [san] at the cursor. [editing] marks additions permanent (amend
-  /// mode); [allowMainline] is false while an inline preview owns the board,
-  /// which forbids the two mainline fast paths.
+  /// mode); [allowMainline] controls following or extending the mainline.
+  /// An inline preview must first acquire ancestry via [materializePreviewLine].
   ViewerMoveKind addMove(
     String san, {
     required bool editing,
@@ -274,11 +318,11 @@ class ViewerGameModel {
     } else {
       final current = analysisPath.last;
       final (node, _) = current.addChild(san, fenAfter, isEphemeral: !editing);
-      // A permanent move under ephemeral ancestors would be dropped by the
-      // serializer — promote the whole line to saved.
-      if (editing) promoteNodeLineage(current);
       analysisPath = [...analysisPath, node];
     }
+    // Include an existing scratch node when the user plays it in an editable
+    // reader, as well as every ancestor needed to serialize a legal line.
+    if (editing) promoteNodeLineage(analysisPath.last);
     currentPosition = newPos;
     return ViewerMoveKind.variation;
   }

@@ -2,6 +2,7 @@
 /// line) land in the move tree without duplicating what is already there.
 library;
 
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -64,6 +65,89 @@ void main() {
           .map((chip) => chip.san),
       ['e5'],
     );
+  });
+
+  for (final score in ['-0.65', '-1.30', '-6.00']) {
+    testWidgets('extend a classified best line and back up one ply: $score', (
+      tester,
+    ) async {
+      final controller = await _pumpViewer(
+        tester,
+        '1. e4 {[%eval 0.00]} e5 {[%eval 0.00]} '
+        '2. Nf3 {[%eval $score] [%pv Bc4,Nf6,d3]} Nc6 {[%eval $score]} *',
+      );
+      final positions = <String>[];
+      Position pos = Chess.initial;
+      for (final san in ['e4', 'e5', 'Bc4', 'Nf6', 'Nc3', 'Bb4']) {
+        pos = pos.play(pos.parseSan(san)!);
+        positions.add(pos.fen);
+      }
+      await tester.tap(find.byTooltip('Preview comment move').at(1));
+      await tester.pumpAndSettle();
+      expect(controller.currentFen, positions[3]);
+      controller.addEphemeralMove('Nc3');
+      controller.addEphemeralMove('Bb4');
+      await tester.pumpAndSettle();
+      expect(controller.currentFen, positions[5]);
+      for (final index in [4, 3, 2, 1]) {
+        controller.goBack();
+        await tester.pumpAndSettle();
+        expect(controller.currentFen, positions[index]);
+        expect(controller.inVariation, index > 1);
+      }
+      // Re-entering the source suggestion must keep our explored branch.
+      await tester.tap(find.byTooltip('Preview comment move').at(1));
+      await tester.pumpAndSettle();
+      controller.addEphemeralMove('Nc3');
+      await tester.pumpAndSettle();
+      controller.goForward();
+      await tester.pumpAndSettle();
+      expect(controller.currentFen, positions[5]);
+      controller.goBack();
+      controller.goBack();
+      controller.goForward();
+      await tester.pumpAndSettle();
+      final before = Chess.fromSetup(Setup.parseFen(positions[3]));
+      expect(controller.currentFen, before.play(before.parseSan('d3')!).fen);
+    });
+  }
+
+  testWidgets('saving a move from a preview includes its legal ancestry', (
+    tester,
+  ) async {
+    final controller = PgnViewerWidgetController();
+    final writes = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PgnViewerWidget(
+            controller: controller,
+            persistMoves: true,
+            onCommentsChanged: writes.add,
+            pgnText:
+                '1. e4 {[%eval 0.0]} e5 {[%eval 0.0]} '
+                '2. Nf3 {[%eval -6.0] [%pv Bc4,Nf6,d3]} *',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Preview comment move').first);
+    await tester.pumpAndSettle();
+    expect(writes, isEmpty);
+    // Following the already suggested reply must save that node as well.
+    controller.addEphemeralMove('Nf6');
+    await tester.pumpAndSettle();
+    expect(writes, hasLength(1));
+    final tree = PgnGame.parsePgn(writes.single).moves;
+    final alternative = tree.children.single.children.single.children[1];
+    expect(alternative.data.san, 'Bc4');
+    expect(alternative.children.single.data.san, 'Nf6');
+    expect(alternative.children.single.children, isEmpty);
+    expect(controller.mainLineMoves, ['e4', 'e5', 'Nf3']);
+    controller.goBack();
+    await tester.pumpAndSettle();
+    expect(controller.recentMoveSquares, {'f1', 'c4'});
   });
 
   for (final comment in [

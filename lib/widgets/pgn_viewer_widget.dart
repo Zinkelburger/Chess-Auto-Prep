@@ -341,8 +341,8 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
 
   // Inline-comment line preview: steps the board through a clickable analysis
   // line embedded in a comment WITHOUT injecting it into the move tree, so the
-  // comment keeps its pretty inline rendering. Fully decoupled from
-  // _analysisPath / ephemeral nodes.
+  // comment keeps its inline rendering. Playing a move first materializes
+  // its ancestry in _m, then uses ordinary variation editing/navigation.
   List<String> _inlineSans = const [];
   int _inlineBaseIndex = 0; // mainline ply before the line's first move
   String? _inlineAnchorFen; // FEN the line starts from, when comment-anchored
@@ -362,7 +362,8 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   // Cross-group members: each is implemented in the named part-file mixin.
   void _clearAnalysis(); // move edits
   void _deleteAnalysisNode(int nodeId); // move edits
-  void _clearInlineLine(); // navigation
+  void _clearInlineLine();
+  void _setInlineCursor(int cursor); // navigation
   void _startEditingComment(int moveIndex); // annotations
   void _notifyCommentsChanged(); // line actions
 }

@@ -835,6 +835,14 @@ notes and replay from their embedded FEN. Dotted-underlined comment moves offer
 **Preview comment move** tooltips and show **Comment preview** while navigating.
 Their active highlight uses the mainline’s borderless pill around the move alone;
 move numbers and separating spaces stay outside, and selection preserves text weight.
+Playing a move from a comment or a classified move’s **Best** line first gives
+that preview ordinary variation ancestry. Back steps one ply through both the
+new moves and the suggested prefix; the suggestion’s unplayed continuation
+remains available as an alternative. Reopening a preview preserves explored
+branches. Preview clicks do not save anything; edited lines follow the reader’s
+normal persistence policy, including every ancestor needed for a legal PGN.
+Independent embedded FEN diagrams remain temporary previews when their starting
+position does not occur on the game’s mainline.
 The variation toolbar and continuation picker float at the foot of the reader,
 so entering a sideline or reaching a fork never resizes the reading viewport.
 Overflow scrolls horizontally. Positions without a choice have no picker or
