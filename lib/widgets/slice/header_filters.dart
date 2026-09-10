@@ -76,6 +76,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
             inputDecorationTheme: Theme.of(context).inputDecorationTheme
                 .copyWith(
                   filled: true,
+                  visualDensity: VisualDensity.standard,
                   fillColor: Theme.of(context).colorScheme.surface,
                   hintStyle: AppTextStyles.forTheme(
                     context,
@@ -501,7 +502,9 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
                     AppTextStyles.caption,
                   ).copyWith(color: Theme.of(context).colorScheme.error)
                 : AppTextStyles.forTheme(context, AppTextStyles.caption),
-            isDense: true,
+            // Keep the painted input at the same 48px minimum as the
+            // choice fields, even when there is no search icon or text.
+            isDense: false,
             border: const OutlineInputBorder(),
           ),
           onChanged: (value) {

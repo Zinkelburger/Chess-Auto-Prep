@@ -46,9 +46,11 @@ Future<void> _show(
   bool simple = false,
   List<GameRecord>? games = _games,
   double textScale = 1,
+  VisualDensity density = VisualDensity.standard,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      theme: ThemeData(visualDensity: density),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(
           context,
@@ -123,6 +125,36 @@ Future<void> _close(
 }
 
 void main() {
+  testWidgets('value border matches field and rule with or without an icon', (
+    tester,
+  ) async {
+    final controller = _controller(value: '');
+    addTearDown(controller.dispose);
+    double borderHeight(Finder field) => InputDecorator.containerOf(
+      tester.element(
+        find.descendant(of: field, matching: find.byType(EditableText)),
+      ),
+    )!.size.height;
+    for (final density in [VisualDensity.standard, VisualDensity.compact]) {
+      await _show(tester, controller, density: density);
+      for (final value in ['', 'World Championship', '']) {
+        await tester.enterText(_value(controller), value);
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        expect(borderHeight(_value(controller)), borderHeight(_field));
+        expect(borderHeight(_value(controller)), borderHeight(_rule));
+      }
+      controller.setHeaderMode(0, MatchMode.regex);
+      await tester.pumpAndSettle();
+      await tester.enterText(_value(controller), '[');
+      await tester.pumpAndSettle();
+      expect(find.text('Invalid regular expression'), findsOneWidget);
+      expect(borderHeight(_value(controller)), borderHeight(_field));
+      controller.setHeaderMode(0, MatchMode.contains);
+      controller.setHeaderValue(0, '');
+    }
+  });
+
   for (final simple in [false, true]) {
     testWidgets('Field / Rule / Value table at 620px (simple: $simple)', (
       tester,
