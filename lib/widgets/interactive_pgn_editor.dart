@@ -923,14 +923,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     required bool isSelected,
     required bool isOnCtxPath,
   }) {
-    // Depth carries the type treatment (semibold mainline, receding
-    // sidelines); selection changes ink only — the pill marks the current
-    // move, and a weight change here would reflow the wrapped movetext.
-    final base = PgnTextStyles.moveAt(
-      depth,
-      ephemeral: node.isEphemeral,
-      quiet: commentProse(node.comment ?? '').isEmpty,
-    );
+    // Moves keep the same size and weight across annotations and depth;
+    // selection changes ink only, with a pill marking the current move.
+    final base = PgnTextStyles.moveAt(depth, ephemeral: node.isEphemeral);
     final sanStyle = isSelected
         ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
         : base;

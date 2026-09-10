@@ -831,6 +831,10 @@ empty results offer Search all games. A number still offers Go to game N.
 Narrow windows move the compact group rows into a horizontal strip. Repertoire
 and training chapter pickers also use reduced row padding.
 
+PGN moves use a consistent 16px regular weight across annotated moves,
+unannotated moves and variations. The current move is marked by its background
+highlight without changing text size or weight.
+
 PGN comment diagrams (`pgn/comment_diagram.dart`) render embedded FENs as small
 boards labelled **Comment position**, including FENs nested inside Chessable
 editorial brackets. Parenthetical prose stays inline; move runs continue across

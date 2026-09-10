@@ -226,8 +226,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     var forceBlackEllipsis = false;
 
     // Root style for RichText runs of mainline moves; comments/variations
-    // use their own styles via [PgnTextStyles]. Weight-free so prose spans
-    // don't inherit the mainline's semibold.
+    // use their own styles via [PgnTextStyles].
     final baseStyle = PgnTextStyles.rowRootAt(0);
 
     void flushSpans() {
@@ -463,11 +462,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       // The current move keeps the mainline's weight and size; only the pill
       // changes, so navigating never reflows the wrapped movetext.
       final moveStyle = isCurrentMove
-          ? PgnTextStyles.moveAt(
-              0,
-              quiet: !annotated,
-            ).copyWith(color: AppColors.pgnMoveCurrentFg)
-          : PgnTextStyles.moveAt(0, quiet: !annotated);
+          ? PgnTextStyles.moveAt(0).copyWith(color: AppColors.pgnMoveCurrentFg)
+          : PgnTextStyles.moveAt(0);
 
       // Build SAN + NAG text (always shown — annotations survive view mode).
       // Every NAG, not just the six editable quality glyphs: `⩲`, `∞`, `→` and

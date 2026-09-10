@@ -375,11 +375,7 @@ InlineSpan _variationMoveSpan(
   // sideline is there.
   final nagSuffix = allNagSuffix(node.nags);
 
-  final base = PgnTextStyles.moveAt(
-    depth,
-    ephemeral: node.isEphemeral,
-    quiet: attachKey,
-  );
+  final base = PgnTextStyles.moveAt(depth, ephemeral: node.isEphemeral);
   final sanStyle = isCurrentNode
       ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
       : base;

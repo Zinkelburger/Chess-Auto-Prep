@@ -44,23 +44,17 @@ abstract final class PgnTextStyles {
 
   static double sizeAt(int depth) => 16;
 
-  /// SAN style at [depth]. The mainline is semibold and every sideline is
-  /// regular — the print convention (bold mainline, roman variations). Weight
-  /// stays a *two-state* signal on purpose; further depth is carried by
-  /// bounded indentation and fold controls.
+  /// SAN uses a consistent size and regular weight, including annotated
+  /// moves and sidelines. Depth is carried by ink, indentation and folds.
   ///
   /// Note the current move does **not** get extra weight: the pill marks it.
   /// A weight change on navigation would still alter glyph widths and reflow
   /// the wrapped pane, even in the notation face.
-  static TextStyle moveAt(
-    int depth, {
-    bool ephemeral = false,
-    bool quiet = false,
-  }) => TextStyle(
+  static TextStyle moveAt(int depth, {bool ephemeral = false}) => TextStyle(
     fontFamily: AppTextStyles.monoFamily,
-    fontSize: quiet ? 15 : sizeAt(depth),
+    fontSize: sizeAt(depth),
     height: 1.7,
-    fontWeight: !quiet && depth == 0 ? FontWeight.w600 : FontWeight.w400,
+    fontWeight: FontWeight.w400,
     // Ephemeral (scratch / solitaire) moves italicize rather than take a hue:
     // "unsaved" is orthogonal to depth, so it gets an orthogonal axis.
     fontStyle: ephemeral ? FontStyle.italic : FontStyle.normal,
