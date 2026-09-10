@@ -219,6 +219,9 @@ class _HeaderFiltersState extends State<HeaderFilters> {
         }),
       ),
     );
+    final ecoCodes = row.field == 'ECO'
+        ? selectedEcoCodes(row.value, row.mode)
+        : <String>[];
     final rule = ChoiceField<MatchMode>(
       label: wide ? null : 'Rule',
       hint: 'Choose rule',
@@ -229,15 +232,14 @@ class _HeaderFiltersState extends State<HeaderFilters> {
         for (final mode in modesForField(row.field))
           ChoiceItem(
             value: mode,
-            label: _ruleLabel(row.field, mode),
+            label: mode == MatchMode.regex && ecoCodes.length > 1
+                ? 'Any of'
+                : _ruleLabel(row.field, mode),
             searchText: '${mode.name} ${_ruleLabel(row.field, mode)}',
           ),
       ],
       onChanged: (mode) => edit((i) => controller.setHeaderMode(i, mode)),
     );
-    final ecoCodes = row.field == 'ECO'
-        ? selectedEcoCodes(row.value, row.mode)
-        : <String>[];
     final value = ecoCodes.isNotEmpty
         ? EcoFilterChips(
             codes: ecoCodes,

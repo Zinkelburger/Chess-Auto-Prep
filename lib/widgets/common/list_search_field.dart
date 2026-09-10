@@ -74,7 +74,7 @@ class _ListSearchFieldState extends State<ListSearchField> {
       },
       decoration: InputDecoration(
         hintText: widget.hintText,
-        filled: widget.fillColor != null,
+        filled: widget.fillColor == null ? null : true,
         fillColor: widget.fillColor,
         hintStyle: AppTextStyles.caption,
         prefixIcon: const Icon(
