@@ -117,9 +117,10 @@ mixin _NavigationMixin on _PositionAnalysisWidgetStateBase {
     });
   }
 
-  /// Games list: click a game → switch to PGN tab.
+  /// Games list: click a game → read it inside Games.
   void _onGameSelected(GameInfo game) {
+    if (!mounted) return;
     setState(() => _selectedGame = game);
-    _tabController.animateTo(2);
+    _tabController.animateTo(1);
   }
 }

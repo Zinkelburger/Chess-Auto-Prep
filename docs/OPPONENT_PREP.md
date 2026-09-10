@@ -193,43 +193,46 @@ proposals are listed under `skipped` in the tool result.
 
 ## In the app
 
-- **Players** and each **group** share an editable table: Name, USCF ID,
-  Chess.com accounts, Lichess accounts, Files / study chapters, Games, Rating,
-  Notes, and a prepared checkbox inside groups. Type directly in cells; valid
-  edits save automatically. Saving failures remain on the affected cell and
-  Enter retries. Commas, semicolons and whitespace separate multiple accounts.
-- **Add saved accounts** in All players brings existing Player Analysis
-  downloads and imported game sets into the directory. Adding a name or ID
-  preserves their stored game links. Prep reuses saved accounts before
-  downloading, combines multiple saved sets with game-identity deduplication,
-  and the inline Accounts / files area opens individual sources.
-- **Groups** are named lists with an ordinary persistent study. Create and
-  rename groups inline. **Add players** expands an in-page chooser of saved
-  people or inserts a new editable row. Removing someone from a group has Undo
-  and keeps their directory record, games and studies.
-- **Paste player list** expands an in-page import with preview. It accepts
-  CSV/TSV, Markdown or column-aligned organizer tables, the existing opponent
-  JSON format, or a URL containing an HTML table. Include column headings.
-  USCF IDs and known handles reuse directory records; unmatched people remain
-  visible even without accounts. Page failures offer pasting the table instead.
-- **Files / study chapters** shows clickable linked studies and chapters.
-  **Create prep** creates the player's personal study. **Link study** expands
-  an in-page browser of saved studies and chapters; Browse PGN files uses the
-  platform file picker. Unlink removes only the association. Missing files
-  report their path instead of silently creating a replacement.
-- **Prepare** opens Player Analysis with the person and group as context.
-  A visible toolbar offers the study, repertoire check, save line, prepared
-  checkbox, previous/next player, and return to the group. Existing opening and
-  weakness analysis tools remain available.
-- **Open group study / Train group study** use the same saved PGN. It is
-  created once (including existing personal prep where available), then edited
-  normally; subsequent opens never regenerate it over the user's changes.
-  Saving lines from group prep prefers this study and prefixes chapters with
-  the player's name and the colour the user holds.
+The player workflow has two destinations:
+
+| View | Purpose | Navigation |
+|---|---|---|
+| **Player database** | All players in an autosaving table: names, USCF IDs, online accounts, ratings, notes and reference studies/chapters/PGN files | Open the filled **Player database** button on the player picker, or the entry in analysis's Actions menu. **Analyze games** pushes analysis; its labelled back button returns to the same table and search. |
+| **Player analysis** | Choose a saved game set from the compact cards, download online games or import PGNs, then explore positions and games | Online and PGN are the two Add player sources. Advanced engine and study actions stay in the existing Actions menu. |
+
+The database opens directly to **All players**. Existing saved accounts and PGN
+sets are linked on first opening; **Add saved accounts** can refresh those links.
+**Add player** inserts an editable row. Valid edits save automatically; failed
+saves show an error on the cell and Enter retries. Use commas, semicolons or
+whitespace for multiple accounts. Stable game-set keys preserve saved games
+when a player's display name or account fields change.
+
+**Paste players** accepts headed CSV/TSV, Markdown, aligned text, opponent JSON
+or a URL with an HTML table. Preview, then **Add to database**. USCF IDs and
+known handles reuse directory records and imports fill blanks without
+replacing edited information. Importing does not create a group.
+
+**Reference studies** keeps links with the person. **New study** creates a
+personal study; **Link study** opens the study/chapter browser with a PGN file
+picker. Links open their target; unlinking removes only the association.
+Missing files report their path. **Analyze games** reuses saved games before
+downloading accounts and deduplicates games across saved sources.
+
+Within analysis, the left column selects **Positions** or the advanced **Holes**
+report; the centre is the board. The right panel has three tabs: **Move Tree**
+for aggregate continuations, **Games** for matching games and their reader
+(with **Back to games**), and **Try moves** for scratch variations. There is
+no separate PGN tab or ambiguously named Analysis tab inside Player analysis.
+
+Groups are deferred from this navigation. The legacy group files and code
+remain compatible, but there is no group landing page or tournament/prepared
+controls in the player workflow. Analysis no longer has a second prep toolbar
+with duplicated study, repertoire and save-line buttons. The existing Actions
+menu retains advanced tools and the player's personal study as a save target.
 
 Files remain backward compatible: `Documents/opponents/people.json` and
 `Documents/opponents/tournaments/<id>.json` retain their original format IDs.
-People optionally carry `game_sets` (stable cached-corpus keys) and `studies`
+The people file records whether saved-account onboarding has completed, so deleting a record is respected on reopening. People optionally carry `game_sets` (stable cached-corpus keys) and `studies`
 (path plus optional chapter name); groups optionally carry `study` (PGN path).
 Existing personal `prep_file` paths, dates, rounds and pairing data are retained.
 Writes are ordered so quick edits cannot leave an older snapshot on disk.
@@ -255,7 +258,7 @@ tools/mcp/requirements.txt   python-chess (opening-tree tools only)
 lib/services/opponent_list.dart              parser + OpponentEntry → AnalysisPlayerInfo
 lib/features/opponents/                      tournaments, people, prep files, US Chess lookup,
                                              repertoire check, text export (models/ services/ widgets/)
-lib/screens/analysis_screen_prep.dart        Player analysis: prep file, next opponent, repertoire check
+lib/screens/analysis_screen_prep.dart        Player analysis: personal study context and repertoire check
 lib/screens/player_selection_screen.dart     the picker ("Which player?")
 lib/models/analysis_player_info.dart         accounts / group
 ```
