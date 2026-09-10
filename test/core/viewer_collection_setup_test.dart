@@ -21,6 +21,31 @@ void main() {
     expect(model.mainline.reachablePlies, 3);
   });
 
+  for (final variations in [false, true]) {
+    test(
+      'null moves keep a replayable collection path (RAVs: $variations)',
+      () async {
+        final tree = await OpeningTreeBuilder.buildTree(
+          pgnList: ['1. e4 Z0 2. d4 *'],
+          username: '',
+          userIsWhite: null,
+          strictPlayerMatching: false,
+          preserveSetupRoots: true,
+          includeVariations: variations,
+        );
+        expect(tree.makeMove('e4'), isTrue);
+        final beforePass = tree.currentFen;
+        expect(tree.makeMove('Z0'), isTrue);
+        final afterPass = tree.currentFen;
+        expect(tree.makeMove('d4'), isTrue);
+        expect(tree.goBack(), isTrue);
+        expect(normalizeFen(tree.currentFen), normalizeFen(afterPass));
+        expect(tree.goBack(), isTrue);
+        expect(normalizeFen(tree.currentFen), normalizeFen(beforePass));
+      },
+    );
+  }
+
   test('setup roots survive isolate transfer and a colliding SAN', () async {
     final tree = await OpeningTreeBuilder.buildTree(
       pgnList: ['1. e4 e5 *', chapter],

@@ -280,11 +280,16 @@ void walkMainlineIntoTree({
     try {
       final moveSan = nodeData.san;
       if (isNullMoveSan(moveSan)) {
-        // Pass the turn without a tree node so later same-side moves stay
-        // legal and `--` does not pollute opening stats.
+        // Collection navigation needs the pass as a real ply so Back can
+        // replay the line. Legacy repertoire trees omit it from their stats.
         final next = playSanOrNullMove(currentPos, moveSan);
         if (next == null) break;
         currentPos = next;
+        if (tree.preserveSetupRoots) {
+          currentNode = tree.advance(currentNode, moveSan, currentPos);
+          currentNode.updateStats(userResult);
+          depth++;
+        }
         continue;
       }
 
@@ -434,8 +439,10 @@ void _walkVariationsIntoTree({
           tree: tree,
           pgnNode: child,
           pos: next,
-          treeNode: treeNode,
-          depth: depth,
+          treeNode: tree.preserveSetupRoots
+              ? (tree.advance(treeNode, san, next)..updateStats(userResult))
+              : treeNode,
+          depth: tree.preserveSetupRoots ? depth + 1 : depth,
           maxDepth: maxDepth,
           userResult: userResult,
           strictFirstPly: strictFirstPly,
