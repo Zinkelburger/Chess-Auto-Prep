@@ -1477,6 +1477,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void _toggleEditMode() {
     if (!mounted || _onReferenceTab) return;
+    _pgnWidgetController.flushPendingComments();
     _showPanel(PgnWorkspace.game);
     setState(() => _editMode = !_editMode);
   }

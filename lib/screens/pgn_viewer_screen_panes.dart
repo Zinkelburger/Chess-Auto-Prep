@@ -576,7 +576,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
         ),
         TextButton.icon(
           onPressed: _toggleEditMode,
-          icon: const Icon(Icons.check, size: 18),
+          icon: Icon(_editMode ? Icons.check : Icons.edit_outlined, size: 18),
           label: Text(_editMode ? 'Finish editing' : 'Edit PGN'),
           style: TextButton.styleFrom(
             foregroundColor: AppColors.ink,
