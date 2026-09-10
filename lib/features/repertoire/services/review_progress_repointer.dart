@@ -103,5 +103,6 @@ class ReviewProgressRepointer {
       );
     }
     if (progressChanged) await _review.saveMoveProgress(movedProgress);
+    await _review.repointAttempts(from: from, movedLinePaths: newPathById);
   }
 }

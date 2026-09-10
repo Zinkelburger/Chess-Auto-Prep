@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:math';
 import '../utils/training_csv.dart';
 
@@ -9,6 +8,7 @@ import '../models/repertoire_move_progress.dart';
 import '../models/training_settings.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
+import 'training/move_attempt_store.dart';
 
 class RepertoireReviewService {
   static const _header =
@@ -43,37 +43,27 @@ class RepertoireReviewService {
     required bool correct,
     required String phase,
   }) async {
-    final row = jsonEncode({
-      'repertoireId': repertoireId,
-      'lineId': lineId,
-      'moveIndex': moveIndex,
-      'fen': fen,
-      'playedSan': playedSan,
-      'expectedSan': expectedSan,
-      'correct': correct,
-      'phase': phase,
-      'timestampUtc': DateTime.now().toUtc().toIso8601String(),
-    });
-    await _storage.updateFile(
-      'repertoire_move_attempts.jsonl',
-      (raw) => '${raw ?? ''}$row\n',
+    await MoveAttemptStore(_storage).record(
+      repertoireId: repertoireId,
+      lineId: lineId,
+      moveIndex: moveIndex,
+      fen: fen,
+      playedSan: playedSan,
+      expectedSan: expectedSan,
+      correct: correct,
+      phase: phase,
     );
   }
 
-  Future<List<Map<String, dynamic>>> loadAttempts({
-    String? repertoireId,
-  }) async {
-    final raw = await _storage.readFile('repertoire_move_attempts.jsonl');
-    if (raw == null) return [];
-    return [
-          for (final row in const LineSplitter().convert(raw))
-            if (row.trim().isNotEmpty) jsonDecode(row) as Map<String, dynamic>,
-        ]
-        .where(
-          (row) => repertoireId == null || row['repertoireId'] == repertoireId,
-        )
-        .toList();
-  }
+  Future<List<Map<String, dynamic>>> loadAttempts({String? repertoireId}) =>
+      MoveAttemptStore(_storage).load(repertoireId: repertoireId);
+
+  Future<void> repointAttempts({
+    required String from,
+    required Map<String, String> movedLinePaths,
+  }) => MoveAttemptStore(
+    _storage,
+  ).repoint(from: from, movedLinePaths: movedLinePaths);
 
   Future<List<RepertoireReviewEntry>> loadAll() async {
     final entries = trainingRows(
