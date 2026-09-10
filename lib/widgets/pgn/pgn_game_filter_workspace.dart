@@ -14,6 +14,7 @@ import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
 import '../board_editor/board_editor_panel.dart';
 import '../lines_preview_panel.dart';
+import '../opening_picker_dialog.dart';
 import '../slice/header_filters.dart';
 import '../slice/position_filter.dart';
 import '../slice/sequence_filter.dart';
@@ -129,6 +130,36 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
     _board?.dispose();
     _filters.dispose();
     super.dispose();
+  }
+
+  Future<void> _chooseOpenings() async {
+    final selection = await showOpeningPicker(context, forFilters: true);
+    if (!mounted || selection == null) return;
+    if (selection.positionLine case final line?) {
+      _filters.positionText.text = line.movetext.isEmpty
+          ? line.position.fen
+          : line.movetext;
+    } else if (selection.lines.isNotEmpty) {
+      // One OR condition replaces ECO rows; other header/position filters stay.
+      for (var i = _filters.headerRows.length - 1; i >= 0; i--) {
+        if (_filters.headerRows[i].field == 'ECO') _filters.removeHeaderRow(i);
+      }
+      final codes = selection.lines.map((line) => line.eco).toSet().toList()
+        ..sort();
+      _filters.addHeaderRow();
+      final index = _filters.headerRows.length - 1;
+      _filters.setHeaderField(index, 'ECO');
+      _filters.setHeaderMode(
+        index,
+        codes.length == 1 ? MatchMode.exact : MatchMode.regex,
+      );
+      _filters.setHeaderValue(
+        index,
+        codes.length == 1
+            ? codes.single
+            : '^(${codes.map(RegExp.escape).join('|')})\$',
+      );
+    }
   }
 
   void _onFiltersChanged() {
@@ -283,6 +314,15 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
         ),
         const SizedBox(height: 8),
       ],
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const ValueKey('filter-choose-eco'),
+          onPressed: _board == null ? _chooseOpenings : null,
+          icon: const Icon(Icons.search),
+          label: const Text('Choose ECO openings…'),
+        ),
+      ),
       HeaderFilters(controller: _filters, games: widget.allGames, simple: true),
       const SizedBox(height: 16),
       IgnorePointer(

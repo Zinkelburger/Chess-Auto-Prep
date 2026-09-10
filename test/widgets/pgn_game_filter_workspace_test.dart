@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/services/opening_catalog.dart';
 import 'package:chess_auto_prep/core/board_editor_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/widgets/board_editor/board_editor_widget.dart';
@@ -200,6 +201,68 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('catalog picks match either code and preserve other conditions', (
+    tester,
+  ) async {
+    await tester.runAsync(OpeningCatalog.load);
+    List<int>? applied;
+    await _open(
+      tester,
+      games: [
+        (
+          headers: {..._games[0].headers, 'ECO': 'B00'},
+          pgnText: _games[0].pgnText,
+        ),
+        (
+          headers: {..._games[1].headers, 'ECO': 'D00'},
+          pgnText: _games[1].pgnText,
+        ),
+        (
+          headers: {..._games[0].headers, 'ECO': 'C20'},
+          pgnText: _games[0].pgnText,
+        ),
+      ],
+      initialConfig: const SliceConfig(
+        headerFilters: [
+          HeaderFilterConfig(field: 'ECO', value: 'C20', mode: MatchMode.exact),
+          HeaderFilterConfig(
+            field: 'White',
+            value: 'Fischer',
+            mode: MatchMode.exact,
+          ),
+        ],
+      ),
+      onApply: (indices, _) => applied = indices,
+    );
+    await tester.tap(find.byKey(const ValueKey('filter-choose-eco')));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    for (final code in ['B00', 'D00']) {
+      await tester.enterText(
+        find.byKey(const ValueKey('opening-search')),
+        code,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(find.text('Filter by selected ECO codes (2)'));
+    await _finishMatching(tester);
+    await tester.tap(_apply);
+    expect(applied, [0]);
+    final controller = tester
+        .widget<HeaderFilters>(find.byType(HeaderFilters))
+        .controller;
+    expect(controller.headerRows.length, 2);
+    controller.removeHeaderRow(0);
+    await _finishMatching(tester);
+    await tester.tap(_apply);
+    expect(applied, [0, 1]);
+  });
 
   testWidgets('plus menu adds ECO prefix search and dates default to After', (
     tester,

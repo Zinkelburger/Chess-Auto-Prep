@@ -28,6 +28,7 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../widgets/chess_board_widget.dart';
+import '../../../widgets/opening_picker_dialog.dart';
 import '../../../widgets/engine/inline_engine_bar.dart';
 import '../../../widgets/generation/generation_config_form.dart';
 import '../../repertoire/models/repertoire_outline.dart';
@@ -351,6 +352,25 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
           .map((line) => line.text.isEmpty ? 'Start position |' : line.text)
           .join('\n');
       _validateStarts();
+    });
+  }
+
+  Future<void> _chooseOpenings() async {
+    final selection = await showOpeningPicker(context);
+    if (!mounted || selection == null || selection.lines.isEmpty) return;
+    final existing = _startingLines.where((line) => line.moves.isNotEmpty);
+    final added = selection.lines.map(
+      (line) =>
+          PlanStartingLine(name: '${line.eco} ${line.name}', moves: line.moves),
+    );
+    _movesText.text = [
+      ...existing,
+      ...added,
+    ].map((line) => line.text).join('\n');
+    _parseTypedMoves(_movesText.text);
+    setState(() {
+      _selectedStart = _startingLines.length - selection.lines.length;
+      _startMoves = List.of(_startingLines[_selectedStart].moves);
     });
   }
 
@@ -903,6 +923,14 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         Wrap(
           spacing: 8,
           children: [
+            TextButton.icon(
+              key: const ValueKey('plan-choose-eco'),
+              onPressed: _preparing || !_startTextValid
+                  ? null
+                  : _chooseOpenings,
+              icon: const Icon(Icons.search, size: 16),
+              label: const Text('Choose ECO openings…'),
+            ),
             TextButton.icon(
               key: const ValueKey('plan-add-start'),
               onPressed: _preparing || !_startTextValid ? null : _addStart,

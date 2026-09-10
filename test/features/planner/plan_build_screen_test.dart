@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/services/opening_catalog.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/features/planner/models/plan_models.dart';
 import 'package:chess_auto_prep/features/planner/services/eco_trie.dart';
@@ -314,6 +315,41 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('plan-remove-start')));
       await tester.pumpAndSettle();
       expect(input.controller!.text, '1.d4 d5 2.c4');
+    },
+  );
+
+  testWidgets(
+    'ECO selection adds an edited named start alongside existing starts',
+    (tester) async {
+      await tester.runAsync(OpeningCatalog.load);
+      await pumpPlanner(tester, [null]);
+      final choose = find.byKey(const ValueKey('plan-choose-eco'));
+      await tester.ensureVisible(choose);
+      await tester.tap(choose);
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('opening-search')),
+        'B00 Barnes',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('opening-moves')),
+        '1.e4 c5',
+      );
+      await tester.tap(find.text('Add starting lines (1)'));
+      await tester.pumpAndSettle();
+      final input = tester.widget<TextField>(
+        find.byKey(const ValueKey('plan-starting-lines')),
+      );
+      expect(input.controller!.text, contains('1.d4 d5 2.c4'));
+      expect(input.controller!.text, contains('B00 Barnes Defense | 1.e4 c5'));
+      expect(tester.takeException(), isNull);
     },
   );
 
