@@ -45,6 +45,18 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               title: _buildOpenPgnMenuButton(fileName),
             ),
           ),
+          if (loaded && !_controller.isSolitaireMode) ...[
+            const SizedBox(width: 12),
+            Flexible(
+              child: PgnSaveStatus(
+                filePath: _controller.filePath,
+                autoSave: _controller.autoSave,
+                dirty: _controller.hasUnsavedChanges,
+                saving: _controller.isSaving,
+                error: _controller.errorMessage,
+              ),
+            ),
+          ],
         ],
       ),
       actions: [

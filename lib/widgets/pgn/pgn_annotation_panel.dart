@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
 import 'movetext_primitives.dart' show GlyphButton;
+import '../common/confirm_dialog.dart';
 
 class PgnAnnotationPanel extends StatefulWidget {
   /// Focuses the comment field of the most recently mounted panel that has a
@@ -77,6 +78,10 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
   late final TextEditingController _controller;
   final FocusNode _focusNode = FocusNode(debugLabel: 'PgnAnnotationPanel');
   Timer? _debounce;
+  bool _confirmingDelete = false;
+
+  bool get _hasComment => widget.comment.trim().isNotEmpty;
+  bool get _blankReplacement => _hasComment && _controller.text.trim().isEmpty;
 
   @override
   void initState() {
@@ -124,7 +129,8 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
   void _flushDebounce(ValueChanged<String> handler) {
     if (_debounce?.isActive ?? false) {
       _debounce!.cancel();
-      handler(_controller.text);
+      // Empty drafts never delete a stored comment, including on disposal.
+      if (_controller.text.trim().isNotEmpty) handler(_controller.text);
     }
     _debounce = null;
   }
@@ -140,6 +146,9 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
 
   void _onTextChanged(String text) {
     _debounce?.cancel();
+    _debounce = null;
+    setState(() {});
+    if (text.trim().isEmpty) return;
     if (widget.commentDebounce == Duration.zero) {
       _debounce = null;
       widget.onCommentChanged(text);
@@ -149,6 +158,43 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
       _debounce = null;
       widget.onCommentChanged(text);
     });
+  }
+
+  Future<void> _deleteComment() async {
+    if (_confirmingDelete || !_hasComment) return;
+    _confirmingDelete = true;
+    final target = widget.targetKey;
+    _flushDebounce(widget.onCommentChanged);
+    // Let the host adopt any just-flushed text before taking the snapshot
+    // that the user is about to confirm removing.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || widget.targetKey != target) {
+      _confirmingDelete = false;
+      return;
+    }
+    final comment = widget.comment;
+    final draft = _controller.text;
+    final confirmed = await confirmAction(
+      context,
+      title: 'Delete 1 comment?',
+      message: 'Remove the comment on ${widget.moveLabel}?',
+      confirmLabel: 'Delete',
+    );
+    _confirmingDelete = false;
+    if (!mounted ||
+        widget.targetKey != target ||
+        widget.comment != comment ||
+        _controller.text != draft) {
+      return;
+    }
+    if (!confirmed) {
+      if (_blankReplacement) setState(() => _controller.text = widget.comment);
+      return;
+    }
+    _debounce?.cancel();
+    _debounce = null;
+    setState(() => _controller.clear());
+    widget.onCommentChanged('');
   }
 
   @override
@@ -190,9 +236,23 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            'Comment:',
-            style: AppTextStyles.bodyStrong.copyWith(color: Colors.white),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _blankReplacement ? 'Comment kept until deleted' : 'Comment:',
+                  style: _blankReplacement
+                      ? AppTextStyles.caption
+                      : AppTextStyles.bodyStrong.copyWith(color: Colors.white),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Delete comment',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                onPressed: enabled && _hasComment ? _deleteComment : null,
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           TextField(

@@ -78,6 +78,7 @@ import '../widgets/game_number_field.dart';
 import '../widgets/game_search_dialog.dart';
 import '../widgets/study/add_to_study_flow.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
+import '../widgets/pgn/pgn_save_status.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
 import '../widgets/pgn/pgn_opening_label.dart';
 import '../widgets/pgn/pgn_tree_toolbar.dart';

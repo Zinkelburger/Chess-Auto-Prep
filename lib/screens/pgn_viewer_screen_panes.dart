@@ -495,10 +495,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
         if (_viewPreferences.showOpening)
           PgnOpeningLabel(headers: game.headers),
         if (!_controller.isSolitaireMode &&
-            (_editMode ||
-                _controller.errorMessage != null ||
-                _controller.isSaving ||
-                _controller.hasUnsavedChanges))
+            (_editMode || _showSaveAction || _controller.errorMessage != null))
           _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
@@ -564,16 +561,9 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        if (_controller.errorMessage != null ||
-            _controller.isSaving ||
-            _controller.hasUnsavedChanges)
+        if (_controller.errorMessage != null)
           Text(
-            _controller.errorMessage ??
-                (_controller.isSaving ||
-                        (_viewPreferences.autoSave &&
-                            _controller.filePath != null)
-                    ? 'Saving…'
-                    : 'Unsaved changes'),
+            _controller.errorMessage!,
             style: AppTextStyles.muted.copyWith(color: AppColors.ink),
           ),
         if (_showSaveAction)
