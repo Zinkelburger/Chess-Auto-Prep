@@ -47,6 +47,16 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               title: _buildOpenPgnMenuButton(fileName),
             ),
           ),
+          if (loaded) ...[
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: PgnSliceChips(
+                controller: _controller,
+                onOpenSliceDialog: _openSliceDialog,
+              ),
+            ),
+          ],
           if (_canReturnToFilters) ...[
             const SizedBox(width: 12),
             Flexible(

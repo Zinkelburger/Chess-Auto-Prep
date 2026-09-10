@@ -82,14 +82,14 @@ void main() {
       expect(find.text('Main line'), findsNothing);
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
-      expect(find.text('Filter games'), findsOneWidget);
+      expect(find.text('Filter games'), findsWidgets);
       await tester.tap(find.text('Turn autosave off'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Autosave on'), findsNothing);
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
       expect(find.text('Turn autosave on'), findsOneWidget);
-      await tester.tap(find.text('Filter games'));
+      await tester.tap(find.text('Filter games').last);
       await tester.pumpAndSettle();
       final filters = tester
           .widget<HeaderFilters>(find.byType(HeaderFilters))
@@ -117,6 +117,20 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('apply-game-filters')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('return-to-filters')), findsNothing);
+      final appliedChip = find.byKey(const ValueKey(('applied-filter', 0)));
+      expect(appliedChip, findsOneWidget);
+      await tester.tap(appliedChip);
+      await tester.pumpAndSettle();
+      expect(find.byType(HeaderFilters).hitTestable(), findsOneWidget);
+      expect(filters.headerRows.single.value, 'A');
+      await tester.tap(find.byKey(const ValueKey('apply-game-filters')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Remove White name contains A'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pumpAndSettle();
+      expect(appliedChip, findsNothing);
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Show opening'));

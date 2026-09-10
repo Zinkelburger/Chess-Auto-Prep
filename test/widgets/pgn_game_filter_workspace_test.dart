@@ -102,11 +102,21 @@ void main() {
     expect(controller.headerRows.single.field, isEmpty);
     expect(controller.buildConfig().isEmpty, isTrue);
     expect(find.byType(PgnTreeGamesList), findsOneWidget);
+    expect(find.text('Apply filter'), findsOneWidget);
+    expect(find.text('Browse ECO openings…'), findsNothing);
     expect(
       find.textContaining('Fischer vs Spassky').hitTestable(),
       findsOneWidget,
     );
     expect(_apply.hitTestable(), findsOneWidget);
+    final valueInput = find.byWidgetPredicate(
+      (w) =>
+          w is TextField &&
+          identical(w.controller, controller.headerRows.single.controller),
+    );
+    final emptySize = tester.getSize(valueInput);
+    await _chooseField(tester, 'Player');
+    expect(tester.getSize(valueInput), emptySize);
     await tester.tap(find.byTooltip('Remove filter'));
     await tester.pumpAndSettle();
     expect(controller.headerRows, hasLength(1));
@@ -149,7 +159,7 @@ void main() {
         ),
       );
       await _finishMatching(tester);
-      expect(find.text('Show 2 games'), findsOneWidget);
+      expect(find.text('2 games'), findsOneWidget);
       await tester.tap(find.textContaining('Spassky vs Fischer'));
       await tester.pumpAndSettle();
       expect(opened, 1);
@@ -208,7 +218,7 @@ void main() {
       await _finishMatching(tester);
       expect(controller.headerRows.single.field, 'Black');
       expect(controller.headerRows.single.controller.text, 'Fischer');
-      expect(find.text('Show 1 game'), findsOneWidget);
+      expect(find.text('1 games'), findsOneWidget);
       await tester.tap(find.text('Positions'));
       await tester.pumpAndSettle();
       final position = find.widgetWithText(TextField, 'FEN or moves');
@@ -218,7 +228,7 @@ void main() {
         '1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6',
       );
       await _finishMatching(tester);
-      expect(find.text('Show 1 game'), findsOneWidget);
+      expect(find.text('1 games'), findsOneWidget);
       await tester.tap(_apply);
       await tester.pump();
       expect(applied, [1]);
@@ -262,8 +272,8 @@ void main() {
       ),
       onApply: (indices, _) => applied = indices,
     );
-    await tester.ensureVisible(find.byKey(const ValueKey('filter-choose-eco')));
-    await tester.tap(find.byKey(const ValueKey('filter-choose-eco')));
+    await tester.ensureVisible(find.text('Edit openings…'));
+    await tester.tap(find.text('Edit openings…'));
     await tester.pump();
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
@@ -303,7 +313,7 @@ void main() {
         .widget<HeaderFilters>(find.byType(HeaderFilters))
         .controller;
     expect(controller.headerRows.length, 2);
-    controller.removeHeaderRow(0);
+    controller.removeHeaderRow(1);
     await _finishMatching(tester);
     await tester.tap(_apply);
     expect(applied, [0, 1]);
@@ -368,6 +378,25 @@ void main() {
     },
   );
 
+  testWidgets('empty ECO value opens the catalog from its search input', (
+    tester,
+  ) async {
+    await tester.runAsync(OpeningCatalog.load);
+    await _open(tester);
+    await _chooseField(tester, 'ECO');
+    await tester.tap(find.widgetWithText(TextField, 'Browse ECO openings…'));
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('opening-search')), findsOneWidget);
+    expect(find.byType(Dialog), findsOneWidget);
+    await tester.tap(find.byTooltip('Close opening picker'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
+  });
+
   testWidgets('one player per field; comma-separated PGN names stay valid', (
     tester,
   ) async {
@@ -430,7 +459,7 @@ void main() {
     expect(tester.widget<FilledButton>(_apply).onPressed, isNull);
     await tester.tap(find.text('Clear filters'));
     await tester.pumpAndSettle();
-    expect(find.text('Show 2 games'), findsOneWidget);
+    expect(find.text('2 games'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -462,7 +491,7 @@ void main() {
         .widget<HeaderFilters>(find.byType(HeaderFilters))
         .controller;
     expect(filters.positionFen, contains('4P3'));
-    expect(find.text('Show 1 game'), findsOneWidget);
+    expect(find.text('1 games'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -518,7 +547,7 @@ void main() {
       same(controller),
     );
     expect(controller.headerConfigs.single.value, 'Fischer');
-    expect(find.text('Show 1 game'), findsOneWidget);
+    expect(find.text('1 games'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -541,7 +570,7 @@ void main() {
           .widget<HeaderFilters>(find.byType(HeaderFilters))
           .controller;
       expect(controller.headerConfigs.single.value, 'Fischer');
-      expect(find.text('Show 1 game'), findsOneWidget);
+      expect(find.text('1 games'), findsOneWidget);
       controller.setHeaderValue(0, 'Spassky');
       await _finishMatching(tester);
       await _open(tester, initialConfig: const SliceConfig.empty());
@@ -575,7 +604,7 @@ void main() {
       expect(_apply.hitTestable(), findsOneWidget);
       await tester.tap(find.text('Clear filters'));
       await tester.pumpAndSettle();
-      expect(find.text('Show 2 games'), findsOneWidget);
+      expect(find.text('2 games'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

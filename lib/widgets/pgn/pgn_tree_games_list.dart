@@ -28,6 +28,9 @@ class PgnTreeGamesList extends StatefulWidget {
   final Widget? toolbarLeading;
   final bool initiallyShowMoves;
 
+  /// Keep live filter previews secondary to their editing controls.
+  final bool subdued;
+
   const PgnTreeGamesList({
     super.key,
     required this.games,
@@ -37,6 +40,7 @@ class PgnTreeGamesList extends StatefulWidget {
     this.onSearch,
     this.toolbarLeading,
     this.initiallyShowMoves = true,
+    this.subdued = false,
   });
 
   @override
@@ -148,6 +152,7 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
                 color: idx.isOdd ? AppColors.rowStripe : Colors.transparent,
                 child: _GameRow(
                   game: games[idx],
+                  subdued: widget.subdued,
                   expanded: _isExpanded(idx),
                   showMoves: _showMoves,
                   pv: _isExpanded(idx) ? _pvFor(games[idx]) : '',
@@ -203,6 +208,7 @@ class _ShowMovesToggle extends StatelessWidget {
 
 class _GameRow extends StatelessWidget {
   final PgnGameEntry game;
+  final bool subdued;
   final bool expanded;
   final bool showMoves;
   final String pv;
@@ -211,6 +217,7 @@ class _GameRow extends StatelessWidget {
 
   const _GameRow({
     required this.game,
+    required this.subdued,
     required this.expanded,
     required this.showMoves,
     required this.pv,
@@ -220,7 +227,11 @@ class _GameRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const triangle = Icon(Icons.play_arrow, size: 14, color: AppColors.info);
+    final triangle = Icon(
+      Icons.play_arrow,
+      size: 14,
+      color: subdued ? AppColors.onSurfaceMuted : AppColors.info,
+    );
     final body = _titleAndPv();
     final stars = _rating();
 
@@ -232,7 +243,7 @@ class _GameRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(padding: EdgeInsets.only(top: 1), child: triangle),
+              Padding(padding: const EdgeInsets.only(top: 1), child: triangle),
               const SizedBox(width: 6),
               Expanded(child: body),
               ?stars,
@@ -282,14 +293,16 @@ class _GameRow extends StatelessWidget {
             Expanded(
               child: Text(
                 game.label,
-                style: AppTextStyles.caption.copyWith(color: AppColors.ink),
+                style: AppTextStyles.caption.copyWith(
+                  color: subdued ? AppColors.onSurfaceMuted : AppColors.ink,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             if (hasResult) ...[
               const SizedBox(width: 8),
-              _ResultBadge(result: result!),
+              _ResultBadge(result: result!, subdued: subdued),
             ],
           ],
         ),
@@ -325,16 +338,18 @@ class _GameRow extends StatelessWidget {
 }
 
 class _ResultBadge extends StatelessWidget {
-  const _ResultBadge({required this.result});
+  const _ResultBadge({required this.result, this.subdued = false});
+  final bool subdued;
   final String result;
 
   @override
   Widget build(BuildContext context) {
-    final (label, color) = switch (result) {
+    final (label, resultColor) = switch (result) {
       '1-0' => ('White win', AppColors.info),
       '0-1' => ('Black win', AppColors.warning),
       _ => ('Draw', AppColors.onSurfaceMuted),
     };
+    final color = subdued ? AppColors.onSurfaceMuted : resultColor;
     return Tooltip(
       message: label,
       child: Container(

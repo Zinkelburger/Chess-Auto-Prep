@@ -1,17 +1,12 @@
-/// Dataset-slice chip bar shown in the PGN Viewer app bar.
-///
-/// Extracted from `pgn_viewer_screen.dart`. Renders the active
-/// slice chips, an add/edit-filter chip, and a filtered/total game count.
-/// State is read from the shared [PgnViewerController]; opening the slice
-/// dialog is the screen's concern, passed in via [onOpenSliceDialog].
+/// Editable applied collection filters beside the PGN viewer title.
 library;
 
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
-import '../../models/pgn_filter_models.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../slice/eco_filter_chips.dart';
 
 class PgnSliceChips extends StatelessWidget {
   final PgnViewerController controller;
@@ -25,177 +20,60 @@ class PgnSliceChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chipLabels = controller.activeSliceConfig.chipLabels;
-
+    final config = controller.activeSliceConfig;
+    final labels = config.chipLabels;
+    // Replace picker-generated regexes with the codes the user selected.
+    final headerOffset =
+        labels.length -
+        config.headerFilters.where((f) => f.value.isNotEmpty).length;
+    var index = headerOffset;
+    for (final filter in config.headerFilters) {
+      if (filter.value.isEmpty) continue;
+      final codes = filter.field == 'ECO'
+          ? selectedEcoCodes(filter.value, filter.mode)
+          : <String>[];
+      if (codes.isNotEmpty) labels[index] = 'ECO: ${codes.join(', ')}';
+      index++;
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          for (int i = 0; i < chipLabels.length; i++) ...[
-            _buildActiveChip(chipLabels[i], i),
-            const SizedBox(width: 4),
-          ],
-          _buildAddSliceChip(),
-          // One-click presets for the detected protagonist. Applied presets
-          // turn into regular slice chips (with ✕) above, so only offer the
-          // ones that aren't active yet.
-          for (final preset in controller.slicePresets)
-            if (!controller.isPresetActive(preset.filter)) ...[
-              const SizedBox(width: 4),
-              _buildPresetChip(preset.shortLabel, preset.label, preset.filter),
-            ],
-          if (controller.hasActiveFilters) ...[
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.infoTint,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: AppColors.info.withAlpha(60),
-                  width: 0.5,
-                ),
-              ),
-              child: Text(
-                '${controller.filteredGames.length}/${controller.allGames.length}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  // info, not chipActiveFg: on the pale infoTint wash the
-                  // near-white fg would erase the "filters active" signal.
-                  color: AppColors.info,
-                  fontFamily: AppTextStyles.monoFamily,
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActiveChip(String label, int index) {
-    return Tooltip(
-      message: 'Edit $label',
-      child: GestureDetector(
-        onTap: onOpenSliceDialog,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.chipActiveBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.info.withAlpha(60), width: 0.5),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 280),
+          for (var i = 0; i < labels.length; i++) ...[
+            if (i > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.chipActiveFg,
-                  ),
+                  config.matchAny ? 'OR' : 'AND',
+                  style: AppTextStyles.caption,
+                ),
+              ),
+            InputChip(
+              key: ValueKey(('applied-filter', i)),
+              tooltip: 'Edit ${labels[i]}',
+              label: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 230),
+                child: Text(
+                  labels[i],
                   overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
+                  style: AppTextStyles.muted.copyWith(color: AppColors.ink),
                 ),
               ),
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: () => controller.removeSliceChip(index),
-                child: Icon(
-                  Icons.close,
-                  size: 13,
-                  color: AppColors.chipActiveFg.withAlpha(180),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPresetChip(
-    String label,
-    String fullLabel,
-    HeaderFilterConfig filter,
-  ) {
-    // Styled like the idle add-filter chip: a preset is just a shortcut to a
-    // filter, not a highlighted state of its own.
-    return Tooltip(
-      message: 'Show only $fullLabel',
-      child: GestureDetector(
-        onTap: () => controller.applySlicePreset(filter),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.chipInactiveBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.outline, width: 0.5),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.person_outline,
-                size: 13,
-                color: AppColors.onSurfaceSoft,
-              ),
-              const SizedBox(width: 3),
-              Text(label, style: AppTextStyles.caption),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddSliceChip() {
-    return Tooltip(
-      message: 'Add or edit filters',
-      child: GestureDetector(
-        onTap: onOpenSliceDialog,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            // Keep the filter entry visibly active while conditions apply.
-            color: controller.hasActiveFilters
-                ? AppColors.chipActiveBg
-                : AppColors.chipInactiveBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: controller.hasActiveFilters
-                  ? AppColors.info.withAlpha(40)
-                  : AppColors.outline,
-              width: 0.5,
+              backgroundColor: AppColors.surface,
+              side: const BorderSide(color: AppColors.outline),
+              onPressed: onOpenSliceDialog,
+              onDeleted: () => controller.removeSliceChip(i),
+              deleteButtonTooltipMessage: 'Remove ${labels[i]}',
             ),
+          ],
+          const SizedBox(width: 8),
+          TextButton.icon(
+            key: const ValueKey('add-collection-filter'),
+            onPressed: onOpenSliceDialog,
+            icon: const Icon(Icons.add, size: 18),
+            label: Text(labels.isEmpty ? 'Filter games' : 'Add filter'),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.add,
-                size: 13,
-                color: controller.hasActiveFilters
-                    ? AppColors.chipActiveFg
-                    : AppColors.onSurfaceSoft,
-              ),
-              const SizedBox(width: 3),
-              Text(
-                'Filter',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: controller.hasActiveFilters
-                      ? AppColors.chipActiveFg
-                      : AppColors.onSurfaceSoft,
-                ),
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }

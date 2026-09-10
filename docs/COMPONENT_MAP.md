@@ -602,7 +602,7 @@ keyboard navigation, Escape and outside-click dismissal remain available.
 toolbar puts **Filter** and the detected player’s **White / Black** toggles on
 the same row, with horizontal scrolling in narrow panes. Collection tree explores
 the filtered games with single-line move rows and result bars capped at 180 pixels.
-To export games reaching a position, use **Filter → Current position → Show games**,
+To export games reaching a position, use **Filter → Current position → Apply filter**,
 then **Actions → Export → Export as PGN…**. Position filtering matches mainlines
 and variations and combines with the other active filters; there is no separate
 tree-position export action. Database explorer offers
@@ -642,8 +642,10 @@ Rule use searchable `ChoiceField`s; values search the loaded collection's cached
 header values, preserving separate White/Black lists and showing compact game
 counts. Result also suggests `1-0`, `0-1`, `1/2-1/2` and `*`. Selecting a suggestion
 resolves Contains/Regex to Exact while preserving bounds and exclusions; typed
-text keeps its selected operator. Muted labels/rules and inset value
-cells provide hierarchy. Each player field accepts one name (PGN commas remain
+text keeps its selected operator. Bright column labels and text, outlined inset controls and consistent input
+heights distinguish Field, Rule and Value, including the initial blank row.
+Selecting ECO exposes catalog browsing inside that row’s Value control; selected
+codes can be reopened and edited without replacing other ECO conditions. Each player field accepts one name (PGN commas remain
 part of the name).
 
 A **Combine AND / OR** selector applies to all active header, position and move
@@ -657,7 +659,10 @@ including positions in variations; a saved legacy filter defaults to AND.
 
 Matching games use the shared `PgnTreeGamesList`, with compact titles and optional
 move previews initially hidden. The list fills the remaining pane below the
-scrollable conditions, with **Show N games** always available in the footer.
+scrollable conditions, with **Apply filter** always available in the footer. Preview titles, arrows and
+result badges use secondary text colors so the editor remains prominent. Applied
+conditions appear as editable, removable chips beside the collection title, with
+AND/OR separators and **Add filter** to extend the same filter set.
 Tree retains **[Player] as White / as Black** when one player occurs in at least
 80% of the collection; Filter uses its editable rows instead of shortcut buttons.
 The mode selector shows only the current mode name, without a “View” prefix.
@@ -695,7 +700,8 @@ only opened tabs. Readers stay mounted and preserve their cursors. The settings
 gear opens view preferences. Opening a filter result exposes **Back to filters**,
 which returns to the same draft. Autosave can be toggled in Actions or settings;
 the reader has no persistent saved-status label. Tree/filter results use subtle
-row striping and blue White-win, amber Black-win and neutral draw badges.
+row striping. Tree uses blue White-win, amber Black-win and neutral draw badges;
+filter previews use neutral badges.
 
 Date rules use **After ≥** / **Before ≤**; rating bounds use **At least ≥** /
 **At most ≤**. These bounds remain inclusive. Even a filter matching all games
@@ -704,12 +710,11 @@ is restored.
 **Browse ECO openings…** uses `widgets/opening_picker_dialog.dart` and
 `services/opening_catalog.dart` to browse the bundled opening TSVs, preserving
 multiple named lines per ECO code. Its search uses the common `ListSearchField`
-with a magnifier, inset input and clear action. The browse control sits beside
-Combine. Selection survives searches and reopening the picker. Exact code sets
+with a magnifier, inset input and clear action. The browse control lives in the Value input after selecting ECO. Selection survives searches and reopening the picker. Exact code sets
 appear as removable chips in the ECO value cell, with representative board
 thumbnails enabled by default and a Show thumbnails checkbox. The preview
 supports legal board moves, editable SAN, undo, reset and board flip.
-**Filter by selected ECO codes** replaces existing ECO rows with one exact/OR
+**Filter by selected ECO codes** updates the current ECO row with one exact/OR
 condition and preserves other filters. **Use preview position** instead supplies
 the edited move sequence to the position filter; **Choose position… → Set up a board** can then
 arrange pieces freely. These actions change the filter draft, not game moves.

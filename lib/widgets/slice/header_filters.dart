@@ -25,6 +25,9 @@ class HeaderFilters extends StatefulWidget {
   /// editable Field / Rule / Value rows.
   final bool simple;
 
+  /// Browse the opening catalog for this ECO condition.
+  final ValueChanged<int>? onBrowseEco;
+
   /// Source games for distinct header suggestions and their game counts.
   /// Pass a new list when the source collection changes.
   final List<GameRecord>? games;
@@ -34,6 +37,7 @@ class HeaderFilters extends StatefulWidget {
     required this.controller,
     this.games,
     this.simple = false,
+    this.onBrowseEco,
   });
 
   @override
@@ -73,17 +77,22 @@ class _HeaderFiltersState extends State<HeaderFilters> {
                 .copyWith(
                   filled: true,
                   fillColor: Theme.of(context).colorScheme.surface,
+                  hintStyle: AppTextStyles.forTheme(
+                    context,
+                    AppTextStyles.hint,
+                  ),
+                  constraints: const BoxConstraints(minHeight: 48),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 12,
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(4),
-                    borderSide: const BorderSide(color: AppColors.divider),
+                    borderSide: const BorderSide(color: AppColors.outline),
                   ),
                   disabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(4),
-                    borderSide: const BorderSide(color: AppColors.divider),
+                    borderSide: const BorderSide(color: AppColors.outline),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(4),
@@ -103,21 +112,21 @@ class _HeaderFiltersState extends State<HeaderFilters> {
                       'Field',
                       style: AppTextStyles.forTheme(
                         context,
-                        AppTextStyles.caption,
+                        AppTextStyles.bodyStrong,
                       ),
                     ),
                     Text(
                       'Rule',
                       style: AppTextStyles.forTheme(
                         context,
-                        AppTextStyles.caption,
+                        AppTextStyles.bodyStrong,
                       ),
                     ),
                     Text(
                       'Value',
                       style: AppTextStyles.forTheme(
                         context,
-                        AppTextStyles.caption,
+                        AppTextStyles.bodyStrong,
                       ),
                     ),
                     const SizedBox(width: 44),
@@ -202,7 +211,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
         label: wide ? null : 'Field',
         hint: 'Search…',
         prefixIcon: row.field.isEmpty ? Icons.search : null,
-        style: AppTextStyles.forTheme(context, AppTextStyles.muted),
+        style: AppTextStyles.forTheme(context, AppTextStyles.body),
         value: row.field.isEmpty ? null : row.field,
         items: [
           for (final field in kHeaderFieldOptions)
@@ -226,7 +235,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       label: wide ? null : 'Rule',
       hint: 'Choose rule',
       enabled: row.field.isNotEmpty,
-      style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+      style: AppTextStyles.forTheme(context, AppTextStyles.body),
       value: row.field.isEmpty ? null : row.mode,
       items: [
         for (final mode in modesForField(row.field))
@@ -240,7 +249,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       ],
       onChanged: (mode) => edit((i) => controller.setHeaderMode(i, mode)),
     );
-    final value = ecoCodes.isNotEmpty
+    final Widget value = ecoCodes.isNotEmpty
         ? EcoFilterChips(
             codes: ecoCodes,
             onChanged: (codes) => edit((i) {
@@ -269,6 +278,9 @@ class _HeaderFiltersState extends State<HeaderFilters> {
               row: row,
               label: wide ? null : 'Value',
               suggestions: _suggestions,
+              onBrowseEco: row.field == 'ECO' && widget.onBrowseEco != null
+                  ? () => edit((i) => widget.onBrowseEco!(i))
+                  : null,
               onChanged: (value) =>
                   edit((i) => controller.setHeaderValue(i, value)),
               onSelected: (value) => edit((i) {
@@ -280,6 +292,20 @@ class _HeaderFiltersState extends State<HeaderFilters> {
               }),
             ),
           );
+    final valueCell = ecoCodes.isNotEmpty && widget.onBrowseEco != null
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              value,
+              TextButton.icon(
+                key: ValueKey(('browse-eco', row)),
+                onPressed: () => edit((i) => widget.onBrowseEco!(i)),
+                icon: const Icon(Icons.search, size: 18),
+                label: const Text('Edit openings…'),
+              ),
+            ],
+          )
+        : value;
     final remove = IconButton(
       tooltip: 'Remove filter',
       onPressed: () => edit((i) {
@@ -299,7 +325,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (wide)
-            _columns(field, rule, value, remove)
+            _columns(field, rule, valueCell, remove)
           else ...[
             Row(
               children: [
@@ -310,7 +336,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
               ],
             ),
             const SizedBox(height: 8),
-            value,
+            valueCell,
           ],
           if (!widget.simple &&
               widget.games != null &&
@@ -371,6 +397,7 @@ class _HeaderValueEditor extends StatefulWidget {
     required this.suggestions,
     required this.onChanged,
     required this.onSelected,
+    this.onBrowseEco,
   });
 
   final HeaderFilterRow row;
@@ -378,6 +405,7 @@ class _HeaderValueEditor extends StatefulWidget {
   final HeaderSuggestions suggestions;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSelected;
+  final VoidCallback? onBrowseEco;
 
   @override
   State<_HeaderValueEditor> createState() => _HeaderValueEditorState();
@@ -426,21 +454,29 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
         fieldViewBuilder: (context, text, focus, submit) => TextField(
           controller: text,
           enabled: row.field.isNotEmpty,
+          onTap: row.value.isEmpty ? widget.onBrowseEco : null,
           focusNode: focus,
           style: AppTextStyles.forTheme(context, AppTextStyles.body),
           decoration: InputDecoration(
-            constraints: const BoxConstraints(minHeight: 44),
+            constraints: const BoxConstraints(minHeight: 48),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
               vertical: 12,
             ),
-            prefixIcon: row.value.isEmpty && row.field.isNotEmpty
+            prefixIcon: row.value.isEmpty
                 ? const Icon(Icons.search, size: 16)
                 : null,
             prefixIconConstraints: const BoxConstraints(
               minWidth: 32,
               minHeight: 44,
             ),
+            suffixIcon: widget.onBrowseEco == null
+                ? null
+                : IconButton(
+                    tooltip: 'Browse ECO openings',
+                    onPressed: widget.onBrowseEco,
+                    icon: const Icon(Icons.manage_search, size: 20),
+                  ),
             labelText: widget.label,
             errorText: error,
             errorMaxLines: 2,
@@ -450,7 +486,10 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
               '' => 'Value',
               'Result' => 'Search results',
               'Date' => 'Year or date',
-              'ECO' => 'ECO code or prefix',
+              'ECO' =>
+                widget.onBrowseEco == null
+                    ? 'ECO code or prefix'
+                    : 'Browse ECO openings…',
               'WhiteElo' || 'BlackElo' || 'StudyRating' => 'Rating',
               _ => 'Search values',
             },

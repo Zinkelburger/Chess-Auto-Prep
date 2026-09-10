@@ -68,6 +68,7 @@ import '../widgets/fullscreen_game_view.dart';
 import '../widgets/game_analysis_tab.dart';
 import '../core/pgn/pgn_workspace.dart';
 import '../widgets/pgn/pgn_workspace_bar.dart';
+import '../widgets/pgn/pgn_slice_chips.dart';
 import '../widgets/pgn/pgn_database_picker.dart';
 import '../widgets/pgn/pgn_database_panel.dart';
 import '../widgets/pgn/pgn_collection_panel.dart';

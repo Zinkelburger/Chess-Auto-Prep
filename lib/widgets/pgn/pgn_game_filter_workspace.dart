@@ -152,32 +152,23 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
     super.dispose();
   }
 
-  Future<void> _chooseOpenings() async {
+  Future<void> _chooseOpenings(int index) async {
+    final row = _filters.headerRows[index];
     final selection = await showOpeningPicker(
       context,
       forFilters: true,
-      initialEcoCodes: {
-        for (final row in _filters.headerRows)
-          if (row.field == 'ECO') ...selectedEcoCodes(row.value, row.mode),
-      },
+      initialEcoCodes: selectedEcoCodes(row.value, row.mode).toSet(),
     );
     if (!mounted || selection == null) return;
+    index = _filters.headerRows.indexOf(row);
+    if (index < 0 || row.field != 'ECO') return;
     if (selection.positionLine case final line?) {
       _filters.positionText.text = line.movetext.isEmpty
           ? line.position.fen
           : line.movetext;
     } else if (selection.lines.isNotEmpty) {
-      // One OR condition replaces ECO rows; other header/position filters stay.
-      for (var i = _filters.headerRows.length - 1; i >= 0; i--) {
-        if (_filters.headerRows[i].field == 'ECO') _filters.removeHeaderRow(i);
-      }
       final codes = selection.lines.map((line) => line.eco).toSet().toList()
         ..sort();
-      var index = _filters.headerRows.indexWhere((row) => row.field.isEmpty);
-      if (index < 0) {
-        _filters.addHeaderRow();
-        index = _filters.headerRows.length - 1;
-      }
       _filters.setHeaderField(index, 'ECO');
       _filters.setHeaderMode(
         index,
@@ -354,28 +345,15 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
               },
             ),
           ),
-          const Spacer(),
-          Flexible(
-            flex: 3,
-            child: OutlinedButton(
-              key: const ValueKey('filter-choose-eco'),
-              style: OutlinedButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.surface,
-                foregroundColor: AppColors.onSurfaceMuted,
-                side: const BorderSide(color: AppColors.divider),
-                textStyle: AppTextStyles.muted,
-              ),
-              onPressed: _board == null ? _chooseOpenings : null,
-              child: const Text(
-                'Browse ECO openings…',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
         ],
       ),
       const SizedBox(height: 10),
-      HeaderFilters(controller: _filters, games: widget.allGames, simple: true),
+      HeaderFilters(
+        controller: _filters,
+        games: widget.allGames,
+        simple: true,
+        onBrowseEco: _board == null ? _chooseOpenings : null,
+      ),
       const SizedBox(height: 12),
       ExpansionTile(
         key: ValueKey(('position-filter-section', _filters)),
@@ -564,6 +542,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
       currentFen: null,
       currentIndex: -1,
       initiallyShowMoves: false,
+      subdued: true,
       toolbarLeading: Text(
         '${_matchingIndices.length} games',
         style: AppTextStyles.forTheme(context, AppTextStyles.caption),
@@ -615,7 +594,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                 ? 'Check filters'
                 : _computing
                 ? 'Finding games…'
-                : 'Show ${_matchingIndices.length} game${_matchingIndices.length == 1 ? '' : 's'}',
+                : 'Apply filter',
           ),
         ),
       ],
