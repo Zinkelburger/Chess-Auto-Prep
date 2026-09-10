@@ -26,7 +26,8 @@ class _EvalNote {
   final String after;
 
   /// The line the engine would have played instead, in SAN, from the position
-  /// *before* this move. Empty when the pass stored no `[%pv]`.
+  /// *before* this move, identifying its saved variation for styled rendering.
+  /// Empty when the pass stored no line.
   final List<String> pv;
 
   String get label => switch (classification) {
@@ -148,43 +149,3 @@ List<InlineSpan> _evalNoteSpans(_EvalNote note) => [
     ).copyWith(color: nagColor(note.classification.nag ?? 0)),
   ),
 ];
-
-/// The engine's line from before the marked move, as clickable moves that
-/// preview on the board without touching the move tree — the same machinery
-/// prose-embedded lines use, so clicking one behaves identically.
-List<InlineSpan> _bestLineSpans(
-  PgnMovetextView view,
-  List<String> pv,
-  int anchorPly,
-) {
-  if (pv.isEmpty) return const [];
-  // Negative ids: parsed comment runs number themselves from zero, and these
-  // synthesized runs must not collide with them.
-  final runId = -(anchorPly + 1);
-  final run = <CommentMove>[];
-  for (var k = 0; k < pv.length; k++) {
-    final coords = _coordsAtPly(view, anchorPly + k);
-    final prefix = coords.isWhite
-        ? '${coords.moveNumber}.'
-        : (k == 0 ? '${coords.moveNumber}...' : '');
-    run.add(
-      CommentMove(
-        san: pv[k],
-        display: '$prefix${pv[k]}',
-        moveNumber: coords.moveNumber,
-        isWhite: coords.isWhite,
-        runId: runId,
-      ),
-    );
-  }
-  return [
-    TextSpan(text: 'Best: ', style: PgnTextStyles.metricsAt(0)),
-    for (final move in run)
-      _buildCommentMoveSpan(
-        view,
-        move,
-        run,
-        moveStyle: PgnTextStyles.moveAt(1),
-      ),
-  ];
-}

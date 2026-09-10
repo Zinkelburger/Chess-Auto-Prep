@@ -443,11 +443,25 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     if (pgnText == null || _isLoading || _m.game == null) return false;
     try {
       final adopted = _m.adoptAnnotations(PgnGame.parsePgn(pgnText));
-      if (adopted) setState(() {});
+      if (adopted) {
+        setState(() {});
+        _persistMigratedAnalysis();
+      }
       return adopted;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Old cached reviews gain real RAVs through the host's usual save policy.
+  /// Defer during widget updates and bind the callback to this exact game.
+  void _persistMigratedAnalysis() {
+    if (!_m.didMaterializeAnalysis || !widget.persistMoves) return;
+    final game = _m.game;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !identical(_m.game, game)) return;
+      _notifyCommentsChanged();
+    });
   }
 
   Future<void> _loadGame() async {
@@ -512,6 +526,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         }
         widget.onGameLoaded?.call();
       });
+      _persistMigratedAnalysis();
     } catch (e) {
       if (!mounted) return;
       setState(() {

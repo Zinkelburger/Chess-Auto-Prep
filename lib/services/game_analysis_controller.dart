@@ -16,6 +16,7 @@ library;
 
 import 'dart:async';
 import '../core/pgn/pgn_dummy_mainline.dart';
+import '../core/pgn/pgn_analysis_variations.dart';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -361,8 +362,9 @@ CachedGameAnalysis? _parseGameEvals(PgnGame<PgnNodeData> parsed) {
 
 /// [pgnText]'s movetext with a `[%pv]` written onto each mainline move named
 /// in [linesByPly] (1-based ply → SAN line from the position before it),
-/// alongside whatever comment the move already carries. Null when the game
-/// does not parse or names no such ply.
+/// alongside whatever comment the move already carries. Classified lines are
+/// then stored as standard RAVs with a `[%bestline]` path reference. Null when
+/// the game does not parse or names no such ply.
 String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
   if (linesByPly.isEmpty) return null;
   final PgnGame parsed;
@@ -386,6 +388,7 @@ String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
     written = true;
   }
   if (!written) return null;
+  annotateGameMoveQuality(parsed);
   // The whole tree, not `mainline`: this text replaces the game in the
   // reader's file, so the sidelines and the game's opening comment it also
   // parsed have to come back out with it.
@@ -399,15 +402,21 @@ String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
 
 /// Add standard quality NAGs to an analyzed game's mainline using the same
 /// classifications as cached review. Existing author glyphs and sidelines stay
-/// intact; games without enough stored evaluations are left untouched.
-void annotateGameMoveQuality(PgnGame<PgnNodeData> game) {
+/// intact; classified PVs become standard RAVs with a best-line path reference.
+/// Games without enough stored evaluations are left untouched. Returns whether
+/// any PV payload was converted, so editable readers can persist migration.
+bool annotateGameMoveQuality(PgnGame<PgnNodeData> game) {
   final analysis = _parseGameEvals(game);
-  if (analysis == null) return;
+  if (analysis == null) return false;
   final moves = game.moves.mainline().toList();
   for (final eval in analysis.evals) {
     final move = moves[eval.ply - 1];
     move.nags = eval.classification.annotateNags(move.nags);
   }
+  return materializeAnalysisVariations(game, {
+    for (final eval in analysis.evals)
+      if (eval.classification != MoveClassification.normal) eval.ply - 1,
+  });
 }
 
 class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {

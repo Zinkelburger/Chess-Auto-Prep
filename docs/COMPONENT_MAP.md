@@ -837,14 +837,22 @@ notes and replay from their embedded FEN. Dotted-underlined comment moves offer
 **Preview comment move** tooltips and show **Comment preview** while navigating.
 Their active highlight uses the mainline’s borderless pill around the move alone;
 move numbers and separating spaces stay outside, and selection preserves text weight.
-Playing a move from a comment or a classified move’s **Best** line first gives
-that preview ordinary variation ancestry. Back steps one ply through both the
-new moves and the suggested prefix; the suggestion’s unplayed continuation
-remains available as an alternative. Reopening a preview preserves explored
-branches. Preview clicks do not save anything; edited lines follow the reader’s
-normal persistence policy, including every ancestor needed for a legal PGN.
-Independent embedded FEN diagrams remain temporary previews when their starting
-position does not occur on the game’s mainline.
+Classified engine suggestions (**Interesting**, **Inaccuracy**, **Mistake**,
+**Blunder**) are saved as standard PGN variations when analysis writes the game.
+Their real variation nodes render once inside the verdict’s inset **Best** block,
+with ordinary move selection, Back/Forward, branching, focus and context menus.
+The `[%bestline ...]` comment identifies the styled path; the RAV owns its moves.
+Existing branches and annotations are reused; the engine’s continuation becomes
+the principal path within that analysis branch, retaining other continuations.
+Legacy `[%pv ...]` suggestions on classified moves convert on load and go through
+the editable reader’s normal save policy, without rerunning the engine. Repeated
+loads do not duplicate them; deleting a branch or suffix also removes/shortens
+its reference so it stays deleted after save/reload. Unclassified cached PVs
+remain compact engine metadata.
+Prose-embedded move runs still preview without saving. Playing a move from one
+first gives it ordinary variation ancestry. Independent embedded FEN diagrams
+remain temporary previews when their starting position does not occur on the
+game’s mainline.
 The variation toolbar and continuation picker float at the foot of the reader,
 so entering a sideline or reaching a fork never resizes the reading viewport.
 Overflow scrolls horizontally. Positions without a choice have no picker or
@@ -1509,7 +1517,8 @@ release smoke testing. No release or update is triggered by these tests.
 | `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
 | `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); movetext via `PgnMovetextView` (near-white `PgnTextStyles`, comments/variations on own rows); larger branch chips + Return-to-mainline + nav icons; **Edit mode** (`editMode` prop): NAG inline display, annotation panel, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildGameMovetext` |
-| `pgn/pgn_movetext_view.dart` | Mainline + sideline + comment rendering; analyzed games annotate every classified move for both sides (Interesting, Inaccuracy, Mistake, Blunder), including short games and scores mixed with prose, using the graph’s shared classifier; move suffixes show `!?`, `?!`, `?`, or `??` even for older cached games. Full review and tactics analysis also save these as standard PGN NAGs, preserving existing author glyphs and positional annotations; verdicts and clickable best lines share an inset block with a left rule and extra space before play resumes. Uses `PgnTextStyles` (comments upright, not italic). ChessBase/Chessable **null moves** (`--` / `Z0`) are hidden in the SAN but still pass the turn. Chessable intro dummies are promoted to the mainline before render, so `1. Z0 (1. d4 Z0 2. Nf3 …)` shows the lesson text on the spine |
+| `core/pgn/pgn_analysis_variations.dart` | Converts classified legacy/new engine PVs to standard RAVs, reuses existing branches, and synchronizes the `[%bestline]` display reference after edits; shared by full review, tactics annotation and viewer loading. |
+| `pgn/pgn_movetext_view.dart` | Mainline + sideline + comment rendering; analyzed games annotate every classified move for both sides (Interesting, Inaccuracy, Mistake, Blunder), including short games and scores mixed with prose, using the graph’s shared classifier; move suffixes show `!?`, `?!`, `?`, or `??` even for older cached games. Full review and tactics analysis also save these as standard PGN NAGs, preserving existing author glyphs and positional annotations; verdicts and their saved RAVs share an inset block with a left rule and extra space before play resumes; those same nodes handle navigation and edits, with no duplicated preview line. Uses `PgnTextStyles` (comments upright, not italic). ChessBase/Chessable **null moves** (`--` / `Z0`) are hidden in the SAN but still pass the turn. Chessable intro dummies are promoted to the mainline before render, so `1. Z0 (1. d4 Z0 2. Nf3 …)` shows the lesson text on the spine |
 | `pgn/pgn_opening_tree_panel.dart` | Opening-tree side panel (replaces Game/Analysis + nav bar). Resizable split between `OpeningTreeWidget` and `PgnTreeGamesList`. While the tree is open, `/` searches the games-at-position list (not the full file) and picking a row/`G` number calls `loadGameFromTree` |
 | `pgn/pgn_tree_games_list.dart` | Games at the tree cursor: `GameNumberField` + `GameSearchButton` + **Show moves** checkbox. Default expanded rows show title + truncated comment-free mainline PV from this FEN (`mainlineSansAfterFen`). With Show moves off, the blue play arrow previews one line and the title opens the game |
 | `pgn_import_dialog.dart` | Compact PGN import `AlertDialog` — file picker pill + paste textarea with live line count via `countPgnGames`; used for repertoire append and create-with-PGN flows. Multi-source contexts use `PgnSourcesPanel` instead |

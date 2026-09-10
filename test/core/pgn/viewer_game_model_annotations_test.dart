@@ -15,7 +15,7 @@ const _plain =
 const _annotated =
     '$_header'
     '1. e4 {[%eval 0.20]} e5 {[%eval 0.15]} (1... c5 {Sicilian}) '
-    '2. Nf3 \$1 {[%eval 0.25]} Nc6 {[%eval -3.00] [%pv Bb5,a6]} *\n';
+    '2. Nf3 \$1 {[%eval 0.25]} Nc6 {[%eval 3.00] [%pv Nf6,Bc4]} *\n';
 
 ViewerGameModel _loaded(String pgn) {
   final model = ViewerGameModel();
@@ -35,8 +35,14 @@ void main() {
     expect(m.adoptAnnotations(parsed), isTrue);
 
     expect(m.mainLineIndex, 3);
-    expect(m.hasEphemeralMoves, isTrue, reason: 'analysis in progress kept');
-    expect(m.moveHistory[3].comments, ['[%eval -3.00] [%pv Bb5,a6]']);
+    expect(
+      m.hasEphemeralMoves,
+      isFalse,
+      reason: 'engine line reuses and saves the active scratch node',
+    );
+    expect(m.moveHistory[3].comments, ['[%eval 3.00] [%bestline Nf6,Bc4]']);
+    expect(m.analysisPath.single.san, 'Nf6');
+    expect(m.analysisPath.single.children.single.san, 'Bc4');
     expect(m.moveHistory[2].nags, [1]);
     expect(m.variationsByPly[1]!.where((n) => !n.isEphemeral), hasLength(1));
   });
