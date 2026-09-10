@@ -161,7 +161,7 @@ OpeningReviewData aggregateOpeningReview(List<RecentGame> games) {
   for (final game in games) {
     anyDesignated = anyDesignated || game.bookDesignated;
     final report = game.deviation;
-    if (report == null || report.inBook) continue;
+    if (report == null || report.inBook || report.differentOpening) continue;
 
     final lineKey = report.pathSans.map(normalizeSan).join('\u0000');
     final Map<String, OpeningReviewEntry> bucket;
@@ -258,21 +258,29 @@ Future<List<RepertoireLine>> loadBookLinesForEntry(OpeningReviewEntry entry) =>
 Future<List<RepertoireLine>> loadBookLines({
   required String chapterPath,
   required List<String> prefixSans,
-}) async {
+}) => _loadBookChapter(chapterPath, prefixSans);
+
+/// All chapter entries, including illustrative games and commentary lines.
+/// Browsing contents must not apply the comparison's repertoire-only filter.
+Future<List<RepertoireLine>> loadBookChapterContents(String chapterPath) =>
+    _loadBookChapter(chapterPath, null);
+
+Future<List<RepertoireLine>> _loadBookChapter(
+  String chapterPath,
+  List<String>? prefixSans,
+) async {
   final String content;
   try {
     content = await File(chapterPath).readAsString();
   } catch (_) {
     return const [];
   }
-  List<RepertoireLine> select() => matchingBookLines(
-    RepertoireService().parseRepertoirePgn(content),
-    prefixSans,
-  );
-  // A course export runs to tens of megabytes; parsing it here would freeze
-  // the viewer for seconds. Small chapters stay on this isolate, where the
-  // widget tests' fake clock can see them finish.
-  return content.length > 512 * 1024 ? Isolate.run(select) : select();
+  List<RepertoireLine> parse() {
+    final lines = RepertoireService().parseRepertoirePgn(content);
+    return prefixSans == null ? lines : matchingBookLines(lines, prefixSans);
+  }
+
+  return content.length > 512 * 1024 ? Isolate.run(parse) : parse();
 }
 
 /// SANs from the initial position as numbered movetext ("1. e4 c5 2. Nf3").
@@ -286,6 +294,9 @@ String formatNumberedSans(List<String> sans) => buildNumberedMovetext(sans);
 /// "Not in book: 7...O-O (book 7...Nc6 / 7...a6)" — the opponent's move
 /// the book has no answer to — and "Book ends after 12...Rc8".
 String? deviationVerdict(DeviationReport report) {
+  if (report.differentOpening) {
+    return 'Different opening — this game did not enter this book';
+  }
   final played = report.playedSan;
   if (played == null) return null;
   final ply = report.matchedPlies;

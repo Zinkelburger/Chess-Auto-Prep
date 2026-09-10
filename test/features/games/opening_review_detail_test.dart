@@ -1,17 +1,13 @@
-/// The opening-review detail dialog: one board, Game / Your book tabs, both
-/// opened at the deviation point, book tab showing the repertoire line with
-/// its comments.
+/// The review queue delegates game/book reading to the canonical PGN viewer.
 library;
 
 import 'package:chess_auto_prep/features/games/models/recent_game.dart';
 import 'package:chess_auto_prep/features/games/services/game_deviation_service.dart';
 import 'package:chess_auto_prep/features/games/services/opening_review.dart';
-import 'package:chess_auto_prep/features/games/widgets/opening_review_detail_dialog.dart';
-import 'package:chess_auto_prep/models/repertoire_line.dart';
+import 'package:chess_auto_prep/features/games/widgets/opening_review_dialog.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
-import 'package:dartchess/dartchess.dart' show Chess;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -48,80 +44,38 @@ OpeningReviewEntry _entry() {
   return aggregateOpeningReview([game]).mistakes.single;
 }
 
-RepertoireLine _bookLine() {
-  return RepertoireLine(
-    id: 'open-sicilian-main',
-    name: 'Open Sicilian – Main',
-    moves: const ['e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4', 'Nxd4'],
-    color: 'black',
-    startPosition: Chess.initial,
-    fullPgn:
-        '[Event "Sicilian"]\n'
-        '[Result "*"]\n'
-        '\n'
-        '1. e4 c5 2. Nf3 d6 3. d4 cxd4 '
-        '{ Recapture with the knight next. } 4. Nxd4 *',
-  );
-}
-
-Future<void> _pumpDialog(WidgetTester tester) async {
-  tester.view.physicalSize = const Size(1400, 900);
-  tester.view.devicePixelRatio = 1.0;
-  addTearDown(tester.view.resetPhysicalSize);
-  addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(
-    MaterialApp(
-      home: Material(
-        child: OpeningReviewDetailDialog.forEntry(
-          entry: _entry(),
-          bookEnd: false,
-          games: const [
-            ReviewGameSource(label: 'vs opp (Jul 12)', pgn: _gamePgn),
-          ],
-          onEditInBuilder: () {},
-          onOpenGame: (_) {},
-          loadLines: (_) async => [_bookLine()],
+void main() {
+  testWidgets('review entry opens its game in the canonical viewer', (
+    tester,
+  ) async {
+    final entry = _entry();
+    RecentGame? opened;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => OpeningReviewDialog(
+                  data: aggregateOpeningReview(entry.games),
+                  windowLabel: 'last 20 games',
+                  onEditLine: (_) {},
+                  onOpenGame: (game) => opened = game,
+                ),
+              ),
+              child: const Text('Review'),
+            ),
+          ),
         ),
       ),
-    ),
-  );
-  await tester.pumpAndSettle();
-}
-
-void main() {
-  testWidgets('shows the deviation header, tabs, and one board', (
-    tester,
-  ) async {
-    await _pumpDialog(tester);
-
-    expect(find.text('Sicilian · move 3'), findsOneWidget);
-    expect(
-      find.textContaining('You played 3... Nf6 — book plays 3... cxd4'),
-      findsOneWidget,
     );
-    expect(find.text('Game'), findsOneWidget);
-    expect(find.text('Your book'), findsOneWidget);
-    expect(find.byType(ChessBoardWidget), findsOneWidget);
-    // Reviewing is the primary action (the viewer's Line tab shows the prep
-    // next to the game on a full-size board); editing the book is secondary.
-    expect(find.text('Open in viewer'), findsOneWidget);
-    expect(find.text('Edit in Builder'), findsOneWidget);
-  });
-
-  testWidgets('book tab shows the repertoire line with its comment', (
-    tester,
-  ) async {
-    await _pumpDialog(tester);
-
-    await tester.tap(find.text('Your book'));
+    await tester.tap(find.text('Review'));
     await tester.pumpAndSettle();
-
-    expect(
-      find.textContaining(
-        'Recapture with the knight next.',
-        findRichText: true,
-      ),
-      findsOneWidget,
-    );
+    await tester.tap(find.text('Sicilian · move 3'));
+    await tester.pumpAndSettle();
+    expect(opened, same(entry.games.first));
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(ChessBoardWidget), findsNothing);
   });
 }

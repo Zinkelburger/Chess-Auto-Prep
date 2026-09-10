@@ -129,8 +129,6 @@ void main() {
                 gamesInWindow: 20,
                 windowLabel: 'last 20 games',
                 onOpeningReview: onOpeningReview ?? () {},
-                masterGameCount: masterGameCount,
-                onMasterPractice: onMasterPractice ?? () {},
                 repeated: repeated,
                 onFixEntry: onFixEntry,
               ),
