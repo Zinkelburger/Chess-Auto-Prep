@@ -258,10 +258,10 @@ class _Boards extends StatelessWidget {
       BughouseBoardCard.headerHeight +
       6 +
       BughouseBoardCard.seatHeight +
-      10 +
       6 +
       6 +
-      10 +
+      6 +
+      6 +
       BughouseBoardCard.seatHeight +
       8 +
       BughouseBoardMovetext.height +

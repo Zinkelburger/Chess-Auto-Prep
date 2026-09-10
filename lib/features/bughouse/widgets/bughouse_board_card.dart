@@ -496,7 +496,10 @@ class _PocketRow extends StatelessWidget {
                   BoardDisplaySettings.of(context).coordinates,
                   width,
                 );
-          return _buildPocket(context, (width - margin) / 8);
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: _buildPocket(context, (width - margin) / 8),
+          );
         },
       ),
     );
@@ -520,8 +523,8 @@ class _PocketRow extends StatelessWidget {
           : 'Not ${side.name}\'s turn on ${which.label.toLowerCase()}',
       waitDuration: const Duration(milliseconds: 600),
       child: Container(
-        height: pieceSize + 10,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        height: pieceSize + 6,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
           color: AppColors.pocketSurface,
           borderRadius: BorderRadius.circular(4),
@@ -530,6 +533,7 @@ class _PocketRow extends StatelessWidget {
         // pocket: the reserve reads as one clump, not as five columns
         // stretched across the board.
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             for (final role in _reserveRoles)
               _PocketPiece(
@@ -631,8 +635,8 @@ class _PocketPiece extends StatelessWidget {
         onSecondaryTap: onSecondaryTap,
         behavior: HitTestBehavior.opaque,
         child: Container(
-          width: size + 8,
-          height: size + 6,
+          width: size + 4,
+          height: size + 4,
           margin: const EdgeInsets.symmetric(horizontal: 1),
           decoration: BoxDecoration(
             color: held ? AppColors.surfaceHighlight : Colors.transparent,
