@@ -497,7 +497,7 @@ class _PocketRow extends StatelessWidget {
                   width,
                 );
           return Align(
-            alignment: Alignment.centerLeft,
+            alignment: Alignment.center,
             child: _buildPocket(context, (width - margin) / 8),
           );
         },
@@ -529,9 +529,8 @@ class _PocketRow extends StatelessWidget {
           color: AppColors.pocketSurface,
           borderRadius: BorderRadius.circular(4),
         ),
-        // Packed tight and left-aligned, the way lichess draws a crazyhouse
-        // pocket: the reserve reads as one clump, not as five columns
-        // stretched across the board.
+        // Keep all five slots together in a centered tray whose width stays
+        // steady as pieces arrive and leave.
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

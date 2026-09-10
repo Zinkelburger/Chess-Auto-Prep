@@ -63,7 +63,7 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 | User action | Control / behavior |
 |---|---|
 | Play or drop a piece | Drag on either board; reserve pieces also support click then square |
-| Read reserves | Pieces match their board's piece size and scale with it, including during a drag. Compact, left-aligned mid-gray trays fit the five slots with tight padding, keeping both piece colors visible. Owned pieces stay fully opaque on either turn and always show a count; empty slots remain faint silhouettes |
+| Read reserves | Pieces match their board's piece size and scale with it, including during a drag. Compact, centered gray trays fit the five slots with tight padding, keeping both piece colors visible. Owned pieces stay fully opaque on either turn and always show a count; empty slots remain faint silhouettes |
 | Identify seats | You / Partner / Opponent / Partner’s opponent in 16px text beside 20px clocks and larger seat badges. Board headings use 18px text; the turn marker keeps a fixed slot so labels do not shift |
 | Pause or resume | Analysis toolbar |
 | Read candidate continuations | Board 1 and Board 2 ranked lines appear together, automatically using the side to move on each board. Searches still consider both boards jointly; all scores are from your team’s perspective |

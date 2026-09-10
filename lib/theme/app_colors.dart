@@ -33,7 +33,7 @@ abstract final class AppColors {
   static const surfaceHighlight = Color(0xFF606060);
 
   /// Mid-gray reserve tray keeps both black and white chess pieces visible.
-  static const pocketSurface = Color(0xFF888888);
+  static const pocketSurface = onSurfaceDisabled;
 
   // ── Ink hierarchy (text/icons on the dark surfaces) ──────────────────────
 
