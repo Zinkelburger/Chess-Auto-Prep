@@ -63,7 +63,7 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 | User action | Control / behavior |
 |---|---|
 | Play or drop a piece | Drag on either board; reserve pieces also support click then square |
-| Read reserves | Mid-gray trays keep both piece colors visible. Owned pieces stay fully opaque on either turn and always show a count; empty slots remain faint silhouettes |
+| Read reserves | Pieces match their board's piece size and scale with it, including during a drag. Mid-gray trays keep both piece colors visible. Owned pieces stay fully opaque on either turn and always show a count; empty slots remain faint silhouettes |
 | Identify seats | You / Partner / Opponent / Partner’s opponent, beside each clock |
 | Pause or resume | Analysis toolbar |
 | Read candidate continuations | Board 1 and Board 2 ranked lines appear together, automatically using the side to move on each board. Searches still consider both boards jointly; all scores are from your team’s perspective |
@@ -77,7 +77,7 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 | Edit either board | Pencil icon; shared drag editor supports palette placement, arbitrary piece movement and right-click removal; illegal kingless bughouse positions are rejected |
 | Change turn, castling, reserves, clear/reset | Edit position controls and reserve slots |
 | Load/copy a position | Dual FEN controls in the editor; copy menu below the boards |
-| Navigate or undo | Controls below the boards; arrows and Home/End navigate history |
+| Navigate or undo | Controls below the boards; arrows and Home/End navigate history. Each board's move list has a charcoal background and outline separating it from the page |
 | Flip a board | Its header control; F for Board 1, G for Board 2 |
 | Run or review engine matches | More bughouse tools → Engine tournament; Done returns to analysis |
 

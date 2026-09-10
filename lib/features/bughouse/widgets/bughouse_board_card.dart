@@ -1,11 +1,13 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
+import '../../../models/board_display_settings.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
 import '../../../utils/chess_utils.dart' show parseSquare;
 import '../../../widgets/chess_board_widget.dart';
+import '../../../widgets/board/board_coordinates.dart';
 import '../../../widgets/board_editor/editable_board.dart';
 import '../../../widgets/common/piece_image.dart';
 import '../controllers/bughouse_controller.dart';
@@ -466,11 +468,22 @@ class _PocketRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<BughouseHover?>(
       valueListenable: controller.hover,
-      builder: (context, _, _) => _buildPocket(context),
+      builder: (context, _, _) => LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final margin = controller.mode == BughouseMode.setup
+              ? 0.0
+              : coordinateMargin(
+                  BoardDisplaySettings.of(context).coordinates,
+                  width,
+                );
+          return _buildPocket(context, (width - margin) / 8);
+        },
+      ),
     );
   }
 
-  Widget _buildPocket(BuildContext context) {
+  Widget _buildPocket(BuildContext context, double pieceSize) {
     final state = controller.hover.value?.preview ?? controller.state;
     final position = state.board(which);
     final pockets = position.pockets ?? Pockets.empty;
@@ -488,7 +501,7 @@ class _PocketRow extends StatelessWidget {
           : 'Not ${side.name}\'s turn on ${which.label.toLowerCase()}',
       waitDuration: const Duration(milliseconds: 600),
       child: Container(
-        height: 46,
+        height: pieceSize + 10,
         padding: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           color: AppColors.pocketSurface,
@@ -505,6 +518,7 @@ class _PocketRow extends StatelessWidget {
                   'bughouse-pocket-${which.name}-${side.name}-${role.name}',
                 ),
                 piece: Piece(color: side, role: role),
+                size: pieceSize,
                 count: pockets.of(side, role),
                 held:
                     pending != null &&
@@ -542,6 +556,7 @@ class _PocketPiece extends StatelessWidget {
   const _PocketPiece({
     super.key,
     required this.piece,
+    required this.size,
     required this.count,
     required this.held,
     required this.onTap,
@@ -562,7 +577,7 @@ class _PocketPiece extends StatelessWidget {
   final VoidCallback? onDragStarted;
   final VoidCallback? onDragEnded;
 
-  static const double size = 36;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -575,7 +590,7 @@ class _PocketPiece extends StatelessWidget {
       // cursor is the square it lands on.
       dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: Transform.translate(
-        offset: const Offset(-size / 2, -size / 2),
+        offset: Offset(-size / 2, -size / 2),
         child: PieceImage(piece: piece, size: size),
       ),
       childWhenDragging: Opacity(opacity: 0.3, child: body),

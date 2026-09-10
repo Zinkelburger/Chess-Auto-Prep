@@ -54,8 +54,9 @@ class BughouseBoardMovetext extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.pgnSurface,
+        color: AppColors.surfaceContainer,
         borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.outline),
       ),
       child: entries.isEmpty
           ? const Text(
