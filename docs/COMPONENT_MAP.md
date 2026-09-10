@@ -568,15 +568,25 @@ RepertoireTrainingScreen
   → TrainingSettings (persisted)
 ```
 
-Train opens multi-chapter imports at the chapter picker instead of silently
-opening the introduction as “Main”. Course headers use the shared repertoire
-chapter detector; Game and Train split PGN collections with `splitPgnIntoGames`.
-The chapter reader reuses `PgnReadingPane` for prose spacing, move anchoring,
-variation focus and return-to-parent navigation, on a softer charcoal surface.
-Single-chapter files open straight to their lines with a direct route back to
-the repertoire's chapters. A line's Read action opens
-that same chapter reader at the chosen line.
+Train opens a repertoire directly; chapters remain an optional filter. Whole-folder
+sessions include each chapter and retain its original per-file review identity.
+Learn and Review have no default session cap (a chosen cap remains available in
+settings). Read sends the selected chapter or whole repertoire to the canonical
+PGN Viewer. During learning, the shared `PgnMovetextView` reveals only played
+moves and keeps introductory prose with the first move; a compact Next control
+stays in a fixed footer. Drilling advances quietly and shows prose only after a
+wrong answer. Corrections replay only missed moves from the current line; an
+Again rating schedules later review without reintroducing earlier lines into
+the current run. Every answer is durably recorded before progression in
+`repertoire_move_attempts.jsonl`, including source, line, position, played and
+expected moves and phase. The trainer's searchable Mistakes panel opens the
+matching line for reading.
 
+Trainer view organization: source browser, lesson and results share the same
+board/panel frame. One phase panel replaces separate intro/learn/drill/replay
+views and move-pair cards. The independent chapter reader was removed; PGN
+reading belongs to the canonical viewer. Mistakes is a list in the existing
+side pane, not a separate screen.
 Training uses Actions → view picker → gear. The gear opens the shared settings sidebar with nested Session, Learning, Playback and Material chapters. **Skip** is visible during a
 lesson and leaves a line out for the current sitting without rating it.
 **Line → Exclude from training** saves an exclusion alongside review progress;
@@ -753,9 +763,8 @@ or variations. Explicit move numbers and sides must match the preview position;
 bare square references in prose are not inferred as pawn moves. Move numbers, check signs
 and annotations are preserved in prose; invalid diagram text remains readable.
 Single-spaced comment lines also replay legally, with numbered restarts and
-parenthesized alternatives anchored to their own positions. The chapter reader
-supports the same previews (←/→ to step, Esc to return) without modifying course
-or training data. `[--]` paragraph separators, bullet sections and `**bold**`
+parenthesized alternatives anchored to their own positions. Trainer Read handoffs use the same PGN Viewer previews (←/→ to step, Esc to
+return) without modifying course or training data. `[--]` paragraph separators, bullet sections and `**bold**`
 labels are formatted for reading. Known exporter null counters and impossible
 Black-prefixed duplicates of legal White moves are cleaned only for display;
 other invalid notation stays readable. A move and its explanation precede its
@@ -1113,7 +1122,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `main_screen.dart` | Mode `IndexedStack`; engine suspend/resume on leaving/entering interactive-engine modes and on `paused`/`hidden`/`detached` (not `inactive`) |
 | `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; when no repertoire is selected shows `RepertoireListBody` inline instead of a placeholder button; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
 | `repertoire_selection_screen.dart` | Full-screen push wrapper around `RepertoireListBody`; pops with selected `RepertoireMetadata` |
-| `repertoire_training_screen.dart` | Repertoire and study trainer: a stable board beside the source picker, chapter/line browser or current lesson; Learn and Review respect the selected chapter and session size. Read opens the shared chapter reader. The settings gear follows the global mode switcher; Skip is visible, and Line actions include persistent exclusion. The browser restores excluded lines without discarding review history. Keyboard: Space acknowledges the next learning step, arrows skip lines, `/` focuses move input, Escape returns to the browser. |
+| `repertoire_training_screen.dart` | Repertoire and study trainer: a stable board beside the source picker, chapter/line browser or current lesson; Learn and Review respect the selected chapter and session size. Read opens the canonical PGN Viewer. The settings gear follows the global mode switcher; Skip is visible, and Line actions include persistent exclusion. The browser restores excluded lines without discarding review history. Keyboard: Space acknowledges the next learning step, arrows skip lines, `/` focuses move input, Escape returns to the browser. |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: arrows, Home/End, Enter, Space, Escape, Ctrl/Cmd+V paste, F11 fullscreen; caches `AppState` so dispose does not `context.read` |
@@ -1429,7 +1438,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `tactics/tactics_import_panel.dart` | Import tactics from Lichess/Chess.com; **fetch mode toggle** (Recent N games / Since date) with segmented button; date picker for since-date mode; **auto-fetch on startup** checkbox with last-synced label; **Session Settings** dialog (order, mistake-type filter, 1-star toggle) opened from toolbar button beside Browse Tactics; live matching count on Start Session |
 | `tactics/puzzle_stats_display.dart` | Puzzle statistics display |
 | `tactics/tactics_delayed_tooltip.dart` | Delayed tooltip for puzzle hints |
-| `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **Chessable-style move display** shows opponent/user moves with full notation ("White's move 1. e4", "Your move 2. Nf3"), comments inline, and **Next button** (Space shortcut) when opponent moves have comments; **J** toggles learn auto-advance (`learnRequiresClick`) on training screen + settings tooltip; `MoveInputWidget` below board accepts SAN/UCI text input, auto-submits on unique legal-move match (Escape clears & blurs) |
+| `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **PGN-style lessons** reveal played moves and introductory prose through `PgnMovetextView`, with a compact fixed **Next button** (Space shortcut); recall mode hides explanations except on mistakes; **J** toggles learn auto-advance (`learnRequiresClick`) on training screen + settings tooltip; `MoveInputWidget` below board accepts SAN/UCI text input, auto-submits on unique legal-move match (Escape clears & blurs) |
 | `study/study_board_pane.dart` | Study board + SAN input; board-shape helpers (`applyStudyBoardShape`) |
 | `study/study_side_pane.dart` | Engine bar + compact chapter bar + PGN editor; shared borderless move selection/hover and neutral Notes field with no move-specific placeholder |
 | `pgn/add_to_study_dialog.dart` | Shared destination picker for adding lines and games: an always-visible Add new study button opens a dedicated name prompt with a suggested unused name and duplicate validation; search and Enter select existing studies only. |
