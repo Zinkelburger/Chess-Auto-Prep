@@ -136,7 +136,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 3, child: field),
+          Expanded(flex: 4, child: field),
           const SizedBox(width: 8),
           Expanded(flex: 4, child: rule),
           const SizedBox(width: 8),
@@ -199,7 +199,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
           (!widget.simple || controller.headerRows.length > 1),
       child: ChoiceField<String>(
         label: wide ? null : 'Field',
-        hint: 'Search fields',
+        hint: 'Search…',
         prefixIcon: Icons.search,
         style: AppTextStyles.forTheme(context, AppTextStyles.muted),
         value: row.field.isEmpty ? null : row.field,
@@ -247,7 +247,9 @@ class _HeaderFiltersState extends State<HeaderFilters> {
         onChanged: (value) => edit((i) => controller.setHeaderValue(i, value)),
         onSelected: (value) => edit((i) {
           controller.setHeaderValue(i, value);
-          controller.setHeaderMode(i, MatchMode.exact);
+          if (row.mode == MatchMode.contains || row.mode == MatchMode.regex) {
+            controller.setHeaderMode(i, MatchMode.exact);
+          }
         }),
       ),
     );
@@ -332,8 +334,8 @@ class _HeaderFiltersState extends State<HeaderFilters> {
   }
 }
 
-/// Free text remains a filter; only explicitly picking an actual value makes
-/// it exact. RawAutocomplete supplies keyboard navigation and dismissal.
+/// Picking a value resolves contains/regex to Exact; bounds and exclusions
+/// retain their chosen operator. Free text remains a filter. RawAutocomplete supplies keyboard navigation and dismissal.
 class _HeaderValueEditor extends StatefulWidget {
   const _HeaderValueEditor({
     super.key,
@@ -400,10 +402,15 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
           focusNode: focus,
           style: AppTextStyles.forTheme(context, AppTextStyles.body),
           decoration: InputDecoration(
+            constraints: const BoxConstraints(minHeight: 44),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 12,
+            ),
             prefixIcon: const Icon(Icons.search, size: 16),
             prefixIconConstraints: const BoxConstraints(
               minWidth: 32,
-              minHeight: 36,
+              minHeight: 44,
             ),
             labelText: widget.label,
             errorText: error,

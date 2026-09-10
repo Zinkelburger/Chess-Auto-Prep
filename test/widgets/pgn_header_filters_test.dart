@@ -88,7 +88,7 @@ SliceFilterController _controller({
 Finder _input(String hint) => find.byWidgetPredicate(
   (widget) => widget is TextField && widget.decoration?.hintText == hint,
 );
-Finder get _field => _input('Search fields');
+Finder get _field => _input('Search…');
 Finder get _rule => _input('Choose rule');
 Finder _value(SliceFilterController controller, [int index = 0]) =>
     find.byWidgetPredicate(
@@ -328,6 +328,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(controller.headerConfigs.single.value, '1/2-1/2');
     expect(controller.headerConfigs.single.mode, MatchMode.exact);
+    await _close(tester, controller);
+  });
+
+  testWidgets('suggesting a date or excluded event keeps the chosen operator', (
+    tester,
+  ) async {
+    final controller = _controller(
+      field: 'Date',
+      mode: MatchMode.after,
+      value: '2025',
+    );
+    await _show(tester, controller);
+    await tester.enterText(_value(controller), '2025');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, '2025.12.31'));
+    await tester.pumpAndSettle();
+    expect(controller.headerConfigs.single.mode, MatchMode.after);
+    expect(controller.headerConfigs.single.value, '2025.12.31');
+    await _choose(tester, _field, 'Event', 'Event');
+    await _choose(tester, _rule, 'Does not contain', 'Does not contain');
+    await tester.enterText(_value(controller), 'Open A');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Open A'));
+    await tester.pumpAndSettle();
+    expect(controller.headerConfigs.single.mode, MatchMode.notContains);
+    expect(controller.headerConfigs.single.value, 'Open A');
     await _close(tester, controller);
   });
 

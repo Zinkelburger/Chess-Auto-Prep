@@ -35,6 +35,7 @@ const _games = <GameRecord>[
 Future<void> _open(
   WidgetTester tester, {
   SliceApplyCallback? onApply,
+  void Function(List<int>, SliceConfig, int)? onOpenGame,
   SliceConfig? initialConfig,
   List<GameRecord> games = _games,
   String? collectionPlayer,
@@ -53,6 +54,7 @@ Future<void> _open(
           currentFen: _fen,
           collectionName: 'Practice.pgn',
           onApply: onApply ?? (_, _) {},
+          onOpenGame: onOpenGame,
         ),
       ),
     ),
@@ -73,7 +75,7 @@ Future<void> _finishMatching(WidgetTester tester) async {
 Future<void> _chooseField(WidgetTester tester, String field) async {
   final input = find
       .byWidgetPredicate(
-        (w) => w is TextField && w.decoration?.hintText == 'Search fields',
+        (w) => w is TextField && w.decoration?.hintText == 'Search…',
       )
       .last;
   await tester.ensureVisible(input);
@@ -111,6 +113,53 @@ void main() {
     expect(controller.headerRows.single.field, isEmpty);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'multiple positions switch AND to OR and open the correct result',
+    (tester) async {
+      SliceConfig? applied;
+      int? opened;
+      await _open(
+        tester,
+        onApply: (_, config) => applied = config,
+        onOpenGame: (_, _, index) => opened = index,
+      );
+      await tester.tap(find.text('Positions'));
+      await tester.pumpAndSettle();
+      final positions = find.widgetWithText(TextField, 'FEN or moves');
+      await tester.ensureVisible(positions.first);
+      await tester.enterText(positions.first, '1. e4');
+      await _finishMatching(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('add-position')));
+      await tester.tap(find.byKey(const ValueKey('add-position')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(positions.last);
+      await tester.enterText(positions.last, '1. d4');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await _finishMatching(tester);
+      expect(find.text('No games match'), findsOneWidget);
+      final logic = find.byKey(const ValueKey('filter-logic'));
+      await tester.ensureVisible(logic);
+      await tester.enterText(logic, 'OR');
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(CompositedTransformFollower),
+          matching: find.text('OR'),
+        ),
+      );
+      await _finishMatching(tester);
+      expect(find.text('Show 2 games'), findsOneWidget);
+      await tester.tap(find.textContaining('Spassky vs Fischer'));
+      await tester.pumpAndSettle();
+      expect(opened, 1);
+      await tester.tap(_apply);
+      await tester.pumpAndSettle();
+      expect(applied!.matchAny, isTrue);
+      expect(applied!.additionalPositions, hasLength(1));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'conditions combine with a user-entered position using the app theme',

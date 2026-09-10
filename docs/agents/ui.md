@@ -37,7 +37,7 @@ Reuse these widgets (paths relative to `lib/`):
 | Labelled number | `InlineStat` / `StackedStat` in `widgets/common/stat_display.dart` |
 | Confirmation | `confirmAction` in `widgets/common/confirm_dialog.dart` |
 | Name with validation | `showNameEntryDialog` in `widgets/common/name_entry_dialog.dart` |
-| Pick from a list | `ChoiceField` in `widgets/common/choice_field.dart`; two or three fixed options use `SegmentedButton`, never `DropdownButton` |
+| Pick from a list | `ChoiceField` in `widgets/common/choice_field.dart`; outside conditional editors, two or three fixed options use `SegmentedButton`, never `DropdownButton` |
 | Set a whole number | `NumberStepper` in `widgets/common/number_stepper.dart`, never a fixed numeric menu |
 | Findings report | `HolesReportPanel` in `features/holes/widgets/holes_report_panel.dart` |
 | Threshold, disclosure, visible cap | `features/audit/widgets/hunt_controls.dart` |

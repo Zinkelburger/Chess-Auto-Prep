@@ -641,7 +641,8 @@ one blank Field / Rule / Value row and a 40px **+ Add filter** control. Field an
 Rule use searchable `ChoiceField`s; values search the loaded collection's cached
 header values, preserving separate White/Black lists and showing compact game
 counts. Result also suggests `1-0`, `0-1`, `1/2-1/2` and `*`. Selecting a suggestion
-uses Exact; typed text remains a partial match. Muted labels/rules and inset value
+resolves Contains/Regex to Exact while preserving bounds and exclusions; typed
+text keeps its selected operator. Muted labels/rules and inset value
 cells provide hierarchy. Each player field accepts one name (PGN commas remain
 part of the name).
 

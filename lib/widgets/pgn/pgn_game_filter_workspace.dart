@@ -292,10 +292,14 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
         children: [
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: constraints.maxHeight * .55),
-            child: SingleChildScrollView(
+            child: Scrollbar(
               controller: _filterScroll,
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
-              child: _buildFilters(context),
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _filterScroll,
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
+                child: _buildFilters(context),
+              ),
             ),
           ),
           Expanded(
