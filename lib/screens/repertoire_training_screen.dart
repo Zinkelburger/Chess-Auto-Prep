@@ -872,7 +872,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     int? initialPly,
   }) async {
     if (lines.isEmpty) return;
-    final path = p.join('cache', 'trainer-reading.pgn');
+    final path = p.join(
+      'cache',
+      'trainer-reading',
+      '${p.basename(_training.repertoire!.name)}.pgn',
+    );
     await StorageFactory.instance.writeFile(
       path,
       lines.map((line) => line.fullPgn).join('\n\n'),
