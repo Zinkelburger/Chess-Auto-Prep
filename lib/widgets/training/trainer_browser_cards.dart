@@ -216,10 +216,12 @@ class _PrimaryAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final enabled = onPressed != null;
-    final fill = enabled ? color : AppColors.surfaceContainer;
+    final fill = enabled
+        ? color.withValues(alpha: 0.18)
+        : AppColors.surfaceContainer;
     // Dark ink on the bright fills: white fails AA on both #42A5F5 and
     // #FFA726 (see AppColors.onWarning).
-    final ink = enabled ? AppColors.onWarning : AppColors.onSurfaceDisabled;
+    final ink = enabled ? AppColors.ink : AppColors.onSurfaceDisabled;
 
     return Material(
       color: fill,

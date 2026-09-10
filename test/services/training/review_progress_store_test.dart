@@ -106,6 +106,25 @@ void main() {
 
   tearDown(() => store.dispose());
 
+  test(
+    'folder ratings and move progress persist the original chapter identity',
+    () async {
+      final scoped = line('same').inSource('/course/one.pgn', 'One');
+      repertoireId = '/course';
+      store.recordMove(scoped, 0, wasCorrect: false);
+      await store.recordRating(scoped, ReviewRating.again, hadMistake: true);
+      await store.flushHeaders();
+      expect(store.byLine.keys, [scoped.id]);
+      expect(review.saved.single.repertoireId, '/course/one.pgn');
+      expect(review.saved.single.lineId, 'same');
+      expect(review.savedProgress.single.repertoireId, '/course/one.pgn');
+      expect(review.savedProgress.single.lineId, 'same');
+      expect(review.history.single.lineId, 'same');
+      expect(repertoire.headerPaths, ['/course/one.pgn']);
+      expect(repertoire.headerUpdates, ['same']);
+    },
+  );
+
   test('exclusion persists without rating and can be reversed', () async {
     final target = line('a');
     await store.setExcluded(target, true);

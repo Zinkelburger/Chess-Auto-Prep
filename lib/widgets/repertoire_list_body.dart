@@ -46,12 +46,16 @@ class RepertoireListBody extends StatefulWidget {
   /// Opens the builder to create a repertoire when supplied by the trainer.
   final VoidCallback? onCreateRepertoire;
 
+  /// Open a folder directly; chapter browsing remains a separate action.
+  final ValueChanged<RepertoireMetadata>? onRepertoireSelected;
+
   final Future<PickedPgnImport?> Function() pickPgn;
 
   const RepertoireListBody({
     super.key,
     required this.onSelected,
     this.onCourseChapterSelected,
+    this.onRepertoireSelected,
     this.onStudySelected,
     this.onCreateRepertoire,
     this.pickPgn = pickPgnImport,
@@ -183,7 +187,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                   children: [
                     if (showSections && repertoires.isNotEmpty)
                       _buildSectionHeader('Repertoires'),
@@ -203,7 +207,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   Widget _buildToolbar() {
     final importingFile = _importing && !_pasting;
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -331,67 +335,37 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
 
     final timeAgo = formatTimeAgo(lastModified);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () => _openRepertoire(repertoire),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceInset,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.library_books,
-                  color: AppColors.onSurfaceSoft,
-                  size: 32,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$chapterCount chapter${chapterCount == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text('Modified $timeAgo', style: AppTextStyles.caption),
-                  ],
-                ),
-              ),
-              // Rename / delete sit right on the card: two one-click targets
-              // beat a menu that hides both behind an extra tap.
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: 'Rename repertoire',
-                onPressed: () => _renameRepertoire(repertoire),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                tooltip: 'Delete repertoire',
-                onPressed: () => _deleteRepertoire(repertoire),
-              ),
-            ],
+    return ListTile(
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+      leading: const Icon(Icons.library_books_outlined, size: 22),
+      title: Text(name, style: AppTextStyles.bodyStrong),
+      subtitle: Text(
+        '$chapterCount chapters · Modified $timeAgo',
+        style: AppTextStyles.caption,
+      ),
+      onTap: () => widget.onRepertoireSelected != null
+          ? widget.onRepertoireSelected!(repertoire)
+          : _openRepertoire(repertoire),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.list_alt, size: 18),
+            tooltip: 'Browse chapters',
+            onPressed: () => _openRepertoire(repertoire),
           ),
-        ),
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            tooltip: 'Rename repertoire',
+            onPressed: () => _renameRepertoire(repertoire),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 18),
+            tooltip: 'Delete repertoire',
+            onPressed: () => _deleteRepertoire(repertoire),
+          ),
+        ],
       ),
     );
   }

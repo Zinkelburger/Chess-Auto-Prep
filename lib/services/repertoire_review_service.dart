@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import '../utils/training_csv.dart';
 
@@ -29,6 +30,50 @@ class RepertoireReviewService {
       '${e.repertoireId.length}:${e.repertoireId}${e.lineId}';
   String _progressKey(RepertoireMoveProgress e) =>
       '${e.repertoireId.length}:${e.repertoireId}${e.lineId}:${e.moveIndex}';
+
+  /// Append each answer immediately, independently of line ratings. A later
+  /// correct replay must never erase what the user originally played.
+  Future<void> recordAttempt({
+    required String repertoireId,
+    required String lineId,
+    required int moveIndex,
+    required String fen,
+    required String playedSan,
+    required String expectedSan,
+    required bool correct,
+    required String phase,
+  }) async {
+    final row = jsonEncode({
+      'repertoireId': repertoireId,
+      'lineId': lineId,
+      'moveIndex': moveIndex,
+      'fen': fen,
+      'playedSan': playedSan,
+      'expectedSan': expectedSan,
+      'correct': correct,
+      'phase': phase,
+      'timestampUtc': DateTime.now().toUtc().toIso8601String(),
+    });
+    await _storage.updateFile(
+      'repertoire_move_attempts.jsonl',
+      (raw) => '${raw ?? ''}$row\n',
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> loadAttempts({
+    String? repertoireId,
+  }) async {
+    final raw = await _storage.readFile('repertoire_move_attempts.jsonl');
+    if (raw == null) return [];
+    return [
+          for (final row in const LineSplitter().convert(raw))
+            if (row.trim().isNotEmpty) jsonDecode(row) as Map<String, dynamic>,
+        ]
+        .where(
+          (row) => repertoireId == null || row['repertoireId'] == repertoireId,
+        )
+        .toList();
+  }
 
   Future<List<RepertoireReviewEntry>> loadAll() async {
     final entries = trainingRows(

@@ -34,6 +34,7 @@ class ReplayPhase {
     }
 
     final targetMoveIndex = _s.wrongMoveIndices[_s.replayIndex];
+    _s.currentMoveIndex = targetMoveIndex;
     _s.resetBoard(_s.currentLine!);
     for (int i = 0; i < targetMoveIndex; i++) {
       _s.session.playMove(_s.currentLine!.moves[i]);
@@ -59,7 +60,8 @@ class ReplayPhase {
     if (isCorrect) {
       _s.updateMoveProgress(_s.currentLine!, targetMoveIndex, wasCorrect: true);
       _s.session.playMove(expectedSan);
-      _s.feedback = 'Correct!';
+      _s.feedback = null;
+      _s.currentAnnotation = null;
       _s.waitingForUser = false;
       _s.emitChange();
       _s.replayIndex++;
@@ -72,7 +74,9 @@ class ReplayPhase {
         targetMoveIndex,
         wasCorrect: false,
       );
-      _s.feedback = 'Try again — the move is $expectedSan';
+      _s.feedback = 'Play $expectedSan';
+      _s.currentAnnotation =
+          _s.currentLine!.comments[targetMoveIndex.toString()];
       _s.emitChange();
     }
   }

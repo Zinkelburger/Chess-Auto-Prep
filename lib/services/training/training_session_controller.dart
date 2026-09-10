@@ -328,6 +328,15 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   // REPERTOIRE LOADING
   // ---------------------------------------------------------------------------
 
+  Future<List<RepertoireMetadata>> _folderSources(String folder) async {
+    final storage = StorageFactory.instance;
+    final files = await storage.listChapters(folder);
+    for (final child in await storage.listSubdirectories(folder)) {
+      files.addAll(await _folderSources(child));
+    }
+    return files;
+  }
+
   /// [startChapter] scopes the browser to one of the file's course chapters
   /// as it opens — the chapter the user tapped in the picker.
   Future<void> loadRepertoire({
@@ -339,6 +348,11 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     // shared mutable field a concurrent handoff can flip while we await, so
     // this load must decide "study or repertoire" from its own snapshot.
     final generation = ++_loadGeneration;
+    _lineGeneration++;
+    learn.cancelPending();
+    currentLine = null;
+    waitingForUser = false;
+    run.clear();
     final loadIsStudy = sourceIsStudy;
     isLoading = true;
     error = null;
@@ -356,57 +370,79 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
               subject: filePath,
             );
       if (generation != _loadGeneration) return;
-      final parsedLines = await repertoireService.parseRepertoireFile(
-        filePath,
-        trainingColor: colorOverrideIsWhite == null
-            ? null
-            : (colorOverrideIsWhite! ? 'white' : 'black'),
-        // Study puzzles: the solver is whoever moves first in each chapter.
-        colorFromStartingSide: loadIsStudy,
-        // Imported courses declare no `// Color:`; without this every Black
-        // repertoire would quiz the user on White's moves.
-        inferColorWhenUnknown: !loadIsStudy,
-      );
-      if (generation != _loadGeneration) return; // superseded mid-parse
+      final folder =
+          !loadIsStudy && !p.extension(filePath).toLowerCase().endsWith('pgn');
+      final sources = folder ? await _folderSources(filePath) : [repertoire!];
+      final parsedLines = <RepertoireLine>[];
+      final allEntries = await reviewService.loadAll();
+      final loadedMoveProgress = await reviewService.loadMoveProgress();
+      final progressBySource = <String, List<RepertoireMoveProgress>>{};
+      for (final mp in loadedMoveProgress) {
+        (progressBySource['${mp.repertoireId}::${mp.lineId}'] ??= []).add(mp);
+      }
+      final mergedMap = <String, RepertoireReviewEntry>{};
+      final progressMap = <String, RepertoireMoveProgress>{};
+      for (final source in sources) {
+        final sourceColor =
+            colorOverrideIsWhite ??
+            (folder
+                ? await askedQuestions.boolAnswerFor(
+                    AskedQuestion.trainingColor,
+                    subject: source.filePath,
+                  )
+                : null);
+        final parsed = await repertoireService.parseRepertoireFile(
+          source.filePath,
+          trainingColor: sourceColor == null
+              ? null
+              : (sourceColor ? 'white' : 'black'),
+          colorFromStartingSide: loadIsStudy,
+          inferColorWhenUnknown: !loadIsStudy,
+        );
+        if (generation != _loadGeneration) return;
+        final merged = reviewService.syncEntries(
+          repertoireId: source.filePath,
+          lines: parsed,
+          existing: allEntries
+              .where((e) => e.repertoireId == source.filePath)
+              .toList(),
+        );
+        await reviewService.saveAll(merged, repertoireId: source.filePath);
+        final entriesById = {for (final e in merged) e.lineId: e};
+        for (final line in parsed) {
+          final scoped = folder
+              ? line.inSource(source.filePath, source.name)
+              : line;
+          parsedLines.add(scoped);
+          mergedMap[scoped.id] = entriesById[line.id]!;
+          for (final mp
+              in progressBySource['${source.filePath}::${line.id}'] ??
+                  <RepertoireMoveProgress>[]) {
+            progressMap['${scoped.id}:${mp.moveIndex}'] = mp;
+          }
+        }
+      }
+      if (generation != _loadGeneration) return;
       if (parsedLines.isEmpty) {
         error = loadIsStudy
             ? 'No chapters with moves to train.'
             : 'No trainable lines found.';
         return;
       }
-
-      final allEntries = await reviewService.loadAll();
-      final loadedMoveProgress = await reviewService.loadMoveProgress();
-      if (generation != _loadGeneration) return;
-      final otherRepertoires = allEntries
-          .where((e) => e.repertoireId != filePath)
-          .toList();
-      final currentEntries = allEntries
-          .where((e) => e.repertoireId == filePath)
-          .toList();
-      final merged = reviewService.syncEntries(
-        repertoireId: filePath,
-        lines: parsedLines,
-        existing: currentEntries,
-      );
-      await reviewService.saveAll(merged, repertoireId: filePath);
-      if (generation != _loadGeneration) return;
-
       lines = parsedLines;
-      // The browser sits beside an idle board, so park it on this source's own
-      // starting position rather than leaving the last line's board up.
       session.setPositionFromFen(parsedLines.first.startPosition.fen);
       progress.adopt(
-        byLine: {for (final e in merged) e.lineId: e},
-        moveProgress: reviewService.indexMoveProgress(
-          loadedMoveProgress
-              .where((mp) => mp.repertoireId == filePath)
-              .toList(),
-        ),
-        otherRepertoires: otherRepertoires,
+        byLine: mergedMap,
+        moveProgress: progressMap,
+        otherRepertoires: allEntries
+            .where(
+              (e) =>
+                  !sources.any((source) => source.filePath == e.repertoireId),
+            )
+            .toList(),
       );
 
-      if (loadIsStudy) {
+      if (loadIsStudy || folder) {
         // No generated tree for studies — clear any repertoire leftovers.
         _treeRoot = null;
         _treeIsWhite = null;
@@ -940,8 +976,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     currentPairOpponent = display;
     currentPairUser = null;
 
-    final annotation = currentLine!.comments[moveIndex.toString()];
-    currentAnnotation = annotation;
+    currentAnnotation = null;
     notifyListeners();
   }
 
@@ -955,6 +990,34 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   Future<void> handleUserMove(CompletedMove move) async {
     if (!waitingForUser || currentLine == null) return;
+
+    final attemptLine = currentLine!;
+    final attemptGeneration = _lineGeneration;
+    final attemptIndex = phase == TrainingPhase.replaying
+        ? wrongMoveIndices[replayIndex]
+        : currentMoveIndex;
+    final expected = attemptLine.moves[attemptIndex];
+    waitingForUser = false;
+    try {
+      await reviewService.recordAttempt(
+        repertoireId: attemptLine.sourcePath ?? repertoireId,
+        lineId: attemptLine.persistedId,
+        moveIndex: attemptIndex,
+        fen: session.fen,
+        playedSan: move.san,
+        expectedSan: expected,
+        correct: validation.isCorrectUserMove(session.position, move, expected),
+        phase: phase.name,
+      );
+    } catch (e) {
+      if (attemptGeneration != _lineGeneration) return;
+      error = 'Could not save this attempt: $e';
+      waitingForUser = true;
+      notifyListeners();
+      return;
+    }
+    if (attemptGeneration != _lineGeneration) return;
+    waitingForUser = true;
 
     if (phase == TrainingPhase.learning && learnQuizzing) {
       await handleLearnQuizMove(move);
@@ -983,9 +1046,9 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       );
       session.playMove(expectedSan);
       waitingForUser = false;
-      feedback = 'Correct!';
+      feedback = null;
       currentPairUser = display;
-      currentAnnotation = display.comment;
+      currentAnnotation = null;
       notifyListeners();
 
       currentMoveIndex++;
@@ -1004,7 +1067,8 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       // Input off immediately so a second answer can't interleave with the
       // correction that plays out below.
       waitingForUser = false;
-      feedback = 'Wrong — the move was $expectedSan';
+      feedback = 'Play $expectedSan';
+      currentAnnotation = currentLine!.comments[currentMoveIndex.toString()];
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 1200));
       if (generation != _lineGeneration) return;
@@ -1016,7 +1080,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       );
       session.playMove(expectedSan);
       currentPairUser = display;
-      currentAnnotation = null;
+      currentAnnotation = display.comment;
       notifyListeners();
       currentMoveIndex++;
       await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
@@ -1101,6 +1165,9 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
     final hadMistake = lineHadMistake;
     await progress.recordRating(line, rating, hadMistake: hadMistake);
+    // This line has already been corrected; a low rating schedules another
+    // review, rather than mixing an old line into this learning run.
+    run.skip(line.id);
     _tallySessionResult(hadMistake: hadMistake);
     notifyListeners();
 

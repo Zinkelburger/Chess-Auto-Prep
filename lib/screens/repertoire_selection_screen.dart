@@ -27,6 +27,8 @@ class RepertoireSelectionScreen extends StatelessWidget {
         ],
       ),
       body: RepertoireListBody(
+        onRepertoireSelected: (folder) =>
+            Navigator.of(context).pop(ChapterPick(folder)),
         onSelected: (chapter) =>
             Navigator.of(context).pop(ChapterPick(chapter)),
         onCourseChapterSelected: (chapter, courseChapter) => Navigator.of(
