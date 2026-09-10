@@ -238,6 +238,7 @@ Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 - **`titleSpacing: 16`** on every `AppBar`.
 - **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with the current mode name as its anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions open on hover or click and use named groups with leading Material icons across modes, with no settings-only ellipsis. Shared operations reuse the PGN viewer’s symbols for copy, import, edit and study actions. Shared Actions and view menus use 32px minimum rows, 13px labels, a 240px minimum width and 16px horizontal insets; faint inset 1px dividers separate groups, adding only 1px before section headings. Both Actions and the view selector support keyboard navigation, Escape and outside-click dismissal. Player Analysis keeps its player picker inside the mode body, below the same Actions / View / Settings bar; selecting or changing a player never replaces that bar. The picker is centered at a maximum width of 1040px, with one Add player button and direct Update games / Change range / Remove buttons per card (file imports only offer Remove). Cards wrap their actions below the metadata on narrower windows. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
+- **Back navigation**: `AppHistory` records mode switches and cross-view links. The shared toolbar keeps Back visible even when the breadcrumb is too narrow, returning to the previous destination. Mounted screens retain their context. PGN Viewer also captures its live collection, filters, game, reading position and tabs before leaving, so revisiting it with another game does not overwrite the earlier history entry.
 - **Settings**: Every `AppSettingsButton(mode: ...)` opens the same persistent settings route at that view. Trainer chapters are Session, Learning, Playback and Material; Tactics has Session, Puzzle selection and Game downloads. Global Engine contains cores, memory, board depth, bulk depth and line count. PVs stay one row until explicitly expanded into a fixed scrolling viewport. The PGN viewer, tactics Analysis gear, repertoire dock and unified engine pane use the same compact engine popup and save shared preferences immediately. `BulkAnalysisSettings` owns the persisted depth for game reviews, full-game analysis, audits, hole hunts and new repertoire builds, migrating the old tactics depth; `EngineSettings.depth` controls live board analysis. Saved build configurations retain their captured depth for resume. Panel visibility and move-table controls remain in view settings. Settings use concise labels without introductory paragraphs. Game downloads use Apply; session and trainer preferences save automatically. PGN Viewer separates Playback, Board and moves, and Analysis panels. Narrow windows use searchable view and chapter pickers. `ViewSettingsRegistry` connects mounted view-owned builders; unmounted views initialise underneath the open route, respecting the generation lock. Global account drafts survive category navigation.
 - **Toolbar buttons collapse** from text+icon to icon-only below `kToolbarCompactBreakpoint` (900 px).
 - **Layout body splits** at `kCompactBreakpoint` (960 px) from side-by-side to stacked.
@@ -774,9 +775,21 @@ filter previews use neutral badges.
 `RepertoireLinePanel` beside the Game tab on the main board. The opening-review
 queue opens games here directly; its former nested board/detail dialog is
 removed. The master-practice comparison button is removed from Tactics.
-Each designated book shows its verdict, with the played and book moves emphasized.
-The Book panel offers searchable chapter and line choices, previous/next lines,
-and Matching lines / Chapter contents. An in-book game can still browse its book.
+The review queue and the selected book comparison show a thumbnail of the position
+before departure: green arrows/text identify book moves, red identifies your
+deviation, and neutral identifies an opponent move or the end of prep. Opening a
+book replaces the summary cards with one compact book/chapter selector and one
+readable comparison sentence; the line title appears once and the embedded
+reader has no floating reading-settings menu.
+Matching lines offers searchable line choices and previous/next controls. Chapter
+contents displays every line in a scrollable, searchable list, with a course
+chapter filter when present. Clicking a line opens it at the beginning for reading
+on the main board. The builder's chapter/line outline and Study's searchable
+sidebar provide the corresponding direct navigation; Study lists every imported
+PGN game as an entry. An in-book game can still browse its book.
+On Tactics, Play tactics is the larger, high-contrast primary action. Pasted-game
+imports display “Analyzing games…” with numeric progress below and a working
+Pause control, including when no online account is configured.
 Choosing another opening on move one is neutral for either side: the game must
 match the first full opening pair (or enter through a later transposition) before a
 departure counts. Different-opening games are excluded from review mistakes,

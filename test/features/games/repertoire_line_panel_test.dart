@@ -129,10 +129,12 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('Sicilian · Open Sicilian'), findsOneWidget);
+    expect(find.text('Sicilian'), findsOneWidget);
+    expect(find.byIcon(Icons.warning_amber), findsNothing);
     expect(
       find.textContaining(
-        'You left book at move 3: 3... Nf6 instead of 3... cxd4',
+        'You played 3... Nf6 — this line plays 3... cxd4.',
+        findRichText: true,
       ),
       findsOneWidget,
     );
@@ -155,7 +157,7 @@ void main() {
     // The prepared line is on screen, and it pushed its landing position onto
     // the viewer's board — the point of the tab existing.
     expect(find.byKey(const ValueKey('book-line')), findsOneWidget);
-    expect(find.text('Hide line'), findsOneWidget);
+    expect(find.byTooltip('Reading options'), findsNothing);
     expect(positions, isNotEmpty);
   });
 
@@ -188,7 +190,10 @@ void main() {
     );
 
     expect(
-      find.text('You played 3... Nf6 — this line plays 3... cxd4.'),
+      find.text(
+        'You played 3... Nf6 — this line plays 3... cxd4.',
+        findRichText: true,
+      ),
       findsOneWidget,
       reason: 'the fork is named, not left for the reader to spot',
     );
@@ -209,7 +214,7 @@ void main() {
       bookLines: [_bookLine(), _sidelineFromSamePrefix()],
     );
 
-    expect(find.text('2 book lines reach move 3'), findsOneWidget);
+    expect(find.text('1 / 2'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('book-line')));
     await tester.pumpAndSettle();
     expect(find.text('Book plays 3... Qxd4'), findsOneWidget);
@@ -217,7 +222,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('You played 3... Nf6 — this line plays 3... Qxd4.'),
+      find.text(
+        'You played 3... Nf6 — this line plays 3... Qxd4.',
+        findRichText: true,
+      ),
       findsOneWidget,
     );
   });
@@ -245,13 +253,14 @@ void main() {
 
     expect(find.textContaining('In book the whole way'), findsOneWidget);
     expect(find.text('Show line'), findsNothing);
-    expect(find.text('Hide line'), findsOneWidget);
+    expect(find.byTooltip('Reading options'), findsNothing);
     expect(find.text('Chapter contents'), findsOneWidget);
   });
 
   testWidgets('chapter contents and next line reuse the reader', (
     tester,
   ) async {
+    final positions = <Position>[];
     await _pump(
       tester,
       service: _StubDeviations(
@@ -259,18 +268,70 @@ void main() {
           true: {'/repertoire/Sicilian': _leftBook},
         },
       ),
+      onShowPosition: positions.add,
       bookLines: [_bookLine(), _sidelineFromSamePrefix()],
+    );
+    expect(positions.last.fen, isNot(Chess.initial.fen));
+    await tester.tap(find.text('Chapter contents'));
+    await tester.pumpAndSettle();
+    expect(positions.last.fen, Chess.initial.fen);
+    expect(
+      find.text(
+        'You played 3... Nf6 — this line plays 3... cxd4.',
+        findRichText: true,
+      ),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('book-contents-list')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('book-content-line-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 2'), findsOneWidget);
+    expect(find.text('Open Sicilian – Chekhover'), findsWidgets);
+  });
+
+  testWidgets('contents searches every line and filters course chapters', (
+    tester,
+  ) async {
+    final source = _bookLine();
+    final lines = [
+      for (var i = 0; i < 40; i++)
+        RepertoireLine(
+          id: 'line-$i',
+          name: 'Lesson $i',
+          chapter: i < 20 ? 'Main lines' : 'Sidelines',
+          moves: source.moves,
+          color: source.color,
+          startPosition: source.startPosition,
+          fullPgn: source.fullPgn,
+        ),
+    ];
+    await _pump(
+      tester,
+      service: _StubDeviations(
+        byColour: {
+          true: {'/repertoire/Sicilian': _leftBook},
+        },
+      ),
+      bookLines: lines,
     );
     await tester.tap(find.text('Chapter contents'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('You played 3... Nf6 — this line plays 3... cxd4.'),
-      findsNothing,
-    );
-    await tester.tap(find.byTooltip('Next book line'));
+    await tester.tap(find.byKey(const ValueKey('book-course-chapter')));
     await tester.pumpAndSettle();
-    expect(find.text('2 / 2'), findsOneWidget);
-    expect(find.text('Open Sicilian – Chekhover'), findsOneWidget);
+    await tester.tap(find.text('Sidelines').last);
+    await tester.pumpAndSettle();
+    expect(find.text('21 / 40'), findsOneWidget);
+    final search = find.descendant(
+      of: find.byKey(const ValueKey('book-contents-search-Sidelines')),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(search, 'Lesson 39');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('book-content-line-39')));
+    await tester.pumpAndSettle();
+    expect(find.text('40 / 40'), findsOneWidget);
+    expect(find.byKey(const ValueKey('book-line-39-39-false')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('another opening is neutral and opens book contents', (

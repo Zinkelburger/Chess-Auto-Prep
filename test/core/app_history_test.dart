@@ -3,9 +3,8 @@ import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The breadcrumb trail records navigation by intercepting [AppState]'s two
-/// choke points: handOff (→ push) and setMode (→ reset). These tests pin the
-/// stack semantics: crumbs re-deliver their handoff, mode switches erase the
-/// trail, and re-delivery never re-records itself.
+/// choke points: handOff and setMode. Back preserves retained screens and
+/// only re-delivers a handoff if another visit replaced the destination.
 void main() {
   (AppState, AppHistory) build() {
     final state = AppState();
@@ -44,16 +43,18 @@ void main() {
       },
     );
 
-    test('setMode erases the trail down to the new root', () {
+    test('mode menu preserves earlier destinations', () {
       final (state, history) = build();
       state.switchToPgnViewer(path: '/g.pgn');
       state.switchToBuilder(repertoirePath: '/r.pgn');
       expect(history.entries, hasLength(3));
 
       state.setMode(AppMode.study);
-      expect(history.entries, hasLength(1));
-      expect(history.entries.single.label, 'Study');
-      expect(history.canGoBack, isFalse);
+      expect(history.entries, hasLength(4));
+      expect(history.entries.last.label, 'Study');
+      expect(history.canGoBack, isTrue);
+      history.back();
+      expect(state.currentMode, AppMode.repertoire);
     });
 
     test('pushMode pushes a payload-free crumb instead of resetting', () {
@@ -82,7 +83,7 @@ void main() {
   });
 
   group('popTo', () {
-    test('re-delivers the crumb\'s handoff and truncates after it', () {
+    test('returning to a retained screen does not reload its handoff', () {
       final (state, history) = build();
       state.switchToPgnViewer(path: '/g.pgn', historyLabel: 'Game A vs B');
       state.switchToBuilder(repertoirePath: '/r.pgn', historyLabel: 'R');
@@ -91,9 +92,109 @@ void main() {
       expect(history.entries, hasLength(2));
       expect(history.entries.last.label, 'Game A vs B');
       expect(state.currentMode, AppMode.pgnViewer);
-      // The re-delivered handoff is waiting for the viewer, exactly as if
-      // the producer had fired it.
-      expect(state.takeHandoff<OpenPgnViewer>()?.pgnPath, '/g.pgn');
+      expect(state.takeHandoff<OpenPgnViewer>(), isNull);
+    });
+
+    test(
+      'overwritten screens restore the live context captured on departure',
+      () {
+        final (state, history) = build();
+        var selectedGame = 0;
+        var selectedPly = 0;
+        history.registerContext(AppMode.pgnViewer, () {
+          final game = selectedGame;
+          final ply = selectedPly;
+          return () {
+            selectedGame = game;
+            selectedPly = ply;
+          };
+        });
+        state.switchToPgnViewer(path: '/first.pgn');
+        state.takeHandoff<OpenPgnViewer>();
+        selectedGame = 12;
+        selectedPly = 17;
+        state.setMode(AppMode.tactics);
+        state.switchToPgnViewer(path: '/second.pgn');
+        state.takeHandoff<OpenPgnViewer>();
+        selectedGame = 1;
+        selectedPly = 2;
+
+        history.popTo(1);
+
+        expect(selectedGame, 12);
+        expect(selectedPly, 17);
+        expect(state.takeHandoff<OpenPgnViewer>(), isNull);
+      },
+    );
+
+    test(
+      'successive Back presses still restore an earlier overwritten view',
+      () {
+        final (state, history) = build();
+        var cursor = 0;
+        history.registerContext(AppMode.pgnViewer, () {
+          final saved = cursor;
+          return () => cursor = saved;
+        });
+        state.switchToPgnViewer(path: '/first.pgn');
+        state.takeHandoff<OpenPgnViewer>();
+        cursor = 17;
+        state.setMode(AppMode.tactics);
+        state.switchToPgnViewer(path: '/second.pgn');
+        state.takeHandoff<OpenPgnViewer>();
+        cursor = 2;
+
+        history.back();
+        history.back();
+
+        expect(state.currentMode, AppMode.pgnViewer);
+        expect(cursor, 17);
+      },
+    );
+
+    test('a rejected context restore leaves navigation unchanged', () {
+      final (state, history) = build();
+      var restored = false;
+      history.registerContext(
+        AppMode.pgnViewer,
+        () =>
+            () => restored = true,
+        canRestore: () => false,
+      );
+      state.switchToPgnViewer(path: '/first.pgn');
+      state.takeHandoff<OpenPgnViewer>();
+      state.setMode(AppMode.tactics);
+      state.switchToPgnViewer(path: '/second.pgn');
+      state.takeHandoff<OpenPgnViewer>();
+      final before = history.entries;
+
+      history.popTo(1);
+
+      expect(history.entries, before);
+      expect(state.currentMode, AppMode.pgnViewer);
+      expect(restored, isFalse);
+    });
+
+    test('an overwritten screen reopens the earlier destination', () {
+      final (state, history) = build();
+      state.switchToPgnViewer(path: '/first.pgn');
+      state.takeHandoff<OpenPgnViewer>();
+      state.switchToBuilder(repertoirePath: '/r.pgn');
+      state.switchToPgnViewer(path: '/second.pgn');
+      state.takeHandoff<OpenPgnViewer>();
+
+      history.popTo(1);
+
+      expect(state.currentMode, AppMode.pgnViewer);
+      expect(state.takeHandoff<OpenPgnViewer>()?.pgnPath, '/first.pgn');
+      expect(history.length, 2);
+    });
+
+    test('reselecting the current mode does not add a duplicate', () {
+      final (state, history) = build();
+      state.setMode(AppMode.study);
+      state.setMode(AppMode.study);
+      expect(history.length, 2);
     });
 
     test('re-delivery does not re-record itself as a new crumb', () {

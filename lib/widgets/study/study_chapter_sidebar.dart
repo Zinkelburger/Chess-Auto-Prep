@@ -14,6 +14,7 @@ import '../../core/study_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import 'study_chapter_actions.dart';
+import '../common/list_search_field.dart';
 
 class StudyChapterSidebar extends StatefulWidget {
   final StudyController study;
@@ -36,7 +37,7 @@ class StudyChapterSidebar extends StatefulWidget {
 class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
   static const double _rowHeight = 34;
 
-  final TextEditingController _filter = TextEditingController();
+  String _filter = '';
   final ScrollController _scroll = ScrollController();
 
   /// Last chapter index this sidebar scrolled into view, so an externally
@@ -46,17 +47,16 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
 
   @override
   void dispose() {
-    _filter.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
-  bool get _filtering => _filter.text.trim().isNotEmpty;
+  bool get _filtering => _filter.trim().isNotEmpty;
 
   List<int> _visibleIndices() {
     final chapters = widget.study.doc.chapters;
     if (!_filtering) return [for (var i = 0; i < chapters.length; i++) i];
-    final query = _filter.text.trim().toLowerCase();
+    final query = _filter.trim().toLowerCase();
     return [
       for (var i = 0; i < chapters.length; i++)
         if (chapters[i].name.toLowerCase().contains(query)) i,
@@ -127,42 +127,15 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-          child: TextField(
-            controller: _filter,
-            onChanged: (_) {
+          child: ListSearchField(
+            hintText: 'Search chapters',
+            onChanged: (value) {
               if (!mounted) return;
-              setState(() => _revealedIndex = -1);
+              setState(() {
+                _filter = value;
+                _revealedIndex = -1;
+              });
             },
-            style: const TextStyle(fontSize: 12),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: 'Filter chapters',
-              hintStyle: AppTextStyles.caption,
-              prefixIcon: const Icon(Icons.search, size: 15),
-              prefixIconConstraints: const BoxConstraints(
-                minWidth: 28,
-                minHeight: 24,
-              ),
-              suffixIcon: _filtering
-                  ? IconButton(
-                      icon: const Icon(Icons.close, size: 14),
-                      tooltip: 'Clear filter',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () {
-                        if (!mounted) return;
-                        _filter.clear();
-                        setState(() => _revealedIndex = -1);
-                      },
-                    )
-                  : null,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 6,
-                vertical: 6,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-            ),
           ),
         ),
         Expanded(

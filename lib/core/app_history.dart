@@ -1,18 +1,6 @@
-/// App-level breadcrumb history: `Games ▸ Game X vs Y ▸ Repertoire "…"`.
-///
-/// The insight that keeps this small: [PendingHandoff] is already the app's
-/// serializable "screen + payload" route object — every cross-screen jump is
-/// either a bare [AppState.setMode] or a [AppState.handOff]. The history
-/// therefore just records those (via [NavigationHistoryRecorder], which
-/// AppState reports into), and a breadcrumb click *re-delivers* the recorded
-/// handoff. Consumer screens restore themselves from a re-fired handoff
-/// exactly as they do from a fresh one, so they need no changes.
-///
-/// Semantics:
-/// - `handOff` / `pushMode` → a new crumb (same-labeled top is replaced, not
-///   stacked, so re-opening the same thing can't grow `A ▸ A`).
-/// - `setMode` (the mode menu) → the trail resets to that mode's root.
-/// - Crumb click → truncate after it, re-deliver its handoff (or bare mode).
+/// App-level navigation history. Mode switches and cross-screen handoffs
+/// append destinations; Back returns to the retained screen in the IndexedStack.
+/// A handoff is replayed only if a later visit overwrote that mode's screen.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -25,15 +13,19 @@ class AppHistoryEntry {
     required this.mode,
     required this.label,
     this.handoff,
+    this.restore,
+    this.visitId = 0,
   });
 
   final AppMode mode;
   final String label;
 
-  /// Payload re-delivered when this crumb is clicked; null for a bare mode
-  /// root (re-delivery is then just a mode switch — the screen keeps
-  /// whatever state it already has).
+  /// Fallback payload when a later visit has replaced this screen context.
   final PendingHandoff? handoff;
+
+  /// Restores live screen state captured immediately before leaving.
+  final VoidCallback? restore;
+  final int visitId;
 }
 
 class AppHistory extends ChangeNotifier
@@ -51,6 +43,45 @@ class AppHistory extends ChangeNotifier
 
   final AppState _appState;
   final List<AppHistoryEntry> _entries = [];
+  final Map<AppMode, int> _screenVisits = {};
+  int _nextVisit = 0;
+  final Map<AppMode, VoidCallback Function()> _captures = {};
+  final Map<AppMode, bool Function()> _canRestore = {};
+
+  /// Register a mounted screen's context capture. The returned function
+  /// unregisters only this registration when the screen is disposed.
+  VoidCallback registerContext(
+    AppMode mode,
+    VoidCallback Function() capture, {
+    bool Function()? canRestore,
+  }) {
+    _captures[mode] = capture;
+    if (canRestore == null) {
+      _canRestore.remove(mode);
+    } else {
+      _canRestore[mode] = canRestore;
+    }
+    return () {
+      if (identical(_captures[mode], capture)) {
+        _captures.remove(mode);
+        _canRestore.remove(mode);
+      }
+    };
+  }
+
+  void _captureCurrent() {
+    if (_entries.isEmpty) return;
+    final entry = _entries.last;
+    final capture = _captures[entry.mode];
+    if (capture == null) return;
+    _entries[_entries.length - 1] = AppHistoryEntry(
+      mode: entry.mode,
+      label: entry.label,
+      handoff: entry.handoff,
+      restore: capture(),
+      visitId: entry.visitId,
+    );
+  }
 
   /// Trail depth cap; oldest crumbs drop off. Deep trails are unreadable
   /// anyway, and the cap bounds re-delivery payload retention.
@@ -68,7 +99,15 @@ class AppHistory extends ChangeNotifier
   @override
   void recordPush(AppMode mode, PendingHandoff? handoff, String label) {
     if (_redelivering) return;
-    final entry = AppHistoryEntry(mode: mode, label: label, handoff: handoff);
+    _captureCurrent();
+    final visitId = ++_nextVisit;
+    _screenVisits[mode] = visitId;
+    final entry = AppHistoryEntry(
+      mode: mode,
+      label: label,
+      handoff: handoff,
+      visitId: visitId,
+    );
     final last = _entries.isEmpty ? null : _entries.last;
     if (last != null && last.mode == mode && last.label == label) {
       // Same destination re-pushed (e.g. re-seeding the same repertoire):
@@ -90,21 +129,29 @@ class AppHistory extends ChangeNotifier
     notifyListeners();
   }
 
-  /// Breadcrumb click: drop everything after [index] and re-deliver that
-  /// entry so its screen restores itself. Clicking the current (last) crumb
-  /// is a no-op.
+  /// Return to an earlier destination. Retained screens keep their current
+  /// board, filters, selected tab and scroll position without reloading.
   void popTo(int index) {
     if (index < 0 || index >= _entries.length - 1) return;
-    _entries.removeRange(index + 1, _entries.length);
     final entry = _entries[index];
+    final screenWasRevisited =
+        (_screenVisits[entry.mode] ?? 0) != entry.visitId;
+    // A replacement guard runs before changing the trail or mode. In
+    // particular, a viewer with unsaved edits must stay on that collection.
+    if (screenWasRevisited && _canRestore[entry.mode]?.call() == false) return;
+    _entries.removeRange(index + 1, _entries.length);
     _redelivering = true;
     try {
       final handoff = entry.handoff;
-      if (handoff != null) {
+      if (screenWasRevisited && entry.restore != null) {
+        _appState.setMode(entry.mode);
+        entry.restore!();
+      } else if (screenWasRevisited && handoff != null) {
         _appState.handOff(handoff);
       } else {
         _appState.setMode(entry.mode);
       }
+      _screenVisits[entry.mode] = entry.visitId;
     } finally {
       _redelivering = false;
     }
