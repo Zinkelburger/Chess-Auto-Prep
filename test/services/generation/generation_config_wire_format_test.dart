@@ -37,6 +37,7 @@ const expectedKeys = <String>{
   'annotation_detail',
   'best_first',
   'build_mode',
+  'bounded_database',
   'cdbdirect_path',
   'cdbdirect_read_ahead',
   'chessdb_api_concurrency',

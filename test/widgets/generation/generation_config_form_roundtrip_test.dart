@@ -406,13 +406,11 @@ void main() {
       expect(result.isRollingSearch, isTrue);
       expect(result.useMasterGames, isFalse);
       expect(find.text('Target master opponents'), findsNothing);
-      expect(find.text('Fast — 4-ply lookahead'), findsOneWidget);
+      expect(find.text('Fast · 4-ply'), findsOneWidget);
       expect(find.textContaining('approximate policy'), findsOneWidget);
       final control = find.byKey(const ValueKey('generation-search-method'));
       await tester.ensureVisible(control);
-      await tester.tap(control);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Pure — full horizon').last);
+      await tester.tap(find.text('Pure'));
       await tester.pumpAndSettle();
       final state = tester.state<GenerationConfigFormState>(
         find.byType(GenerationConfigForm),

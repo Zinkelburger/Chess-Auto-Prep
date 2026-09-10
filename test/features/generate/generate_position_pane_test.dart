@@ -17,6 +17,7 @@ void main() {
     final gen = GenerationSessionController();
     addTearDown(gen.dispose);
     final calls = <({String? san, int depth, int cores})>[];
+    final coverageCalls = <(int, double)>[];
     String? played;
     var booksOpened = 0;
     await tester.pumpWidget(
@@ -33,8 +34,11 @@ void main() {
                     String? moveSan,
                     required int plies,
                     required int cores,
+                    required int engineMoves,
+                    required double maiaCoverage,
                   }) async {
                     calls.add((san: moveSan, depth: plies, cores: cores));
+                    coverageCalls.add((engineMoves, maiaCoverage));
                     return null;
                   },
               onPlayMove: (san) => played = san,
@@ -48,17 +52,30 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('build-chessdb-repertoire')));
     expect(booksOpened, 1);
     expect(calls, isEmpty);
-    expect(find.text('??'), findsWidgets);
+    expect(find.text('—'), findsWidgets);
     expect(
-      find.text('Saved analysis: My book / Main · scores for White'),
+      find.text('Top 4 engine + 60% Maia moves · scores for White'),
       findsOneWidget,
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('generate-engine-moves')),
+        matching: find.byTooltip('More'),
+      ),
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('generate-maia-coverage')),
+        matching: find.byTooltip('More'),
+      ),
     );
     await tester.enterText(find.byType(TextFormField).at(0), '3');
     await tester.enterText(find.byType(TextFormField).at(1), '1');
     await tester.tap(find.text('Generate'));
     await tester.pump();
     expect(calls.single, (san: null, depth: 3, cores: 1));
-    await tester.tap(find.byTooltip('Compute after Na3'));
+    expect(coverageCalls.single, (5, .65));
+    await tester.tap(find.byTooltip('Evaluate Na3 and save engine PV'));
     await tester.pump();
     expect(calls.last, (san: 'Na3', depth: 3, cores: 1));
     await tester.tap(find.text('Na3'));
@@ -90,6 +107,8 @@ void main() {
                 String? moveSan,
                 required int plies,
                 required int cores,
+                required int engineMoves,
+                required double maiaCoverage,
               }) async => null,
           onPlayMove: (_) {},
           onPlanLines: () {},

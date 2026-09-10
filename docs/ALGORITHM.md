@@ -138,3 +138,32 @@ Correctness-preserving speedups can follow: reusable fixed-depth evaluations,
 parallel evaluation, and rigorous bounded chance-node pruning. Rolling is
 explicitly approximate and tested against this reference. Study selection and
 exercise boundaries are a separate, reversible output layer.
+
+## Bounded local database exploration
+
+The Builder Generate pane explicitly sets `bounded_database: true`; normal Pure
+builds keep their exhaustive contract. Engine-move count and Maia coverage are
+adjustable in the pane, starting at four and 60%. At every position it explores the union of the top four Stockfish MultiPV
+candidates and the most likely Maia moves until cumulative probability reaches
+at least 60% (the move crossing the threshold is included). Strong but rare
+opponent replies therefore remain in the database. Child evaluations use the
+same configured engine depth. It does not impose a separate reply-count
+cap. These are local reply probabilities, not whole-repertoire coverage.
+
+This mode is approximate. Omitted Maia mass stays unnormalized: backup uses the
+node engine value (or neutral value when unavailable) for its estimate and keeps
+that missing mass in the uncertainty interval. The configured engine-loss guard
+still applies to the final choice among evaluated own moves. Serialized configs
+record the mode and thresholds; resume cannot silently switch their semantics.
+The shared normal Pure and Fast options continue to use all positive Maia support.
+
+Generation indexes newly attached nodes incrementally and looks up only the
+board’s legal continuations on UI updates, allowing engine scores to appear
+during expansion without repeatedly traversing the entire saved database.
+Bounded probes retain their own root histories and policy distributions; the
+latest position analysis overlays the lookup without grafting into Pure trees. Expected
+scores appear when backup has computed them. The per-move play-circle is a
+separate direct Stockfish PV request. Only the searched position receives that
+engine score; its continuation is saved as independent UCI PV metadata (never inserted into
+Maia policy children), and no expected score
+is fabricated for a single engine line.

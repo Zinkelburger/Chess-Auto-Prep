@@ -99,18 +99,30 @@ mixin _RepertoireTabContent
       databaseName:
           '${p.basename(p.dirname(_controller.currentRepertoire!.filePath))} / ${_controller.currentRepertoire!.name}',
       generation: _generationController,
-      onGenerate: ({String? moveSan, required int plies, required int cores}) =>
-          _generationController.computeExpectimax(
-            ExpectimaxProbeTarget(
-              repertoireFilePath: _controller.currentRepertoire!.filePath,
-              repertoireStartFen: _controller.startingFen ?? kStandardStartFen,
-              movesFromStart: List.of(_controller.currentMoveSequence),
-              playAsWhite: _controller.isRepertoireWhite,
-              moveSan: moveSan,
-              plies: plies,
-              engineThreads: cores,
-            ),
-          ),
+      onGenerate:
+          ({
+            String? moveSan,
+            required int plies,
+            required int cores,
+            required int engineMoves,
+            required double maiaCoverage,
+          }) =>
+              (moveSan == null
+              ? _generationController.computeExpectimax
+              : _generationController.computeMovePv)(
+                ExpectimaxProbeTarget(
+                  repertoireFilePath: _controller.currentRepertoire!.filePath,
+                  repertoireStartFen:
+                      _controller.startingFen ?? kStandardStartFen,
+                  movesFromStart: List.of(_controller.currentMoveSequence),
+                  playAsWhite: _controller.isRepertoireWhite,
+                  moveSan: moveSan,
+                  plies: plies,
+                  engineThreads: cores,
+                  engineMoves: engineMoves,
+                  maiaCoverage: maiaCoverage,
+                ),
+              ),
       onPlayMove: _controller.playMove,
       onHoverMove: (uci) => _boardPreview.setHoverArrow(
         uci == null ? null : BoardAnnotation.arrowFromUci(uci),
@@ -124,24 +136,6 @@ mixin _RepertoireTabContent
       ),
       onPlanLines: () => unawaited(_openPlanner()),
       onCutLines: () => unawaited(_openLineBuildDialog(cutOnly: true)),
-    );
-  }
-
-  Widget _buildTreeTabContent() {
-    return RepertoireTreePane(
-      sourceName: _controller.currentRepertoire?.name,
-      tree: _controller.openingTree,
-      repertoireLines: _controller.repertoireLines,
-      currentMoveSequence: _controller.currentMoveSequence,
-      fen: _controller.fen,
-      onMoveSelected: _controller.userSelectedTreeMove,
-      onGoBack: _controller.goBack,
-      onGoForward: _controller.goForward,
-      repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition,
-      onPlayMove: _controller.playMove,
-      onAddMove: _onExplorerAddMove,
-      onHoverTreeMove: _onTreeMoveHover,
-      onHoverExplorerMove: _onExplorerMoveHover,
     );
   }
 
@@ -176,6 +170,11 @@ mixin _RepertoireTabContent
   /// Database tab of the analysis panel: the live opening explorer.
   Widget _buildDatabaseTabContent() {
     return RepertoireDatabasePane(
+      tree: _controller.openingTree,
+      repertoireLines: _controller.repertoireLines,
+      onHoverTreeMove: _onTreeMoveHover,
+      onGoBack: _controller.goBack,
+      onGoForward: _controller.goForward,
       fen: _controller.fen,
       currentMoveSequence: _controller.currentMoveSequence,
       repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition,

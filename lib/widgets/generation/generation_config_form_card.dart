@@ -162,23 +162,19 @@ mixin _GenerationConfigCard
     final isBook = _buildMode == BuildMode.chessDbBook;
     return _cardSection(isBook ? 'Book size' : 'Search', [
       if (_buildMode == BuildMode.stockfishExpectimax)
-        DropdownButtonFormField<SearchAlgorithm>(
+        SegmentedButton<SearchAlgorithm>(
           key: const ValueKey('generation-search-method'),
-          initialValue: _searchAlgorithm,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Search method'),
-          items: const [
-            DropdownMenuItem(
-              value: SearchAlgorithm.pure,
-              child: Text('Pure — full horizon'),
-            ),
-            DropdownMenuItem(
+          segments: const [
+            ButtonSegment(value: SearchAlgorithm.pure, label: Text('Pure')),
+            ButtonSegment(
               value: SearchAlgorithm.rolling,
-              child: Text('Fast — 4-ply lookahead'),
+              label: Text('Fast · 4-ply'),
             ),
           ],
-          onChanged: (value) {
-            if (value != null) setState(() => _searchAlgorithm = value);
+          selected: {_searchAlgorithm},
+          onSelectionChanged: (value) {
+            if (!mounted) return;
+            setState(() => _searchAlgorithm = value.first);
           },
         ),
       if (_buildMode == BuildMode.stockfishExpectimax)

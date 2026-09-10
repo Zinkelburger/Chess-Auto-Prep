@@ -209,7 +209,7 @@ finished. Update these rows when adding or retiring a route or parallel renderer
 | View | Duplicate surfaces retired in this pass | Canonical organization / retained feature surfaces |
 |---|---:|---|
 | Repertoire trainer | 4 (five bespoke reader/phase surfaces → one phase surface) | Library → browser → session/results. `TrainingPhasePanel` uses shared PGN movetext; Read opens PGN Viewer. Mistakes is a searchable panel, not another board/reader. Chapter selection is optional scope. |
-| Repertoire builder | 1 | Outline + board/editor + Engine/Database evidence. Repertoire tree and opening explorer are Database sources; jobs/config are one bottom workspace. Whole-repertoire opening bypasses the forced chapter gate. |
+| Repertoire builder | 1 | Outline + board/editor + Engine/Database/Generate tabs. Repertoire tree and opening explorer are Database sources; background jobs remain in the bottom panel. Whole-repertoire opening bypasses the forced chapter gate. |
 | Tactics | 1 | Queue/browser → puzzle. Opening-review cards hand off to PGN Viewer; the nested book/game review dialog is removed. |
 | PGN Viewer | 0 | Owns reading, game navigation, analysis graph, collection filtering and book comparison. Book contents and matching lines use the same Book panel. |
 | Player analysis | 0 | Compact player selection → `PositionAnalysisWidget`; findings reuse `HolesReportPanel`. |
@@ -246,7 +246,7 @@ Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 ### Repertoire screen layout (right pane + bottom pane, redesigned June 2026)
 
-Design principles (Chessable-style, Aug 2026): **what the repertoire contains** on the left (the outline: folders → chapters → lines, a real file structure), **the position** in the middle (board + PGN editor; no eval bar by design), **evidence about the position** on the right (Analysis panel: Engine | Database | Tree). **Bottom pane** = job output (Findings, Jobs/config) — collapsed by default. Generation and audit config are inline in the Jobs tab; the outline's chapter menu ("Generate lines into this chapter…") switches to that chapter, puts the board on the chapter's shared root, and opens it.
+Design principles (Chessable-style, Aug 2026): **what the repertoire contains** on the left (the outline: folders → chapters → lines, a real file structure), **the position** in the middle (board + PGN editor; no eval bar by design), **evidence about the position** on the right (Analysis panel: Engine | Database | Generate). **Bottom pane** = job output (Findings, Jobs/config) — collapsed by default. Generation and audit config are inline in the Jobs tab; the outline's chapter menu ("Generate lines into this chapter…") switches to that chapter, puts the board on the chapter's shared root, and opens it.
 
 ```
 RepertoireScreen (composition root — wires controllers to widgets)
@@ -265,17 +265,17 @@ RepertoireScreen (composition root — wires controllers to widgets)
   │          | Board (square, annotated)
   │          | PGN editor (PgnWithAnalysisPane) + NavControls
   │          | Analysis panel (resizable, collapsible → "Analysis" strip)
-  │              TabBar: Engine | Database | Tree
+  │              TabBar: Engine | Database | Generate
   │                Engine: InlineEngineBar over InlineExpectimaxBar
-  │                Database: RepertoireDatabasePane (live Lichess explorer)
-  │                Tree: RepertoireTreePane (OpeningTreeWidget, optional explorer split)
+  │                Database: RepertoireDatabasePane (Repertoire / Opening explorer source selector)
+  │                Generate: GeneratePositionPane (local analysis, live scores, single-move PV)
   │       Outline column content = RepertoireOutlinePanel (default)
   │          | line-metrics view (old RepertoireLinesBrowser: coverage/ease/coherence/traps, via
   │            the header's metrics button, "Back to chapters" returns)
   │       BottomPane (collapsed by default, full width): Findings | Jobs
   │
   ├─ Compact (<960px):
-  │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN (with engine bars) | Chapters | Tree
+  │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN (with engine bars) | Chapters | Database | Generate
   │
   ├─ Inline config (in Jobs tab): Actions ▾ → Generate from here… / outline chapter menu → RepertoireGenerationTab;
   │     Audit button / chapter menu → AuditConfigPanel
@@ -313,8 +313,20 @@ The quiz uses `services/eco_trie.dart` to identify opening forks and `services/p
 
 **Line metrics view (outline column):** The old `RepertoireLinesBrowser` (search/filter/sort, coverage/ease/coherence columns, gap buttons) plus the Lines/Traps segmented toggle, reached from the outline header's metrics button; "Back to chapters" returns to the outline. The Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges, and expandable detail cards. `BoardPreviewController` is threaded through; a `FloatingBoardPreview` overlay is mounted in the view's `Stack`.
 
-**Tree tab (analysis panel):** The Tree tab shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **lines** when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
+**Database tab (analysis panel):** The Repertoire source shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **paths** (including variations) when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
 
+The separate Tree tab has been removed. Database offers the repertoire tree and
+live opening explorer through a compact source switcher. Copying moves stays in
+the PGN editor context menu. Repertoire selection uses compact searchable rows:
+clicking a repertoire opens it directly (Builder opens its first file with the
+full outline available), while Browse chapters is an optional action.
+
+Generate starts bounded exploration: the union of Stockfish candidates and Maia
+moves covering the requested probability at every position. Compact controls
+start at four engine moves and 60% Maia coverage. Scores update during expansion;
+completed-position and depth counters stay visible. A move row's play-circle
+evaluates that move once and saves its engine PV without tree generation or an
+invented expected score. See [bounded database exploration](ALGORITHM.md#bounded-local-database-exploration).
 
 **"Generate from here" button:** In the nav controls bar, a `+` icon button opens the generation dialog pre-seeded with the current position FEN.
 
@@ -830,7 +842,7 @@ alternatives. In reading mode, a commented leaf repeating the principal move
 reads as an inline reference; annotated or continuing branches and edit mode
 retain full variation controls. The source PGN and every branch remain intact.
 
-Opening tree (**Actions → Tree**): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). The viewer defaults to one mainline per game. **Include variations**, in the tree header, rebuilds both tree frequencies and the matching-game index with all RAVs. Other builder callers retain their existing automatic policy (RAVs for course `Result *`, mainlines for scored games). `*` results count toward frequency without a fake 50% draw bar — the UI says **lines** instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Game headers show the players, date and completed result (`1-0`, `0-1`, or `1/2-1/2`); the result stays visible when a long title is truncated. Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Show moves** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
+Opening tree (**Actions → Tree**): `PgnOpeningTreePanel` splits the move tree and a resizable **games at this position** list (`PgnTreeGamesList`). Viewer and repertoire both build through `OpeningTreeBuilder` → `walkMainlineIntoTree` (`pgn_tree_core.dart`); player analysis uses the same walk from `UnifiedAnalysisBuilder` (mainline only). The viewer defaults to one mainline per game. **Include variations**, in the tree header, rebuilds both tree frequencies and the matching-game index with all RAVs. Other builder callers retain their existing automatic policy (RAVs for course `Result *`, mainlines for scored games). `*` results count toward frequency without a fake 50% draw bar — the UI says **paths** (including variations) instead of **games** and hides the W/D/L bar. Chessable intro dummies (`1. Z0 (1. d4 …)`) are promoted onto the mainline before the walk. The list keeps the nav-bar `GameNumberField` + `GameSearchButton` (`/` searches this list, `G` focuses the number). Game headers show the players, date and completed result (`1-0`, `0-1`, or `1/2-1/2`); the result stays visible when a long title is truncated. Rows start expanded with the comment-free continuation from this FEN (including a hit that only exists in a sideline), truncated to one line. **Show moves** (next to Search) is on by default — the blue triangle is a bullet and tapping a row opens the game. Unchecked, the triangle previews one line and the title still opens the game. Drag the split handle to grow the list.
 
 **Cursor ownership (same rule as Game vs Line tabs, Analysis `_navigateTo`, Repertoire `jump`):** each exploration surface keeps its own place. The merged opening tree is not the current game's move list, and its tab retains the game reader offstage. Re-entering the tree — its tab, or the app-bar back after a games-at-position click — restores the tree cursor onto the board; it does not resync from that remounted game. Clicking a game in the list parks that game at the tree FEN (`pgnInitialFen` → `PgnViewerWidget.initialFen`). Leaving the tree for the Game tab restores the game cursor snapshotted when the tree was opened. First open (no saved tree cursor) still syncs the tree to the current game FEN. Next/prev/sort/slice clear the landing FEN so those games start at move 1. Repertoire's Tree tab and Analysis's opening-tree tab already share one board cursor and stay mounted, so they do not need this snapshot.
 

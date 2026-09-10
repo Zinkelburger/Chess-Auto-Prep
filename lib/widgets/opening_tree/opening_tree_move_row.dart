@@ -103,7 +103,7 @@ class _OpeningTreeMoveRowState extends State<OpeningTreeMoveRow> {
     // are continuation paths, not games; use the same WDL-based distinction
     // as the position header so a 300-chapter course never claims thousands
     // of games were loaded.
-    final noun = entry.hasWdl ? 'games' : 'lines';
+    final noun = entry.hasWdl ? 'games' : 'paths';
     final frequency = entry.viaTransposition
         ? '${entry.gamesPlayed} $noun (transp.)'
         : '${entry.gamesPlayed} $noun · ${playedPercent.round()}%';
@@ -158,7 +158,9 @@ class _OpeningTreeMoveRowState extends State<OpeningTreeMoveRow> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Tooltip(
-                        message: reach == null
+                        message: !entry.hasWdl
+                            ? '$frequency · Includes variations'
+                            : reach == null
                             ? frequency
                             : '$frequency · ${reach.percentLabel}% reached',
                         child: Text(
