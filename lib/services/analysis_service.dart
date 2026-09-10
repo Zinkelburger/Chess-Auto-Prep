@@ -26,17 +26,13 @@ export '../utils/ease_utils.dart' show scoreToQ, kEaseAlpha, kEaseBeta;
 export 'engine/eval_worker.dart' show EvalResult;
 
 class AnalysisService {
-  /// Application-wide shared instance.
-  static final AnalysisService instance = AnalysisService._();
-
-  /// Create an independent instance (unit tests only).
-  @visibleForTesting
-  AnalysisService.fresh({BoardEngine? engine})
-    : _engine = engine ?? BoardEngine.instance;
-
-  AnalysisService._() : _engine = BoardEngine.instance;
+  AnalysisService({BoardEngine? engine})
+    : _engine = engine ?? BoardEngine.instance,
+      _session = (engine ?? BoardEngine.instance).createSession();
 
   final BoardEngine _engine;
+  final BoardEngineSession _session;
+  bool _disposed = false;
 
   int _generation = 0;
 
@@ -63,16 +59,25 @@ class AnalysisService {
   /// Applies [apply] synchronously when idle; otherwise after the current frame.
   /// Avoids "widget tree was locked" when notifiers rebuild [ListenableBuilder]s.
   void _publishUi(void Function() apply) {
+    final generation = _generation;
+    void publish() {
+      if (!_disposed && generation == _generation) apply();
+    }
+
     if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
-      apply();
+      publish();
     } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+      WidgetsBinding.instance.addPostFrameCallback((_) => publish());
+      WidgetsBinding.instance.ensureVisualUpdate();
     }
   }
 
-  Future<void> prepare(Object pane) => _engine.prepare(pane);
+  Future<void> prepare() => _session.prepare();
 
-  void detach(Object pane) => _engine.detach(pane);
+  void detach() {
+    cancel();
+    _session.detach();
+  }
 
   // ── Discovery: MultiPV on root position ───────────────────────────────
 
@@ -84,7 +89,7 @@ class AnalysisService {
     _generation++;
     final myGen = _generation;
 
-    _engine.pause(this);
+    _session.pause();
     _workerCurrentMoves.clear();
     _currentBaseFen = null;
     _publishUi(() {
@@ -113,8 +118,7 @@ class AnalysisService {
     var lastLoggedDiscoveryDepth = 0;
 
     try {
-      final result = await _engine.discover(
-        this,
+      final result = await _session.discover(
         fen: fen,
         depth: depth,
         multiPv: multiPv,
@@ -174,7 +178,7 @@ class AnalysisService {
     _generation++;
     final myGen = _generation;
 
-    _engine.pause(this);
+    _session.pause();
 
     _currentBaseFen = baseFen;
     _moveQueue = List.from(moveUcis);
@@ -220,7 +224,7 @@ class AnalysisService {
     _currentBaseFen = null;
     _moveQueue = [];
     _nextMoveIndex = 0;
-    _engine.pause(this);
+    _session.pause();
     _publishUi(() {
       discoveryResult.value = const DiscoveryResult();
       results.value = {};
@@ -287,10 +291,7 @@ class AnalysisService {
         if (resultingFen == null) continue;
 
         // ── Eval ──
-        final eval = await _engine.run(
-          this,
-          (worker) => worker.evaluateFen(resultingFen, _evalDepth),
-        );
+        final eval = await _session.evaluate(resultingFen, _evalDepth);
         if (_generation != generation || eval == null) return;
 
         final whiteCp = eval.scoreCp != null
@@ -346,6 +347,12 @@ class AnalysisService {
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   void dispose() {
+    if (_disposed) return;
     cancel();
+    _disposed = true;
+    _session.dispose();
+    discoveryResult.dispose();
+    results.dispose();
+    poolStatus.dispose();
   }
 }

@@ -4,8 +4,8 @@
 /// Workers take [EngineSettings.hashMb] of hash each and a single thread
 /// unless a build asks for more.
 ///
-/// Used by [AnalysisService] for interactive analysis and by
-/// [TreeBuildService] for generation-mode evaluation.
+/// Used by bulk jobs and tree generation. Interactive panes use BoardEngine;
+/// both paths share EvalWorker protocol safety and the app-wide search budget.
 library;
 
 import 'dart:async';
@@ -135,9 +135,7 @@ class StockfishPool {
         if (w.hashMb != hashMb) w.setHash(hashMb),
     ]);
 
-    if (_workers.isNotEmpty &&
-        _threadsPerWorker > 1 &&
-        threadsPerWorker != null) {
+    if (_workers.isNotEmpty && threadsPerWorker != null) {
       await reconfigureAllWorkers(_threadsPerWorker);
     }
 
@@ -410,9 +408,9 @@ class StockfishPool {
 
   // ── Stop / suspend / dispose ────────────────────────────────────────────
 
-  /// Send UCI `stop` to every worker.  Instant CPU release.
+  /// Cancel callers and request stop. Workers retain CPU admission until bestmove.
   void stopAll() {
-    for (final w in _workers) {
+    for (final w in List.of(_workers)) {
       w.stop();
     }
     // Reject any pending acquires.

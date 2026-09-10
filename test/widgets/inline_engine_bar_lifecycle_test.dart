@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:dartchess/dartchess.dart';
@@ -62,12 +63,14 @@ void main() {
   const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    EngineLifecycle.instance.resetForTest();
+    EngineLifecycle.testMode = true;
     StockfishConnectionFactory.createForTest = () async => _Connection();
   });
   tearDown(() {
     BoardEngine.instance.dispose();
     StockfishConnectionFactory.createForTest = null;
-    if (InlineEngineBar.isEngineEnabled) InlineEngineBar.toggleEngine();
+    EngineLifecycle.instance.resetForTest();
   });
 
   Widget harness({required bool active}) => MaterialApp(

@@ -149,6 +149,41 @@ void main() {
     },
   );
 
+  test('pool applies a reduced thread setting to existing workers', () async {
+    final connection = _FakeConnection();
+    final pool = StockfishPool.fresh(createConnection: () async => connection);
+    await pool.ensureWorkers(1, 2);
+    await pool.ensureWorkers(1, 1);
+    expect(
+      connection.commands.lastIndexOf('setoption name Threads value 1'),
+      greaterThan(
+        connection.commands.lastIndexOf('setoption name Threads value 2'),
+      ),
+    );
+    pool.dispose();
+  });
+
+  test(
+    'broken stop pipes retire every worker without mutating iteration',
+    () async {
+      final pool = StockfishPool.fresh();
+      final evaluations = <Future<void>>[];
+      for (var i = 0; i < 2; i++) {
+        final connection = _FakeConnection()..failStop = true;
+        final worker = EvalWorker(connection);
+        await worker.init();
+        pool.addWorkerForTest(worker);
+        evaluations.add(
+          expectLater(worker.evaluateFen('position', 8), throwsStateError),
+        );
+      }
+      await Future<void>.delayed(Duration.zero);
+      pool.stopAll();
+      await Future.wait(evaluations);
+      pool.dispose();
+    },
+  );
+
   test('broken stop pipe does not abort disposal', () async {
     final conn = _FakeConnection()..failStop = true;
     final worker = EvalWorker(conn);

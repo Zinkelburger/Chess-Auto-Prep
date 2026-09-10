@@ -6,10 +6,8 @@ abstract class EngineConnection {
   void sendCommand(String command);
   void dispose();
 
-  /// Completes when the engine process dies unexpectedly.
-  ///
-  /// Does **not** complete when [dispose] is called first — that is a
-  /// deliberate shutdown, not a crash. Callers that need to respawn a
-  /// worker listen here.
+  /// Completes when the underlying engine exits or is deliberately disposed.
+  /// Consumers record their own disposed state to distinguish shutdown from
+  /// an unexpected exit before deciding whether to replace the worker.
   Future<void> get done;
 }

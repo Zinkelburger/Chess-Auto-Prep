@@ -58,7 +58,7 @@ class RepertoireAnalysisDock extends StatefulWidget {
 
 class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   final EngineSettings _settings = EngineSettings.instance;
-  final AnalysisService _analysis = AnalysisService.instance;
+  final AnalysisService _analysis = AnalysisService();
 
   @override
   void initState() {
@@ -75,6 +75,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
     _settings.removeListener(_scheduleSetState);
     EngineLifecycle.instance.removeListener(_scheduleSetState);
     _analysis.discoveryResult.removeListener(_scheduleSetState);
+    _analysis.dispose();
     super.dispose();
   }
 
@@ -84,11 +85,6 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       if (mounted) setState(() {});
     });
   }
-
-  bool get _engineActive =>
-      widget.isActive &&
-      EngineLifecycle.instance.state != EngineState.off &&
-      EngineLifecycle.instance.state != EngineState.generating;
 
   @override
   Widget build(BuildContext context) {
@@ -239,7 +235,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   Widget _buildEnginePane() {
     return UnifiedEnginePane(
       fen: widget.controller.fen,
-      isActive: _engineActive,
+      isActive: widget.isActive,
+      analysis: _analysis,
       compact: true,
       isUserTurn:
           widget.controller.position.turn ==

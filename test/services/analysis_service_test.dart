@@ -61,7 +61,8 @@ void main() {
     EngineSettings.instance.cores = 1;
     engine = ScriptedEngine();
     boardEngine = BoardEngine(createConnection: () async => engine);
-    service = AnalysisService.fresh(engine: boardEngine);
+    service = AnalysisService(engine: boardEngine);
+    await service.prepare();
   });
 
   tearDown(() {
