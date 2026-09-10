@@ -269,6 +269,9 @@ class PgnViewerController extends ChangeNotifier
     allGames: () => allGames,
     fenIndex: () => _fenIndex.value,
     currentFen: () => currentPosition.fen,
+    gameStartFen: () => filteredGames.isEmpty
+        ? null
+        : filteredGames[currentGameIndex].headers['FEN'],
     applyPosition: (pos) => currentPosition = pos,
     onReclaimFocus: () => onReclaimFocus?.call(),
   );
@@ -826,9 +829,14 @@ class PgnViewerController extends ChangeNotifier
     final gameLoadEpoch = ++_gameLoadEpoch;
     stopAutoPlay();
     analysisController.cancel();
-    currentPosition = _tryParseFen(pgnInitialFen) ?? Chess.initial;
-    orientBoardForCurrentGame();
     final game = filteredGames[currentGameIndex];
+    if (!showOpeningTree) {
+      currentPosition =
+          _tryParseFen(pgnInitialFen) ??
+          _tryParseFen(game.headers['FEN']) ??
+          Chess.initial;
+    }
+    orientBoardForCurrentGame();
     final restored = await analysisController.tryLoadFromPgn(game.pgnText);
     if (!isActive() || gameLoadEpoch != _gameLoadEpoch) return;
     notifyListeners();
@@ -1105,9 +1113,10 @@ class PgnViewerController extends ChangeNotifier
   List<int> gamesAtTreePosition() => _viewerTree.gamesAtTreePosition();
 
   void loadGameFromTree(int filteredIndex) {
+    if (filteredIndex < 0 || filteredIndex >= filteredGames.length) return;
     _rememberCurrentPlace();
     _viewerTree.snapshotCursor(leavingForGame: true);
-    final landingFen = openingTree?.currentNode.fen;
+    final landingFen = openingTree?.currentFen;
     pgnInitialFen = landingFen;
     _gameCursorFen = landingFen;
     _viewerTree.hide();

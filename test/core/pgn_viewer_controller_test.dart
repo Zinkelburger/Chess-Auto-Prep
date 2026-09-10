@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:dartchess/dartchess.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -69,6 +71,29 @@ void main() {
   tearDown(() {
     StorageFactory.instanceForTest = null;
   });
+
+  test(
+    'loading a setup game initializes its board and cannot reset a shown tree',
+    () async {
+      const fen = '4k3/8/8/4p3/8/8/8/4K3 b - - 0 17';
+      final c = _makeController();
+      addTearDown(c.dispose);
+      _seed(c, [
+        PgnGameEntry(
+          headers: {'FEN': fen},
+          pgnText: '[FEN "$fen"]\n\n17... e4 *',
+        ),
+      ]);
+      await c.loadCurrentGame();
+      expect(c.currentPosition.fen, Chess.fromSetup(Setup.parseFen(fen)).fen);
+      c.toggleOpeningTree();
+      await c.rebuildOpeningTree();
+      c.onTreeMoveSelected('e4');
+      final treeFen = c.currentPosition.fen;
+      await c.loadCurrentGame();
+      expect(c.currentPosition.fen, treeFen);
+    },
+  );
 
   group('load ordering', () {
     test('a slower file read cannot replace the newest selection', () async {

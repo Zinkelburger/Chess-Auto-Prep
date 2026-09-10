@@ -408,6 +408,19 @@ class OpeningTree {
   late final OpeningTreeNode root;
   late OpeningTreeNode currentNode;
 
+  /// Collection viewers retain disconnected setup chapters as separate roots.
+  /// Other consumers keep their existing single-root repertoire layout.
+  final bool preserveSetupRoots;
+  final List<OpeningTreeNode> setupRoots = [];
+  late OpeningTreeNode cursorRoot;
+
+  OpeningTreeNode addSetupRoot(String fen) {
+    final node = OpeningTreeNode(move: '', fen: fen);
+    setupRoots.add(node);
+    indexNode(node);
+    return node;
+  }
+
   /// FEN to node mapping for quick lookup
   final Map<String, List<OpeningTreeNode>> fenToNodes;
 
@@ -421,12 +434,14 @@ class OpeningTree {
 
   OpeningTree({
     OpeningTreeNode? root,
+    this.preserveSetupRoots = false,
     Map<String, List<OpeningTreeNode>>? fenToNodes,
   }) : fenToNodes = fenToNodes ?? {} {
     // Ensure root and currentNode point to the same object
     final rootNode = root ?? OpeningTreeNode(move: '', fen: kStandardStartFen);
     this.root = rootNode;
     currentNode = rootNode;
+    cursorRoot = rootNode;
     indexNode(rootNode);
   }
 
@@ -447,7 +462,12 @@ class OpeningTree {
 
   String get currentMovePathString => _walkedSans.isEmpty
       ? 'Starting position'
-      : buildNumberedMovetext(_walkedSans, compact: true);
+      : buildNumberedMovetext(
+          _walkedSans,
+          compact: true,
+          startMoveNumber: Setup.parseFen(cursorRoot.fen).fullmoves,
+          whiteToMoveFirst: isWhiteToMove(cursorRoot.fen),
+        );
 
   /// Continuations from [currentFen]: moves actually played there, plus
   /// legal moves that land on a FEN the tree already has (one-ply
@@ -532,13 +552,17 @@ class OpeningTree {
       return false;
     }
     final prefix = _walkedSans.sublist(0, _walkedSans.length - 1);
-    syncToMoveHistory(prefix);
+    syncToMoveHistory(prefix, startFen: cursorRoot.fen);
     return true;
   }
 
-  /// Reset to root position
-  void reset() {
-    currentNode = root;
+  /// Reset to the default root, or a specified chapter start position.
+  void reset({String? startFen}) {
+    final starts = startFen == null ? null : fenToNodes[normalizeFen(startFen)];
+    cursorRoot = starts == null || starts.isEmpty
+        ? root
+        : PositionGroup(starts).primaryNode;
+    currentNode = cursorRoot;
     _walkedSans = [];
     _offBookFen = null;
   }
@@ -551,6 +575,10 @@ class OpeningTree {
     currentNode = PositionGroup(nodes).primaryNode;
     _offBookFen = null;
     _walkedSans = currentNode.getMovePath();
+    cursorRoot = currentNode;
+    while (cursorRoot.parent != null) {
+      cursorRoot = cursorRoot.parent!;
+    }
     return true;
   }
 
@@ -578,7 +606,9 @@ class OpeningTree {
   }
 
   /// Get total number of games in the tree (games at root)
-  int get totalGames => root.gamesPlayed;
+  int get totalGames =>
+      root.gamesPlayed +
+      setupRoots.fold<int>(0, (total, node) => total + node.gamesPlayed);
 
   /// Get current depth in the tree (walked plies, including off-book).
   int get currentDepth => _walkedSans.length;
@@ -773,18 +803,18 @@ class OpeningTree {
   /// still offer one-ply transpositions) without aborting the rest of the
   /// line. Returns true when every move was legal *and* the final FEN is in
   /// the tree. An illegal SAN stops at the last legal ply.
-  bool syncToMoveHistory(List<String> moves) {
-    reset();
+  bool syncToMoveHistory(List<String> moves, {String? startFen}) {
+    reset(startFen: startFen);
     if (moves.isEmpty) return true;
 
     Position position;
     try {
-      position = Chess.fromSetup(Setup.parseFen(root.fen));
+      position = Chess.fromSetup(Setup.parseFen(cursorRoot.fen));
     } catch (_) {
       return false;
     }
 
-    OpeningTreeNode lastOnBook = root;
+    OpeningTreeNode lastOnBook = cursorRoot;
     for (final san in moves) {
       final next = playSanOrNullMove(position, san);
       if (next == null) {
@@ -834,6 +864,10 @@ class OpeningTree {
     // BFS to assign IDs and serialise each node.
     final queue = Queue<OpeningTreeNode>()..add(root);
     nodeToId[root] = 0;
+    for (final setupRoot in setupRoots) {
+      nodeToId[setupRoot] = nodeToId.length;
+      queue.add(setupRoot);
+    }
 
     while (queue.isNotEmpty) {
       final node = queue.removeFirst();
@@ -866,7 +900,7 @@ class OpeningTree {
     // [fenToNodes] is derivable from the nodes — every node is indexed under
     // its own FEN — so it is rebuilt on receipt rather than shipped: sending
     // it doubled every FEN in the message.
-    return {'nodes': nodes};
+    return {'nodes': nodes, 'preserveSetupRoots': preserveSetupRoots};
   }
 
   /// Reconstruct an [OpeningTree] from the flat map produced by
@@ -921,10 +955,16 @@ class OpeningTree {
       return OpeningTree(root: builtNodes[0], fenToNodes: fenToNodes);
     }
 
-    final tree = OpeningTree(root: builtNodes[0]);
+    final tree = OpeningTree(
+      root: builtNodes[0],
+      preserveSetupRoots: json['preserveSetupRoots'] as bool? ?? false,
+    );
     for (var id = 1; id < rawNodes.length; id++) {
       final node = builtNodes[id];
-      if (node != null) tree.indexNode(node);
+      if (node != null) {
+        tree.indexNode(node);
+        if (node.parent == null) tree.setupRoots.add(node);
+      }
     }
     return tree;
   }

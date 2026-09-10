@@ -234,7 +234,9 @@ void walkMainlineIntoTree({
   // Where this game's first move hangs.  A `[FEN]` chapter starts mid-game, so
   // it belongs under the node that *is* its start position; only a game
   // starting where the tree does belongs at the root.
-  final placed = _anchorNode(tree, position);
+  final placed =
+      _anchorNode(tree, position) ??
+      (tree.preserveSetupRoots ? tree.addSetupRoot(position.fen) : null);
 
   // No node stands at that position, so the chapter is grafted at the root to
   // keep it visible — but [OpeningTree.advance] matches children by SAN
@@ -245,8 +247,13 @@ void walkMainlineIntoTree({
   final anchor = placed ?? tree.root;
   final strictFirstPly = placed == null;
 
-  tree.root.updateStats(userResult);
-  if (!identical(anchor, tree.root)) anchor.updateStats(userResult);
+  if (tree.preserveSetupRoots) {
+    // A setup chapter contributes only to positions on its own branch.
+    _incrementPathStats(anchor, userResult);
+  } else {
+    tree.root.updateStats(userResult);
+    if (!identical(anchor, tree.root)) anchor.updateStats(userResult);
+  }
 
   if (includeVariations) {
     _walkVariationsIntoTree(
