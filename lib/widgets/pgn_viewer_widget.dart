@@ -729,6 +729,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
           child: PgnReadingPane(
             key: _readingPaneKey,
             showReadingOptions: widget.showReadingOptions,
+            continuationPicker: _buildBranchChips(),
             previewingComment: _inlineActive,
             selection: (
               _game,
@@ -746,7 +747,6 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
             documentBuilder: _buildMovetext,
           ),
         ),
-        _buildBranchChips(),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
