@@ -661,8 +661,11 @@ Matching games use the shared `PgnTreeGamesList`, with compact titles and option
 move previews initially hidden. The list fills the remaining pane below the
 scrollable conditions, with **Apply filter** always available in the footer. Preview titles, arrows and
 result badges use secondary text colors so the editor remains prominent. Applied
-conditions appear as editable, removable chips beside the collection title, with
-AND/OR separators and **Add filter** to extend the same filter set.
+conditions appear as uniform 112×44 gray tiles beside the collection title. Each
+tile stacks the value above the field/rule, truncates both lines, shows the full
+condition on hover and opens the editor on click. Its separate × removes that
+condition. AND/OR separators retain the combination rule; the muted **Add filter**
+action extends the same set. Additional tiles scroll horizontally.
 Tree retains **[Player] as White / as Black** when one player occurs in at least
 80% of the collection; Filter uses its editable rows instead of shortcut buttons.
 The mode selector shows only the current mode name, without a “View” prefix.

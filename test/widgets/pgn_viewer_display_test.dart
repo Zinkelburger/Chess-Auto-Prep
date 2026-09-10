@@ -123,6 +123,29 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(HeaderFilters).hitTestable(), findsOneWidget);
       expect(filters.headerRows.single.value, 'A');
+      filters.addHeaderRow(field: 'Black');
+      filters.setHeaderValue(1, 'B');
+      filters.addHeaderRow(field: 'Opening');
+      filters.setHeaderValue(2, 'Orthodox Variation');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('apply-game-filters')));
+      await tester.pumpAndSettle();
+      final secondTile = find.byKey(const ValueKey(('applied-filter', 1)));
+      final thirdTile = find.byKey(const ValueKey(('applied-filter', 2)));
+      expect(tester.getSize(appliedChip), tester.getSize(secondTile));
+      expect(tester.getSize(appliedChip), tester.getSize(thirdTile));
+      expect(thirdTile.hitTestable(), findsOneWidget);
+      expect(
+        find.byTooltip('Edit Opening contains Orthodox Variation'),
+        findsOneWidget,
+      );
+      await tester.tap(thirdTile);
+      await tester.pumpAndSettle();
+      expect(filters.headerRows.last.value, 'Orthodox Variation');
       await tester.tap(find.byKey(const ValueKey('apply-game-filters')));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Remove White name contains A'));
@@ -130,7 +153,15 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 300)),
       );
       await tester.pumpAndSettle();
-      expect(appliedChip, findsNothing);
+      expect(thirdTile, findsNothing);
+      expect(
+        find.descendant(of: appliedChip, matching: find.text('B')),
+        findsOneWidget,
+      );
+      expect(
+        find.byTooltip('Edit Opening contains Orthodox Variation'),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Show opening'));
