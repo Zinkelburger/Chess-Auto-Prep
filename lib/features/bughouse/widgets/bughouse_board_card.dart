@@ -42,6 +42,9 @@ class BughouseBoardCard extends StatelessWidget {
   final BughouseController controller;
   final BughouseBoard which;
 
+  static const double headerHeight = 28;
+  static const double seatHeight = 36;
+
   @override
   Widget build(BuildContext context) {
     final state = controller.state;
@@ -56,7 +59,10 @@ class BughouseBoardCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _BoardHeader(controller: controller, which: which),
+        SizedBox(
+          height: headerHeight,
+          child: _BoardHeader(controller: controller, which: which),
+        ),
         const SizedBox(height: 6),
         _Seat(controller: controller, which: which, side: topSide),
         _PocketRow(controller: controller, which: which, side: topSide),
@@ -177,7 +183,7 @@ class _BoardHeader extends StatelessWidget {
     final last = controller.lastPlyOn(which);
     return Row(
       children: [
-        Text(which.label, style: AppTextStyles.bodyStrong),
+        Text(which.label, style: AppTextStyles.title),
         const SizedBox(width: 10),
         // The move that just landed here, which on two boards is two separate
         // questions — the whole-line cursor answers neither of them. Blank
@@ -186,16 +192,16 @@ class _BoardHeader extends StatelessWidget {
         Expanded(
           child: Text(
             last == null ? '' : '${last.numberLabel} ${last.san}',
-            style: AppTextStyles.monoDense,
+            style: AppTextStyles.mono.copyWith(fontSize: 16),
             overflow: TextOverflow.ellipsis,
           ),
         ),
         IconButton(
           tooltip: "Copy ${which.label.toLowerCase()}'s moves",
           visualDensity: VisualDensity.compact,
-          iconSize: 16,
+          iconSize: 20,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 28, height: 24),
+          constraints: const BoxConstraints.tightFor(width: 32, height: 28),
           icon: const Icon(Icons.copy),
           // Disabled rather than hidden: a control that appears with the
           // first move would shift the flip button sideways mid-game.
@@ -210,9 +216,9 @@ class _BoardHeader extends StatelessWidget {
         IconButton(
           tooltip: 'Draw ${which.label.toLowerCase()} the other way up',
           visualDensity: VisualDensity.compact,
-          iconSize: 16,
+          iconSize: 20,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 28, height: 24),
+          constraints: const BoxConstraints.tightFor(width: 32, height: 28),
           icon: const Icon(Icons.swap_vert),
           onPressed: () => controller.toggleFlip(which),
         ),
@@ -246,7 +252,8 @@ class _Seat extends StatelessWidget {
         state.seatLetter(which, side) == 'A' ||
         state.seatLetter(which, side) == 'C';
 
-    return Padding(
+    return Container(
+      height: BughouseBoardCard.seatHeight,
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
@@ -258,22 +265,29 @@ class _Seat extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              state.seatRole(which, side),
-              style: onMove
-                  ? AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)
-                  : AppTextStyles.muted,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (onMove)
-            const Padding(
-              padding: EdgeInsets.only(right: 6),
-              child: Tooltip(
-                message: 'To move',
-                child: Icon(Icons.play_arrow, size: 13, color: AppColors.ink),
+            child: Tooltip(
+              message: state.seatRole(which, side),
+              child: Text(
+                state.seatRole(which, side),
+                style: AppTextStyles.bodyStrong.copyWith(fontSize: 16),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
+          ),
+          SizedBox(
+            width: 20,
+            child: onMove
+                ? const Tooltip(
+                    message: 'To move',
+                    child: Icon(
+                      Icons.play_arrow,
+                      size: 16,
+                      color: AppColors.ink,
+                    ),
+                  )
+                : null,
+          ),
           _ClockBox(controller: controller, which: which, side: side),
         ],
       ),
@@ -302,8 +316,8 @@ class _SeatBadge extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Container(
-        width: 22,
-        height: 22,
+        width: 26,
+        height: 26,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: white ? AppColors.sideWhite : AppColors.sideBlack,
@@ -318,6 +332,7 @@ class _SeatBadge extends StatelessWidget {
         child: Text(
           letter,
           style: AppTextStyles.mono.copyWith(
+            fontSize: 16,
             fontWeight: FontWeight.w700,
             height: 1.0,
             color: white ? AppColors.onSideWhite : AppColors.ink,
@@ -394,12 +409,16 @@ class _ClockBoxState extends State<_ClockBox> {
           'diagonal: your clock against your partner\'s opponent.',
       waitDuration: const Duration(milliseconds: 700),
       child: SizedBox(
-        width: 58,
+        width: 88,
         child: TextField(
           controller: _text,
           focusNode: _focus,
           textAlign: TextAlign.right,
-          style: AppTextStyles.mono.copyWith(fontWeight: FontWeight.w600),
+          style: AppTextStyles.mono.copyWith(
+            fontSize: 20,
+            height: 1.1,
+            fontWeight: FontWeight.w700,
+          ),
           decoration: InputDecoration(
             isDense: true,
             filled: true,
@@ -647,6 +666,7 @@ class _PocketPiece extends StatelessWidget {
                     child: Text(
                       '$count',
                       style: AppTextStyles.caption.copyWith(
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: AppColors.ink,
                         height: 1.1,

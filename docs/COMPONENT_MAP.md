@@ -64,7 +64,7 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 |---|---|
 | Play or drop a piece | Drag on either board; reserve pieces also support click then square |
 | Read reserves | Pieces match their board's piece size and scale with it, including during a drag. Mid-gray trays keep both piece colors visible. Owned pieces stay fully opaque on either turn and always show a count; empty slots remain faint silhouettes |
-| Identify seats | You / Partner / Opponent / Partner’s opponent, beside each clock |
+| Identify seats | You / Partner / Opponent / Partner’s opponent in 16px text beside 20px clocks and larger seat badges. Board headings use 18px text; the turn marker keeps a fixed slot so labels do not shift |
 | Pause or resume | Analysis toolbar |
 | Read candidate continuations | Board 1 and Board 2 ranked lines appear together, automatically using the side to move on each board. Searches still consider both boards jointly; all scores are from your team’s perspective |
 | Preview a continuation | Hover a move or candidate to show the resulting boards and reserves; exit restores the current position without changing history |
@@ -77,7 +77,7 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 | Edit either board | Pencil icon; shared drag editor supports palette placement, arbitrary piece movement and right-click removal; illegal kingless bughouse positions are rejected |
 | Change turn, castling, reserves, clear/reset | Edit position controls and reserve slots |
 | Load/copy a position | Dual FEN controls in the editor; copy menu below the boards |
-| Navigate or undo | Controls below the boards; arrows and Home/End navigate history. Each board's move list has a charcoal background and outline separating it from the page |
+| Navigate or undo | Larger controls below the boards; arrows and Home/End navigate history. Each board's 16px move list has a charcoal background and outline separating it from the page, with room for two lines before scrolling |
 | Flip a board | Its header control; F for Board 1, G for Board 2 |
 | Run or review engine matches | More bughouse tools → Engine tournament; Done returns to analysis |
 

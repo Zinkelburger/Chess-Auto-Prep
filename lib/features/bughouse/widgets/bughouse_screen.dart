@@ -255,14 +255,14 @@ class _Boards extends StatelessWidget {
   /// Each reserve adds one board square in height. The movetext stays fixed
   /// so the boards do not resize as the game is played.
   static const double chromeHeight =
-      24 +
+      BughouseBoardCard.headerHeight +
       6 +
-      30 +
+      BughouseBoardCard.seatHeight +
       10 +
       6 +
       6 +
       10 +
-      30 +
+      BughouseBoardCard.seatHeight +
       8 +
       BughouseBoardMovetext.height +
       4 +
