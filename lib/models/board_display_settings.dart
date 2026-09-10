@@ -58,19 +58,24 @@ class BoardDisplaySettings extends ChangeNotifier with SafeChangeNotifier {
   BoardDisplaySettings.fresh({
     BoardCoordinates coordinates = BoardCoordinates.inside,
     PieceNotation pieceNotation = PieceNotation.letters,
+    bool showLegalMoves = false,
   }) {
     _coordinates = coordinates;
     _pieceNotation = pieceNotation;
+    _showLegalMoves = showLegalMoves;
   }
 
   static const _keyCoordinates = 'display.board_coordinates';
   static const _keyPieceNotation = 'display.piece_notation';
+  static const _keyLegalMoves = 'display.legal_moves';
 
   BoardCoordinates _coordinates = BoardCoordinates.inside;
   PieceNotation _pieceNotation = PieceNotation.letters;
+  bool _showLegalMoves = false;
 
   BoardCoordinates get coordinates => _coordinates;
   PieceNotation get pieceNotation => _pieceNotation;
+  bool get showLegalMoves => _showLegalMoves;
 
   /// The settings in effect for [context]: the nearest [DisplaySettingsScope]
   /// (rebuilding the caller when they change), else [instance].
@@ -88,6 +93,7 @@ class BoardDisplaySettings extends ChangeNotifier with SafeChangeNotifier {
     _pieceNotation = PieceNotation.fromStorage(
       prefs.getString(_keyPieceNotation),
     );
+    _showLegalMoves = prefs.getBool(_keyLegalMoves) ?? false;
     notifyListeners();
   }
 
@@ -107,13 +113,23 @@ class BoardDisplaySettings extends ChangeNotifier with SafeChangeNotifier {
     await prefs.setString(_keyPieceNotation, value.name);
   }
 
+  Future<void> setShowLegalMoves(bool value) async {
+    if (_showLegalMoves == value) return;
+    _showLegalMoves = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyLegalMoves, value);
+  }
+
   Future<void> resetToDefaults() async {
     _coordinates = BoardCoordinates.inside;
     _pieceNotation = PieceNotation.letters;
+    _showLegalMoves = false;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyCoordinates);
     await prefs.remove(_keyPieceNotation);
+    await prefs.remove(_keyLegalMoves);
   }
 }
 

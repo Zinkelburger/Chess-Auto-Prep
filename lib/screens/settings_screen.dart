@@ -569,6 +569,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
               onChanged: (v) => unawaited(display.setCoordinates(v)),
             ),
+            SettingsSwitchTile(
+              label: 'Legal move dots',
+              description: 'Show possible destinations when selecting a piece',
+              value: display.showLegalMoves,
+              onChanged: (value) => unawaited(display.setShowLegalMoves(value)),
+            ),
             SettingsChoiceTile<PieceNotation>(
               label: 'Piece notation',
               value: display.pieceNotation,

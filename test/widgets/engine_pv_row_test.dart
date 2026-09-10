@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/widgets/engine/engine_pv_row.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -53,6 +54,45 @@ void main() {
     expect(tapped, 99);
     expect(tester.getSize(find.byType(EnginePvRow)).height, expandedHeight);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('move numbers and separator padding preview the same move', (
+    tester,
+  ) async {
+    int? hovered;
+    int? tapped;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 400,
+            child: EnginePvRow(
+              evaluation: '+0.20',
+              sanMoves: const ['e4', 'e5', 'Nf3'],
+              startPly: 0,
+              onMoveHovered: (index, _) => hovered = index,
+              onHoverExit: () => hovered = null,
+              onMoveTapped: (index) => tapped = index,
+            ),
+          ),
+        ),
+      ),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.text('1.')));
+    await tester.pump();
+    expect(hovered, 0);
+    final label = tester.getRect(find.text('e4'));
+    await mouse.moveTo(Offset(label.right + 4, label.center.dy));
+    await tester.pump();
+    expect(hovered, 0);
+    await tester.tapAt(Offset(label.right + 4, label.center.dy));
+    expect(tapped, 0);
+    await mouse.moveTo(tester.getCenter(find.text('e5')));
+    await tester.pump();
+    expect(hovered, 1);
+    await mouse.removePointer();
   });
 
   for (final textScale in [1.0, 1.5, 2.0]) {
