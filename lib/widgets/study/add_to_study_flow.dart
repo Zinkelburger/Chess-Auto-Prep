@@ -1,7 +1,7 @@
 /// The one "add to study" flow, shared by every producer (Player Analysis
 /// lines, PGN viewer lines, solitaire games, tactics source games): study
-/// picker → chapter write → a confirmation dialog whose "View line" action
-/// opens Study mode parked on the new chapter.
+/// picker → chapter write. Successful additions finish quietly; explicit
+/// edit requests open Study mode on the new chapter.
 library;
 
 import 'dart:async';
@@ -19,16 +19,14 @@ import '../pgn/add_to_study_dialog.dart';
 /// settled on and returns the chapter PGN (null aborts silently — the
 /// builder is expected to have surfaced its own error).
 ///
-/// [viewSanLine], when given, parks the Study cursor at the deepest node
-/// reachable by that SAN sequence — pass it for single-line adds so "View
-/// line" lands on the position being discussed; leave it null for whole-game
-/// adds, which read better from the start.
+/// [openAfterAdding] is for explicit "Edit in study" requests. [viewSanLine]
+/// optionally parks that editor on the position being discussed.
 Future<void> runAddToStudyFlow(
   BuildContext context, {
   required String suggestedChapterName,
   required FutureOr<String?> Function(String chapterName) buildPgn,
   String pickerTitle = 'Add line to study',
-  String viewActionLabel = 'View line',
+  bool openAfterAdding = false,
   List<String>? viewSanLine,
   Future<String?> Function()? preferredStudy,
 }) async {
@@ -56,36 +54,16 @@ Future<void> runAddToStudyFlow(
         await StorageFactory.instance.studyFilePath(result.newStudyName!);
     await study.addChapterToStudyFile(path, result.chapterName, pgn);
     if (!context.mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Added to study'),
-        content: Text(
-          'Chapter "${result.chapterName}" is now in '
-          '"${result.studyName}".',
+    if (openAfterAdding) {
+      appState.handOff(
+        EditStudy(
+          studyPath: path,
+          chapterName: result.chapterName,
+          initialSanLine: viewSanLine,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              appState.handOff(
-                EditStudy(
-                  studyPath: path,
-                  chapterName: result.chapterName,
-                  initialSanLine: viewSanLine,
-                ),
-                historyLabel: 'Study: ${result.studyName}',
-              );
-            },
-            child: Text(viewActionLabel),
-          ),
-        ],
-      ),
-    );
+        historyLabel: 'Study: ${result.studyName}',
+      );
+    }
   } catch (e) {
     debugPrint('Add to study failed: $e');
     if (context.mounted) {

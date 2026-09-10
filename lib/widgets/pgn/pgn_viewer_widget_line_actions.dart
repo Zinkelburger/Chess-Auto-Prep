@@ -192,7 +192,6 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
       context,
       suggestedChapterName: _suggestChapterName(line),
       buildPgn: (_) => pgn,
-      viewSanLine: [for (final data in line) data.san],
     );
   }
 

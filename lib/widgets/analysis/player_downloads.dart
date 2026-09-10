@@ -47,6 +47,7 @@ class PlayerDownloadRunner {
           showAppSnackBar(
             context,
             AppMessages.noGamesFound(config.displayName),
+            requiresAttention: true,
           );
         }
         return false;

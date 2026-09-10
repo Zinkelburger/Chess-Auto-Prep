@@ -99,6 +99,7 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
       showAppSnackBar(
         context,
         'No tournament called "$id" under Documents/engine_tournaments.',
+        requiresAttention: true,
       );
       return;
     }
@@ -231,7 +232,11 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
         '${config.name} stopped after ${finished.gamesPlayed} games.',
       _ => '${config.name} failed: ${finished.error ?? "unknown error"}',
     };
-    showAppSnackBar(context, message);
+    showAppSnackBar(
+      context,
+      message,
+      isError: finished.status == TournamentStatus.failed,
+    );
   }
 
   Future<void> _manageEngines() async {

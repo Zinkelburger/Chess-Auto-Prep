@@ -237,13 +237,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
   Future<void> _copyFen() async {
     await Clipboard.setData(ClipboardData(text: _training.session.fen));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('FEN copied to clipboard'),
-        duration: Duration(seconds: 2),
-      ),
-    );
   }
 
   @override
@@ -878,23 +871,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     Set<String> checkedLineIds,
     Set<String> scope,
   ) async {
-    final changed = await _training.applyLearnedSelection(
-      checkedLineIds,
-      within: scope,
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          changed == 0
-              ? 'Learned lines unchanged.'
-              : changed == 1
-              ? '1 line updated.'
-              : '$changed lines updated.',
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    await _training.applyLearnedSelection(checkedLineIds, within: scope);
   }
 
   Widget _buildPgnTab() {

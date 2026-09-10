@@ -287,6 +287,7 @@ mixin _ScratchAnalysisMixin on _PositionAnalysisWidgetStateBase {
         context,
         'Could not add the engine line: the position is not in the '
         'Analysis tab.',
+        requiresAttention: true,
       );
       return;
     }

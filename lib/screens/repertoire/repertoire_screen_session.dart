@@ -33,14 +33,7 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   Future<void> _performUndo() async {
     if (!_controller.writer.canUndo) return;
     try {
-      final undone = await _controller.writer.undo();
-      if (!mounted || !undone) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Undid last repertoire add'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      await _controller.writer.undo();
     } catch (e) {
       log.w('Undo failed', name: 'RepertoireScreen', error: e);
       if (!mounted) return;
@@ -211,7 +204,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
       if (clipboardData == null || clipboardData.text == null) {
         if (mounted) {
-          showAppSnackBar(context, AppMessages.clipboardEmpty);
+          showAppSnackBar(
+            context,
+            AppMessages.clipboardEmpty,
+            requiresAttention: true,
+          );
         }
         return;
       }
@@ -219,14 +216,22 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       final fen = clipboardData.text!.trim();
       if (fen.isEmpty) {
         if (mounted) {
-          showAppSnackBar(context, AppMessages.clipboardEmpty);
+          showAppSnackBar(
+            context,
+            AppMessages.clipboardEmpty,
+            requiresAttention: true,
+          );
         }
         return;
       }
 
       final success = _controller.setPositionFromFen(fen);
       if (!success && mounted) {
-        showAppSnackBar(context, AppMessages.invalidFen);
+        showAppSnackBar(
+          context,
+          AppMessages.invalidFen,
+          requiresAttention: true,
+        );
       }
     } catch (e) {
       log.w('Clipboard read failed', name: 'RepertoireScreen', error: e);
@@ -332,7 +337,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
 
     final tree = _controller.openingTree;
     if (tree == null) {
-      showAppSnackBar(context, 'No repertoire tree loaded');
+      showAppSnackBar(
+        context,
+        'No repertoire tree loaded',
+        requiresAttention: true,
+      );
       return;
     }
 
@@ -354,7 +363,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       }
     } catch (e) {
       if (mounted) {
-        showAppSnackBar(context, 'Coverage analysis failed: $e');
+        showAppSnackBar(
+          context,
+          'Coverage analysis failed: $e',
+          requiresAttention: true,
+        );
       }
     }
   }

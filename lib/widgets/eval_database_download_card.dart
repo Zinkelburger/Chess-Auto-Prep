@@ -93,10 +93,6 @@ class _ChessDbDumpCardState extends State<ChessDbDumpCard> {
     final opened = await openInFileManager(path);
     if (opened || !mounted) return;
     await Clipboard.setData(ClipboardData(text: path));
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
   }
 
   Future<void> _confirmDelete() async {

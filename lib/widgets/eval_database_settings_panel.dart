@@ -141,10 +141,6 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
 
   Future<void> _copyCommand(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
   }
 
   Future<void> _reveal(String path) async {

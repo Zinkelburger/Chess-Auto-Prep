@@ -40,6 +40,7 @@ class EngineGate {
       context,
       lockedMessage,
       duration: const Duration(seconds: 4),
+      requiresAttention: true,
     );
     return false;
   }

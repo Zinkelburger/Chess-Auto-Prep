@@ -9,7 +9,8 @@ import '../theme/app_colors.dart';
 ///
 /// Messages are grouped by how they're displayed:
 /// - **Errors**: shown as persistent SnackBars (user must dismiss)
-/// - **Informational**: shown as auto-dismissing SnackBars
+/// - **Attention**: actionable notices shown as auto-dismissing SnackBars
+/// - **Success**: routine completion messages stay quiet
 /// - **Validation**: shown inline on form fields (not as SnackBars)
 /// - **Inline**: shown in widget state areas (not as SnackBars)
 class AppMessages {
@@ -52,7 +53,10 @@ class AppMessages {
       'Added $count new tactics position${count == 1 ? '' : 's'}.';
 }
 
-/// Show a styled SnackBar. Use [isError] for persistent error notifications
+/// Show a styled SnackBar for errors or notices requiring attention.
+/// Routine success notifications are intentionally silent across the app.
+/// Set [requiresAttention] for a blocked action or other necessary guidance.
+/// Use [isError] for persistent error notifications
 /// that require the user to dismiss them. All snackbars carry a close icon so
 /// they can be dismissed before the timeout; pass [actionLabel]/[onAction] for
 /// an inline action (e.g. "Open", "Undo").
@@ -60,10 +64,12 @@ void showAppSnackBar(
   BuildContext context,
   String message, {
   bool isError = false,
+  bool requiresAttention = false,
   String? actionLabel,
   VoidCallback? onAction,
   Duration? duration,
 }) {
+  if (!isError && !requiresAttention) return;
   final screenWidth = MediaQuery.sizeOf(context).width;
   ScaffoldMessenger.of(context).clearSnackBars();
   ScaffoldMessenger.of(context).showSnackBar(
@@ -99,7 +105,8 @@ void showAppSnackBar(
   );
 }
 
-/// Copy [text] and optionally show [successMessage]. Fire-and-forget so
+/// Copy [text] quietly. [successMessage] is retained for existing callers.
+/// Fire-and-forget so
 /// button handlers stay synchronous.
 void copyToClipboard(
   BuildContext context,
@@ -107,7 +114,4 @@ void copyToClipboard(
   String? successMessage,
 }) {
   unawaited(Clipboard.setData(ClipboardData(text: text)));
-  if (successMessage != null) {
-    showAppSnackBar(context, successMessage);
-  }
 }

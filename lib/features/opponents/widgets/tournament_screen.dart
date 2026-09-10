@@ -97,24 +97,7 @@ class _TournamentScreenState extends State<TournamentScreen> {
   }
 
   Future<void> _remove(PersonRecord person) async {
-    final entry = _group!.entries[_group!.indexOf(person.id)];
     await _store.saveTournament(_group!.withoutPerson(person.id));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${person.name} removed from group'),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () => unawaited(
-            _run(() async {
-              if (_group != null) {
-                await _store.saveTournament(_group!.withEntry(entry));
-              }
-            }),
-          ),
-        ),
-      ),
-    );
   }
 
   @override
