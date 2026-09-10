@@ -212,6 +212,8 @@ class TreeBuildConfig {
   final int maxEvalLossCp;
 
   // ── Opponent-move selection (constant at every depth) ──
+  /// Explicit bounded database exploration; Pure remains exhaustive by default.
+  final bool boundedDatabase;
   final int oppMaxChildren;
   final double oppMassTarget;
 
@@ -521,6 +523,7 @@ class TreeBuildConfig {
     this.buildMode = BuildMode.stockfishExpectimax,
     this.evalDepth = kDefaultGenerationEvalDepth,
     this.engineThreads = 0,
+    this.boundedDatabase = false,
     this.ourMultipv = 4,
     this.maxEvalLossCp = 50,
     this.oppMaxChildren = 4,
@@ -613,6 +616,7 @@ class TreeBuildConfig {
       evalDepth:
           (json['eval_depth'] as num?)?.toInt() ?? kDefaultGenerationEvalDepth,
       engineThreads: (json['engine_threads'] as num?)?.toInt() ?? 0,
+      boundedDatabase: json['bounded_database'] as bool? ?? false,
       ourMultipv: (json['our_multipv'] as num?)?.toInt() ?? 4,
       maxEvalLossCp: (json['max_eval_loss_cp'] as num?)?.toInt() ?? 50,
       oppMaxChildren: (json['opp_max_children'] as num?)?.toInt() ?? 4,
@@ -946,6 +950,7 @@ class TreeBuildConfig {
     'build_mode': buildMode.name,
     'eval_depth': evalDepth,
     'engine_threads': resolvedEngineThreads,
+    'bounded_database': boundedDatabase,
     'our_multipv': ourMultipv,
     'max_eval_loss_cp': maxEvalLossCp,
     'opp_max_children': oppMaxChildren,
@@ -1081,6 +1086,7 @@ class TreeBuildConfig {
     BuildMode? buildMode,
     int? evalDepth,
     int? engineThreads,
+    bool? boundedDatabase,
     int? ourMultipv,
     int? maxEvalLossCp,
     int? oppMaxChildren,
@@ -1163,6 +1169,7 @@ class TreeBuildConfig {
       buildMode: buildMode ?? this.buildMode,
       evalDepth: evalDepth ?? this.evalDepth,
       engineThreads: engineThreads ?? this.engineThreads,
+      boundedDatabase: boundedDatabase ?? this.boundedDatabase,
       ourMultipv: ourMultipv ?? this.ourMultipv,
       maxEvalLossCp: maxEvalLossCp ?? this.maxEvalLossCp,
       oppMaxChildren: oppMaxChildren ?? this.oppMaxChildren,

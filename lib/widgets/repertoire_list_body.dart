@@ -341,7 +341,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       leading: const Icon(Icons.library_books_outlined, size: 22),
       title: Text(name, style: AppTextStyles.bodyStrong),
       subtitle: Text(
-        '$chapterCount chapters · Modified $timeAgo',
+        '$chapterCount chapter${chapterCount == 1 ? '' : 's'} · Modified $timeAgo',
         style: AppTextStyles.caption,
       ),
       onTap: () => widget.onRepertoireSelected != null

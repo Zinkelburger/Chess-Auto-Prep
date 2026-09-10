@@ -255,7 +255,12 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     // A course chapter picked inside a file opens that file: the outline
     // already shows the chapters.
     if (pick != null && mounted) {
-      await _controller.setRepertoire(pick.chapter);
+      final picked = pick.chapter;
+      final chapters = p.extension(picked.filePath).toLowerCase() == '.pgn'
+          ? [picked]
+          : await StorageFactory.instance.listChapters(picked.filePath);
+      if (!mounted || chapters.isEmpty) return;
+      await _controller.setRepertoire(chapters.first);
     }
     _reclaimFocus();
   }

@@ -27,10 +27,12 @@ Future<void> _pump(WidgetTester tester, PositionGroup entry) =>
     );
 
 void main() {
-  testWidgets('unscored course paths are labelled as lines', (tester) async {
+  testWidgets('unscored course variations are labelled as paths', (
+    tester,
+  ) async {
     await _pump(tester, _entry(scored: false));
 
-    expect(find.text('3 lines · 75%'), findsOneWidget);
+    expect(find.text('3 paths · 75%'), findsOneWidget);
     expect(find.textContaining('games'), findsNothing);
   });
 

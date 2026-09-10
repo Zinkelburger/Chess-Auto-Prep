@@ -1,4 +1,5 @@
 import 'package:dartchess/dartchess.dart';
+import '../../../models/build_tree_node.dart';
 
 import '../../../services/eval/db_move_list.dart';
 import '../../../services/generation/fen_map.dart';
@@ -13,6 +14,7 @@ class PositionMove {
     this.evalCp,
     this.expectedCp,
     this.chessDb,
+    this.pvSan = const [],
   });
   final String san;
   final String uci;
@@ -21,18 +23,20 @@ class PositionMove {
   final int? evalCp;
   final int? expectedCp;
   final DbMove? chessDb;
+  final List<String> pvSan;
 }
 
 List<PositionMove> positionMoves(
   String fen, {
   FenMap? database,
+  BuildTreeNode? Function(String fen)? liveNodeAt,
   bool playAsWhite = true,
   DbMoveList chessDb = DbMoveList.empty,
   bool sortByChessDb = false,
 }) {
   final position = tryParseFen(fen);
   if (position == null) return const [];
-  final parent = database?.getCanonical(fen);
+  final parent = liveNodeAt?.call(fen) ?? database?.getCanonical(fen);
   final rows = <PositionMove>[];
   for (final entry in position.legalMoves.entries) {
     for (final to in entry.value.squares) {
@@ -50,7 +54,10 @@ List<PositionMove> positionMoves(
             .where((n) => n.moveSan == san)
             .firstOrNull;
         // Also find standalone probes: their root may not be linked to parent.
-        final node = database?.getCanonical(after.fen) ?? child;
+        final node =
+            liveNodeAt?.call(after.fen) ??
+            database?.getCanonical(after.fen) ??
+            child;
         final expected = node != null && node.hasExpectimax
             ? expectedCpFromWinProb(node.expectimaxValue) *
                   (playAsWhite ? 1 : -1)
@@ -63,6 +70,9 @@ List<PositionMove> positionMoves(
                 ? node.evalForUs(true)
                 : null,
             expectedCp: expected,
+            pvSan: node == null
+                ? const []
+                : uciPvToSan(node.fen, node.enginePv, maxMoves: 24),
             chessDb: chessDb.moves
                 .where((m) => m.uci == uci || m.san == san)
                 .firstOrNull,
@@ -73,9 +83,10 @@ List<PositionMove> positionMoves(
   }
   int? score(PositionMove row) => sortByChessDb
       ? row.chessDb?.stmCp
-      : row.expectedCp == null
+      : (row.expectedCp ?? row.evalCp) == null
       ? null
-      : row.expectedCp! * (position.turn == Side.white ? 1 : -1);
+      : (row.expectedCp ?? row.evalCp)! *
+            (position.turn == Side.white ? 1 : -1);
   rows.sort((a, b) {
     final x = score(a), y = score(b);
     if (x == null && y != null) return 1;

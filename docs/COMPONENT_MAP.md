@@ -210,7 +210,7 @@ Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 ### Repertoire screen layout (right pane + bottom pane, redesigned June 2026)
 
-Design principles (Chessable-style, Aug 2026): **what the repertoire contains** on the left (the outline: folders → chapters → lines, a real file structure), **the position** in the middle (board + PGN editor; no eval bar by design), **evidence about the position** on the right (Analysis panel: Engine | Database | Tree). **Bottom pane** = job output (Findings, Jobs/config) — collapsed by default. Generation and audit config are inline in the Jobs tab; the outline's chapter menu ("Generate lines into this chapter…") switches to that chapter, puts the board on the chapter's shared root, and opens it.
+Design principles (Chessable-style, Aug 2026): **what the repertoire contains** on the left (the outline: folders → chapters → lines, a real file structure), **the position** in the middle (board + PGN editor; no eval bar by design), **evidence about the position** on the right (Analysis panel: Engine | Database | Generate). **Bottom pane** = job output (Findings, Jobs/config) — collapsed by default. Generation and audit config are inline in the Jobs tab; the outline's chapter menu ("Generate lines into this chapter…") switches to that chapter, puts the board on the chapter's shared root, and opens it.
 
 ```
 RepertoireScreen (composition root — wires controllers to widgets)
@@ -229,17 +229,17 @@ RepertoireScreen (composition root — wires controllers to widgets)
   │          | Board (square, annotated)
   │          | PGN editor (PgnWithAnalysisPane) + NavControls
   │          | Analysis panel (resizable, collapsible → "Analysis" strip)
-  │              TabBar: Engine | Database | Tree
+  │              TabBar: Engine | Database | Generate
   │                Engine: InlineEngineBar over InlineExpectimaxBar
-  │                Database: RepertoireDatabasePane (live Lichess explorer)
-  │                Tree: RepertoireTreePane (OpeningTreeWidget, optional explorer split)
+  │                Database: RepertoireDatabasePane (Repertoire / Opening explorer source selector)
+  │                Generate: GeneratePositionPane (local analysis, live scores, single-move PV)
   │       Outline column content = RepertoireOutlinePanel (default)
   │          | line-metrics view (old RepertoireLinesBrowser: coverage/ease/coherence/traps, via
   │            the header's metrics button, "Back to chapters" returns)
   │       BottomPane (collapsed by default, full width): Findings | Jobs
   │
   ├─ Compact (<960px):
-  │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN (with engine bars) | Chapters | Tree
+  │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN (with engine bars) | Chapters | Database | Generate
   │
   ├─ Inline config (in Jobs tab): Actions ▾ → Generate from here… / outline chapter menu → RepertoireGenerationTab;
   │     Audit button / chapter menu → AuditConfigPanel
@@ -277,8 +277,20 @@ The quiz uses `services/eco_trie.dart` to identify opening forks and `services/p
 
 **Line metrics view (outline column):** The old `RepertoireLinesBrowser` (search/filter/sort, coverage/ease/coherence columns, gap buttons) plus the Lines/Traps segmented toggle, reached from the outline header's metrics button; "Back to chapters" returns to the outline. The Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges, and expandable detail cards. `BoardPreviewController` is threaded through; a `FloatingBoardPreview` overlay is mounted in the view's `Stack`.
 
-**Tree tab (analysis panel):** The Tree tab shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **lines** when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
+**Database tab (analysis panel):** The Repertoire source shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **paths** (including variations) when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
 
+The separate Tree tab has been removed. Database offers the repertoire tree and
+live opening explorer through a compact source switcher. Copying moves stays in
+the PGN editor context menu. Repertoire selection uses compact searchable rows:
+clicking a repertoire opens it directly (Builder opens its first file with the
+full outline available), while Browse chapters is an optional action.
+
+Generate starts bounded exploration: the union of Stockfish candidates and Maia
+moves covering the requested probability at every position. Compact controls
+start at four engine moves and 60% Maia coverage. Scores update during expansion;
+completed-position and depth counters stay visible. A move row's play-circle
+evaluates that move once and saves its engine PV without tree generation or an
+invented expected score. See [bounded database exploration](ALGORITHM.md#bounded-local-database-exploration).
 
 **"Generate from here" button:** In the nav controls bar, a `+` icon button opens the generation dialog pre-seeded with the current position FEN.
 
