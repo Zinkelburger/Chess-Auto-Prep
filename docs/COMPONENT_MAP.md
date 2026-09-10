@@ -763,8 +763,8 @@ removed. The master-practice comparison button is removed from Tactics.
 Each designated book shows its verdict, with the played and book moves emphasized.
 The Book panel offers searchable chapter and line choices, previous/next lines,
 and Matching lines / Chapter contents. An in-book game can still browse its book.
-Choosing another opening on the first own move is neutral: the game must first
-enter the designated book (including through a later transposition) before a
+Choosing another opening on move one is neutral for either side: the game must
+match the first full opening pair (or enter through a later transposition) before a
 departure counts. Different-opening games are excluded from review mistakes,
 gaps and game moments, and never labeled fully in book.
 Comparison uses positions across move orders; the book reader uses the book's

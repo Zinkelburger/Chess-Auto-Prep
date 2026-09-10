@@ -7,7 +7,7 @@
 /// against real games:
 ///
 /// * **Choosing another opening is not a repertoire mistake.** Matching
-///   must reach at least our first move in the book. Black playing c5 instead
+///   must reach the first full opening pair in the book. Black playing c5 instead
 ///   of an e5 repertoire has not entered that repertoire merely by sharing
 ///   White's e4. A later transposition into it still establishes membership.
 /// * **A book is a set of positions, not of move orders.** Every root-to-leaf
@@ -102,8 +102,8 @@ class DeviationReport {
   /// a deviation from the repertoire, but not an unknown move.
   final bool mentionedAlternative;
 
-  /// The game never entered this book through our first opening choice.
-  /// Sharing the initial position (or White's move in a Black book) is not
+  /// The game never matched the first full opening pair of this book.
+  /// Sharing the initial position or only White's first move is not
   /// evidence that the player intended to play this repertoire.
   final bool differentOpening;
 
@@ -341,7 +341,7 @@ class GameDeviationService {
       expectedSans: diverged ? expected.values.toList() : const [],
       lineName: lineName,
       mentionedAlternative: mentioned,
-      differentOpening: diverged && matched < (meWhite ? 1 : 2),
+      differentOpening: diverged && matched < 2,
     );
   }
 
