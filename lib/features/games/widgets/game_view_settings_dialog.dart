@@ -137,6 +137,13 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
             icon: Icons.grid_on_outlined,
             children: [
               SettingsSwitchTile(
+                label: 'Autosave PGN edits',
+                description:
+                    'Save comments and variations automatically. Turn off to use the Save button.',
+                value: _prefs.autoSave,
+                onChanged: (v) => _update(_prefs.copyWith(autoSave: v)),
+              ),
+              SettingsSwitchTile(
                 label: 'Auto-detect ECO and opening',
                 description:
                     'Identify openings in every game and save missing ECO and Opening tags to the PGN. Existing tags are kept.',

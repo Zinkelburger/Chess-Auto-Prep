@@ -4,6 +4,10 @@
 part of '../pgn_viewer_widget.dart';
 
 mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
+  final _annotationKey = GlobalKey<PgnAnnotationPanelState>();
+
+  void _flushPendingComments() => _annotationKey.currentState?.flush();
+
   // ── Move comment editing ──
 
   int? _editingCommentIndex;
@@ -109,6 +113,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
     }
 
     return PgnAnnotationPanel(
+      key: _annotationKey,
       targetKey: targetKey,
       moveLabel: label,
       nags: nags,

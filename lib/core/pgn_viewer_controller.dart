@@ -23,7 +23,8 @@ import '../services/default_pgn_service.dart';
 import '../services/pgn_document_patch.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
-import '../services/pgn_parsing_service.dart' show movetextStart;
+import '../services/pgn_parsing_service.dart'
+    show movetextStart, extractHeaders;
 import '../services/storage/storage_factory.dart';
 import 'pgn/pgn_viewer_handle.dart';
 import 'pgn/solitaire_controller.dart';
@@ -389,6 +390,7 @@ class PgnViewerController extends ChangeNotifier
 
   String? collectionsDir;
 
+  @override
   String? errorMessage;
 
   int get currentPly => pgnWidgetController.mainLineIndex;
@@ -516,6 +518,7 @@ class PgnViewerController extends ChangeNotifier
   /// single-game handoffs (Games page "Review"): a leftover slice there only
   /// hides the target game and confuses the count display.
   Future<void> loadFile(String path, {bool restoreSavedSlice = true}) async {
+    if (!canReplaceCollection()) return;
     unawaited(saveSession());
     final loadEpoch = ++_loadEpoch;
     _restoringSession = false;
@@ -642,6 +645,7 @@ class PgnViewerController extends ChangeNotifier
   /// reads it during the build this load triggers, which is the only moment
   /// the freshly parsed game and the cursor request meet.
   Future<void> loadPgnContent(String content, {String? initialFen}) async {
+    if (!canReplaceCollection()) return;
     unawaited(saveSession());
     final loadEpoch = ++_loadEpoch;
     _restoringSession = false;
@@ -700,6 +704,7 @@ class PgnViewerController extends ChangeNotifier
   /// the way back in) and the slice persisted on disk for this file, so
   /// reopening it still restores what you were looking at.
   void closeFile() {
+    if (!canReplaceCollection()) return;
     unawaited(saveSession());
     unawaited(_sessions.close());
     _restoringSession = false;
@@ -798,7 +803,7 @@ class PgnViewerController extends ChangeNotifier
     if (changed) {
       _markCollectionChanged();
       notifyListeners();
-      await doPersistMetadata();
+      if (autoSave) await doPersistMetadata();
     }
   }
 

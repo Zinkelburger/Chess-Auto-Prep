@@ -9,6 +9,7 @@ void main() {
   test('simple defaults and explicit display choices survive reload', () async {
     final initial = await GameViewPreferences.load();
     expect(initial.playback, isFalse);
+    expect(initial.autoSave, isTrue);
     expect(initial.engine, isFalse);
     expect(initial.graph, isFalse);
     await initial
@@ -18,6 +19,7 @@ void main() {
           graph: false,
           speed: 3,
           autoNext: true,
+          autoSave: false,
         )
         .save();
     final restored = await GameViewPreferences.load();
@@ -26,6 +28,7 @@ void main() {
     expect(restored.graph, isFalse);
     expect(restored.speed, 3);
     expect(restored.autoNext, isTrue);
+    expect(restored.autoSave, isFalse);
     await const GameViewPreferences().save();
     expect((await GameViewPreferences.load()).playback, isFalse);
   });

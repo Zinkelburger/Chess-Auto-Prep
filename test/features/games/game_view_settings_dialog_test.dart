@@ -32,6 +32,11 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(find.text('Live engine controls'), findsNothing);
+    await tester.ensureVisible(find.text('Autosave PGN edits'));
+    await tester.tap(find.text('Autosave PGN edits'));
+    await tester.pumpAndSettle();
+    expect(prefs.autoSave, isFalse);
+    await tester.ensureVisible(find.text('Playback controls'));
     await tester.tap(find.text('Playback controls'));
     await tester.pumpAndSettle();
     expect(prefs.playback, isTrue);
@@ -49,6 +54,7 @@ void main() {
     expect(prefs.graph, isFalse);
     expect(prefs.engine, isFalse);
     expect(prefs.playback, isFalse);
+    expect(prefs.autoSave, isTrue);
     expect(tester.takeException(), isNull);
   });
 }

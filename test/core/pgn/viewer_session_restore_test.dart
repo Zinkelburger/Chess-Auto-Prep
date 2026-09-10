@@ -63,6 +63,20 @@ void main() {
   });
 
   test(
+    'opening detection never writes staged edits in manual-save mode',
+    () async {
+      final c = make()..setAutoSave(false);
+      final original = await File(path).readAsString();
+      await c.loadFile(path);
+      expect(await File(path).readAsString(), original);
+      expect(c.hasUnsavedChanges, isTrue);
+      expect(c.allGames.first.headers['ECO'], isNotEmpty);
+      expect(await c.saveChanges(), isTrue);
+      expect(await File(path).readAsString(), contains('[ECO "'));
+    },
+  );
+
+  test(
     'restart restores file, date slice, game 37 and move; reordered files keep identity',
     () async {
       final handle = _Handle();

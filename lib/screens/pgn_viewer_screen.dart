@@ -203,11 +203,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _controller.addListener(_onControllerUpdate);
     MyRepertoireSettings.instance.addListener(_onRepertoireDesignationsChanged);
     windowManager.addListener(this);
+    unawaited(windowManager.setPreventClose(true));
     // Leaving the Book tab hands the board back to the game: the tab you are
     // reading owns the board, so flipping between them is a comparison of the
     // same position rather than two viewers fighting over one board.
     _tabController.addListener(_onSideTabChanged);
-    unawaited(_loadViewPreferences());
+    final preferencesReady = _loadViewPreferences();
     unawaited(_controller.loadRecentFiles());
     unawaited(_controller.loadCollections());
     unawaited(_controller.loadSolitaireSettings());
@@ -220,7 +221,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         // The screen may have been created by the very mode switch that set
         // the pending file (listener not registered yet) — consume it now.
         _consumePendingViewerFile(appState);
-        unawaited(_controller.restoreLastSession());
+        unawaited(
+          preferencesReady.then((_) async {
+            if (mounted) await _controller.restoreLastSession();
+          }),
+        );
       }
     });
   }
@@ -246,6 +251,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     setState(() => _viewPreferences = saved);
     _controller.setAutoPlaySpeed(saved.speed);
     _controller.setAutoNextGame(saved.autoNext);
+    _controller.setAutoSave(saved.autoSave);
     _controller.setAutoDetectOpenings(saved.autoDetectOpenings);
   }
 
@@ -260,6 +266,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!value.playback) _controller.stopAutoPlay();
     _controller.setAutoPlaySpeed(value.speed);
     _controller.setAutoNextGame(value.autoNext);
+    _controller.setAutoSave(value.autoSave);
     _controller.setAutoDetectOpenings(value.autoDetectOpenings);
     unawaited(value.save());
   }
@@ -430,7 +437,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// whose engine review is still running — you left to let it finish.
   void _dropHandedOffGame() {
     if (!_singleGameFocus || _analysisController.isAnalyzing) return;
-    _closeFile();
+    unawaited(_closeFile());
   }
 
   Future<void> _openFromHandoff(OpenPgnViewer handoff) async {
@@ -689,6 +696,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void dispose() {
     _appState?.removeListener(_onAppStateChanged);
     windowManager.removeListener(this);
+    unawaited(windowManager.setPreventClose(false));
     MyRepertoireSettings.instance.removeListener(
       _onRepertoireDesignationsChanged,
     );
@@ -700,6 +708,23 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _tabController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  bool _confirmingWindowClose = false;
+
+  @override
+  Future<void> onWindowClose() async {
+    if (_confirmingWindowClose || !await windowManager.isPreventClose()) return;
+    _confirmingWindowClose = true;
+    try {
+      if (!await _confirmLeavePgn()) return;
+      await _controller.flushPendingMetadata();
+      await _controller.saveSession();
+      await windowManager.setPreventClose(false);
+      await windowManager.close();
+    } finally {
+      _confirmingWindowClose = false;
+    }
   }
 
   @override
@@ -726,6 +751,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   Future<void> _pastePgn() async {
+    if (!await _confirmLeavePgn()) return;
     _singleGameFocus = false;
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (!mounted) return;
@@ -754,6 +780,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     bool notifySliceRestore = true,
     bool restoreSavedSlice = true,
   }) async {
+    if (!await _confirmLeavePgn()) return;
     await _controller.loadFile(path, restoreSavedSlice: restoreSavedSlice);
     if (!mounted) return;
     final error = _controller.errorMessage;
@@ -776,7 +803,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// longer exists — and the side panel returns to the Game tab, since Line
   /// and Analysis have nothing to say about an empty viewer.
   @override
-  void _closeFile() {
+  Future<void> _closeFile() async {
+    if (!await _confirmLeavePgn() || !mounted) return;
     _controller.closeFile();
     setState(() {
       _editMode = false;
@@ -786,6 +814,74 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     });
     if (_tabController.index != _kGameTab) _tabController.animateTo(_kGameTab);
     _reclaimFocus();
+  }
+
+  @override
+  Future<bool> _savePgn() async {
+    _pgnWidgetController.flushPendingComments();
+    if (_controller.filePath != null) {
+      return _controller.saveChanges();
+    }
+    final games = _controller.allGames;
+    if (games.isEmpty) return false;
+    final snapshot = _controller.snapshotForSave();
+    final content =
+        '${_controller.collectionPreamble}\n\n${snapshot.values.join('\n\n')}\n';
+    try {
+      final uri = await FilePicker.saveFile(
+        dialogTitle: 'Save PGN',
+        fileName: 'games.pgn',
+        type: FileType.custom,
+        allowedExtensions: ['pgn'],
+        bytes: utf8.encode(content),
+      );
+      if (uri == null || !mounted || !identical(games, _controller.allGames)) {
+        return false;
+      }
+      _controller.adoptSavedCopy(uri.toFilePath(), snapshot);
+      return !_controller.hasUnsavedChanges;
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(context, 'Could not save PGN: $e', isError: true);
+      }
+      return false;
+    }
+  }
+
+  Future<bool> _confirmLeavePgn() async {
+    _pgnWidgetController.flushPendingComments();
+    if (!_controller.hasUnsavedChanges) return true;
+    if (_controller.autoSave && _controller.filePath != null) {
+      return _controller.saveChanges();
+    }
+    if (!mounted) return false;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Save PGN changes?'),
+        content: const Text(
+          'This collection has unsaved comments or variations.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'discard'),
+            child: const Text('Discard'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, 'save'),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || choice == null) return false;
+    if (choice == 'save') return _savePgn();
+    _controller.discardChanges();
+    return true;
   }
 
   void _showPendingSliceRestoreSnackBar() {
@@ -1396,6 +1492,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   @override
   void _toggleEditMode() {
     if (!mounted || _onReferenceTab) return;
+    _pgnWidgetController.flushPendingComments();
     _showPanel(PgnWorkspace.game);
     setState(() => _editMode = !_editMode);
   }
