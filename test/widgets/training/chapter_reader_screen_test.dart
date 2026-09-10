@@ -76,7 +76,12 @@ void main() {
           .widget<ChessBoardWidget>(find.byType(ChessBoardWidget))
           .position
           .fen;
-      await tester.tap(find.text('2.Nf3'));
+      final previewMove = find.descendant(
+        of: find.byTooltip('Preview comment move'),
+        matching: find.text('Nf3', findRichText: true),
+      );
+      expect(previewMove, findsOneWidget);
+      await tester.tap(previewMove);
       await tester.pumpAndSettle();
       Position expected = Chess.initial;
       for (final san in ['e4', 'c5', 'Nf3']) {

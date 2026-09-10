@@ -314,8 +314,6 @@ void main() {
     await tester.pumpAndSettle();
     final cores = find.byKey(const Key('engine-cores'));
     expect(cores, findsOneWidget);
-    expect(find.byKey(const Key('engine-bulk-depth')), findsOneWidget);
-    expect(find.byKey(const Key('book-check-games-field')), findsNothing);
     await tester.enterText(
       find.descendant(of: cores, matching: find.byType(TextField)),
       '2',

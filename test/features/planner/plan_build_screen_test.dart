@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../support/board_engine_fixture.dart';
+
 /// The planner screen end to end with a scripted book and database: start,
 /// answer a fork, split a tabiya, review the chapters, commit.
 const _tsv = '''
@@ -116,7 +118,10 @@ const _blackGames = '''
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    useScriptedBoardEngine();
+  });
 
   /// Pumps the host and opens the planner; the route's result lands in
   /// [holder] when the planner pops.

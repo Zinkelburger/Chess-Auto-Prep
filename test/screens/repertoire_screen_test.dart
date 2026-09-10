@@ -25,6 +25,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/repertoire_screen.dart';
 
+import '../support/board_engine_fixture.dart';
+
 class _TestPaths extends PathProviderPlatform with MockPlatformInterfaceMixin {
   _TestPaths(this.root);
   final String root;
@@ -118,6 +120,7 @@ void main() {
   late Directory storageRoot;
   late PathProviderPlatform originalPaths;
   setUp(() async {
+    useScriptedBoardEngine();
     SharedPreferences.setMockInitialValues({});
     storageRoot = await Directory.systemTemp.createTemp(
       'repertoire_screen_storage',

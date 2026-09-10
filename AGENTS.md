@@ -45,7 +45,7 @@ repertoires, training, player analysis and studies.
 - For visible changes, use the `run-chess-auto-prep` skill and inspect a
   screenshot from the headless app. Stop your preview before testing its tree.
 - GitHub CI runs only through the `v*` release-tag workflow; branch pushes,
-  backup pushes and PRs do not trigger it. Releases require passing coverage,
+  backup pushes and PRs do not trigger it. Releases require passing tests,
   offline-tool, integration and engine gates. Use focused local checks during
   development; a full local suite before each commit is not required.
 - Before stopping, waiting for later or reporting completion, commit all

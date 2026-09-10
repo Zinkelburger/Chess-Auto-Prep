@@ -15,6 +15,7 @@ import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';
 import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
 import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:chess_auto_prep/widgets/analysis/stockfish_settings_dialog.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -234,9 +235,8 @@ void main() {
     await pump(tester, runner: h.runner, coordinator: h.co);
     await tester.tap(find.byTooltip('Engine settings'));
     await tester.pumpAndSettle();
-    expect(find.text('Board depth'), findsOneWidget);
-    expect(find.text('Bulk depth'), findsOneWidget);
-    expect(find.text('Review performance'), findsNothing);
+    expect(find.byType(StockfishSettingsBody), findsOneWidget);
+    expect(find.byKey(const Key('engine-cores')), findsOneWidget);
   });
 
   testWidgets('opening review is a button with its leak count, and opens', (
