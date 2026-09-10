@@ -45,6 +45,7 @@ void main() {
     expect(after.data.minY, before.data.minY);
     expect(after.data.maxY, before.data.maxY);
     expect(after.data.maxX, 100);
+    expect(after.data.lineBarsData, hasLength(1));
     expect(tester.getSize(find.byType(LineChart)), beforeSize);
     expect(scroll.position.pixels, 200);
     expect(after.duration, Duration.zero);

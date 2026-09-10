@@ -193,8 +193,44 @@ main.dart
 | `pgnViewer` | `PgnViewerScreen` | Standalone game PGN + inline engine |
 | `study` | `StudyScreen` | Multi-chapter studies |
 | `engineTournament` | `EngineTournamentScreen` | Engine-vs-engine matches, crosstable, per-game PGN |
+| `bughouse` | `BughouseScreen` | Two-board analysis and matches |
+| `databases` | `DatabasesScreen` | Local data inventory, downloads and storage |
 
 Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens on hover or click with a grouped, text-only menu (Train / Build / Analyse / Lab / Data, order in `kAppModeGroups`); switching views uses this menu, with no Ctrl/Cmd+number bindings.
+
+#### View composition audit (September 2026)
+
+Count independently implemented workflows that duplicate an existing reader,
+selector or analysis surface; do not count every extracted widget as a new view.
+Smaller widgets with one owner reduce maintenance cost. This audit records the
+specific duplicates reviewed in this pass, not a claim that every screen is
+finished. Update these rows when adding or retiring a route or parallel renderer.
+
+| View | Duplicate surfaces retired in this pass | Canonical organization / retained feature surfaces |
+|---|---:|---|
+| Repertoire trainer | 4 (five bespoke reader/phase surfaces → one phase surface) | Library → browser → session/results. `TrainingPhasePanel` uses shared PGN movetext; Read opens PGN Viewer. Mistakes is a searchable panel, not another board/reader. Chapter selection is optional scope. |
+| Repertoire builder | 1 | Outline + board/editor + Engine/Database evidence. Repertoire tree and opening explorer are Database sources; jobs/config are one bottom workspace. Whole-repertoire opening bypasses the forced chapter gate. |
+| Tactics | 1 | Queue/browser → puzzle. Opening-review cards hand off to PGN Viewer; the nested book/game review dialog is removed. |
+| PGN Viewer | 0 | Owns reading, game navigation, analysis graph, collection filtering and book comparison. Book contents and matching lines use the same Book panel. |
+| Player analysis | 0 | Compact player selection → `PositionAnalysisWidget`; findings reuse `HolesReportPanel`. |
+| Study | 0 | Chapter sidebar + authoring board/movetext + engine. Study/chapter selection uses `showSearchablePicker`; reading and training hand off to their canonical views. |
+| Engine tournament | 0 | Results and Engine controls; setup reuses `TournamentSetupPanel`, games open PGN Viewer. |
+| Bughouse lab | 0 | Two boards and one contextual side panel. Variant positions, reserves and joint engine actions justify feature-owned presentation. |
+| Databases | 0 | One scrolling inventory of data sources; downloads and storage operations stay in their owning cards/dialogs. |
+
+List selection has three reusable forms: visible `ListSearchField` for a catalog,
+inline `ChoiceField` for a named choice, and `showSearchablePicker` where the
+anchor cannot contain an input. Add-existing repertoires and the tactics flaw-tag
+menu now search. Numeric values use `NumberStepper`; short fixed choices use
+segments. Action menus (copy, import, delete) are commands, not catalogs. New
+reading features should enter PGN Viewer rather than introduce another chess
+board + navigation + movetext implementation.
+
+The user's **ChessBook Discord Updates** note informed the line-scoped correction
+flow, preserving answers when leaving practice, searchable scope navigation and
+stable controls. Listudy was consulted for the guided/repetition flow. We reuse
+these interaction principles rather than importing an unrelated training model,
+predictive learnability score or mandatory daily quota.
 
 #### App bar conventions (unified June 2026)
 

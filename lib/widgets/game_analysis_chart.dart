@@ -249,18 +249,6 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                   ],
                 ),
                 lineBarsData: [
-                  // White advantage area (above zero)
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    curveSmoothness: 0.2,
-                    preventCurveOverShooting: true,
-                    color: Colors.transparent,
-                    barWidth: 0,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(show: false),
-                    aboveBarData: BarAreaData(show: false),
-                  ),
                   // Main eval line with area fill
                   LineChartBarData(
                     spots: spots,
