@@ -1,9 +1,19 @@
 import 'package:flutter/widgets.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 
 const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
+class _FailingPool extends StockfishPool {
+  _FailingPool() : super.fresh();
+  @override
+  Future<void> prepareForTreeBuild(int threadBudget) async {
+    throw StateError('Provisioning failed');
+  }
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +34,39 @@ void main() {
   tearDown(() {
     lifecycle.removeListener(countNotifications);
     lifecycle.resetForTest();
+  });
+
+  test(
+    'failed generation restores state and does not poison future toggles',
+    () async {
+      EngineLifecycle.testMode = false;
+      final board = BoardEngine(createConnection: () async => null);
+      final independent = EngineLifecycle.fresh(
+        pool: _FailingPool(),
+        board: board,
+      );
+      addTearDown(independent.dispose);
+      addTearDown(board.dispose);
+      await independent.toggleOn();
+      await expectLater(independent.enterGeneration(1), throwsStateError);
+      expect(independent.state, EngineState.idle);
+      await independent.toggleOff();
+      expect(independent.state, EngineState.off);
+      await independent.toggleOn();
+      expect(independent.state, EngineState.idle);
+    },
+  );
+
+  test('generation re-entry and resume preserve the original toggle', () async {
+    await lifecycle.toggleOff();
+    await lifecycle.enterGeneration(1);
+    await lifecycle.enterGeneration(1);
+    await lifecycle.toggleOn();
+    await lifecycle.resume();
+    expect(lifecycle.state, EngineState.generating);
+    await lifecycle.exitGeneration();
+    await lifecycle.resume();
+    expect(lifecycle.state, EngineState.off);
   });
 
   test('starts in off state', () {

@@ -510,7 +510,12 @@ are changed only while idle. FIFO admission does not preempt an existing long
 search: a queued job waits for completion or cancellation. This budget covers
 `EvalWorker` consumers, not external MCP processes, engine tournaments, Maia or
 Bughouse. It is not a total RAM cap: idle workers still retain their hash and
-network allocations. Generation still suspends interactive analysis explicitly.
+network allocations. Generation still suspends interactive analysis explicitly. Its transition is
+serialized; repeated entry preserves its original toggle preference, and
+failed provisioning restores the prior state without blocking later toggles. App resume cannot reopen board analysis
+during generation. The board API still accepts a FEN, so it does not supply
+the move history Stockfish needs to identify repetitions before that position.
+Retaining the hash does not reconstruct that history.
 
 The ordering follows the [Stockfish UCI documentation](https://official-stockfish.github.io/docs/stockfish-wiki/UCI-Protocol-and-Stockfish-Commands.html):
 `readyok` may arrive during a search and cannot acknowledge `stop`; `bestmove`
@@ -519,6 +524,13 @@ in [Lichess's ceval protocol](https://github.com/lichess-org/lila/blob/master/ui
 (current work survives until `bestmove`, with pending replacement work) and
 [Scid's engine communication](https://github.com/benini/scid/blob/github/tcl/enginecomm.tcl)
 (command/reply sequencing around stop and restart).
+
+On the mobile FFI fallback, `StockfishPackageConnection` accounts for
+`package:stockfish` 1.8.1's [dispose implementation](https://github.com/ArjanAswal/stockfish/blob/master/lib/src/stockfish.dart):
+quit is a stdin write that requires the ready state. An adapter disposed during
+startup cancels its waiters immediately and quits a late successful start;
+error/disposed states require no quit write. Adapter lifecycle tests inject the
+package engine, so desktop unit tests do not need its native library.
 
 Regression checks live in `test/services/engine/{board_engine,eval_worker_protocol,engine_search_budget,stockfish_pool}_test.dart`,
 `test/services/analysis_service_test.dart`, and the actual pane widget tests in

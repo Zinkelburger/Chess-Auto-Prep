@@ -6,6 +6,7 @@ import 'engine_connection.dart';
 import 'engine_worker_slot.dart';
 import 'eval_worker.dart';
 import 'engine_search_budget.dart';
+import 'engine_serial_queue.dart';
 
 /// One process for interactive boards. Pausing retains its configured threads,
 /// hash and network; only leaving all boards or suspending releases the process.
@@ -27,7 +28,7 @@ class BoardEngine {
 
   final EngineWorkerSlot _slot;
   final Set<BoardEngineSession> _clients = {};
-  Future<void>? _tail;
+  var _queue = EngineSerialQueue();
   final Set<BoardEngineSession> _searchClients = {};
   final Map<BoardEngineSession, void Function(DiscoveryResult)> _progress = {};
   Object? _discoveryKey;
@@ -40,14 +41,7 @@ class BoardEngine {
 
   int get workerCount => _slot.hasWorker ? 1 : 0;
 
-  Future<T> _enqueue<T>(Future<T> Function() action) {
-    final tail = _tail;
-    final pending = tail == null
-        ? Future<T>.sync(action)
-        : tail.then((_) => action());
-    _tail = pending.then<void>((_) {}, onError: (Object _, StackTrace _) {});
-    return pending;
-  }
+  Future<T> _enqueue<T>(Future<T> Function() action) => _queue.run(action);
 
   Future<EvalWorker?> _ensure() => _slot.ensure(
     threads: EngineSettings.instance.cores,
@@ -217,7 +211,7 @@ class BoardEngine {
     _suspended = false;
     _clients.clear();
     _release();
-    _tail = null;
+    _queue = EngineSerialQueue();
   }
 }
 
