@@ -20,7 +20,7 @@ final _ecoExact = RegExp(r'^[A-E]\d{2}$');
 class HeaderFilters extends StatefulWidget {
   final SliceFilterController controller;
 
-  /// Use a single plus menu in the collection workspace; both hosts keep
+  /// Show direct common filters in the collection workspace; both hosts keep
   /// editable Field / Rule / Value rows.
   final bool simple;
 
@@ -41,6 +41,7 @@ class HeaderFilters extends StatefulWidget {
 
 class _HeaderFiltersState extends State<HeaderFilters> {
   late HeaderSuggestions _suggestions;
+  bool _showMore = false;
 
   SliceFilterController get controller => widget.controller;
 
@@ -159,24 +160,78 @@ class _HeaderFiltersState extends State<HeaderFilters> {
     if (field == 'Date') controller.setHeaderMode(index, MatchMode.after);
   }
 
-  Widget _buildAddButtons() => Align(
-    alignment: Alignment.centerLeft,
-    child: widget.simple
-        ? PopupMenuButton<String>(
-            tooltip: 'Add filter',
-            icon: const Icon(Icons.add),
-            onSelected: _addField,
-            itemBuilder: (_) => [
+  Widget _buildAddButtons() {
+    if (!widget.simple) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () => _addField(kPlayerHeaderField),
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Add condition'),
+        ),
+      );
+    }
+    const common = {
+      kPlayerHeaderField: Icons.person_outline,
+      'Event': Icons.emoji_events_outlined,
+      'Date': Icons.calendar_today_outlined,
+      'Result': Icons.flag_outlined,
+      'ECO': Icons.menu_book_outlined,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final entry in common.entries)
+              OutlinedButton.icon(
+                key: ValueKey('add-filter-${entry.key}'),
+                onPressed: () => _addField(entry.key),
+                icon: Icon(entry.value, size: 16),
+                label: Text(_fieldLabel(entry.key)),
+              ),
+            TextButton.icon(
+              key: const ValueKey('more-game-filters'),
+              onPressed: () {
+                if (!mounted) return;
+                setState(() => _showMore = !_showMore);
+              },
+              icon: Icon(
+                _showMore ? Icons.expand_less : Icons.expand_more,
+                size: 18,
+              ),
+              label: const Text('More filters'),
+            ),
+          ],
+        ),
+        if (_showMore) ...[
+          const SizedBox(height: 12),
+          ChoiceField<String>(
+            key: const ValueKey('additional-game-filter'),
+            value: null,
+            label: 'Add another filter',
+            hint: 'Search fields',
+            items: [
               for (final field in kHeaderFieldOptions)
-                PopupMenuItem(value: field, child: Text(_fieldLabel(field))),
+                if (!common.containsKey(field))
+                  ChoiceItem(
+                    value: field,
+                    label: _fieldLabel(field),
+                    searchText: '$field ${_fieldLabel(field)}',
+                  ),
             ],
-          )
-        : TextButton.icon(
-            onPressed: () => _addField(kPlayerHeaderField),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add condition'),
+            onChanged: (field) {
+              if (!mounted) return;
+              setState(() => _showMore = false);
+              _addField(field);
+            },
           ),
-  );
+        ],
+      ],
+    );
+  }
 
   Widget _buildRow(int index, {required bool wide}) {
     final row = controller.headerRows[index];

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/opening_catalog.dart';
 import '../theme/app_text_styles.dart';
 import 'chess_board_widget.dart';
+import 'common/list_search_field.dart';
 
 class OpeningSelection {
   const OpeningSelection({this.lines = const [], this.positionLine});
@@ -34,7 +35,7 @@ class OpeningPickerDialog extends StatefulWidget {
 
 class _OpeningPickerDialogState extends State<OpeningPickerDialog> {
   late final _loading = widget.openings ?? OpeningCatalog.load();
-  final _search = TextEditingController();
+  String _query = '';
   final _moves = TextEditingController();
   final _selected = <CatalogOpening>{};
   final _drafts = <CatalogOpening, String>{};
@@ -45,7 +46,6 @@ class _OpeningPickerDialogState extends State<OpeningPickerDialog> {
 
   @override
   void dispose() {
-    _search.dispose();
     _moves.dispose();
     super.dispose();
   }
@@ -126,17 +126,13 @@ class _OpeningPickerDialogState extends State<OpeningPickerDialog> {
               style: AppTextStyles.muted,
             ),
             const SizedBox(height: 12),
-            TextField(
+            ListSearchField(
               key: const ValueKey('opening-search'),
-              controller: _search,
+              hintText: 'Search ECO codes or opening names',
               autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'ECO code or opening name',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (_) {
-                if (mounted) setState(() {});
+              onChanged: (query) {
+                if (!mounted) return;
+                setState(() => _query = query);
               },
             ),
             const SizedBox(height: 12),
@@ -214,7 +210,7 @@ class _OpeningPickerDialogState extends State<OpeningPickerDialog> {
       if (!snapshot.hasData) {
         return const Center(child: CircularProgressIndicator());
       }
-      final words = _search.text.toLowerCase().trim().split(RegExp(r'\s+'));
+      final words = _query.toLowerCase().trim().split(RegExp(r'\s+'));
       final matches = snapshot.data!.where((entry) {
         final text = '${entry.eco} ${entry.name}'.toLowerCase();
         return words.every(text.contains);

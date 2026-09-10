@@ -82,6 +82,28 @@ void main() {
     },
   );
 
+  testWidgets(
+    'clearing the shared search restores results and keeps selection',
+    (tester) async {
+      OpeningSelection? result;
+      await _open(tester, (value) => result = value, filters: true);
+      await tester.enterText(
+        find.byKey(const ValueKey('opening-search')),
+        'queen',
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(Checkbox), findsOneWidget);
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Clear search'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Checkbox), findsNWidgets(3));
+      await tester.tap(find.text('Filter by selected ECO codes (1)'));
+      await tester.pumpAndSettle();
+      expect(result!.lines.single.eco, 'D00');
+    },
+  );
+
   testWidgets('invalid edits cannot become builder starts', (tester) async {
     OpeningSelection? result;
     await _open(tester, (value) => result = value);

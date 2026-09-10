@@ -637,8 +637,10 @@ The evaluation graph uses opaque near-white and near-black advantage fills
 on a charcoal plot background so both sides remain distinct.
 
 **Filter games** opens a normal **Filter** tab beside the board, using the app
-theme. Compact Player, Event, Year, Result and Opening buttons add a field and
-focus its value; More contains less common fields. Filter and Tree both offer
+theme. Outlined Player, Event, Date, Result and ECO buttons add a field and
+focus its value; **More filters** reveals a shared searchable `ChoiceField` for
+less common fields. A bordered filter surface separates conditions from the live
+results; the footer keeps **Show N games** as the teal primary action. Filter and Tree both offer
 **[Player] as White / as Black** when exactly one named player appears in at
 least 80% of the complete collection. Switching sides replaces the other side
 while retaining other filters; clicking the selected side clears it. Each player field takes one
@@ -678,15 +680,16 @@ two or more tabs; extra tabs can be closed and dragged into order, and Tab cycle
 only opened tabs. Readers stay mounted and preserve their cursors. The settings
 gear opens view preferences.
 
-The Filter workspace uses one **+** menu to add a Field / Rule / Value row,
+The Filter workspace uses direct labelled buttons to add a Field / Rule / Value row,
 including **ECO** (code or prefix) and **Opening** (name). Date rules use
 **After** / **Before**, with an explicit note that the entered year/date is
 included; existing saved date bounds keep their meaning. Even a filter matching
 all games is restored.
 
-**Choose ECO openings…** uses `widgets/opening_picker_dialog.dart` and
+**Browse openings by name or ECO** uses `widgets/opening_picker_dialog.dart` and
 `services/opening_catalog.dart` to browse the bundled opening TSVs, preserving
-multiple named lines per ECO code. Selection survives searches. The preview
+multiple named lines per ECO code. Its search uses the common `ListSearchField`
+with a magnifier, outlined input and clear action. Selection survives searches. The preview
 supports legal board moves, editable SAN, undo, reset and board flip.
 **Filter by selected ECO codes** replaces existing ECO rows with one exact/OR
 condition and preserves other filters. **Use preview position** instead supplies

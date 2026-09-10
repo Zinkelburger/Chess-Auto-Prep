@@ -33,6 +33,7 @@ Reuse these widgets (paths relative to `lib/`):
 
 | Need | Use |
 |---|---|
+| Search a list or catalog | `ListSearchField` in `widgets/common/list_search_field.dart` |
 | Labelled number | `InlineStat` / `StackedStat` in `widgets/common/stat_display.dart` |
 | Confirmation | `confirmAction` in `widgets/common/confirm_dialog.dart` |
 | Name with validation | `showNameEntryDialog` in `widgets/common/name_entry_dialog.dart` |
@@ -40,6 +41,13 @@ Reuse these widgets (paths relative to `lib/`):
 | Set a whole number | `NumberStepper` in `widgets/common/number_stepper.dart`, never a fixed numeric menu |
 | Findings report | `HolesReportPanel` in `features/holes/widgets/holes_report_panel.dart` |
 | Threshold, disclosure, visible cap | `features/audit/widgets/hunt_controls.dart` |
+
+Before creating a control, check this table and `lib/widgets/common/`. Extend
+an existing control when the behavior is shared. Search stays a visible input
+with a magnifier and clear action. Common filters use labelled direct controls;
+less common fields use a searchable `ChoiceField` behind a labelled disclosure.
+Use surface separation and title/body weights to group controls, and reserve the
+strongest filled action for applying or completing the task.
 
 ## Keyboard shortcuts
 
