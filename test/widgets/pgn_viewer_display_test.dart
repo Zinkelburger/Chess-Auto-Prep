@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/core/app_history.dart';
+import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 import 'package:chess_auto_prep/screens/pgn_viewer_screen.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_opening_label.dart';
@@ -54,6 +56,64 @@ void main() {
     });
   });
   tearDown(() => EngineLifecycle.instance.resetForTest());
+
+  testWidgets(
+    'Back restores the live reading cursor after another viewer visit',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final app = AppState();
+      final history = AppHistory(app);
+      addTearDown(app.dispose);
+      addTearDown(history.dispose);
+      app.setMode(AppMode.pgnViewer);
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: app),
+            ChangeNotifierProvider.value(value: history),
+          ],
+          child: const MaterialApp(home: PgnViewerScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 500)),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      final reader = tester
+          .widget<PgnViewerWidget>(find.byType(PgnViewerWidget))
+          .controller!;
+      expect(reader.mainLineIndex, 1);
+      final previousFen = reader.currentFen;
+
+      app.setMode(AppMode.tactics);
+      await tester.pumpAndSettle();
+      app.setMode(AppMode.pgnViewer);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      expect(reader.mainLineIndex, 2);
+
+      await tester.runAsync(() async {
+        history.popTo(1);
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pumpAndSettle();
+
+      expect(reader.mainLineIndex, 1);
+      expect(reader.currentFen, previousFen);
+      expect(history.length, 2);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets(
     'Actions toggles opening details and enters a clear comment editor',

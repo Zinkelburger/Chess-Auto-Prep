@@ -756,7 +756,7 @@ class PgnViewerController extends ChangeNotifier
       // The reader may keep the same PGN widget (and therefore skip parsing)
       // when two visits show identical game text. Explicitly restore its
       // cursor after the restored collection has reached the widget tree.
-      schedulePostFrame(() {
+      schedulePostFrame?.call(() {
         if (!_isCurrentLoad(loadEpoch)) return;
         pgnWidgetController.goToMainLineIndex(cursorPly);
       });
