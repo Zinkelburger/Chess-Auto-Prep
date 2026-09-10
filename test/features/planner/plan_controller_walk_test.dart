@@ -169,6 +169,28 @@ void main() {
       },
     );
 
+    test(
+      'own-games thresholds follow each root rather than the largest sample',
+      () async {
+        final controller = make(
+          basis: PlanBasis.ownGames,
+          knowledge: PlanKnowledge(
+            ownReplies: {
+              normalizeFen(_fenAfter(roots[0].moves)): {'Nf3': 1000},
+              normalizeFen(_fenAfter(roots[1].moves)): {'Bg2': 10},
+            },
+          ),
+        );
+        addTearDown(controller.dispose);
+        await controller.startMany(roots.take(2).toList());
+        expect(controller.ownFloor, 80);
+        await controller.stopHere();
+        expect(controller.step!.moves, roots[1].moves);
+        expect(controller.ownFloor, 3);
+        expect(controller.step!.kind, PlanStepKind.theirMove);
+      },
+    );
+
     test('Finish now includes every unvisited root', () async {
       final controller = make();
       addTearDown(controller.dispose);

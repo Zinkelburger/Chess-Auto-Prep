@@ -172,7 +172,7 @@ void main() {
 
     // Start screen: root position only, moves the board was on, and the
     // choice of what to walk — the book by default, or your games.
-    expect(find.text('Where should this start?'), findsOneWidget);
+    expect(find.text('Starting positions'), findsOneWidget);
     expect(find.text('1.d4 d5 2.c4'), findsWidgets);
     expect(find.text('Opening book'), findsOneWidget);
     expect(find.text('My games'), findsOneWidget);

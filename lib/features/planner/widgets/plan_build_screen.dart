@@ -833,7 +833,7 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
         const Row(
           children: [
             Text(
-              'Where should this start?',
+              'Starting positions',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             SizedBox(width: 6),
