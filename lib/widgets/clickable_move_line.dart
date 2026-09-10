@@ -67,6 +67,9 @@ class ClickableMoveLineWidget extends StatelessWidget {
   /// Font size for move text (default 13 — readable at desktop 1×).
   final double fontSize;
 
+  /// Optional ink override for engine columns.
+  final Color? moveColor;
+
   /// Padding around each clickable move (larger = easier to tap).
   final EdgeInsets movePadding;
 
@@ -90,6 +93,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
     this.startIndex = 0,
     this.maxMoves = 8,
     this.fontSize = 13,
+    this.moveColor,
     this.movePadding = const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
     this.singleLine = true,
     this.maxLines = 1,
@@ -116,7 +120,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
           text: label,
           style: TextStyle(
             fontSize: fontSize,
-            color: AppColors.pgnMove,
+            color: moveColor ?? AppColors.pgnMove,
             fontFamily: AppTextStyles.monoFamily,
             fontWeight: FontWeight.bold,
           ),
@@ -236,7 +240,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                             fontSize: fontSize,
                             color: isActive
                                 ? AppColors.pgnMoveCurrentFg
-                                : AppColors.pgnMove,
+                                : moveColor ?? AppColors.pgnMove,
                             fontFamily: AppTextStyles.monoFamily,
                             fontWeight: isActive
                                 ? FontWeight.bold
@@ -281,7 +285,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             text: '${displaySan(context, sanMoves[i])} ',
             style: TextStyle(
               fontSize: fontSize,
-              color: AppColors.pgnMove,
+              color: moveColor ?? AppColors.pgnMove,
               fontFamily: AppTextStyles.monoFamily,
             ),
           ),
