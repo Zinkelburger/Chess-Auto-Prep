@@ -18,7 +18,8 @@ import 'package:flutter/foundation.dart';
 import 'engine_connection.dart';
 import '../../models/analysis/discovery_result.dart';
 import '../../utils/eval_constants.dart';
-import 'package:chess_auto_prep/utils/log.dart';
+import 'engine_search_budget.dart';
+import 'engine_serial_queue.dart';
 
 // ── Eval result (side-to-move perspective) ────────────────────────────────
 
@@ -43,43 +44,50 @@ class EvalResult {
 
 // ── Single Stockfish worker ───────────────────────────────────────────────
 
+enum EngineWorkerState { idle, searching, stopping, dead, disposed }
+
+/// Owns the complete UCI transaction: admission, options, go, stop and bestmove.
+/// A cancelled caller returns promptly, but the serial transaction retains its
+/// CPU allocation and output ownership until bestmove (or process retirement).
+/// Every consumer, including the bulk pool, therefore gets safe worker reuse.
 class EvalWorker {
+  EvalWorker(
+    this.engine, {
+    EngineSearchBudget? budget,
+    this.protocolTimeout = const Duration(seconds: 10),
+  }) : _budget = budget ?? EngineSearchBudget.instance {
+    _sub = engine.stdout.listen(_onOutput, onError: _die, onDone: () => _die());
+    unawaited(engine.done.then((_) => _die(), onError: _die));
+  }
+
   final EngineConnection engine;
-  late final StreamSubscription _sub;
-
-  /// Called once when the underlying process dies unexpectedly.
-  /// Not invoked on [dispose].
+  final EngineSearchBudget _budget;
+  final Duration protocolTimeout;
+  late final StreamSubscription<String> _sub;
+  final _queue = EngineSerialQueue();
+  final _retired = Completer<void>();
+  final Set<_SearchRequest> _requests = {};
+  _SearchRequest? _active;
+  Completer<void>? _ready;
+  Timer? _stopTimer;
+  bool _initialized = false;
+  EngineWorkerState _state = EngineWorkerState.idle;
+  EngineWorkerState get state => _state;
+  bool get isDead =>
+      _state == EngineWorkerState.dead || _state == EngineWorkerState.disposed;
   void Function()? onDied;
-
-  bool _dead = false;
-  bool _disposed = false;
-  bool get isDead => _dead;
-
-  /// Searches launched via [evaluateFen] across all workers, resettable.
-  /// Diagnostic only — read by benchmarks to compare mining strategies.
   static int searchCount = 0;
+  int _requestedThreads = 1;
+  int _currentThreads = 1;
+  int _currentHashMb = 128;
+  int get hashMb => _currentHashMb;
 
-  /// Pending `isready` handshakes, completed FIFO as each `readyok` arrives.
-  /// A queue (not a single completer) so overlapping handshakes — e.g.
-  /// [setThreads] from pool reconfiguration racing an [evaluateFen] — can
-  /// never orphan an awaiter.
-  final List<Completer<void>> _readyQueue = [];
-
-  // ── Single eval state ──
-  Completer<EvalResult>? _evalCompleter;
-
-  /// Bumped by [stop] so an [evaluateFen] whose completer isn't set up yet
-  /// (mid `isready` handshake) still observes the stop instead of silently
-  /// starting its search anyway.
-  int _stopGen = 0;
+  // Parsing state belongs to _active and is reset only after its predecessor's
+  // bestmove. Cancellation never makes old output eligible for a new request.
   int? _scoreCp;
   int? _scoreMate;
   List<String> _pv = [];
   int _depth = 0;
-
-  // ── Discovery (MultiPV) state ──
-  Completer<void>? _searchDone;
-  Completer<DiscoveryResult>? _discoveryCompleter;
   final Map<int, DiscoveryLine> _discoveryLines = {};
   bool _discoveryIsWhiteToMove = true;
   int _discoveryDepth = 0;
@@ -87,116 +95,78 @@ class EvalWorker {
   int _discoveryNps = 0;
   void Function(DiscoveryResult)? _discoveryOnProgress;
 
-  EvalWorker(this.engine) {
-    _sub = engine.stdout.listen(
-      _onOutput,
-      onError: (Object error) {
-        if (kDebugMode) log.e('[EvalWorker] Engine stream error: $error');
-        _handleDeath(error);
-      },
-      onDone: () => _handleDeath(),
-    );
-    unawaited(
-      engine.done.then(
-        (_) => _handleDeath(),
-        onError: (Object error) => _handleDeath(error),
-      ),
-    );
+  void _checkAlive() {
+    if (isDead) throw StateError('Worker unavailable');
   }
 
-  void _handleDeath([Object? error]) {
-    if (_dead || _disposed) return;
-    _dead = true;
-    final err = error ?? StateError('Stockfish process exited');
-    _finishSearch();
-    if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
-      _evalCompleter!.completeError(err);
-    }
-    _evalCompleter = null;
-    if (_discoveryCompleter != null && !_discoveryCompleter!.isCompleted) {
-      _discoveryCompleter!.completeError(err);
-    }
-    _discoveryCompleter = null;
-    _discoveryOnProgress = null;
-    _failReadyQueue(err);
-    engine.dispose();
-    onDied?.call();
-  }
+  Future<void> _untilRetired(Future<void> operation) => Future.any([
+    operation,
+    _retired.future.then<void>((_) => throw StateError('Worker unavailable')),
+  ]);
 
-  /// Send `isready` and wait for the matching `readyok`.
-  Future<void> _syncReady() {
-    if (_disposed || _dead) {
-      return Future.error(StateError('Worker unavailable'));
-    }
-    final c = Completer<void>();
-    _readyQueue.add(c);
+  Future<void> _syncReady() async {
+    _checkAlive();
+    final ready = _ready = Completer<void>();
+    // Install the waiter before writing: transports may throw synchronously.
+    final response = ready.future.timeout(protocolTimeout);
     try {
-      engine.sendCommand('isready');
+      try {
+        engine.sendCommand('isready');
+      } catch (error, stack) {
+        ready.completeError(error, stack);
+      }
+      await response;
+      _checkAlive();
     } catch (error) {
-      _readyQueue.remove(c);
-      c.completeError(error);
-    }
-    return c.future.timeout(
-      const Duration(seconds: 10),
-      onTimeout: () {
-        final error = TimeoutException('Stockfish did not answer isready');
-        _handleDeath(error);
-        throw error;
-      },
-    );
-  }
-
-  void _failReadyQueue(Object error) {
-    final pending = List.of(_readyQueue);
-    _readyQueue.clear();
-    for (final c in pending) {
-      if (!c.isCompleted) c.completeError(error);
+      _die(error);
+      rethrow;
+    } finally {
+      if (identical(_ready, ready)) _ready = null;
     }
   }
 
-  Future<void> init({int hashMb = 128, int threads = 1}) async {
-    await engine.waitForReady();
-    if (_disposed || _dead) throw StateError('Worker unavailable');
-    await _applyThreads(threads);
-    engine.sendCommand('setoption name Hash value $hashMb');
-    _currentHashMb = hashMb;
-    await _syncReady();
-  }
+  Future<void> init({int hashMb = 128, int threads = 1}) =>
+      _queue.run(() async {
+        _checkAlive();
+        _requestedThreads = threads < 1 ? 1 : threads;
+        if (!_initialized) {
+          try {
+            await _untilRetired(engine.waitForReady()).timeout(protocolTimeout);
+          } catch (error) {
+            _die(error);
+            rethrow;
+          }
+        }
+        _checkAlive();
+        engine.sendCommand('setoption name Threads value $_requestedThreads');
+        _currentThreads = _requestedThreads;
+        engine.sendCommand('setoption name Hash value $hashMb');
+        _currentHashMb = hashMb;
+        await _syncReady();
+        _initialized = true;
+      });
 
-  int _currentThreads = 1;
-  int _currentHashMb = 128;
-
-  /// Hash the worker was last configured with, MB.
-  int get hashMb => _currentHashMb;
-
-  /// Set Stockfish UCI Hash (skips if already at desired size). Call it
-  /// between searches: Stockfish clears its table on resize.
-  Future<void> setHash(int hashMb) async {
+  Future<void> setHash(int hashMb) => _queue.run(() async {
+    _checkAlive();
     if (hashMb < 1 || _currentHashMb == hashMb) return;
     engine.sendCommand('setoption name Hash value $hashMb');
+    await _syncReady();
     _currentHashMb = hashMb;
-    await _syncReady();
-  }
+  });
 
-  /// Dynamically set Stockfish UCI Threads (skips if already at desired count).
-  Future<void> setThreads(int threads) async {
-    if (threads < 1) threads = 1;
-    if (_currentThreads == threads) return;
-    await _applyThreads(threads);
-    await _syncReady();
-  }
+  Future<void> setThreads(int threads) => _queue.run(() async {
+    _checkAlive();
+    _requestedThreads = threads < 1 ? 1 : threads;
+    await _applyThreads(_requestedThreads);
+  });
 
   Future<void> _applyThreads(int threads) async {
+    if (_currentThreads == threads) return;
     engine.sendCommand('setoption name Threads value $threads');
+    await _syncReady();
     _currentThreads = threads;
   }
 
-  /// Run MultiPV analysis on a position. Returns when bestmove arrives.
-  /// Calls [onProgress] on each info update for progressive UI.
-  ///
-  /// [searchMoves] restricts the search to those root moves (UCI): each gets
-  /// its own PV line, so a handful of candidates the caller wants scored can
-  /// share one search and one hash instead of costing a `go` apiece.
   Future<DiscoveryResult> runDiscovery(
     String fen,
     int depth,
@@ -204,171 +174,186 @@ class EvalWorker {
     bool isWhiteToMove, {
     List<String>? searchMoves,
     void Function(DiscoveryResult)? onProgress,
-  }) async {
+  }) => _submit(
+    _SearchRequest(
+      fen,
+      depth,
+      multiPv: multiPv,
+      whiteToMove: isWhiteToMove,
+      searchMoves: searchMoves,
+      onProgress: onProgress,
+    ),
+  ).then((result) => result as DiscoveryResult);
+
+  Future<EvalResult> evaluateFen(String fen, int depth) => _submit(
+    _SearchRequest(fen, depth),
+  ).then((result) => result as EvalResult);
+
+  Future<Object> _submit(_SearchRequest request) {
     stop();
-    final generation = _stopGen;
-
-    _discoveryIsWhiteToMove = isWhiteToMove;
-    _discoveryLines.clear();
-    _discoveryDepth = 0;
-    _discoveryNodes = 0;
-    _discoveryNps = 0;
-    _discoveryOnProgress = onProgress;
-
-    engine.sendCommand('setoption name MultiPV value $multiPv');
-    await _syncReady();
-
-    if (_disposed || _dead || generation != _stopGen) {
-      throw StateError('Discovery cancelled');
-    }
-
-    // Options are ready. BoardEngine also waits for the previous bestmove
-    // before assigning this worker to a new interactive search.
-    _discoveryCompleter = Completer<DiscoveryResult>();
-
-    _searchDone = Completer<void>();
-    engine.sendCommand('position fen $fen');
-    engine.sendCommand(
-      searchMoves == null || searchMoves.isEmpty
-          ? 'go depth $depth'
-          : 'go depth $depth searchmoves ${searchMoves.join(' ')}',
+    if (isDead) return Future.error(StateError('Worker unavailable'));
+    _requests.add(request);
+    unawaited(
+      _queue
+          .run(() => _execute(request))
+          .catchError((Object error) {
+            request.fail(error);
+          })
+          .whenComplete(() => _requests.remove(request)),
     );
-
-    final result = await _discoveryCompleter!.future;
-
-    if (_disposed || _dead || generation != _stopGen) {
-      throw StateError('Discovery cancelled');
-    }
-    // Reset to single PV for subsequent evals
-    engine.sendCommand('setoption name MultiPV value 1');
-    await _syncReady();
-    if (generation == _stopGen) _discoveryOnProgress = null;
-
-    return result;
+    return request.result.future;
   }
 
-  /// Evaluate [fen] at [depth].  Returns scores in **side-to-move**
-  /// perspective — negate when converting to White's viewpoint on a
-  /// Black-to-move position.
-  Future<EvalResult> evaluateFen(String fen, int depth) async {
-    final gen = _stopGen;
-    if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
-      _evalCompleter!.completeError(StateError('Cancelled by new eval'));
+  Future<void> _execute(_SearchRequest request) async {
+    EngineSearchAllocation? allocation;
+    try {
+      request.cancellation.check();
+      _checkAlive();
+      allocation = await _budget.acquire(
+        _requestedThreads,
+        request.cancellation,
+      );
+      request.cancellation.check();
+      _checkAlive();
+      await _applyThreads(allocation.threads);
+      request.cancellation.check();
+      engine.sendCommand(
+        'setoption name MultiPV value ${request.multiPv ?? 1}',
+      );
+      await _syncReady();
+      request.cancellation.check();
+      _scoreCp = _scoreMate = null;
+      _pv = [];
+      _depth = 0;
+      _discoveryLines.clear();
+      _discoveryDepth = _discoveryNodes = _discoveryNps = 0;
+      _discoveryIsWhiteToMove = request.whiteToMove;
+      _discoveryOnProgress = request.onProgress;
+      _active = request;
+      _state = EngineWorkerState.searching;
+      if (request.multiPv == null) searchCount++;
+      engine.sendCommand('position fen ${request.fen}');
+      final moves = request.searchMoves;
+      engine.sendCommand(
+        'go depth ${request.depth}'
+        '${moves == null || moves.isEmpty ? '' : ' searchmoves ${moves.join(' ')}'}',
+      );
+      await request.finished.future;
+    } catch (error) {
+      request.fail(error);
+      // A broken write while a search may have started cannot leave a reusable
+      // protocol channel or release its CPU allocation without retirement.
+      if (identical(_active, request)) _die(error);
+    } finally {
+      allocation?.release();
     }
-    _evalCompleter = null;
-
-    // Synchronize pending options. BoardEngine separately waits for bestmove
-    // when handing a stopped search to its next owner.
-    engine.sendCommand('stop');
-    engine.sendCommand('setoption name MultiPV value 1');
-    await _syncReady();
-
-    // A stop() that landed during the handshake above had no completer to
-    // fail; honor it here instead of running the search anyway.
-    if (gen != _stopGen) throw StateError('Eval stopped');
-
-    // Pipeline is clean — safe to set up the new eval.
-    searchCount++;
-    _evalCompleter = Completer<EvalResult>();
-    _scoreCp = null;
-    _scoreMate = null;
-    _pv = [];
-    _depth = 0;
-
-    _searchDone = Completer<void>();
-    engine.sendCommand('position fen $fen');
-    engine.sendCommand('go depth $depth');
-
-    return _evalCompleter!.future;
   }
 
   void stop() {
-    _stopGen++;
-    try {
-      engine.sendCommand('stop');
-    } catch (_) {
-      // Cleanup must still complete awaiters when the process pipe is closed.
-    }
-    if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
-      _evalCompleter!.completeError(StateError('Eval stopped'));
-      _evalCompleter = null;
-    }
-    if (_discoveryCompleter != null && !_discoveryCompleter!.isCompleted) {
-      _discoveryCompleter!.completeError(StateError('Discovery stopped'));
-      _discoveryCompleter = null;
+    for (final request in _requests) {
+      request.cancellation.cancel();
+      request.fail(EngineSearchCancelled());
     }
     _discoveryOnProgress = null;
-  }
-
-  void _finishSearch() {
-    final done = _searchDone;
-    _searchDone = null;
-    if (done != null && !done.isCompleted) done.complete();
-  }
-
-  /// `readyok` may arrive while Stockfish is still stopping its search thread.
-  /// A shared worker must consume that search's bestmove before its next go.
-  Future<void> waitUntilStopped() async {
-    final done = _searchDone;
-    if (done == null) return;
+    if (_active == null || _state != EngineWorkerState.searching) return;
+    _state = EngineWorkerState.stopping;
+    _stopTimer = Timer(
+      protocolTimeout,
+      () => _die(
+        TimeoutException('Stockfish did not acknowledge stop', protocolTimeout),
+      ),
+    );
     try {
-      await done.future.timeout(const Duration(seconds: 10));
-    } on TimeoutException {
-      dispose();
-      rethrow;
+      engine.sendCommand('stop');
+    } catch (error) {
+      _die(error);
     }
   }
 
   void _onOutput(String line) {
+    if (isDead) return;
     line = line.trim();
-    if (line.isEmpty) return;
-
     if (line == 'readyok') {
-      if (_readyQueue.isNotEmpty) {
-        final c = _readyQueue.removeAt(0);
-        if (!c.isCompleted) c.complete();
-      }
+      final ready = _ready;
+      if (ready != null && !ready.isCompleted) ready.complete();
       return;
     }
-
-    if (line.startsWith('bestmove')) _finishSearch();
-
-    // ── Discovery mode (MultiPV) ──
-    if (_discoveryCompleter != null && !_discoveryCompleter!.isCompleted) {
-      if (line.startsWith('info') && line.contains('score')) {
-        _parseDiscoveryInfo(line);
-      } else if (line.startsWith('bestmove')) {
-        final lines = _discoveryLines.values.toList()
-          ..sort((a, b) => a.pvNumber.compareTo(b.pvNumber));
-        _discoveryCompleter!.complete(
-          DiscoveryResult(
-            lines: lines,
-            depth: _discoveryDepth,
-            nodes: _discoveryNodes,
-            nps: _discoveryNps,
-          ),
+    final request = _active;
+    if (request == null) return;
+    if (line.startsWith('bestmove')) {
+      if (!request.result.isCompleted) {
+        request.result.complete(
+          request.multiPv == null
+              ? EvalResult(
+                  scoreCp: _scoreCp,
+                  scoreMate: _scoreMate,
+                  pv: List.of(_pv),
+                  depth: _depth,
+                )
+              : DiscoveryResult(
+                  lines: _discoveryLines.values.toList()
+                    ..sort((a, b) => a.pvNumber.compareTo(b.pvNumber)),
+                  depth: _discoveryDepth,
+                  nodes: _discoveryNodes,
+                  nps: _discoveryNps,
+                ),
         );
-        _discoveryCompleter = null;
       }
-      return;
+      _finishActive();
+    } else if (!request.cancellation.isCancelled &&
+        line.startsWith('info') &&
+        line.contains('score')) {
+      if (request.multiPv == null) {
+        _parseSingleInfo(line);
+      } else {
+        _parseDiscoveryInfo(line);
+      }
     }
+  }
 
-    // ── Single eval mode ──
-    if (_evalCompleter == null || _evalCompleter!.isCompleted) return;
-
-    if (line.startsWith('info') && line.contains('score')) {
-      _parseSingleInfo(line);
-    } else if (line.startsWith('bestmove')) {
-      _evalCompleter?.complete(
-        EvalResult(
-          scoreCp: _scoreCp,
-          scoreMate: _scoreMate,
-          pv: List.from(_pv),
-          depth: _depth,
-        ),
-      );
-      _evalCompleter = null;
+  void _finishActive() {
+    _stopTimer?.cancel();
+    _stopTimer = null;
+    final active = _active;
+    _active = null;
+    _discoveryOnProgress = null;
+    if (!isDead) _state = EngineWorkerState.idle;
+    if (active != null && !active.finished.isCompleted) {
+      active.finished.complete();
     }
+  }
+
+  void _die([Object? error]) {
+    if (isDead) return;
+    _state = EngineWorkerState.dead;
+    _retire(error ?? StateError('Stockfish process exited'));
+    onDied?.call();
+  }
+
+  void _retire(Object error) {
+    if (!_retired.isCompleted) _retired.complete();
+    for (final request in _requests) {
+      request.cancellation.cancel();
+      request.fail(error);
+    }
+    final ready = _ready;
+    _ready = null;
+    if (ready != null && !ready.isCompleted) ready.completeError(error);
+    _finishActive();
+    unawaited(_sub.cancel());
+    try {
+      engine.dispose();
+    } catch (error) {
+      // A failed transport teardown must not strand waiters or pool recovery.
+      debugPrint('[EvalWorker] Transport disposal failed: $error');
+    }
+  }
+
+  void dispose() {
+    if (_state == EngineWorkerState.disposed) return;
+    _state = EngineWorkerState.disposed;
+    onDied = null;
+    _retire(StateError('Worker disposed'));
   }
 
   void _parseDiscoveryInfo(String line) {
@@ -399,9 +384,9 @@ class EvalWorker {
       }
     }
 
-    if (depth != null && multipv != null) {
-      _discoveryLines[multipv] = DiscoveryLine(
-        pvNumber: multipv,
+    if (depth != null) {
+      _discoveryLines[multipv ?? 1] = DiscoveryLine(
+        pvNumber: multipv ?? 1,
         depth: depth,
         scoreCp: scoreCp,
         scoreMate: scoreMate,
@@ -447,20 +432,27 @@ class EvalWorker {
       }
     }
   }
+}
 
-  void dispose() {
-    _finishSearch();
-    if (_disposed) return;
-    _disposed = true;
-    onDied = null;
-    stop();
-    _failReadyQueue(StateError('Worker disposed'));
-    unawaited(_sub.cancel());
-    try {
-      engine.sendCommand('quit');
-    } catch (_) {
-      /* engine may already be closed */
-    }
-    engine.dispose();
+class _SearchRequest {
+  _SearchRequest(
+    this.fen,
+    this.depth, {
+    this.multiPv,
+    this.whiteToMove = true,
+    this.searchMoves,
+    this.onProgress,
+  });
+  final String fen;
+  final int depth;
+  final int? multiPv;
+  final bool whiteToMove;
+  final List<String>? searchMoves;
+  final void Function(DiscoveryResult)? onProgress;
+  final cancellation = EngineSearchCancellation();
+  final result = Completer<Object>();
+  final finished = Completer<void>();
+  void fail(Object error) {
+    if (!result.isCompleted) result.completeError(error);
   }
 }

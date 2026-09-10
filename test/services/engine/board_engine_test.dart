@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
+import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -56,8 +58,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late BoardEngine board;
   late List<_Engine> engines;
-  final a = Object();
-  final b = Object();
+  late BoardEngineSession a;
+  late BoardEngineSession b;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -71,15 +73,16 @@ void main() {
         return engine;
       },
     );
+    a = board.createSession();
+    b = board.createSession();
   });
   tearDown(() => board.dispose());
 
   Future<dynamic> search(
-    Object owner, {
+    BoardEngineSession owner, {
     String fen = _fen,
     void Function()? onProgress,
-  }) => board.discover(
-    owner,
+  }) => owner.discover(
     fen: fen,
     depth: 15,
     multiPv: 3,
@@ -88,9 +91,121 @@ void main() {
   );
 
   test(
+    'detached sessions cannot join another pane or stop its search',
+    () async {
+      await a.prepare();
+      final active = search(a);
+      await flush();
+      expect(await search(b), isNull);
+      b.pause();
+      expect(engines.single.searching, isTrue);
+      engines.single.progress();
+      engines.single.finish();
+      expect(await active, isNotNull);
+      b.dispose();
+      await expectLater(b.prepare(), throwsStateError);
+      await expectLater(search(b), throwsStateError);
+    },
+  );
+
+  test('stop timeout replaces process for the next search', () async {
+    board.dispose();
+    board = BoardEngine(
+      protocolTimeout: const Duration(milliseconds: 100),
+      createConnection: () async {
+        final engine = _Engine()..acknowledgeStop = false;
+        engines.add(engine);
+        return engine;
+      },
+    );
+    a = board.createSession();
+    await a.prepare();
+    final old = search(a);
+    await flush();
+    final next = search(a, fen: 'next');
+    expect(await old, isNull);
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await flush();
+    expect(engines, hasLength(2));
+    expect(engines.first.disposed, isTrue);
+    engines.last.progress();
+    engines.last.finish();
+    expect(await next, isNotNull);
+  });
+
+  test(
+    'board and bulk workers share CPU admission, including stop draining',
+    () async {
+      board.dispose();
+      final budget = EngineSearchBudget(capacity: () => 2);
+      board = BoardEngine(
+        budget: budget,
+        createConnection: () async {
+          final engine = _Engine()..acknowledgeStop = false;
+          engines.add(engine);
+          return engine;
+        },
+      );
+      a = board.createSession();
+      await a.prepare();
+      final bulkConnection = _Engine();
+      final bulkWorker = EvalWorker(bulkConnection, budget: budget);
+      await bulkWorker.init();
+      final pool = StockfishPool.fresh()..addWorkerForTest(bulkWorker);
+      addTearDown(pool.dispose);
+      final active = search(a);
+      await flush();
+      expect(budget.activeThreads, 2);
+      final bulk = pool.evaluateFen('bulk', 8);
+      await flush();
+      expect(bulkConnection.searching, isFalse);
+      a.pause();
+      expect(await active, isNull);
+      expect(bulkConnection.searching, isFalse);
+      engines.single.finish();
+      await flush();
+      expect(bulkConnection.searching, isTrue);
+      final resumed = search(a);
+      await flush();
+      expect(budget.activeThreads, 2);
+      expect(
+        engines.single.commands,
+        contains('setoption name Threads value 1'),
+      );
+      bulkConnection.finish();
+      engines.single.progress();
+      engines.single.finish();
+      await bulk;
+      expect(await resumed, isNotNull);
+      await flush();
+      expect(budget.activeThreads, 0);
+    },
+  );
+
+  test('settings resize the warm worker between searches', () async {
+    await a.prepare();
+    final active = search(a);
+    await flush();
+    EngineSettings.instance.hashMb = 64;
+    final prepared = a.prepare();
+    await flush();
+    expect(
+      engines.single.commands,
+      isNot(contains('setoption name Hash value 64')),
+    );
+    a.pause();
+    await active;
+    await prepared;
+    expect(engines, hasLength(1));
+    expect(engines.single.commands, contains('setoption name Hash value 64'));
+  });
+
+  test(
     'many boards prepare exactly one configured process without searching',
     () async {
-      await Future.wait([for (var i = 0; i < 10; i++) board.prepare(Object())]);
+      await Future.wait([
+        for (var i = 0; i < 10; i++) board.createSession().prepare(),
+      ]);
       expect(engines, hasLength(1));
       expect(
         engines.single.commands.where((c) => c.startsWith('go ')),
@@ -113,11 +228,11 @@ void main() {
   test(
     'pause and resume reuse the process without changing threads or hash',
     () async {
-      await board.prepare(a);
+      await a.prepare();
       final engine = engines.single;
       final first = search(a);
       await flush();
-      board.pause(a);
+      a.pause();
       expect(await first, isNull);
       final second = search(a);
       await flush();
@@ -140,8 +255,8 @@ void main() {
   test(
     'two views share live discovery and pausing one leaves the other running',
     () async {
-      await board.prepare(a);
-      await board.prepare(b);
+      await a.prepare();
+      await b.prepare();
       var updatesA = 0;
       var updatesB = 0;
       final first = search(a, onProgress: () => updatesA++);
@@ -152,7 +267,7 @@ void main() {
       await flush();
       expect(updatesA, 1);
       expect(updatesB, 1);
-      board.pause(a);
+      a.pause();
       expect(engine.searching, isTrue);
       engine.progress();
       engine.finish();
@@ -167,14 +282,15 @@ void main() {
   test(
     'a new position waits for old bestmove even when readyok arrived first',
     () async {
-      await board.prepare(a);
+      await a.prepare();
       final engine = engines.single..acknowledgeStop = false;
       final old = search(a);
       await flush();
+      await b.prepare();
       final next = search(b, fen: '$_fen moves e2e4');
       await flush();
       expect(await old, isNull);
-      board.pause(a); // An old pane cannot cancel its successor.
+      a.pause(); // An old pane cannot cancel its successor.
       engine.output.add('readyok');
       engine.progress(); // Stale PV must not complete the new request.
       await flush();
@@ -191,13 +307,13 @@ void main() {
   test(
     'last board departure releases process; route replacement reuses it',
     () async {
-      await board.prepare(a);
-      board.detach(a);
-      await board.prepare(b);
+      await a.prepare();
+      a.detach();
+      await b.prepare();
       await flush();
       expect(engines, hasLength(1));
       expect(engines.single.disposed, isFalse);
-      board.detach(b);
+      b.detach();
       await flush();
       expect(engines.single.disposed, isTrue);
     },
@@ -206,11 +322,11 @@ void main() {
   test(
     'suspension releases memory and resume prepares only one process',
     () async {
-      await board.prepare(a);
-      await board.prepare(b);
+      await a.prepare();
+      await b.prepare();
       board.suspend();
       expect(engines.single.disposed, isTrue);
-      await board.prepare(a);
+      await a.prepare();
       expect(await search(a), isNull);
       expect(engines, hasLength(1));
       await board.resume();
@@ -225,9 +341,10 @@ void main() {
       board.dispose();
       final created = Completer<EngineConnection?>();
       board = BoardEngine(createConnection: () => created.future);
-      final preparing = board.prepare(a);
+      a = board.createSession();
+      final preparing = a.prepare();
       await flush();
-      board.detach(a);
+      a.detach();
       await flush();
       final engine = _Engine();
       created.complete(engine);

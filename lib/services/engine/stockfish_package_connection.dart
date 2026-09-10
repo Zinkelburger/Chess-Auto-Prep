@@ -11,15 +11,20 @@ class StockfishPackageConnection implements EngineConnection {
   final Completer<void> _done = Completer<void>();
   bool _disposed = false;
 
-  StockfishPackageConnection() : _engine = Stockfish() {
+  StockfishPackageConnection({Stockfish? engine})
+    : _engine = engine ?? Stockfish() {
     _subscription = _engine.stdout.listen((line) {
-      _stdoutController.add(line);
+      if (!_disposed) _stdoutController.add(line);
     });
     _engine.state.addListener(_onEngineState);
+    _onEngineState();
   }
 
   void _onEngineState() {
-    if (_disposed) return;
+    if (_disposed) {
+      _disposeWhenReady();
+      return;
+    }
     final state = _engine.state.value;
     if (state == StockfishState.error || state == StockfishState.disposed) {
       if (!_done.isCompleted) _done.complete();
@@ -60,6 +65,7 @@ class StockfishPackageConnection implements EngineConnection {
 
   @override
   void sendCommand(String command) {
+    if (_disposed) throw StateError('Engine disposed');
     _engine.stdin = command;
   }
 
@@ -68,9 +74,17 @@ class StockfishPackageConnection implements EngineConnection {
     if (_disposed) return;
     _disposed = true;
     if (!_done.isCompleted) _done.complete();
-    _engine.state.removeListener(_onEngineState);
     unawaited(_subscription.cancel());
-    _engine.dispose();
     unawaited(_stdoutController.close());
+    _disposeWhenReady();
+  }
+
+  void _disposeWhenReady() {
+    final state = _engine.state.value;
+    // package:stockfish dispose writes "quit", which is only legal when ready.
+    // Keep the listener during startup so a late successful start is quit too.
+    if (state == StockfishState.starting) return;
+    _engine.state.removeListener(_onEngineState);
+    if (state == StockfishState.ready) _engine.dispose();
   }
 }

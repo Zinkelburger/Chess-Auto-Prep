@@ -476,7 +476,7 @@ in a left column; move taps and hover previews work throughout the line.
 Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off
 UnifiedEnginePane (when lifecycle ≠ off)
   → post-frame _runAnalysis on FEN / lifecycle changes (not during parent build)
-  → AnalysisService → shared BoardEngine / EvalWorker (one process; cores = threads)
+  → pane-owned AnalysisService → BoardEngineSession → shared BoardEngine / EvalWorker
   → Eval chain: session cache → CdbDirect → Stockfish (Lichess Explorer mothballed; DB column hidden, _fetchDbData never called)
   → Best-line eval persisted to EvalCache via _persistBestEvalToCache()
   → Hover on MOVE or PV line → BoardPreviewController (floating) → FloatingBoardPreview overlay
@@ -484,16 +484,51 @@ InlineEngineBar — shares BoardEngine with the analysis pane; normal Stockfish 
 ExpectimaxLinesPane — same floating preview on line hover
 ```
 
-Active board panes prepare one shared Stockfish process with the selected cores
-and hash before the first toggle. Toggle-off sends `stop`, retaining those
-threads, the network and hash in memory without background searches or a thread
-ramp-down. Same-position views share streamed discovery results. Candidate evals
-in the larger pane run sequentially in that process; interactive analysis never
-prepares the bulk worker pool. A new search waits for the previous `bestmove`
-acknowledgement, and an old pane cannot stop another owner's search. Leaving the
-last board, backgrounding the app, or starting generation releases the process;
-returning prepares one again. Generation and other bulk jobs create their own
-workers on demand; finished generation releases unleased workers.
+Active board panes prepare one shared Stockfish process before the first toggle.
+`EngineLifecycle` owns the persisted toggle for both pane types. Toggle-off sends
+UCI `stop` and keeps the idle process, network, hash and configured threads warm.
+Turning it on starts a new search with the retained hash; it does not continue
+the stopped search's stack or depth. Leaving the last board, backgrounding the
+app, or starting generation releases the process. Returning prepares one again.
+
+The engine responsibilities are separated as follows:
+
+| Component | Owns | Contract |
+|---|---|---|
+| `BoardEngineSession` | One pane's attachment and search ownership | `prepare`, `discover`/`evaluate`, `pause`, reversible `detach`, terminal `dispose`. Detached panes cannot search. An old pane cannot cancel its successor; same-position views share discovery and live PVs. |
+| `AnalysisService` | One pane's discovery/candidate pipeline and UI notifiers | Owns a session. Cancellation invalidates deferred publications; disposing the service disposes its notifiers. A host may inject its service into `UnifiedEnginePane`. |
+| `BoardEngine` / `EngineWorkerSlot` | Latest interactive request and one lazily initialized worker | Coalesce startup, reject late connections after teardown, update settings while idle, retry a retired worker once. Pausing keeps the process. |
+| `EvalWorker` | UCI transaction and result parsing | Serialize readiness, options and searches. Cancellation completes the caller promptly while the worker drains through `bestmove`; old output never belongs to a new FEN. Ten-second readiness/stop timeouts retire the transport. Disposed workers are unavailable. |
+| `EngineSearchBudget` | Search-thread admission shared by board and bulk workers | FIFO, cancellable admission; grant up to the requested threads from free cores. Release only after `bestmove` or retirement. Idle processes consume no search allocation. |
+| `StockfishPool` | Bulk worker provisioning and exclusive worker checkout | Generation and background jobs create workers on demand. All searches use the same `EvalWorker` contract. Finished generation releases unleased workers. |
+| `EngineSerialQueue` | Ordered asynchronous transactions | A failed transaction still reaches its caller, while subsequent work can run. Install the queue tail before invoking potentially reentrant callbacks. |
+
+The core setting caps admitted board-plus-pool search threads. A search keeps
+its allocation until it ends; lowering cores takes effect at subsequent search
+boundaries. With competition a board can receive fewer threads; those options
+are changed only while idle. FIFO admission does not preempt an existing long
+search: a queued job waits for completion or cancellation. This budget covers
+`EvalWorker` consumers, not external MCP processes, engine tournaments, Maia or
+Bughouse. It is not a total RAM cap: idle workers still retain their hash and
+network allocations. Generation still suspends interactive analysis explicitly.
+
+The ordering follows the [Stockfish UCI documentation](https://official-stockfish.github.io/docs/stockfish-wiki/UCI-Protocol-and-Stockfish-Commands.html):
+`readyok` may arrive during a search and cannot acknowledge `stop`; `bestmove`
+ends that search, and options belong between searches. This is also the pattern
+in [Lichess's ceval protocol](https://github.com/lichess-org/lila/blob/master/ui/lib/src/ceval/protocol.ts)
+(current work survives until `bestmove`, with pending replacement work) and
+[Scid's engine communication](https://github.com/benini/scid/blob/github/tcl/enginecomm.tcl)
+(command/reply sequencing around stop and restart).
+
+Regression checks live in `test/services/engine/{board_engine,eval_worker_protocol,engine_search_budget,stockfish_pool}_test.dart`,
+`test/services/analysis_service_test.dart`, and the actual pane widget tests in
+`test/widgets/{inline_engine_bar,unified_engine_pane}_lifecycle_test.dart`.
+They cover delayed/stale output, stop timeout and replacement, queued cancellation,
+CPU sharing, settings changes, hidden panes, warm toggles and teardown. For a
+native Linux check, set `STOCKFISH_EXECUTABLE` to the extracted bundled binary
+and run `scripts/ci.sh test test/services/engine/native_board_engine_test.dart`;
+it measures paused process CPU ticks, checks process/config reuse and verifies
+exit on the last detach. Without that environment variable the native test skips.
 
 Inline engine hover boards follow the main board perspective in Repertoire,
 PGN Viewer, Player Analysis, Planner, Studies and Tactics. Stepping through a

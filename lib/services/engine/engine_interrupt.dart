@@ -6,7 +6,10 @@
 /// a failed run.
 library;
 
+import 'engine_search_budget.dart';
+
 bool isEngineInterrupt(Object error) {
+  if (error is EngineSearchCancelled) return true;
   if (error is! StateError) return false;
   final message = error.message;
   return message == 'Eval stopped' ||

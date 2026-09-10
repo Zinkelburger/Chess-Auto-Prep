@@ -10,7 +10,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../analysis_service.dart';
+import 'engine_serial_queue.dart';
 import 'stockfish_pool.dart';
 import 'board_engine.dart';
 import '../../utils/safe_change_notifier.dart';
@@ -28,7 +28,6 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   EngineLifecycle._();
 
   final StockfishPool _pool = StockfishPool.instance;
-  final AnalysisService _analysis = AnalysisService.instance;
 
   EngineState _state = EngineState.off;
   EngineState get state => _state;
@@ -43,7 +42,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  Future<void> _queueTail = Future.value();
+  var _queue = EngineSerialQueue();
 
   static const _toggleKey = 'engine_lifecycle.toggle_on';
 
@@ -51,10 +50,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   @visibleForTesting
   static bool testMode = false;
 
-  Future<void> _serialExec(Future<void> Function() fn) async {
-    _queueTail = _queueTail.then((_) => fn());
-    await _queueTail;
-  }
+  Future<void> _serialExec(Future<void> Function() fn) => _queue.run(fn);
 
   /// The user's persisted preference.  Only [toggleOn]/[toggleOff] (explicit
   /// user actions) change it — [suspend] shuts the engine down without
@@ -135,7 +131,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   Future<void> _doShutdown() async {
     if (_state == EngineState.off) return;
     if (_state == EngineState.generating) return;
-    _analysis.cancel();
+    BoardEngine.instance.pauseAll();
     // A leased pool belongs to a running background job — leave its workers
     // alive. On app close the orphaned engines still exit on their own:
     // stdin hits EOF when this process dies and UCI engines quit on EOF.
@@ -168,13 +164,18 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
 
   Future<void> _doEnterGeneration(int threads) async {
     _toggleStateBeforeGeneration = _state != EngineState.off;
-    _analysis.cancel();
+    final previous = _state;
     BoardEngine.instance.suspend();
-    if (!testMode) {
-      await _pool.prepareForTreeBuild(threads);
-    }
     _state = EngineState.generating;
     notifyListeners();
+    try {
+      if (!testMode) await _pool.prepareForTreeBuild(threads);
+    } catch (_) {
+      _state = previous;
+      _resumeBoard();
+      notifyListeners();
+      rethrow;
+    }
   }
 
   /// Hand the engine back to interactive analysis while a build is paused.
@@ -220,14 +221,14 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   /// Resets singleton state between tests. Does not notify listeners.
   @visibleForTesting
   void resetForTest() {
-    _analysis.cancel();
+    _queue = EngineSerialQueue();
+    BoardEngine.instance.pauseAll();
     _pool.dispose();
     BoardEngine.instance.dispose();
     _state = EngineState.off;
     _userWantsEngine = true;
     _toggleStateBeforeGeneration = false;
     _poolLeases = 0;
-    _queueTail = Future.value();
     testMode = false;
   }
 }

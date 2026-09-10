@@ -5,6 +5,7 @@ import '../../models/analysis/discovery_result.dart';
 import 'engine_connection.dart';
 import 'engine_worker_slot.dart';
 import 'eval_worker.dart';
+import 'engine_search_budget.dart';
 
 /// One process for interactive boards. Pausing retains its configured threads,
 /// hash and network; only leaving all boards or suspending releases the process.
@@ -12,14 +13,23 @@ import 'eval_worker.dart';
 class BoardEngine {
   static final instance = BoardEngine();
 
-  BoardEngine({Future<EngineConnection?> Function()? createConnection})
-    : _slot = EngineWorkerSlot(createConnection: createConnection);
+  BoardEngine({
+    Future<EngineConnection?> Function()? createConnection,
+    EngineSearchBudget? budget,
+    Duration protocolTimeout = const Duration(seconds: 10),
+  }) : _slot = EngineWorkerSlot(
+         createConnection: createConnection,
+         budget: budget,
+         protocolTimeout: protocolTimeout,
+       );
+
+  BoardEngineSession createSession() => BoardEngineSession._(this);
 
   final EngineWorkerSlot _slot;
-  final Set<Object> _clients = {};
+  final Set<BoardEngineSession> _clients = {};
   Future<void>? _tail;
-  final Set<Object> _searchClients = {};
-  final Map<Object, void Function(DiscoveryResult)> _progress = {};
+  final Set<BoardEngineSession> _searchClients = {};
+  final Map<BoardEngineSession, void Function(DiscoveryResult)> _progress = {};
   Object? _discoveryKey;
   Future<DiscoveryResult?>? _discovery;
   int _discoveryRequest = -1;
@@ -27,7 +37,6 @@ class BoardEngine {
   int _request = 0;
   int _lifetime = 0;
   bool _suspended = false;
-  (int, int)? _preparedConfig;
 
   int get workerCount => _slot.hasWorker ? 1 : 0;
 
@@ -46,31 +55,15 @@ class BoardEngine {
   );
 
   /// Prepare the real configuration before the first toggle, without searching.
-  Future<void> prepare(Object client) {
+  Future<void> _prepare(BoardEngineSession client) {
     _clients.add(client);
     if (_suspended) return Future.value();
-    final config = (
-      EngineSettings.instance.cores,
-      EngineSettings.instance.hashMb,
-    );
-    if (_preparedConfig == config) return Future.value();
-    _preparedConfig = config;
-    final lifetime = _lifetime;
-    return _enqueue(() async {
-      try {
-        if (lifetime == _lifetime && !_suspended && _clients.isNotEmpty) {
-          await _ensure();
-        }
-      } catch (_) {
-        _preparedConfig = null;
-        rethrow;
-      }
-    });
+    return _ensure().then((_) {});
   }
 
-  void detach(Object client) {
+  void _detach(BoardEngineSession client) {
     _clients.remove(client);
-    pause(client);
+    _pause(client);
     // A route replacement can mount its new board in this same frame.
     scheduleMicrotask(() {
       if (_clients.isEmpty) _release();
@@ -79,7 +72,11 @@ class BoardEngine {
 
   /// Returns null when superseded, paused or suspended. All engine work is
   /// serialized, including the final bestmove acknowledgement after a stop.
-  Future<T?> run<T>(Object owner, Future<T> Function(EvalWorker) search) {
+  Future<T?> _run<T>(
+    BoardEngineSession owner,
+    Future<T> Function(EvalWorker) search,
+  ) {
+    if (!_clients.contains(owner)) return Future.value();
     final request = ++_request;
     _searchClients
       ..clear()
@@ -90,13 +87,21 @@ class BoardEngine {
       bool current() => request == _request && !_suspended;
       if (!current()) return null;
       try {
-        await _slot.waitUntilStopped();
-        if (!current()) return null;
-        final worker = await _ensure();
-        if (!current()) return null;
-        if (worker == null) throw StateError('Engine unavailable');
-        final result = await search(worker);
-        return current() ? result : null;
+        // Retry one retired process. The worker owns drain/CPU admission for
+        // every search, so neither UI nor pool callers can skip that contract.
+        for (var attempt = 0; ; attempt++) {
+          final worker = await _ensure();
+          if (!current()) return null;
+          if (worker == null) throw StateError('Engine unavailable');
+          try {
+            final result = await search(worker);
+            return current() ? result : null;
+          } catch (_) {
+            if (!current()) return null;
+            if (!worker.isDead || attempt != 0) rethrow;
+            _slot.release();
+          }
+        }
       } catch (_) {
         if (!current()) return null;
         rethrow;
@@ -105,14 +110,15 @@ class BoardEngine {
   }
 
   /// Multiple views of the same board share both the search and live PVs.
-  Future<DiscoveryResult?> discover(
-    Object owner, {
+  Future<DiscoveryResult?> _discover(
+    BoardEngineSession owner, {
     required String fen,
     required int depth,
     required int multiPv,
     required bool whiteToMove,
     void Function(DiscoveryResult)? onProgress,
   }) {
+    if (!_clients.contains(owner) || _suspended) return Future.value();
     final key = (
       fen,
       depth,
@@ -125,7 +131,7 @@ class BoardEngine {
         _discoveryKey != key ||
         _discoveryRequest != _request) {
       _latestProgress = null;
-      _discovery = run(
+      _discovery = _run(
         owner,
         (worker) => worker.runDiscovery(
           fen,
@@ -137,6 +143,16 @@ class BoardEngine {
             for (final entry in Map.of(_progress).entries) {
               if (_searchClients.contains(entry.key)) entry.value(result);
             }
+          },
+        ),
+      );
+      final pending = _discovery!;
+      // A failed search must not become a cached failure for this position.
+      unawaited(
+        pending.then<void>(
+          (_) {},
+          onError: (Object _, StackTrace _) {
+            if (identical(_discovery, pending)) _discovery = null;
           },
         ),
       );
@@ -155,7 +171,7 @@ class BoardEngine {
     );
   }
 
-  void pause(Object owner) {
+  void _pause(BoardEngineSession owner) {
     _progress.remove(owner);
     if (!_searchClients.remove(owner) || _searchClients.isNotEmpty) return;
     _request++;
@@ -164,13 +180,22 @@ class BoardEngine {
 
   void _release() {
     _lifetime++;
-    _preparedConfig = null;
     _request++;
     _searchClients.clear();
     _progress.clear();
     _discovery = null;
     _latestProgress = null;
     _slot.release();
+  }
+
+  /// Stop all board searches while retaining the configured idle process.
+  void pauseAll() {
+    _request++;
+    _searchClients.clear();
+    _progress.clear();
+    _discovery = null;
+    _latestProgress = null;
+    _slot.stop();
   }
 
   void suspend() {
@@ -193,5 +218,49 @@ class BoardEngine {
     _clients.clear();
     _release();
     _tail = null;
+  }
+}
+
+/// A pane's attachment and search ownership are the same typed handle.
+/// Detach is reversible (hidden tabs); dispose is terminal (widget teardown).
+class BoardEngineSession {
+  BoardEngineSession._(this._engine);
+  final BoardEngine _engine;
+  bool _disposed = false;
+
+  Future<void> prepare() {
+    if (_disposed) return Future.error(StateError('Board session disposed'));
+    return _engine._prepare(this);
+  }
+
+  Future<DiscoveryResult?> discover({
+    required String fen,
+    required int depth,
+    required int multiPv,
+    required bool whiteToMove,
+    void Function(DiscoveryResult)? onProgress,
+  }) {
+    if (_disposed) return Future.error(StateError('Board session disposed'));
+    return _engine._discover(
+      this,
+      fen: fen,
+      depth: depth,
+      multiPv: multiPv,
+      whiteToMove: whiteToMove,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<EvalResult?> evaluate(String fen, int depth) {
+    if (_disposed) return Future.error(StateError('Board session disposed'));
+    return _engine._run(this, (worker) => worker.evaluateFen(fen, depth));
+  }
+
+  void pause() => _engine._pause(this);
+  void detach() => _engine._detach(this);
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    detach();
   }
 }
