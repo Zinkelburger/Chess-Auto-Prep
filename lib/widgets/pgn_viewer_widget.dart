@@ -746,7 +746,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
             documentBuilder: _buildMovetext,
           ),
         ),
-        ?_buildBranchChips(),
+        _buildBranchChips(),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(

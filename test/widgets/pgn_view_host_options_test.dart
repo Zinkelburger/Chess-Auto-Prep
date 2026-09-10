@@ -20,7 +20,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byTooltip('Reading options'), findsNothing);
-      expect(find.text('Main line'), findsNothing);
+      expect(find.text('Main line'), findsOneWidget);
       final before = controller.currentFen;
       controller.showReadingOptions();
       await tester.pumpAndSettle();

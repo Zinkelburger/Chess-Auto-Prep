@@ -20,6 +20,7 @@ Future<PgnViewerWidgetController> _pump(
   WidgetTester tester, {
   String pgn = _tree,
   double width = 520,
+  bool showReadingOptions = true,
 }) async {
   final controller = PgnViewerWidgetController();
   await tester.pumpWidget(
@@ -28,7 +29,11 @@ Future<PgnViewerWidgetController> _pump(
       home: Scaffold(
         body: SizedBox(
           width: width,
-          child: PgnViewerWidget(pgnText: pgn, controller: controller),
+          child: PgnViewerWidget(
+            pgnText: pgn,
+            controller: controller,
+            showReadingOptions: showReadingOptions,
+          ),
         ),
       ),
     ),
@@ -38,6 +43,79 @@ Future<PgnViewerWidgetController> _pump(
 }
 
 void main() {
+  for (final width in [320.0, 800.0]) {
+    for (final showReadingOptions in [true, false]) {
+      testWidgets('navigation keeps the reading viewport stable at $width, '
+          'reading options: $showReadingOptions', (tester) async {
+        final controller = await _pump(
+          tester,
+          width: width,
+          showReadingOptions: showReadingOptions,
+        );
+        final viewport = tester.getRect(_scrollView);
+        final forward = find.byIcon(Icons.chevron_right).last;
+        final forwardRect = tester.getRect(forward);
+        void expectStable() {
+          expect(tester.getRect(_scrollView), viewport);
+          expect(tester.getRect(forward), forwardRect);
+          expect(tester.takeException(), isNull);
+        }
+
+        // The fork picker appears after e4 and disappears after e5.
+        for (final ply in [1, 2, 1, 0]) {
+          controller.goToMainLineIndex(ply);
+          await tester.pumpAndSettle();
+          expectStable();
+        }
+        final view = tester.widget<PgnMovetextView>(
+          find.byType(PgnMovetextView),
+        );
+        final sicilian = view.variationsByPly[1]!.single;
+        controller.goToVariationNode(sicilian, 1);
+        await tester.pumpAndSettle();
+        expectStable();
+        final nested = sicilian.children.first.children[1];
+        controller.goToVariationNode(nested, 1);
+        await tester.pumpAndSettle();
+        expectStable();
+        controller.focusVariation();
+        await tester.pumpAndSettle();
+        expectStable();
+        controller.goToMainLineIndex(2);
+        await tester.pumpAndSettle();
+        expectStable();
+      });
+    }
+  }
+
+  testWidgets('a crowded fork scrolls without moving the reading area', (
+    tester,
+  ) async {
+    final controller = await _pump(
+      tester,
+      width: 320,
+      pgn:
+          '1. e4 e5 (1... c5) (1... e6) (1... c6) (1... d5) '
+          '(1... d6) (1... Nf6) (1... g6) (1... a5) 2. Nf3 *',
+    );
+    final viewport = tester.getRect(_scrollView);
+    controller.goForward();
+    await tester.pumpAndSettle();
+    expect(tester.getRect(_scrollView), viewport);
+    final lastChoice = find.descendant(
+      of: find.byKey(const ValueKey('pgn-branch-picker')),
+      matching: find.text('a5'),
+    );
+    await tester.ensureVisible(lastChoice);
+    await tester.tap(lastChoice);
+    await tester.pumpAndSettle();
+    expect(controller.inVariation, isTrue);
+    final view = tester.widget<PgnMovetextView>(find.byType(PgnMovetextView));
+    expect(controller.currentFen, view.variationsByPly[1]!.last.fen);
+    expect(tester.getRect(_scrollView), viewport);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final note in ['', '{A short explanation.}']) {
     testWidgets('a fitting game keeps its title visible with note="$note"', (
       tester,
@@ -270,6 +348,9 @@ void main() {
       findsOneWidget,
     );
     expect(_move('e5'), findsNWidgets(2));
+    await tester.ensureVisible(
+      find.widgetWithText(TextButton, 'Focus variation'),
+    );
     await tester.tap(find.widgetWithText(TextButton, 'Focus variation'));
     await tester.pumpAndSettle();
     expect(
@@ -289,6 +370,9 @@ void main() {
     controller.goForward();
     await tester.pumpAndSettle();
     expect(controller.currentFen, e5.children.first.fen);
+    await tester.ensureVisible(
+      find.widgetWithText(TextButton, 'Return to parent'),
+    );
     await tester.tap(find.widgetWithText(TextButton, 'Return to parent'));
     await tester.pumpAndSettle();
     expect(controller.currentFen, d4.fen);
@@ -358,7 +442,13 @@ void main() {
       expect(_move('e4'), findsOneWidget);
       final headingTop = tester.getTopLeft(_move('e4')).dy;
       expect(headingTop, closeTo(tester.getTopLeft(_scrollView).dy, 2));
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is SingleChildScrollView && w.scrollDirection == Axis.vertical,
+        ),
+        findsOneWidget,
+      );
       expect(
         find.textContaining('Readable prose needs space.', findRichText: true),
         findsOneWidget,
