@@ -99,6 +99,7 @@ Future<void> _pump(
           settings: settings,
           onShowPosition: onShowPosition ?? (_) {},
           onEditInBuilder: onEditInBuilder,
+          loadContents: (_) async => bookLines ?? [_bookLine()],
           loadLines:
               ({
                 required String chapterPath,
@@ -153,7 +154,7 @@ void main() {
 
     // The prepared line is on screen, and it pushed its landing position onto
     // the viewer's board — the point of the tab existing.
-    expect(find.text('Open Sicilian – Main'), findsOneWidget);
+    expect(find.byKey(const ValueKey('book-line')), findsOneWidget);
     expect(find.text('Hide line'), findsOneWidget);
     expect(positions, isNotEmpty);
   });
@@ -208,17 +209,11 @@ void main() {
       bookLines: [_bookLine(), _sidelineFromSamePrefix()],
     );
 
-    // The header counts them, and each row is labelled by the move that line
-    // answers the deviation with — the only thing that differs between them.
     expect(find.text('2 book lines reach move 3'), findsOneWidget);
-    // cxd4 is both a picker row and a move in the selected line's movetext.
-    expect(find.text('cxd4'), findsWidgets);
-    // Qxd4 is only the picker row: its line is not the one on screen yet.
-    expect(find.text('Qxd4'), findsOneWidget);
-    expect(find.text('Open Sicilian – Chekhover'), findsOneWidget);
-
-    // Picking one swaps the movetext and the note under the header.
-    await tester.tap(find.text('Qxd4'));
+    await tester.tap(find.byKey(const ValueKey('book-line')));
+    await tester.pumpAndSettle();
+    expect(find.text('Book plays 3... Qxd4'), findsOneWidget);
+    await tester.tap(find.text('Open Sicilian – Chekhover'));
     await tester.pumpAndSettle();
 
     expect(
@@ -227,7 +222,9 @@ void main() {
     );
   });
 
-  testWidgets('an in-book game offers no line to show', (tester) async {
+  testWidgets('an in-book game still lets me browse its contents', (
+    tester,
+  ) async {
     await _pump(
       tester,
       service: _StubDeviations(
@@ -248,7 +245,59 @@ void main() {
 
     expect(find.textContaining('In book the whole way'), findsOneWidget);
     expect(find.text('Show line'), findsNothing);
-    expect(find.text('Hide line'), findsNothing);
+    expect(find.text('Hide line'), findsOneWidget);
+    expect(find.text('Chapter contents'), findsOneWidget);
+  });
+
+  testWidgets('chapter contents and next line reuse the reader', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      service: _StubDeviations(
+        byColour: {
+          true: {'/repertoire/Sicilian': _leftBook},
+        },
+      ),
+      bookLines: [_bookLine(), _sidelineFromSamePrefix()],
+    );
+    await tester.tap(find.text('Chapter contents'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('You played 3... Nf6 — this line plays 3... cxd4.'),
+      findsNothing,
+    );
+    await tester.tap(find.byTooltip('Next book line'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 2'), findsOneWidget);
+    expect(find.text('Open Sicilian – Chekhover'), findsOneWidget);
+  });
+
+  testWidgets('another opening is neutral and opens book contents', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      service: _StubDeviations(
+        byColour: {
+          true: {
+            '/repertoire/Sicilian': const DeviationReport(
+              matchedPlies: 0,
+              chapterPath: '/repertoire/Sicilian/open.pgn',
+              chapterName: 'Sicilian',
+              pathSans: [],
+              playedSan: 'd4',
+              expectedSans: ['e4'],
+              byMe: true,
+              differentOpening: true,
+            ),
+          },
+        },
+      ),
+    );
+    expect(find.textContaining('Different opening —'), findsOneWidget);
+    expect(find.textContaining('You left book'), findsNothing);
+    expect(find.text('Chapter contents'), findsOneWidget);
   });
 
   testWidgets('switching colour re-asks, and says when nothing is designated', (

@@ -6,6 +6,10 @@
 /// identity). Three rules, each learned from a real course export checked
 /// against real games:
 ///
+/// * **Choosing another opening is not a repertoire mistake.** Matching
+///   must reach at least our first move in the book. Black playing c5 instead
+///   of an e5 repertoire has not entered that repertoire merely by sharing
+///   White's e4. A later transposition into it still establishes membership.
 /// * **A book is a set of positions, not of move orders.** Every root-to-leaf
 ///   path of every chapter game — mainlines and variations alike — is played
 ///   out and each position it reaches is keyed by its FEN (counters dropped).
@@ -30,6 +34,8 @@ library;
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:path/path.dart' as p;
+
 import 'package:dartchess/dartchess.dart'
     show Chess, PgnNode, PgnNodeData, Position, Side;
 
@@ -52,6 +58,7 @@ class DeviationReport {
     this.lineName,
     this.gamePathSans,
     this.mentionedAlternative = false,
+    this.differentOpening = false,
   });
 
   /// Plies of the game that were in book before it diverged (== the 0-based
@@ -95,13 +102,19 @@ class DeviationReport {
   /// a deviation from the repertoire, but not an unknown move.
   final bool mentionedAlternative;
 
-  bool get inBook => playedSan == null;
+  /// The game never entered this book through our first opening choice.
+  /// Sharing the initial position (or White's move in a Black book) is not
+  /// evidence that the player intended to play this repertoire.
+  final bool differentOpening;
+
+  bool get inBook => !differentOpening && playedSan == null;
 
   /// True when the game ran past the *end* of the prepared line — the book
   /// has no moves at all at the deviation point — as opposed to diverging
   /// from moves it does have. "Who left book" is meaningless here; this is
   /// an invitation to extend the prep, not a deviation.
-  bool get bookEnded => playedSan != null && expectedSans.isEmpty;
+  bool get bookEnded =>
+      !differentOpening && playedSan != null && expectedSans.isEmpty;
 
   /// True when the game reached the book by a move order the book does not
   /// spell out.
@@ -328,6 +341,7 @@ class GameDeviationService {
       expectedSans: diverged ? expected.values.toList() : const [],
       lineName: lineName,
       mentionedAlternative: mentioned,
+      differentOpening: diverged && matched < (meWhite ? 1 : 2),
     );
   }
 
@@ -511,10 +525,6 @@ class GameDeviationService {
     }
   }
 
-  static String _chapterDisplayName(String path) {
-    final base = path.split(RegExp(r'[/\\]')).last;
-    return base.toLowerCase().endsWith('.pgn')
-        ? base.substring(0, base.length - 4)
-        : base;
-  }
+  static String _chapterDisplayName(String path) =>
+      p.basenameWithoutExtension(path);
 }

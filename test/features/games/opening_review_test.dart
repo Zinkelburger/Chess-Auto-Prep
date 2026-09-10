@@ -61,6 +61,24 @@ DeviationReport _report({
 }
 
 void main() {
+  test('different opening choices produce no review issue or game moment', () {
+    const report = DeviationReport(
+      matchedPlies: 1,
+      chapterPath: '/book/Main.pgn',
+      chapterName: 'Open games',
+      pathSans: ['e4'],
+      playedSan: 'c5',
+      expectedSans: ['e5'],
+      byMe: true,
+      differentOpening: true,
+    );
+    final game = _game(deviation: report);
+    final review = aggregateOpeningReview([game]);
+    expect(review.issueCount, 0);
+    expect(game.moments, isEmpty);
+    expect(deviationVerdict(report), startsWith('Different opening'));
+  });
+
   test('identical mistakes across games collapse into one counted entry', () {
     final repeated = _report(
       pathSans: ['e4', 'c5', 'Nf3', 'd6'],

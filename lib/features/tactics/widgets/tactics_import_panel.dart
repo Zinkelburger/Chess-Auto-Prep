@@ -10,7 +10,6 @@ import '../../../theme/app_text_styles.dart';
 import '../../../widgets/accounts/accounts_card.dart';
 import '../../../widgets/common/home_block.dart';
 import '../../../widgets/engine/engine_gate.dart';
-import '../../../services/master_games/master_games_service.dart';
 import '../../games/controllers/recent_games_controller.dart';
 import '../../games/services/home_review_runner.dart';
 import '../../games/services/opening_review.dart';
@@ -18,7 +17,6 @@ import '../../games/services/recent_game_navigation.dart';
 import '../../games/widgets/analysis_block.dart';
 import '../../games/widgets/my_books_block.dart';
 import '../../games/widgets/opening_review_dialog.dart';
-import '../../master_games/widgets/master_practice_dialog.dart';
 import '../controllers/tactics_session_controller.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
@@ -174,13 +172,6 @@ class _TacticsImportPanelState extends _TacticsImportPanelStateBase
       gamesInWindow: checked.length,
       windowLabel: games.window.bookCheckLabel,
       onOpeningReview: () => _showOpeningReview(games),
-      masterGameCount: MasterGamesService.instance.stats?.games ?? 0,
-      onMasterPractice: () => showMasterPracticeReview(
-        context,
-        appState: context.read<AppState>(),
-        games: games.games,
-        windowLabel: games.window.label,
-      ),
       repeated: review.repeated(),
       onFixEntry: (entry) => openLineInBuilder(context.read<AppState>(), entry),
     );

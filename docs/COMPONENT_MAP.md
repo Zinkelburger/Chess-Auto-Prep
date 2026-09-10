@@ -746,7 +746,7 @@ Move selection follows the position on the board: only the latest half-move supp
 Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept; editable readers save these lines, read-only readers retain them temporarily)
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
 Keyboard: `↑`/`↓` previous/next game, `←`/`→` moves, Home/End jump, Enter focus variation, Esc return to parent or leave mode, F11 fullscreen, Space playback, and Ctrl/Cmd+V paste PGN. Enter starts solitaire during setup. Text fields retain their normal editing behavior.
-Workspace tabs: the main **Game** stays open. **Actions** opens Evaluation graph,
+Workspace tabs: the main **Game** stays open. **Actions** opens Compare against my books, Evaluation graph,
 Filter or Tree; the Tree tab contains the collection/database source selector. The strip appears only with
 two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles
 only opened tabs. Readers stay mounted and preserve their cursors. The settings
@@ -755,6 +755,22 @@ which returns to the same draft. Autosave can be toggled in Actions or settings;
 the reader has no persistent saved-status label. Tree/filter results use subtle
 row striping. Tree uses blue White-win, amber Black-win and neutral draw badges;
 filter previews use neutral badges.
+
+**Book comparison:** Actions → Compare against my books opens the canonical
+`RepertoireLinePanel` beside the Game tab on the main board. The opening-review
+queue opens games here directly; its former nested board/detail dialog is
+removed. The master-practice comparison button is removed from Tactics.
+Each designated book shows its verdict, with the played and book moves emphasized.
+The Book panel offers searchable chapter and line choices, previous/next lines,
+and Matching lines / Chapter contents. An in-book game can still browse its book.
+Choosing another opening on the first own move is neutral: the game must first
+enter the designated book (including through a later transposition) before a
+departure counts. Different-opening games are excluded from review mistakes,
+gaps and game moments, and never labeled fully in book.
+Comparison uses positions across move orders; the book reader uses the book's
+own ply when a transposition changes path length. Async comparison and line
+loads discard obsolete results after selection changes. Add existing in My books
+uses the shared `ChoiceField` searchable picker.
 
 Date rules use **After ≥** / **Before ≤**; rating bounds use **At least ≥** /
 **At most ≤**. These bounds remain inclusive. Even a filter matching all games

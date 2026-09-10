@@ -255,8 +255,6 @@ class OpeningsBlock extends StatelessWidget {
     required this.gamesInWindow,
     required this.windowLabel,
     required this.onOpeningReview,
-    required this.masterGameCount,
-    required this.onMasterPractice,
     this.checking = false,
     this.repeated = const [],
     this.onFixEntry,
@@ -273,11 +271,6 @@ class OpeningsBlock extends StatelessWidget {
   final int gamesInWindow;
   final String windowLabel;
   final VoidCallback onOpeningReview;
-
-  /// Games in the local TWIC database; zero disables the browse button rather
-  /// than hiding it, so the block keeps the same shape either way.
-  final int masterGameCount;
-  final VoidCallback onMasterPractice;
 
   /// Deviation points more than one game walked into, most-repeated first
   /// (see `OpeningReviewData.repeated`). Listed under the buttons so the
@@ -302,7 +295,7 @@ class OpeningsBlock extends StatelessWidget {
               ? '$openingIssueCount $places your games left your books'
               : checking
               ? 'Checking your books…'
-              : 'Your $windowLabel stayed in book',
+              : 'No book deviations in your $windowLabel',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: AppTextStyles.bodyStrong,
@@ -327,32 +320,6 @@ class OpeningsBlock extends StatelessWidget {
                 hasIssues
                     ? 'Opening review ($openingIssueCount)'
                     : 'Opening review',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Tooltip(
-          message: masterGameCount > 0
-              ? 'See where your $windowLabel left master practice, what '
-                    'masters play there instead, and the games worth opening'
-              : 'Download The Week in Chess on the Databases page first',
-          child: SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: OutlinedButton(
-              key: const Key('master-practice-button'),
-              onPressed: masterGameCount > 0 && gamesInWindow > 0
-                  ? onMasterPractice
-                  : null,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.ink,
-                side: const BorderSide(color: AppColors.outline),
-              ),
-              child: const Text(
-                'Vs. master practice',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

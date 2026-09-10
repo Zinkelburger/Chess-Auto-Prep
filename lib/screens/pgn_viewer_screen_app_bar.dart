@@ -152,6 +152,11 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             ),
           if (!solitaire) ...[
             AppMenuEntry(
+              label: 'Compare against my books',
+              icon: Icons.menu_book_outlined,
+              onRun: () => _showPanel(PgnWorkspace.books),
+            ),
+            AppMenuEntry(
               label: _viewPreferences.engine ? 'Hide Engine' : 'Show Engine',
               icon: Icons.memory,
               onRun: () {

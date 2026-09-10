@@ -189,7 +189,10 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             onClose: _closePanel,
           ),
         if (_deviationReport case final deviation?
-            when showTabs && _tabController.index == 0)
+            when showTabs &&
+                _tabController.index == 0 &&
+                !deviation.inBook &&
+                !deviation.differentOpening)
           _DeviationBanner(report: deviation, onShowLine: _showLineTab),
         Expanded(
           child: IndexedStack(
