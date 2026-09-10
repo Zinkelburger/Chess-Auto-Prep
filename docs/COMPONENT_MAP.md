@@ -475,10 +475,12 @@ Both use `EnginePvRow`: compact rows, hairline separators and a cool slate surfa
 distinguish analysis from the neutral PGN canvas. All engine-provided moves are
 available, without a fixed move-count cap; each row can expand to show its full
 line. The shared PV-row preference limits collapsed wrapping in both panels (one row
-by default); short lines occupy only the space they need.
+by default); each slot reserves that many rows even for short or pending lines.
 Move taps and hover previews work throughout the line, including the first move.
 The inline toolbar is 24px tall and reserves compact PV slots during streaming
-to keep the PGN stable; expanded lines scroll within a bounded area.
+to keep the PGN stable, including when wrapping is enabled. Expanding a line opens
+a fixed six-row viewport; subsequent PV updates scroll within it without moving
+the following rows.
 
 ```
 Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off

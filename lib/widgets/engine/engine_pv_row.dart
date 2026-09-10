@@ -84,23 +84,20 @@ class _EnginePvRowState extends State<EnginePvRow> {
               ),
             ),
             Expanded(
-              child: !_expanded && widget.rows == 1
-                  ? SizedBox(
-                      height: EnginePvRow.lineHeight(context),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: line,
-                      ),
-                    )
-                  : ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: EnginePvRow.lineHeight(context),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: line,
-                      ),
-                    ),
+              // Streamed PV length must never move the following engine row.
+              // Expansion is an explicit resize; subsequent updates scroll in
+              // the same six-row viewport, including when the PV gets shorter.
+              child: SizedBox(
+                height:
+                    EnginePvRow.lineHeight(context) *
+                    (_expanded ? 6 : widget.rows),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: _expanded
+                      ? SingleChildScrollView(child: line)
+                      : ClipRect(child: line),
+                ),
+              ),
             ),
             if (widget.trailing != null)
               Padding(
@@ -109,7 +106,7 @@ class _EnginePvRowState extends State<EnginePvRow> {
               ),
             SizedBox(
               width: 26,
-              child: widget.sanMoves.length > 1
+              child: _expanded || widget.sanMoves.length > 1
                   ? IconButton(
                       style: const ButtonStyle(
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
