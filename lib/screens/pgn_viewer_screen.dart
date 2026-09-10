@@ -28,6 +28,7 @@ import '../utils/open_in_file_manager.dart';
 import '../core/pgn_viewer_controller.dart';
 import '../core/pgn/pgn_viewer_handle.dart';
 import '../core/pgn/pgn_pane_router.dart';
+import '../core/pgn/pgn_copy.dart';
 import '../core/pgn/solitaire_controller.dart';
 import '../features/games/services/game_deviation_service.dart';
 import '../features/games/services/opening_review.dart' show deviationVerdict;
@@ -207,7 +208,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     // reading owns the board, so flipping between them is a comparison of the
     // same position rather than two viewers fighting over one board.
     _tabController.addListener(_onSideTabChanged);
-    unawaited(_loadViewPreferences());
+    final preferencesReady = _loadViewPreferences();
     unawaited(_controller.loadRecentFiles());
     unawaited(_controller.loadCollections());
     unawaited(_controller.loadSolitaireSettings());
@@ -220,6 +221,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         // The screen may have been created by the very mode switch that set
         // the pending file (listener not registered yet) — consume it now.
         _consumePendingViewerFile(appState);
+        unawaited(
+          preferencesReady.then((_) async {
+            if (mounted) await _controller.restoreLastSession();
+          }),
+        );
       }
     });
   }
@@ -246,6 +252,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _controller.setAutoPlaySpeed(saved.speed);
     _controller.setAutoNextGame(saved.autoNext);
     _controller.setAutoSave(saved.autoSave);
+    _controller.setAutoDetectOpenings(saved.autoDetectOpenings);
   }
 
   @override
@@ -260,6 +267,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _controller.setAutoPlaySpeed(value.speed);
     _controller.setAutoNextGame(value.autoNext);
     _controller.setAutoSave(value.autoSave);
+    _controller.setAutoDetectOpenings(value.autoDetectOpenings);
     unawaited(value.save());
   }
 
@@ -711,6 +719,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     try {
       if (!await _confirmLeavePgn()) return;
       await _controller.flushPendingMetadata();
+      await _controller.saveSession();
       await windowManager.setPreventClose(false);
       await windowManager.close();
     } finally {
@@ -1051,6 +1060,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void _onGamePosition(Position position) {
+    if (!mounted) return;
+    _controller.rememberReadingPosition();
     _gamePanePosition = position;
     // TabBarView keeps the Game child alive while Book is visible. Engine or
     // async widget updates from that hidden child must not steal the board.
@@ -1260,13 +1271,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   @override
-  Future<void> _copyCurrentGamePgn() async {
+  Future<void> _copyCurrentGamePgn({bool mainlineOnly = false}) async {
     if (_controller.filteredGames.isEmpty) return;
     final pgnText =
         (_referenceGames[_tabController.index] ??
                 _controller.filteredGames[_controller.currentGameIndex])
             .pgnText;
-    await Clipboard.setData(ClipboardData(text: pgnText));
+    await Clipboard.setData(
+      ClipboardData(
+        text: mainlineOnly ? mainlinePgnWithoutComments(pgnText) : pgnText,
+      ),
+    );
     if (!mounted) return;
     showAppSnackBar(context, AppMessages.pgnCopied);
     _reclaimFocus();

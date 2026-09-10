@@ -40,11 +40,17 @@ void main() {
     await tester.tap(find.text('Playback controls'));
     await tester.pumpAndSettle();
     expect(prefs.playback, isTrue);
+    expect(prefs.autoDetectOpenings, isTrue);
+    await tester.ensureVisible(find.text('Auto-detect ECO and opening'));
+    await tester.tap(find.text('Auto-detect ECO and opening'));
+    await tester.pumpAndSettle();
+    expect(prefs.autoDetectOpenings, isFalse);
     expect(find.byType(SettingsChoiceTile<double>), findsOneWidget);
     await tester.ensureVisible(find.text('Restore simple defaults'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restore simple defaults'));
     await tester.pumpAndSettle();
+    expect(prefs.autoDetectOpenings, isTrue);
     expect(prefs.graph, isFalse);
     expect(prefs.engine, isFalse);
     expect(prefs.playback, isFalse);

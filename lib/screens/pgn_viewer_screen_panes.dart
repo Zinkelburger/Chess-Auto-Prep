@@ -461,6 +461,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
         ),
       );
     }
+    if (_controller.isRestoringSession) return const SizedBox.shrink();
     final game = _controller.filteredGames[_controller.currentGameIndex];
     return Column(
       children: [
@@ -491,6 +492,24 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             onAnalyse: _analyseSolitaireGame,
             onExit: () => unawaited(_leaveSolitaire()),
           ),
+        if (_viewPreferences.autoDetectOpenings &&
+            [
+              game.headers['ECO'],
+              game.headers['Opening'],
+            ].any((value) => value != null && value.isNotEmpty && value != '?'))
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                [game.headers['ECO'], game.headers['Opening']]
+                    .whereType<String>()
+                    .where((value) => value.isNotEmpty && value != '?')
+                    .join(' · '),
+                style: AppTextStyles.muted,
+              ),
+            ),
+          ),
         if (!_controller.isSolitaireMode) _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
@@ -503,7 +522,17 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             // Through the screen, not straight to the controller: it remembers
             // where the game's cursor is so leaving the Line tab can put the
             // board back (see [_onGamePosition]).
-            onPositionChanged: _onGamePosition,
+            onPositionChanged: (position) {
+              if (!mounted ||
+                  _controller.filteredGames.isEmpty ||
+                  !identical(
+                    _controller.filteredGames[_controller.currentGameIndex],
+                    game,
+                  )) {
+                return;
+              }
+              _onGamePosition(position);
+            },
             // Bound to this game object: the annotation panel debounces its
             // saves, which may flush after the user switches games.
             onCommentsChanged: (movetext) => _controller.persistMoveCommentsFor(

@@ -8,6 +8,8 @@ class GameViewPreferences {
   final double speed;
   final bool autoNext;
   final bool autoSave;
+  final bool autoDetectOpenings;
+  static const autoDetectOpeningsKey = 'pgn_viewer.auto_detect_openings';
 
   const GameViewPreferences({
     this.playback = false,
@@ -16,6 +18,7 @@ class GameViewPreferences {
     this.speed = 1,
     this.autoNext = false,
     this.autoSave = true,
+    this.autoDetectOpenings = true,
   });
 
   GameViewPreferences copyWith({
@@ -25,6 +28,7 @@ class GameViewPreferences {
     double? speed,
     bool? autoNext,
     bool? autoSave,
+    bool? autoDetectOpenings,
   }) => GameViewPreferences(
     playback: playback ?? this.playback,
     engine: engine ?? this.engine,
@@ -32,6 +36,7 @@ class GameViewPreferences {
     speed: speed ?? this.speed,
     autoNext: autoNext ?? this.autoNext,
     autoSave: autoSave ?? this.autoSave,
+    autoDetectOpenings: autoDetectOpenings ?? this.autoDetectOpenings,
   );
 
   static Future<GameViewPreferences> load() async {
@@ -44,6 +49,7 @@ class GameViewPreferences {
       speed: speed.isFinite && speed >= 0.5 && speed <= 10 ? speed : 1,
       autoNext: prefs.getBool('game_view.auto_next') ?? false,
       autoSave: prefs.getBool('game_view.auto_save') ?? true,
+      autoDetectOpenings: prefs.getBool(autoDetectOpeningsKey) ?? true,
     );
   }
 
@@ -55,5 +61,6 @@ class GameViewPreferences {
     await prefs.setDouble('game_view.speed', speed);
     await prefs.setBool('game_view.auto_next', autoNext);
     await prefs.setBool('game_view.auto_save', autoSave);
+    await prefs.setBool(autoDetectOpeningsKey, autoDetectOpenings);
   }
 }

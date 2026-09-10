@@ -20,8 +20,8 @@ final _ecoExact = RegExp(r'^[A-E]\d{2}$');
 class HeaderFilters extends StatefulWidget {
   final SliceFilterController controller;
 
-  /// Retains the dialog's quick-add buttons; rows use the same editor in both
-  /// modes, including editable preset rows and an explicit matching rule.
+  /// Use a single plus menu in the collection workspace; both hosts keep
+  /// editable Field / Rule / Value rows.
   final bool simple;
 
   /// Source games for distinct header suggestions and their game counts.
@@ -132,7 +132,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
 
   String _fieldLabel(String field) => switch (field) {
     kPlayerHeaderField => 'Player',
-    'Date' => 'Date / year',
+    'Date' => 'Date',
     'WhiteElo' => 'White rating',
     'BlackElo' => 'Black rating',
     'StudyRating' => 'Study rating',
@@ -146,8 +146,8 @@ class _HeaderFiltersState extends State<HeaderFilters> {
     MatchMode.notContains => 'Does not contain',
     MatchMode.exact => 'Exact',
     MatchMode.regex => 'Matches regex',
-    MatchMode.after => field == 'Date' ? 'In or after' : 'At least',
-    MatchMode.before => field == 'Date' ? 'In or before' : 'At most',
+    MatchMode.after => field == 'Date' ? 'After' : 'At least',
+    MatchMode.before => field == 'Date' ? 'Before' : 'At most',
   };
 
   void _addField(String field) {
@@ -156,44 +156,26 @@ class _HeaderFiltersState extends State<HeaderFilters> {
     final index = controller.headerRows.length - 1;
     controller.setHeaderField(index, field);
     if (field == 'Result') controller.setHeaderMode(index, MatchMode.exact);
+    if (field == 'Date') controller.setHeaderMode(index, MatchMode.after);
   }
 
-  Widget _buildAddButtons() => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    children: [
-      if (!widget.simple)
-        TextButton.icon(
-          onPressed: () => _addField(kPlayerHeaderField),
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('Add condition'),
-        ),
-      if (widget.simple) ...[
-        for (final field in [
-          kPlayerHeaderField,
-          'Event',
-          'Date',
-          'Result',
-          'Opening',
-        ])
-          TextButton(
-            onPressed: () => _addField(field),
-            child: Text(field == 'Date' ? 'Year' : field),
+  Widget _buildAddButtons() => Align(
+    alignment: Alignment.centerLeft,
+    child: widget.simple
+        ? PopupMenuButton<String>(
+            tooltip: 'Add filter',
+            icon: const Icon(Icons.add),
+            onSelected: _addField,
+            itemBuilder: (_) => [
+              for (final field in kHeaderFieldOptions)
+                PopupMenuItem(value: field, child: Text(_fieldLabel(field))),
+            ],
+          )
+        : TextButton.icon(
+            onPressed: () => _addField(kPlayerHeaderField),
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Add condition'),
           ),
-        PopupMenuButton<String>(
-          tooltip: 'More filters',
-          onSelected: _addField,
-          itemBuilder: (_) => [
-            for (final field in kHeaderFieldOptions)
-              PopupMenuItem(value: field, child: Text(_fieldLabel(field))),
-          ],
-          child: const Padding(
-            padding: EdgeInsets.all(8),
-            child: Text('More…'),
-          ),
-        ),
-      ],
-    ],
   );
 
   Widget _buildRow(int index, {required bool wide}) {
@@ -405,7 +387,13 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
               'WhiteElo' || 'BlackElo' || 'StudyRating' => 'Rating',
               _ => 'Type a value',
             },
-            helperText: showEcoWarn ? 'Expected A00–E99' : null,
+            helperText: showEcoWarn
+                ? 'Expected A00–E99'
+                : row.field == 'Date' &&
+                      (row.mode == MatchMode.after ||
+                          row.mode == MatchMode.before)
+                ? 'Includes this year or date'
+                : null,
             helperMaxLines: 3,
             helperStyle: showEcoWarn
                 ? AppTextStyles.forTheme(

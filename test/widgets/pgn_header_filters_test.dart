@@ -323,11 +323,11 @@ void main() {
     await tester.enterText(_value(controller), '2200');
     await tester.pumpAndSettle();
     expect(controller.headerConfigs.single.mode, MatchMode.after);
-    await _choose(tester, _field, 'Date', 'Date / year');
-    await _choose(tester, _rule, 'before', 'In or before');
+    await _choose(tester, _field, 'Date', 'Date');
+    await _choose(tester, _rule, 'before', 'Before');
     await tester.enterText(_value(controller), '1960');
     await tester.pumpAndSettle();
-    expect(controller.headerConfigs.single.chipLabel, 'In or before 1960');
+    expect(controller.headerConfigs.single.chipLabel, 'Before 1960');
     await _choose(tester, _field, 'ECO', 'ECO');
     await _choose(tester, _rule, 'exact', 'Exact');
     await tester.enterText(_value(controller), 'B');
