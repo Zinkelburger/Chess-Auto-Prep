@@ -34,7 +34,7 @@ const int kMaxMaxAnalysisMoves = 20;
 
 /// How many text rows each engine row gives its principal variation before
 /// the continuation is ellipsised. 1 restores the old single-line behavior.
-const int kDefaultPvRows = 2;
+const int kDefaultPvRows = 1;
 const int kMinPvRows = 1;
 const int kMaxPvRows = 4;
 

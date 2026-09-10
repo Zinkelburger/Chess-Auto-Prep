@@ -224,6 +224,54 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('full PV expands and later moves insert the complete line', (
+    tester,
+  ) async {
+    final connection = _Connection(autoReply: false);
+    StockfishConnectionFactory.createForTest = () async => connection;
+    List<String>? inserted;
+    int? clicked;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            child: InlineEngineBar(
+              fen: fen,
+              onLineMoveTapped: (moves, index) {
+                inserted = moves;
+                clicked = index;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    InlineEngineBar.toggleEngine();
+    await tester.pump();
+    connection.output.add(
+      'info depth 15 multipv 1 score cp 20 nodes 100 pv '
+      'e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6 e1g1 f8e7 f1e1 b7b5 a4b3 d7d6',
+    );
+    connection.output.add('bestmove e2e4');
+    await tester.pumpAndSettle();
+    final compactHeight = tester.getSize(find.byType(InlineEngineBar)).height;
+    await tester.tap(find.byTooltip('Show full line'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('d6'));
+    await tester.pumpAndSettle();
+    expect(inserted, hasLength(14));
+    expect(clicked, 13);
+    expect(inserted!.first, 'e4');
+    await tester.tap(find.byTooltip('Collapse line'));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(InlineEngineBar)).height, compactHeight);
+    await tester.tap(find.text('e4'));
+    expect(clicked, 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('hover lines preserve perspective across turns and board flips', (
     tester,
   ) async {
