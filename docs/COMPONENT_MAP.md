@@ -585,7 +585,7 @@ They do not contribute to Learn/Review counts or either scheduling queue.
 
 ### PGN viewer (Open PGN)
 
-**Actions ▾** offers icon-labelled **Edit PGN**, **Show Engine / Hide Engine**,
+**Actions ▾** offers icon-labelled **Edit**, **Show opening / Hide opening**, **Show Engine / Hide Engine**,
 **Evaluation graph / Tree**, **Copy Game PGN**, **Copy mainline PGN (no comments)**,
 and **Copy FEN** (the overlapping-squares copy icon). The mainline copy keeps the
 active game's headers, starting position and result, stripping all comments,
@@ -607,6 +607,14 @@ then **Actions → Export → Export as PGN…**. Position filtering matches mai
 and variations and combines with the other active filters; there is no separate
 tree-position export action. Database explorer offers
 Lichess, Masters and local TWIC sources.
+
+Opening details are hidden by default; **Actions → Show opening** saves the
+choice and displays the opening name with its ECO code in normal body text.
+Code-only PGNs resolve a name from the bundled opening book. ECO detection and
+filtering remain independent of this display choice. Normal reading has no PGN
+edit banner or mainline heading; **Back to game** appears only in variations or
+comment previews. **Edit** opens the annotation panel with a white **Comment:**
+label and field outline; **Done** leaves edit mode.
 
 The engine is hidden by default. **E** reveals and enables it on the Game tab;
 further presses toggle analysis without hiding the panel. This shortcut is

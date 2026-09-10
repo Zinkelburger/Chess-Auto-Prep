@@ -12,6 +12,8 @@ void main() {
     expect(initial.autoSave, isTrue);
     expect(initial.engine, isFalse);
     expect(initial.graph, isFalse);
+    expect(initial.showOpening, isFalse);
+    expect(initial.autoDetectOpenings, isTrue);
     await initial
         .copyWith(
           playback: true,
@@ -20,6 +22,7 @@ void main() {
           speed: 3,
           autoNext: true,
           autoSave: false,
+          showOpening: true,
         )
         .save();
     final restored = await GameViewPreferences.load();
@@ -29,6 +32,8 @@ void main() {
     expect(restored.speed, 3);
     expect(restored.autoNext, isTrue);
     expect(restored.autoSave, isFalse);
+    expect(restored.showOpening, isTrue);
+    expect(restored.autoDetectOpenings, isTrue);
     await const GameViewPreferences().save();
     expect((await GameViewPreferences.load()).playback, isFalse);
   });

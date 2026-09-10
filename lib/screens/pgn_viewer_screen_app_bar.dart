@@ -92,6 +92,17 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             onRun: _openSliceDialog,
           ),
         if (hasGame) ...[
+          AppMenuEntry(
+            label: _viewPreferences.showOpening
+                ? 'Hide opening'
+                : 'Show opening',
+            icon: Icons.info_outline,
+            onRun: () => _setViewPreferences(
+              _viewPreferences.copyWith(
+                showOpening: !_viewPreferences.showOpening,
+              ),
+            ),
+          ),
           if (!solitaire && _showSaveAction)
             AppMenuEntry(
               icon: Icons.save_outlined,
@@ -102,7 +113,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
           if (!solitaire && !_onReferenceTab)
             AppMenuEntry(
               icon: Icons.edit_outlined,
-              label: _editMode ? 'Finish editing' : 'Edit PGN',
+              label: _editMode ? 'Finish editing' : 'Edit',
               enabled: !_onLineTab,
               onRun: _toggleEditMode,
             ),

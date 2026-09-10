@@ -19,6 +19,13 @@ void main() {
     EngineLifecycle.instance.resetForTest();
     EngineLifecycle.testMode = true;
     useScriptedBoardEngine();
+    const windowChannel = MethodChannel('window_manager');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(windowChannel, (_) async => null);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(windowChannel, null);
+    });
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
           if (call.method == 'Clipboard.getData') {
