@@ -101,17 +101,19 @@ void main() {
     return service;
   }
 
-  testWidgets('first run spells out all three ways to add a player', (
-    tester,
-  ) async {
-    await pumpPicker(tester, const []);
+  testWidgets(
+    'first run spells out game sources and a separate player database',
+    (tester) async {
+      await pumpPicker(tester, const []);
 
-    expect(find.text('Which player?'), findsOneWidget);
-    expect(find.text('No players yet'), findsNothing);
-    expect(find.text('Online…'), findsOneWidget);
-    expect(find.text('From PGN files…'), findsOneWidget);
-    expect(find.text('Groups of players…'), findsOneWidget);
-  });
+      expect(find.text('Which player?'), findsOneWidget);
+      expect(find.text('No players yet'), findsNothing);
+      expect(find.text('Online…'), findsOneWidget);
+      expect(find.text('From PGN files…'), findsOneWidget);
+      expect(find.text('Groups of players…'), findsNothing);
+      expect(find.byKey(const Key('player-database')), findsOneWidget);
+    },
+  );
 
   testWidgets('a saved player is listed with one add control, not three', (
     tester,
@@ -127,12 +129,13 @@ void main() {
     expect(find.byKey(const Key('add-player-button')), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
 
-    // The three sources live behind it, worded exactly as on first run.
+    // The two sources live behind it, worded exactly as on first run.
     await tester.tap(find.byKey(const Key('add-player-button')));
     await tester.pumpAndSettle();
     expect(find.text('Online…'), findsOneWidget);
     expect(find.text('From PGN files…'), findsOneWidget);
-    expect(find.text('Groups of players…'), findsOneWidget);
+    expect(find.text('Groups of players…'), findsNothing);
+    expect(find.byKey(const Key('player-database')), findsOneWidget);
   });
 
   testWidgets('tapping a player pops the screen with it', (tester) async {

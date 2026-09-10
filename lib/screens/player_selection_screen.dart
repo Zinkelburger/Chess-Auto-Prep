@@ -21,7 +21,7 @@ import '../widgets/analysis/player_downloads.dart';
 import '../widgets/analysis_download_dialog.dart';
 import '../widgets/analysis_import_dialog.dart';
 import '../widgets/common/list_search_field.dart';
-import '../features/opponents/widgets/tournaments_screen.dart';
+import '../features/opponents/widgets/people_screen.dart';
 
 class PlayerSelectionScreen extends StatefulWidget {
   const PlayerSelectionScreen({
@@ -122,9 +122,11 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                       onPressed: widget.onCancel,
                       child: const Text('Back to analysis'),
                     ),
-                  TextButton(
-                    onPressed: _openTournaments,
-                    child: const Text('Players & groups'),
+                  FilledButton.icon(
+                    key: const Key('player-database'),
+                    onPressed: _openDatabase,
+                    icon: const Icon(Icons.table_chart_outlined, size: 18),
+                    label: const Text('Player database'),
                   ),
                   const SizedBox(width: 8),
                   AddPlayerButton(onSelected: _addPlayerFrom),
@@ -228,8 +230,6 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         unawaited(_downloadNewPlayer());
       case AddPlayerSource.pgnFiles:
         unawaited(_openPgnFiles());
-      case AddPlayerSource.opponentList:
-        unawaited(_openTournaments());
     }
   }
 
@@ -304,19 +304,11 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     return replace == true && mounted;
   }
 
-  /// The tournaments screen hands back a player when the user picks
-  /// "Analyse" on an opponent there; otherwise the list is just refreshed,
-  /// since games may have been downloaded meanwhile.
-  Future<void> _openTournaments() async {
-    final picked = await Navigator.of(context).push<AnalysisPlayerInfo>(
-      MaterialPageRoute(builder: (_) => const TournamentsScreen()),
-    );
-    if (!mounted) return;
-    if (picked != null) {
-      _pick(picked);
-      return;
-    }
-    await _loadCachedPlayers();
+  Future<void> _openDatabase() async {
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => const PeopleScreen()));
+    if (mounted) await _loadCachedPlayers();
   }
 
   /// Seed the app-wide default username, but only when none is saved yet:

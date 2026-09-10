@@ -84,6 +84,8 @@ class _PlayerCellState extends State<PlayerCell> {
     textInputAction: TextInputAction.done,
     decoration: InputDecoration(
       hintText: widget.label,
+      filled: true,
+      fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       border: const OutlineInputBorder(),

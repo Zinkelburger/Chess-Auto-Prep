@@ -147,6 +147,7 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
   final Map<String, Tournament> _tournaments = {};
   Future<void>? _loading;
   bool _loaded = false;
+  bool savedAccountsImported = false;
   Future<void>? _writes;
 
   Future<void> _persist(Future<void> Function() write) {
@@ -181,6 +182,8 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
     if (raw != null && raw.trim().isNotEmpty) {
       try {
         final decoded = jsonDecode(raw);
+        savedAccountsImported =
+            decoded is Map && decoded['saved_accounts_imported'] == true;
         final rows = decoded is Map ? decoded['people'] : decoded;
         for (final row in (rows as List?) ?? const []) {
           if (row is Map) {
@@ -349,9 +352,21 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
+  /// Remember onboarding so deleting a record is not undone on next opening.
+  Future<void> markSavedAccountsImported() async {
+    savedAccountsImported = true;
+    try {
+      await _writePeople();
+    } catch (_) {
+      savedAccountsImported = false;
+      rethrow;
+    }
+  }
+
   Future<void> _writePeople() {
     final json = const JsonEncoder.withIndent('  ').convert({
       'format': kPeopleFormat,
+      'saved_accounts_imported': savedAccountsImported,
       'people': [for (final p in people) p.toJson()],
     });
     return _persist(() => _storage.writePeople(json));
