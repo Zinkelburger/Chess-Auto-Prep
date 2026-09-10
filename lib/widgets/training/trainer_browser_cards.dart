@@ -86,7 +86,7 @@ class _BrowserHeader extends StatelessWidget {
                   label: 'Learn',
                   hint: 'untrained',
                   icon: Icons.play_arrow_rounded,
-                  color: AppColors.srsNew,
+                  color: AppColors.successSoft,
                   count: counts.untrained,
                   batchSize: learnBatchSize,
                   dense: dense,
@@ -142,7 +142,7 @@ class _ReadAction extends StatelessWidget {
         onTap: onPressed,
         borderRadius: BorderRadius.circular(12),
         child: Tooltip(
-          message: 'Board and notes for every line, on one page',
+          message: 'Read moves and notes in PGN Viewer',
           waitDuration: const Duration(milliseconds: 400),
           child: Padding(
             padding: EdgeInsets.symmetric(
@@ -216,12 +216,10 @@ class _PrimaryAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final enabled = onPressed != null;
-    final fill = enabled
-        ? color.withValues(alpha: 0.18)
-        : AppColors.surfaceContainer;
+    final fill = enabled ? color : AppColors.surfaceContainer;
     // Dark ink on the bright fills: white fails AA on both #42A5F5 and
     // #FFA726 (see AppColors.onWarning).
-    final ink = enabled ? AppColors.ink : AppColors.onSurfaceDisabled;
+    final ink = enabled ? AppColors.onWarning : AppColors.onSurfaceDisabled;
 
     return Material(
       color: fill,
