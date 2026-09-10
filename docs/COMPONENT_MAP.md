@@ -692,7 +692,10 @@ Workspace tabs: the main **Game** stays open. **Actions** opens Evaluation graph
 Filter or Tree; the Tree tab contains the collection/database source selector. The strip appears only with
 two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles
 only opened tabs. Readers stay mounted and preserve their cursors. The settings
-gear opens view preferences.
+gear opens view preferences. Opening a filter result exposes **Back to filters**,
+which returns to the same draft. Autosave can be toggled in Actions or settings;
+the reader has no persistent saved-status label. Tree/filter results use subtle
+row striping and blue White-win, amber Black-win and neutral draw badges.
 
 Date rules use **After ≥** / **Before ≤**; rating bounds use **At least ≥** /
 **At most ≤**. These bounds remain inclusive. Even a filter matching all games
@@ -701,7 +704,10 @@ is restored.
 **Browse ECO openings…** uses `widgets/opening_picker_dialog.dart` and
 `services/opening_catalog.dart` to browse the bundled opening TSVs, preserving
 multiple named lines per ECO code. Its search uses the common `ListSearchField`
-with a magnifier, outlined input and clear action. Selection survives searches. The preview
+with a magnifier, inset input and clear action. The browse control sits beside
+Combine. Selection survives searches and reopening the picker. Exact code sets
+appear as removable chips in the ECO value cell, with representative board
+thumbnails enabled by default and a Show thumbnails checkbox. The preview
 supports legal board moves, editable SAN, undo, reset and board flip.
 **Filter by selected ECO codes** replaces existing ECO rows with one exact/OR
 condition and preserves other filters. **Use preview position** instead supplies
@@ -761,7 +767,7 @@ Collection trees retain null moves as navigable plies so Back preserves the side
 Toggled through **Actions → Edit PGN**. When active:
 
 - **NAG display**: Move-quality NAGs ($1–$6) render inline after the SAN with Lichess-style colors (brilliant=green, good=green, interesting=pink, dubious=blue, mistake=orange, blunder=red). Annotations remain visible outside edit mode.
-- **Save status and annotation panel**: PGN Viewer and Study show a quiet, fixed-width status beside the file title: **Autosave on · Saved**, **Saving…**, or **Not saved** on failure. There are no success popups or animated indicators, and saving does not insert a toolbar or shift the board. Hover reveals the file path or failure details. Manual saving reports **Autosave off · Saved** / **Unsaved changes** and keeps **Save** available; pasted games say **Not saved to a file** and offer **Save as…**. Failed viewer autosaves expose **Save** to retry. The shared Notes panel labels its target move; NAG buttons retain move-quality colors. Emptying an existing comment field keeps the stored comment until the explicit Delete comment action is confirmed, allowing replacement text without a popup while typing. Submitting an empty inline comment asks before removal. Branch deletion always confirms the count of moves and prose comments across all nested variations; chapter deletion and bulk clearing also show affected counts, including chapter introductions and variation starting comments. Confirmed removals follow the host's normal save setting.
+- **Save status and annotation panel**: PGN Viewer keeps autosave controls in Actions/settings without a persistent status label; failed autosaves expose Save to retry. Study shows a quiet, fixed-width status beside the file title: **Autosave on · Saved**, **Saving…**, or **Not saved** on failure. There are no success popups or animated indicators, and saving does not insert a toolbar or shift the board. Hover reveals the file path or failure details. Manual saving reports **Autosave off · Saved** / **Unsaved changes** and keeps **Save** available; pasted games say **Not saved to a file** and offer **Save as…**. Failed viewer autosaves expose **Save** to retry. The shared Notes panel labels its target move; NAG buttons retain move-quality colors. Emptying an existing comment field keeps the stored comment until the explicit Delete comment action is confirmed, allowing replacement text without a popup while typing. Submitting an empty inline comment asks before removal. Branch deletion always confirms the count of moves and prose comments across all nested variations; chapter deletion and bulk clearing also show affected counts, including chapter introductions and variation starting comments. Confirmed removals follow the host's normal save setting.
 - **Context menu**: Right-click in edit mode shows Comment, Annotate, Promote (variation), Delete — with promote/delete gated by `protectOriginal`.
 - **Keyboard**: `Escape` exits edit mode.
 - **Persistence**: User-added moves and variations persist in both reading and edit mode; Edit PGN exposes annotation controls. **Settings → PGN Viewer → Board and moves → Autosave PGN edits** defaults on. Turning it off keeps edits in memory across game navigation until **Save**; closing the file, replacing the collection, or closing the window offers Save / Discard / Cancel. Solitaire guesses and read-only reference readers remain temporary. Saves patch changed games into the source file, preserve unrelated games and file preambles, and retain unsaved status on failure. Pending comments flush on Save and when finishing editing, before the annotation panel is removed; repainting waits until the widget tree unlocks. NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
@@ -1401,7 +1407,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `pgn_inline_slice_editor.dart` | **Inline slice editor** — "All Lines" / "Slice" radio + position/header/sequence filters + match count via `computeSliceMatches` + preview panel; accepts optional `fenIndex` for instant position lookups; used inside `PgnSourcesPanel` per source |
 | `lines_preview_panel.dart` | **Browseable line list** — literal substring search, virtualized scrolling, `HoverableMoveChips` per row with `FloatingBoardPreview` on hover; shows full-panel loading spinner while `computing` (replaces stale count + list); used in collection search and inline slice editor |
 | `hoverable_move_chips.dart` | **Inline move chips with hover board preview** — renders SAN moves as compact chips, computes FEN on hover, triggers `BoardPreviewController.setPreview`; shared by `LinesPreviewPanel`, `LineItemRow`, PGN Viewer |
-| `slice/position_filter.dart` | Shared position filter widget (FEN/SAN input + Apply/Clear + "Board position" chip); uses `PositionPreviewIcon` for hover board preview |
+| `slice/position_filter.dart` | Shared position filter widget (FEN/SAN input, clear and optional current-board shortcut); hovering the input shows a board through `PositionHoverPreview`, without an eye icon or success checkmark |
 | `slice/header_filters.dart` | Reusable Field / Rule / Value table, stacked at narrow widths. Distinct collection headers suggest names/events with game counts; typing uses literal case-insensitive matching and selecting a suggestion sets the visible rule to exact. Presets are ordinary editable rows; shared by collection search and inline import filters |
 | `slice/sequence_filter.dart` | Shared move sequence filter widget ([gap]-separated groups) |
 | `pgn/pgn_game_filter_workspace.dart` | **Filter** workspace tab opened from **Actions → Filter games**, beside the board with the shared app theme. Compact named filter buttons focus newly added values; player fields reject multiple semicolon-separated names. Board position stays expanded and accepts FEN/moves, current-board capture and an embedded board editor. Move sequence is collapsible. Draft conditions and results survive tab switches; a changed collection starts a fresh draft from saved filters. Exact position search includes side to move, castling and en passant (mainline and variations). Live results use `LinesPreviewPanel`; Show games or a result click applies the draft and returns to Game. Debounces by 300ms and hides stale results; invalid input and unfinished board setup block applying. Optional `fenIndex` accelerates matching. |

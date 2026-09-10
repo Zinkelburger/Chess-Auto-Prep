@@ -78,7 +78,6 @@ import '../widgets/game_number_field.dart';
 import '../widgets/game_search_dialog.dart';
 import '../widgets/study/add_to_study_flow.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
-import '../widgets/pgn/pgn_save_status.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
 import '../widgets/pgn/pgn_opening_label.dart';
 import '../widgets/pgn/pgn_tree_toolbar.dart';
@@ -133,6 +132,23 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   List<GameRecord> _filterRecords = [];
   int? _filterRevision;
   String? _filterOriginFen;
+  List<PgnGameEntry>? _filterReturnSource;
+
+  @override
+  bool get _canReturnToFilters =>
+      _filterReturnSource != null &&
+      identical(_filterReturnSource, _controller.allGames) &&
+      _tabController.index == PgnWorkspace.game;
+
+  @override
+  void _returnToFilters() {
+    if (!mounted || !_canReturnToFilters) return;
+    _controller.stopAutoPlay();
+    _tabController.index = PgnWorkspace.filters;
+    setState(() => _filterReturnSource = null);
+    _reclaimFocus();
+  }
+
   final Map<int, PgnDatabasePanelController> _databasePanels = {};
   final Map<int, PgnGameEntry> _referenceGames = {};
   final Map<int, PgnViewerWidgetController> _referenceReaders = {};
@@ -303,7 +319,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _controller.stopAutoPlay();
     if (!mounted) return;
     if (index == PgnWorkspace.filters && _tabController.index != index) {
-      _filterOriginFen = normalizeFen(_controller.currentPosition.fen);
+      if (!identical(_filterReturnSource, _controller.allGames)) {
+        _filterOriginFen = normalizeFen(_controller.currentPosition.fen);
+      }
+      _filterReturnSource = null;
     }
     if (index == _lineTabIndex) _lineTabVisited = true;
     _tabController.index = index;
@@ -316,6 +335,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     _controller.stopAutoPlay();
     _tabController.close(id);
+    if (id == PgnWorkspace.filters) _filterReturnSource = null;
     if (_databasePickerTab == id) _databasePickerTab = null;
     _databasePaths.remove(id);
     _databasePanels.remove(id);
@@ -929,11 +949,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       fenIndex: _controller.fenIndex,
       onApply: (indices, config) {
         if (!mounted || !identical(source, _controller.allGames)) return;
+        _filterReturnSource = null;
         _controller.applySlice(indices, config);
         _showPanel(PgnWorkspace.game);
       },
       onOpenGame: (indices, config, gameIndex) {
         if (!mounted || !identical(source, _controller.allGames)) return;
+        _filterReturnSource = source;
         _controller.applySlice(indices, config);
         _controller.goToGame(
           _controller.filteredGames.indexOf(source[gameIndex]),

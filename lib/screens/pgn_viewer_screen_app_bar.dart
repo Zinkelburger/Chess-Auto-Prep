@@ -4,6 +4,8 @@ part of 'pgn_viewer_screen.dart';
 mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   PgnViewerController get _controller;
   bool get _editMode;
+  bool get _canReturnToFilters;
+  void _returnToFilters();
   bool get _onLineTab;
   bool get _onReferenceTab;
   bool get _viewingStudy;
@@ -45,15 +47,14 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               title: _buildOpenPgnMenuButton(fileName),
             ),
           ),
-          if (loaded && !_controller.isSolitaireMode) ...[
+          if (_canReturnToFilters) ...[
             const SizedBox(width: 12),
             Flexible(
-              child: PgnSaveStatus(
-                filePath: _controller.filePath,
-                autoSave: _controller.autoSave,
-                dirty: _controller.hasUnsavedChanges,
-                saving: _controller.isSaving,
-                error: _controller.errorMessage,
+              child: TextButton.icon(
+                key: const ValueKey('return-to-filters'),
+                onPressed: _returnToFilters,
+                icon: const Icon(Icons.arrow_back, size: 18),
+                label: const Text('Back to filters'),
               ),
             ),
           ],
@@ -102,6 +103,16 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             label: 'Filter games',
             icon: Icons.filter_alt_outlined,
             onRun: _openSliceDialog,
+          ),
+        if (!solitaire)
+          AppMenuEntry(
+            label: _viewPreferences.autoSave
+                ? 'Turn autosave off'
+                : 'Turn autosave on',
+            icon: Icons.save_outlined,
+            onRun: () => _setViewPreferences(
+              _viewPreferences.copyWith(autoSave: !_viewPreferences.autoSave),
+            ),
           ),
         if (hasGame) ...[
           AppMenuEntry(

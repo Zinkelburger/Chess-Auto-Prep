@@ -269,6 +269,16 @@ void main() {
       () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
     await tester.pumpAndSettle();
+    // The existing code remains selected when the picker reopens.
+    expect(find.text('Filter by selected ECO codes (1)'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('opening-search')), 'C20');
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .descendant(of: find.byType(Dialog), matching: find.byType(Checkbox))
+          .first,
+    );
+    await tester.pumpAndSettle();
     for (final code in ['B00', 'D00']) {
       await tester.enterText(
         find.byKey(const ValueKey('opening-search')),
@@ -297,6 +307,17 @@ void main() {
     await _finishMatching(tester);
     await tester.tap(_apply);
     expect(applied, [0, 1]);
+    expect(find.widgetWithText(InputChip, 'B00'), findsOneWidget);
+    final chip = tester.widget<InputChip>(
+      find.widgetWithText(InputChip, 'B00'),
+    );
+    chip.onDeleted!();
+    await _finishMatching(tester);
+    await tester.tap(_apply);
+    expect(applied, [1]);
+    expect(controller.headerRows.single.value, 'D00');
+    expect(controller.headerRows.single.controller.text, 'D00');
+    expect(controller.headerRows.single.mode, MatchMode.exact);
   });
 
   testWidgets(

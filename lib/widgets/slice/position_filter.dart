@@ -46,7 +46,6 @@ class PositionFilter extends StatelessWidget {
         ? controller.positionParse
         : parsePositionInput(text.text);
     final showError = parse.error != null;
-    final showOk = parse.isValid && parse.fen != null;
     final hasFilter = parse.isValid && parse.fen != null;
 
     return Column(
@@ -65,45 +64,46 @@ class PositionFilter extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: TextField(
-                controller: text,
-                decoration: InputDecoration(
-                  hintText: 'FEN or moves',
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.surface,
-                  enabledBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: AppColors.divider),
+              child: PositionHoverPreview(
+                inputGetter: () => parse.isValid ? text.text : '',
+                child: TextField(
+                  controller: text,
+                  decoration: InputDecoration(
+                    hintText: 'FEN or moves',
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surface,
+                    enabledBorder: const OutlineInputBorder(
+                      borderSide: BorderSide(color: AppColors.divider),
+                    ),
+                    hintStyle: AppTextStyles.forTheme(
+                      context,
+                      AppTextStyles.hint,
+                    ),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 14,
+                    ),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: showError
+                        ? const Icon(
+                            Icons.error_outline,
+                            size: 18,
+                            color: AppColors.danger,
+                          )
+                        : null,
+                    suffixIconConstraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 28,
+                    ),
                   ),
-                  hintStyle: AppTextStyles.forTheme(
-                    context,
-                    AppTextStyles.hint,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontFamily: AppTextStyles.monoFamily,
                   ),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 14,
-                  ),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: showOk || showError
-                      ? Icon(
-                          showOk ? Icons.check_circle : Icons.error_outline,
-                          size: 18,
-                          color: showOk ? AppColors.success : AppColors.danger,
-                        )
-                      : null,
-                  suffixIconConstraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 28,
-                  ),
-                ),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontFamily: AppTextStyles.monoFamily,
                 ),
               ),
             ),
-            if (text.text.isNotEmpty)
-              PositionPreviewIcon(inputGetter: () => text.text),
             if (hasFilter || text.text.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 4),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/opening_catalog.dart';
@@ -14,9 +16,13 @@ class OpeningSelection {
 Future<OpeningSelection?> showOpeningPicker(
   BuildContext context, {
   bool forFilters = false,
+  Set<String> initialEcoCodes = const {},
 }) => showDialog<OpeningSelection>(
   context: context,
-  builder: (_) => OpeningPickerDialog(forFilters: forFilters),
+  builder: (_) => OpeningPickerDialog(
+    forFilters: forFilters,
+    initialEcoCodes: initialEcoCodes,
+  ),
 );
 
 /// Shared opening search; edits remain local until an explicit action is used.
@@ -25,8 +31,10 @@ class OpeningPickerDialog extends StatefulWidget {
     super.key,
     this.forFilters = false,
     this.openings,
+    this.initialEcoCodes = const {},
   });
   final bool forFilters;
+  final Set<String> initialEcoCodes;
   final Future<List<CatalogOpening>>? openings;
 
   @override
@@ -43,6 +51,29 @@ class _OpeningPickerDialogState extends State<OpeningPickerDialog> {
   CatalogOpening? _preview;
   String? _error;
   bool _flipped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialEcoCodes.isNotEmpty) {
+      unawaited(
+        _loading.then(
+          (openings) {
+            if (!mounted) return;
+            final remaining = {...widget.initialEcoCodes};
+            setState(() {
+              for (final opening in openings) {
+                if (remaining.remove(opening.eco)) _selected.add(opening);
+              }
+            });
+          },
+          onError: (Object _, StackTrace _) {
+            // The results pane owns the catalog load error.
+          },
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -129,6 +160,7 @@ class _OpeningPickerDialogState extends State<OpeningPickerDialog> {
             ListSearchField(
               key: const ValueKey('opening-search'),
               hintText: 'Search ECO codes or opening names',
+              fillColor: Theme.of(context).colorScheme.surface,
               autofocus: true,
               onChanged: (query) {
                 if (!mounted) return;

@@ -144,13 +144,16 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
             child: ListView.builder(
               padding: const EdgeInsets.only(bottom: 4),
               itemCount: games.length,
-              itemBuilder: (context, idx) => _GameRow(
-                game: games[idx],
-                expanded: _isExpanded(idx),
-                showMoves: _showMoves,
-                pv: _isExpanded(idx) ? _pvFor(games[idx]) : '',
-                onOpen: () => widget.onGameSelected(idx),
-                onTogglePreview: () => _togglePreview(idx),
+              itemBuilder: (context, idx) => ColoredBox(
+                color: idx.isOdd ? AppColors.rowStripe : Colors.transparent,
+                child: _GameRow(
+                  game: games[idx],
+                  expanded: _isExpanded(idx),
+                  showMoves: _showMoves,
+                  pv: _isExpanded(idx) ? _pvFor(games[idx]) : '',
+                  onOpen: () => widget.onGameSelected(idx),
+                  onTogglePreview: () => _togglePreview(idx),
+                ),
               ),
             ),
           ),
@@ -279,14 +282,14 @@ class _GameRow extends StatelessWidget {
             Expanded(
               child: Text(
                 game.label,
-                style: AppTextStyles.caption,
+                style: AppTextStyles.caption.copyWith(color: AppColors.ink),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             if (hasResult) ...[
               const SizedBox(width: 8),
-              Text(result!, style: AppTextStyles.caption),
+              _ResultBadge(result: result!),
             ],
           ],
         ),
@@ -317,6 +320,36 @@ class _GameRow extends StatelessWidget {
         const Icon(Icons.star, size: 12, color: AppColors.starAccent),
         Text('${game.studyRating}', style: const TextStyle(fontSize: 12)),
       ],
+    );
+  }
+}
+
+class _ResultBadge extends StatelessWidget {
+  const _ResultBadge({required this.result});
+  final String result;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (result) {
+      '1-0' => ('White win', AppColors.info),
+      '0-1' => ('Black win', AppColors.warning),
+      _ => ('Draw', AppColors.onSurfaceMuted),
+    };
+    return Tooltip(
+      message: label,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 58),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .13),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          result,
+          style: AppTextStyles.caption.copyWith(color: color),
+        ),
+      ),
     );
   }
 }

@@ -5,6 +5,8 @@ import 'package:chess_auto_prep/screens/pgn_viewer_screen.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_opening_label.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
+import 'package:chess_auto_prep/widgets/slice/header_filters.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_tree_games_list.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -81,6 +83,42 @@ void main() {
       await tester.tap(find.text('Actions'));
       await tester.pumpAndSettle();
       expect(find.text('Filter games'), findsOneWidget);
+      await tester.tap(find.text('Turn autosave off'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Autosave on'), findsNothing);
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
+      expect(find.text('Turn autosave on'), findsOneWidget);
+      await tester.tap(find.text('Filter games'));
+      await tester.pumpAndSettle();
+      final filters = tester
+          .widget<HeaderFilters>(find.byType(HeaderFilters))
+          .controller;
+      filters.setHeaderField(0, 'White');
+      filters.setHeaderValue(0, 'A');
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await tester.pumpAndSettle();
+      final results = tester.widget<PgnTreeGamesList>(
+        find.byType(PgnTreeGamesList),
+      );
+      results.onGameSelected(0);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('return-to-filters')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('return-to-filters')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<HeaderFilters>(find.byType(HeaderFilters)).controller,
+        same(filters),
+      );
+      expect(filters.headerRows.single.value, 'A');
+      await tester.tap(find.byKey(const ValueKey('apply-game-filters')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('return-to-filters')), findsNothing);
+      await tester.tap(find.text('Actions'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Show opening'));
       await tester.pumpAndSettle();
       expect(
@@ -109,6 +147,11 @@ void main() {
       expect(find.byType(PgnAnnotationPanel), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
+      // Let cancellation finish if the background FEN-index isolate was still
+      // spawning when the reader was disposed.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
       await tester.pumpAndSettle();
     },
   );

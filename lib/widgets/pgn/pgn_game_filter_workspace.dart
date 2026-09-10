@@ -18,6 +18,7 @@ import 'pgn_tree_games_list.dart';
 import '../common/choice_field.dart';
 import '../opening_picker_dialog.dart';
 import '../slice/header_filters.dart';
+import '../slice/eco_filter_chips.dart';
 import '../slice/position_filter.dart';
 import '../slice/sequence_filter.dart';
 
@@ -152,7 +153,14 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   }
 
   Future<void> _chooseOpenings() async {
-    final selection = await showOpeningPicker(context, forFilters: true);
+    final selection = await showOpeningPicker(
+      context,
+      forFilters: true,
+      initialEcoCodes: {
+        for (final row in _filters.headerRows)
+          if (row.field == 'ECO') ...selectedEcoCodes(row.value, row.mode),
+      },
+    );
     if (!mounted || selection == null) return;
     if (selection.positionLine case final line?) {
       _filters.positionText.text = line.movetext.isEmpty
@@ -175,6 +183,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
         index,
         codes.length == 1 ? MatchMode.exact : MatchMode.regex,
       );
+      _filters.headerRows[index].controller.text = ecoCodeExpression(codes);
       _filters.setHeaderValue(
         index,
         codes.length == 1
@@ -320,6 +329,8 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
         children: [
           Text(
             'Combine',
@@ -341,6 +352,24 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                 if (!mounted) return;
                 _filters.setMatchAny(value);
               },
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            flex: 3,
+            child: OutlinedButton(
+              key: const ValueKey('filter-choose-eco'),
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                foregroundColor: AppColors.onSurfaceMuted,
+                side: const BorderSide(color: AppColors.divider),
+                textStyle: AppTextStyles.muted,
+              ),
+              onPressed: _board == null ? _chooseOpenings : null,
+              child: const Text(
+                'Browse ECO openings…',
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
         ],
@@ -371,6 +400,11 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               key: const ValueKey('add-position'),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                minimumSize: const Size(120, 40),
+                textStyle: AppTextStyles.muted,
+              ),
               onPressed: _board != null
                   ? null
                   : () {
@@ -397,18 +431,6 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
             child: SequenceFilter(controller: _filters),
           ),
         ],
-      ),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton(
-          key: const ValueKey('filter-choose-eco'),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.onSurfaceMuted,
-            textStyle: AppTextStyles.muted,
-          ),
-          onPressed: _board == null ? _chooseOpenings : null,
-          child: const Text('Browse ECO openings…'),
-        ),
       ),
     ],
   );

@@ -14,6 +14,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../common/choice_field.dart';
 import 'header_suggestions.dart';
+import 'eco_filter_chips.dart';
 
 final _ecoExact = RegExp(r'^[A-E]\d{2}$');
 
@@ -200,7 +201,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       child: ChoiceField<String>(
         label: wide ? null : 'Field',
         hint: 'Search…',
-        prefixIcon: Icons.search,
+        prefixIcon: row.field.isEmpty ? Icons.search : null,
         style: AppTextStyles.forTheme(context, AppTextStyles.muted),
         value: row.field.isEmpty ? null : row.field,
         items: [
@@ -234,25 +235,49 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       ],
       onChanged: (mode) => edit((i) => controller.setHeaderMode(i, mode)),
     );
-    final value = _NewConditionFocus(
-      key: ValueKey(row.field),
-      focusOnMount: row.field.isNotEmpty && row.value.isEmpty && widget.simple,
-      child: _HeaderValueEditor(
-        // Refresh autocomplete when its source/rule changes. In particular,
-        // choosing the same value again after switching rules must set Exact.
-        key: ValueKey((row.controller, row.field, row.mode, _suggestions)),
-        row: row,
-        label: wide ? null : 'Value',
-        suggestions: _suggestions,
-        onChanged: (value) => edit((i) => controller.setHeaderValue(i, value)),
-        onSelected: (value) => edit((i) {
-          controller.setHeaderValue(i, value);
-          if (row.mode == MatchMode.contains || row.mode == MatchMode.regex) {
-            controller.setHeaderMode(i, MatchMode.exact);
-          }
-        }),
-      ),
-    );
+    final ecoCodes = row.field == 'ECO'
+        ? selectedEcoCodes(row.value, row.mode)
+        : <String>[];
+    final value = ecoCodes.isNotEmpty
+        ? EcoFilterChips(
+            codes: ecoCodes,
+            onChanged: (codes) => edit((i) {
+              final value = ecoCodeExpression(codes);
+              row.controller.text = value;
+              controller.setHeaderValue(i, value);
+              controller.setHeaderMode(
+                i,
+                codes.length > 1 ? MatchMode.regex : MatchMode.exact,
+              );
+            }),
+          )
+        : _NewConditionFocus(
+            key: ValueKey(row.field),
+            focusOnMount:
+                row.field.isNotEmpty && row.value.isEmpty && widget.simple,
+            child: _HeaderValueEditor(
+              // Refresh autocomplete when its source/rule changes. In particular,
+              // choosing the same value again after switching rules must set Exact.
+              key: ValueKey((
+                row.controller,
+                row.field,
+                row.mode,
+                _suggestions,
+              )),
+              row: row,
+              label: wide ? null : 'Value',
+              suggestions: _suggestions,
+              onChanged: (value) =>
+                  edit((i) => controller.setHeaderValue(i, value)),
+              onSelected: (value) => edit((i) {
+                controller.setHeaderValue(i, value);
+                if (row.mode == MatchMode.contains ||
+                    row.mode == MatchMode.regex) {
+                  controller.setHeaderMode(i, MatchMode.exact);
+                }
+              }),
+            ),
+          );
     final remove = IconButton(
       tooltip: 'Remove filter',
       onPressed: () => edit((i) {
@@ -407,7 +432,9 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
               horizontal: 10,
               vertical: 12,
             ),
-            prefixIcon: const Icon(Icons.search, size: 16),
+            prefixIcon: row.value.isEmpty && row.field.isNotEmpty
+                ? const Icon(Icons.search, size: 16)
+                : null,
             prefixIconConstraints: const BoxConstraints(
               minWidth: 32,
               minHeight: 44,

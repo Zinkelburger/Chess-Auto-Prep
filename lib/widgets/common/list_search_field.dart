@@ -16,6 +16,7 @@ class ListSearchField extends StatefulWidget {
     required this.onChanged,
     this.autofocus = false,
     this.onSubmitted,
+    this.fillColor,
   });
 
   /// Says *what* is being searched ("Search repertoires"), so the box needs
@@ -23,6 +24,7 @@ class ListSearchField extends StatefulWidget {
   final String hintText;
   final ValueChanged<String> onChanged;
   final bool autofocus;
+  final Color? fillColor;
 
   /// Enter pressed in the box. Lists that can act on the top hit (a picker
   /// that closes on it) wire this up; plain filters leave it null.
@@ -72,6 +74,8 @@ class _ListSearchFieldState extends State<ListSearchField> {
       },
       decoration: InputDecoration(
         hintText: widget.hintText,
+        filled: widget.fillColor != null,
+        fillColor: widget.fillColor,
         hintStyle: AppTextStyles.caption,
         prefixIcon: const Icon(
           Icons.search,

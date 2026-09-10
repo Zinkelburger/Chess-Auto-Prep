@@ -45,7 +45,10 @@ Reuse these widgets (paths relative to `lib/`):
 Before creating a control, check this table and `lib/widgets/common/`. Extend
 an existing control when the behavior is shared. Search stays a visible input
 with a magnifier and clear action. Conditional filters use compact Field / Rule /
-Value rows with searchable choices and cached source-value suggestions. Start with
+Value rows with searchable choices and cached source-value suggestions. Show the
+search icon on empty filter inputs; selected fields/values remain searchable
+without repeating the icon. Selected sets use removable chips; position previews
+belong on hover over the value, not a separate eye button. Start with
 one blank row and a labelled add-row control; avoid palettes of field buttons.
 Use muted labels/rules, inset value inputs and whitespace; avoid explanatory
 headings or sentences when a concise label or operator (`≥`, `≤`) suffices.
