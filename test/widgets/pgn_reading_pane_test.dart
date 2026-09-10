@@ -21,6 +21,7 @@ Future<PgnViewerWidgetController> _pump(
   String pgn = _tree,
   double width = 520,
   bool showReadingOptions = true,
+  VoidCallback? onPaint,
 }) async {
   final controller = PgnViewerWidgetController();
   await tester.pumpWidget(
@@ -29,10 +30,13 @@ Future<PgnViewerWidgetController> _pump(
       home: Scaffold(
         body: SizedBox(
           width: width,
-          child: PgnViewerWidget(
-            pgnText: pgn,
-            controller: controller,
-            showReadingOptions: showReadingOptions,
+          child: CustomPaint(
+            foregroundPainter: onPaint == null ? null : _PaintObserver(onPaint),
+            child: PgnViewerWidget(
+              pgnText: pgn,
+              controller: controller,
+              showReadingOptions: showReadingOptions,
+            ),
           ),
         ),
       ),
@@ -40,6 +44,17 @@ Future<PgnViewerWidgetController> _pump(
   );
   await tester.pumpAndSettle();
   return controller;
+}
+
+class _PaintObserver extends CustomPainter {
+  final VoidCallback onPaint;
+  _PaintObserver(this.onPaint);
+
+  @override
+  void paint(Canvas canvas, Size size) => onPaint();
+
+  @override
+  bool shouldRepaint(_PaintObserver oldDelegate) => true;
 }
 
 void main() {
@@ -83,6 +98,109 @@ void main() {
       tester.getTopLeft(active).dy - tester.getTopLeft(_scrollView).dy,
       closeTo(52, 1),
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'offscreen navigation paints the destination in its first frame',
+    (tester) async {
+      final note = List.filled(
+        80,
+        'A long explanation of this position.',
+      ).join(' ');
+      final paintedTops = <double>[];
+      final controller = await _pump(
+        tester,
+        pgn: '1. e4 {$note} e5 {$note} 2. Nf3 {$note} Nc6 *',
+        onPaint: () {
+          final active = find.byWidgetPredicate(
+            (w) => w is PgnReadingPassage && w.active,
+          );
+          if (active.evaluate().isNotEmpty) {
+            paintedTops.add(
+              tester.getTopLeft(active).dy - tester.getTopLeft(_scrollView).dy,
+            );
+          }
+        },
+      );
+      controller.goForward();
+      await tester.pumpAndSettle();
+
+      for (final ply in [2, 3, 2, 1, 3, 1]) {
+        paintedTops.clear();
+        controller.goToMainLineIndex(ply);
+        await tester.pump();
+        expect(paintedTops, isNotEmpty, reason: 'must inspect the first paint');
+        expect(
+          paintedTops,
+          everyElement(closeTo(ply == 1 ? 32 : 52, 1)),
+          reason:
+              'no frame may show the new selection at the old scroll offset',
+        );
+        await tester.pumpAndSettle();
+        expect(paintedTops, everyElement(closeTo(ply == 1 ? 32 : 52, 1)));
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'reading options reposition the current move without navigation',
+    (tester) async {
+      final note = List.filled(
+        80,
+        'A long explanation of this position.',
+      ).join(' ');
+      final controller = await _pump(
+        tester,
+        pgn: '1. e4 {$note} e5 {$note} 2. Nf3 *',
+      );
+      controller.goToMainLineIndex(2);
+      await tester.pumpAndSettle();
+      for (final option in {
+        'Anchor near middle': .35,
+        'Anchor near bottom': .68,
+        'Anchor near top': 0.0,
+      }.entries) {
+        await tester.tap(find.byTooltip('Reading options'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(option.key));
+        await tester.pumpAndSettle();
+        final active = find.byWidgetPredicate(
+          (w) => w is PgnReadingPassage && w.active,
+        );
+        final viewport = tester.getRect(_scrollView);
+        expect(
+          tester.getTopLeft(active).dy - viewport.top,
+          closeTo(option.value == 0 ? 52 : viewport.height * option.value, 1),
+        );
+        expect(controller.mainLineIndex, 2);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('navigation stops an in-flight scroll at the selected move', (
+    tester,
+  ) async {
+    final note = List.filled(
+      80,
+      'A long explanation of this position.',
+    ).join(' ');
+    final controller = await _pump(
+      tester,
+      pgn: '1. e4 {$note} e5 {$note} 2. Nf3 {$note} Nc6 *',
+    );
+    await tester.fling(_scrollView, const Offset(0, -200), 2000);
+    await tester.pump(const Duration(milliseconds: 16));
+    controller.goToMainLineIndex(2);
+    await tester.pump();
+    final scroll = tester
+        .widget<SingleChildScrollView>(_scrollView)
+        .controller!;
+    final anchored = scroll.offset;
+    await tester.pumpAndSettle();
+    expect(scroll.offset, closeTo(anchored, 1));
     expect(tester.takeException(), isNull);
   });
 

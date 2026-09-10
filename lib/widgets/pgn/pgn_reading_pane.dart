@@ -7,6 +7,7 @@ import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart' show coordsAtPly;
 import '../../utils/app_shortcuts.dart';
 import '../shortcut_tooltip.dart';
+import 'pgn_reading_scroll.dart';
 
 /// A sideline is identified by its actual first move, including for games
 /// starting from a FEN. No generated chapter names or separate variation index.
@@ -72,8 +73,10 @@ class PgnReadingPane extends StatefulWidget {
 }
 
 class PgnReadingPaneState extends State<PgnReadingPane> {
-  final _scroll = ScrollController();
-  final _currentMove = GlobalKey();
+  late final _scroll = PgnReadingScrollController(
+    resolveAnchor: _resolveAnchor,
+  );
+  var _currentMove = GlobalKey();
   final _bookmarks = <({PgnReadingBranch? scope, double offset})>[];
   PgnReadingBranch? _scope;
   bool _expandAll = false;
@@ -178,32 +181,26 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
   }
 
   void _scheduleAnchor() {
-    final request = ++_scrollRequest;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || request != _scrollRequest || !_scroll.hasClients) return;
-      final restore = _restoreOffset;
-      _restoreOffset = null;
-      if (restore != null) {
-        _scroll.jumpTo(restore.clamp(0, _scroll.position.maxScrollExtent));
-        return;
-      }
-      final target = _currentMove.currentContext?.findRenderObject();
-      if (target == null) {
-        _scroll.jumpTo(0);
-        return;
-      }
-      // Resolve against this viewport only: ensureVisible on all ancestors
-      // would also move the host's TabBarView when this reader is offstage.
-      final viewport = RenderAbstractViewport.of(target);
-      final top = viewport.getOffsetToReveal(target, 0).offset;
-      final inset = _anchor == 0
-          ? 52.0
-          : _scroll.position.viewportDimension * _anchor;
-      final offset = (top - inset).clamp(0.0, _scroll.position.maxScrollExtent);
-      // Land with the new move as soon as its layout is available. Animating
-      // long notes makes the reading position trail keyboard navigation.
-      _scroll.jumpTo(offset);
-    });
+    // A previous move can remain in the inactive element list until after
+    // layout. Resolve only a key attached by the new document build.
+    _currentMove = GlobalKey();
+    _scrollRequest++;
+    _scroll.requestAnchor();
+  }
+
+  double _resolveAnchor(double viewportDimension) {
+    final restore = _restoreOffset;
+    _restoreOffset = null;
+    if (restore != null) return restore;
+    final target = _currentMove.currentContext?.findRenderObject();
+    if (target == null) return 0;
+    // Resolve against this viewport only; ancestor TabBarViews must not move.
+    final viewport = RenderAbstractViewport.of(target);
+    // Only the origin is needed. Reading descendant paint bounds during
+    // viewport layout would access a size outside its permitted layout scope.
+    final top = viewport.getOffsetToReveal(target, 0, rect: Rect.zero).offset;
+    final inset = _anchor == 0 ? 52.0 : viewportDimension * _anchor;
+    return top - inset;
   }
 
   /// Returns false when Escape has no reading action to perform, so the host
@@ -330,12 +327,15 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                           alignment: Alignment.topLeft,
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 760),
-                            child: KeyedSubtree(
-                              key: ValueKey(_foldRevision),
-                              child: widget.documentBuilder(
-                                _currentMove,
-                                _scope,
-                                _expandAll,
+                            child: PgnReadingAnchorLayout(
+                              revision: _scrollRequest,
+                              child: KeyedSubtree(
+                                key: ValueKey(_foldRevision),
+                                child: widget.documentBuilder(
+                                  _currentMove,
+                                  _scope,
+                                  _expandAll,
+                                ),
                               ),
                             ),
                           ),
