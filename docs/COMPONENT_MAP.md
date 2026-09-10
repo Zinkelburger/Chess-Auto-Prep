@@ -740,6 +740,8 @@ to its parent, restoring any parent focus and reading position. **Esc** first
 returns to a manually scrolled reading position, then returns to the parent
 variation, then follows the existing mode-exit behavior. Parent and focus
 controls use quiet text buttons with registry-backed shortcut tooltips.
+Move navigation anchors immediately after layout, without a scroll animation,
+so vertical jumps across long notes stay in step with the board cursor.
 Move anchoring is bounded by the document with a 32px bottom margin: games
 whose title, moves and notes fit stay at the top for every anchor setting.
 Long chapters retain the selected anchor while content remains below it;

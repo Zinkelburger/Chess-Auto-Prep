@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -202,14 +200,9 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
           ? 52.0
           : _scroll.position.viewportDimension * _anchor;
       final offset = (top - inset).clamp(0.0, _scroll.position.maxScrollExtent);
-      final reduceMotion = MediaQuery.disableAnimationsOf(context);
-      unawaited(
-        _scroll.animateTo(
-          offset,
-          duration: Duration(milliseconds: reduceMotion ? 1 : 180),
-          curve: Curves.easeOutCubic,
-        ),
-      );
+      // Land with the new move as soon as its layout is available. Animating
+      // long notes makes the reading position trail keyboard navigation.
+      _scroll.jumpTo(offset);
     });
   }
 

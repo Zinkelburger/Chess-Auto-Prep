@@ -43,6 +43,49 @@ Future<PgnViewerWidgetController> _pump(
 }
 
 void main() {
+  testWidgets('move navigation anchors immediately across long comments', (
+    tester,
+  ) async {
+    final note = List.filled(
+      80,
+      'A long explanation of this position.',
+    ).join(' ');
+    final controller = await _pump(
+      tester,
+      pgn: '1. e4 {$note} e5 {$note} 2. Nf3 {$note} Nc6 *',
+    );
+    final scroll = tester
+        .widget<SingleChildScrollView>(_scrollView)
+        .controller!;
+    controller.goForward();
+    await tester.pump();
+    final firstOffset = scroll.offset;
+
+    controller.goForward();
+    await tester.pump();
+    final secondOffset = scroll.offset;
+    expect(secondOffset, greaterThan(firstOffset + 500));
+    expect(scroll.position.isScrollingNotifier.value, isFalse);
+
+    // Reversing before an animation could finish must follow the latest move.
+    controller.goBack();
+    await tester.pump();
+    expect(scroll.offset, closeTo(firstOffset, 1));
+    controller.goForward();
+    await tester.pump();
+    expect(scroll.offset, closeTo(secondOffset, 1));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(scroll.offset, closeTo(secondOffset, 1));
+    final active = find.byWidgetPredicate(
+      (w) => w is PgnReadingPassage && w.active,
+    );
+    expect(
+      tester.getTopLeft(active).dy - tester.getTopLeft(_scrollView).dy,
+      closeTo(52, 1),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   for (final width in [320.0, 800.0]) {
     for (final showReadingOptions in [true, false]) {
       testWidgets('floating controls never resize the reading area at $width, '
