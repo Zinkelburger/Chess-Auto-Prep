@@ -45,14 +45,15 @@ Future<PgnViewerWidgetController> _pump(
 void main() {
   for (final width in [320.0, 800.0]) {
     for (final showReadingOptions in [true, false]) {
-      testWidgets('navigation keeps the reading viewport stable at $width, '
+      testWidgets('navigation only opens the toolbar for variations at $width, '
           'reading options: $showReadingOptions', (tester) async {
         final controller = await _pump(
           tester,
           width: width,
           showReadingOptions: showReadingOptions,
         );
-        final viewport = tester.getRect(_scrollView);
+        var viewport = tester.getRect(_scrollView);
+        final mainlineViewport = viewport;
         final forward = find.byIcon(Icons.chevron_right).last;
         final forwardRect = tester.getRect(forward);
         void expectStable() {
@@ -73,6 +74,11 @@ void main() {
         final sicilian = view.variationsByPly[1]!.single;
         controller.goToVariationNode(sicilian, 1);
         await tester.pumpAndSettle();
+        expect(find.text('Back to game'), findsOneWidget);
+        if (!showReadingOptions) {
+          viewport = tester.getRect(_scrollView);
+          expect(viewport.top, greaterThan(mainlineViewport.top));
+        }
         expectStable();
         final nested = sicilian.children.first.children[1];
         controller.goToVariationNode(nested, 1);
@@ -81,8 +87,11 @@ void main() {
         controller.focusVariation();
         await tester.pumpAndSettle();
         expectStable();
-        controller.goToMainLineIndex(2);
+        await tester.tap(find.text('Back to game'));
         await tester.pumpAndSettle();
+        expect(controller.inVariation, isFalse);
+        expect(find.text('Back to game'), findsNothing);
+        viewport = mainlineViewport;
         expectStable();
       });
     }

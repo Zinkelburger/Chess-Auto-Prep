@@ -190,6 +190,11 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
             ],
           ),
           const SizedBox(height: 6),
+          Text(
+            'Comment:',
+            style: AppTextStyles.bodyStrong.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: 6),
           TextField(
             controller: _controller,
             focusNode: _focusNode,
@@ -210,15 +215,15 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide.none,
+                borderSide: const BorderSide(color: Colors.white),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: AppColors.outline),
+                borderSide: const BorderSide(color: Colors.white, width: 2),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide.none,
+                borderSide: const BorderSide(color: Colors.white),
               ),
             ),
           ),

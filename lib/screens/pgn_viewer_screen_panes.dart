@@ -492,25 +492,14 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             onAnalyse: _analyseSolitaireGame,
             onExit: () => unawaited(_leaveSolitaire()),
           ),
-        if (_viewPreferences.autoDetectOpenings &&
-            [
-              game.headers['ECO'],
-              game.headers['Opening'],
-            ].any((value) => value != null && value.isNotEmpty && value != '?'))
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SelectableText(
-                [game.headers['ECO'], game.headers['Opening']]
-                    .whereType<String>()
-                    .where((value) => value.isNotEmpty && value != '?')
-                    .join(' · '),
-                style: AppTextStyles.muted,
-              ),
-            ),
-          ),
-        if (!_controller.isSolitaireMode) _buildEditModeBar(),
+        if (_viewPreferences.showOpening)
+          PgnOpeningLabel(headers: game.headers),
+        if (!_controller.isSolitaireMode &&
+            (_editMode ||
+                _controller.errorMessage != null ||
+                _controller.isSaving ||
+                _controller.hasUnsavedChanges))
+          _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
             showStartEndButtons: true,
@@ -575,15 +564,6 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        const Icon(
-          Icons.edit_outlined,
-          size: 18,
-          color: AppColors.onSurfaceMuted,
-        ),
-        Text(
-          _editMode ? 'Editing PGN' : 'PGN',
-          style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
-        ),
         if (_controller.errorMessage != null ||
             _controller.isSaving ||
             _controller.hasUnsavedChanges)
@@ -604,16 +584,17 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             icon: const Icon(Icons.save_outlined, size: 18),
             label: Text(_controller.filePath == null ? 'Save as…' : 'Save'),
           ),
-        TextButton.icon(
-          onPressed: _toggleEditMode,
-          icon: Icon(_editMode ? Icons.check : Icons.edit_outlined, size: 18),
-          label: Text(_editMode ? 'Finish editing' : 'Edit PGN'),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.ink,
-            backgroundColor: AppColors.surfaceContainer,
-            textStyle: AppTextStyles.bodyStrong,
+        if (_editMode)
+          TextButton.icon(
+            onPressed: _toggleEditMode,
+            icon: const Icon(Icons.check, size: 18),
+            label: const Text('Done'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.ink,
+              backgroundColor: AppColors.surfaceContainer,
+              textStyle: AppTextStyles.bodyStrong,
+            ),
           ),
-        ),
       ],
     ),
   );
