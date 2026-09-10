@@ -133,7 +133,6 @@ mixin _TacticsPlayback on _TacticsControlPanelStateBase {
       context,
       suggestedChapterName: suggested,
       pickerTitle: 'Add game to study',
-      viewActionLabel: 'View game',
       buildPgn: (_) =>
           sourceGamePgn(tactic, _session.engine.solutionLineToSan(tactic)),
     );

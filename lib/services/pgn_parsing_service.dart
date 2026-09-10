@@ -400,7 +400,8 @@ String _normalizeSanToken(String token) {
 
 /// Determines the starting [Position] for a parsed PGN game.
 ///
-/// Uses the `[FEN]` / `[SetUp]` headers when present, otherwise returns
+/// Uses a nonempty `[FEN]` header, including exports without `[SetUp]`;
+/// otherwise returns
 /// [Chess.initial].
 Position startPositionFromGame(PgnGame game) {
   try {
@@ -416,13 +417,12 @@ PgnGame _parsePgnForReplay(String pgnText) {
   return game;
 }
 
-/// Throws when `[SetUp]` is `1` and `[FEN]` is unparsable — replay helpers
+/// Throws when a nonempty `[FEN]` is unparsable — replay helpers
 /// catch that and skip the game. [startPositionFromGame] falls back to the
 /// initial position instead.
 Position _positionFromHeaders(Map<String, String> headers) {
-  final setupFlag = headers['SetUp'] ?? headers['Setup'] ?? '';
-  final fenHeader = headers['FEN'] ?? '';
-  if (setupFlag == '1' && fenHeader.isNotEmpty) {
+  final fenHeader = headers['FEN']?.trim() ?? '';
+  if (fenHeader.isNotEmpty) {
     return Chess.fromSetup(Setup.parseFen(expandFen(fenHeader)));
   }
   return Chess.initial;
@@ -974,11 +974,11 @@ bool _passesNonPositionFilters(
 
 /// Serialize a FEN index for disk storage.
 ///
-/// Format header: `FENIDX2 <gameCount> <fileSize> <modifiedMs>`, then
+/// Format header: `FENIDX3 <gameCount> <fileSize> <modifiedMs>`, then
 /// one `FEN\tidx,idx,...` per entry.  [fileSize] and [modifiedMs] are the
 /// PGN file's byte-size and last-modified epoch-ms at build time, used for
-/// staleness detection on load. v2 indexes RAVs as well as the mainline;
-/// `FENIDX1` blobs are rejected so they rebuild.
+/// staleness detection on load. v3 also honors FEN headers without SetUp;
+/// older indexes rebuild so setup chapters cannot retain incorrect positions.
 String serializeFenIndex(
   Map<String, List<int>> index, {
   required int gameCount,
@@ -986,7 +986,7 @@ String serializeFenIndex(
   required int modifiedMs,
 }) {
   final buf = StringBuffer();
-  buf.writeln('FENIDX2 $gameCount $fileSize $modifiedMs');
+  buf.writeln('FENIDX3 $gameCount $fileSize $modifiedMs');
   for (final entry in index.entries) {
     buf.write(entry.key);
     buf.write('\t');
@@ -1009,13 +1009,13 @@ Map<String, List<int>>? deserializeFenIndex(
   final header = data.substring(0, firstNl).trim().split(' ');
   if (header.length < 2) return null;
 
-  if (header[0] == 'FENIDX2') {
+  if (header[0] == 'FENIDX3') {
     if (header.length != 4) return null;
     if (int.tryParse(header[1]) != expectedGameCount) return null;
     if (int.tryParse(header[2]) != expectedFileSize) return null;
     if (int.tryParse(header[3]) != expectedModifiedMs) return null;
   } else {
-    // v1 (mainline-only) or unknown format — force rebuild.
+    // Older replay semantics or unknown format — force rebuild.
     return null;
   }
 

@@ -140,12 +140,10 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
         final narrow = constraints.maxWidth < _narrowTableWidth;
         final showMaia =
             !narrow && _settings.showMaia && _settings.fetchMaiaForOpponent;
-        final moveWidth = narrow ? 36.0 : 52.0;
-        final evalWidth = narrow ? 44.0 : 58.0;
-        final hPad = narrow ? 4.0 : 12.0;
+        const evalWidth = 54.0;
 
         return Padding(
-          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: [
               _buildColumnHeader(
@@ -155,25 +153,11 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
                 width: evalWidth,
                 tooltipExtra: 'Stockfish evaluation',
               ),
-              if (!narrow) const SizedBox(width: 8),
-              SizedBox(
-                width: moveWidth,
-                child: const Text(
-                  'MOVE',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onSurfaceMuted,
-                    letterSpacing: 0.5,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
               _buildColumnHeader(
                 columnId: EngineSettings.colLine,
                 label: 'LINE',
                 textAlign: TextAlign.left,
-                tooltipExtra: 'Principal variation continuation',
+                tooltipExtra: 'Principal variation',
               ),
               if (showMaia)
                 _buildColumnHeader(
@@ -183,6 +167,7 @@ mixin _EnginePaneTable on _UnifiedEnginePaneStateBase {
                   width: 46,
                   tooltipExtra: 'Maia ${_settings.maiaElo} prediction',
                 ),
+              const SizedBox(width: 26),
             ],
           ),
         );

@@ -190,7 +190,7 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
               child: EditContextSplitHandle(
                 axis: EditContextSplitAxis.vertical,
                 onDrag: (dy) {
-                  if (available <= 0) return;
+                  if (!mounted || available <= 0) return;
                   setState(() {
                     _splitRatio = (_splitRatio + dy / available).clamp(
                       0.2,
@@ -203,7 +203,7 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
             Expanded(
               child: PgnTreeGamesList(
                 games: [for (final i in matching) controller.filteredGames[i]],
-                currentFen: controller.openingTree!.currentNode.fen,
+                currentFen: controller.openingTree!.currentFen,
                 currentIndex: matching.indexOf(controller.currentGameIndex),
                 onGameSelected: (i) => controller.loadGameFromTree(matching[i]),
                 onSearch: () => openTreePositionGameSearch(

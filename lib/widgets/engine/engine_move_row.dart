@@ -6,8 +6,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart';
 import '../../utils/fen_utils.dart';
-import '../../utils/san_display.dart';
-import '../clickable_move_line.dart';
+import 'engine_pv_row.dart';
 import '../../models/merged_move.dart';
 
 /// One row of the unified engine table: eval + move SAN + PV continuation
@@ -15,8 +14,6 @@ import '../../models/merged_move.dart';
 /// tap callbacks are driven through the injected [boardPreview] and callbacks;
 /// [previewStackKey] is the parent's preview stack anchor.
 class EngineMoveRow extends StatelessWidget {
-  static const double _narrowTableWidth = 200;
-
   final MergedMove move;
   final EngineSettings settings;
   final String fen;
@@ -39,195 +36,68 @@ class EngineMoveRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final evalMuted = settings.isAnalysisColumnMuted(EngineSettings.colEval);
-    final lineMuted = settings.isAnalysisColumnMuted(EngineSettings.colLine);
-    final maiaMuted = settings.isAnalysisColumnMuted(EngineSettings.colMaia);
-
-    // Eval reads as a plain number; muted only when the column is dimmed or
-    // the engine hasn't scored the move yet.
-    final evalColor = !move.hasStockfish
-        ? AppColors.onSurfaceDim
-        : evalMuted
-        ? AppColors.onSurfaceMuted
-        : null;
-
+    final pv = move.fullPv.isEmpty ? [move.uci] : move.fullPv;
+    final sanMoves = uciPvToSanCached(fen, pv);
     return LayoutBuilder(
-      builder: (context, constraints) {
-        final narrow = constraints.maxWidth < _narrowTableWidth;
-        final showMaia =
-            !narrow && settings.showMaia && settings.fetchMaiaForOpponent;
-        final moveWidth = narrow ? 36.0 : 52.0;
-        final evalWidth = narrow ? 44.0 : 58.0;
-        final hPad = narrow ? 4.0 : 12.0;
-
-        final pvRows = settings.pvRows;
-
-        return InkWell(
-          onTap: () => onMoveSelected?.call(move.uci),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 6),
-            child: Row(
-              // With a wrapping PV the move and eval sit beside its first
-              // row rather than floating in the middle of the block.
-              crossAxisAlignment: pvRows > 1
-                  ? CrossAxisAlignment.start
-                  : CrossAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: evalWidth,
-                  child: Text(
-                    move.evalString,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: evalColor,
-                      fontFamily: AppTextStyles.monoFamily,
-                    ),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (!narrow) const SizedBox(width: 8),
-                Builder(
-                  builder: (anchorContext) {
-                    return MouseRegion(
-                      onEnter: boardPreview != null
-                          ? (_) {
-                              final box =
-                                  anchorContext.findRenderObject()
-                                      as RenderBox?;
-                              if (box == null) return;
-                              final anchor = box.localToGlobal(
-                                Offset(box.size.width / 2, box.size.height),
-                              );
-                              _previewEngineMove(move, anchor);
-                            }
-                          : null,
-                      onExit: boardPreview != null
-                          ? (_) => boardPreview!.clearPreview()
-                          : null,
-                      child: SizedBox(
-                        width: moveWidth,
-                        child: Text(
-                          displaySan(context, move.san),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontFamily: AppTextStyles.monoFamily,
-                            fontSize: 15,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+      builder: (context, constraints) => EnginePvRow(
+        key: ValueKey('$fen:${move.uci}'),
+        evaluation: move.evalString,
+        sanMoves: sanMoves,
+        startPly: plyFromFen(fen),
+        rows: settings.pvRows,
+        evalColor:
+            !move.hasStockfish ||
+                settings.isAnalysisColumnMuted(EngineSettings.colEval)
+            ? AppColors.onSurfaceMuted
+            : AppColors.ink,
+        moveColor: settings.isAnalysisColumnMuted(EngineSettings.colLine)
+            ? AppColors.onSurfaceMuted
+            : AppColors.ink,
+        trailing:
+            constraints.maxWidth >= 200 &&
+                settings.showMaia &&
+                settings.fetchMaiaForOpponent
+            ? SizedBox(
+                width: 46,
+                child: Text(
+                  move.maiaProb != null
+                      ? '${(move.maiaProb! * 100).toStringAsFixed(0)}%'
+                      : '--',
+                  textAlign: TextAlign.right,
+                  style: AppTextStyles.mono.copyWith(
+                    color: AppColors.maiaColor(
+                      muted: settings.isAnalysisColumnMuted(
+                        EngineSettings.colMaia,
                       ),
-                    );
-                  },
-                ),
-                Expanded(
-                  child: _buildContinuation(
-                    move,
-                    muted: lineMuted,
-                    rows: pvRows,
-                  ),
-                ),
-                if (showMaia)
-                  SizedBox(
-                    width: narrow ? 40 : 46,
-                    child: Text(
-                      move.maiaProb != null
-                          ? '${(move.maiaProb! * 100).toStringAsFixed(0)}%'
-                          : '--',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: move.maiaProb != null
-                            ? AppColors.maiaColor(muted: maiaMuted)
-                            : AppColors.onSurfaceDim,
-                        fontFamily: AppTextStyles.monoFamily,
-                      ),
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildContinuation(
-    MergedMove move, {
-    bool muted = false,
-    int rows = 1,
-  }) {
-    final lineColor = muted ? AppColors.onSurfaceDim : AppColors.onSurfaceMuted;
-    if (move.fullPv.length <= 1 || boardPreview == null) {
-      final continuation = formatContinuation(fen, move.fullPv);
-      return Text(
-        continuation,
-        style: TextStyle(
-          fontSize: 13,
-          color: lineColor,
-          fontFamily: AppTextStyles.monoFamily,
-        ),
-        maxLines: rows,
-        overflow: TextOverflow.ellipsis,
-      );
-    }
-
-    final afterFirstMove = playUciMove(fen, move.uci);
-    if (afterFirstMove == null) return const SizedBox.shrink();
-
-    final continuationUci = move.fullPv.sublist(1);
-    // Cached: MultiPV rows re-render on every info line during a live search;
-    // re-parsing the FEN + replaying the PV each frame is what drops frames.
-    final sanMoves = uciPvToSanCached(afterFirstMove, continuationUci);
-    if (sanMoves.isEmpty) return const SizedBox.shrink();
-
-    final startPly = plyFromFen(afterFirstMove);
-
-    return ClickableMoveLineWidget(
-      sanMoves: sanMoves,
-      startPly: startPly,
-      // Each extra row earns roughly another row's worth of moves; the
-      // widget still ellipsises whatever does not fit.
-      maxMoves: 8 * rows,
-      maxLines: rows,
-      fontSize: 13,
-      onMoveTapped: (idx) {
-        if (onLineMoveTapped != null) {
-          final fullLine = [move.san, ...sanMoves];
-          onLineMoveTapped!(fullLine, idx + 1);
-          boardPreview?.clearPreview();
-        } else if (idx < continuationUci.length) {
-          onMoveSelected?.call(move.uci);
-        }
-      },
-      onMoveHovered: (idx, anchor) {
-        final fen = fenAfterMoves(afterFirstMove, sanMoves, idx);
-        final uci = idx < continuationUci.length ? continuationUci[idx] : null;
-        boardPreview!.setPreview(
-          fen,
-          moves: sanMoves.sublist(0, idx + 1),
-          target: BoardPreviewTarget.floating,
-          lastMoveUci: uci,
-          anchorGlobal: anchor,
-          ownerTag: previewStackKey,
-        );
-      },
-      onHoverExit: () => boardPreview!.clearPreview(),
-    );
-  }
-
-  void _previewEngineMove(MergedMove move, Offset anchorGlobal) {
-    final f = playUciMove(fen, move.uci);
-    if (f == null) return;
-    boardPreview!.setPreview(
-      f,
-      moves: [move.san],
-      target: BoardPreviewTarget.floating,
-      lastMoveUci: move.uci,
-      anchorGlobal: anchorGlobal,
-      ownerTag: previewStackKey,
+                ),
+              )
+            : null,
+        onMoveTapped: onLineMoveTapped != null || onMoveSelected != null
+            ? (idx) {
+                if (onLineMoveTapped != null) {
+                  onLineMoveTapped!(sanMoves, idx);
+                } else {
+                  onMoveSelected?.call(move.uci);
+                }
+                boardPreview?.clearPreview();
+              }
+            : null,
+        onMoveHovered: boardPreview == null
+            ? null
+            : (idx, anchor) {
+                boardPreview!.setPreview(
+                  fenAfterMoves(fen, sanMoves, idx),
+                  moves: sanMoves.sublist(0, idx + 1),
+                  target: BoardPreviewTarget.floating,
+                  lastMoveUci: idx < pv.length ? pv[idx] : null,
+                  anchorGlobal: anchor,
+                  ownerTag: previewStackKey,
+                );
+              },
+        onHoverExit: boardPreview?.clearPreview,
+      ),
     );
   }
 }

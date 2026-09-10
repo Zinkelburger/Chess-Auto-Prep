@@ -17,6 +17,7 @@ class OpeningTreeBuilder {
     int maxDepth = 30,
     bool strictPlayerMatching = true,
     bool? includeVariations,
+    bool preserveSetupRoots = false,
     void Function(int processed, int total)? onProgress,
   }) async {
     final transferJson = onProgress == null
@@ -28,6 +29,7 @@ class OpeningTreeBuilder {
               maxDepth: maxDepth,
               strictPlayerMatching: strictPlayerMatching,
               includeVariations: includeVariations,
+              preserveSetupRoots: preserveSetupRoots,
             );
           })
         : await _buildTreeWithProgress(
@@ -37,6 +39,7 @@ class OpeningTreeBuilder {
             maxDepth: maxDepth,
             strictPlayerMatching: strictPlayerMatching,
             includeVariations: includeVariations,
+            preserveSetupRoots: preserveSetupRoots,
             onProgress: onProgress,
           );
     return OpeningTree.fromTransferJson(transferJson);
@@ -49,6 +52,7 @@ class OpeningTreeBuilder {
     required int maxDepth,
     required bool strictPlayerMatching,
     bool? includeVariations,
+    bool preserveSetupRoots = false,
     required void Function(int processed, int total) onProgress,
   }) async {
     final receivePort = ReceivePort();
@@ -61,6 +65,7 @@ class OpeningTreeBuilder {
           'maxDepth': maxDepth,
           'strictPlayerMatching': strictPlayerMatching,
           'includeVariations': includeVariations,
+          'preserveSetupRoots': preserveSetupRoots,
         });
 
     final completer = Completer<Map<String, dynamic>>();
@@ -105,6 +110,7 @@ class OpeningTreeBuilder {
         maxDepth: args['maxDepth'] as int,
         strictPlayerMatching: args['strictPlayerMatching'] as bool,
         includeVariations: args['includeVariations'] as bool?,
+        preserveSetupRoots: args['preserveSetupRoots'] as bool,
         onProgress: (processed, total) {
           sendPort.send({
             'type': 'progress',
@@ -131,9 +137,10 @@ class OpeningTreeBuilder {
     int maxDepth = 30,
     bool strictPlayerMatching = true,
     bool? includeVariations,
+    bool preserveSetupRoots = false,
     void Function(int processed, int total)? onProgress,
   }) {
-    final tree = OpeningTree();
+    final tree = OpeningTree(preserveSetupRoots: preserveSetupRoots);
     final usernameLower = username.toLowerCase();
     final total = pgnList.length;
     var processed = 0;

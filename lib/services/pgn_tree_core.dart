@@ -234,7 +234,9 @@ void walkMainlineIntoTree({
   // Where this game's first move hangs.  A `[FEN]` chapter starts mid-game, so
   // it belongs under the node that *is* its start position; only a game
   // starting where the tree does belongs at the root.
-  final placed = _anchorNode(tree, position);
+  final placed =
+      _anchorNode(tree, position) ??
+      (tree.preserveSetupRoots ? tree.addSetupRoot(position.fen) : null);
 
   // No node stands at that position, so the chapter is grafted at the root to
   // keep it visible — but [OpeningTree.advance] matches children by SAN
@@ -245,8 +247,13 @@ void walkMainlineIntoTree({
   final anchor = placed ?? tree.root;
   final strictFirstPly = placed == null;
 
-  tree.root.updateStats(userResult);
-  if (!identical(anchor, tree.root)) anchor.updateStats(userResult);
+  if (tree.preserveSetupRoots) {
+    // A setup chapter contributes only to positions on its own branch.
+    _incrementPathStats(anchor, userResult);
+  } else {
+    tree.root.updateStats(userResult);
+    if (!identical(anchor, tree.root)) anchor.updateStats(userResult);
+  }
 
   if (includeVariations) {
     _walkVariationsIntoTree(
@@ -273,11 +280,16 @@ void walkMainlineIntoTree({
     try {
       final moveSan = nodeData.san;
       if (isNullMoveSan(moveSan)) {
-        // Pass the turn without a tree node so later same-side moves stay
-        // legal and `--` does not pollute opening stats.
+        // Collection navigation needs the pass as a real ply so Back can
+        // replay the line. Legacy repertoire trees omit it from their stats.
         final next = playSanOrNullMove(currentPos, moveSan);
         if (next == null) break;
         currentPos = next;
+        if (tree.preserveSetupRoots) {
+          currentNode = tree.advance(currentNode, moveSan, currentPos);
+          currentNode.updateStats(userResult);
+          depth++;
+        }
         continue;
       }
 
@@ -427,8 +439,10 @@ void _walkVariationsIntoTree({
           tree: tree,
           pgnNode: child,
           pos: next,
-          treeNode: treeNode,
-          depth: depth,
+          treeNode: tree.preserveSetupRoots
+              ? (tree.advance(treeNode, san, next)..updateStats(userResult))
+              : treeNode,
+          depth: tree.preserveSetupRoots ? depth + 1 : depth,
           maxDepth: maxDepth,
           userResult: userResult,
           strictFirstPly: strictFirstPly,

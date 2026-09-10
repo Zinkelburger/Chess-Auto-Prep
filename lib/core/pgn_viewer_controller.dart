@@ -11,6 +11,8 @@ import 'pgn/pgn_collection_helpers.dart';
 export 'pgn/pgn_collection_helpers.dart';
 import 'pgn/pgn_fen_index.dart';
 import 'pgn/slice_persistence.dart';
+import 'pgn/viewer_session_store.dart';
+import '../services/pgn_opening_headers.dart';
 import 'pgn/viewer_opening_tree.dart';
 import 'pgn/viewer_solitaire_session.dart';
 import '../models/opening_tree.dart';
@@ -21,7 +23,8 @@ import '../services/default_pgn_service.dart';
 import '../services/pgn_document_patch.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
-import '../services/pgn_parsing_service.dart' show movetextStart;
+import '../services/pgn_parsing_service.dart'
+    show movetextStart, extractHeaders;
 import '../services/storage/storage_factory.dart';
 import 'pgn/pgn_viewer_handle.dart';
 import 'pgn/solitaire_controller.dart';
@@ -176,11 +179,56 @@ class PgnViewerController extends ChangeNotifier
 
   @override
   void _rememberCurrentPlace() {
+    if (showOpeningTree || isSolitaireMode || isLoading) return;
     if (currentGameIndex < 0 || currentGameIndex >= filteredGames.length) {
       return;
     }
-    _resumePlyByGame[filteredGames[currentGameIndex]] =
-        pgnWidgetController.mainLineIndex;
+    _resumePlyByGame[filteredGames[currentGameIndex]] = pgnWidgetController
+        .mainLineIndex
+        .clamp(0, 100000);
+  }
+
+  final _sessions = ViewerSessionStore();
+  bool _restoringSession = false;
+  bool get isRestoringSession => _restoringSession;
+  String? _lastSessionJson;
+
+  /// Called only by the game reader; tree/reference cursors are independent.
+  void rememberReadingPosition() {
+    if (_restoringSession || isLoading) return;
+    _rememberCurrentPlace();
+    unawaited(saveSession());
+  }
+
+  Future<void> saveSession() {
+    final path = filePath;
+    if (_restoringSession ||
+        isLoading ||
+        path == null ||
+        filteredGames.isEmpty) {
+      return Future.value();
+    }
+    final game = filteredGames[currentGameIndex];
+    final session = ViewerSession(
+      gameIndex: allGames.indexOf(game),
+      gameKey: ViewerSession.keyFor(game),
+      ply: resumePlyFor(game),
+      sortMode: sortMode,
+    );
+    final json = '$path:${session.encode()}';
+    if (json == _lastSessionJson) return _sessions.flush();
+    _lastSessionJson = json;
+    return _sessions.save(path, session);
+  }
+
+  /// A deliberate file/handoff request always wins over startup restoration.
+  Future<void> restoreLastSession() async {
+    if (_loadEpoch != 0) return;
+    final path = await _sessions.lastFile();
+    if (_loadEpoch != 0 || !isActive() || path == null) return;
+    if (!await StorageFactory.instance.fileExists(path)) return;
+    if (_loadEpoch != 0 || !isActive()) return;
+    await loadFile(path);
   }
 
   int resumePlyFor(PgnGameEntry game) => _resumePlyByGame[game] ?? 0;
@@ -222,6 +270,9 @@ class PgnViewerController extends ChangeNotifier
     allGames: () => allGames,
     fenIndex: () => _fenIndex.value,
     currentFen: () => currentPosition.fen,
+    gameStartFen: () => filteredGames.isEmpty
+        ? null
+        : filteredGames[currentGameIndex].headers['FEN'],
     applyPosition: (pos) => currentPosition = pos,
     onReclaimFocus: () => onReclaimFocus?.call(),
   );
@@ -303,7 +354,7 @@ class PgnViewerController extends ChangeNotifier
   );
 
   void _onFenIndexReady() {
-    unawaited(_classifyOpenings());
+    notifyListeners();
   }
 
   /// Read-only access to the precomputed FEN → game-indices map.
@@ -339,12 +390,16 @@ class PgnViewerController extends ChangeNotifier
 
   String? collectionsDir;
 
+  @override
   String? errorMessage;
 
   int get currentPly => pgnWidgetController.mainLineIndex;
 
   @override
   void dispose() {
+    unawaited(saveSession());
+    _loadEpoch++;
+    _openingEpoch++;
     _fenIndex.cancel();
     _autoPlay.dispose();
     _solitaireSession.dispose();
@@ -415,6 +470,8 @@ class PgnViewerController extends ChangeNotifier
     // stale FEN-index stamp) before its path and games are replaced; the
     // flush captures both synchronously.
     unawaited(flushPendingMetadata());
+    _lastSessionJson = null;
+    _openingEpoch++;
     filePath = path;
     // Whoever adopted a collection knows the mtime if there is one; a
     // from-memory collection has none. Cleared here so it can never outlive
@@ -461,7 +518,10 @@ class PgnViewerController extends ChangeNotifier
   /// single-game handoffs (Games page "Review"): a leftover slice there only
   /// hides the target game and confuses the count display.
   Future<void> loadFile(String path, {bool restoreSavedSlice = true}) async {
+    if (!canReplaceCollection()) return;
+    unawaited(saveSession());
     final loadEpoch = ++_loadEpoch;
+    _restoringSession = false;
     // A collection request also makes any cached-analysis parse for the old
     // selected game stale immediately, before the new file finishes reading.
     _gameLoadEpoch++;
@@ -520,8 +580,8 @@ class PgnViewerController extends ChangeNotifier
       final modified = await storage.fileStat(path);
       if (!_isCurrentLoad(loadEpoch)) return;
 
-      isLoading = false;
       _sliceEpoch++;
+      _restoringSession = true;
       _adoptCollection(
         path: path,
         entries: entries,
@@ -536,18 +596,41 @@ class PgnViewerController extends ChangeNotifier
       _fenIndex.reset();
       await _fenIndex.tryLoadPersisted(path, entries.length);
       if (!_isCurrentLoad(loadEpoch)) return;
-      if (restoreSavedSlice) await tryRestoreSavedSlice(path, entries);
+      final prefs = await SharedPreferences.getInstance();
       if (!_isCurrentLoad(loadEpoch)) return;
+      autoDetectOpenings =
+          prefs.getBool('pgn_viewer.auto_detect_openings') ?? true;
+      // ECO/name filters must see detected tags before restoring their matches.
+      if (_fenIndex.value == null) unawaited(_buildFenIndex());
+      if (!_isCurrentLoad(loadEpoch)) return;
+      await classifyOpenings();
+      if (!_isCurrentLoad(loadEpoch)) return;
+      if (restoreSavedSlice) {
+        await tryRestoreSavedSlice(path, entries);
+        if (!_isCurrentLoad(loadEpoch)) return;
+        final session = await _sessions.load(path);
+        if (!_isCurrentLoad(loadEpoch)) return;
+        if (session != null) {
+          sortMode = session.sortMode;
+          applySortMode();
+          final index = session.locate(allGames);
+          if (index >= 0) {
+            final game = allGames[index];
+            _resumePlyByGame[game] = session.ply;
+            final filteredIndex = filteredGames.indexOf(game);
+            if (filteredIndex >= 0) currentGameIndex = filteredIndex;
+          }
+        }
+      }
+      _restoringSession = false;
+      isLoading = false;
       await loadCurrentGame();
       if (!_isCurrentLoad(loadEpoch)) return;
-      if (_fenIndex.value == null) {
-        _buildFenIndex(); // classification runs via _onFenIndexReady
-      } else {
-        unawaited(_classifyOpenings());
-      }
+      await saveSession();
     } catch (e) {
       if (!_isCurrentLoad(loadEpoch)) return;
       isLoading = false;
+      _restoringSession = false;
       errorMessage = 'Could not open $fileName: $e';
       notifyListeners();
     }
@@ -562,7 +645,10 @@ class PgnViewerController extends ChangeNotifier
   /// reads it during the build this load triggers, which is the only moment
   /// the freshly parsed game and the cursor request meet.
   Future<void> loadPgnContent(String content, {String? initialFen}) async {
+    if (!canReplaceCollection()) return;
+    unawaited(saveSession());
     final loadEpoch = ++_loadEpoch;
+    _restoringSession = false;
     _gameLoadEpoch++;
     errorMessage = null;
     pendingSliceRestore = null;
@@ -603,7 +689,12 @@ class PgnViewerController extends ChangeNotifier
 
     await loadCurrentGame();
     if (!_isCurrentLoad(loadEpoch)) return;
-    _buildFenIndex();
+    unawaited(_buildFenIndex());
+    final prefs = await SharedPreferences.getInstance();
+    if (!_isCurrentLoad(loadEpoch)) return;
+    autoDetectOpenings =
+        prefs.getBool('pgn_viewer.auto_detect_openings') ?? true;
+    await classifyOpenings();
   }
 
   /// Close the loaded collection and put the viewer back on its start screen
@@ -613,6 +704,10 @@ class PgnViewerController extends ChangeNotifier
   /// the way back in) and the slice persisted on disk for this file, so
   /// reopening it still restores what you were looking at.
   void closeFile() {
+    if (!canReplaceCollection()) return;
+    unawaited(saveSession());
+    unawaited(_sessions.close());
+    _restoringSession = false;
     // Bumped first: an in-flight load or slice recompute would otherwise land
     // its results — and its isLoading release — on the cleared state.
     _loadEpoch++;
@@ -641,7 +736,7 @@ class PgnViewerController extends ChangeNotifier
     notifyListeners();
   }
 
-  void _buildFenIndex() {
+  Future<void> _buildFenIndex() {
     final gameData = allGames
         .map(
           (g) => (
@@ -650,42 +745,65 @@ class PgnViewerController extends ChangeNotifier
           ),
         )
         .toList();
-    unawaited(
-      _fenIndex.build(gameData, filePath: filePath, gameTotal: allGames.length),
+    return _fenIndex.build(
+      gameData,
+      filePath: filePath,
+      gameTotal: allGames.length,
     );
   }
 
-  /// Attach ECO / Opening headers (in-memory only) from the bundled lichess
-  /// opening book, so the slice header filters can match opening names.
-  /// Position-based via the FEN index, so transpositions are classified too.
-  Future<void> _classifyOpenings() async {
-    final index = _fenIndex.value;
-    if (index == null || allGames.isEmpty) return;
+  bool autoDetectOpenings = true;
+  int _openingEpoch = 0;
+
+  void setAutoDetectOpenings(bool value) {
+    if (autoDetectOpenings == value) return;
+    autoDetectOpenings = value;
+    _openingEpoch++;
+    notifyListeners();
+    if (value) unawaited(classifyOpenings());
+  }
+
+  /// Add missing tags to every game and save through the conflict-aware writer.
+  Future<void> classifyOpenings() async {
+    if (!autoDetectOpenings || allGames.isEmpty) return;
     final games = allGames;
-
+    if (!games.any(needsOpeningHeaders)) return;
+    final epoch = ++_openingEpoch;
     final book = await OpeningBookService.instance.load();
-    // A new file may have loaded while the book was loading.
-    if (!isActive() || !identical(_fenIndex.value, index)) return;
-
-    final openings = classifyGamesFromIndex(book, index, games.length);
+    if (!isActive() ||
+        !autoDetectOpenings ||
+        !identical(allGames, games) ||
+        epoch != _openingEpoch) {
+      return;
+    }
+    final openings = await compute(classifyMainlineOpenings, (
+      book: book,
+      games: games
+          .map(
+            (game) => (
+              headers: Map<String, String>.of(game.headers),
+              pgnText: game.pgnText,
+            ),
+          )
+          .toList(),
+    ));
+    if (!isActive() ||
+        !autoDetectOpenings ||
+        !identical(allGames, games) ||
+        epoch != _openingEpoch) {
+      return;
+    }
     var changed = false;
     for (var i = 0; i < games.length; i++) {
-      final entry = openings[i];
-      if (entry == null) continue;
-      final headers = games[i].headers;
-      if (headers['Opening'] != entry.name) {
-        headers['Opening'] = entry.name;
-        changed = true;
-      }
-      // Keep an existing ECO header: the source file's code is authoritative.
-      if ((headers['ECO'] ?? '').isEmpty) {
-        headers['ECO'] = entry.eco;
-        changed = true;
-      }
+      final opening = openings[i];
+      if (opening == null) continue;
+      rememberPersistedGame(games[i]);
+      if (fillOpeningHeaders(games[i], opening)) changed = true;
     }
     if (changed) {
       _markCollectionChanged();
       notifyListeners();
+      if (autoSave) await doPersistMetadata();
     }
   }
 
@@ -716,14 +834,20 @@ class PgnViewerController extends ChangeNotifier
     final gameLoadEpoch = ++_gameLoadEpoch;
     stopAutoPlay();
     analysisController.cancel();
-    currentPosition = _tryParseFen(pgnInitialFen) ?? Chess.initial;
-    orientBoardForCurrentGame();
     final game = filteredGames[currentGameIndex];
+    if (!showOpeningTree) {
+      currentPosition =
+          _tryParseFen(pgnInitialFen) ??
+          _tryParseFen(game.headers['FEN']) ??
+          Chess.initial;
+    }
+    orientBoardForCurrentGame();
     final restored = await analysisController.tryLoadFromPgn(game.pgnText);
     if (!isActive() || gameLoadEpoch != _gameLoadEpoch) return;
     notifyListeners();
     onReclaimFocus?.call();
     if (restored) unawaited(_fillMissingBestLines(game));
+    unawaited(saveSession());
   }
 
   /// A stored graph whose mistakes carry no line gets them now: a few short
@@ -994,9 +1118,10 @@ class PgnViewerController extends ChangeNotifier
   List<int> gamesAtTreePosition() => _viewerTree.gamesAtTreePosition();
 
   void loadGameFromTree(int filteredIndex) {
+    if (filteredIndex < 0 || filteredIndex >= filteredGames.length) return;
     _rememberCurrentPlace();
     _viewerTree.snapshotCursor(leavingForGame: true);
-    final landingFen = openingTree?.currentNode.fen;
+    final landingFen = openingTree?.currentFen;
     pgnInitialFen = landingFen;
     _gameCursorFen = landingFen;
     _viewerTree.hide();

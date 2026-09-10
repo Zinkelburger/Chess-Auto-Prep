@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('saved bounds retain inclusive wording and persistence keys', () {
     for (final (field, mode, value, label) in [
-      ('Date', 'after', '1960', 'In or after 1960'),
-      ('Date', 'before', '2000', 'In or before 2000'),
+      ('Date', 'after', '1960', 'After 1960'),
+      ('Date', 'before', '2000', 'Before 2000'),
       ('WhiteElo', 'after', '2200', 'White rating at least 2200'),
       ('BlackElo', 'before', '1800', 'Black rating at most 1800'),
       ('Player', 'notContains', 'Alpha', 'Player name excludes Alpha'),

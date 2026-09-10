@@ -150,14 +150,6 @@ class _ExplorerSectionState extends State<ExplorerSection> {
         pathFromRoot: widget.controller.currentMoveSequence,
       );
       widget.controller.playMove(move.san);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Added ${move.san} to repertoire'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -172,14 +164,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
 
   Future<void> _performUndo() async {
     try {
-      final undone = await widget.controller.writer.undo();
-      if (!mounted || !undone) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Undid last repertoire add'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      await widget.controller.writer.undo();
     } catch (_) {
       // Best-effort; failure here is non-fatal and intentionally ignored.
     }

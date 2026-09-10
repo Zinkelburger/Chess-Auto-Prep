@@ -514,7 +514,7 @@ void main() {
       // An index >= gameCount would crash consumers; deserialize returns null.
       expect(
         deserializeFenIndex(
-          'FENIDX2 2 10 20\nsomefen\t5\n',
+          'FENIDX3 2 10 20\nsomefen\t5\n',
           expectedGameCount: 2,
           expectedFileSize: 10,
           expectedModifiedMs: 20,

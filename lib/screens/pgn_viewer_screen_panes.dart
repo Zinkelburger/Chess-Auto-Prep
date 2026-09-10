@@ -461,6 +461,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
         ),
       );
     }
+    if (_controller.isRestoringSession) return const SizedBox.shrink();
     final game = _controller.filteredGames[_controller.currentGameIndex];
     return Column(
       children: [
@@ -491,7 +492,25 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             onAnalyse: _analyseSolitaireGame,
             onExit: () => unawaited(_leaveSolitaire()),
           ),
-        if (_editMode) _buildEditModeBar(),
+        if (_viewPreferences.autoDetectOpenings &&
+            [
+              game.headers['ECO'],
+              game.headers['Opening'],
+            ].any((value) => value != null && value.isNotEmpty && value != '?'))
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SelectableText(
+                [game.headers['ECO'], game.headers['Opening']]
+                    .whereType<String>()
+                    .where((value) => value.isNotEmpty && value != '?')
+                    .join(' · '),
+                style: AppTextStyles.muted,
+              ),
+            ),
+          ),
+        if (!_controller.isSolitaireMode) _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
             showStartEndButtons: true,
@@ -503,7 +522,17 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             // Through the screen, not straight to the controller: it remembers
             // where the game's cursor is so leaving the Line tab can put the
             // board back (see [_onGamePosition]).
-            onPositionChanged: _onGamePosition,
+            onPositionChanged: (position) {
+              if (!mounted ||
+                  _controller.filteredGames.isEmpty ||
+                  !identical(
+                    _controller.filteredGames[_controller.currentGameIndex],
+                    game,
+                  )) {
+                return;
+              }
+              _onGamePosition(position);
+            },
             // Bound to this game object: the annotation panel debounces its
             // saves, which may flush after the user switches games.
             onCommentsChanged: (movetext) => _controller.persistMoveCommentsFor(
@@ -517,6 +546,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
               writeToFile: !_controller.isSolitaireMode,
             ),
             editMode: _editMode,
+            persistMoves: !_controller.isSolitaireMode,
             bookFormatting: game.isCourseStyle,
             initialMainLineIndex: _controller.resumePlyFor(game),
             // The result is the answer to "how did this go?" — the one header
@@ -551,21 +581,32 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
           color: AppColors.onSurfaceMuted,
         ),
         Text(
-          'Editing PGN',
+          _editMode ? 'Editing PGN' : 'PGN',
           style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
         ),
         Text(
           _controller.filePath == null
-              ? 'Copy PGN or save to a study to keep changes'
+              ? 'Not saved to a file'
               : _controller.errorMessage != null
               ? _controller.errorMessage!
-              : 'Changes to the file are saved',
+              : _controller.isSaving
+              ? 'Saving…'
+              : _controller.hasUnsavedChanges
+              ? 'Unsaved changes'
+              : _viewPreferences.autoSave
+              ? 'All changes saved · Autosave on'
+              : 'All changes saved · Autosave off',
           style: AppTextStyles.muted.copyWith(color: AppColors.ink),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: _controller.isSaving ? null : () => unawaited(_savePgn()),
+          icon: const Icon(Icons.save_outlined, size: 18),
+          label: Text(_controller.filePath == null ? 'Save as…' : 'Save'),
         ),
         TextButton.icon(
           onPressed: _toggleEditMode,
-          icon: const Icon(Icons.check, size: 18),
-          label: const Text('Finish editing'),
+          icon: Icon(_editMode ? Icons.check : Icons.edit_outlined, size: 18),
+          label: Text(_editMode ? 'Finish editing' : 'Edit PGN'),
           style: TextButton.styleFrom(
             foregroundColor: AppColors.ink,
             backgroundColor: AppColors.surfaceContainer,

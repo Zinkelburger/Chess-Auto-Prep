@@ -910,15 +910,16 @@ void main() {
       final good = blobOf({
         'a/fen w - -': [0],
       });
-      const header = 'FENIDX2 $gameCount $fileSize $modifiedMs';
+      const header = 'FENIDX3 $gameCount $fileSize $modifiedMs';
       expect(readBack(good), isNotNull);
+      expect(readBack(good.replaceFirst('FENIDX3', 'FENIDX2')), isNull);
       expect(
         readBack(good.replaceFirst(header, '$header 99')),
         isNull,
         reason: 'an extra header field is not a format we can trust',
       );
       expect(
-        readBack(good.replaceFirst(header, 'FENIDX2 $gameCount $fileSize')),
+        readBack(good.replaceFirst(header, 'FENIDX3 $gameCount $fileSize')),
         isNull,
         reason: 'a truncated header is not a format we can trust',
       );

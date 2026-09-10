@@ -16,6 +16,10 @@ abstract final class AppColors {
   // ── Surfaces ─────────────────────────────────────────────────────────────
 
   static const surface = Color(0xFF121212);
+
+  /// Cool slate separates engine analysis from the neutral PGN canvas.
+  static const engineSurface = Color(0xFF252D34);
+
   static const surfaceElevated = Color(0xFF1E1E1E);
   static const surfaceContainer = Color(0xFF2A2A2A);
 

@@ -225,32 +225,38 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        if (!widget.compact) ...[_buildSettingsBar(), const Divider(height: 1)],
-        if (EngineGate.isLocked)
-          const Expanded(child: EngineBusyNotice())
-        else if (_engineEnabled) ...[
-          Expanded(child: _buildUnifiedMoveTable()),
-          EnginePaneFooter(
-            settings: _settings,
-            analysis: _analysis,
-            probabilityService: _probabilityService,
-            fen: widget.fen,
-            maiaProbs: _maiaProbs,
-            isWhiteRepertoire: widget.isWhiteRepertoire,
-            onSetRoot: widget.onSetRoot,
-          ),
-        ] else
-          const Expanded(child: SizedBox.shrink()),
-      ],
+    return Material(
+      color: AppColors.engineSurface,
+      child: Column(
+        children: [
+          if (!widget.compact) ...[
+            _buildSettingsBar(),
+            const Divider(height: 1),
+          ],
+          if (EngineGate.isLocked)
+            const Expanded(child: EngineBusyNotice())
+          else if (_engineEnabled) ...[
+            Expanded(child: _buildUnifiedMoveTable()),
+            EnginePaneFooter(
+              settings: _settings,
+              analysis: _analysis,
+              probabilityService: _probabilityService,
+              fen: widget.fen,
+              maiaProbs: _maiaProbs,
+              isWhiteRepertoire: widget.isWhiteRepertoire,
+              onSetRoot: widget.onSetRoot,
+            ),
+          ] else
+            const Expanded(child: SizedBox.shrink()),
+        ],
+      ),
     );
   }
 
   Widget _buildSettingsBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      color: AppColors.engineSurface,
       child: Row(
         children: [
           Expanded(

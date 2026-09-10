@@ -64,10 +64,9 @@ mixin _SliceOps on ChangeNotifier {
     if (!isActive() || epoch != _sliceEpoch) return;
 
     isLoading = false;
-    // An all-games or zero-game match isn't worth restoring: the former is a
-    // no-op, and the latter would blank the viewer for a file that loaded
-    // fine (the config likely predates a rewrite of the file).
-    if (indices.isEmpty || indices.length == entries.length) {
+    // Keep even an all-games filter so its editable conditions survive. A
+    // zero-game match falls back to the collection if the file has changed.
+    if (indices.isEmpty) {
       notifyListeners();
       return;
     }
@@ -98,7 +97,8 @@ mixin _SliceOps on ChangeNotifier {
     isLoading = false;
     _activeSliceIndices = List<int>.from(indices);
     filteredGames = indices.map((i) => allGames[i]).toList();
-    hasActiveFilters = filteredGames.length != allGames.length;
+    hasActiveFilters =
+        !config.isEmpty || filteredGames.length != allGames.length;
     activeSliceConfig = config;
     currentGameIndex = 0;
     pgnInitialFen = null;

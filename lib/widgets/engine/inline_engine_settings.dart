@@ -38,8 +38,10 @@ class _InlineEngineSettingsState extends State<InlineEngineSettings> {
       ),
     ],
     builder: (context, controller, _) => IconButton(
-      icon: const Icon(Icons.settings_outlined, size: 18),
+      icon: const Icon(Icons.settings_outlined, size: 16),
       tooltip: 'Engine settings',
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
       onPressed: () =>
           controller.isOpen ? controller.close() : controller.open(),
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

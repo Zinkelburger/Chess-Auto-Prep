@@ -35,6 +35,7 @@ class ViewerOpeningTree {
     required this.currentFen,
     required this.applyPosition,
     this.onReclaimFocus,
+    this.gameStartFen,
   });
 
   /// Whether the owning view is still mounted/active.
@@ -54,6 +55,9 @@ class ViewerOpeningTree {
 
   /// Current board FEN (used as a sync fallback on first open).
   final String Function() currentFen;
+
+  /// Current game setup, used when its selected variation is absent.
+  final String? Function()? gameStartFen;
 
   /// Push a board position derived from the tree cursor.
   final void Function(Position) applyPosition;
@@ -86,7 +90,7 @@ class ViewerOpeningTree {
     if (tree == null) return const {};
     try {
       return recentMoveTrailSquares(
-        Chess.fromSetup(Setup.parseFen(tree.root.fen)),
+        Chess.fromSetup(Setup.parseFen(tree.cursorRoot.fen)),
         tree.currentMovePath,
       );
     } catch (_) {
@@ -98,6 +102,7 @@ class ViewerOpeningTree {
   /// from the games-at-position list). Re-entering walks this sequence instead
   /// of syncing from the remounted game, which would jump to the start.
   List<String>? _savedMoveSequence;
+  String? _cursorStartFen;
 
   /// True when the last leave was a click on a game at this position. The
   /// app-bar back button is only offered in that case; T always restores.
@@ -106,17 +111,21 @@ class ViewerOpeningTree {
   static const _maxCacheEntries = 500;
   final Map<String, List<int>> _positionGameCache = {};
   Map<String, List<int>>? _mainlineIndex;
+  List<PgnGameEntry> _indexedGames = const [];
 
   /// Reset tree state when a new file is loaded.
   void resetForNewFile() {
     _generation++;
     _mainlineIndex = null;
+    _indexedGames = const [];
     buildingTree = false;
     openingTree = null;
     showOpeningTree = false;
     treeCurrentMoveSequence = [];
     _savedMoveSequence = null;
     _leftForGame = false;
+    _cursorStartFen = null;
+    clearCache();
   }
 
   /// Drop the built tree (e.g. after re-slicing); a rebuild follows if shown.
@@ -124,7 +133,11 @@ class ViewerOpeningTree {
   void clearTree() {
     _generation++;
     _mainlineIndex = null;
+    _indexedGames = const [];
+    _cursorStartFen = openingTree?.cursorRoot.fen ?? _cursorStartFen;
     openingTree = null;
+    buildingTree = false;
+    clearCache();
     _savedMoveSequence = null;
     _leftForGame = false;
   }
@@ -138,7 +151,8 @@ class ViewerOpeningTree {
   /// button appears while that game is on screen.
   void snapshotCursor({bool leavingForGame = false}) {
     if (openingTree == null) return;
-    _savedMoveSequence = List.of(treeCurrentMoveSequence);
+    _savedMoveSequence = openingTree!.currentMovePath;
+    _cursorStartFen = openingTree!.cursorRoot.fen;
     if (leavingForGame) _leftForGame = true;
   }
 
@@ -180,12 +194,15 @@ class ViewerOpeningTree {
       return;
     }
     _restoreCursorOntoBoard(preferSaved: true);
+    _savedMoveSequence = null;
     onChanged();
     onReclaimFocus?.call();
   }
 
   Future<void> rebuild() async {
     final generation = ++_generation;
+    final boardFen = currentFen();
+    _cursorStartFen = openingTree?.cursorRoot.fen ?? _cursorStartFen;
     if (filteredGames().isEmpty) {
       openingTree = null;
       buildingTree = false;
@@ -210,6 +227,7 @@ class ViewerOpeningTree {
         userIsWhite: null,
         strictPlayerMatching: false,
         includeVariations: variations,
+        preserveSetupRoots: true,
         maxDepth: kOpeningTreeMaxDepth,
         onProgress: (processed, total) {
           if (!isActive() || generation != _generation) return;
@@ -226,10 +244,14 @@ class ViewerOpeningTree {
             ]);
       if (!isActive() || generation != _generation) return;
       _mainlineIndex = mainlineIndex;
+      _indexedGames = games;
       openingTree = tree;
       buildingTree = false;
       treeBuildProcessed = treeBuildTotal;
-      _restoreCursorOntoBoard(preferSaved: false);
+      if (showOpeningTree) {
+        _restoreCursorOntoBoard(preferSaved: true, fallbackFen: boardFen);
+        _savedMoveSequence = null;
+      }
       onChanged();
     } catch (e) {
       if (!isActive() || generation != _generation) return;
@@ -268,7 +290,7 @@ class ViewerOpeningTree {
   }
 
   void resetToStart() {
-    openingTree?.reset();
+    openingTree?.reset(startFen: openingTree?.cursorRoot.fen);
     treeCurrentMoveSequence = [];
     _updatePositionFromTree();
     onChanged();
@@ -294,7 +316,10 @@ class ViewerOpeningTree {
   /// re-entering the tree (the snapshot is the place we left). Rebuilds while
   /// the tree is already shown walk the live cursor instead — a stale snapshot
   /// from the last hide must not yank the user back mid-exploration.
-  void _restoreCursorOntoBoard({required bool preferSaved}) {
+  void _restoreCursorOntoBoard({
+    required bool preferSaved,
+    String? fallbackFen,
+  }) {
     final saved = _savedMoveSequence;
     final seq = preferSaved && saved != null ? saved : treeCurrentMoveSequence;
     if ((preferSaved && saved != null) || seq.isNotEmpty) {
@@ -302,27 +327,35 @@ class ViewerOpeningTree {
       _updatePositionFromTree();
       return;
     }
-    _syncToCurrentPosition();
+    _syncToCurrentPosition(fallbackFen);
   }
 
   void _walkTo(List<String> seq) {
     final tree = openingTree;
     if (tree == null) return;
-    tree.syncToMoveHistory(seq);
+    final start = _cursorStartFen;
+    if (start != null && !tree.fenToNodes.containsKey(normalizeFen(start))) {
+      _syncToCurrentPosition(null);
+      return;
+    }
+    tree.syncToMoveHistory(seq, startFen: start);
     treeCurrentMoveSequence = tree.currentMovePath;
   }
 
   /// Sync the opening tree cursor to the current board position via FEN
   /// lookup in the aggregate tree. Used on first open, when there is no
   /// saved tree cursor to restore.
-  void _syncToCurrentPosition() {
+  void _syncToCurrentPosition(String? fallbackFen) {
     if (openingTree == null) return;
     openingTree!.reset();
-    if (openingTree!.navigateToFen(currentFen())) {
+    if (openingTree!.navigateToFen(fallbackFen ?? currentFen())) {
       treeCurrentMoveSequence = openingTree!.currentMovePath;
     } else {
-      openingTree!.reset();
-      treeCurrentMoveSequence = [];
+      final start = gameStartFen?.call();
+      if (start == null || !openingTree!.navigateToFen(start)) {
+        openingTree!.reset();
+      }
+      treeCurrentMoveSequence = openingTree!.currentMovePath;
     }
     // A missing variation falls back to the root. The board must follow that
     // fallback too, rather than retaining the hidden Game pane's position.
@@ -333,6 +366,7 @@ class ViewerOpeningTree {
   /// cursor included).
   void _updatePositionFromTree() {
     if (openingTree == null) return;
+    _cursorStartFen = openingTree!.cursorRoot.fen;
     final fen = openingTree!.currentFen;
     try {
       applyPosition(Chess.fromSetup(Setup.parseFen(fen)));
@@ -357,7 +391,14 @@ class ViewerOpeningTree {
       final filtered = filteredGames();
 
       if (!includeVariations && _mainlineIndex != null) {
-        return _mainlineIndex![fen] ?? <int>[];
+        final matching = {
+          for (final i in _mainlineIndex![fen] ?? const <int>[])
+            _indexedGames[i],
+        };
+        return [
+          for (var i = 0; i < filtered.length; i++)
+            if (matching.contains(filtered[i])) i,
+        ];
       }
 
       // Fast path: map FEN-index (allGames indices) → filteredGames indices.

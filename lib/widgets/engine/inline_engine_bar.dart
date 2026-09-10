@@ -24,7 +24,7 @@ import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart'
     show fenAfterMoves, formatEvalDisplay, formatNodes, uciPvToSanCached;
 import '../../utils/fen_utils.dart';
-import '../clickable_move_line.dart';
+import 'engine_pv_row.dart';
 import 'inline_engine_settings.dart';
 import '../../services/engine/threat_position.dart';
 import '../../utils/app_shortcuts.dart';
@@ -262,6 +262,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         _settings.multiPv != _lastMultiPv ||
         _settings.cores != _lastInlineThreads ||
         _settings.hashMb != _lastHashMb;
+    if (!mounted) return;
+    setState(() {});
     if (!relevant) return;
     _lastDepth = _settings.depth;
     _lastMultiPv = _settings.multiPv;
@@ -375,42 +377,49 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildToggleBar(context),
-        if (_engineEnabled) ...[
-          const Divider(height: 1),
-          // Reserve every configured PV slot even while a new position has
-          // no results (or fewer legal moves). Navigation must not move the
-          // PGN below us as streamed lines disappear and arrive.
-          SizedBox(
-            height: (_lineHeight(context) * _settings.multiPv).clamp(
-              40.0,
-              double.infinity,
+    return Material(
+      color: AppColors.engineSurface,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildToggleBar(context),
+          if (_engineEnabled) ...[
+            const Divider(height: 1),
+            // Reserve every configured PV slot even while a new position has
+            // no results (or fewer legal moves). Navigation must not move the
+            // PGN below us as streamed lines disappear and arrive.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: EnginePvRow.lineHeight(context) * _settings.multiPv,
+                maxHeight:
+                    (EnginePvRow.lineHeight(context) *
+                            _settings.multiPv *
+                            _settings.pvRows)
+                        .clamp(240.0, double.infinity),
+              ),
+              child: SingleChildScrollView(
+                child: EngineGate.isLocked
+                    ? const EngineBusyNotice(dense: true)
+                    : _buildLines(context),
+              ),
             ),
-            child: SingleChildScrollView(
-              child: EngineGate.isLocked
-                  ? const EngineBusyNotice(dense: true)
-                  : _buildLines(context),
-            ),
+          ],
+          // Renders nothing inline; drives the hover mini-board via Overlay.
+          FloatingBoardPreview(
+            stackKey: _previewKey,
+            controller: _boardPreview,
+            flipped: widget.previewFlipped,
+            ownerTag: _previewKey,
           ),
         ],
-        // Renders nothing inline; drives the hover mini-board via Overlay.
-        FloatingBoardPreview(
-          stackKey: _previewKey,
-          controller: _boardPreview,
-          flipped: widget.previewFlipped,
-          ownerTag: _previewKey,
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildToggleBar(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      color: AppColors.engineSurface,
       child: Row(
         children: [
           SizedBox(
@@ -429,7 +438,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
               ),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           Expanded(
             child: _engineEnabled
                 ? Text(
@@ -449,7 +458,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                   ),
           ),
           IconButton(
-            icon: const Icon(Icons.gps_fixed, size: 18),
+            icon: const Icon(Icons.gps_fixed, size: 16),
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
             tooltip: _threatMode ? 'Hide threat' : 'Show threat',
             isSelected: _threatMode,
             onPressed:
@@ -471,13 +482,13 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
 
     if (lines.isEmpty && !_isSearching) {
       return Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Text(_error ?? 'No legal moves.', style: AppTextStyles.caption),
       );
     }
     if (lines.isEmpty) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
+        padding: EdgeInsets.symmetric(vertical: 4),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -523,101 +534,20 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     );
   }
 
-  double _lineHeight(BuildContext context) =>
-      MediaQuery.textScalerOf(context).scale(14) * 1.5 + 8;
-
   Widget _buildLineRow(BuildContext context, DiscoveryLine line) {
     final sanMoves = _pvToSanList(_searchFen, line.pv);
-    final san = sanMoves.isNotEmpty ? sanMoves.first : '?';
-
-    final evalStr = formatEvalDisplay(
-      scoreCp: line.scoreCp,
-      scoreMate: line.scoreMate,
-    );
-
-    return Container(
-      height: _lineHeight(context),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 52,
-            child: Text(
-              evalStr,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                fontFamily: AppTextStyles.monoFamily,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 6),
-          SizedBox(
-            width: 48,
-            child: Builder(
-              builder: (anchorContext) => MouseRegion(
-                cursor: !_threatMode && widget.onLineMoveTapped != null
-                    ? SystemMouseCursors.click
-                    : MouseCursor.defer,
-                onEnter: (_) {
-                  final box = anchorContext.findRenderObject() as RenderBox?;
-                  if (box == null) return;
-                  final anchor = box.localToGlobal(
-                    Offset(box.size.width / 2, box.size.height),
-                  );
-                  _showPreview(line, sanMoves, 0, anchor);
-                },
-                onExit: (_) => _boardPreview.clearPreview(),
-                child: GestureDetector(
-                  onTap: !_threatMode && widget.onLineMoveTapped != null
-                      ? () {
-                          widget.onLineMoveTapped!(sanMoves, 0);
-                          _boardPreview.clearPreview();
-                        }
-                      : null,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Text(
-                      san,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontFamily: AppTextStyles.monoFamily,
-                        fontSize: 14,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Expanded(child: _buildClickableContinuation(line, sanMoves)),
-        ],
+    return EnginePvRow(
+      key: ValueKey('$_searchFen:${line.pvNumber}'),
+      evaluation: formatEvalDisplay(
+        scoreCp: line.scoreCp,
+        scoreMate: line.scoreMate,
       ),
-    );
-  }
-
-  Widget _buildClickableContinuation(
-    DiscoveryLine line,
-    List<String> sanMoves,
-  ) {
-    if (sanMoves.length <= 1) return const SizedBox.shrink();
-
-    // Ply of the first move in the PV (index 0)
-    final firstMovePly = plyFromFen(_searchFen);
-
-    return ClickableMoveLineWidget(
       sanMoves: sanMoves,
-      startPly: firstMovePly,
-      startIndex: 1,
-      maxMoves: 7,
-      fontSize: 12,
+      startPly: plyFromFen(_searchFen),
+      rows: _settings.pvRows,
       onMoveTapped: !_threatMode && widget.onLineMoveTapped != null
           ? (idx) {
+              if (!mounted) return;
               widget.onLineMoveTapped!(sanMoves, idx);
               _boardPreview.clearPreview();
             }

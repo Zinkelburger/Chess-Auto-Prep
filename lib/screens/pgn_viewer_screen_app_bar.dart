@@ -18,7 +18,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   void _toggleEditMode();
   Future<void> _editInStudy();
   Future<void> _addCurrentGameToStudy();
-  Future<void> _copyCurrentGamePgn();
+  Future<void> _copyCurrentGamePgn({bool mainlineOnly = false});
   Future<void> _copyCurrentFen();
   void _openSliceDialog();
   Future<void> _exportSlice();
@@ -26,7 +26,8 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   Future<void> _pickFile();
   Future<void> _pastePgn();
   Future<void> _loadFile(String path);
-  void _closeFile();
+  Future<void> _closeFile();
+  Future<bool> _savePgn();
   bool _toggleSolitaireMode();
   void _reclaimFocus();
 
@@ -86,6 +87,12 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             onRun: _openSliceDialog,
           ),
         if (hasGame) ...[
+          if (!solitaire)
+            AppMenuEntry(
+              icon: Icons.save_outlined,
+              label: 'Save PGN',
+              onRun: () => unawaited(_savePgn()),
+            ),
           if (!solitaire && !_onReferenceTab)
             AppMenuEntry(
               icon: Icons.edit_outlined,
@@ -120,6 +127,11 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             icon: Icons.copy,
             dividerAbove: true,
             onRun: _copyCurrentGamePgn,
+          ),
+          AppMenuEntry(
+            label: 'Copy mainline PGN (no comments)',
+            icon: Icons.copy,
+            onRun: () => _copyCurrentGamePgn(mainlineOnly: true),
           ),
           AppMenuEntry(
             label: 'Copy FEN',
@@ -213,7 +225,7 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
         } else if (value == 'paste') {
           unawaited(_pastePgn());
         } else if (value == 'close') {
-          _closeFile();
+          unawaited(_closeFile());
         } else if (value.startsWith('recent:')) {
           _singleGameFocus = false;
           unawaited(_loadFile(value.substring('recent:'.length)));

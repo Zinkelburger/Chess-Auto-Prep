@@ -153,16 +153,6 @@ class _AnalysisTabState extends State<AnalysisTab> {
   Future<void> _acceptSuggestion(SuggestedLine suggestion) async {
     try {
       await widget.controller.writer.acceptSuggestion(suggestion);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Added ${suggestion.newMoves.join(' ')} to repertoire',
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
     } catch (e) {
       debugPrint('[AnalysisTab] Failed to accept suggestion: $e');
       if (mounted) {
@@ -178,14 +168,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
 
   Future<void> _performUndo() async {
     try {
-      final undone = await widget.controller.writer.undo();
-      if (!mounted || !undone) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Undid last repertoire add'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      await widget.controller.writer.undo();
     } catch (e) {
       debugPrint('[AnalysisTab] Undo failed: $e');
       if (!mounted) return;
@@ -226,14 +209,6 @@ class _AnalysisTabState extends State<AnalysisTab> {
         pathFromRoot: widget.controller.currentMoveSequence,
       );
       widget.controller.playMove(move.san);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Added ${move.san} to repertoire'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
     } catch (e) {
       debugPrint('[AnalysisTab] Failed to add move: $e');
       if (mounted) {

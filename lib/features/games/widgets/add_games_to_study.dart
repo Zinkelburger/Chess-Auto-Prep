@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/app_state.dart';
 import '../../../core/study_controller.dart';
 import '../../../models/pgn_game_entry.dart';
 import '../../../models/study_document.dart';
@@ -52,12 +51,11 @@ Future<void> addGamesToStudy(
   );
   if (destination == null || !context.mounted) return;
   final study = context.read<StudyController>();
-  final app = context.read<AppState>();
   try {
     final path =
         destination.existingPath ??
         await StorageFactory.instance.studyFilePath(destination.newStudyName!);
-    final firstIndex = await study.addChaptersToStudyFile(path, [
+    await study.addChaptersToStudyFile(path, [
       for (final index in selected)
         StudyChapter.fromGameText(
           snapshots[index].pgn,
@@ -66,14 +64,6 @@ Future<void> addGamesToStudy(
               : snapshots[index].name,
         ),
     ]);
-    if (!context.mounted) return;
-    showAppSnackBar(
-      context,
-      'Added ${selected.length == 1 ? 'game' : '${selected.length} games'} to "${destination.studyName}".',
-      actionLabel: 'Open study',
-      onAction: () =>
-          app.switchToStudyEdit(path: path, chapterIndex: firstIndex),
-    );
   } catch (error) {
     debugPrint('Add games to study failed: $error');
     if (context.mounted) {

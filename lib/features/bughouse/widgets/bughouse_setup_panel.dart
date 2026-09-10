@@ -82,10 +82,6 @@ class _BughouseSetupPanelState extends State<BughouseSetupPanel> {
               onPressed: () async {
                 final fen = controller.state.dualFen;
                 await Clipboard.setData(ClipboardData(text: fen));
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Dual FEN copied')),
-                );
               },
             ),
             OutlinedButton.icon(
