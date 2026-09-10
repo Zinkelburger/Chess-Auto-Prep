@@ -390,7 +390,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             // PGN below us as streamed lines disappear and arrive.
             ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight: EnginePvRow.lineHeight(context) * _settings.multiPv,
+                minHeight:
+                    EnginePvRow.lineHeight(context) *
+                    _settings.multiPv *
+                    _settings.pvRows,
                 maxHeight:
                     (EnginePvRow.lineHeight(context) *
                             _settings.multiPv *
@@ -507,9 +510,17 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       );
     }
 
+    final byRank = {for (final line in lines) line.pvNumber: line};
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: lines.map((line) => _buildLineRow(context, line)).toList(),
+      children: List.generate(_settings.multiPv, (index) {
+        final line = byRank[index + 1];
+        return line == null
+            ? SizedBox(
+                height: EnginePvRow.lineHeight(context) * _settings.pvRows,
+              )
+            : _buildLineRow(context, line);
+      }),
     );
   }
 

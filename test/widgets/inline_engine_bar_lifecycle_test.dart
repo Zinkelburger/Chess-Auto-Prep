@@ -126,8 +126,13 @@ void main() {
   ) async {
     final settings = EngineSettings.instance;
     final previousMultiPv = settings.multiPv;
+    final previousPvRows = settings.pvRows;
     settings.multiPv = 3;
-    addTearDown(() => settings.multiPv = previousMultiPv);
+    settings.pvRows = 3;
+    addTearDown(() {
+      settings.multiPv = previousMultiPv;
+      settings.pvRows = previousPvRows;
+    });
     final connection = _Connection(autoReply: false);
     StockfishConnectionFactory.createForTest = () async => connection;
     const pgnKey = ValueKey('pgn-content');
@@ -159,6 +164,12 @@ void main() {
     expect(enabledTop, greaterThan(disabledTop));
     expect(find.text('Analyzing...'), findsOneWidget);
 
+    // A lower-ranked result can arrive before the higher-ranked slots.
+    connection.output.add('info depth 1 multipv 3 score cp 5 nodes 5 pv c2c4');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final thirdLineTop = tester.getTopLeft(find.text('c4')).dy;
+
     connection.output.add(
       'info depth 1 multipv 1 score cp 20 nodes 10 pv e2e4',
     );
@@ -166,9 +177,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('e4'), findsOneWidget);
     expect(pgnTop(), enabledTop);
+    expect(tester.getTopLeft(find.text('c4')).dy, thirdLineTop);
 
     connection.output.add(
-      'info depth 2 multipv 1 score cp 20 nodes 20 pv e2e4 e7e5 g1f3 b8c6',
+      'info depth 2 multipv 1 score cp 20 nodes 20 pv e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6 e1g1 f8e7 f1e1 b7b5 a4b3 d7d6',
     );
     connection.output.add(
       'info depth 2 multipv 2 score cp 10 nodes 30 pv d2d4 d7d5',

@@ -584,25 +584,26 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
           _editMode ? 'Editing PGN' : 'PGN',
           style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
         ),
-        Text(
-          _controller.filePath == null
-              ? 'Not saved to a file'
-              : _controller.errorMessage != null
-              ? _controller.errorMessage!
-              : _controller.isSaving
-              ? 'Saving…'
-              : _controller.hasUnsavedChanges
-              ? 'Unsaved changes'
-              : _viewPreferences.autoSave
-              ? 'All changes saved · Autosave on'
-              : 'All changes saved · Autosave off',
-          style: AppTextStyles.muted.copyWith(color: AppColors.ink),
-        ),
-        FilledButton.tonalIcon(
-          onPressed: _controller.isSaving ? null : () => unawaited(_savePgn()),
-          icon: const Icon(Icons.save_outlined, size: 18),
-          label: Text(_controller.filePath == null ? 'Save as…' : 'Save'),
-        ),
+        if (_controller.errorMessage != null ||
+            _controller.isSaving ||
+            _controller.hasUnsavedChanges)
+          Text(
+            _controller.errorMessage ??
+                (_controller.isSaving ||
+                        (_viewPreferences.autoSave &&
+                            _controller.filePath != null)
+                    ? 'Saving…'
+                    : 'Unsaved changes'),
+            style: AppTextStyles.muted.copyWith(color: AppColors.ink),
+          ),
+        if (_showSaveAction)
+          FilledButton.tonalIcon(
+            onPressed: _controller.isSaving
+                ? null
+                : () => unawaited(_savePgn()),
+            icon: const Icon(Icons.save_outlined, size: 18),
+            label: Text(_controller.filePath == null ? 'Save as…' : 'Save'),
+          ),
         TextButton.icon(
           onPressed: _toggleEditMode,
           icon: Icon(_editMode ? Icons.check : Icons.edit_outlined, size: 18),
