@@ -453,12 +453,19 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                               '${formatNodes(_discovery.nodes)} nodes'
                         : '${_threatMode ? 'Threat · ' : ''}${_discovery.lines.length} lines • '
                               'depth ${_discovery.depth}',
-                    style: AppTextStyles.bodyStrong,
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w400,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   )
-                : const Tooltip(
+                : Tooltip(
                     message: 'Toggle engine',
-                    child: Text('Engine', style: AppTextStyles.bodyStrong),
+                    child: Text(
+                      'Engine',
+                      style: AppTextStyles.body.copyWith(
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
                   ),
           ),
           IconButton(

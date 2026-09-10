@@ -612,7 +612,10 @@ class _DeviationBanner extends StatelessWidget {
         // A deviation warns; running out of book is neutral information.
         color: report.bookEnded
             ? AppColors.surfaceElevated
-            : AppColors.warningTint,
+            : Color.alphaBlend(
+                AppColors.warningTint.withAlpha(20),
+                AppColors.surface,
+              ),
         border: const Border(bottom: BorderSide(color: AppColors.divider)),
       ),
       child: Row(
@@ -640,7 +643,10 @@ class _DeviationBanner extends StatelessWidget {
               minimumSize: const Size(0, 32),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: const Text('Show my line', style: AppTextStyles.bodyStrong),
+            child: Text(
+              'Show my line',
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w400),
+            ),
           ),
         ],
       ),

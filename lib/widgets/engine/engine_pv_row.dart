@@ -78,7 +78,7 @@ class _EnginePvRowState extends State<EnginePvRow> {
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.mono.copyWith(
                     fontSize: EnginePvRow.fontSize,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w400,
                     color: widget.evalColor ?? AppColors.ink,
                   ),
                 ),
