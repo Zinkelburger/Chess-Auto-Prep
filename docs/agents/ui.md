@@ -44,10 +44,13 @@ Reuse these widgets (paths relative to `lib/`):
 
 Before creating a control, check this table and `lib/widgets/common/`. Extend
 an existing control when the behavior is shared. Search stays a visible input
-with a magnifier and clear action. Common filters use labelled direct controls;
-less common fields use a searchable `ChoiceField` behind a labelled disclosure.
-Use surface separation and title/body weights to group controls, and reserve the
-strongest filled action for applying or completing the task.
+with a magnifier and clear action. Conditional filters use compact Field / Rule /
+Value rows with searchable choices and cached source-value suggestions. Start with
+one blank row and a labelled add-row control; avoid palettes of field buttons.
+Use muted labels/rules, inset value inputs and whitespace; avoid explanatory
+headings or sentences when a concise label or operator (`≥`, `≤`) suffices.
+Collapse optional controls and reuse the Tree game list for PGN filter results.
+Reserve the strongest filled action for applying or completing the task.
 
 ## Keyboard shortcuts
 

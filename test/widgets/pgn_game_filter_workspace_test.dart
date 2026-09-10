@@ -2,7 +2,7 @@ import 'package:chess_auto_prep/services/opening_catalog.dart';
 import 'package:chess_auto_prep/core/board_editor_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/widgets/board_editor/board_editor_widget.dart';
-import 'package:chess_auto_prep/widgets/lines_preview_panel.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_tree_games_list.dart';
 import 'package:chess_auto_prep/widgets/layout/responsive_split_layout.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_game_filter_workspace.dart';
 import 'package:chess_auto_prep/widgets/slice/header_filters.dart';
@@ -70,67 +70,45 @@ Future<void> _finishMatching(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _chooseField(WidgetTester tester, String field) async {
+  final input = find
+      .byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == 'Search fields',
+      )
+      .last;
+  await tester.ensureVisible(input);
+  await tester.enterText(input, field);
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.descendant(
+      of: find.byType(CompositedTransformFollower),
+      matching: find.text(field),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  testWidgets('detected player shortcuts swap sides and keep other filters', (
+  testWidgets('starts with one blank row and keeps results and apply visible', (
     tester,
   ) async {
-    const games = <GameRecord>[
-      (
-        headers: {'White': 'Polgar, Judit', 'Black': 'Anand', 'Event': 'Rapid'},
-        pgnText: '1. e4 e5 *',
-      ),
-      (
-        headers: {
-          'White': 'Kramnik',
-          'Black': 'Polgar, Judit',
-          'Event': 'Rapid',
-        },
-        pgnText: '1. d4 d5 *',
-      ),
-    ];
-    await _open(
-      tester,
-      games: games,
-      collectionPlayer: 'Polgar, Judit',
-      initialConfig: const SliceConfig(
-        positionInput: _fen,
-        headerFilters: [
-          HeaderFilterConfig(
-            field: 'Event',
-            mode: MatchMode.exact,
-            value: 'Rapid',
-          ),
-        ],
-      ),
-    );
+    await _open(tester, size: const Size(680, 480));
     final controller = tester
         .widget<HeaderFilters>(find.byType(HeaderFilters))
         .controller;
-    await tester.tap(find.text('Polgar as White'));
-    await _finishMatching(tester);
-    expect(find.text('Show 1 game'), findsOneWidget);
-    expect(controller.headerConfigs.last.field, 'White');
-    expect(controller.headerConfigs.last.mode, MatchMode.exact);
-    await tester.tap(find.text('Polgar as Black'));
-    await _finishMatching(tester);
-    expect(find.text('Show 1 game'), findsOneWidget);
-    expect(controller.headerConfigs.map((f) => f.field), ['Event', 'Black']);
-    expect(controller.positionFen, _fen);
+    expect(controller.headerRows, hasLength(1));
+    expect(controller.headerRows.single.field, isEmpty);
+    expect(controller.buildConfig().isEmpty, isTrue);
+    expect(find.byType(PgnTreeGamesList), findsOneWidget);
     expect(
-      tester
-          .widget<FilterChip>(
-            find.widgetWithText(FilterChip, 'Polgar as Black'),
-          )
-          .selected,
-      isTrue,
+      find.textContaining('Fischer vs Spassky').hitTestable(),
+      findsOneWidget,
     );
-    await tester.tap(find.text('Polgar as Black'));
-    await _finishMatching(tester);
-    expect(controller.headerConfigs.single.field, 'Event');
-    expect(find.text('Show 2 games'), findsOneWidget);
-    await _open(tester);
-    expect(find.text('Polgar as White'), findsNothing);
-    expect(find.text('Polgar as Black'), findsNothing);
+    expect(_apply.hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('Remove filter'));
+    await tester.pumpAndSettle();
+    expect(controller.headerRows, hasLength(1));
+    expect(controller.headerRows.single.field, isEmpty);
     expect(tester.takeException(), isNull);
   });
 
@@ -147,11 +125,11 @@ void main() {
         },
       );
       expect(find.byType(Dialog), findsNothing);
-      expect(find.byType(LinesPreviewPanel), findsOneWidget);
+      expect(find.byType(PgnTreeGamesList), findsOneWidget);
       expect(
         tester
-            .widget<LinesPreviewPanel>(find.byType(LinesPreviewPanel))
-            .showSearch,
+            .widget<PgnTreeGamesList>(find.byType(PgnTreeGamesList))
+            .initiallyShowMoves,
         isFalse,
       );
       expect(find.text('King’s Indian'), findsNothing);
@@ -159,7 +137,7 @@ void main() {
         Theme.of(tester.element(find.byType(HeaderFilters))).brightness,
         Brightness.dark,
       );
-      await tester.tap(find.text('Player'));
+      await _chooseField(tester, 'Player');
       await _finishMatching(tester);
       final controller = tester
           .widget<HeaderFilters>(find.byType(HeaderFilters))
@@ -182,6 +160,8 @@ void main() {
       expect(controller.headerRows.single.field, 'Black');
       expect(controller.headerRows.single.controller.text, 'Fischer');
       expect(find.text('Show 1 game'), findsOneWidget);
+      await tester.tap(find.text('Positions'));
+      await tester.pumpAndSettle();
       final position = find.widgetWithText(TextField, 'FEN or moves');
       await tester.ensureVisible(position);
       await tester.enterText(
@@ -233,6 +213,7 @@ void main() {
       ),
       onApply: (indices, _) => applied = indices,
     );
+    await tester.ensureVisible(find.byKey(const ValueKey('filter-choose-eco')));
     await tester.tap(find.byKey(const ValueKey('filter-choose-eco')));
     await tester.pump();
     await tester.runAsync(
@@ -245,7 +226,14 @@ void main() {
         code,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(Checkbox).first);
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(Dialog),
+              matching: find.byType(Checkbox),
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
     }
     await tester.tap(find.text('Filter by selected ECO codes (2)'));
@@ -280,9 +268,9 @@ void main() {
         ],
         onApply: (indices, _) => applied = indices,
       );
-      expect(find.byKey(const ValueKey('add-filter-Player')), findsOneWidget);
+      expect(find.byKey(const ValueKey('add-filter-row')), findsOneWidget);
       expect(find.text('More…'), findsNothing);
-      await tester.tap(find.text('ECO'));
+      await _chooseField(tester, 'ECO');
       await tester.pumpAndSettle();
       final controller = tester
           .widget<HeaderFilters>(find.byType(HeaderFilters))
@@ -300,7 +288,9 @@ void main() {
       await _finishMatching(tester);
       await tester.tap(_apply);
       expect(applied, [1]);
-      await tester.tap(find.text('Date'));
+      await tester.tap(find.byKey(const ValueKey('add-filter-row')));
+      await tester.pumpAndSettle();
+      await _chooseField(tester, 'Date');
       await tester.pumpAndSettle();
       expect(controller.headerRows.last.field, 'Date');
       expect(controller.headerRows.last.mode, MatchMode.after);
@@ -312,7 +302,7 @@ void main() {
     tester,
   ) async {
     await _open(tester);
-    await tester.tap(find.text('Player'));
+    await _chooseField(tester, 'Player');
     await tester.pumpAndSettle();
     final controller = tester
         .widget<HeaderFilters>(find.byType(HeaderFilters))
@@ -330,7 +320,7 @@ void main() {
     await _finishMatching(tester);
     expect(find.text('Use one player name per filter'), findsNothing);
     expect(controller.headerRows.single.hasMultiplePlayerNames, isFalse);
-    expect(find.widgetWithText(TextField, 'FEN or moves'), findsOneWidget);
+    expect(find.text('Positions'), findsOneWidget);
     expect(find.text('Add condition'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -357,7 +347,7 @@ void main() {
     controller.setHeaderValue(0, 'Spassky');
     await tester.pump();
     expect(tester.widget<FilledButton>(_apply).onPressed, isNull);
-    expect(find.byType(LinesPreviewPanel), findsNothing);
+    expect(find.byType(PgnTreeGamesList), findsNothing);
     await _finishMatching(tester);
     expect(tester.widget<FilledButton>(_apply).onPressed, isNotNull);
     controller.positionText.text = 'not a position';
@@ -378,7 +368,11 @@ void main() {
     tester,
   ) async {
     await _open(tester);
-    await tester.ensureVisible(find.text('Set up a board'));
+    await tester.tap(find.text('Positions'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('position-source')));
+    await tester.tap(find.byKey(const ValueKey('position-source')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Set up a board'));
     await tester.pumpAndSettle();
     final board = tester

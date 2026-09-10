@@ -18,36 +18,50 @@ class PositionFilter extends StatelessWidget {
 
   /// Current board FEN (for the "Board position" chip).
   final String? currentFen;
+  final bool showTitle;
+  final TextEditingController? input;
 
-  const PositionFilter({super.key, required this.controller, this.currentFen});
+  const PositionFilter({
+    super.key,
+    required this.controller,
+    this.currentFen,
+    this.showTitle = true,
+    this.input,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([controller, controller.positionText]),
+      listenable: Listenable.merge([
+        controller,
+        input ?? controller.positionText,
+      ]),
       builder: (context, _) => _buildContent(context),
     );
   }
 
   Widget _buildContent(BuildContext context) {
-    final parse = controller.positionParse;
-    final text = controller.positionText;
+    final text = input ?? controller.positionText;
+    final parse = input == null
+        ? controller.positionParse
+        : parsePositionInput(text.text);
     final showError = parse.error != null;
     final showOk = parse.isValid && parse.fen != null;
-    final hasFilter = controller.hasPositionFilter;
+    final hasFilter = parse.isValid && parse.fen != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Board position',
-          style: AppTextStyles.forTheme(
-            context,
-            AppTextStyles.subtitle,
-          ).copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
+        if (showTitle)
+          Text(
+            'Board position',
+            style: AppTextStyles.forTheme(
+              context,
+              AppTextStyles.subtitle,
+            ).copyWith(fontWeight: FontWeight.w600),
+          ),
+        if (showTitle) const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
@@ -55,6 +69,11 @@ class PositionFilter extends StatelessWidget {
                 controller: text,
                 decoration: InputDecoration(
                   hintText: 'FEN or moves',
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.surface,
+                  enabledBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: AppColors.divider),
+                  ),
                   hintStyle: AppTextStyles.forTheme(
                     context,
                     AppTextStyles.hint,
@@ -95,7 +114,7 @@ class PositionFilter extends StatelessWidget {
                     minWidth: 44,
                     minHeight: 44,
                   ),
-                  onPressed: controller.clearPosition,
+                  onPressed: text.clear,
                   tooltip: 'Clear position filter',
                 ),
               ),

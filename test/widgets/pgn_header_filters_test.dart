@@ -88,7 +88,7 @@ SliceFilterController _controller({
 Finder _input(String hint) => find.byWidgetPredicate(
   (widget) => widget is TextField && widget.decoration?.hintText == hint,
 );
-Finder get _field => _input('Choose field');
+Finder get _field => _input('Search fields');
 Finder get _rule => _input('Choose rule');
 Finder _value(SliceFilterController controller, [int index = 0]) =>
     find.byWidgetPredicate(
@@ -149,7 +149,7 @@ void main() {
     (tester) async {
       final controller = _controller();
       await _show(tester, controller, width: 300, simple: true);
-      expect(tester.getRect(_rule).top, tester.getRect(_field).top);
+      expect(tester.getRect(_rule).top, closeTo(tester.getRect(_field).top, 2));
       expect(
         tester.getRect(_value(controller)).top,
         greaterThan(tester.getRect(_rule).bottom),
@@ -170,7 +170,7 @@ void main() {
   ) async {
     final controller = _controller();
     await _show(tester, controller, textScale: 1.5);
-    expect(tester.getRect(_rule).top, tester.getRect(_field).top);
+    expect(tester.getRect(_rule).top, closeTo(tester.getRect(_field).top, 2));
     expect(tester.takeException(), isNull);
     await _close(tester, controller);
   });
@@ -295,16 +295,15 @@ void main() {
     await _close(tester, controller);
   });
 
-  testWidgets('more filters searches fields and focuses the new value', (
+  testWidgets('adding a blank row searches fields and focuses its value', (
     tester,
   ) async {
     final controller = _controller();
     await _show(tester, controller, width: 300, simple: true, textScale: 1.5);
-    await tester.tap(find.byKey(const ValueKey('more-game-filters')));
+    await tester.tap(find.byKey(const ValueKey('add-filter-row')));
     await tester.pumpAndSettle();
-    await _choose(tester, _input('Search fields'), 'WhiteElo', 'White rating');
+    await _choose(tester, _field.last, 'White rating', 'White rating');
     expect(controller.headerRows.last.field, 'WhiteElo');
-    expect(_input('Search fields'), findsNothing);
     expect(
       tester.widget<TextField>(_value(controller, 1)).focusNode!.hasFocus,
       isTrue,
@@ -317,12 +316,27 @@ void main() {
     await _close(tester, controller);
   });
 
+  testWidgets('Result offers standard values even in an empty collection', (
+    tester,
+  ) async {
+    final controller = _controller(field: 'Result', value: '');
+    controller.setHeaderField(0, 'Result');
+    await _show(tester, controller, games: [], simple: true);
+    await tester.enterText(_value(controller), '1/2');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, '1/2-1/2'));
+    await tester.pumpAndSettle();
+    expect(controller.headerConfigs.single.value, '1/2-1/2');
+    expect(controller.headerConfigs.single.mode, MatchMode.exact);
+    await _close(tester, controller);
+  });
+
   testWidgets('new row takes field focus and preserves existing values', (
     tester,
   ) async {
     final controller = _controller(field: 'Date', value: '1960');
     await _show(tester, controller);
-    await tester.tap(find.text('Add condition'));
+    await tester.tap(find.text('Add filter'));
     await tester.pumpAndSettle();
     expect(_field, findsNWidgets(2));
     expect(tester.widget<TextField>(_field.last).focusNode!.hasFocus, isTrue);
@@ -341,12 +355,12 @@ void main() {
     final controller = _controller();
     await _show(tester, controller);
     await _choose(tester, _field, 'WhiteElo', 'White rating');
-    expect(tester.widget<TextField>(_rule).controller!.text, 'At least');
+    expect(tester.widget<TextField>(_rule).controller!.text, 'At least ≥');
     await tester.enterText(_value(controller), '2200');
     await tester.pumpAndSettle();
     expect(controller.headerConfigs.single.mode, MatchMode.after);
     await _choose(tester, _field, 'Date', 'Date');
-    await _choose(tester, _rule, 'before', 'Before');
+    await _choose(tester, _rule, 'before', 'Before ≤');
     await tester.enterText(_value(controller), '1960');
     await tester.pumpAndSettle();
     expect(controller.headerConfigs.single.chipLabel, 'Before 1960');

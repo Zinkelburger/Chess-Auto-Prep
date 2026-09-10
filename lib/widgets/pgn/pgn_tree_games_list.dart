@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:dartchess/dartchess.dart';
 
 import '../../models/pgn_game_entry.dart';
 import '../../services/pgn_parsing_service.dart';
@@ -20,10 +21,12 @@ import '../game_search_dialog.dart';
 
 class PgnTreeGamesList extends StatefulWidget {
   final List<PgnGameEntry> games;
-  final String currentFen;
+  final String? currentFen;
   final int currentIndex;
   final ValueChanged<int> onGameSelected;
-  final VoidCallback onSearch;
+  final VoidCallback? onSearch;
+  final Widget? toolbarLeading;
+  final bool initiallyShowMoves;
 
   const PgnTreeGamesList({
     super.key,
@@ -31,7 +34,9 @@ class PgnTreeGamesList extends StatefulWidget {
     required this.currentFen,
     required this.currentIndex,
     required this.onGameSelected,
-    required this.onSearch,
+    this.onSearch,
+    this.toolbarLeading,
+    this.initiallyShowMoves = true,
   });
 
   @override
@@ -39,7 +44,7 @@ class PgnTreeGamesList extends StatefulWidget {
 }
 
 class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
-  bool _showMoves = true;
+  late bool _showMoves = widget.initiallyShowMoves;
   final Set<int> _previewed = {};
   final Map<PgnGameEntry, String> _pvCache = {};
   String? _cachedFen;
@@ -47,7 +52,8 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
   @override
   void didUpdateWidget(covariant PgnTreeGamesList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.currentFen != widget.currentFen) {
+    if (oldWidget.currentFen != widget.currentFen ||
+        !identical(oldWidget.games, widget.games)) {
       _previewed.clear();
       _pvCache.clear();
       _cachedFen = null;
@@ -62,7 +68,7 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
       _cachedFen = widget.currentFen;
     }
     return _pvCache.putIfAbsent(game, () {
-      final fen = widget.currentFen;
+      final fen = widget.currentFen ?? game.headers['FEN'] ?? Chess.initial.fen;
       final sans = mainlineSansAfterFen(
         game.headers,
         game.pgnText,
@@ -113,19 +119,23 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
               spacing: 8,
               runSpacing: 4,
               children: [
-                GameNumberField(
-                  currentIndex: current < 0 ? 0 : current,
-                  gameCount: games.length,
-                  onGoToGame: widget.onGameSelected,
-                  tooltip:
-                      'Games that reach this opening-tree position, '
-                      'in the current sort.\n'
-                      'Type a number and press Enter to open that game',
-                ),
-                GameSearchButton(
-                  shortcut: AppShortcut.searchGames,
-                  onPressed: widget.onSearch,
-                ),
+                if (widget.toolbarLeading case final leading?)
+                  leading
+                else
+                  GameNumberField(
+                    currentIndex: current < 0 ? 0 : current,
+                    gameCount: games.length,
+                    onGoToGame: widget.onGameSelected,
+                    tooltip:
+                        'Games that reach this opening-tree position, '
+                        'in the current sort.\n'
+                        'Type a number and press Enter to open that game',
+                  ),
+                if (widget.onSearch != null)
+                  GameSearchButton(
+                    shortcut: AppShortcut.searchGames,
+                    onPressed: widget.onSearch!,
+                  ),
                 _ShowMovesToggle(value: _showMoves, onChanged: _setShowMoves),
               ],
             ),

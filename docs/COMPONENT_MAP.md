@@ -636,16 +636,29 @@ its glyph color.
 The evaluation graph uses opaque near-white and near-black advantage fills
 on a charcoal plot background so both sides remain distinct.
 
-**Filter games** opens a normal **Filter** tab beside the board, using the app
-theme. Outlined Player, Event, Date, Result and ECO buttons add a field and
-focus its value; **More filters** reveals a shared searchable `ChoiceField` for
-less common fields. A bordered filter surface separates conditions from the live
-results; the footer keeps **Show N games** as the teal primary action. Filter and Tree both offer
-**[Player] as White / as Black** when exactly one named player appears in at
-least 80% of the complete collection. Switching sides replaces the other side
-while retaining other filters; clicking the selected side clears it. Each player field takes one
-name (commas within PGN names are preserved). Board position is always expanded;
-Move sequence is optional. Matching games update live below the controls.
+**Filter games** opens a normal **Filter** tab beside the board. It starts with
+one blank Field / Rule / Value row and a 40px **+ Add filter** control. Field and
+Rule use searchable `ChoiceField`s; values search the loaded collection's cached
+header values, preserving separate White/Black lists and showing compact game
+counts. Result also suggests `1-0`, `0-1`, `1/2-1/2` and `*`. Selecting a suggestion
+uses Exact; typed text remains a partial match. Muted labels/rules and inset value
+cells provide hierarchy. Each player field accepts one name (PGN commas remain
+part of the name).
+
+A **Combine AND / OR** selector applies to all active header, position and move
+sequence conditions. **Positions** and **Move sequence** are collapsed unless
+restored with active filters. Positions accepts multiple FEN/move inputs, with
+**Add position** and a single source selector per row (current board, setup, or
+remove an additional row). The choice and all positions survive saved-filter
+round trips, chip removal and Tree player presets. AND requires every position;
+OR accepts any condition. Indexed and replay searches use the same semantics,
+including positions in variations; a saved legacy filter defaults to AND.
+
+Matching games use the shared `PgnTreeGamesList`, with compact titles and optional
+move previews initially hidden. The list fills the remaining pane below the
+scrollable conditions, with **Show N games** always available in the footer.
+Tree retains **[Player] as White / as Black** when one player occurs in at least
+80% of the collection; Filter uses its editable rows instead of shortcut buttons.
 The mode selector shows only the current mode name, without a “View” prefix.
 
 In the reader, **Enter** focuses a variation. **←** steps back through its root
@@ -680,20 +693,18 @@ two or more tabs; extra tabs can be closed and dragged into order, and Tab cycle
 only opened tabs. Readers stay mounted and preserve their cursors. The settings
 gear opens view preferences.
 
-The Filter workspace uses direct labelled buttons to add a Field / Rule / Value row,
-including **ECO** (code or prefix) and **Opening** (name). Date rules use
-**After** / **Before**, with an explicit note that the entered year/date is
-included; existing saved date bounds keep their meaning. Even a filter matching
-all games is restored.
+Date rules use **After ≥** / **Before ≤**; rating bounds use **At least ≥** /
+**At most ≤**. These bounds remain inclusive. Even a filter matching all games
+is restored.
 
-**Browse openings by name or ECO** uses `widgets/opening_picker_dialog.dart` and
+**Browse ECO openings…** uses `widgets/opening_picker_dialog.dart` and
 `services/opening_catalog.dart` to browse the bundled opening TSVs, preserving
 multiple named lines per ECO code. Its search uses the common `ListSearchField`
 with a magnifier, outlined input and clear action. Selection survives searches. The preview
 supports legal board moves, editable SAN, undo, reset and board flip.
 **Filter by selected ECO codes** replaces existing ECO rows with one exact/OR
 condition and preserves other filters. **Use preview position** instead supplies
-the edited move sequence to the position filter; **Set up a board** can then
+the edited move sequence to the position filter; **Choose position… → Set up a board** can then
 arrange pieces freely. These actions change the filter draft, not game moves.
 Existing game editing and autosave remain separate; opening detection still
 fills missing headers without overwriting existing ECO labels.
