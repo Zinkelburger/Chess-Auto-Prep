@@ -331,7 +331,7 @@ void main() {
     addTearDown(c.dispose);
 
     // Something else annotates game two — the review runner's own write.
-    final patched = _fileText().replaceFirst(
+    final patched = storage.files[_path]!.replaceFirst(
       '1. d4 { theirs, untouched } d5',
       '1. d4 { theirs, untouched } { [%eval 0.21,18] } d5',
     );
@@ -362,7 +362,10 @@ void main() {
         '[Result "*"]\n'
         '\n'
         '1. Nf3 d5 *\n';
-    storage.writeBehindOurBack(_path, '${_fileText().trimRight()}\n\n$extra');
+    storage.writeBehindOurBack(
+      _path,
+      '${storage.files[_path]!.trimRight()}\n\n$extra',
+    );
 
     c.setRating(2);
     await c.flushPendingMetadata();

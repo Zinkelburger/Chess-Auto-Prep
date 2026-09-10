@@ -651,7 +651,9 @@ PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal
   → StorageService.fileExists / readFile (absolute paths as-is; relative → app documents)
   → compute(parseMultiGamePgn) → allGames / filteredGames
   → on failure: controller.errorMessage + debugPrint; screen shows SnackBar + inline error in empty state
-  → on success: recent-files prefs, optional saved slice restore, loadCurrentGame
+  → on success: recent-files prefs, missing ECO/Opening tags, optional saved slice and reading-session restore, loadCurrentGame
+  → viewer startup reopens the last file, filters, sort order, game and mainline move; explicit file/game handoffs take precedence. Closing the collection clears auto-reopen, keeping its per-file bookmark. `ViewerSessionStore` validates game identity before restoring a cursor, including when a file was reordered.
+  → default-on **Board and moves → Auto-detect ECO and opening** classifies every game's mainline using the bundled opening book (including transpositions). Missing/placeholder ECO and Opening tags are patched into the source PGN without replacing existing values or reserializing movetext. Detected tags appear above the game and in exported/copied PGNs. Turning this off stops detection and hides that label; previously saved tags remain in the PGN.
   → game change (↓/↑, dropdown, slice, sort): `loadCurrentGame` resets `currentPosition` to start; `PgnViewerWidget._loadGame` defers `onPositionChanged` to a post-frame callback (avoids setState-during-build when called from `didUpdateWidget`)
 Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].pgnText` → `Clipboard.setData` + `AppMessages.pgnCopied` snackbar
 Move selection follows the position on the board: only the latest half-move supplies its from/to square tints. The collection Tree uses its own walked move path, including transpositions, and clears the tint at its root; an absent game variation falls back to the tree root on both the tree and board, and that saved root survives tab switches; switching panes never borrows a hidden reader’s trail for a different position. Inline comment previews suppress the parked mainline move selection; variations and previews suppress the analysis graph’s mainline cursor and selected mainline card. Returning to the mainline restores its selection. Active repertoire training retains its intentional two-half-move trail (your move and the opponent reply).
@@ -663,6 +665,12 @@ Filter or Tree; the Tree tab contains the collection/database source selector. T
 two or more tabs; extra tabs can be closed and dragged into order, and Tab cycles
 only opened tabs. Readers stay mounted and preserve their cursors. The settings
 gear opens view preferences.
+
+The Filter workspace uses one **+** menu to add a Field / Rule / Value row,
+including **ECO** (code or prefix) and **Opening** (name). Date rules use
+**After** / **Before**, with an explicit note that the entered year/date is
+included; existing saved date bounds keep their meaning. Even a filter matching
+all games is restored.
 
 The game counter and Search both open the larger **Browse Games** dialog.
 Chapter detection uses the same header rules as repertoire browsing. Chapters
