@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/app_theme.dart';
 import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
+import 'package:chess_auto_prep/widgets/analysis/stockfish_settings_dialog.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_settings.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -113,7 +114,7 @@ void main() {
   );
 
   testWidgets(
-    'engine settings labels, inputs and helper text contrast with their raised panel',
+    'rendered engine settings labels and inputs contrast with their raised panel',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -123,17 +124,24 @@ void main() {
       );
       await tester.tap(find.byTooltip('Engine settings'));
       await tester.pumpAndSettle();
-      final panel = panelFor(tester, find.text('Cores'));
+      final settings = find.byType(StockfishSettingsBody);
+      expect(settings, findsOneWidget);
+      final panel = panelFor(tester, settings);
       expectRaised(panel);
-      for (final label in [
-        'Engine settings',
-        'Cores',
-        'Lines',
-        'Depth',
-        'Memory (MB)',
-        'Shared with global engine settings.',
-      ]) {
-        expectTextContrast(tester, label, panel.color!);
+      final labels = find.descendant(of: settings, matching: find.byType(Text));
+      expect(labels, findsWidgets);
+      for (final label in labels.evaluate()) {
+        final rendered = tester.widget<RichText>(
+          find.descendant(
+            of: find.byWidget(label.widget),
+            matching: find.byType(RichText),
+          ),
+        );
+        expect(
+          contrast(rendered.text.style!.color!, panel.color!),
+          greaterThanOrEqualTo(4.5),
+          reason: rendered.text.toPlainText(),
+        );
       }
       for (final input in tester.widgetList<EditableText>(
         find.byType(EditableText),

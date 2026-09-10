@@ -11,6 +11,14 @@
 - When moving or renaming boot-screen controls, update the text/tooltip
   assertions in `integration_test/app_test.dart` in the same change.
 
+## Widget tests
+
+Test user actions and resulting state. Use control keys or semantic finders
+when wording and text layout are incidental; contrast tests should inspect the
+rendered labels rather than duplicate their copy. Composite screen tests can
+use `test/support/board_engine_fixture.dart` to supply a scripted engine.
+Reserve native engine startup for explicit engine and desktop integration tests.
+
 ## Type, colour and controls
 
 Use `AppTextStyles` from `lib/theme/app_text_styles.dart`: title 18, body 14,

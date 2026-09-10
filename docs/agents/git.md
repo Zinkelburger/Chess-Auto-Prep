@@ -37,6 +37,11 @@ Fix regressions from your task using focused local checks.
 A failed backup push is recoverable: keep the worktrees and retry integration.
 Never force-push the backup to hide divergence from another machine.
 
+Tests gate releases on behavior, not a line-coverage percentage. Coverage is
+optional diagnostic output (`scripts/ci.sh test --coverage`); there is no floor.
+Failed release tests retain the expanded log as the `flutter-test-results`
+artifact.
+
 ## Publish a batch only when requested
 
 Keep local main's useful history. To produce a compact published history:

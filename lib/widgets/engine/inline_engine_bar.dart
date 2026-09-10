@@ -67,21 +67,20 @@ class InlineEngineBar extends StatefulWidget {
 class _InlineEngineBarState extends State<InlineEngineBar> {
   final EngineSettings _settings = EngineSettings.instance;
 
-  static bool _engineEnabled = false;
+  static bool get _engineEnabled =>
+      EngineLifecycle.instance.state != EngineState.off;
 
-  static final _externalToggleNotifier = <VoidCallback>[];
-
-  /// Toggle engine on/off from outside (e.g. keyboard shortcut).
-  /// Any mounted InlineEngineBar will pick up the change on next build.
   static void toggleEngineExternal() {
     _setEngineEnabled(!_engineEnabled);
   }
 
   static void _setEngineEnabled(bool value) {
-    _engineEnabled = value;
-    for (final cb in List<VoidCallback>.of(_externalToggleNotifier)) {
-      cb();
-    }
+    final lifecycle = EngineLifecycle.instance;
+    unawaited(
+      (value ? lifecycle.toggleOn() : lifecycle.toggleOff()).catchError(
+        (Object error) => debugPrint('[InlineEngine] Toggle failed: $error'),
+      ),
+    );
   }
 
   bool _threatMode = false;
@@ -137,7 +136,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   int _lastInlineThreads = 0;
   int _lastHashMb = 0;
 
-  final _boardEngine = BoardEngine.instance;
+  final _session = BoardEngine.instance.createSession();
+  bool _wasEnabled = _engineEnabled;
   bool _modeActive = true;
 
   bool get _isActive => widget.isActive && _modeActive;
@@ -151,14 +151,13 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   @override
   void initState() {
     super.initState();
-    // Manual listener: thread-count changes dispose worker and re-run discovery.
+    // Reconfigure the idle worker and restart when search settings change.
     _settings.addListener(_onSettingsChanged);
     _lastDepth = _settings.depth;
     _lastMultiPv = _settings.multiPv;
     _lastInlineThreads = _settings.cores;
     _lastHashMb = _settings.hashMb;
     EngineLifecycle.instance.addListener(_onEngineGateChanged);
-    _externalToggleNotifier.add(_onExternalToggle);
     if (_engineEnabled && _isActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _runDiscovery());
     }
@@ -169,24 +168,29 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   void _onEngineGateChanged() {
     if (!mounted) return;
     final locked = EngineGate.isLocked;
-    if (locked == _gateLocked) return;
+    final enabled = _engineEnabled;
+    final changed = locked != _gateLocked || enabled != _wasEnabled;
     _gateLocked = locked;
-    if (locked) {
+    _wasEnabled = enabled;
+    if (!changed) return;
+    if (locked || !enabled) {
       _generation++;
-      _boardEngine.detach(this);
+      _progressThrottle?.cancel();
+      _progressThrottle = null;
+      _pendingProgress = null;
+      _session.pause();
+      if (locked) _session.detach();
       _lastAnalyzedFen = null;
-      setState(() => _isSearching = false);
+      _threatMode = false;
+      setState(() {
+        _isSearching = false;
+        _discovery = const DiscoveryResult();
+      });
       _publishThreat();
     } else {
-      setState(() {});
       _prepareEngine();
-      if (_engineEnabled && _isActive) unawaited(_runDiscovery());
+      if (_isActive) unawaited(_runDiscovery());
     }
-  }
-
-  void _onExternalToggle() {
-    if (!mounted) return;
-    _toggleEngine(_engineEnabled);
   }
 
   @override
@@ -231,7 +235,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _progressThrottle?.cancel();
     _progressThrottle = null;
     _pendingProgress = null;
-    _boardEngine.detach(this);
+    _session.detach();
     _lastAnalyzedFen = null;
     _discovery = const DiscoveryResult();
     _isSearching = false;
@@ -242,10 +246,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   void dispose() {
     _generation++;
     _progressThrottle?.cancel();
-    _externalToggleNotifier.remove(_onExternalToggle);
     EngineLifecycle.instance.removeListener(_onEngineGateChanged);
     _settings.removeListener(_onSettingsChanged);
-    _boardEngine.detach(this);
+    _session.dispose();
     _boardPreview.dispose();
     super.dispose();
   }
@@ -295,29 +298,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     });
   }
 
-  void _toggleEngine(bool value) {
-    if (!mounted) return;
-    setState(() {
-      _engineEnabled = value;
-      if (!value) {
-        _threatMode = false;
-        _generation++;
-        _discovery = const DiscoveryResult();
-        _isSearching = false;
-        _lastAnalyzedFen = null;
-        _boardEngine.pause(this);
-      }
-    });
-    _publishThreat();
-    if (_engineEnabled && _isActive) {
-      unawaited(_runDiscovery());
-    }
-  }
-
   void _prepareEngine() {
     if (!_isActive || EngineGate.isLocked) return;
     unawaited(
-      _boardEngine.prepare(this).catchError((Object error) {
+      _session.prepare().catchError((Object error) {
         if (kDebugMode) debugPrint('[InlineEngine] Preparation failed: $error');
       }),
     );
@@ -348,8 +332,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     final whiteToMove = isWhiteToMove(fen);
 
     try {
-      final result = await _boardEngine.discover(
-        this,
+      final result = await _session.discover(
         fen: fen,
         depth: _settings.depth,
         multiPv: _settings.multiPv,

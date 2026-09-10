@@ -42,6 +42,9 @@ void _perfReset() {
 
 class UnifiedEnginePane extends StatefulWidget {
   final String fen;
+
+  /// Optional host-owned service. Otherwise the pane owns and disposes one.
+  final AnalysisService? analysis;
   final bool isActive;
   final bool? isUserTurn;
   final Function(String uciMove)? onMoveSelected;
@@ -58,6 +61,7 @@ class UnifiedEnginePane extends StatefulWidget {
   const UnifiedEnginePane({
     super.key,
     required this.fen,
+    this.analysis,
     this.isActive = true,
     this.isUserTurn,
     this.onMoveSelected,
@@ -93,13 +97,14 @@ class _PositionSnapshot {
   });
 }
 
-// ── Per-FEN analysis cache (static — survives widget rebuilds) ──
-final Map<String, _PositionSnapshot> _analysisCache = {};
+// ── Per-session analysis cache (survives widget rebuilds) ──
 const int _maxCacheSize = 50;
 
 abstract class _UnifiedEnginePaneStateBase extends State<UnifiedEnginePane> {
+  final Map<String, _PositionSnapshot> _analysisCache = {};
   final EngineSettings _settings = EngineSettings.instance;
-  final AnalysisService _analysis = AnalysisService.instance;
+  late bool _ownsAnalysis;
+  late AnalysisService _analysis;
   final ProbabilityService _probabilityService = ProbabilityService.instance;
   final GlobalKey _previewStackKey = GlobalKey();
 
@@ -134,14 +139,13 @@ abstract class _UnifiedEnginePaneStateBase extends State<UnifiedEnginePane> {
   void _syncBoardEngine() {
     if (_surfaceActive && !EngineGate.isLocked) {
       unawaited(
-        _analysis.prepare(this).catchError((Object error) {
+        _analysis.prepare().catchError((Object error) {
           if (kDebugMode) log.e('[Engine] Preparation failed: $error');
         }),
       );
     } else {
       _analysisGeneration++;
-      _analysis.cancel();
-      _analysis.detach(this);
+      _analysis.detach();
     }
   }
 
@@ -153,6 +157,9 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
   @override
   void initState() {
     super.initState();
+    // Capture ownership at mount; the host retains an injected service.
+    _ownsAnalysis = widget.analysis == null;
+    _analysis = widget.analysis ?? AnalysisService();
     _analysisConfigRevision = _settings.analysisConfigRevision;
     // Manual listener: analysisConfigRevision changes trigger re-analysis, not just rebuild.
     _settings.addListener(_onSettingsChanged);
@@ -180,13 +187,26 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
   @override
   void didUpdateWidget(UnifiedEnginePane oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final analysisChanged = oldWidget.analysis != widget.analysis;
+    if (analysisChanged) {
+      _analysisGeneration++;
+      _analysis.poolStatus.removeListener(_onPoolStatusChanged);
+      _analysis.detach();
+      if (_ownsAnalysis) _analysis.dispose();
+      _ownsAnalysis = widget.analysis == null;
+      _analysis = widget.analysis ?? AnalysisService();
+      _analysis.poolStatus.addListener(_onPoolStatusChanged);
+      _analysisCache.clear();
+      _currentAnalysisFen = null;
+      _initialAnalysisStarted = false;
+    }
     _syncBoardEngine();
     if (!_isActive) return;
 
     final fenChanged = widget.fen != oldWidget.fen;
     final becameActive = !oldWidget.isActive;
 
-    if (fenChanged || becameActive) {
+    if (fenChanged || becameActive || analysisChanged) {
       _scheduleAnalysis();
     }
   }
@@ -196,8 +216,8 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
     _settings.removeListener(_onSettingsChanged);
     _analysis.poolStatus.removeListener(_onPoolStatusChanged);
     EngineLifecycle.instance.removeListener(_onLifecycleChanged);
-    _analysis.cancel();
-    _analysis.detach(this);
+    _analysis.detach();
+    if (_ownsAnalysis) _analysis.dispose();
     super.dispose();
   }
 

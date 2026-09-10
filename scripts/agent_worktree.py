@@ -27,13 +27,14 @@ WORKFLOW_FILES = (
     'scripts/app_driver.py',
     'scripts/ci.sh', 'scripts/doctor.sh', 'scripts/setup_agent_display.sh',
     'scripts/hooks/flutter_gate.sh', 'scripts/test_tools.sh',
-    'scripts/check_coverage.sh', 'scripts/health_log.sh',
+    'scripts/health_log.sh',
     'scripts/oom_containment.sh', 'tools/test_agent_jobs.py',
     'tools/test_agent_worktree.py', 'tools/test_agent_rules.py', 'tools/test_agent_integrate.py',
 )
 
 # Remove superseded rules when preparing older worktrees, but only if clean.
 RETIRED_WORKFLOW_FILES = (
+    'scripts/check_coverage.sh',
     '.cursor/rules/agent-workflow.mdc',
     '.cursor/rules/app-documentation.mdc',
     '.cursor/rules/cross-platform-paths.mdc',

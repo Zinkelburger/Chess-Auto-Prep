@@ -46,12 +46,7 @@ run_step() {
       "${JOB[@]}" run -- "$FLUTTER" analyze lib test integration_test --no-fatal-infos
       ;;
     test)
-      if [[ $# -gt 0 ]]; then
-        "${JOB[@]}" run -- "$FLUTTER" test --concurrency=2 "$@"
-      else
-        "${JOB[@]}" run -- "$FLUTTER" test --concurrency=2 --coverage &&
-          scripts/check_coverage.sh coverage/lcov.info
-      fi
+      "${JOB[@]}" run -- "$FLUTTER" test --concurrency=2 "$@"
       ;;
     tools)
       "${JOB[@]}" run -- bash scripts/test_tools.sh

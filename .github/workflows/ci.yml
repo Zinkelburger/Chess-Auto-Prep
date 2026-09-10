@@ -48,10 +48,18 @@ jobs:
       - name: Analyze (lib + test)
         run: flutter analyze lib test integration_test --no-fatal-infos
 
-      - name: Run tests with coverage
+      - name: Run unit and widget tests
         run: |
-          flutter test --coverage
-          scripts/check_coverage.sh coverage/lcov.info
+          set -o pipefail
+          flutter test --reporter expanded 2>&1 | tee test-results.log
+
+      - name: Preserve test failure details
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: flutter-test-results
+          path: test-results.log
+          if-no-files-found: ignore
 
   tools:
     runs-on: ubuntu-latest

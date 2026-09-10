@@ -9,6 +9,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       if (!mounted || !_isActive) return;
       _runAnalysis();
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _scheduleSetState() {
@@ -16,6 +17,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() {});
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _onLifecycleChanged() {
@@ -26,6 +28,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
     _lastLifecycleState = state;
 
     if (!_isActive) {
+      _analysisGeneration++;
       if (prev != state) _analysis.cancel();
       _scheduleSetState();
       return;
@@ -240,8 +243,9 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
   // ── Cache ──────────────────────────────────────────────────────────────
 
   void _restoreFromCache(_PositionSnapshot cached) {
+    final generation = _analysisGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || generation != _analysisGeneration || !_isActive) return;
       _selectedMoveUcis = List.from(cached.selectedMoveUcis);
       _maiaProbs = Map.from(cached.maiaProbs);
       _analysis.results.value = Map.from(cached.poolResults);
@@ -258,6 +262,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
 
       _scheduleSetState();
     });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _trySaveCurrentToCache() {
