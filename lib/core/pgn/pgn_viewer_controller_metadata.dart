@@ -12,6 +12,7 @@ mixin _MetadataOps on ChangeNotifier {
   bool Function() get isActive;
   VoidCallback? get onReclaimFocus;
   String? get filePath;
+  set filePath(String? value);
   DateTime? get loadedFileModified;
   set loadedFileModified(DateTime? value);
   List<PgnGameEntry> get allGames;
@@ -22,19 +23,91 @@ mixin _MetadataOps on ChangeNotifier {
   void _markCollectionChanged();
 
   Timer? persistDebounce;
+  String? get errorMessage;
   set errorMessage(String? value);
+  bool autoSave = true;
+  int _pendingWrites = 0;
+  bool get isSaving => _pendingWrites > 0;
+
+  bool get hasUnsavedChanges =>
+      _dirtyGames.isNotEmpty ||
+      _editedGames.any(
+        (g) =>
+            (_screenOnlyMovetext[g] ?? g.pgnText).trim() !=
+            (_persistedGames[g] ?? g.pgnText).trim(),
+      );
+
+  void setAutoSave(bool value) {
+    if (autoSave == value) return;
+    autoSave = value;
+    persistDebounce?.cancel();
+    persistDebounce = null;
+    if (value && hasUnsavedChanges) unawaited(persistMetadata());
+    notifyListeners();
+  }
+
+  Future<bool> saveChanges() async {
+    await doPersistMetadata();
+    return !hasUnsavedChanges;
+  }
+
+  /// The native Save As dialog wrote this exact snapshot. Later edits stay dirty.
+  void adoptSavedCopy(String path, Map<PgnGameEntry, String> snapshot) {
+    filePath = path;
+    _persistedGames = Map.identity()..addAll(snapshot);
+    errorMessage = null;
+    if (autoSave && hasUnsavedChanges) unawaited(persistMetadata());
+    notifyListeners();
+  }
+
+  /// Keep the collection available until its manual edits have been saved.
+  bool canReplaceCollection() {
+    if (!autoSave && hasUnsavedChanges) {
+      errorMessage =
+          'Unsaved changes — save or discard them before closing or opening another PGN.';
+      notifyListeners();
+      return false;
+    }
+    return true;
+  }
+
+  void discardChanges() {
+    persistDebounce?.cancel();
+    persistDebounce = null;
+    for (final g in _editedGames) {
+      final original = _persistedGames[g];
+      if (original == null) continue;
+      g.pgnText = original;
+      g.headers
+        ..clear()
+        ..addAll(extractHeaders(original));
+      g.studyRating = int.tryParse(g.headers['StudyRating'] ?? '') ?? 0;
+      g.studySummary = g.headers['StudySummary'] ?? '';
+    }
+    _dirtyGames.clear();
+    _editedGames.clear();
+    _screenOnlyMovetext.clear();
+    errorMessage = null;
+    _fenIndex.reset();
+    _markCollectionChanged();
+    notifyListeners();
+  }
+
   Map<PgnGameEntry, String> _persistedGames = Map.identity();
   Future<void> _metadataWrites = Future.value();
 
   void adoptPersistedGames(List<PgnGameEntry> games) {
+    _dirtyGames.clear();
     _persistedGames = Map.identity();
     for (final game in games) {
       _persistedGames[game] = game.pgnText;
     }
   }
 
-  void rememberPersistedGame(PgnGameEntry game) =>
-      _persistedGames.putIfAbsent(game, () => game.pgnText);
+  void rememberPersistedGame(PgnGameEntry game) {
+    _persistedGames.putIfAbsent(game, () => game.pgnText);
+    _editedGames.add(game);
+  }
 
   /// Games whose rating or summary changed since the last write.  Their
   /// `[StudyRating]` / `[StudySummary]` headers are rewritten at persist
@@ -90,26 +163,20 @@ mixin _MetadataOps on ChangeNotifier {
 
   Future<void> persistMetadata() async {
     persistDebounce?.cancel();
+    persistDebounce = null;
+    if (!autoSave) return;
     persistDebounce = Timer(const Duration(milliseconds: 300), () {
       unawaited(doPersistMetadata());
     });
   }
 
-  /// Write the collection back to its file: dirty games get their metadata
-  /// headers regenerated, the rest are written from memory as they are.
-  ///
-  /// Everything the write depends on is captured before the first `await`,
-  /// so [flushPendingMetadata] can call this for a collection that is about
-  /// to be replaced.  The FEN index is only marked stale here — its stamp
-  /// no longer matches the file — and is persisted once when the collection
-  /// is closed rather than after every edit.
-  Future<void> doPersistMetadata() async {
-    persistDebounce?.cancel();
-    persistDebounce = null;
-    final path = filePath;
-    if (path == null || !isActive()) return;
-    final games = allGames;
-    final originals = _persistedGames;
+  /// Snapshot all games for Save As, including staged metadata edits.
+  Map<PgnGameEntry, String> snapshotForSave() {
+    _prepareMetadata();
+    return {for (final g in allGames) g: _screenOnlyMovetext[g] ?? g.pgnText};
+  }
+
+  List<PgnGameEntry> _prepareMetadata() {
     final dirty = List.of(_dirtyGames);
     _dirtyGames.clear();
     // A game the user has just rated is a game they touched: write what is
@@ -135,9 +202,31 @@ mixin _MetadataOps on ChangeNotifier {
       }
     }
 
+    return dirty;
+  }
+
+  /// Write the collection back to its file: dirty games get their metadata
+  /// headers regenerated, the rest are written from memory as they are.
+  ///
+  /// Everything the write depends on is captured before the first `await`,
+  /// so [flushPendingMetadata] can call this for a collection that is about
+  /// to be replaced.  The FEN index is only marked stale here — its stamp
+  /// no longer matches the file — and is persisted once when the collection
+  /// is closed rather than after every edit.
+  Future<void> doPersistMetadata() async {
+    persistDebounce?.cancel();
+    persistDebounce = null;
+    final path = filePath;
+    if (path == null || !isActive()) return;
+    final games = allGames;
+    final originals = _persistedGames;
+    final dirty = _prepareMetadata();
+
     final output = {
       for (final g in games) g: _screenOnlyMovetext[g] ?? g.pgnText,
     };
+    _pendingWrites++;
+    notifyListeners();
     final task = _metadataWrites.then((_) async {
       final edits = <String, String>{
         for (final g in games)
@@ -197,7 +286,12 @@ mixin _MetadataOps on ChangeNotifier {
       errorMessage = 'Could not save: $e';
       notifyListeners();
     });
-    await _metadataWrites;
+    try {
+      await _metadataWrites;
+    } finally {
+      _pendingWrites--;
+      notifyListeners();
+    }
   }
 
   /// Run a debounced persist now (for the collection currently loaded), and

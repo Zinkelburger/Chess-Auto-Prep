@@ -491,7 +491,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             onAnalyse: _analyseSolitaireGame,
             onExit: () => unawaited(_leaveSolitaire()),
           ),
-        if (_editMode) _buildEditModeBar(),
+        if (!_controller.isSolitaireMode) _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
             showStartEndButtons: true,
@@ -517,6 +517,7 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
               writeToFile: !_controller.isSolitaireMode,
             ),
             editMode: _editMode,
+            persistMoves: !_controller.isSolitaireMode,
             bookFormatting: game.isCourseStyle,
             initialMainLineIndex: _controller.resumePlyFor(game),
             // The result is the answer to "how did this go?" — the one header
@@ -551,21 +552,32 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
           color: AppColors.onSurfaceMuted,
         ),
         Text(
-          'Editing PGN',
+          _editMode ? 'Editing PGN' : 'PGN',
           style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
         ),
         Text(
           _controller.filePath == null
-              ? 'Copy PGN or save to a study to keep changes'
+              ? 'Not saved to a file'
               : _controller.errorMessage != null
               ? _controller.errorMessage!
-              : 'Changes to the file are saved',
+              : _controller.isSaving
+              ? 'Saving…'
+              : _controller.hasUnsavedChanges
+              ? 'Unsaved changes'
+              : _viewPreferences.autoSave
+              ? 'All changes saved · Autosave on'
+              : 'All changes saved · Autosave off',
           style: AppTextStyles.muted.copyWith(color: AppColors.ink),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: _controller.isSaving ? null : () => unawaited(_savePgn()),
+          icon: const Icon(Icons.save_outlined, size: 18),
+          label: Text(_controller.filePath == null ? 'Save as…' : 'Save'),
         ),
         TextButton.icon(
           onPressed: _toggleEditMode,
           icon: const Icon(Icons.check, size: 18),
-          label: const Text('Finish editing'),
+          label: Text(_editMode ? 'Finish editing' : 'Edit PGN'),
           style: TextButton.styleFrom(
             foregroundColor: AppColors.ink,
             backgroundColor: AppColors.surfaceContainer,

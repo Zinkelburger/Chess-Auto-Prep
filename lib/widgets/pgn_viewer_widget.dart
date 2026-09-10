@@ -65,6 +65,8 @@ class PgnViewerWidgetController implements PgnViewerHandle {
     _state?._addAnalysisMove(san);
   }
 
+  void flushPendingComments() => _state?._flushPendingComments();
+
   @override
   String? get currentFen => _state?._currentPosition.fen;
 
@@ -262,6 +264,9 @@ class PgnViewerWidget extends StatefulWidget {
   final ValueChanged<String>? onCommentsChanged;
   final bool editMode;
 
+  /// Keep board moves as PGN edits even when annotation controls are hidden.
+  final bool persistMoves;
+
   /// Mainline ply restored by a collection host when this game was visited
   /// earlier in the session.
   final int initialMainLineIndex;
@@ -293,6 +298,7 @@ class PgnViewerWidget extends StatefulWidget {
     this.showReadingOptions = true,
     this.onCommentsChanged,
     this.editMode = false,
+    this.persistMoves = false,
     this.initialMainLineIndex = 0,
     this.onGameLoaded,
     this.bookFormatting = false,

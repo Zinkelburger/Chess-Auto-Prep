@@ -136,6 +136,13 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
             title: 'Board and moves',
             icon: Icons.grid_on_outlined,
             children: [
+              SettingsSwitchTile(
+                label: 'Autosave PGN edits',
+                description:
+                    'Save comments and variations automatically. Turn off to use the Save button.',
+                value: _prefs.autoSave,
+                onChanged: (v) => _update(_prefs.copyWith(autoSave: v)),
+              ),
               _action('Move list…', widget.onReadingOptions),
               _action(
                 'Flip board',

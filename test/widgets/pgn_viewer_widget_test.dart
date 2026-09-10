@@ -33,6 +33,7 @@ Future<List<String>> _pump(
   required PgnViewerWidgetController controller,
   String pgn = _annotatedPgn,
   bool editMode = false,
+  bool persistMoves = false,
   int initialMainLineIndex = 0,
 }) async {
   final emissions = <String>[];
@@ -47,6 +48,7 @@ Future<List<String>> _pump(
             controller: controller,
             onCommentsChanged: emissions.add,
             editMode: editMode,
+            persistMoves: persistMoves,
             initialMainLineIndex: initialMainLineIndex,
           ),
         ),
@@ -249,6 +251,49 @@ void main() {
     expect(c.goToFen(_positionAfter(['d4']).fen), isFalse);
     await tester.pumpAndSettle();
     expect(c.mainLineIndex, 2, reason: 'a miss must not move the cursor');
+  });
+
+  testWidgets(
+    'file reader keeps normal-mode variations and mainline extensions',
+    (tester) async {
+      final c = PgnViewerWidgetController();
+      final emissions = await _pump(tester, controller: c, persistMoves: true);
+      c.goToMainLineIndex(2);
+      c.addEphemeralMove('Bc4');
+      await tester.pumpAndSettle();
+      expect(c.inVariation, isTrue);
+      expect(c.hasEphemeralMoves, isFalse);
+      expect(emissions.last, contains('Bc4'));
+      c.goToMainLineIndex(4);
+      c.addEphemeralMove('Bb5');
+      await tester.pumpAndSettle();
+      expect(emissions.last, contains('Bb5'));
+      expect(emissions.last, contains('Sicilian try'));
+    },
+  );
+
+  testWidgets('Save flushes the latest comment before its debounce', (
+    tester,
+  ) async {
+    final c = PgnViewerWidgetController();
+    final emissions = await _pump(
+      tester,
+      controller: c,
+      editMode: true,
+      initialMainLineIndex: 1,
+    );
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(PgnAnnotationPanel),
+        matching: find.byType(TextField),
+      ),
+      'Last characters',
+    );
+    expect(emissions, isEmpty);
+    c.flushPendingComments();
+    expect(emissions.single, contains('Last characters'));
+    await tester.pumpAndSettle();
+    expect(emissions, hasLength(1));
   });
 
   testWidgets('scratch analysis is ephemeral and never persisted', (

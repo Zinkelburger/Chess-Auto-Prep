@@ -20,7 +20,7 @@ class PgnAnnotationPanel extends StatefulWidget {
   /// panel is on screen, so callers can let the key event fall through.
   /// Escape inside the field hands focus back to whoever had it before.
   static bool focusActive() {
-    for (final state in _PgnAnnotationPanelState._mounted.reversed) {
+    for (final state in PgnAnnotationPanelState._mounted.reversed) {
       if (state.mounted && state.widget.targetKey != null) {
         state._focusComment();
         return true;
@@ -66,13 +66,13 @@ class PgnAnnotationPanel extends StatefulWidget {
   });
 
   @override
-  State<PgnAnnotationPanel> createState() => _PgnAnnotationPanelState();
+  State<PgnAnnotationPanel> createState() => PgnAnnotationPanelState();
 }
 
-class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
+class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
   /// Mounted panels, oldest first; [PgnAnnotationPanel.focusActive] targets
   /// the newest so a nested/foreground panel wins over a background one.
-  static final List<_PgnAnnotationPanelState> _mounted = [];
+  static final List<PgnAnnotationPanelState> _mounted = [];
 
   late final TextEditingController _controller;
   final FocusNode _focusNode = FocusNode(debugLabel: 'PgnAnnotationPanel');
@@ -117,6 +117,9 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
       _controller.text = widget.comment;
     }
   }
+
+  /// Commit the current field before an explicit save or file switch.
+  void flush() => _flushDebounce(widget.onCommentChanged);
 
   void _flushDebounce(ValueChanged<String> handler) {
     if (_debounce?.isActive ?? false) {

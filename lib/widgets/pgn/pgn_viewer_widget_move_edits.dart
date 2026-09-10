@@ -1,5 +1,5 @@
-// Adding user moves to the PGN viewer — permanent edits in edit mode,
-// ephemeral scratch analysis otherwise — plus clearing / deleting analysis
+// Adding user moves to the PGN viewer — saved edits for editable readers,
+// temporary scratch moves for other hosts — plus clearing / deleting analysis
 // nodes. Part of pgn_viewer_widget.dart; mixed into _PgnViewerWidgetState.
 // Thin setState/notify wrappers around [ViewerGameModel], which owns the
 // actual mutations.
@@ -9,11 +9,10 @@ mixin _PgnViewerMoveEdits on _PgnViewerWidgetStateBase {
   // ── Adding user moves ──
 
   void _addAnalysisMove(String san) {
-    // In edit mode, moves become permanent edits saved to disk: extending the
-    // mainline at its end, or adding a real (non-ephemeral) sideline elsewhere.
-    // Outside edit mode, moves are ephemeral scratch analysis (never saved).
+    // Editable file readers retain board moves in either mode. Other hosts
+    // can still use scratch analysis; solitaire always remains temporary.
     final editing =
-        widget.editMode &&
+        (widget.editMode || widget.persistMoves) &&
         widget.onCommentsChanged != null &&
         _m.reveal == null;
 
