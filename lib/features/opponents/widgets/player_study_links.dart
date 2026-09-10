@@ -151,7 +151,7 @@ class _PlayerStudyLinksState extends State<PlayerStudyLinks> {
               Expanded(
                 child: _studies.isEmpty
                     ? const Text(
-                        'No studies yet. Create prep from the player row, or browse a PGN file.',
+                        'No studies yet. Use New study in the player row, or browse a PGN file.',
                       )
                     : ListView(
                         children: [

@@ -97,6 +97,14 @@ they drifted. `MoveAnnotation` carries everything the tree knows about a move
 are omitted rather than defaulted: an unmeasured score must not read like an
 even one.
 
+New builds default to no generated comments or glyphs. In Advanced → PGN output,
+independent checkboxes include evaluations, expectimax values, source-labelled
+move probabilities/frequencies, and generated explanations/extra statistics.
+The settings also govern snapshot and model-game comments; moves and variations
+remain intact. Ranking metadata stays in PGN headers. Saved `none`, `likelihood`
+and `full` choices still load, while custom combinations serialize in
+`annotation_detail`. Existing PGNs are not rewritten by changing the setting.
+
 ## The ChessDB mainline book (`BuildMode.chessDbBook`)
 
 A mode with a different bargain from every other one: the database decides,
@@ -158,3 +166,38 @@ encyclopedia branches everywhere, and the reader is looking for a code. The
 group carries its own `OpeningLabel` because lines reaching one code by
 different move orders share a shorter prefix than the code's defining
 position.
+
+The board-side Generate pane offers **Build ChessDB repertoire…**. Its form
+also offers **Presets → ChessDB compact repertoire**, or **Use compact
+repertoire settings** after choosing ChessDB mainline book. This uses
+the same method as `test/benchmark/chessdb_book_build.dart`, which produced the
+King’s Indian book. The preset keeps one move for our side and limits branching
+through master reply count, local reply coverage and branching depth. Root
+systems remain broad; line deduplication and folded sidelines keep repeated
+decisions out of the training list. Results depend on the position, available
+master games, current ChessDB data and build budget; the preset does not promise
+a fixed line count or full coverage.
+
+Both the app and the headless harness export the known starting moves before
+each generated continuation. For example, `START_MOVES="d4 Nf6 c4 g6 Nc3 Bg7
+e4 d6"` builds from the KID position but writes a PGN beginning `1. d4 Nf6`.
+The harness records that prefix on its saved tree as well. A custom FEN without
+move history stays a setup-position PGN; no move order is invented.
+
+For several systems in one repertoire, use **Generate → Plan starting lines…**.
+Enter a move sequence per row, optionally prefixed with a chapter name and `|`.
+The board previews and edits the selected row; Add starting position keeps the
+others. For example:
+
+```text
+Main KID | 1.d4 Nf6 2.c4 g6 3.Nc3 Bg7 4.e4 d6
+Fianchetto KID | 1.d4 Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 d6
+London | 1.d4 Nf6 2.Bf4 d5
+```
+
+**Guided choices** asks setup questions under each root. **Use these positions**
+goes directly to chapter review with the ChessDB compact profile. Each root
+gets a separate chapter and queued build; budgets are per build point. Roots
+must be legal, distinct and not prefixes of one another. Shared setup moves
+are preserved in every PGN. This does not imply coverage of systems outside
+the supplied roots.

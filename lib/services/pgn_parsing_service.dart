@@ -804,80 +804,82 @@ Map<String, List<int>> buildFenIndex(
 Future<List<int>> computeSliceMatches({
   required List<GameRecord> games,
   String? targetFen,
+  List<String> additionalTargetFens = const [],
+  bool matchAny = false,
   required List<({String field, MatchMode mode, String value})> filters,
   required List<List<String>> seqGroups,
   required int seqGap,
   Map<String, List<int>>? fenIndex,
 }) {
-  // Records cross the isolate boundary; the enum travels by name.
+  final targets = {?targetFen, ...additionalTargetFens}.toList();
   final filterData = filters
       .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
       .toList();
   final seqCopy = seqGroups.map((g) => List<String>.from(g)).toList();
-
-  // Fast path: precomputed FEN index for position lookup
-  if (targetFen != null && fenIndex != null) {
-    final candidates = fenIndex[targetFen];
-    if (candidates == null || candidates.isEmpty) {
-      return Future.value(const []);
-    }
-
-    final hasOtherFilters =
-        filters.any((f) => f.value.isNotEmpty) || seqGroups.isNotEmpty;
-    if (!hasOtherFilters) return Future.value(List<int>.from(candidates));
-
-    final candidateData = candidates
-        .map(
-          (i) => (
-            origIdx: i,
-            headers: Map<String, String>.from(games[i].headers),
-            pgnText: games[i].pgnText,
-          ),
-        )
-        .toList();
-
-    return Isolate.run(() {
-      final compiled = _CompiledFilter.compileAll(filterData);
-      final result = <int>[];
-      for (final c in candidateData) {
-        if (!_passesNonPositionFilters(
-          c.headers,
-          c.pgnText,
-          compiled,
-          seqCopy,
-          seqGap,
-        )) {
-          continue;
-        }
-        result.add(c.origIdx);
+  final positionSets = fenIndex == null
+      ? null
+      : [for (final fen in targets) (fenIndex[fen] ?? const <int>[]).toSet()];
+  final hasOtherFilters =
+      filters.any((f) => f.value.isNotEmpty) || seqCopy.isNotEmpty;
+  Set<int>? candidates;
+  if (positionSets != null &&
+      positionSets.isNotEmpty &&
+      (!matchAny || !hasOtherFilters)) {
+    candidates = Set<int>.of(positionSets.first);
+    for (final set in positionSets.skip(1)) {
+      if (matchAny) {
+        candidates!.addAll(set);
+      } else {
+        candidates = candidates!.intersection(set);
       }
-      return result;
-    });
+    }
+    if (!hasOtherFilters) return Future.value(candidates!.toList()..sort());
   }
-
-  // Slow path: full scan in isolate
-  final gameData = games
-      .map(
-        (g) =>
-            (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText),
-      )
-      .toList();
-
+  final candidateIndices = candidates?.toList();
+  candidateIndices?.sort();
+  final gameData = [
+    for (final i in candidateIndices ?? List.generate(games.length, (i) => i))
+      (
+        index: i,
+        headers: Map<String, String>.from(games[i].headers),
+        pgnText: games[i].pgnText,
+      ),
+  ];
   return Isolate.run(() {
     final compiled = _CompiledFilter.compileAll(filterData);
-    final needsReplay = targetFen != null || seqCopy.isNotEmpty;
     final indices = <int>[];
-    for (int i = 0; i < gameData.length; i++) {
-      final game = gameData[i];
-      if (needsReplay) {
-        // One parse serves both replay predicates.
-        final replay = _ReplayGame.tryParse(game.headers, game.pgnText);
-        if (replay == null) continue;
-        if (targetFen != null && !replay.passesThroughFen(targetFen)) continue;
-        if (!replay.matchesSequence(seqCopy, seqGap)) continue;
+    for (final game in gameData) {
+      _ReplayGame? replay;
+      bool parsed = false;
+      _ReplayGame? readReplay() {
+        if (!parsed) {
+          replay = _ReplayGame.tryParse(game.headers, game.pgnText);
+          parsed = true;
+        }
+        return replay;
       }
-      if (!_CompiledFilter.allMatch(compiled, game.headers)) continue;
-      indices.add(i);
+
+      Iterable<bool> conditions() sync* {
+        for (final filter in compiled) {
+          yield filter.matches(game.headers);
+        }
+        for (var j = 0; j < targets.length; j++) {
+          yield positionSets != null
+              ? positionSets[j].contains(game.index)
+              : readReplay()?.passesThroughFen(targets[j]) ?? false;
+        }
+        if (seqCopy.isNotEmpty) {
+          yield readReplay()?.matchesSequence(seqCopy, seqGap) ?? false;
+        }
+      }
+
+      final empty = compiled.isEmpty && targets.isEmpty && seqCopy.isEmpty;
+      if (empty ||
+          (matchAny
+              ? conditions().any((value) => value)
+              : conditions().every((value) => value))) {
+        indices.add(game.index);
+      }
     }
     return indices;
   });
@@ -919,16 +921,6 @@ class _CompiledFilter {
         ),
   ];
 
-  static bool allMatch(
-    List<_CompiledFilter> filters,
-    Map<String, String> headers,
-  ) {
-    for (final f in filters) {
-      if (!f.matches(headers)) return false;
-    }
-    return true;
-  }
-
   bool matches(Map<String, String> headers) {
     if (field == kPlayerHeaderField) {
       return playerFieldMatches(
@@ -953,21 +945,6 @@ class _CompiledFilter {
         return matchesField(headerVal, value, mode);
     }
   }
-}
-
-/// Shared predicate for header + sequence filters (not position).
-bool _passesNonPositionFilters(
-  Map<String, String> headers,
-  String pgnText,
-  List<_CompiledFilter> filters,
-  List<List<String>> seqGroups,
-  int seqGap,
-) {
-  if (seqGroups.isNotEmpty &&
-      !gameMatchesSequence(pgnText, seqGroups, seqGap)) {
-    return false;
-  }
-  return _CompiledFilter.allMatch(filters, headers);
 }
 
 // ── FEN index persistence ────────────────────────────────────────────────────

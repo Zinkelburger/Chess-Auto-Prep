@@ -137,7 +137,10 @@ class ClickableMoveLineWidget extends StatelessWidget {
     for (int i = startIndex; i < end; i++) {
       final isFirst = i == startIndex;
 
-      if (isWhite) {
+      final numberPrefix = isWhite
+          ? '$moveNum.'
+          : (isFirst ? '$moveNum...' : '');
+      if (!hasCallback && isWhite) {
         spans.add(
           TextSpan(
             text: '$moveNum.',
@@ -148,7 +151,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
             ),
           ),
         );
-      } else if (isFirst) {
+      } else if (!hasCallback && isFirst) {
         spans.add(
           TextSpan(
             text: '$moveNum...',
@@ -215,7 +218,10 @@ class ClickableMoveLineWidget extends StatelessWidget {
                           : null,
                       hoverColor: AppColors.pgnMoveHoverBg,
                       child: Container(
-                        padding: movePadding,
+                        // Include the separator in this move's hit target.
+                        padding:
+                            movePadding +
+                            EdgeInsets.only(right: fontSize * 0.6),
                         decoration: isActive
                             ? BoxDecoration(
                                 color: AppColors.pgnMoveCurrentBg,
@@ -234,18 +240,32 @@ class ClickableMoveLineWidget extends StatelessWidget {
                                   width: 1,
                                 ),
                               ),
-                        child: Text(
-                          displaySan(context, sanMoves[i]),
-                          style: TextStyle(
-                            fontSize: fontSize,
-                            color: isActive
-                                ? AppColors.pgnMoveCurrentFg
-                                : moveColor ?? AppColors.pgnMove,
-                            fontFamily: AppTextStyles.monoFamily,
-                            fontWeight: isActive
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (numberPrefix.isNotEmpty)
+                              Text(
+                                numberPrefix,
+                                style: TextStyle(
+                                  fontSize: fontSize,
+                                  color: AppColors.pgnMoveNumber,
+                                  fontFamily: AppTextStyles.monoFamily,
+                                ),
+                              ),
+                            Text(
+                              displaySan(context, sanMoves[i]),
+                              style: TextStyle(
+                                fontSize: fontSize,
+                                color: isActive
+                                    ? AppColors.pgnMoveCurrentFg
+                                    : moveColor ?? AppColors.pgnMove,
+                                fontFamily: AppTextStyles.monoFamily,
+                                fontWeight: isActive
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -269,16 +289,6 @@ class ClickableMoveLineWidget extends StatelessWidget {
             ),
           );
         }
-
-        spans.add(
-          TextSpan(
-            text: ' ',
-            style: TextStyle(
-              fontSize: fontSize,
-              fontFamily: AppTextStyles.monoFamily,
-            ),
-          ),
-        );
       } else {
         spans.add(
           TextSpan(

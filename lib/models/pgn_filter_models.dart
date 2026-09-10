@@ -105,30 +105,40 @@ class HeaderFilterConfig {
 /// Serializable snapshot of all slice filters.
 class SliceConfig {
   final String? positionInput;
+  final List<String> additionalPositions;
+  final bool matchAny;
   final List<HeaderFilterConfig> headerFilters;
   final String? sequencePattern;
   final int sequenceGap;
 
   const SliceConfig({
     this.positionInput,
+    this.additionalPositions = const [],
+    this.matchAny = false,
     this.headerFilters = const [],
     this.sequencePattern,
     this.sequenceGap = 4,
   });
   const SliceConfig.empty()
     : positionInput = null,
+      additionalPositions = const [],
+      matchAny = false,
       headerFilters = const [],
       sequencePattern = null,
       sequenceGap = 4;
 
   bool get isEmpty =>
       (positionInput == null || positionInput!.trim().isEmpty) &&
+      additionalPositions.every((p) => p.trim().isEmpty) &&
       headerFilters.every((f) => f.value.isEmpty) &&
       (sequencePattern == null || sequencePattern!.trim().isEmpty);
 
   String toJsonString() => jsonEncode({
     if (positionInput != null && positionInput!.isNotEmpty)
       'positionInput': positionInput,
+    if (additionalPositions.isNotEmpty)
+      'additionalPositions': additionalPositions,
+    if (matchAny) 'matchAny': true,
     'headerFilters': headerFilters.map((f) => f.toJson()).toList(),
     if (sequencePattern != null && sequencePattern!.isNotEmpty)
       'sequencePattern': sequencePattern,
@@ -140,6 +150,10 @@ class SliceConfig {
       final j = jsonDecode(s) as Map<String, dynamic>;
       return SliceConfig(
         positionInput: j['positionInput'] as String?,
+        additionalPositions:
+            (j['additionalPositions'] as List<dynamic>?)?.cast<String>() ??
+            const [],
+        matchAny: j['matchAny'] as bool? ?? false,
         headerFilters:
             (j['headerFilters'] as List<dynamic>?)
                 ?.map(
@@ -158,6 +172,8 @@ class SliceConfig {
   List<String> get chipLabels => [
     if (positionInput != null && positionInput!.isNotEmpty)
       'Pos: ${_truncate(positionInput!, 20)}',
+    for (final position in additionalPositions)
+      if (position.isNotEmpty) 'Pos: ${_truncate(position, 20)}',
     if (sequencePattern != null && sequencePattern!.isNotEmpty)
       'Seq: ${_truncate(sequencePattern!, 18)} (gap $sequenceGap)',
     for (final f in headerFilters)

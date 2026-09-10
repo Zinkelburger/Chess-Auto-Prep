@@ -46,6 +46,84 @@ void main() {
 1. d4 d5 2. c4 c6 3. Nf3 Nf6 *
 ''';
 
+  test(
+    'choosing another first move is a different opening, not a mistake',
+    () async {
+      await writeChapter(
+        'Main.pgn',
+        '[Event "Open game"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 Nc6 *',
+      );
+      for (final white in [true, false]) {
+        await settings.setPaths(white: white, paths: [tempDir.path]);
+        final report = await service.analyzeGame(
+          gameSans: white ? ['d4', 'd5', 'c4'] : ['e4', 'c5', 'Nf3'],
+          meWhite: white,
+        );
+        expect(report!.differentOpening, isTrue);
+        expect(report.inBook, isFalse);
+        expect(report.bookEnded, isFalse);
+      }
+      final opponentChoice = await service.analyzeGame(
+        gameSans: ['e4', 'c5', 'Nf3'],
+        meWhite: true,
+      );
+      expect(
+        opponentChoice!.differentOpening,
+        isTrue,
+        reason: 'White e4 alone does not establish an Open Game repertoire',
+      );
+      expect(opponentChoice.byMe, isFalse);
+      final entered = await service.analyzeGame(
+        gameSans: ['e4', 'e5', 'Nf3', 'Nf6'],
+        meWhite: false,
+      );
+      expect(entered!.differentOpening, isFalse);
+      expect(entered.matchedPlies, 3);
+      expect(entered.byMe, isTrue);
+    },
+  );
+
+  test('Black e5 course compares the real departure, not move one', () async {
+    await writeChapter('Ruy Lopez.pgn', '''
+// Color: Black
+// Chapter: Ruy Lopez
+[Event "Deferred Steinitz"]
+[White "Ruy Lopez"]
+[Black "Main Line"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]
+[Result "*"]
+
+1. e4 1. e5 2. Nf3 2. Nc6 3. Bb5 3. a6 4. Ba4 4. Nf6
+5. O-O 5. d6 6. d4 6. b5 7. dxe5 7. dxe5 *
+''');
+    await settings.setPaths(white: false, paths: [tempDir.path]);
+    final report = await service.analyzeGame(
+      gameSans: [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+        'Bb5',
+        'a6',
+        'Ba4',
+        'Nf6',
+        'O-O',
+        'd6',
+        'd4',
+        'b5',
+        'dxe5',
+        'bxa4',
+        'exf6',
+        'Qxf6',
+      ],
+      meWhite: false,
+    );
+    expect(report!.matchedPlies, 13);
+    expect(report.byMe, isTrue);
+    expect(report.playedSan, 'bxa4');
+    expect(report.expectedSans, ['dxe5']);
+  });
+
   test('reports my deviation with move number and expected moves', () async {
     await writeChapter('Main.pgn', mainChapter);
     await settings.setPaths(white: true, paths: [tempDir.path]);

@@ -189,7 +189,10 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             onClose: _closePanel,
           ),
         if (_deviationReport case final deviation?
-            when showTabs && _tabController.index == 0)
+            when showTabs &&
+                _tabController.index == 0 &&
+                !deviation.inBook &&
+                !deviation.differentOpening)
           _DeviationBanner(report: deviation, onShowLine: _showLineTab),
         Expanded(
           child: IndexedStack(
@@ -492,25 +495,11 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
             onAnalyse: _analyseSolitaireGame,
             onExit: () => unawaited(_leaveSolitaire()),
           ),
-        if (_viewPreferences.autoDetectOpenings &&
-            [
-              game.headers['ECO'],
-              game.headers['Opening'],
-            ].any((value) => value != null && value.isNotEmpty && value != '?'))
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SelectableText(
-                [game.headers['ECO'], game.headers['Opening']]
-                    .whereType<String>()
-                    .where((value) => value.isNotEmpty && value != '?')
-                    .join(' · '),
-                style: AppTextStyles.muted,
-              ),
-            ),
-          ),
-        if (!_controller.isSolitaireMode) _buildEditModeBar(),
+        if (_viewPreferences.showOpening)
+          PgnOpeningLabel(headers: game.headers),
+        if (!_controller.isSolitaireMode &&
+            (_editMode || _showSaveAction || _controller.errorMessage != null))
+          _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
             showStartEndButtons: true,
@@ -575,44 +564,30 @@ mixin _PaneBuildersMixin on State<PgnViewerScreen>, _AppBarBuildersMixin {
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        const Icon(
-          Icons.edit_outlined,
-          size: 18,
-          color: AppColors.onSurfaceMuted,
-        ),
-        Text(
-          _editMode ? 'Editing PGN' : 'PGN',
-          style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
-        ),
-        Text(
-          _controller.filePath == null
-              ? 'Not saved to a file'
-              : _controller.errorMessage != null
-              ? _controller.errorMessage!
-              : _controller.isSaving
-              ? 'Saving…'
-              : _controller.hasUnsavedChanges
-              ? 'Unsaved changes'
-              : _viewPreferences.autoSave
-              ? 'All changes saved · Autosave on'
-              : 'All changes saved · Autosave off',
-          style: AppTextStyles.muted.copyWith(color: AppColors.ink),
-        ),
-        FilledButton.tonalIcon(
-          onPressed: _controller.isSaving ? null : () => unawaited(_savePgn()),
-          icon: const Icon(Icons.save_outlined, size: 18),
-          label: Text(_controller.filePath == null ? 'Save as…' : 'Save'),
-        ),
-        TextButton.icon(
-          onPressed: _toggleEditMode,
-          icon: Icon(_editMode ? Icons.check : Icons.edit_outlined, size: 18),
-          label: Text(_editMode ? 'Finish editing' : 'Edit PGN'),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.ink,
-            backgroundColor: AppColors.surfaceContainer,
-            textStyle: AppTextStyles.bodyStrong,
+        if (_controller.errorMessage != null)
+          Text(
+            _controller.errorMessage!,
+            style: AppTextStyles.muted.copyWith(color: AppColors.ink),
           ),
-        ),
+        if (_showSaveAction)
+          FilledButton.tonalIcon(
+            onPressed: _controller.isSaving
+                ? null
+                : () => unawaited(_savePgn()),
+            icon: const Icon(Icons.save_outlined, size: 18),
+            label: Text(_controller.filePath == null ? 'Save as…' : 'Save'),
+          ),
+        if (_editMode)
+          TextButton.icon(
+            onPressed: _toggleEditMode,
+            icon: const Icon(Icons.check, size: 18),
+            label: const Text('Done'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.ink,
+              backgroundColor: AppColors.surfaceContainer,
+              textStyle: AppTextStyles.bodyStrong,
+            ),
+          ),
       ],
     ),
   );
@@ -637,14 +612,17 @@ class _DeviationBanner extends StatelessWidget {
         // A deviation warns; running out of book is neutral information.
         color: report.bookEnded
             ? AppColors.surfaceElevated
-            : AppColors.warningTint,
+            : Color.alphaBlend(
+                AppColors.warningTint.withAlpha(20),
+                AppColors.surface,
+              ),
         border: const Border(bottom: BorderSide(color: AppColors.divider)),
       ),
       child: Row(
         children: [
           Icon(
             Icons.fork_right,
-            size: 16,
+            size: 20,
             color: report.bookEnded
                 ? AppColors.onSurfaceMuted
                 : AppColors.warning,
@@ -654,19 +632,20 @@ class _DeviationBanner extends StatelessWidget {
             child: Text(
               message,
               overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.caption.copyWith(fontSize: 12),
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
             ),
           ),
           TextButton(
             onPressed: onShowLine,
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              minimumSize: Size.zero,
+              foregroundColor: AppColors.ink,
+              minimumSize: const Size(0, 32),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: Text(
               'Show my line',
-              style: AppTextStyles.caption.copyWith(fontSize: 12),
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w400),
             ),
           ),
         ],

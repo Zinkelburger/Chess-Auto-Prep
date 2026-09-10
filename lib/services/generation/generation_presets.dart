@@ -2,9 +2,8 @@
 ///
 /// A profile is a whole [TreeBuildConfig] saved under a name, so the user
 /// can keep "my anti-London prep" or "quick sanity build" and reapply it
-/// verbatim.  There are deliberately no bundled "style" or "effort"
-/// presets that rewrite several knobs behind the user's back — every knob
-/// on the form is its own control.
+/// verbatim. The explicit ChessDB starter profile reproduces the method used
+/// by the King's Indian book harness; its settings remain editable.
 library;
 
 import 'dart:convert';
@@ -12,6 +11,31 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'generation_config.dart';
+
+/// A bounded starting point for the ChessDB + master-practice workflow.
+/// Independent of opening and colour; the caller supplies both at build time.
+TreeBuildConfig chessDbRepertoirePreset({required bool playAsWhite}) =>
+    TreeBuildConfig(
+      startFen: '',
+      playAsWhite: playAsWhite,
+      buildMode: BuildMode.chessDbBook,
+      selectionMode: SelectionMode.engineOnly,
+      searchAlgorithm: SearchAlgorithm.fast,
+      maxPly: 20,
+      bookTailMaxPly: 34,
+      maxNodes: 12000,
+      timeBudgetMinutes: 120,
+      minEvalCp: -250,
+      maxEvalCp: 500,
+      oppMaxChildren: 5,
+      oppMassTarget: 0.90,
+      verifyFinal: false,
+      useMasterGames: true,
+      enableChessDbApi: true,
+      chessDbApiConcurrency: 1,
+      chaptersByEco: true,
+      minLinesPerChapter: 4,
+    );
 
 /// Named full-config profiles persisted in SharedPreferences.
 ///

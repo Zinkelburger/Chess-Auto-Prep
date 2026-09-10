@@ -15,8 +15,8 @@ mixin _GenerationConfigDescriptions on _GenerationConfigFormStateBase {
         return 'Builds from the PGN files listed below. Move frequencies '
             'come from those games; engine evals are added afterwards.';
       case BuildMode.chessDbBook:
-        return 'Plays whatever ChessDB ranks best: one move per position, no '
-            'engine search, no human model. Branches only where masters have '
+        return 'A compact repertoire with one '
+            'best database move for your side. Branches only where masters have '
             'branched, then runs on as a single mainline. Needs the ChessDB '
             'dump or API, enabled below.';
     }

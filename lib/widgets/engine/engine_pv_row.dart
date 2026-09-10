@@ -11,7 +11,6 @@ class EnginePvRow extends StatefulWidget {
     required this.evaluation,
     required this.sanMoves,
     required this.startPly,
-    this.rows = 1,
     this.evalColor,
     this.moveColor,
     this.trailing,
@@ -23,7 +22,6 @@ class EnginePvRow extends StatefulWidget {
   final String evaluation;
   final List<String> sanMoves;
   final int startPly;
-  final int rows;
   final Color? evalColor;
   final Color? moveColor;
   final Widget? trailing;
@@ -31,8 +29,10 @@ class EnginePvRow extends StatefulWidget {
   final void Function(int index, Offset anchor)? onMoveHovered;
   final VoidCallback? onHoverExit;
 
+  static const double fontSize = 14;
+
   static double lineHeight(BuildContext context) =>
-      MediaQuery.textScalerOf(context).scale(13) * 1.5 + 8.5;
+      MediaQuery.textScalerOf(context).scale(fontSize) * 1.5 + 8.5;
 
   @override
   State<EnginePvRow> createState() => _EnginePvRowState();
@@ -47,9 +47,9 @@ class _EnginePvRowState extends State<EnginePvRow> {
       sanMoves: widget.sanMoves,
       startPly: widget.startPly,
       maxMoves: widget.sanMoves.length,
-      maxLines: widget.rows,
+      maxLines: 1,
       singleLine: !_expanded,
-      fontSize: 13,
+      fontSize: EnginePvRow.fontSize,
       moveColor: widget.moveColor,
       movePadding: const EdgeInsets.symmetric(horizontal: 1),
       onMoveTapped: widget.onMoveTapped,
@@ -77,30 +77,26 @@ class _EnginePvRowState extends State<EnginePvRow> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.mono.copyWith(
-                    fontWeight: FontWeight.w600,
+                    fontSize: EnginePvRow.fontSize,
+                    fontWeight: FontWeight.w400,
                     color: widget.evalColor ?? AppColors.ink,
                   ),
                 ),
               ),
             ),
             Expanded(
-              child: !_expanded && widget.rows == 1
-                  ? SizedBox(
-                      height: EnginePvRow.lineHeight(context),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: line,
-                      ),
-                    )
-                  : ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: EnginePvRow.lineHeight(context),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: line,
-                      ),
-                    ),
+              // Streamed PV length must never move the following engine row.
+              // Expansion is an explicit resize; subsequent updates scroll in
+              // the same six-row viewport, including when the PV gets shorter.
+              child: SizedBox(
+                height: EnginePvRow.lineHeight(context) * (_expanded ? 6 : 1),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: _expanded
+                      ? SingleChildScrollView(child: line)
+                      : ClipRect(child: line),
+                ),
+              ),
             ),
             if (widget.trailing != null)
               Padding(
@@ -109,7 +105,7 @@ class _EnginePvRowState extends State<EnginePvRow> {
               ),
             SizedBox(
               width: 26,
-              child: widget.sanMoves.length > 1
+              child: _expanded || widget.sanMoves.length > 1
                   ? IconButton(
                       style: const ButtonStyle(
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,

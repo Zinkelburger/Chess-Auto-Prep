@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/models/game_outcome.dart';
+import 'package:chess_auto_prep/widgets/match_games_table.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/core/app_state.dart';
@@ -134,6 +135,39 @@ void main() {
     await store.save(finished);
     return finished;
   }
+
+  testWidgets(
+    'engine controls open the saved setup and thumbnail choice persists',
+    (tester) async {
+      await tester.runAsync(() async {
+        await seedTournament();
+      });
+      await pumpScreen(tester);
+      final toggle = find.byKey(const ValueKey('tournament-final-positions'));
+      await tester.ensureVisible(toggle);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<MatchGamesTable>(find.byType(MatchGamesTable))
+            .showFinalPositions,
+        isFalse,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('tournament.show_final_positions'), isFalse);
+      await tester.tap(find.text('Engine controls'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('new-tournament-fen')))
+            .controller!
+            .text,
+        _fen,
+      );
+      expect(find.text('Edit board…'), findsOneWidget);
+      expect(find.text('Start new run'), findsOneWidget);
+    },
+  );
 
   testWidgets('with nothing saved it offers to start one', (tester) async {
     await pumpScreen(tester);

@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../common/confirm_dialog.dart';
 
 class PgnCommentEditor extends StatefulWidget {
   final String initialText;
@@ -41,6 +42,25 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
     super.dispose();
   }
 
+  bool _confirming = false;
+
+  Future<void> _save() async {
+    if (_confirming) return;
+    final text = _controller.text;
+    if (text.trim().isEmpty && widget.initialText.trim().isNotEmpty) {
+      _confirming = true;
+      final confirmed = await confirmAction(
+        context,
+        title: 'Delete 1 comment?',
+        confirmLabel: 'Delete',
+      );
+      _confirming = false;
+      if (!mounted || !confirmed || _controller.text != text) return;
+    }
+    if (!mounted) return;
+    widget.onSave(text);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -66,11 +86,11 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
                 ),
                 border: InputBorder.none,
               ),
-              onSubmitted: (v) => widget.onSave(v),
+              onSubmitted: (_) => _save(),
             ),
           ),
           IconButton(
-            onPressed: () => widget.onSave(_controller.text),
+            onPressed: _save,
             icon: const Icon(
               Icons.check,
               size: 18,

@@ -1,15 +1,13 @@
-/// The Database tab of the analysis panel: the live Lichess opening explorer
-/// for the position on the board, as a first-class peer of the engine rather
-/// than a toggle hidden inside the tree.
-///
-/// Owns its [LiveExplorerService] the way [RepertoireTreePane] does — the
-/// service holds an HTTP client and a debounce timer, so the widget that
-/// shows its results is the one that creates and disposes it.
+/// Shared database surface for repertoire continuations and opening practice.
+/// The pane owns and disposes its live explorer client and debounce timer.
 library;
 
 import 'package:flutter/material.dart';
 
 import '../../../models/explorer_response.dart';
+import '../../../models/opening_tree.dart';
+import '../../../models/repertoire_line.dart';
+import '../../../widgets/opening_tree_widget.dart';
 import '../../../services/live_explorer_service.dart';
 import '../../../widgets/opening_explorer/opening_explorer_panel.dart';
 
@@ -20,12 +18,22 @@ class RepertoireDatabasePane extends StatefulWidget {
     required this.currentMoveSequence,
     required this.repertoireMovesAtPosition,
     required this.onPlayMove,
+    this.tree,
+    this.repertoireLines = const [],
+    this.onHoverTreeMove,
+    this.onGoBack,
+    this.onGoForward,
     this.onAddMove,
     this.onHoverMove,
   });
 
   /// Position the explorer looks up.
   final String fen;
+  final OpeningTree? tree;
+  final List<RepertoireLine> repertoireLines;
+  final ValueChanged<String?>? onHoverTreeMove;
+  final VoidCallback? onGoBack;
+  final VoidCallback? onGoForward;
 
   /// SAN path to [fen].
   final List<String> currentMoveSequence;
@@ -48,6 +56,7 @@ class RepertoireDatabasePane extends StatefulWidget {
 }
 
 class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
+  bool _repertoire = true;
   late final LiveExplorerService _explorer = LiveExplorerService();
 
   @override
@@ -58,14 +67,46 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
 
   @override
   Widget build(BuildContext context) {
-    return OpeningExplorerPanel(
-      service: _explorer,
-      fen: widget.fen,
-      movePath: widget.currentMoveSequence,
-      repertoireMovesAtPosition: widget.repertoireMovesAtPosition(),
-      onPlayMove: widget.onPlayMove,
-      onAddMove: widget.onAddMove,
-      onHoverMove: widget.onHoverMove,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: true, label: Text('Repertoire')),
+              ButtonSegment(value: false, label: Text('Opening explorer')),
+            ],
+            selected: {_repertoire},
+            onSelectionChanged: (v) {
+              if (mounted) setState(() => _repertoire = v.first);
+            },
+          ),
+        ),
+        Expanded(
+          child: _repertoire
+              ? widget.tree == null
+                    ? const Center(child: Text('No repertoire moves yet'))
+                    : OpeningTreeWidget(
+                        tree: widget.tree!,
+                        repertoireLines: widget.repertoireLines,
+                        currentMoveSequence: widget.currentMoveSequence,
+                        onMoveSelected: widget.onPlayMove,
+                        onGoBack: widget.onGoBack,
+                        onGoForward: widget.onGoForward,
+                        onHoverMove: widget.onHoverTreeMove,
+                        showCopyMoves: false,
+                      )
+              : OpeningExplorerPanel(
+                  service: _explorer,
+                  fen: widget.fen,
+                  movePath: widget.currentMoveSequence,
+                  repertoireMovesAtPosition: widget.repertoireMovesAtPosition(),
+                  onPlayMove: widget.onPlayMove,
+                  onAddMove: widget.onAddMove,
+                  onHoverMove: widget.onHoverMove,
+                ),
+        ),
+      ],
     );
   }
 }

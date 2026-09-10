@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/study_controller.dart';
+import '../../models/pgn_deletion_summary.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../common/confirm_dialog.dart';
@@ -61,13 +62,17 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
   Future<void> _delete(int index) async {
     if (_study.doc.chapters.length <= 1) return;
     final chapter = _study.doc.chapters[index];
+    final version = chapter.tree.version;
+    final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
       title: 'Delete chapter "${chapter.name}"?',
+      message: 'Remove ${summary.description}, including all annotations.',
       confirmLabel: 'Delete',
     );
-    if (!confirmed || !mounted) return;
-    setState(() => _study.deleteChapter(index));
+    if (!confirmed || !mounted || chapter.tree.version != version) return;
+    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    if (currentIndex >= 0) setState(() => _study.deleteChapter(currentIndex));
   }
 
   @override

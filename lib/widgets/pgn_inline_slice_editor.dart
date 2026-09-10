@@ -113,6 +113,8 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
           .computeSliceMatches(
             games: widget.allGames,
             targetFen: _filters.positionFen,
+            additionalTargetFens: _filters.additionalPositionFens,
+            matchAny: _filters.matchAny,
             filters: _filters.rawHeaderFilters,
             seqGroups: _filters.sequenceGroups,
             seqGap: _filters.sequenceGap,

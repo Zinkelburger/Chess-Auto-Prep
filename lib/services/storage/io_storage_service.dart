@@ -14,6 +14,7 @@ import '../game_store/game_store_service.dart';
 import 'app_paths.dart';
 import 'file_mutation_service.dart';
 import 'storage_service.dart';
+import '../training/move_attempt_store.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
 StorageService getStorageService() => IOStorageService();
@@ -218,6 +219,9 @@ class IOStorageService implements StorageService {
       destination,
       allowedRoot: await _rootForMove(source.path, destination.path),
     );
+    await MoveAttemptStore(
+      this,
+    ).repoint(from: source.path, to: destination.path);
   }
 
   @override
@@ -367,6 +371,7 @@ class IOStorageService implements StorageService {
       Directory(newPath),
       allowedRoot: root,
     );
+    await MoveAttemptStore(this).repoint(from: oldDirPath, to: newPath);
     return newPath;
   }
 
@@ -414,6 +419,7 @@ class IOStorageService implements StorageService {
       Directory(newPath),
       allowedRoot: root,
     );
+    await MoveAttemptStore(this).repoint(from: oldPath, to: newPath);
   }
 
   // ── Study file management ────────────────────────────────────────────────

@@ -150,6 +150,8 @@ class ExpectimaxProbeTarget {
     required this.playAsWhite,
     this.moveSan,
     this.engineThreads,
+    this.engineMoves = 4,
+    this.maiaCoverage = .60,
   });
 
   final String repertoireFilePath;
@@ -163,4 +165,6 @@ class ExpectimaxProbeTarget {
   final int plies;
   final bool playAsWhite;
   final int? engineThreads;
+  final int engineMoves;
+  final double maiaCoverage;
 }

@@ -122,6 +122,9 @@ int graftProbe({
 /// Fill what [into] lacks from [from], never overwriting a value the host
 /// already had — the host's numbers were computed in their own context.
 void _completeFrom(BuildTreeNode into, BuildTreeNode from) {
+  if (into.enginePv.isEmpty && from.enginePv.isNotEmpty) {
+    into.enginePv = List.of(from.enginePv);
+  }
   if (!into.hasEngineEval && from.hasEngineEval) {
     into.engineEvalCp = from.engineEvalCp;
     into.extEvalMode = from.extEvalMode;
@@ -146,6 +149,7 @@ void _completeFrom(BuildTreeNode into, BuildTreeNode from) {
 void _copyScalars(BuildTreeNode node, BuildTreeNode old) {
   node
     ..engineEvalCp = old.engineEvalCp
+    ..enginePv = List.of(old.enginePv)
     ..explored = old.explored
     ..pruneReason = old.pruneReason
     ..pruneEvalCp = old.pruneEvalCp

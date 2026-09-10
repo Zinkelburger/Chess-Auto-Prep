@@ -27,7 +27,8 @@ import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/shortcut_tooltip.dart';
 import '../widgets/trainer_keyboard_scope.dart';
-import '../widgets/training/chapter_reader_screen.dart';
+import '../services/storage/storage_factory.dart';
+import '../widgets/training/training_mistakes_panel.dart';
 import '../widgets/training/chapter_setup_dialog.dart';
 import '../widgets/training/move_input_widget.dart';
 import '../widgets/chapter_list_body.dart' show ChapterPick;
@@ -184,7 +185,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     final pick = await Navigator.of(context).push<ChapterPick>(
       MaterialPageRoute(builder: (_) => const RepertoireSelectionScreen()),
     );
-    if (pick != null) {
+    if (mounted && pick != null) {
       _training.setRepertoire(pick.chapter);
       await _training.loadRepertoire(startChapter: pick.courseChapter);
     }
@@ -193,7 +194,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   Future<void> _chooseChapter() async {
     final source = _training.repertoire;
     if (source == null) return;
-    final directory = p.dirname(source.filePath);
+    final directory = p.extension(source.filePath).toLowerCase() == '.pgn'
+        ? p.dirname(source.filePath)
+        : source.filePath;
     final pick = await Navigator.of(context).push<ChapterPick>(
       MaterialPageRoute(
         builder: (_) => RepertoireChaptersScreen(
@@ -213,8 +216,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   void _openInBuilder() {
     if (_training.repertoire == null) return;
     context.read<AppState>().switchToBuilder(
-      repertoirePath: _training.repertoire!.filePath,
-      lineId: _training.currentLine?.id,
+      repertoirePath:
+          _training.currentLine?.sourcePath ?? _training.repertoire!.filePath,
+      lineId: _training.currentLine?.persistedId,
     );
   }
 
@@ -415,7 +419,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   String? _repertoireFolder() {
     final repertoire = _training.repertoire;
     if (repertoire == null || _training.sourceIsStudy) return null;
-    return p.basename(p.dirname(repertoire.filePath));
+    return p.extension(repertoire.filePath).toLowerCase() == '.pgn'
+        ? p.basename(p.dirname(repertoire.filePath))
+        : null;
   }
 
   /// The app bar's `Repertoire › Chapter` crumb: folder plain, chapter bold,
@@ -519,6 +525,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
           context.read<AppState>().setMode(AppMode.repertoire);
         },
         onSelected: _onRepertoireSelected,
+        onRepertoireSelected: _onRepertoireSelected,
         onCourseChapterSelected: _onCourseChapterSelected,
         onStudySelected: _onStudySelected,
       );
@@ -548,28 +555,61 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   }
 
   /// Choose material before starting a lesson.
+  bool _showMistakes = false;
+
   Widget _buildBrowser() {
-    return TrainerBrowser(
-      title: _training.repertoire!.name,
-      subtitle: _browserSubtitle(),
-      lines: _training.lines,
-      reviewMap: _training.reviewMap,
-      chapterOf: _training.chapterOf,
-      activeChapter: _training.activeChapter,
-      onChapterSelected: _training.setActiveChapter,
-      ungroupedChapter: TrainingSessionController.ungroupedChapter,
-      onBrowseChapters: _training.sourceIsStudy ? null : _chooseChapter,
-      onLearn: _training.startLearnSession,
-      onReview: _training.startReviewSession,
-      learnBatchSize: _sessionCap(_training.settings.newLinesPerSession),
-      reviewBatchSize: _sessionCap(_training.settings.reviewsPerSession),
-      onTrainLine: (line) => _training.startLine(line),
-      onPreviewLine: _previewLine,
-      onReadLines: _readLines,
-      onApplyLearnedSelection: _applyLearnedSelection,
-      introEnabled: _training.settings.skipToFirstComment,
-      onExcludeLine: (line, excluded) =>
-          unawaited(_training.setLineExcluded(line, excluded)),
+    if (_showMistakes) {
+      return TrainingMistakesPanel(
+        service: _training.reviewService,
+        sourcePaths: {
+          for (final line in _training.lines)
+            line.sourcePath ?? _training.repertoireId,
+        },
+        lines: _training.lines,
+        onClose: () {
+          if (mounted) setState(() => _showMistakes = false);
+        },
+        onRead: (line, moveIndex) =>
+            unawaited(_readLines([line], initialPly: moveIndex + 1)),
+      );
+    }
+    return Column(
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () {
+              if (mounted) setState(() => _showMistakes = true);
+            },
+            icon: const Icon(Icons.history, size: 16),
+            label: const Text('Mistakes'),
+          ),
+        ),
+        Expanded(
+          child: TrainerBrowser(
+            title: _training.repertoire!.name,
+            subtitle: _browserSubtitle(),
+            lines: _training.lines,
+            reviewMap: _training.reviewMap,
+            chapterOf: _training.chapterOf,
+            activeChapter: _training.activeChapter,
+            onChapterSelected: _training.setActiveChapter,
+            ungroupedChapter: TrainingSessionController.ungroupedChapter,
+            onBrowseChapters: _training.sourceIsStudy ? null : _chooseChapter,
+            onLearn: _training.startLearnSession,
+            onReview: _training.startReviewSession,
+            learnBatchSize: _sessionCap(_training.settings.newLinesPerSession),
+            reviewBatchSize: _sessionCap(_training.settings.reviewsPerSession),
+            onTrainLine: (line) => _training.startLine(line),
+            onPreviewLine: _previewLine,
+            onReadLines: _readLines,
+            onApplyLearnedSelection: _applyLearnedSelection,
+            introEnabled: _training.settings.skipToFirstComment,
+            onExcludeLine: (line, excluded) =>
+                unawaited(_training.setLineExcluded(line, excluded)),
+          ),
+        ),
+      ],
     );
   }
 
@@ -812,14 +852,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     );
   }
 
-  /// What to call the chapter scope in the UI: null is every line, the
-  /// ungrouped sentinel is the lines no chapter claims.
-  static String _chapterTitle(String? chapter) => chapter == null
-      ? 'All lines'
-      : chapter == TrainingSessionController.ungroupedChapter
-      ? 'Other lines'
-      : chapter;
-
   void _previewLine(RepertoireLine line) {
     final chapter = _training.chapterOf(line);
     unawaited(
@@ -837,33 +869,28 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   Future<void> _readLines(
     List<RepertoireLine> lines, {
     String? initialLineId,
+    int? initialPly,
   }) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ChapterReaderScreen(
-          repertoireName: _repertoireFolder() ?? _training.repertoire!.name,
-          chapterTitle: _training.activeChapter == null
-              ? _training.repertoire!.name
-              : _chapterTitle(_training.activeChapter),
-          lines: lines,
-          initialLineId: initialLineId,
-          reviewMap: _training.reviewMap,
-          editLabel: _training.sourceIsStudy
-              ? 'Edit in Study'
-              : 'Edit in Builder',
-          onEditLine: (line) {
-            if (_training.sourceIsStudy) {
-              _openInStudy();
-            } else if (_training.repertoire != null) {
-              context.read<AppState>().switchToBuilder(
-                repertoirePath: _training.repertoire!.filePath,
-                lineId: line.id,
-              );
-            }
-          },
-          onTrainLine: _training.startLine,
-        ),
-      ),
+    if (lines.isEmpty) return;
+    final path = p.join(
+      'cache',
+      'trainer-reading',
+      '${p.basename(_training.repertoire!.name)}.pgn',
+    );
+    await StorageFactory.instance.writeFile(
+      path,
+      lines.map((line) => line.fullPgn).join('\n\n'),
+    );
+    if (!mounted) return;
+    context.read<AppState>().switchToPgnViewer(
+      path: path,
+      gameIndex: initialLineId == null
+          ? 0
+          : lines
+                .indexWhere((line) => line.id == initialLineId)
+                .clamp(0, lines.length - 1),
+      ply: initialPly,
+      historyLabel: 'Read ${_training.repertoire!.name}',
     );
   }
 

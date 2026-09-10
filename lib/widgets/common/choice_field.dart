@@ -64,6 +64,7 @@ class ChoiceField<T> extends StatefulWidget {
     this.style,
     this.emptyMessage = 'No matches',
     this.autofocus = false,
+    this.prefixIcon,
   });
 
   final List<ChoiceItem<T>> items;
@@ -91,6 +92,7 @@ class ChoiceField<T> extends StatefulWidget {
   final TextStyle? style;
   final String emptyMessage;
   final bool autofocus;
+  final IconData? prefixIcon;
 
   @override
   State<ChoiceField<T>> createState() => _ChoiceFieldState<T>();
@@ -338,6 +340,13 @@ class _ChoiceFieldState<T> extends State<ChoiceField<T>> {
             ),
           )
         : InputDecoration(
+            prefixIcon: widget.prefixIcon == null
+                ? null
+                : Icon(widget.prefixIcon, size: 16),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 32,
+              minHeight: 36,
+            ),
             labelText: widget.label,
             hintText: widget.hint,
             helperText: widget.helper,

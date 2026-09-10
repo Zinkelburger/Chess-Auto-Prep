@@ -1,11 +1,11 @@
-/// The three ways a player gets into Player Analysis, named once.
+/// The two ways a player gets into Player Analysis, named once.
 ///
-/// The screen used to stack three floating action buttons ("Import
+/// The screen used to stack two floating action buttons ("Import
 /// Opponents", "Load from disk", "Download New") over the list *and* repeat
-/// two of them as buttons in the empty state — five controls for three
+/// two of them as buttons in the empty state — five controls for two
 /// actions, none of whose labels said whether they downloaded, opened a file,
 /// or did both. Each source is written down exactly once here so the menu
-/// and the empty state can never drift apart. No icons: none of the three
+/// and the empty state can never drift apart. No icons: none of the two
 /// has a glyph that says more than its label.
 library;
 
@@ -22,12 +22,6 @@ enum AddPlayerSource {
   pgnFiles(
     label: 'From PGN files',
     detail: 'Games already saved on this computer',
-  ),
-
-  /// Open the tournaments you are preparing for.
-  opponentList(
-    label: 'Groups of players',
-    detail: 'Saved players, accounts and prep studies',
   );
 
   const AddPlayerSource({required this.label, required this.detail});
@@ -44,7 +38,7 @@ enum AddPlayerSource {
   String get menuLabel => '$label…';
 }
 
-/// The single "add a player" control: one button, one menu, three sources.
+/// The single "add a player" control: one button, one menu, two sources.
 class AddPlayerButton extends StatelessWidget {
   const AddPlayerButton({super.key, required this.onSelected});
 
@@ -85,7 +79,7 @@ class AddPlayerButton extends StatelessWidget {
   }
 }
 
-/// The same three sources spelled out as a list, for the first run — when
+/// The same two sources spelled out as a list, for the first run — when
 /// there is nothing to pick, the options should be on the screen rather than
 /// hidden one tap deep in a menu.
 class AddPlayerSourceList extends StatelessWidget {

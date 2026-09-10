@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dartchess/dartchess.dart';
 
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 
@@ -60,16 +61,31 @@ void main() {
   // immaterial, and `*` is the terminator this game's `[Result "*"]` implies.
   test('injectBestLines writes the line beside the existing score', () {
     final movetext = injectBestLines(_series, {
-      8: ['Bxc6', 'dxc6'],
+      8: ['Qxg5', 'd3'],
     });
-    expect(
-      movetext,
-      '1. e4 { [%eval 0.20,12] } e5 { [%eval 0.15,12] } '
-      '2. Nf3 { [%eval 0.25,12] } Nc6 { [%eval 0.20,12] } '
-      '3. Bb5 { [%eval 0.30,12] } a6 { [%eval 0.30,12] } '
-      '4. Ng5 { [%eval -6.00,12] [%pv Ba4,Nf6] } '
-      'Nf6 { [%eval -0.50,12] [%pv Bxc6,dxc6] } *',
-    );
+    expect(movetext, contains('[%bestline Ba4,Nf6]'));
+    expect(movetext, contains('[%bestline Qxg5,d3]'));
+    final game = PgnGame.parsePgn('$_header$movetext');
+    final parents = <PgnNode<PgnNodeData>>[];
+    var parent = game.moves;
+    while (parent.children.isNotEmpty) {
+      parents.add(parent);
+      parent = parent.children.first;
+    }
+    expect(parents[6].children[1].data.san, 'Ba4');
+    expect(parents[6].children[1].children.single.data.san, 'Nf6');
+    expect(parents[7].children[1].data.san, 'Qxg5');
+    expect(parents[7].children[1].children.single.data.san, 'd3');
+    expect(game.moves.mainline().map((n) => n.san), [
+      'e4',
+      'e5',
+      'Nf3',
+      'Nc6',
+      'Bb5',
+      'a6',
+      'Ng5',
+      'Nf6',
+    ]);
   });
 
   test('a rewritten game keeps its sidelines and its opening comment', () {
@@ -77,12 +93,12 @@ void main() {
         '$_header'
         '{intro [%clk 0:05:00]} 1. e4 {[%eval 0.20,12]} (1. d4 d5) '
         'e5 {[%eval 0.15,12]} 2. Nf3 {[%eval 0.25,12]} '
-        'Nc6 {[%eval -6.00,12]} *\n';
+        'Nc6 {[%eval 6.00,12]} *\n';
     final movetext = injectBestLines(withExtras, {
-      4: ['Bb5', 'a6'],
+      4: ['Nf6', 'Bc4'],
     });
     expect(movetext, isNotNull);
-    expect(movetext, contains('[%pv Bb5,a6]'));
+    expect(movetext, contains('[%bestline Nf6,Bc4]'));
     expect(movetext, contains('d4'), reason: 'the sideline survived');
     expect(
       movetext,
@@ -104,13 +120,13 @@ void main() {
 
   test('a line written back is read back on the next load', () async {
     final movetext = injectBestLines(_series, {
-      8: ['Bxc6', 'dxc6'],
+      8: ['Qxg5', 'd3'],
     })!;
     final controller = GameAnalysisController();
     addTearDown(controller.dispose);
     await controller.tryLoadFromPgn('$_header$movetext\n');
     expect(controller.movesMissingBestLine, isEmpty);
     final nf6 = controller.evals.firstWhere((e) => e.san == 'Nf6');
-    expect(nf6.bestLine, ['Bxc6', 'dxc6']);
+    expect(nf6.bestLine, ['Qxg5', 'd3']);
   });
 }

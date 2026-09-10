@@ -4,6 +4,8 @@ part of 'pgn_viewer_screen.dart';
 mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
   PgnViewerController get _controller;
   bool get _editMode;
+  bool get _canReturnToFilters;
+  void _returnToFilters();
   bool get _onLineTab;
   bool get _onReferenceTab;
   bool get _viewingStudy;
@@ -45,6 +47,27 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
               title: _buildOpenPgnMenuButton(fileName),
             ),
           ),
+          if (loaded) ...[
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: PgnSliceChips(
+                controller: _controller,
+                onOpenSliceDialog: _openSliceDialog,
+              ),
+            ),
+          ],
+          if (_canReturnToFilters) ...[
+            const SizedBox(width: 12),
+            Flexible(
+              child: TextButton.icon(
+                key: const ValueKey('return-to-filters'),
+                onPressed: _returnToFilters,
+                icon: const Icon(Icons.arrow_back, size: 18),
+                label: const Text('Back to filters'),
+              ),
+            ),
+          ],
         ],
       ),
       actions: [
@@ -58,6 +81,11 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
       ],
     );
   }
+
+  bool get _showSaveAction =>
+      _controller.filePath == null ||
+      !_viewPreferences.autoSave ||
+      (_controller.errorMessage != null && _controller.hasUnsavedChanges);
 
   Widget _buildViewMenu() {
     final hasGame = _controller.filteredGames.isNotEmpty;
@@ -86,21 +114,48 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             icon: Icons.filter_alt_outlined,
             onRun: _openSliceDialog,
           ),
+        if (!solitaire)
+          AppMenuEntry(
+            label: _viewPreferences.autoSave
+                ? 'Turn autosave off'
+                : 'Turn autosave on',
+            icon: Icons.save_outlined,
+            onRun: () => _setViewPreferences(
+              _viewPreferences.copyWith(autoSave: !_viewPreferences.autoSave),
+            ),
+          ),
         if (hasGame) ...[
-          if (!solitaire)
+          AppMenuEntry(
+            label: _viewPreferences.showOpening
+                ? 'Hide opening'
+                : 'Show opening',
+            icon: Icons.info_outline,
+            onRun: () => _setViewPreferences(
+              _viewPreferences.copyWith(
+                showOpening: !_viewPreferences.showOpening,
+              ),
+            ),
+          ),
+          if (!solitaire && _showSaveAction)
             AppMenuEntry(
               icon: Icons.save_outlined,
-              label: 'Save PGN',
+              label: _controller.filePath == null ? 'Save as…' : 'Save PGN',
+              enabled: !_controller.isSaving,
               onRun: () => unawaited(_savePgn()),
             ),
           if (!solitaire && !_onReferenceTab)
             AppMenuEntry(
               icon: Icons.edit_outlined,
-              label: _editMode ? 'Finish editing' : 'Edit PGN',
+              label: _editMode ? 'Finish editing' : 'Edit',
               enabled: !_onLineTab,
               onRun: _toggleEditMode,
             ),
           if (!solitaire) ...[
+            AppMenuEntry(
+              label: 'Compare against my books',
+              icon: Icons.menu_book_outlined,
+              onRun: () => _showPanel(PgnWorkspace.books),
+            ),
             AppMenuEntry(
               label: _viewPreferences.engine ? 'Hide Engine' : 'Show Engine',
               icon: Icons.memory,

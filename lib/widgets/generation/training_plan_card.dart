@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../models/build_tree_node.dart';
+import '../common/number_stepper.dart';
 import '../../services/generation/generation_config.dart';
 import '../../services/generation/line_extractor.dart';
 import '../../services/generation/fen_map.dart';
@@ -161,28 +162,27 @@ class _TrainingPlanCardState extends State<TrainingPlanCard> {
               children: [
                 SizedBox(
                   width: 220,
-                  child: DropdownButtonFormField<int>(
-                    key: const ValueKey('study-exercise-length'),
-                    initialValue: _length,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Target moves of your own',
-                    ),
-                    items: [
-                      for (final n in [2, 4, 6])
-                        DropdownMenuItem(
-                          value: n,
-                          child: Text('$n moves per exercise'),
-                        ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Target moves of your own',
+                        style: AppTextStyles.muted,
+                      ),
+                      const SizedBox(height: 6),
+                      NumberStepper(
+                        key: const ValueKey('study-exercise-length'),
+                        value: _length,
+                        min: 2,
+                        max: 6,
+                        enabled: !disabled,
+                        onChanged: (value) {
+                          if (!mounted) return;
+                          _length = value;
+                          unawaited(_replan());
+                        },
+                      ),
                     ],
-                    onChanged: disabled
-                        ? null
-                        : (v) {
-                            if (v != null) {
-                              _length = v;
-                              unawaited(_replan());
-                            }
-                          },
                   ),
                 ),
                 SizedBox(

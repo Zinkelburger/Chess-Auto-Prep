@@ -74,7 +74,7 @@ void main() {
       expect(result.pgnEntries.first, contains('e4'));
     });
 
-    test('improvement notes reach the written lines', () {
+    test('improvement notes reach the written lines only when enabled', () {
       // Probing needs the engine and happens after extraction, so the notes
       // arrive at the writer separately.  A build that finds an improvement
       // and then writes a PGN that never mentions it is the note going
@@ -102,15 +102,19 @@ void main() {
         runSnapshotExport(_request(stopAfterSelection: true)).selectedTreeJson!,
       );
 
-      String write({ImprovementMap improvements = const {}}) =>
-          extractSnapshotLines(
-            tree: selected,
-            config: _config,
-            fenMap: StandardTree().toFenMap(),
-            prefix: const [],
-            repertoireStartFen: _startFen,
-            improvements: improvements,
-          ).join('\n\n');
+      String write({
+        ImprovementMap improvements = const {},
+        bool includeNotes = false,
+      }) => extractSnapshotLines(
+        tree: selected,
+        config: _config.copyWith(
+          annotationDetail: MoveAnnotationDetail(explanations: includeNotes),
+        ),
+        fenMap: StandardTree().toFenMap(),
+        prefix: const [],
+        repertoireStartFen: _startFen,
+        improvements: improvements,
+      ).join('\n\n');
 
       expect(write(), isNot(contains('improves on')));
 
@@ -124,7 +128,14 @@ void main() {
       );
 
       // Keyed by the position our move is played from — here, the root.
-      final withNotes = write(improvements: {_startFen: improvement});
+      expect(
+        write(improvements: {_startFen: improvement}),
+        isNot(contains('{')),
+      );
+      final withNotes = write(
+        improvements: {_startFen: improvement},
+        includeNotes: true,
+      );
 
       expect(withNotes, contains('e4 improves on d4'));
       expect(withNotes, contains(improvement.note));

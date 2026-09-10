@@ -16,13 +16,12 @@ import '../core/app_state.dart';
 import '../features/audit/models/audit_finding.dart';
 import '../features/audit/models/audit_result.dart';
 import '../features/holes/services/hole_hunt_config.dart';
-import '../features/opponents/models/person_record.dart';
 import '../features/opponents/widgets/opponent_actions.dart';
 import '../features/opponents/services/opponent_store.dart';
 import '../features/opponents/services/prep_context.dart';
 import '../features/opponents/services/repertoire_check.dart';
 import '../features/opponents/widgets/repertoire_check_dialog.dart';
-import '../features/opponents/widgets/tournament_screen.dart';
+import '../features/opponents/widgets/people_screen.dart';
 import '../features/holes/services/hole_hunt_persistence.dart';
 import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/hole_hunt_config_dialog.dart';
@@ -52,7 +51,9 @@ part 'analysis_screen_holes.dart';
 part 'analysis_screen_prep.dart';
 
 class AnalysisScreen extends StatefulWidget {
-  const AnalysisScreen({super.key});
+  const AnalysisScreen({super.key, this.initialPlayer});
+
+  final AnalysisPlayerInfo? initialPlayer;
 
   @override
   State<AnalysisScreen> createState() => _AnalysisScreenState();
@@ -131,9 +132,6 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   bool _huntCancelled = false;
   bool _probesSkipped = false;
 
-  // Implemented by the concrete state; called from the extracted mixins.
-  Future<void> _selectPlayer(AnalysisPlayerInfo player);
-
   void _showError(String message) {
     unawaited(
       showDialog(
@@ -160,6 +158,8 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
     super.initState();
     unawaited(_opponents.ensureLoaded());
     _opponents.addListener(_onOpponentsChanged);
+    final initial = widget.initialPlayer;
+    if (initial != null) unawaited(_selectPlayer(initial));
   }
 
   IsolateTask? _analysisTask;
@@ -208,6 +208,19 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: widget.initialPlayer == null ? null : 190,
+        leading: widget.initialPlayer == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.all(6),
+                child: FilledButton.icon(
+                  key: const Key('back-to-player-database'),
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: const Text('Player database'),
+                ),
+              ),
         titleSpacing: 16,
         title: AppBarTitleWithTrail(
           title: Row(
@@ -219,13 +232,12 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         ),
         actions: [
           _buildActionsMenu(),
-          const AppModeSwitcher(),
+          AppModeSwitcher(onModeSelected: () => popToRoot(context)),
           const AppSettingsButton(mode: AppMode.positionAnalysis),
         ],
       ),
       body: Column(
         children: [
-          _buildPrepToolbar(),
           ..._buildJobProgressStrip(theme),
           Expanded(
             child: IndexedStack(
@@ -354,7 +366,10 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           label: 'Open games in PGN viewer',
           icon: Icons.open_in_new,
           enabled: _boardActions.canOpenGames,
-          onRun: _boardActions.openGamesInPgnViewer,
+          onRun: () {
+            _boardActions.openGamesInPgnViewer();
+            popToRoot(context);
+          },
         ),
         AppMenuEntry(
           heading: 'Player',
@@ -362,6 +377,19 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           icon: Icons.person_search,
           dividerAbove: true,
           onRun: _showPlayerSelection,
+        ),
+        AppMenuEntry(
+          label: 'Player database',
+          icon: Icons.table_chart_outlined,
+          onRun: () {
+            if (widget.initialPlayer != null) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).push<void>(
+                MaterialPageRoute(builder: (_) => const PeopleScreen()),
+              );
+            }
+          },
         ),
       ],
     );
@@ -519,7 +547,7 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
         : '';
     final base =
         '${p.gameCount} games · ${p.platformDisplayName} (${p.displayName})'
-        ' · ${p.rangeDescription}$dl$_prepSubtitle';
+        ' · ${p.rangeDescription}$dl';
     if (!_isAnalyzing) return base;
     if (_analysisTotal > 0) {
       return '$base · $_analysisPhase · $_analysisCurrent / $_analysisTotal games';
@@ -535,7 +563,6 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
 
   /// Make [player] the analysed player: stop whatever is running for the
   /// previous one, resolve their place in the opponents directory, build.
-  @override
   Future<void> _selectPlayer(AnalysisPlayerInfo player) async {
     if (!mounted) return;
     _cancelEvalAnalysis();

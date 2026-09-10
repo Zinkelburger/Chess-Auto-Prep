@@ -10,7 +10,9 @@ import '../theme/app_colors.dart';
 import 'app_overflow_menu.dart';
 
 class AppModeSwitcher extends StatelessWidget {
-  const AppModeSwitcher({super.key});
+  const AppModeSwitcher({super.key, this.onModeSelected});
+
+  final VoidCallback? onModeSelected;
 
   /// Finder handle for tests: the one control that opens the mode menu.
   static const Key switcherKey = Key('app-mode-switcher');
@@ -36,7 +38,10 @@ class AppModeSwitcher extends StatelessWidget {
               heading: m == group.modes.first ? group.heading : null,
               label: m.label,
               checked: m == mode,
-              onRun: () => context.read<AppState>().setMode(m),
+              onRun: () {
+                context.read<AppState>().setMode(m);
+                onModeSelected?.call();
+              },
             ),
       ],
     );

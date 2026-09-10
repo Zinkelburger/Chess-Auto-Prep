@@ -136,6 +136,7 @@ Widget _buildVariationDocument(
   required Map<int, bool> branchVisibility,
   required ValueChanged<int> onToggleBranch,
   bool Function(MoveNode)? nodeVisible,
+  String? leadingLabel,
 }) {
   final containsCurrent = view.analysisPath.any((n) => n.id == root.id);
   final defaultOpen = branchVisibility.putIfAbsent(
@@ -177,7 +178,10 @@ Widget _buildVariationDocument(
           child: text,
         );
   var firstRun = true;
-  final run = <InlineSpan>[];
+  final run = <InlineSpan>[
+    if (leadingLabel != null)
+      TextSpan(text: leadingLabel, style: PgnTextStyles.metricsAt(depth)),
+  ];
   void flush() {
     if (run.isEmpty) return;
     children.add(
@@ -222,7 +226,7 @@ Widget _buildVariationDocument(
       if (annotated) flush();
       final passageStart = children.length;
       if (!isNullMoveSan(node.san)) {
-        if (pos.isWhite || run.isEmpty) {
+        if (pos.isWhite || run.isEmpty || index == ply) {
           run.add(
             TextSpan(
               text: '${pos.moveNumber}${pos.isWhite ? '.' : '...'} ',
@@ -318,6 +322,11 @@ Widget _buildVariationDocument(
                 Text.rich(
                   TextSpan(
                     children: [
+                      if (leadingLabel != null)
+                        TextSpan(
+                          text: leadingLabel,
+                          style: PgnTextStyles.metricsAt(depth),
+                        ),
                       TextSpan(
                         text:
                             '${coords.moveNumber}${coords.isWhite ? '.' : '...'} ',
@@ -366,11 +375,7 @@ InlineSpan _variationMoveSpan(
   // sideline is there.
   final nagSuffix = allNagSuffix(node.nags);
 
-  final base = PgnTextStyles.moveAt(
-    depth,
-    ephemeral: node.isEphemeral,
-    quiet: attachKey,
-  );
+  final base = PgnTextStyles.moveAt(depth, ephemeral: node.isEphemeral);
   final sanStyle = isCurrentNode
       ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
       : base;

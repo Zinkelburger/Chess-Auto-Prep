@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:dartchess/dartchess.dart';
 
 import '../../models/pgn_game_entry.dart';
 import '../../services/pgn_parsing_service.dart';
@@ -20,10 +21,15 @@ import '../game_search_dialog.dart';
 
 class PgnTreeGamesList extends StatefulWidget {
   final List<PgnGameEntry> games;
-  final String currentFen;
+  final String? currentFen;
   final int currentIndex;
   final ValueChanged<int> onGameSelected;
-  final VoidCallback onSearch;
+  final VoidCallback? onSearch;
+  final Widget? toolbarLeading;
+  final bool initiallyShowMoves;
+
+  /// Keep live filter previews secondary to their editing controls.
+  final bool subdued;
 
   const PgnTreeGamesList({
     super.key,
@@ -31,7 +37,10 @@ class PgnTreeGamesList extends StatefulWidget {
     required this.currentFen,
     required this.currentIndex,
     required this.onGameSelected,
-    required this.onSearch,
+    this.onSearch,
+    this.toolbarLeading,
+    this.initiallyShowMoves = true,
+    this.subdued = false,
   });
 
   @override
@@ -39,7 +48,7 @@ class PgnTreeGamesList extends StatefulWidget {
 }
 
 class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
-  bool _showMoves = true;
+  late bool _showMoves = widget.initiallyShowMoves;
   final Set<int> _previewed = {};
   final Map<PgnGameEntry, String> _pvCache = {};
   String? _cachedFen;
@@ -47,7 +56,8 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
   @override
   void didUpdateWidget(covariant PgnTreeGamesList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.currentFen != widget.currentFen) {
+    if (oldWidget.currentFen != widget.currentFen ||
+        !identical(oldWidget.games, widget.games)) {
       _previewed.clear();
       _pvCache.clear();
       _cachedFen = null;
@@ -62,7 +72,7 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
       _cachedFen = widget.currentFen;
     }
     return _pvCache.putIfAbsent(game, () {
-      final fen = widget.currentFen;
+      final fen = widget.currentFen ?? game.headers['FEN'] ?? Chess.initial.fen;
       final sans = mainlineSansAfterFen(
         game.headers,
         game.pgnText,
@@ -113,19 +123,23 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
               spacing: 8,
               runSpacing: 4,
               children: [
-                GameNumberField(
-                  currentIndex: current < 0 ? 0 : current,
-                  gameCount: games.length,
-                  onGoToGame: widget.onGameSelected,
-                  tooltip:
-                      'Games that reach this opening-tree position, '
-                      'in the current sort.\n'
-                      'Type a number and press Enter to open that game',
-                ),
-                GameSearchButton(
-                  shortcut: AppShortcut.searchGames,
-                  onPressed: widget.onSearch,
-                ),
+                if (widget.toolbarLeading case final leading?)
+                  leading
+                else
+                  GameNumberField(
+                    currentIndex: current < 0 ? 0 : current,
+                    gameCount: games.length,
+                    onGoToGame: widget.onGameSelected,
+                    tooltip:
+                        'Games that reach this opening-tree position, '
+                        'in the current sort.\n'
+                        'Type a number and press Enter to open that game',
+                  ),
+                if (widget.onSearch != null)
+                  GameSearchButton(
+                    shortcut: AppShortcut.searchGames,
+                    onPressed: widget.onSearch!,
+                  ),
                 _ShowMovesToggle(value: _showMoves, onChanged: _setShowMoves),
               ],
             ),
@@ -134,13 +148,17 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
             child: ListView.builder(
               padding: const EdgeInsets.only(bottom: 4),
               itemCount: games.length,
-              itemBuilder: (context, idx) => _GameRow(
-                game: games[idx],
-                expanded: _isExpanded(idx),
-                showMoves: _showMoves,
-                pv: _isExpanded(idx) ? _pvFor(games[idx]) : '',
-                onOpen: () => widget.onGameSelected(idx),
-                onTogglePreview: () => _togglePreview(idx),
+              itemBuilder: (context, idx) => ColoredBox(
+                color: idx.isOdd ? AppColors.rowStripe : Colors.transparent,
+                child: _GameRow(
+                  game: games[idx],
+                  subdued: widget.subdued,
+                  expanded: _isExpanded(idx),
+                  showMoves: _showMoves,
+                  pv: _isExpanded(idx) ? _pvFor(games[idx]) : '',
+                  onOpen: () => widget.onGameSelected(idx),
+                  onTogglePreview: () => _togglePreview(idx),
+                ),
               ),
             ),
           ),
@@ -190,6 +208,7 @@ class _ShowMovesToggle extends StatelessWidget {
 
 class _GameRow extends StatelessWidget {
   final PgnGameEntry game;
+  final bool subdued;
   final bool expanded;
   final bool showMoves;
   final String pv;
@@ -198,6 +217,7 @@ class _GameRow extends StatelessWidget {
 
   const _GameRow({
     required this.game,
+    required this.subdued,
     required this.expanded,
     required this.showMoves,
     required this.pv,
@@ -207,7 +227,11 @@ class _GameRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const triangle = Icon(Icons.play_arrow, size: 14, color: AppColors.info);
+    final triangle = Icon(
+      Icons.play_arrow,
+      size: 14,
+      color: subdued ? AppColors.onSurfaceMuted : AppColors.info,
+    );
     final body = _titleAndPv();
     final stars = _rating();
 
@@ -219,7 +243,7 @@ class _GameRow extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(padding: EdgeInsets.only(top: 1), child: triangle),
+              Padding(padding: const EdgeInsets.only(top: 1), child: triangle),
               const SizedBox(width: 6),
               Expanded(child: body),
               ?stars,
@@ -269,14 +293,16 @@ class _GameRow extends StatelessWidget {
             Expanded(
               child: Text(
                 game.label,
-                style: AppTextStyles.caption,
+                style: AppTextStyles.caption.copyWith(
+                  color: subdued ? AppColors.onSurfaceMuted : AppColors.ink,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             if (hasResult) ...[
               const SizedBox(width: 8),
-              Text(result!, style: AppTextStyles.caption),
+              _ResultBadge(result: result!, subdued: subdued),
             ],
           ],
         ),
@@ -307,6 +333,38 @@ class _GameRow extends StatelessWidget {
         const Icon(Icons.star, size: 12, color: AppColors.starAccent),
         Text('${game.studyRating}', style: const TextStyle(fontSize: 12)),
       ],
+    );
+  }
+}
+
+class _ResultBadge extends StatelessWidget {
+  const _ResultBadge({required this.result, this.subdued = false});
+  final bool subdued;
+  final String result;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, resultColor) = switch (result) {
+      '1-0' => ('White win', AppColors.info),
+      '0-1' => ('Black win', AppColors.warning),
+      _ => ('Draw', AppColors.onSurfaceMuted),
+    };
+    final color = subdued ? AppColors.onSurfaceMuted : resultColor;
+    return Tooltip(
+      message: label,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 58),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .13),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          result,
+          style: AppTextStyles.caption.copyWith(color: color),
+        ),
+      ),
     );
   }
 }

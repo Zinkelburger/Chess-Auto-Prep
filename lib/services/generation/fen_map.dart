@@ -114,6 +114,22 @@ class FenMap {
     }
   }
 
+  /// Prefer independently computed position analysis without grafting its
+  /// history or probability distribution into the older repertoire tree.
+  void overlay(BuildTreeNode root) {
+    _assertMutable();
+    final pending = [root];
+    while (pending.isNotEmpty) {
+      final node = pending.removeLast();
+      if (node.hasEngineEval ||
+          node.hasExpectimax ||
+          node.children.isNotEmpty) {
+        _canonical[_key(node.fen)] = node;
+      }
+      pending.addAll(node.children);
+    }
+  }
+
   /// Register every *expanded* node of a saved tree as canonical for its
   /// position, first in tree order wins.  This is what a resumed build needs
   /// from the previous session: which positions already have a subtree, so

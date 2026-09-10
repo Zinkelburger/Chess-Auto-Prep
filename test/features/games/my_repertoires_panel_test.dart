@@ -122,7 +122,7 @@ void main() {
 
   /// Open the Add existing menu of one section (first = White, last = Black).
   Future<void> openAddExisting(WidgetTester tester, {bool white = true}) async {
-    final button = find.widgetWithText(OutlinedButton, 'Add existing');
+    final button = find.byKey(const ValueKey('add-existing-repertoire'));
     await tester.tap(white ? button.first : button.last);
     await tester.pumpAndSettle();
   }
@@ -137,7 +137,6 @@ void main() {
     // No chooser dialog in between: the menu opens right here, and with
     // nothing in the app it says so instead of dead-ending.
     await openAddExisting(tester);
-    expect(find.text('No other repertoires in the app'), findsOneWidget);
     expect(find.text('New empty repertoire…'), findsOneWidget);
     expect(find.byType(AlertDialog), findsNothing);
   });
@@ -197,6 +196,34 @@ void main() {
     expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
   });
 
+  testWidgets('Add existing filters the shared searchable picker', (
+    tester,
+  ) async {
+    storage.repertoires = [
+      for (final name in ['Caro-Kann', 'Ruy Lopez', 'Sicilian'])
+        RepertoireMetadata(
+          filePath: p.join(dir.path, name),
+          name: name,
+          lastModified: DateTime(2026, 8, 1),
+        ),
+    ];
+    await pumpPanel(tester);
+    await openAddExisting(tester, white: false);
+    final field = find.descendant(
+      of: find.byKey(const ValueKey('add-existing-repertoire')).last,
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(field, 'ruy');
+    await tester.pumpAndSettle();
+    expect(find.text('Ruy Lopez'), findsOneWidget);
+    expect(find.text('Caro-Kann'), findsNothing);
+    await tester.tap(find.text('Ruy Lopez'));
+    await tester.pumpAndSettle();
+    expect(MyRepertoireSettings.instance.blackPaths, [
+      p.join(dir.path, 'Ruy Lopez'),
+    ]);
+  });
+
   testWidgets('an existing repertoire is one menu click', (tester) async {
     storage.repertoires = [
       RepertoireMetadata(
@@ -217,7 +244,6 @@ void main() {
     expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
     // Now designated for Black, it is no longer offered there.
     await openAddExisting(tester, white: false);
-    expect(find.text('No other repertoires in the app'), findsOneWidget);
   });
 
   testWidgets(
@@ -254,8 +280,9 @@ void main() {
       ]);
       expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
       expect(
-        find.text('Caro-Kann is now your Black book — 2 lines imported.'),
-        findsOneWidget,
+        find.byType(SnackBar),
+        findsNothing,
+        reason: 'routine success notifications are silent across the app',
       );
     },
   );

@@ -31,6 +31,8 @@ import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/board_editor/board_editor_dialog.dart';
 import '../widgets/common/confirm_dialog.dart';
+import '../models/pgn_deletion_summary.dart';
+import '../widgets/pgn/pgn_save_status.dart';
 import '../widgets/common/searchable_picker_dialog.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
@@ -403,15 +405,37 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _deleteCurrentStudy() async {
-    final path = _study.doc.filePath;
+    final doc = _study.doc;
+    final path = doc.filePath;
     if (path == null) return;
+    final chapters = List.of(doc.chapters);
+    final versions = [for (final c in chapters) c.tree.version];
+    final summaries = [
+      for (final c in chapters) PgnDeletionSummary.tree(c.tree),
+    ];
+    final moves = summaries.fold(0, (n, s) => n + s.moves);
+    final comments = summaries.fold(0, (n, s) => n + s.comments);
     final confirmed = await confirmAction(
       context,
-      title: 'Delete study "${_study.doc.name}"?',
-      message: 'The PGN file will be moved to Chess Auto Prep recovery trash.',
+      title: 'Delete study "${doc.name}"?',
+      message:
+          '${chapters.length} chapters with $moves moves and $comments comments. '
+          'The PGN file will be moved to Chess Auto Prep recovery trash.',
       confirmLabel: 'Delete',
     );
-    if (confirmed) await _study.deleteStudy(path);
+    if (!mounted ||
+        !confirmed ||
+        !identical(_study.doc, doc) ||
+        doc.chapters.length != chapters.length) {
+      return;
+    }
+    for (var i = 0; i < chapters.length; i++) {
+      if (!identical(doc.chapters[i], chapters[i]) ||
+          chapters[i].tree.version != versions[i]) {
+        return;
+      }
+    }
+    await _study.deleteStudy(path);
   }
 
   /// The Lichess "New chapter" dialog: empty, from a position, or from
@@ -579,27 +603,37 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _clearAnnotationsAt(int index) async {
+    final chapter = _study.doc.chapters[index];
+    final version = chapter.tree.version;
+    final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
       title: 'Clear all comments, glyphs and shapes?',
       message:
-          'Every note in "${_study.doc.chapters[index].name}" goes; the '
-          'moves stay.',
+          'Remove ${summary.comments} comments and all glyphs and shapes '
+          'from "${chapter.name}". The moves stay.',
       confirmLabel: 'Clear',
     );
-    if (confirmed) _study.clearChapterAnnotations(index);
+    if (!mounted || !confirmed || chapter.tree.version != version) return;
+    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    if (currentIndex >= 0) _study.clearChapterAnnotations(currentIndex);
   }
 
   Future<void> _clearVariationsAt(int index) async {
+    final chapter = _study.doc.chapters[index];
+    final version = chapter.tree.version;
+    final summary = PgnDeletionSummary.variations(chapter.tree);
     final confirmed = await confirmAction(
       context,
       title: 'Clear variations?',
       message:
-          'Every sideline in "${_study.doc.chapters[index].name}" goes; '
-          'the main line and its notes stay.',
+          'Remove ${summary.description} from "${chapter.name}", '
+          'including sideline annotations. The main line and its notes stay.',
       confirmLabel: 'Clear',
     );
-    if (confirmed) _study.clearChapterVariations(index);
+    if (!mounted || !confirmed || chapter.tree.version != version) return;
+    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    if (currentIndex >= 0) _study.clearChapterVariations(currentIndex);
   }
 
   /// Gear action on a sidebar row: the board-editor flow edits the *current*
@@ -618,12 +652,18 @@ class _StudyScreenState extends State<StudyScreen> {
       );
       return;
     }
+    final chapter = _study.doc.chapters[index];
+    final version = chapter.tree.version;
+    final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
-      title: 'Delete chapter "${_study.doc.chapters[index].name}"?',
+      title: 'Delete chapter "${chapter.name}"?',
+      message: 'Remove ${summary.description}, including all annotations.',
       confirmLabel: 'Delete',
     );
-    if (confirmed) _study.deleteChapter(index);
+    if (!mounted || !confirmed || chapter.tree.version != version) return;
+    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    if (currentIndex >= 0) _study.deleteChapter(currentIndex);
   }
 
   // ── Build ────────────────────────────────────────────────────────────
@@ -633,12 +673,29 @@ class _StudyScreenState extends State<StudyScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: AppBarTitleWithTrail(
-          title: StudyPickerBar(
-            study: _study,
-            focusNode: _focusNode,
-            onPickStudy: () => unawaited(_pickStudy()),
-          ),
+        title: Row(
+          children: [
+            Flexible(
+              child: AppBarTitleWithTrail(
+                title: StudyPickerBar(
+                  study: _study,
+                  focusNode: _focusNode,
+                  onPickStudy: () => unawaited(_pickStudy()),
+                ),
+              ),
+            ),
+            if (_study.doc.filePath != null) ...[
+              const SizedBox(width: 12),
+              Flexible(
+                child: PgnSaveStatus(
+                  filePath: _study.doc.filePath,
+                  autoSave: true,
+                  dirty: _study.dirty,
+                  error: _study.saveError,
+                ),
+              ),
+            ],
+          ],
         ),
         actions: [
           // Only visible while a collection download is running.

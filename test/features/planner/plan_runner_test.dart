@@ -4,6 +4,8 @@ import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/features/planner/controllers/plan_runner.dart';
 import 'package:chess_auto_prep/features/planner/models/plan_models.dart';
+import 'package:chess_auto_prep/features/planner/models/plan_starting_line.dart';
+import 'package:chess_auto_prep/services/generation/generation_presets.dart';
 import 'package:chess_auto_prep/features/repertoire/models/repertoire_outline.dart';
 import 'package:chess_auto_prep/features/repertoire/services/repertoire_outline_service.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
@@ -177,6 +179,38 @@ void main() {
     expect(runner.isRunning, isFalse);
     expect(runner.doneCount, 2);
   });
+
+  test(
+    'queues KID, Fianchetto and London ChessDB builds with full PGN prefixes',
+    () async {
+      final roots = PlanStartingLine.parse(
+        'Main KID | 1.d4 Nf6 2.c4 g6 3.Nc3 Bg7 4.e4 d6\nFianchetto KID | 1.d4 Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 d6\nLondon | 1.d4 Nf6 2.Bf4 d5',
+      );
+      await runner.run(
+        plan: _plan(
+          chapters: [
+            for (final root in roots)
+              PlanChapter(
+                name: root.name,
+                family: root.name,
+                moves: root.moves,
+                points: [PlanBuildPoint(moves: root.moves)],
+              ),
+          ],
+        ),
+        folderPath: '/rep',
+        config: chessDbRepertoirePreset(playAsWhite: false),
+      );
+      expect(generation.requests, hasLength(3));
+      for (final (i, request) in generation.requests.indexed) {
+        expect(request.config.buildMode, BuildMode.chessDbBook);
+        expect(request.buildRootFen, _fenAfter(roots[i].moves));
+        expect(request.lineMovePrefix, roots[i].moves);
+        expect(request.repertoireStartFen, kStandardStartFen);
+        expect(request.repertoireFilePath, '/rep/${roots[i].name}.pgn');
+      }
+    },
+  );
 
   test('a name that already exists gets a numbered suffix', () async {
     outline.collisions['London System'] = 1;

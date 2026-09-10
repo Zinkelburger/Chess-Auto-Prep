@@ -39,6 +39,13 @@ class _IdleLibrary extends GamesLibraryService {
 }
 
 class _StubCoordinator extends TacticsImportCoordinator {
+  bool pauseRequested = false;
+
+  @override
+  void cancelImport() {
+    pauseRequested = true;
+  }
+
   @override
   Future<bool> import({
     required TacticsImportSource source,
@@ -129,8 +136,6 @@ void main() {
                 gamesInWindow: 20,
                 windowLabel: 'last 20 games',
                 onOpeningReview: onOpeningReview ?? () {},
-                masterGameCount: masterGameCount,
-                onMasterPractice: onMasterPractice ?? () {},
                 repeated: repeated,
                 onFixEntry: onFixEntry,
               ),
@@ -140,6 +145,26 @@ void main() {
       ),
     ),
   );
+
+  testWidgets('pasted games show analysis and can pause without an account', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final h = build(lichess: null);
+    addTearDown(h.games.dispose);
+    addTearDown(h.runner.dispose);
+    h.co.isImporting = true;
+    h.co.importStatus = 'Internal engine worker status';
+
+    await pump(tester, runner: h.runner, coordinator: h.co);
+
+    expect(find.text('Analyzing games…'), findsOneWidget);
+    expect(find.text('No account set'), findsNothing);
+    expect(find.text('Internal engine worker status'), findsNothing);
+    expect(find.text('Pause'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('review-transport-button')));
+    expect(h.co.pauseRequested, isTrue);
+  });
 
   testWidgets('idle: the work waiting is the headline, the count is on the '
       'button', (tester) async {

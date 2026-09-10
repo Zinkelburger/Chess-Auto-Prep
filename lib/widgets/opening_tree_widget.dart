@@ -22,6 +22,7 @@ import '../utils/fen_utils.dart';
 import '../utils/movetext_builder.dart';
 
 class OpeningTreeWidget extends StatefulWidget {
+  final bool showCopyMoves;
   final OpeningTree tree;
   final Function(String fen)? onPositionSelected;
   final Function(String move)? onMoveSelected;
@@ -57,6 +58,7 @@ class OpeningTreeWidget extends StatefulWidget {
 
   const OpeningTreeWidget({
     super.key,
+    this.showCopyMoves = true,
     required this.tree,
     this.onPositionSelected,
     this.onMoveSelected,
@@ -287,31 +289,35 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.copy,
-                        size: 16,
-                        color: AppColors.onSurfaceSoft,
-                      ),
-                      padding: EdgeInsets.zero,
-                      tooltip: 'Copy moves',
-                      onPressed: tree.currentMovePath.isEmpty
-                          ? null
-                          : () {
-                              unawaited(
-                                Clipboard.setData(
-                                  ClipboardData(
-                                    text: _movetext(tree.currentMovePath),
+                  if (widget.showCopyMoves)
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.copy,
+                          size: 16,
+                          color: AppColors.onSurfaceSoft,
+                        ),
+                        padding: EdgeInsets.zero,
+                        tooltip: 'Copy moves',
+                        onPressed: tree.currentMovePath.isEmpty
+                            ? null
+                            : () {
+                                unawaited(
+                                  Clipboard.setData(
+                                    ClipboardData(
+                                      text: _movetext(tree.currentMovePath),
+                                    ),
                                   ),
-                                ),
-                              );
-                              showAppSnackBar(context, AppMessages.movesCopied);
-                            },
+                                );
+                                showAppSnackBar(
+                                  context,
+                                  AppMessages.movesCopied,
+                                );
+                              },
+                      ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -529,7 +535,8 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
         : '${flip ? position.losses : position.wins}W-'
               '${position.draws}D-'
               '${flip ? position.wins : position.losses}L';
-    final noun = position.hasWdl ? 'games' : 'lines';
+    final noun =
+        '${position.hasWdl ? 'game' : 'path'}${position.gamesPlayed == 1 ? '' : 's'}';
     final text = Text(
       position.hasWdl
           ? '${position.gamesPlayed} $noun • '
@@ -541,6 +548,9 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                 '${position.nodes.length > 1 ? ' • ${position.nodes.length} move orders' : ''}',
       style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
     );
+    if (!position.hasWdl) {
+      return Tooltip(message: 'Includes variations', child: text);
+    }
     if (!showReach) return text;
     return Tooltip(
       message:

@@ -26,6 +26,9 @@ const _blackAreaFill = AppColors.chartAreaBlack;
 class GameAnalysisChart extends StatefulWidget {
   final List<MoveEval> evals;
   final double height;
+
+  /// Full game extent, including positions whose evaluations have not arrived.
+  final int? totalPlies;
   final double startWinChance;
   final int? currentPly; // highlighted ply
   final ValueChanged<int>? onPlySelected;
@@ -34,6 +37,7 @@ class GameAnalysisChart extends StatefulWidget {
     super.key,
     required this.evals,
     this.height = 180,
+    this.totalPlies,
     this.startWinChance = 0.0,
     this.currentPly,
     this.onPlySelected,
@@ -47,6 +51,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
   final ScrollController _scrollController = ScrollController();
   double _chartWidth = 0;
   double _availableWidth = 0;
+  double _extent = 1;
 
   List<MoveEval> get evals => widget.evals;
   int? get currentPly => widget.currentPly;
@@ -73,16 +78,24 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
   }
 
   void _scrollToPly() {
-    if (!_scrollController.hasClients || _chartWidth <= _availableWidth) return;
+    if (!mounted ||
+        !_scrollController.hasClients ||
+        _chartWidth <= _availableWidth) {
+      return;
+    }
     final ply = widget.currentPly;
     if (ply == null || evals.isEmpty) return;
 
-    final plyCount = evals.last.ply.toDouble();
+    final plyCount = _extent;
     if (plyCount <= 0) return;
 
     final fraction = ply / plyCount;
     final targetX = fraction * _chartWidth;
-    // Center the current ply in view
+    // Keep a visible selection still; scroll only when navigation leaves it.
+    final left = _scrollController.offset;
+    if (targetX >= left + 24 && targetX <= left + _availableWidth - 24) {
+      return;
+    }
     final target = (targetX - _availableWidth / 2).clamp(
       0.0,
       _scrollController.position.maxScrollExtent,
@@ -105,22 +118,22 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
 
     final theme = Theme.of(context);
 
-    const double defaultCap = 200;
+    // A fixed scale and full-game extent keep streaming/offscreen scores
+    // from stretching the plot or animating the visible history.
+    const double yBound = 800;
     final spots = <FlSpot>[
       const FlSpot(0, 0),
       for (final e in evals) FlSpot(e.ply.toDouble(), _clampCp(e).toDouble()),
     ];
 
-    final maxAbs = spots.fold<double>(
-      0.0,
-      (m, s) => s.y.abs() > m ? s.y.abs() : m,
-    );
-    final yBound = maxAbs <= defaultCap
-        ? defaultCap
-        : (maxAbs * 1.1).clamp(defaultCap, 800.0);
-
     const double minPxPerPly = 12.0;
-    final plyCount = evals.isEmpty ? 1.0 : evals.last.ply.toDouble();
+    final lastPly = evals.fold<int>(
+      0,
+      (last, e) => e.ply > last ? e.ply : last,
+    );
+    final total = widget.totalPlies ?? lastPly;
+    _extent = (total > lastPly ? total : lastPly).clamp(1, 1000000).toDouble();
+    final byPly = {for (final e in evals) e.ply: e};
 
     return Padding(
       padding: const EdgeInsets.only(left: 4, right: 12, top: 8, bottom: 4),
@@ -129,7 +142,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             _availableWidth = constraints.maxWidth;
-            _chartWidth = (plyCount * minPxPerPly).clamp(
+            _chartWidth = (_extent * minPxPerPly).clamp(
               _availableWidth,
               double.infinity,
             );
@@ -140,7 +153,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                 minY: -yBound,
                 maxY: yBound,
                 minX: 0,
-                maxX: plyCount,
+                maxX: _extent,
                 clipData: const FlClipData.all(),
                 gridData: FlGridData(
                   show: true,
@@ -177,7 +190,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                         response!.lineBarSpots!.isNotEmpty &&
                         (event is FlTapUpEvent || event is FlPanUpdateEvent)) {
                       final x = response.lineBarSpots!.first.x;
-                      final ply = x.round().clamp(0, evals.length);
+                      final ply = x.round().clamp(0, lastPly);
                       if (ply > 0) onPlySelected!(ply);
                     }
                   },
@@ -200,9 +213,8 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                             ),
                           );
                         }
-                        final idx = ply - 1;
-                        if (idx < 0 || idx >= evals.length) return null;
-                        final e = evals[idx];
+                        final e = byPly[ply];
+                        if (e == null) return null;
                         final evalStr = e.evalDisplay;
                         final classStr = _classSymbol(e.classification);
                         return LineTooltipItem(
@@ -227,7 +239,7 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                   verticalLines: [
                     if (currentPly != null &&
                         currentPly! >= 0 &&
-                        currentPly! <= evals.length)
+                        currentPly! <= _extent)
                       VerticalLine(
                         x: currentPly!.toDouble(),
                         color: theme.colorScheme.primary.withAlpha(180),
@@ -237,18 +249,6 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                   ],
                 ),
                 lineBarsData: [
-                  // White advantage area (above zero)
-                  LineChartBarData(
-                    spots: spots,
-                    isCurved: true,
-                    curveSmoothness: 0.2,
-                    preventCurveOverShooting: true,
-                    color: Colors.transparent,
-                    barWidth: 0,
-                    dotData: const FlDotData(show: false),
-                    belowBarData: BarAreaData(show: false),
-                    aboveBarData: BarAreaData(show: false),
-                  ),
                   // Main eval line with area fill
                   LineChartBarData(
                     spots: spots,
@@ -268,14 +268,13 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                             color: Colors.transparent,
                           );
                         }
-                        final idx = ply - 1;
-                        if (idx < 0 || idx >= evals.length) {
+                        final e = byPly[ply];
+                        if (e == null) {
                           return FlDotCirclePainter(
                             radius: 0,
                             color: Colors.transparent,
                           );
                         }
-                        final e = evals[idx];
                         final cls = e.classification;
                         if (cls == MoveClassification.normal) {
                           if (currentPly == ply) {
@@ -319,15 +318,12 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                   ),
                 ],
               ),
-              duration: const Duration(milliseconds: 150),
+              duration: Duration.zero,
             );
 
-            if (_chartWidth <= _availableWidth) {
-              return chart;
-            }
             return Scrollbar(
               controller: _scrollController,
-              thumbVisibility: true,
+              thumbVisibility: _chartWidth > _availableWidth,
               child: SingleChildScrollView(
                 controller: _scrollController,
                 scrollDirection: Axis.horizontal,

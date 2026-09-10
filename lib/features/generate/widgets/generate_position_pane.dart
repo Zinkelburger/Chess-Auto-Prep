@@ -11,6 +11,7 @@ import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../utils/system_info.dart';
 import '../services/position_moves.dart';
+import '../../../widgets/common/number_stepper.dart';
 
 /// Board-side generation. Starting a run only adds analysis to the database.
 class GeneratePositionPane extends StatefulWidget {
@@ -25,6 +26,7 @@ class GeneratePositionPane extends StatefulWidget {
     this.onHoverMove,
     this.lookupChessDb,
     this.onCutLines,
+    this.onBuildChessDb,
   });
   final String fen;
   final String databaseName;
@@ -33,12 +35,15 @@ class GeneratePositionPane extends StatefulWidget {
     String? moveSan,
     required int plies,
     required int cores,
+    required int engineMoves,
+    required double maiaCoverage,
   })
   onGenerate;
   final ValueChanged<String> onPlayMove;
   final ValueChanged<String?>? onHoverMove;
   final VoidCallback onPlanLines;
   final VoidCallback? onCutLines;
+  final VoidCallback? onBuildChessDb;
   final Future<DbMoveList> Function(String fen)? lookupChessDb;
 
   @override
@@ -48,11 +53,13 @@ class GeneratePositionPane extends StatefulWidget {
 class _GeneratePositionPaneState extends State<GeneratePositionPane>
     with AutomaticKeepAliveClientMixin {
   late final _depth = TextEditingController(
-    text: '${widget.generation.lastConfig?.maxPly ?? 12}',
+    text: '${widget.generation.lastConfig?.maxPly ?? 6}',
   );
   late final _cores = TextEditingController(
     text: '${widget.generation.lastConfig?.resolvedEngineThreads ?? 1}',
   );
+  int _engineMoves = 4;
+  int _maiaCoverage = 60;
   final _form = GlobalKey<FormState>();
   final _chessDb = ChessDbApiProvider();
   bool _showChessDb = false;
@@ -130,6 +137,8 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
         moveSan: san,
         plies: int.parse(_depth.text),
         cores: int.parse(_cores.text),
+        engineMoves: _engineMoves,
+        maiaCoverage: _maiaCoverage / 100,
       );
       if (mounted) setState(() => _error = error);
     } catch (e) {
@@ -178,6 +187,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
         final rows = positionMoves(
           widget.fen,
           database: gen.generatedTreeFenMap,
+          liveNodeAt: gen.liveNodeAt,
           playAsWhite: gen.generatedTreeConfig?.playAsWhite ?? true,
           chessDb: _dbMoves,
           sortByChessDb: _showChessDb,
@@ -218,6 +228,51 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                 ),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Engine moves', style: AppTextStyles.caption),
+                      NumberStepper(
+                        key: const ValueKey('generate-engine-moves'),
+                        value: _engineMoves,
+                        min: 1,
+                        max: 20,
+                        fieldWidth: 32,
+                        enabled: !busy,
+                        onChanged: (v) {
+                          if (mounted) setState(() => _engineMoves = v);
+                        },
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Maia coverage', style: AppTextStyles.caption),
+                      NumberStepper(
+                        key: const ValueKey('generate-maia-coverage'),
+                        value: _maiaCoverage,
+                        min: 1,
+                        max: 100,
+                        step: 5,
+                        suffix: '%',
+                        fieldWidth: 32,
+                        enabled: !busy,
+                        onChanged: (v) {
+                          if (mounted) setState(() => _maiaCoverage = v);
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             if (gen.isGenerating) ...[
               const LinearProgressIndicator(),
               Padding(
@@ -229,7 +284,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                   children: [
                     Expanded(
                       child: Text(
-                        '${gen.expectimaxProbeLabel}\n${gen.progress.status}',
+                        '${gen.progress.depthExplored.fold<int>(0, (a, b) => a + b)} positions completed · depth ${gen.progress.depth}/${gen.progress.maxPlyConfig}\n${gen.progress.status}',
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: AppTextStyles.caption,
@@ -267,7 +322,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   ChoiceChip(
-                    label: const Text('Expectimax'),
+                    label: const Text('Local analysis'),
                     selected: !_showChessDb,
                     onSelected: (_) => setState(() => _showChessDb = false),
                   ),
@@ -287,7 +342,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
               child: Text(
                 _showChessDb
                     ? 'Source: chessdb.cn · scores for White'
-                    : 'Saved analysis: ${widget.databaseName} · scores for White',
+                    : 'Top $_engineMoves engine + $_maiaCoverage% Maia moves · scores for White',
                 style: AppTextStyles.caption,
               ),
             ),
@@ -365,16 +420,21 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                                   ),
                                   SizedBox(
                                     width: 65,
-                                    child: Text(
-                                      _showChessDb
-                                          ? '${row.chessDb?.rank ?? '??'}'
-                                          : row.evalCp == null
-                                          ? '??'
-                                          : formatPackedEval(
-                                              row.evalCp!,
-                                              decimals: 2,
-                                            ),
-                                      style: AppTextStyles.caption,
+                                    child: Tooltip(
+                                      message: row.pvSan.isEmpty
+                                          ? 'Engine evaluation'
+                                          : row.pvSan.join(' '),
+                                      child: Text(
+                                        _showChessDb
+                                            ? '${row.chessDb?.rank ?? '—'}'
+                                            : row.evalCp == null
+                                            ? '—'
+                                            : formatPackedEval(
+                                                row.evalCp!,
+                                                decimals: 2,
+                                              ),
+                                        style: AppTextStyles.caption,
+                                      ),
                                     ),
                                   ),
                                   SizedBox(
@@ -383,31 +443,24 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                                       message: _showChessDb
                                           ? row.chessDb?.note ?? 'ChessDB score'
                                           : score == null
-                                          ? 'Not computed. Use the compute button.'
+                                          ? 'Generate from this position to calculate an expected score.'
                                           : 'Expected score from opponent move probabilities',
-                                      child: InkWell(
-                                        onTap:
-                                            !_showChessDb &&
-                                                score == null &&
-                                                !busy
-                                            ? () => _generate(row.san)
-                                            : null,
-                                        child: Text(
-                                          score == null
-                                              ? '??'
-                                              : formatPackedEval(
-                                                  score,
-                                                  decimals: 2,
-                                                ),
-                                          style: AppTextStyles.body,
-                                        ),
+                                      child: Text(
+                                        score == null
+                                            ? '—'
+                                            : formatPackedEval(
+                                                score,
+                                                decimals: 2,
+                                              ),
+                                        style: AppTextStyles.caption,
                                       ),
                                     ),
                                   ),
                                   SizedBox(
                                     width: 36,
                                     child: IconButton(
-                                      tooltip: 'Compute after ${row.san}',
+                                      tooltip:
+                                          'Evaluate ${row.san} and save engine PV',
                                       onPressed: busy
                                           ? null
                                           : () => _generate(row.san),
@@ -436,9 +489,16 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
               child: Wrap(
                 spacing: 8,
                 children: [
+                  if (widget.onBuildChessDb != null)
+                    TextButton.icon(
+                      key: const ValueKey('build-chessdb-repertoire'),
+                      onPressed: busy ? null : widget.onBuildChessDb,
+                      icon: const Icon(Icons.menu_book_outlined, size: 16),
+                      label: const Text('Build ChessDB repertoire…'),
+                    ),
                   TextButton(
                     onPressed: widget.onPlanLines,
-                    child: const Text('Plan lines from here'),
+                    child: const Text('Plan starting lines…'),
                   ),
                   if (widget.onCutLines != null)
                     TextButton(

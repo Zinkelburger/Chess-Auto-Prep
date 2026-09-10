@@ -137,7 +137,7 @@ class ReviewProgressStore {
     required bool hadMistake,
     String sessionType = 'trainer',
   }) async {
-    final sourcePath = repertoireId;
+    final sourcePath = line.sourcePath ?? repertoireId;
     final existing = byLine[line.id] ?? _freshEntry(line);
     final updated = reviewService
         .applyRating(existing, rating)
@@ -154,7 +154,7 @@ class ReviewProgressStore {
     await reviewService.appendHistory([
       RepertoireReviewHistoryEntry(
         repertoireId: sourcePath,
-        lineId: line.id,
+        lineId: line.persistedId,
         timestampUtc: DateTime.now().toUtc(),
         rating: rating.name,
         hadMistake: hadMistake,
@@ -162,7 +162,7 @@ class ReviewProgressStore {
       ),
     ]);
 
-    _queueHeaderWrite(sourcePath, line.id, updated);
+    _queueHeaderWrite(sourcePath, line.persistedId, updated);
 
     return updated;
   }
@@ -177,7 +177,7 @@ class ReviewProgressStore {
     required bool hadMistake,
     String sessionType = 'linear',
   }) async {
-    final sourcePath = repertoireId;
+    final sourcePath = line.sourcePath ?? repertoireId;
     final existing = byLine[line.id] ?? _freshEntry(line);
     byLine[line.id] = existing.copyWith(
       passCount: hadMistake ? existing.passCount : existing.passCount + 1,
@@ -191,7 +191,7 @@ class ReviewProgressStore {
     await reviewService.appendHistory([
       RepertoireReviewHistoryEntry(
         repertoireId: sourcePath,
-        lineId: line.id,
+        lineId: line.persistedId,
         timestampUtc: DateTime.now().toUtc(),
         rating: '',
         hadMistake: hadMistake,
@@ -201,7 +201,7 @@ class ReviewProgressStore {
   }
 
   Future<void> setExcluded(RepertoireLine line, bool excluded) async {
-    final sourcePath = repertoireId;
+    final sourcePath = line.sourcePath ?? repertoireId;
     final entry = byLine[line.id] ?? _freshEntry(line);
     byLine[line.id] = entry.copyWith(excluded: excluded);
     await reviewService.saveAll(
@@ -230,7 +230,39 @@ class ReviewProgressStore {
     Set<String>? within,
     void Function()? onApplied,
   }) async {
-    final sourcePath = repertoireId;
+    final sources = {for (final line in lines) line.sourcePath ?? repertoireId};
+    if (sources.length > 1 ||
+        (sources.isNotEmpty && sources.single != repertoireId)) {
+      var changed = 0;
+      for (final source in sources) {
+        changed += await _applyLearnedSelectionForSource(
+          lines
+              .where((line) => (line.sourcePath ?? repertoireId) == source)
+              .toList(),
+          checkedLineIds,
+          sourcePath: source,
+          within: within,
+          onApplied: onApplied,
+        );
+      }
+      return changed;
+    }
+    return _applyLearnedSelectionForSource(
+      lines,
+      checkedLineIds,
+      sourcePath: repertoireId,
+      within: within,
+      onApplied: onApplied,
+    );
+  }
+
+  Future<int> _applyLearnedSelectionForSource(
+    List<RepertoireLine> lines,
+    Set<String> checkedLineIds, {
+    required String sourcePath,
+    Set<String>? within,
+    void Function()? onApplied,
+  }) async {
     final now = DateTime.now().toUtc();
     final history = <RepertoireReviewHistoryEntry>[];
     final headerUpdates = <String, RepertoireReviewEntry>{};
@@ -260,7 +292,7 @@ class ReviewProgressStore {
         // entry rather than copyWith because copyWith can't null the dates.
         updated = RepertoireReviewEntry(
           repertoireId: sourcePath,
-          lineId: line.id,
+          lineId: line.persistedId,
           lineName: line.name,
           difficulty: entry!.difficulty,
           passCount: entry.passCount,
@@ -269,11 +301,11 @@ class ReviewProgressStore {
         );
       }
       byLine[line.id] = updated;
-      headerUpdates[line.id] = updated;
+      headerUpdates[line.persistedId] = updated;
       history.add(
         RepertoireReviewHistoryEntry(
           repertoireId: sourcePath,
-          lineId: line.id,
+          lineId: line.persistedId,
           timestampUtc: now,
           rating: wantLearned ? ReviewRating.good.name : '',
           hadMistake: false,
@@ -313,8 +345,8 @@ class ReviewProgressStore {
 
     if (!wasCorrect) {
       moveProgress[key] = RepertoireMoveProgress(
-        repertoireId: repertoireId,
-        lineId: line.id,
+        repertoireId: line.sourcePath ?? repertoireId,
+        lineId: line.persistedId,
         moveIndex: moveIndex,
         correctStreak: 0,
         learned: false,
@@ -325,8 +357,8 @@ class ReviewProgressStore {
     final newStreak = (moveProgress[key]?.correctStreak ?? 0) + 1;
     final learned = newStreak >= threshold;
     moveProgress[key] = RepertoireMoveProgress(
-      repertoireId: repertoireId,
-      lineId: line.id,
+      repertoireId: line.sourcePath ?? repertoireId,
+      lineId: line.persistedId,
       moveIndex: moveIndex,
       // Cap at the threshold so a long streak doesn't inflate difficulty
       // past 1.0 once the move counts as learned.
@@ -347,8 +379,8 @@ class ReviewProgressStore {
 
   RepertoireReviewEntry _freshEntry(RepertoireLine line) =>
       RepertoireReviewEntry(
-        repertoireId: repertoireId,
-        lineId: line.id,
+        repertoireId: line.sourcePath ?? repertoireId,
+        lineId: line.persistedId,
         lineName: line.name,
       );
 }

@@ -697,6 +697,74 @@ class PgnViewerController extends ChangeNotifier
     await classifyOpenings();
   }
 
+  /// Capture the live collection and reading cursor for app navigation. Games
+  /// remain shared objects so edits made before leaving are kept; list order,
+  /// filters and the selected position are independent of subsequent visits.
+  Future<bool> Function() captureNavigationContext() {
+    _rememberCurrentPlace();
+    final entries = List<PgnGameEntry>.of(allGames);
+    final filtered = List<PgnGameEntry>.of(filteredGames);
+    final path = filePath;
+    final modified = loadedFileModified;
+    final preamble = collectionPreamble;
+    final viewPerspective = perspective;
+    final flipped = boardFlipped;
+    final gameIndex = currentGameIndex;
+    final config = activeSliceConfig;
+    final activeFilters = hasActiveFilters;
+    final indices = _activeSliceIndices == null
+        ? null
+        : List<int>.of(_activeSliceIndices!);
+    final sorting = sortMode;
+    final bookmarks = Map<PgnGameEntry, int>.of(_resumePlyByGame);
+    final cursorFen = pgnWidgetController.currentFen;
+    final cursorPly = pgnWidgetController.mainLineIndex;
+    final initialFen = pgnInitialFen;
+    return () async {
+      if (!isActive() || !canReplaceCollection()) return false;
+      final loadEpoch = ++_loadEpoch;
+      _sliceEpoch++;
+      _gameLoadEpoch++;
+      stopAutoPlay();
+      analysisController.cancel();
+      analysisController.clearEvals();
+      _fenIndex.reset();
+      _adoptCollection(
+        path: path,
+        entries: List.of(entries),
+        newPerspective: viewPerspective,
+        preamble: preamble,
+      );
+      loadedFileModified = modified;
+      filteredGames = List.of(filtered);
+      activeSliceConfig = config;
+      hasActiveFilters = activeFilters;
+      _activeSliceIndices = indices == null ? null : List.of(indices);
+      sortMode = sorting;
+      currentGameIndex = gameIndex;
+      _resumePlyByGame.addAll(bookmarks);
+      pgnInitialFen = cursorFen ?? initialFen;
+      isLoading = false;
+      errorMessage = null;
+      pendingSliceRestore = null;
+      if (filteredGames.isEmpty) currentPosition = Chess.initial;
+      notifyListeners();
+      await loadCurrentGame();
+      if (!_isCurrentLoad(loadEpoch)) return false;
+      boardFlipped = flipped;
+      notifyListeners();
+      // The reader may keep the same PGN widget (and therefore skip parsing)
+      // when two visits show identical game text. Explicitly restore its
+      // cursor after the restored collection has reached the widget tree.
+      schedulePostFrame?.call(() {
+        if (!_isCurrentLoad(loadEpoch)) return;
+        pgnWidgetController.goToMainLineIndex(cursorPly);
+      });
+      unawaited(_buildFenIndex());
+      return true;
+    };
+  }
+
   /// Close the loaded collection and put the viewer back on its start screen
   /// ("No PGN loaded" — browse button plus the recent list).
   ///

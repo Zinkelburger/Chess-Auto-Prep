@@ -62,8 +62,8 @@ class AnalysisBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final running = runner.isRunning;
-    final failed = runner.stage == HomeReviewStage.failed;
+    final running = runner.isRunning || coordinator.isImporting;
+    final failed = !running && runner.stage == HomeReviewStage.failed;
     return HomeBlock(
       heading: 'Analysis',
       trailing: Row(
@@ -148,7 +148,7 @@ class AnalysisBlock extends StatelessWidget {
   Widget _buildTransportButton(bool running) {
     final enabled = running || runner.hasAnySource;
     return Tooltip(
-      message: runner.hasAnySource
+      message: running || runner.hasAnySource
           ? (running
                 ? 'Stop after the game being analysed; press again to carry on'
                 : _isResume
@@ -163,7 +163,11 @@ class AnalysisBlock extends StatelessWidget {
         height: 40,
         child: FilledButton.icon(
           key: const Key('review-transport-button'),
-          onPressed: enabled ? (running ? onPause : onStart) : null,
+          onPressed: enabled
+              ? (running
+                    ? (runner.isRunning ? onPause : coordinator.cancelImport)
+                    : onStart)
+              : null,
           icon: Icon(_transportIcon(running), size: 20),
           label: Text(
             _transportLabel(running),
@@ -183,14 +187,14 @@ class AnalysisBlock extends StatelessWidget {
 
   String _headline(bool running) {
     final stage = runner.stage;
-    if (!runner.hasAnySource) return 'No account set';
     if (running) {
-      if (stage == HomeReviewStage.reviewing && coordinator.gamesTotal > 0) {
-        return 'Analysing game ${coordinator.gamesDone} of '
-            '${coordinator.gamesTotal}';
+      if (coordinator.isCancelling) return 'Pausing…';
+      if (coordinator.isImporting || stage == HomeReviewStage.reviewing) {
+        return 'Analyzing games…';
       }
       return stage.label;
     }
+    if (!runner.hasAnySource) return 'No account set';
     if (stage == HomeReviewStage.failed) return 'Analysis failed';
     if (stage == HomeReviewStage.paused) {
       return unreviewedCount > 0
@@ -206,18 +210,20 @@ class AnalysisBlock extends StatelessWidget {
   }
 
   String _detailLine(bool running) {
-    if (runner.stage == HomeReviewStage.failed) {
+    if (!running && runner.stage == HomeReviewStage.failed) {
       return runner.detail ?? 'Something went wrong';
     }
-    if (!runner.hasAnySource) return 'Add a username below';
     if (running) {
       final found = coordinator.newPositionsFound;
-      final site = runner.detail;
+      final site = runner.isRunning ? runner.detail : null;
       return [
         ?site,
+        if (coordinator.gamesTotal > 0)
+          '${coordinator.gamesDone} / ${coordinator.gamesTotal} games',
         '$found ${found == 1 ? 'puzzle' : 'puzzles'} found',
       ].join(' · ');
     }
+    if (!runner.hasAnySource) return 'Add a username below';
     if (runner.stage == HomeReviewStage.paused) {
       return 'Press Resume to carry on where it stopped';
     }
@@ -233,7 +239,8 @@ class AnalysisBlock extends StatelessWidget {
     final showBar = running || isLoadingGames;
     final determinate =
         running &&
-        runner.stage == HomeReviewStage.reviewing &&
+        (coordinator.isImporting ||
+            runner.stage == HomeReviewStage.reviewing) &&
         coordinator.gamesTotal > 0;
     return SizedBox(
       height: 3,
@@ -255,8 +262,6 @@ class OpeningsBlock extends StatelessWidget {
     required this.gamesInWindow,
     required this.windowLabel,
     required this.onOpeningReview,
-    required this.masterGameCount,
-    required this.onMasterPractice,
     this.checking = false,
     this.repeated = const [],
     this.onFixEntry,
@@ -273,11 +278,6 @@ class OpeningsBlock extends StatelessWidget {
   final int gamesInWindow;
   final String windowLabel;
   final VoidCallback onOpeningReview;
-
-  /// Games in the local TWIC database; zero disables the browse button rather
-  /// than hiding it, so the block keeps the same shape either way.
-  final int masterGameCount;
-  final VoidCallback onMasterPractice;
 
   /// Deviation points more than one game walked into, most-repeated first
   /// (see `OpeningReviewData.repeated`). Listed under the buttons so the
@@ -302,7 +302,7 @@ class OpeningsBlock extends StatelessWidget {
               ? '$openingIssueCount $places your games left your books'
               : checking
               ? 'Checking your books…'
-              : 'Your $windowLabel stayed in book',
+              : 'No book deviations in your $windowLabel',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: AppTextStyles.bodyStrong,
@@ -327,32 +327,6 @@ class OpeningsBlock extends StatelessWidget {
                 hasIssues
                     ? 'Opening review ($openingIssueCount)'
                     : 'Opening review',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Tooltip(
-          message: masterGameCount > 0
-              ? 'See where your $windowLabel left master practice, what '
-                    'masters play there instead, and the games worth opening'
-              : 'Download The Week in Chess on the Databases page first',
-          child: SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: OutlinedButton(
-              key: const Key('master-practice-button'),
-              onPressed: masterGameCount > 0 && gamesInWindow > 0
-                  ? onMasterPractice
-                  : null,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.ink,
-                side: const BorderSide(color: AppColors.outline),
-              ),
-              child: const Text(
-                'Vs. master practice',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

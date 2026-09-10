@@ -65,8 +65,10 @@ List<String>? parseTransposesToken(String? comment) {
   return moves.where((s) => s.isNotEmpty).toList();
 }
 
-/// Matches `[%pv Nf3,Bb4,O-O,d5]`.
-final pvCommentRe = RegExp(r'\[%pv\s+([^\]]+)\]');
+/// Legacy PV payloads and references to an engine line stored as a real RAV.
+final pvCommentRe = RegExp(r'\[%(?:pv|bestline)\s+([^\]]+)\]');
+final legacyPvCommentRe = RegExp(r'\[%pv\s+([^\]]+)\]');
+final bestLineCommentRe = RegExp(r'\[%bestline\s+([^\]]+)\]');
 
 /// Matches `[%maiatop Nf3,0.450]` — MAIA's most likely move and its prob.
 final maiaTopCommentRe = RegExp(r'\[%maiatop\s+([^,\]]+),(\d+\.?\d*)\]');
@@ -124,7 +126,7 @@ double? parseImportanceComment(String comment) {
   return (move: move, prob: prob);
 }
 
-/// Parse a `[%pv ...]` token into a SAN move list.
+/// Parse a legacy `[%pv ...]` or stored `[%bestline ...]` path into SANs.
 List<String> parsePvComment(String comment) {
   final match = pvCommentRe.firstMatch(comment);
   if (match == null) return const [];

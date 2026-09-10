@@ -173,6 +173,11 @@ Future<List<int>> applySliceConfig(
   return pgn.computeSliceMatches(
     games: games,
     targetFen: pgn.parseTargetFen(config.positionInput),
+    additionalTargetFens: [
+      for (final input in config.additionalPositions)
+        ?pgn.parseTargetFen(input),
+    ],
+    matchAny: config.matchAny,
     filters: config.headerFilters
         .map((f) => (field: f.field, mode: f.mode, value: f.value))
         .toList(),

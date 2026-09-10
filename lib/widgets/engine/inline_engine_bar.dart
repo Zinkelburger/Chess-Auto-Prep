@@ -391,11 +391,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             ConstrainedBox(
               constraints: BoxConstraints(
                 minHeight: EnginePvRow.lineHeight(context) * _settings.multiPv,
-                maxHeight:
-                    (EnginePvRow.lineHeight(context) *
-                            _settings.multiPv *
-                            _settings.pvRows)
-                        .clamp(240.0, double.infinity),
+                maxHeight: (EnginePvRow.lineHeight(context) * _settings.multiPv)
+                    .clamp(240.0, double.infinity),
               ),
               child: SingleChildScrollView(
                 child: EngineGate.isLocked
@@ -423,13 +420,20 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       child: Row(
         children: [
           SizedBox(
-            height: 24,
+            height: 32,
             child: FittedBox(
               child: ShortcutTooltip(
                 description: 'Toggle engine',
                 shortcut: AppShortcut.toggleEngine,
                 child: Switch(
                   value: _engineEnabled,
+                  activeThumbColor: AppColors.ink,
+                  activeTrackColor: AppColors.accent,
+                  inactiveThumbColor: AppColors.onSurfaceMuted,
+                  inactiveTrackColor: AppColors.surfaceInset,
+                  trackOutlineColor: const WidgetStatePropertyAll(
+                    AppColors.onSurfaceMuted,
+                  ),
                   onChanged: (value) {
                     if (value && !EngineGate.ensureAvailable(context)) return;
                     _setEngineEnabled(value);
@@ -449,16 +453,29 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                               '${formatNodes(_discovery.nodes)} nodes'
                         : '${_threatMode ? 'Threat · ' : ''}${_discovery.lines.length} lines • '
                               'depth ${_discovery.depth}',
-                    style: AppTextStyles.caption,
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w400,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   )
-                : const Tooltip(
+                : Tooltip(
                     message: 'Toggle engine',
-                    child: Text('Engine', style: AppTextStyles.caption),
+                    child: Text(
+                      'Engine',
+                      style: AppTextStyles.body.copyWith(
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
                   ),
           ),
           IconButton(
-            icon: const Icon(Icons.gps_fixed, size: 16),
+            icon: const Icon(Icons.gps_fixed, size: 20),
+            style: IconButton.styleFrom(foregroundColor: AppColors.ink),
+            selectedIcon: const Icon(
+              Icons.gps_fixed,
+              size: 20,
+              color: AppColors.accent,
+            ),
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             tooltip: _threatMode ? 'Hide threat' : 'Show threat',
@@ -507,9 +524,15 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       );
     }
 
+    final byRank = {for (final line in lines) line.pvNumber: line};
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: lines.map((line) => _buildLineRow(context, line)).toList(),
+      children: List.generate(_settings.multiPv, (index) {
+        final line = byRank[index + 1];
+        return line == null
+            ? SizedBox(height: EnginePvRow.lineHeight(context))
+            : _buildLineRow(context, line);
+      }),
     );
   }
 
@@ -544,7 +567,6 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       ),
       sanMoves: sanMoves,
       startPly: plyFromFen(_searchFen),
-      rows: _settings.pvRows,
       onMoveTapped: !_threatMode && widget.onLineMoveTapped != null
           ? (idx) {
               if (!mounted) return;

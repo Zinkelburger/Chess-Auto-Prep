@@ -50,6 +50,9 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// Engine evaluation in centipawns (side-to-move perspective).
   int? engineEvalCp;
 
+  /// An independently searched UCI principal variation, not policy children.
+  List<String> enginePv = const [];
+
   /// Version-2 search stores full paths: never borrow another history's value.
   /// Rolling search commits this UCI after a complete short lookahead.
   /// The decision estimate is retained separately from the final policy value.

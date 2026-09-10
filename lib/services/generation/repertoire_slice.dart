@@ -70,9 +70,10 @@ class SlicePlan {
 /// costs one pass over lines already in memory — no engine, no network. That
 /// is what makes a size *control* possible rather than a size *setting*.
 class RepertoireSlicer {
-  RepertoireSlicer._(this._slice);
+  RepertoireSlicer._(this._slice, this._prefix);
 
   final LineSlice _slice;
+  final List<String> _prefix;
 
   /// Rank the lines of an already-selected tree.
   ///
@@ -87,6 +88,7 @@ class RepertoireSlicer {
     final lines = LineExtractor(config: config, fenMap: map).extract(tree);
     return RepertoireSlicer._(
       LinePruner.rank(lines, diversity: LineDiversity.fromConfig(config)),
+      tree.startMoves.split(' ').where((move) => move.isNotEmpty).toList(),
     );
   }
 
@@ -121,7 +123,10 @@ class RepertoireSlicer {
   /// Every *extracted* line, not every ranked one: a line folded into
   /// another, or ranked out for teaching nothing, is still in a file an
   /// earlier build wrote, and the trim button has to be able to offer it.
-  late final List<String> _allKeys = _slice.everyLineKey;
+  late final List<String> _allKeys = [
+    for (final key in _slice.everyLineKey)
+      lineKey([..._prefix, ...key.split(' ')]),
+  ];
 
   int? _memoKeep;
   SlicePlan? _memoPlan;
@@ -136,7 +141,9 @@ class RepertoireSlicer {
     if (memo != null && _memoKeep == keep) return memo;
 
     final kept = _slice.take(keep);
-    final keptKeys = {for (final l in kept) lineKey(l.movesSan)};
+    final keptKeys = {
+      for (final l in kept) lineKey([..._prefix, ...l.movesSan]),
+    };
     final droppedKeys = <String>{};
     for (final key in _allKeys) {
       if (!keptKeys.contains(key)) droppedKeys.add(key);

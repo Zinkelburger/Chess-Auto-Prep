@@ -20,6 +20,9 @@ import '../../utils/pgn_comment_utils.dart'
     show buildGameMovetext, joinComments;
 import 'mainline_positions.dart';
 import 'pgn_dummy_mainline.dart';
+import 'pgn_analysis_variations.dart';
+import '../../services/game_analysis_controller.dart'
+    show annotateGameMoveQuality;
 import 'pgn_variation_extractor.dart';
 import 'solitaire_reveal.dart';
 
@@ -40,6 +43,9 @@ enum ViewerMoveKind {
 
 class ViewerGameModel {
   PgnGame? game;
+
+  /// Whether the last load/adoption converted legacy PVs to stored variations.
+  bool didMaterializeAnalysis = false;
   List<PgnNodeData> moveHistory = [];
   Position startPosition = Chess.initial;
   Position currentPosition = Chess.initial;
@@ -86,6 +92,7 @@ class ViewerGameModel {
   /// PGN's own sidelines. Resets the cursor to the start.
   void load(PgnGame parsed) {
     promoteNullMoveDummyMainline(parsed.moves);
+    didMaterializeAnalysis = annotateGameMoveQuality(parsed);
     game = parsed;
     moveHistory = parsed.moves.mainline().toList();
     startPosition = startPositionFromGame(parsed);
@@ -108,6 +115,7 @@ class ViewerGameModel {
   /// stored sidelines — in which case the caller must reload.
   bool adoptAnnotations(PgnGame parsed) {
     promoteNullMoveDummyMainline(parsed.moves);
+    didMaterializeAnalysis = annotateGameMoveQuality(parsed);
     final incoming = parsed.moves.mainline().toList();
     if (incoming.length != moveHistory.length) return false;
     for (var i = 0; i < incoming.length; i++) {
@@ -117,11 +125,42 @@ class ViewerGameModel {
     // in-memory analysis (ephemeral nodes) may differ.
     final storedRoots = extractPgnVariations(parsed, startPosition);
     for (final ply in {...storedRoots.keys, ...variationsByPly.keys}) {
-      final theirs = storedRoots[ply]?.length ?? 0;
-      final mine = (variationsByPly[ply] ?? const [])
+      final theirs = storedRoots[ply] ?? const <MoveNode>[];
+      final mine = (variationsByPly[ply] ?? const <MoveNode>[])
           .where((n) => !n.isEphemeral)
-          .length;
-      if (theirs != mine) return false;
+          .toList();
+      final best = ply < incoming.length
+          ? analysisVariationPath(incoming[ply]).firstOrNull
+          : null;
+      if (mine.any((n) => !theirs.any((r) => r.san == n.san))) return false;
+      if (theirs.any(
+        (n) => !mine.any((r) => r.san == n.san) && n.san != best,
+      )) {
+        return false;
+      }
+    }
+    // Merge generated RAVs into existing nodes so a live variation cursor,
+    // comments, and scratch continuations survive an arriving analysis pass.
+    void merge(List<MoveNode> target, List<MoveNode> source) {
+      final ordered = <MoveNode>[];
+      for (final node in source) {
+        final existing = target.where((n) => n.san == node.san).firstOrNull;
+        if (existing == null) {
+          ordered.add(node);
+        } else {
+          existing.isEphemeral = false;
+          merge(existing.children, node.children);
+          ordered.add(existing);
+        }
+      }
+      ordered.addAll(target.where((n) => !ordered.contains(n)));
+      target
+        ..clear()
+        ..addAll(ordered);
+    }
+
+    for (final entry in storedRoots.entries) {
+      merge(variationsByPly.putIfAbsent(entry.key, () => []), entry.value);
     }
     game = parsed;
     for (var i = 0; i < incoming.length; i++) {
@@ -206,11 +245,55 @@ class ViewerGameModel {
     currentPosition = pos;
   }
 
+  /// Give a comment/PV preview normal ancestry before a user edits it.
+  /// Reuse existing moves and keep the unplayed continuation as scratch nodes.
+  /// Merely viewing a preview does not call this or change the saved PGN.
+  /// Returns false if the preview cannot be reached from this mainline anchor
+  /// (for example, a separate diagram embedded in a comment).
+  bool materializePreviewLine(int baseIndex, List<String> sans, int cursor) {
+    if (cursor <= 0 || cursor > sans.length) return false;
+    final base = mainline.tryAt(baseIndex);
+    if (base == null) return false;
+    var pos = base;
+    for (final san in sans.take(cursor)) {
+      final move = pos.parseSan(san);
+      if (move == null) return false;
+      pos = pos.play(move);
+    }
+    if (normalizeFen(pos.fen) != normalizeFen(currentPosition.fen)) {
+      return false;
+    }
+    if (revealedPly != null && baseIndex > revealedPly!) return false;
+
+    goToMainLineMove(baseIndex);
+    var selectedIndex = mainLineIndex;
+    var selectedBranch = activeBranchPly;
+    var selectedPath = <MoveNode>[];
+    var selectedPosition = currentPosition;
+    for (var i = 0; i < sans.length; i++) {
+      if (addMove(sans[i], editing: false, allowMainline: true) ==
+          ViewerMoveKind.illegal) {
+        break;
+      }
+      if (i + 1 == cursor) {
+        selectedIndex = mainLineIndex;
+        selectedBranch = activeBranchPly;
+        selectedPath = List.of(analysisPath);
+        selectedPosition = currentPosition;
+      }
+    }
+    mainLineIndex = selectedIndex;
+    activeBranchPly = selectedBranch;
+    analysisPath = selectedPath;
+    currentPosition = selectedPosition;
+    return true;
+  }
+
   // ── Adding moves ─────────────────────────────────────────────────────
 
   /// Play [san] at the cursor. [editing] marks additions permanent (amend
-  /// mode); [allowMainline] is false while an inline preview owns the board,
-  /// which forbids the two mainline fast paths.
+  /// mode); [allowMainline] controls following or extending the mainline.
+  /// An inline preview must first acquire ancestry via [materializePreviewLine].
   ViewerMoveKind addMove(
     String san, {
     required bool editing,
@@ -274,11 +357,11 @@ class ViewerGameModel {
     } else {
       final current = analysisPath.last;
       final (node, _) = current.addChild(san, fenAfter, isEphemeral: !editing);
-      // A permanent move under ephemeral ancestors would be dropped by the
-      // serializer — promote the whole line to saved.
-      if (editing) promoteNodeLineage(current);
       analysisPath = [...analysisPath, node];
     }
+    // Include an existing scratch node when the user plays it in an editable
+    // reader, as well as every ancestor needed to serialize a legal line.
+    if (editing) promoteNodeLineage(analysisPath.last);
     currentPosition = newPos;
     return ViewerMoveKind.variation;
   }
@@ -622,6 +705,7 @@ class ViewerGameModel {
     }
     // Sidelines branching after the final mainline move (user-added only).
     addSidelines(moveHistory.length);
+    synchronizeAnalysisVariationPaths(root);
     return root;
   }
 

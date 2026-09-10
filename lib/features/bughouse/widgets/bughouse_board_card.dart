@@ -1,11 +1,13 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
+import '../../../models/board_display_settings.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
 import '../../../utils/chess_utils.dart' show parseSquare;
 import '../../../widgets/chess_board_widget.dart';
+import '../../../widgets/board/board_coordinates.dart';
 import '../../../widgets/board_editor/editable_board.dart';
 import '../../../widgets/common/piece_image.dart';
 import '../controllers/bughouse_controller.dart';
@@ -40,6 +42,9 @@ class BughouseBoardCard extends StatelessWidget {
   final BughouseController controller;
   final BughouseBoard which;
 
+  static const double headerHeight = 28;
+  static const double seatHeight = 36;
+
   @override
   Widget build(BuildContext context) {
     final state = controller.state;
@@ -54,7 +59,10 @@ class BughouseBoardCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _BoardHeader(controller: controller, which: which),
+        SizedBox(
+          height: headerHeight,
+          child: _BoardHeader(controller: controller, which: which),
+        ),
         const SizedBox(height: 6),
         _Seat(controller: controller, which: which, side: topSide),
         _PocketRow(controller: controller, which: which, side: topSide),
@@ -175,7 +183,7 @@ class _BoardHeader extends StatelessWidget {
     final last = controller.lastPlyOn(which);
     return Row(
       children: [
-        Text(which.label, style: AppTextStyles.bodyStrong),
+        Text(which.label, style: AppTextStyles.title),
         const SizedBox(width: 10),
         // The move that just landed here, which on two boards is two separate
         // questions — the whole-line cursor answers neither of them. Blank
@@ -184,16 +192,16 @@ class _BoardHeader extends StatelessWidget {
         Expanded(
           child: Text(
             last == null ? '' : '${last.numberLabel} ${last.san}',
-            style: AppTextStyles.monoDense,
+            style: AppTextStyles.mono.copyWith(fontSize: 16),
             overflow: TextOverflow.ellipsis,
           ),
         ),
         IconButton(
           tooltip: "Copy ${which.label.toLowerCase()}'s moves",
           visualDensity: VisualDensity.compact,
-          iconSize: 16,
+          iconSize: 20,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 28, height: 24),
+          constraints: const BoxConstraints.tightFor(width: 32, height: 28),
           icon: const Icon(Icons.copy),
           // Disabled rather than hidden: a control that appears with the
           // first move would shift the flip button sideways mid-game.
@@ -208,9 +216,9 @@ class _BoardHeader extends StatelessWidget {
         IconButton(
           tooltip: 'Draw ${which.label.toLowerCase()} the other way up',
           visualDensity: VisualDensity.compact,
-          iconSize: 16,
+          iconSize: 20,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 28, height: 24),
+          constraints: const BoxConstraints.tightFor(width: 32, height: 28),
           icon: const Icon(Icons.swap_vert),
           onPressed: () => controller.toggleFlip(which),
         ),
@@ -244,7 +252,8 @@ class _Seat extends StatelessWidget {
         state.seatLetter(which, side) == 'A' ||
         state.seatLetter(which, side) == 'C';
 
-    return Padding(
+    return Container(
+      height: BughouseBoardCard.seatHeight,
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
@@ -256,22 +265,29 @@ class _Seat extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              state.seatRole(which, side),
-              style: onMove
-                  ? AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)
-                  : AppTextStyles.muted,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (onMove)
-            const Padding(
-              padding: EdgeInsets.only(right: 6),
-              child: Tooltip(
-                message: 'To move',
-                child: Icon(Icons.play_arrow, size: 13, color: AppColors.ink),
+            child: Tooltip(
+              message: state.seatRole(which, side),
+              child: Text(
+                state.seatRole(which, side),
+                style: AppTextStyles.bodyStrong.copyWith(fontSize: 16),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
+          ),
+          SizedBox(
+            width: 20,
+            child: onMove
+                ? const Tooltip(
+                    message: 'To move',
+                    child: Icon(
+                      Icons.play_arrow,
+                      size: 16,
+                      color: AppColors.ink,
+                    ),
+                  )
+                : null,
+          ),
           _ClockBox(controller: controller, which: which, side: side),
         ],
       ),
@@ -300,8 +316,8 @@ class _SeatBadge extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Container(
-        width: 22,
-        height: 22,
+        width: 26,
+        height: 26,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: white ? AppColors.sideWhite : AppColors.sideBlack,
@@ -316,6 +332,7 @@ class _SeatBadge extends StatelessWidget {
         child: Text(
           letter,
           style: AppTextStyles.mono.copyWith(
+            fontSize: 16,
             fontWeight: FontWeight.w700,
             height: 1.0,
             color: white ? AppColors.onSideWhite : AppColors.ink,
@@ -392,12 +409,16 @@ class _ClockBoxState extends State<_ClockBox> {
           'diagonal: your clock against your partner\'s opponent.',
       waitDuration: const Duration(milliseconds: 700),
       child: SizedBox(
-        width: 58,
+        width: 88,
         child: TextField(
           controller: _text,
           focusNode: _focus,
           textAlign: TextAlign.right,
-          style: AppTextStyles.mono.copyWith(fontWeight: FontWeight.w600),
+          style: AppTextStyles.mono.copyWith(
+            fontSize: 20,
+            height: 1.1,
+            fontWeight: FontWeight.w700,
+          ),
           decoration: InputDecoration(
             isDense: true,
             filled: true,
@@ -466,18 +487,32 @@ class _PocketRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<BughouseHover?>(
       valueListenable: controller.hover,
-      builder: (context, _, _) => _buildPocket(context),
+      builder: (context, _, _) => LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final margin = controller.mode == BughouseMode.setup
+              ? 0.0
+              : coordinateMargin(
+                  BoardDisplaySettings.of(context).coordinates,
+                  width,
+                );
+          return Align(
+            alignment: Alignment.center,
+            child: _buildPocket(context, (width - margin) / 8),
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildPocket(BuildContext context) {
+  Widget _buildPocket(BuildContext context, double pieceSize) {
     final state = controller.hover.value?.preview ?? controller.state;
     final position = state.board(which);
     final pockets = position.pockets ?? Pockets.empty;
     final setup = controller.mode == BughouseMode.setup;
     final pending = controller.pendingDrop;
-    // Dropping is only possible for the side actually on turn there, so the
-    // other strip is shown but visibly inert.
+    // Turn gates interaction, not visibility: reserves remain useful to read
+    // while waiting for this side to move.
     final droppable = setup || position.turn == side;
 
     return Tooltip(
@@ -488,16 +523,16 @@ class _PocketRow extends StatelessWidget {
           : 'Not ${side.name}\'s turn on ${which.label.toLowerCase()}',
       waitDuration: const Duration(milliseconds: 600),
       child: Container(
-        height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        height: pieceSize + 6,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainer,
+          color: AppColors.pocketSurface,
           borderRadius: BorderRadius.circular(4),
         ),
-        // Packed tight and left-aligned, the way lichess draws a crazyhouse
-        // pocket: the reserve reads as one clump, not as five columns
-        // stretched across the board.
+        // Keep all five slots together in a centered tray whose width stays
+        // steady as pieces arrive and leave.
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             for (final role in _reserveRoles)
               _PocketPiece(
@@ -505,13 +540,13 @@ class _PocketRow extends StatelessWidget {
                   'bughouse-pocket-${which.name}-${side.name}-${role.name}',
                 ),
                 piece: Piece(color: side, role: role),
+                size: pieceSize,
                 count: pockets.of(side, role),
                 held:
                     pending != null &&
                     pending.board == which &&
                     pending.side == side &&
                     pending.role == role,
-                enabled: droppable,
                 // A reserve piece is dragged onto its square the way a piece
                 // already on the board is; the click-then-click path stays for
                 // anyone who prefers it, and for touch.
@@ -543,9 +578,9 @@ class _PocketPiece extends StatelessWidget {
   const _PocketPiece({
     super.key,
     required this.piece,
+    required this.size,
     required this.count,
     required this.held,
-    required this.enabled,
     required this.onTap,
     this.onSecondaryTap,
     this.drag,
@@ -556,7 +591,6 @@ class _PocketPiece extends StatelessWidget {
   final Piece piece;
   final int count;
   final bool held;
-  final bool enabled;
   final VoidCallback? onTap;
   final VoidCallback? onSecondaryTap;
 
@@ -565,7 +599,7 @@ class _PocketPiece extends StatelessWidget {
   final VoidCallback? onDragStarted;
   final VoidCallback? onDragEnded;
 
-  static const double size = 36;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -578,7 +612,7 @@ class _PocketPiece extends StatelessWidget {
       // cursor is the square it lands on.
       dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: Transform.translate(
-        offset: const Offset(-size / 2, -size / 2),
+        offset: Offset(-size / 2, -size / 2),
         child: PieceImage(piece: piece, size: size),
       ),
       childWhenDragging: Opacity(opacity: 0.3, child: body),
@@ -600,8 +634,8 @@ class _PocketPiece extends StatelessWidget {
         onSecondaryTap: onSecondaryTap,
         behavior: HitTestBehavior.opaque,
         child: Container(
-          width: size + 8,
-          height: size + 6,
+          width: size + 4,
+          height: size + 4,
           margin: const EdgeInsets.symmetric(horizontal: 1),
           decoration: BoxDecoration(
             color: held ? AppColors.surfaceHighlight : Colors.transparent,
@@ -614,13 +648,12 @@ class _PocketPiece extends StatelessWidget {
               Opacity(
                 // Empty slots stay legible enough to read as "none of these",
                 // without competing with the pieces that are actually there.
-                opacity: empty ? 0.16 : (enabled ? 1.0 : 0.45),
+                opacity: empty ? 0.10 : 1.0,
                 child: PieceImage(piece: piece, size: size),
               ),
-              // A count only when there is more than one: a lone piece is
-              // already shown by being drawn, and a "1" on every slot is four
-              // strips of noise.
-              if (count > 1)
+              // Even one piece gets a count, so ownership never relies on
+              // distinguishing its artwork from an empty silhouette alone.
+              if (count > 0)
                 Positioned(
                   right: 0,
                   bottom: 0,
@@ -636,6 +669,7 @@ class _PocketPiece extends StatelessWidget {
                     child: Text(
                       '$count',
                       style: AppTextStyles.caption.copyWith(
+                        fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: AppColors.ink,
                         height: 1.1,

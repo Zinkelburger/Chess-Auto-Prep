@@ -20,6 +20,8 @@ import 'package:chess_auto_prep/utils/chess_utils.dart' show isNullMoveSan;
 import 'package:chess_auto_prep/utils/training_markers.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'
     show MoveChip, PgnMoveDecorations;
+import '../models/pgn_deletion_summary.dart';
+import 'common/confirm_dialog.dart';
 import 'pgn/comment_editor.dart';
 import 'pgn/comment_prose_spans.dart';
 import 'pgn/pgn_annotation_panel.dart';
@@ -256,9 +258,29 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     setState(() {});
   }
 
-  void _deleteFromHere() {
-    if (_contextMenuPath == null) return;
-    widget.onDelete?.call(_contextMenuPath!);
+  Future<void> _deleteFromHere() async {
+    final path = _contextMenuPath;
+    if (path == null || widget.onDelete == null) return;
+    final tree = widget.tree;
+    final node = tree.nodeAt(path);
+    if (node == null) return;
+    final version = tree.version;
+    final summary = PgnDeletionSummary.nodes([node]);
+    final confirmed = await confirmAction(
+      context,
+      title: 'Delete ${summary.description}?',
+      message:
+          'This removes the move and all continuations from here, '
+          'including their annotations.',
+      confirmLabel: 'Delete',
+    );
+    if (!mounted ||
+        !confirmed ||
+        !identical(widget.tree, tree) ||
+        tree.version != version) {
+      return;
+    }
+    widget.onDelete?.call(path);
   }
 
   void _promoteVariation() {
@@ -471,7 +493,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       case 'viewlines':
         widget.onViewInLines?.call();
       case 'delete':
-        _deleteFromHere();
+        await _deleteFromHere();
     }
   }
 
@@ -901,14 +923,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     required bool isSelected,
     required bool isOnCtxPath,
   }) {
-    // Depth carries the type treatment (semibold mainline, receding
-    // sidelines); selection changes ink only — the pill marks the current
-    // move, and a weight change here would reflow the wrapped movetext.
-    final base = PgnTextStyles.moveAt(
-      depth,
-      ephemeral: node.isEphemeral,
-      quiet: commentProse(node.comment ?? '').isEmpty,
-    );
+    // Moves keep the same size and weight across annotations and depth;
+    // selection changes ink only, with a pill marking the current move.
+    final base = PgnTextStyles.moveAt(depth, ephemeral: node.isEphemeral);
     final sanStyle = isSelected
         ? base.copyWith(color: AppColors.pgnMoveCurrentFg)
         : base;

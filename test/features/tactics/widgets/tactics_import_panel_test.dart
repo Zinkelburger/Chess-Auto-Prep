@@ -139,7 +139,7 @@ void main() {
     await pumpPanel(tester, positions: [_position(id: '1')], isImporting: true);
 
     expect(
-      find.textContaining('more are added as the review finds them'),
+      find.textContaining('Analyzing games…'),
       findsOneWidget,
     );
     final button = tester.widget<FilledButton>(
@@ -158,7 +158,7 @@ void main() {
     await pumpPanel(tester, positions: const [], isImporting: true);
 
     expect(
-      find.textContaining('Analysing your games'),
+      find.text('Analyzing games…'),
       findsOneWidget,
       reason: 'auto-start means the usual empty database is a busy one',
     );

@@ -7,7 +7,7 @@ import '../../../theme/app_text_styles.dart';
 import '../models/recent_game.dart';
 import '../services/opening_review.dart';
 import 'my_repertoires_panel.dart';
-import 'opening_review_detail_dialog.dart';
+import 'opening_position_preview.dart';
 
 /// All opening mistakes from the recent-games window in one place — the
 /// aggregate complement of the per-game "Left book" line, so leaks can be
@@ -47,9 +47,9 @@ class OpeningReviewDialog extends StatelessWidget {
     return AlertDialog(
       title: const Text('Opening review'),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 520),
+        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 600),
         child: SizedBox(
-          width: 560,
+          width: 720,
           child: SingleChildScrollView(child: _buildBody(context)),
         ),
       ),
@@ -87,8 +87,8 @@ class OpeningReviewDialog extends StatelessWidget {
         context,
         icon: Icons.verified_outlined,
         message:
-            'You stayed in book in every game of your $windowLabel. '
-            'Nothing to review here.',
+            'No deviations after entering your books in your $windowLabel. '
+            'Games in a different opening are not counted as mistakes.',
       );
     }
     return Column(
@@ -212,82 +212,64 @@ class _EntryTile extends StatelessWidget {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
-        // The detail dialog stacks on top of this list, so closing it drops
-        // the user back into the review queue. Its navigation callbacks pop
-        // both dialogs (detail first, then this list) before switching.
-        onTap: () => showDialog<void>(
-          context: context,
-          builder: (_) => OpeningReviewDetailDialog.forEntry(
-            entry: entry,
-            bookEnd: bookEnd,
-            byMe: entry.byMe,
-            games: [
-              for (final game in entry.games)
-                ReviewGameSource(
-                  label:
-                      'vs ${game.meWhite == true ? game.black : game.white} '
-                      '(${game.dateDisplayShort})',
-                  pgn: game.record.pgn,
-                  stableKey: game.record.dedupKey,
-                ),
-            ],
-            // Every game in an entry is one of mine from the same side of the
-            // book, so the first game's colour orients the board.
-            flipped:
-                entry.games.isNotEmpty && entry.games.first.meWhite == false,
-            onEditInBuilder: () {
-              Navigator.of(context)
-                ..pop()
-                ..pop();
-              onEditLine(entry);
-            },
-            onOpenGame: (index) {
-              final game = entry.games[index];
-              Navigator.of(context)
-                ..pop()
-                ..pop();
-              onOpenGame(game);
-            },
-          ),
-        ),
+        onTap: () {
+          Navigator.of(context).pop();
+          onOpenGame(entry.games.first);
+        },
         child: Padding(
           padding: const EdgeInsets.all(10),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${entry.placeName} · move ${entry.moveNumber}',
-                      overflow: TextOverflow.ellipsis,
+              OpeningPositionPreview(
+                pathSans: entry.pathSans,
+                playedSan: entry.playedSan,
+                expectedSans: entry.expectedSans,
+                byMe: entry.byMe,
+                bookEnded: entry.isBookEnd,
+                flipped: entry.games.first.meWhite == false,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${entry.placeName} · move ${entry.moveNumber}',
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body.copyWith(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '$count ${count == 1 ? 'game' : 'games'}',
+                          style: AppTextStyles.body.copyWith(
+                            fontSize: 12,
+                            color: AppColors.onSurfaceMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      entry.lineDisplay,
                       style: AppTextStyles.body.copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        color: AppColors.onSurfaceMuted,
                       ),
                     ),
-                  ),
-                  Text(
-                    '$count ${count == 1 ? 'game' : 'games'}',
-                    style: AppTextStyles.body.copyWith(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                entry.lineDisplay,
-                style: AppTextStyles.body.copyWith(
-                  fontSize: 12,
-                  color: AppColors.onSurfaceMuted,
+                    const SizedBox(height: 4),
+                    bookEnd ? _buildBookEndLine() : _buildMistakeLine(),
+                    const SizedBox(height: 6),
+                    _GameLinks(entry: entry, onOpenGame: onOpenGame),
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
-              bookEnd ? _buildBookEndLine() : _buildMistakeLine(),
-              const SizedBox(height: 6),
-              _GameLinks(entry: entry, onOpenGame: onOpenGame),
             ],
           ),
         ),
@@ -309,9 +291,7 @@ class _EntryTile extends StatelessWidget {
             style: AppTextStyles.body.copyWith(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              // Amber marks a move of mine to unlearn; an opponent's move
-              // the book lacks is information, not a fault.
-              color: gap ? null : AppColors.warning,
+              color: gap ? AppColors.onSurfaceMuted : AppColors.danger,
             ),
           ),
           TextSpan(
@@ -321,7 +301,8 @@ class _EntryTile extends StatelessWidget {
           TextSpan(
             text: entry.expectedDisplay,
             style: AppTextStyles.body.copyWith(
-              fontSize: 13,
+              fontSize: 14,
+              color: AppColors.success,
               fontWeight: FontWeight.w700,
             ),
           ),

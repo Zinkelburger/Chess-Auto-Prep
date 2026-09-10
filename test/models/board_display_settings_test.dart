@@ -33,6 +33,7 @@ void main() {
     test('defaults match lila: coordinates inside, letters', () {
       final settings = BoardDisplaySettings.fresh();
       expect(settings.coordinates, BoardCoordinates.inside);
+      expect(settings.showLegalMoves, isFalse);
       expect(settings.pieceNotation, PieceNotation.letters);
     });
 
@@ -43,17 +44,20 @@ void main() {
         var notified = 0;
         settings.addListener(() => notified++);
 
+        await settings.setShowLegalMoves(true);
         await settings.setCoordinates(BoardCoordinates.outside);
         await settings.setPieceNotation(PieceNotation.figurines);
         await settings.setPieceNotation(PieceNotation.figurines); // no-op
-        expect(notified, 2);
+        expect(notified, 3);
 
         final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getBool('display.legal_moves'), isTrue);
         expect(prefs.getString('display.board_coordinates'), 'outside');
         expect(prefs.getString('display.piece_notation'), 'figurines');
 
         final reloaded = BoardDisplaySettings.fresh();
         await reloaded.load();
+        expect(reloaded.showLegalMoves, isTrue);
         expect(reloaded.coordinates, BoardCoordinates.outside);
         expect(reloaded.pieceNotation, PieceNotation.figurines);
       },
@@ -72,8 +76,10 @@ void main() {
 
     test('reset returns to the defaults and clears the stored keys', () async {
       final settings = BoardDisplaySettings.fresh();
+      await settings.setShowLegalMoves(true);
       await settings.setCoordinates(BoardCoordinates.everySquare);
       await settings.resetToDefaults();
+      expect(settings.showLegalMoves, isFalse);
       expect(settings.coordinates, BoardCoordinates.inside);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('display.board_coordinates'), isNull);

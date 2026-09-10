@@ -1,13 +1,7 @@
 part of 'analysis_screen.dart';
 
-/// Player Analysis when the player is someone in the opponents directory:
-/// their prep file is one menu entry away, "Add line to study…" offers it
-/// first, and — opened from a tournament sheet — the field is a list to walk:
-/// tick them off, move to the next one, or go back to the sheet.
-///
-/// "Check against my repertoire…" lives here too but works for any player:
-/// it needs only the tree on screen and the book designated for the other
-/// colour.
+/// Keep the player's personal study available to the existing board actions.
+/// Player records and reference links are edited in the player database.
 mixin _PrepMixin on _AnalysisScreenStateBase {
   void _onOpponentsChanged() {
     if (!mounted) return;
@@ -22,122 +16,12 @@ mixin _PrepMixin on _AnalysisScreenStateBase {
     final prep = _prep;
     _boardActions.preferredStudy = prep == null
         ? null
-        : () => _opponentActions.prepFiles.preferredFor(
-            prep.person,
-            prep.tournament,
-          );
+        : () => _opponentActions.prepFiles.preferredFor(prep.person, null);
     // The chapter is named for the colour *I* hold against them.
     _boardActions.chapterPrefix = prep == null
         ? null
         : () =>
-              '${prep.inTournament ? '${prep.person.name} · ' : ''}${_playerIsWhite ? 'As Black' : 'As White'}';
-  }
-
-  /// ` · Spring Open 2026 · 3 of 12` for the app-bar subtitle, or ''.
-  String get _prepSubtitle {
-    final prep = _prep;
-    return prep == null || !prep.inTournament ? '' : ' · ${prep.label}';
-  }
-
-  Widget _buildPrepToolbar() {
-    final prep = _prep;
-    if (prep == null) return const SizedBox.shrink();
-    final next = prep.neighbour(_opponents, 1);
-    final prev = prep.neighbour(_opponents, -1);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Wrap(
-        spacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text(prep.person.name),
-          if (prep.inTournament) Text(prep.label),
-          TextButton(
-            onPressed: () => unawaited(
-              prep.tournament == null
-                  ? _opponentActions.openPrepFile(context, prep.person)
-                  : _opponentActions.openGroupStudy(context, prep.tournament!),
-            ),
-            child: Text(
-              prep.inTournament ? 'Open group study' : 'Open prep study',
-            ),
-          ),
-          TextButton(
-            onPressed: _openingTree == null || _isAnalyzing
-                ? null
-                : () => unawaited(_runRepertoireCheck()),
-            child: const Text('Check repertoire'),
-          ),
-          TextButton(
-            onPressed: _openingTree == null
-                ? null
-                : () => unawaited(_boardActions.addCurrentLineToStudy()),
-            child: const Text('Save line to study'),
-          ),
-          if (prep.entry != null) ...[
-            FilterChip(
-              label: const Text('Prepared'),
-              selected: prep.entry!.prepared,
-              onSelected: (_) => unawaited(_togglePrepared()),
-            ),
-            TextButton(
-              onPressed: prev == null
-                  ? null
-                  : () => unawaited(_switchToPerson(prev)),
-              child: const Text('Previous player'),
-            ),
-            TextButton(
-              onPressed: next == null
-                  ? null
-                  : () => unawaited(_switchToPerson(next)),
-              child: const Text('Next player'),
-            ),
-            TextButton(
-              onPressed: () => unawaited(_openTournamentSheet()),
-              child: const Text('Back to group'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Future<void> _togglePrepared() async {
-    final prep = _prep;
-    final entry = prep?.entry;
-    final tournament = prep?.tournament;
-    if (entry == null || tournament == null) return;
-    await _opponents.saveTournament(
-      tournament.withEntry(entry.copyWith(prepared: !entry.prepared)),
-    );
-  }
-
-  /// Load another person's games, downloading them first if they are not
-  /// on disk yet.
-  Future<void> _switchToPerson(PersonRecord person) async {
-    final group = _prep?.tournament?.name;
-    final info = await _opponentActions.ensureGames(
-      context,
-      person,
-      group: group,
-    );
-    if (info == null || !mounted) return;
-    await _selectPlayer(info);
-  }
-
-  Future<void> _openTournamentSheet() async {
-    final tournament = _prep?.tournament;
-    if (tournament == null) return;
-    final picked = await Navigator.of(context).push<AnalysisPlayerInfo>(
-      MaterialPageRoute(
-        builder: (_) => TournamentScreen(
-          tournamentId: tournament.id,
-          store: _opponents,
-          actions: _opponentActions,
-        ),
-      ),
-    );
-    if (picked != null && mounted) await _selectPlayer(picked);
+              '${prep.person.name} · ${_playerIsWhite ? 'As Black' : 'As White'}';
   }
 
   Future<void> _runRepertoireCheck() async {
