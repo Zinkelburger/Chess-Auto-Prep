@@ -63,6 +63,16 @@ void main() {
         expect(report.inBook, isFalse);
         expect(report.bookEnded, isFalse);
       }
+      final opponentChoice = await service.analyzeGame(
+        gameSans: ['e4', 'c5', 'Nf3'],
+        meWhite: true,
+      );
+      expect(
+        opponentChoice!.differentOpening,
+        isTrue,
+        reason: 'White e4 alone does not establish an Open Game repertoire',
+      );
+      expect(opponentChoice.byMe, isFalse);
       final entered = await service.analyzeGame(
         gameSans: ['e4', 'e5', 'Nf3', 'Nf6'],
         meWhite: false,
