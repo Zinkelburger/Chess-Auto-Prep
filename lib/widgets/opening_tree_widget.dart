@@ -535,7 +535,8 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
         : '${flip ? position.losses : position.wins}W-'
               '${position.draws}D-'
               '${flip ? position.wins : position.losses}L';
-    final noun = position.hasWdl ? 'games' : 'paths';
+    final noun =
+        '${position.hasWdl ? 'game' : 'path'}${position.gamesPlayed == 1 ? '' : 's'}';
     final text = Text(
       position.hasWdl
           ? '${position.gamesPlayed} $noun • '
