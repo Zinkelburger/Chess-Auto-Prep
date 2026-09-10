@@ -420,13 +420,20 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       child: Row(
         children: [
           SizedBox(
-            height: 24,
+            height: 32,
             child: FittedBox(
               child: ShortcutTooltip(
                 description: 'Toggle engine',
                 shortcut: AppShortcut.toggleEngine,
                 child: Switch(
                   value: _engineEnabled,
+                  activeThumbColor: AppColors.ink,
+                  activeTrackColor: AppColors.accent,
+                  inactiveThumbColor: AppColors.onSurfaceMuted,
+                  inactiveTrackColor: AppColors.surfaceInset,
+                  trackOutlineColor: const WidgetStatePropertyAll(
+                    AppColors.onSurfaceMuted,
+                  ),
                   onChanged: (value) {
                     if (value && !EngineGate.ensureAvailable(context)) return;
                     _setEngineEnabled(value);
@@ -446,16 +453,22 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                               '${formatNodes(_discovery.nodes)} nodes'
                         : '${_threatMode ? 'Threat · ' : ''}${_discovery.lines.length} lines • '
                               'depth ${_discovery.depth}',
-                    style: AppTextStyles.caption,
+                    style: AppTextStyles.bodyStrong,
                     overflow: TextOverflow.ellipsis,
                   )
                 : const Tooltip(
                     message: 'Toggle engine',
-                    child: Text('Engine', style: AppTextStyles.caption),
+                    child: Text('Engine', style: AppTextStyles.bodyStrong),
                   ),
           ),
           IconButton(
-            icon: const Icon(Icons.gps_fixed, size: 16),
+            icon: const Icon(Icons.gps_fixed, size: 20),
+            style: IconButton.styleFrom(foregroundColor: AppColors.ink),
+            selectedIcon: const Icon(
+              Icons.gps_fixed,
+              size: 20,
+              color: AppColors.accent,
+            ),
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
             tooltip: _threatMode ? 'Hide threat' : 'Show threat',

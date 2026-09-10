@@ -619,7 +619,7 @@ class _DeviationBanner extends StatelessWidget {
         children: [
           Icon(
             Icons.fork_right,
-            size: 16,
+            size: 20,
             color: report.bookEnded
                 ? AppColors.onSurfaceMuted
                 : AppColors.warning,
@@ -629,20 +629,18 @@ class _DeviationBanner extends StatelessWidget {
             child: Text(
               message,
               overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.caption.copyWith(fontSize: 12),
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w500),
             ),
           ),
           TextButton(
             onPressed: onShowLine,
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              minimumSize: Size.zero,
+              foregroundColor: AppColors.ink,
+              minimumSize: const Size(0, 32),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            child: Text(
-              'Show my line',
-              style: AppTextStyles.caption.copyWith(fontSize: 12),
-            ),
+            child: const Text('Show my line', style: AppTextStyles.bodyStrong),
           ),
         ],
       ),

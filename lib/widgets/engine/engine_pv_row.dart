@@ -29,8 +29,10 @@ class EnginePvRow extends StatefulWidget {
   final void Function(int index, Offset anchor)? onMoveHovered;
   final VoidCallback? onHoverExit;
 
+  static const double fontSize = 14;
+
   static double lineHeight(BuildContext context) =>
-      MediaQuery.textScalerOf(context).scale(13) * 1.5 + 8.5;
+      MediaQuery.textScalerOf(context).scale(fontSize) * 1.5 + 8.5;
 
   @override
   State<EnginePvRow> createState() => _EnginePvRowState();
@@ -47,7 +49,7 @@ class _EnginePvRowState extends State<EnginePvRow> {
       maxMoves: widget.sanMoves.length,
       maxLines: 1,
       singleLine: !_expanded,
-      fontSize: 13,
+      fontSize: EnginePvRow.fontSize,
       moveColor: widget.moveColor,
       movePadding: const EdgeInsets.symmetric(horizontal: 1),
       onMoveTapped: widget.onMoveTapped,
@@ -75,6 +77,7 @@ class _EnginePvRowState extends State<EnginePvRow> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.mono.copyWith(
+                    fontSize: EnginePvRow.fontSize,
                     fontWeight: FontWeight.w600,
                     color: widget.evalColor ?? AppColors.ink,
                   ),
