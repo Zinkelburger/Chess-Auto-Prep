@@ -71,7 +71,7 @@ mixin _GenerationConfigAdvanced
               : null,
         ),
         AdvancedSection(
-          'Line order & tails',
+          'PGN output',
           Icons.playlist_add_check,
           _coverageSection,
         ),
@@ -163,33 +163,44 @@ mixin _GenerationConfigAdvanced
         },
       ),
       const SizedBox(height: 8),
-      ChoiceField<MoveAnnotationDetail>(
-        label: 'Per-move annotations',
-        value: _annotationDetail,
-        enabled: !widget.isGenerating,
-        items: const [
-          ChoiceItem(
-            value: MoveAnnotationDetail.none,
-            label: 'None — moves only',
-          ),
-          ChoiceItem(
-            value: MoveAnnotationDetail.likelihood,
-            label: 'Reply likelihood',
-          ),
-          ChoiceItem(
-            value: MoveAnnotationDetail.full,
-            label: 'Full — eval, ease, scores',
-          ),
-        ],
-        onChanged: (v) {
-          _annotationDetail = v;
+      _caption('PGN output · optional annotations (off by default)'),
+      _labeledCheckbox('Include evaluations', _annotationDetail.evaluations, (
+        v,
+      ) {
+        _annotationDetail = _annotationDetail.copyWith(evaluations: v);
+        refresh();
+      }),
+      _labeledCheckbox(
+        'Include expectimax values',
+        _annotationDetail.expectimax,
+        (v) {
+          _annotationDetail = _annotationDetail.copyWith(expectimax: v);
+          refresh();
+        },
+      ),
+      _labeledCheckbox(
+        'Include Maia probabilities / database frequencies',
+        _annotationDetail.probabilities,
+        (v) {
+          _annotationDetail = _annotationDetail.copyWith(probabilities: v);
+          refresh();
+        },
+      ),
+      _labeledCheckbox(
+        'Include generated explanations and extra statistics',
+        _annotationDetail.explanations,
+        (v) {
+          _annotationDetail = _annotationDetail.copyWith(
+            explanations: v,
+            extraMetrics: v,
+          );
           refresh();
         },
       ),
       _caption(
-        'Full writes the numbers the build already computed — evaluation, '
-        'how hard each move is to find, and how the move scores in real '
-        'games — next to every move.',
+        'Only available values are included. ChessDB books use database '
+        'frequencies, not Maia probabilities. These settings change the PGN '
+        'comments; saved analysis is retained.',
       ),
     ];
   }

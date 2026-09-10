@@ -538,7 +538,7 @@ class TreeBuildConfig {
     this.lineMinNewShare = 0.25,
     this.lineMaxOverlap = 0.7,
     this.lineMaxFoldPlies = 6,
-    this.annotationDetail = MoveAnnotationDetail.full,
+    this.annotationDetail = MoveAnnotationDetail.none,
     this.organizeIntoChapters = true,
     this.maxLinesPerChapter = 40,
     this.minLinesPerChapter = 5,
@@ -1245,7 +1245,7 @@ SearchAlgorithm _parseSearchAlgorithm(String? value, {bool? legacyBestFirst}) {
   return SearchAlgorithm.fast;
 }
 
-/// Read the annotation level, falling back to the boolean pair this enum
+/// Read the annotation choices, falling back to the boolean the old enum
 /// replaced so presets and paused builds written before the change still load.
 MoveAnnotationDetail _parseAnnotationDetail(Map<String, dynamic> json) {
   final name = json['annotation_detail'] as String?;
@@ -1254,7 +1254,7 @@ MoveAnnotationDetail _parseAnnotationDetail(Map<String, dynamic> json) {
   if (legacy != null) {
     return MoveAnnotationDetail.fromLegacyFlags(annotate: legacy);
   }
-  return MoveAnnotationDetail.full;
+  return MoveAnnotationDetail.none;
 }
 
 SelectionMode _parseSelectionMode(String? value) {

@@ -12,6 +12,26 @@ import 'package:flutter_test/flutter_test.dart';
 String movetextOf(String pgn) => pgn.split('\n\n').last.trim();
 
 void main() {
+  test('bare output suppresses generated comments throughout the game', () {
+    final pgn = writePgnGame(
+      const PgnGameSpec(
+        headers: {'Event': 'Clean book', 'CumProb': '42%'},
+        movesSan: ['e4', 'c5'],
+        leadingComment: '[%cumProb 42%]',
+        annotations: [MoveAnnotation(evalCp: 25, note: 'Generated note')],
+        variations: {
+          1: [
+            PgnSideline(['e5', 'Nf3'], comment: 'Generated sideline note'),
+          ],
+        },
+      ),
+      detail: MoveAnnotationDetail.none,
+    );
+    expect(pgn, isNot(contains('{')));
+    expect(pgn, contains('[CumProb "42%"]'));
+    expect(movetextOf(pgn), '1. e4 c5 (1... e5 2. Nf3) *');
+  });
+
   group('variations', () {
     test('hang off the move they are keyed to, numbered from it', () {
       final pgn = writePgnGame(
@@ -155,7 +175,7 @@ void main() {
             ],
           },
         ),
-        detail: MoveAnnotationDetail.none,
+        detail: MoveAnnotationDetail.full,
       );
 
       expect(

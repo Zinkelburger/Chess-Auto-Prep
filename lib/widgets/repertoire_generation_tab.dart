@@ -353,7 +353,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   const Padding(
                     padding: EdgeInsets.only(top: 16),
                     child: Text(
-                      'No generated lines to cut in this chapter. Plan and save lines first.',
+                      'No matching generated build is loaded. Open its saved analysis tree to cut lines.',
                     ),
                   ),
               ],
@@ -626,7 +626,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             ),
             const SizedBox(height: 4),
             Text(
-              '$keep of $max lines · covers $coverage% of what you will face',
+              '$keep of $max lines · covers $coverage% of this build’s weighted lines',
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
             ),
             Slider(
@@ -637,7 +637,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               label: '$keep',
               onChanged: _trimming
                   ? null
-                  : (v) => setState(() => _keepLines = v.round()),
+                  : (v) {
+                      if (!mounted) return;
+                      setState(() => _keepLines = v.round());
+                    },
               // The count is planned here, not in `build`: a drag emits
               // `onChanged` every frame and `onChangeEnd` once.
               onChangeEnd: _trimming
@@ -647,15 +650,17 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             if (folded > 0 && answered > coverage)
               Text(
                 '$folded near-duplicate lines are folded in as sidelines, '
-                'so the file answers $answered%.',
+                'so the saved build answers $answered% including sidelines.',
                 style: AppTextStyles.caption,
               ),
             const Text(
               'Lines are ordered by how much new ground each one breaks, so '
               'the ones dropped first are the ones that only answer a rarer '
-              'try than a line you are keeping already. A line that differs '
-              'from one you are keeping by a single move is written into it '
-              'as a sideline instead of getting an entry of its own.',
+              'try than a line you are keeping already. Coverage is relative '
+              'to this saved build, not all possible opponent play. This '
+              'action only removes entries; it does not add sidelines or '
+              'restore previously removed lines. Required transposition '
+              'continuations may keep the total above your target.',
               style: AppTextStyles.caption,
             ),
             const SizedBox(height: 8),
@@ -706,8 +711,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         removed == 0
             ? 'Nothing to remove — the repertoire is already this size.'
             : 'Removed $removed line${removed == 1 ? '' : 's'}. '
-                  '${plan.keep} left, covering '
-                  '${(plan.coverage * 100).round()}% of what you will face.',
+                  'Saved analysis is still available.',
       );
     } finally {
       // The file just changed, so the memoised "would remove" count for this
