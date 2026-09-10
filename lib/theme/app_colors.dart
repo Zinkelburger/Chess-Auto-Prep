@@ -32,6 +32,9 @@ abstract final class AppColors {
   /// ColorScheme.secondary — slider tracks, switches, selection chrome.
   static const surfaceHighlight = Color(0xFF606060);
 
+  /// Mid-gray reserve tray keeps both black and white chess pieces visible.
+  static const pocketSurface = Color(0xFF888888);
+
   // ── Ink hierarchy (text/icons on the dark surfaces) ──────────────────────
 
   /// Canonical body ink (16.7:1 on [surface]). [AppTextStyles.ink] and the

@@ -63,6 +63,7 @@ boards, engine lines and opening explorer. Smaller windows stack the panel.
 | User action | Control / behavior |
 |---|---|
 | Play or drop a piece | Drag on either board; reserve pieces also support click then square |
+| Read reserves | Mid-gray trays keep both piece colors visible. Owned pieces stay fully opaque on either turn and always show a count; empty slots remain faint silhouettes |
 | Identify seats | You / Partner / Opponent / Partner’s opponent, beside each clock |
 | Pause or resume | Analysis toolbar |
 | Read candidate continuations | Board 1 and Board 2 ranked lines appear together, automatically using the side to move on each board. Searches still consider both boards jointly; all scores are from your team’s perspective |

@@ -476,8 +476,8 @@ class _PocketRow extends StatelessWidget {
     final pockets = position.pockets ?? Pockets.empty;
     final setup = controller.mode == BughouseMode.setup;
     final pending = controller.pendingDrop;
-    // Dropping is only possible for the side actually on turn there, so the
-    // other strip is shown but visibly inert.
+    // Turn gates interaction, not visibility: reserves remain useful to read
+    // while waiting for this side to move.
     final droppable = setup || position.turn == side;
 
     return Tooltip(
@@ -491,7 +491,7 @@ class _PocketRow extends StatelessWidget {
         height: 46,
         padding: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainer,
+          color: AppColors.pocketSurface,
           borderRadius: BorderRadius.circular(4),
         ),
         // Packed tight and left-aligned, the way lichess draws a crazyhouse
@@ -511,7 +511,6 @@ class _PocketRow extends StatelessWidget {
                     pending.board == which &&
                     pending.side == side &&
                     pending.role == role,
-                enabled: droppable,
                 // A reserve piece is dragged onto its square the way a piece
                 // already on the board is; the click-then-click path stays for
                 // anyone who prefers it, and for touch.
@@ -545,7 +544,6 @@ class _PocketPiece extends StatelessWidget {
     required this.piece,
     required this.count,
     required this.held,
-    required this.enabled,
     required this.onTap,
     this.onSecondaryTap,
     this.drag,
@@ -556,7 +554,6 @@ class _PocketPiece extends StatelessWidget {
   final Piece piece;
   final int count;
   final bool held;
-  final bool enabled;
   final VoidCallback? onTap;
   final VoidCallback? onSecondaryTap;
 
@@ -614,13 +611,12 @@ class _PocketPiece extends StatelessWidget {
               Opacity(
                 // Empty slots stay legible enough to read as "none of these",
                 // without competing with the pieces that are actually there.
-                opacity: empty ? 0.16 : (enabled ? 1.0 : 0.45),
+                opacity: empty ? 0.10 : 1.0,
                 child: PieceImage(piece: piece, size: size),
               ),
-              // A count only when there is more than one: a lone piece is
-              // already shown by being drawn, and a "1" on every slot is four
-              // strips of noise.
-              if (count > 1)
+              // Even one piece gets a count, so ownership never relies on
+              // distinguishing its artwork from an empty silhouette alone.
+              if (count > 0)
                 Positioned(
                   right: 0,
                   bottom: 0,
