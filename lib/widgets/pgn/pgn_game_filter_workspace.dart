@@ -269,7 +269,17 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildFilters(context),
+                Material(
+                  color: Theme.of(context).colorScheme.surface,
+                  shape: RoundedRectangleBorder(
+                    side: const BorderSide(color: AppColors.outline),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: _buildFilters(context),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 SizedBox(
                   height: _board == null ? 300 : 660,
@@ -287,6 +297,16 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   Widget _buildFilters(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      Text(
+        'Filter games',
+        style: AppTextStyles.forTheme(context, AppTextStyles.title),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        'Choose a filter. Matching games update as you type.',
+        style: AppTextStyles.forTheme(context, AppTextStyles.muted),
+      ),
+      const SizedBox(height: 16),
       if (widget.collectionPlayer case final player?) ...[
         Wrap(
           spacing: 8,
@@ -314,16 +334,27 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
         ),
         const SizedBox(height: 8),
       ],
+      Text(
+        'Game details',
+        style: AppTextStyles.forTheme(context, AppTextStyles.bodyStrong),
+      ),
+      const SizedBox(height: 10),
+      HeaderFilters(controller: _filters, games: widget.allGames, simple: true),
+      const Divider(height: 28),
+      Text(
+        'Opening',
+        style: AppTextStyles.forTheme(context, AppTextStyles.bodyStrong),
+      ),
+      const SizedBox(height: 8),
       Align(
         alignment: Alignment.centerLeft,
-        child: TextButton.icon(
+        child: OutlinedButton.icon(
           key: const ValueKey('filter-choose-eco'),
           onPressed: _board == null ? _chooseOpenings : null,
           icon: const Icon(Icons.search),
-          label: const Text('Choose ECO openings…'),
+          label: const Text('Browse openings by name or ECO'),
         ),
       ),
-      HeaderFilters(controller: _filters, games: widget.allGames, simple: true),
       const SizedBox(height: 16),
       IgnorePointer(
         ignoring: _board != null,
@@ -428,7 +459,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
               : _invalid || _boardDirty
               ? 'Preview paused'
               : '${_matchingIndices.length} matching games',
-          style: AppTextStyles.forTheme(context, AppTextStyles.bodyStrong),
+          style: AppTextStyles.forTheme(context, AppTextStyles.title),
         ),
         if (_invalid)
           Text(
@@ -513,6 +544,10 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
           ),
         FilledButton(
           key: const ValueKey('apply-game-filters'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            foregroundColor: AppColors.surface,
+          ),
           onPressed: _canApply && _matchingIndices.isNotEmpty
               ? () {
                   if (!mounted) return;

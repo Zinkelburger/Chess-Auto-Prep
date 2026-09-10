@@ -159,8 +159,6 @@ void main() {
         Theme.of(tester.element(find.byType(HeaderFilters))).brightness,
         Brightness.dark,
       );
-      await tester.tap(find.byTooltip('Add filter'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Player'));
       await _finishMatching(tester);
       final controller = tester
@@ -264,58 +262,56 @@ void main() {
     expect(applied, [0, 1]);
   });
 
-  testWidgets('plus menu adds ECO prefix search and dates default to After', (
-    tester,
-  ) async {
-    List<int>? applied;
-    await _open(
-      tester,
-      games: [
-        (
-          headers: {..._games[0].headers, 'ECO': 'C20'},
-          pgnText: _games[0].pgnText,
-        ),
-        (
-          headers: {..._games[1].headers, 'ECO': 'E60'},
-          pgnText: _games[1].pgnText,
-        ),
-      ],
-      onApply: (indices, _) => applied = indices,
-    );
-    expect(find.text('Player'), findsNothing);
-    expect(find.text('More…'), findsNothing);
-    await tester.tap(find.byTooltip('Add filter'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('ECO'));
-    await tester.pumpAndSettle();
-    final controller = tester
-        .widget<HeaderFilters>(find.byType(HeaderFilters))
-        .controller;
-    final input = find.byWidgetPredicate(
-      (widget) =>
-          widget is TextField &&
-          identical(widget.controller, controller.headerRows.single.controller),
-    );
-    await tester.enterText(input, 'E');
-    FocusManager.instance.primaryFocus?.unfocus();
-    await _finishMatching(tester);
-    await tester.tap(_apply);
-    expect(applied, [1]);
-    await tester.tap(find.byTooltip('Add filter'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Date'));
-    await tester.pumpAndSettle();
-    expect(controller.headerRows.last.field, 'Date');
-    expect(controller.headerRows.last.mode, MatchMode.after);
-    expect(tester.takeException(), isNull);
-  });
+  testWidgets(
+    'direct filters add ECO prefix search and dates default to After',
+    (tester) async {
+      List<int>? applied;
+      await _open(
+        tester,
+        games: [
+          (
+            headers: {..._games[0].headers, 'ECO': 'C20'},
+            pgnText: _games[0].pgnText,
+          ),
+          (
+            headers: {..._games[1].headers, 'ECO': 'E60'},
+            pgnText: _games[1].pgnText,
+          ),
+        ],
+        onApply: (indices, _) => applied = indices,
+      );
+      expect(find.byKey(const ValueKey('add-filter-Player')), findsOneWidget);
+      expect(find.text('More…'), findsNothing);
+      await tester.tap(find.text('ECO'));
+      await tester.pumpAndSettle();
+      final controller = tester
+          .widget<HeaderFilters>(find.byType(HeaderFilters))
+          .controller;
+      final input = find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            identical(
+              widget.controller,
+              controller.headerRows.single.controller,
+            ),
+      );
+      await tester.enterText(input, 'E');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await _finishMatching(tester);
+      await tester.tap(_apply);
+      expect(applied, [1]);
+      await tester.tap(find.text('Date'));
+      await tester.pumpAndSettle();
+      expect(controller.headerRows.last.field, 'Date');
+      expect(controller.headerRows.last.mode, MatchMode.after);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('one player per field; comma-separated PGN names stay valid', (
     tester,
   ) async {
     await _open(tester);
-    await tester.tap(find.byTooltip('Add filter'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Player'));
     await tester.pumpAndSettle();
     final controller = tester

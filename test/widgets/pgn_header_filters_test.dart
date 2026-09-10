@@ -295,6 +295,28 @@ void main() {
     await _close(tester, controller);
   });
 
+  testWidgets('more filters searches fields and focuses the new value', (
+    tester,
+  ) async {
+    final controller = _controller();
+    await _show(tester, controller, width: 300, simple: true, textScale: 1.5);
+    await tester.tap(find.byKey(const ValueKey('more-game-filters')));
+    await tester.pumpAndSettle();
+    await _choose(tester, _input('Search fields'), 'WhiteElo', 'White rating');
+    expect(controller.headerRows.last.field, 'WhiteElo');
+    expect(_input('Search fields'), findsNothing);
+    expect(
+      tester.widget<TextField>(_value(controller, 1)).focusNode!.hasFocus,
+      isTrue,
+    );
+    await tester.enterText(_value(controller, 1), '2400');
+    await tester.pumpAndSettle();
+    expect(controller.headerConfigs.last.value, '2400');
+    expect(controller.headerConfigs.first.value, 'Open');
+    expect(tester.takeException(), isNull);
+    await _close(tester, controller);
+  });
+
   testWidgets('new row takes field focus and preserves existing values', (
     tester,
   ) async {
