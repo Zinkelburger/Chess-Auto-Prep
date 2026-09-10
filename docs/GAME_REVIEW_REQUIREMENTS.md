@@ -12,7 +12,7 @@ The `codex/games-study-workspace` change implements a quieter default: board and
 
 Implemented in this change:
 
-- Add the current game, or select multiple games from the currently filtered collection, to an existing or new study. Keep reviewing after saving; offer an Open study link. Append a batch in one file write and retain unsaved edits when the destination is already open.
+- Add the current game, or select multiple games from the currently filtered collection, to an existing or new study. Keep reviewing after saving without a completion popup. The destination picker offers Add new study immediately, with a dedicated name prompt. Append a batch in one file write and retain unsaved edits when the destination is already open.
 - When viewing a study, offer Edit study and return to that chapter and position. Copying into another study is a secondary action.
 - Keep filters accessible through one Filter games control; show matching/total counts when active. Preserve the existing detailed filter dialog.
 - One View menu contains Explore this game, Solitaire chess, Customize view, Game and collection, and App settings. Contextual panels offer Back to game.
@@ -24,9 +24,9 @@ Still open for product review: membership indicators and duplicate detection; so
 
 Validation: 20 focused tests pass, including study batch persistence, open-study edits, selection scope, preference reload, navigation routing, and move-reader options. Analyze and lint pass; the analyzer reports one existing informational const suggestion in `review_counterexamples_test.dart`.
 
-Headless app checks used an isolated three-game fixture. Verified adding a two-game selection to a new study, appending to that existing study, opening the new chapter, browsing a study and returning through Edit study, position filtering (2/3 games), filtered study selection, and playback visibility after restart without autoplay. The shared snackbar action now uses the same legible ink as its close control, so Open study stays readable on the dark surface.
+Headless app checks used an isolated three-game fixture. Verified adding a two-game selection to a new study, appending to that existing study, opening the new chapter, browsing a study and returning through Edit study, position filtering (2/3 games), filtered study selection, and playback visibility after restart without autoplay. Routine success snackbars, including the Open study completion popup, have since been removed.
 
-Review screenshots: [default reader](images/game-review/default.png), [choose games](images/game-review/study-selection.png), [optional controls](images/game-review/view-options.png), [added-to-study confirmation](images/game-review/study-added.png).
+Review screenshots: [default reader](images/game-review/default.png), [choose games](images/game-review/study-selection.png), [optional controls](images/game-review/view-options.png), [historical added-to-study confirmation, since removed](images/game-review/study-added.png).
 
 The variation typography work is separate (`codex/pgn-variation-flow`); this change does not edit its movetext rendering files. Shared reader changes only let the host relocate reading settings into View; the reader retains its existing standalone settings by default.
 
@@ -75,7 +75,7 @@ The variation typography work is separate (`codex/pgn-variation-flow`); this cha
 - [ ] Add a selection of games or all filtered games, with an explicit count and scope before saving. Do not silently add the entire original file.
 - [ ] Each full game becomes a named chapter by default. Preserve the full game and its variations/comments/analysis annotations.
 - [ ] Show which studies already contain the game and open the relevant chapter directly. Repeated additions should identify a likely duplicate rather than silently generating many copies.
-- [ ] Keep reviewing after adding. Offer **Open study**, without forcing a page switch.
+- [x] Keep reviewing after adding, without a completion popup or a page switch.
 - [ ] Allow a useful repertoire line or analysis variation to be added to a study, labelled distinctly from adding the full played game.
 - [ ] Retain provenance: source game identity/file, original players/date, and the repertoire/chapter/line when applicable.
 - [ ] **Proposed:** Existing Study remains the owner of chapter editing, ordering and training. Use its storage and add-to-study flow rather than creating another grouping system.

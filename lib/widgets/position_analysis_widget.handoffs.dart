@@ -88,6 +88,7 @@ mixin _StudyHandoffMixin on _PositionAnalysisWidgetStateBase {
       showAppSnackBar(
         context,
         'Could not build a line to this position from the games.',
+        requiresAttention: true,
       );
       return;
     }
@@ -115,9 +116,6 @@ mixin _StudyHandoffMixin on _PositionAnalysisWidgetStateBase {
       preferredStudy: widget.actions?.preferredStudy,
       buildPgn: (chapterName) =>
           lineTree.toPgn(event: chapterName, result: '*'),
-      viewSanLine: lineTree.sanSequenceAt(
-        lineTree.mainlineEndFrom(TreePath.empty),
-      ),
     );
   }
 

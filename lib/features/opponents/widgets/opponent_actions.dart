@@ -181,7 +181,11 @@ class OpponentActions {
     }
     if (!context.mounted) return null;
     if (!person.hasAccount) {
-      showAppSnackBar(context, 'Add an account in the row to download games.');
+      showAppSnackBar(
+        context,
+        'Add an account in the row to download games.',
+        requiresAttention: true,
+      );
       return null;
     }
     final wanted = person.toPlayerInfo(
@@ -242,7 +246,11 @@ class OpponentActions {
           person.asOpponentEntry,
     ];
     if (rows.isEmpty) {
-      showAppSnackBar(context, 'Nobody in the field has an online account.');
+      showAppSnackBar(
+        context,
+        'Nobody in the field has an online account.',
+        requiresAttention: true,
+      );
       return false;
     }
     return downloads.downloadList(
@@ -278,6 +286,7 @@ class OpponentActions {
         context,
         'No lines in ${person.name}’s prep file yet — add some from '
         'Player Analysis first.',
+        requiresAttention: true,
       );
       return;
     }
@@ -359,7 +368,11 @@ class OpponentActions {
         if (store.person(e.personId) case final p? when p.uscfId != null) p,
     ];
     if (targets.isEmpty) {
-      showAppSnackBar(context, 'Nobody in the field has a US Chess ID.');
+      showAppSnackBar(
+        context,
+        'Nobody in the field has a US Chess ID.',
+        requiresAttention: true,
+      );
       return 0;
     }
     final progress = ValueNotifier<String>('Starting…');

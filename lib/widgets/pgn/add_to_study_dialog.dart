@@ -1,6 +1,5 @@
-/// Picker for "Add line to study": an editable chapter name, a search bar,
-/// and the list of existing studies. Typing a name that matches no study
-/// offers creating a new one with that name.
+/// Picker for "Add line to study": an editable chapter name, an explicit
+/// new-study action, and a searchable list of existing studies.
 library;
 
 import 'dart:async';
@@ -10,6 +9,8 @@ import 'package:flutter/material.dart';
 import '../../models/repertoire_metadata.dart';
 import '../../services/storage/storage_factory.dart';
 import '../../theme/app_colors.dart';
+import '../common/name_entry_dialog.dart';
+import '../study/study_name_dialog.dart' show sanitizeStudyName;
 
 /// Outcome of [AddToStudyDialog]: exactly one of [existingPath] /
 /// [newStudyName] is set.
@@ -107,15 +108,38 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
     );
   }
 
-  void _createNew(String name) {
-    final safe = name
-        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .trim();
-    if (safe.isEmpty) return;
+  Future<void> _createNew() async {
+    final taken = {
+      for (final study in _studies ?? <RepertoireMetadata>[])
+        study.name.toLowerCase(),
+    };
+    var suggested = 'New study';
+    for (var suffix = 2; taken.contains(suggested.toLowerCase()); suffix++) {
+      suggested = 'New study ($suffix)';
+    }
+    final name = await showNameEntryDialog(
+      context,
+      title: 'Add new study',
+      fieldLabel: 'Study name',
+      confirmLabel: 'Create and add',
+      initialValue: suggested,
+      allowUnchanged: true,
+      validate: (value) {
+        final safe = sanitizeStudyName(value);
+        if (safe.isEmpty) return 'Please enter a study name.';
+        if (taken.contains(safe.toLowerCase())) {
+          return 'A study with this name already exists.';
+        }
+        return null;
+      },
+    );
+    if (name == null || !mounted) return;
     Navigator.pop(
       context,
-      AddToStudyResult(newStudyName: safe, chapterName: _chapterName),
+      AddToStudyResult(
+        newStudyName: sanitizeStudyName(name),
+        chapterName: _chapterName,
+      ),
     );
   }
 
@@ -123,10 +147,6 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
   Widget build(BuildContext context) {
     final studies = _studies;
     final filtered = _filtered;
-    final query = _query.trim();
-    final hasExactMatch = filtered.any(
-      (s) => s.name.toLowerCase() == query.toLowerCase(),
-    );
 
     return AlertDialog(
       title: Text(widget.title),
@@ -150,22 +170,28 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                 ),
               ),
             const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: studies == null ? null : _createNew,
+              icon: const Icon(Icons.add),
+              label: const Text('Add new study'),
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _searchCtrl,
               autofocus: true,
               decoration: const InputDecoration(
-                labelText: 'Search studies — or type a new study name',
+                labelText: 'Search existing studies',
                 prefixIcon: Icon(Icons.search, size: 18),
                 isDense: true,
               ),
-              onChanged: (v) => setState(() => _query = v.trim()),
-              onSubmitted: (v) {
-                // Enter picks the single match, or creates the typed study.
-                if (filtered.length == 1) {
-                  _pickExisting(filtered.first);
-                } else if (filtered.isEmpty && v.trim().isNotEmpty) {
-                  _createNew(v);
-                }
+              onChanged: (v) {
+                if (!mounted) return;
+                setState(() => _query = v.trim());
+              },
+              onSubmitted: (_) {
+                if (!mounted) return;
+                final matches = _filtered;
+                if (matches.length == 1) _pickExisting(matches.first);
               },
             ),
             const SizedBox(height: 8),
@@ -174,21 +200,17 @@ class _AddToStudyDialogState extends State<AddToStudyDialog> {
                   ? const Center(child: CircularProgressIndicator())
                   : ListView(
                       children: [
-                        if (query.isNotEmpty && !hasExactMatch)
-                          ListTile(
-                            dense: true,
-                            leading: const Icon(Icons.add, size: 20),
-                            title: Text('Create study "$query"'),
-                            onTap: () => _createNew(query),
-                          ),
-                        if (filtered.isEmpty && query.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.all(24),
+                        if (filtered.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(24),
                             child: Text(
-                              'No studies yet — type a name above to '
-                              'create one.',
+                              studies.isEmpty
+                                  ? 'No studies yet. Use Add new study to create one.'
+                                  : 'No studies match your search.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: AppColors.onSurfaceMuted),
+                              style: const TextStyle(
+                                color: AppColors.onSurfaceMuted,
+                              ),
                             ),
                           ),
                         for (final s in filtered)

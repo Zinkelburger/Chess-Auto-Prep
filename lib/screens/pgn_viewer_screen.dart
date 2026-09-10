@@ -729,7 +729,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     final error = _controller.errorMessage;
     if (error != null) {
-      showAppSnackBar(context, error, duration: const Duration(seconds: 4));
+      showAppSnackBar(
+        context,
+        error,
+        isError: true,
+        duration: const Duration(seconds: 4),
+      );
       return;
     }
     showAppSnackBar(
@@ -749,7 +754,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     final error = _controller.errorMessage;
     if (error != null) {
-      showAppSnackBar(context, error, duration: const Duration(seconds: 5));
+      showAppSnackBar(
+        context,
+        error,
+        isError: true,
+        duration: const Duration(seconds: 5),
+      );
       return;
     }
     if (notifySliceRestore) _showPendingSliceRestoreSnackBar();
@@ -1087,7 +1097,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     final error = _controller.errorMessage;
     if (error != null) {
-      showAppSnackBar(context, error, duration: const Duration(seconds: 4));
+      showAppSnackBar(
+        context,
+        error,
+        isError: true,
+        duration: const Duration(seconds: 4),
+      );
     }
   }
 
@@ -1410,7 +1425,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       context,
       suggestedChapterName: '$white – $black',
       pickerTitle: 'Edit game in a study',
-      viewActionLabel: 'Edit in study',
+      openAfterAdding: true,
       buildPgn: (_) => game.pgnText,
       viewSanLine: sanLine,
     );

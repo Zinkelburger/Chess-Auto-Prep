@@ -383,7 +383,13 @@ class _ChapterListBodyState extends State<ChapterListBody> {
       final color = await _repertoireColor();
       final path = storage.chapterFilePath(_dirPath, name);
       if (await storage.fileExists(path)) {
-        if (mounted) showAppSnackBar(context, 'That chapter already exists.');
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            'That chapter already exists.',
+            requiresAttention: true,
+          );
+        }
         return;
       }
       final header =

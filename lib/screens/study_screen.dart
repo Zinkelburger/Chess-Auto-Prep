@@ -311,6 +311,7 @@ class _StudyScreenState extends State<StudyScreen> {
       'Downloading ${plan.gameIds.length} games (~$minutes min). '
       'chessgames.com is slow on purpose — keep working, it runs in the '
       'background.',
+      requiresAttention: true,
     );
   }
 
