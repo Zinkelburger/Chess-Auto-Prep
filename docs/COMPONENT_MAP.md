@@ -289,8 +289,9 @@ RepertoireScreen (composition root — wires controllers to widgets)
 - `Ctrl/Cmd+Shift+V` — paste FEN from clipboard
 - `Escape` — close the current panel
 - `F` — flip the board (outside text input)
+- `E` — toggle engine analysis (outside text input, including comment and move fields)
 
-View-switching Ctrl/Cmd+number shortcuts, bare letter commands other than `F` (flip board), slash, panel-Tab, numbered fork/planner choices and Shift+arrow trap jumps have been removed. Their mouse controls remain available. Unassigned actions have no chords, dispatch no keys and show no shortcut suffix in shared tooltips.
+View-switching Ctrl/Cmd+number shortcuts, bare letter commands other than `F` (flip board) and `E` (toggle engine), slash, panel-Tab, numbered fork/planner choices and Shift+arrow trap jumps have been removed. Their mouse controls remain available. Unassigned actions have no chords, dispatch no keys and show no shortcut suffix in shared tooltips.
 
 Digit shortcuts (bottom-pane tab toggles `1`/`2`/`3`, edit-mode NAG `1`–`6`, star ratings, etc.) are **not** bound.
 
@@ -593,7 +594,9 @@ and variations and combines with the other active filters; there is no separate
 tree-position export action. Database explorer offers
 Lichess, Masters and local TWIC sources.
 
-The engine is hidden by default. **Show Engine** opens the Game tab with an
+The engine is hidden by default. **E** reveals and enables it on the Game tab;
+further presses toggle analysis without hiding the panel. This shortcut is
+suppressed while typing or in solitaire. **Show Engine** opens the Game tab with an
 inline switch, a **Show threat** target button and compact settings for **Cores,
 Lines, Depth and Memory**. These controls use `EngineSettings.instance`, shared
 and persisted with global engine preferences. Threat mode evaluates a hypothetical

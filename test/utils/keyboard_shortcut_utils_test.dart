@@ -160,6 +160,34 @@ void main() {
       expect(flipped, isFalse);
     });
 
+    testWidgets(
+      'E toggles the engine after leaving text input but never while typing',
+      (tester) async {
+        var engineEnabled = false;
+        await pumpScreen(tester, [
+          ...KeyBinding.forShortcut(
+            AppShortcut.toggleEngine,
+            'Toggle engine',
+            () => engineEnabled = !engineEnabled,
+          ),
+        ]);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+        await tester.pump();
+        expect(engineEnabled, isFalse);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+        await tester.pump();
+        expect(engineEnabled, isTrue);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+        await tester.pump();
+        expect(engineEnabled, isFalse);
+      },
+    );
+
     testWidgets('Escape blurs the field instead of firing bindings', (
       tester,
     ) async {

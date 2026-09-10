@@ -18,6 +18,8 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
+import '../../../utils/app_shortcuts.dart';
+import '../../../utils/keyboard_shortcut_utils.dart';
 import '../../../constants/chess_constants.dart';
 import '../../../models/board_annotation.dart';
 import '../../../services/analysis_games_service.dart';
@@ -415,6 +417,17 @@ class _PlanBuildScreenState extends State<PlanBuildScreen> {
       body: Focus(
         focusNode: _keys,
         autofocus: true,
+        onKeyEvent: (node, event) => handleKeyBindings(
+          [
+            ...KeyBinding.forShortcut(
+              AppShortcut.toggleEngine,
+              'Toggle engine',
+              InlineEngineBar.toggleEngine,
+            ),
+          ],
+          event,
+          node: node,
+        ),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 1000;

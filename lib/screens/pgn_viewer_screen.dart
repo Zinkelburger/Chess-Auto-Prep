@@ -260,6 +260,24 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     unawaited(value.save());
   }
 
+  void _toggleEngine() {
+    if (!mounted ||
+        _controller.filteredGames.isEmpty ||
+        _controller.isSolitaireSetup) {
+      return;
+    }
+    final hidden = !_viewPreferences.engine;
+    if (hidden) {
+      _setViewPreferences(_viewPreferences.copyWith(engine: true));
+    }
+    _showPanel(PgnWorkspace.game);
+    // Revealing an already enabled engine must not turn it off. Subsequent
+    // presses toggle analysis while leaving the panel in place.
+    if (!hidden || !InlineEngineBar.isEngineEnabled) {
+      InlineEngineBar.toggleEngine();
+    }
+  }
+
   Future<void> _checkStudyPath(String? path) async {
     final isStudy = path != null && await _isStudyPath(path);
     if (mounted && _controller.filePath == path) {
@@ -1561,12 +1579,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _controller.toggleBoardFlipped,
     ),
     ...KeyBinding.forShortcut(AppShortcut.pastePgn, 'Paste PGN', _pastePgn),
+    ...KeyBinding.forShortcut(
+      AppShortcut.toggleEngine,
+      'Toggle engine',
+      _toggleEngine,
+    ),
     if (!_onLineTab && !_onReferenceTab) ...[
-      ...KeyBinding.forShortcut(
-        AppShortcut.toggleEngine,
-        'Toggle engine',
-        InlineEngineBar.toggleEngine,
-      ),
       ...KeyBinding.forShortcut(
         AppShortcut.autoPlay,
         'Toggle auto-play',
