@@ -59,6 +59,11 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
     );
   }
 
+  bool get _showSaveAction =>
+      _controller.filePath == null ||
+      !_viewPreferences.autoSave ||
+      (_controller.errorMessage != null && _controller.hasUnsavedChanges);
+
   Widget _buildViewMenu() {
     final hasGame = _controller.filteredGames.isNotEmpty;
     final solitaire = _controller.isSolitaireMode;
@@ -87,10 +92,11 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             onRun: _openSliceDialog,
           ),
         if (hasGame) ...[
-          if (!solitaire)
+          if (!solitaire && _showSaveAction)
             AppMenuEntry(
               icon: Icons.save_outlined,
-              label: 'Save PGN',
+              label: _controller.filePath == null ? 'Save as…' : 'Save PGN',
+              enabled: !_controller.isSaving,
               onRun: () => unawaited(_savePgn()),
             ),
           if (!solitaire && !_onReferenceTab)
