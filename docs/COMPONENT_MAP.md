@@ -716,10 +716,12 @@ notes and replay from their embedded FEN. Dotted-underlined comment moves offer
 **Preview comment move** tooltips and show **Comment preview** while navigating.
 Their active highlight uses the mainline’s borderless pill around the move alone;
 move numbers and separating spaces stay outside, and selection preserves text weight.
-The variation toolbar and continuation picker keep a stable single-row height
-as moves and branches change; overflow scrolls horizontally instead of wrapping.
-The mainline control remains visible when reading options live in the host menu,
-and the picker reserves its space at positions without a choice.
+The variation toolbar and continuation picker float at the foot of the reader,
+so entering a sideline or reaching a fork never resizes the reading viewport.
+Overflow scrolls horizontally. Positions without a choice have no picker or
+reserved empty row; trailing document padding keeps the final moves reachable
+above any visible controls. The mainline control remains available when reading
+options live in the host menu.
 The note stays in view during preview. They never become saved mainline moves
 or variations. Explicit move numbers and sides must match the preview position;
 bare square references in prose are not inferred as pawn moves. Move numbers, check signs

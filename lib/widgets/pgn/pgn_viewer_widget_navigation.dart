@@ -129,42 +129,27 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     }
   }
 
-  /// Reserve one row even away from a fork, so showing the choices never
-  /// changes the reading viewport. Overflow scrolls instead of wrapping.
-  Widget _buildBranchChips() {
+  /// Float choices over the reader only when there is a real fork.
+  Widget? _buildBranchChips() {
     final candidates = _branchCandidates();
+    if (candidates.length < 2) return null;
     return Padding(
-      padding: const EdgeInsets.only(left: 8, right: 8, top: 6),
-      child: Visibility(
-        visible: candidates.length >= 2,
-        maintainSize: true,
-        maintainAnimation: true,
-        maintainState: true,
-        child: SingleChildScrollView(
-          key: const ValueKey('pgn-branch-picker'),
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            spacing: 8,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.call_split,
-                size: 18,
-                color: AppColors.onSurfaceMuted,
-              ),
-              // A hidden chip keeps the same text-scaled height at line ends.
-              if (candidates.length < 2)
-                _branchChip('', AppColors.pgnMove, () {}),
-              if (candidates.length >= 2)
-                for (final c in candidates)
-                  _branchChip(
-                    c.san,
-                    c.color,
-                    c.onTap,
-                    emphasized: c.emphasized,
-                  ),
-            ],
-          ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: SingleChildScrollView(
+        key: const ValueKey('pgn-branch-picker'),
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          spacing: 8,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.call_split,
+              size: 18,
+              color: AppColors.onSurfaceMuted,
+            ),
+            for (final c in candidates)
+              _branchChip(c.san, c.color, c.onTap, emphasized: c.emphasized),
+          ],
         ),
       ),
     );

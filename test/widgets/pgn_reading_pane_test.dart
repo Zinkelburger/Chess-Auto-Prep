@@ -45,15 +45,14 @@ Future<PgnViewerWidgetController> _pump(
 void main() {
   for (final width in [320.0, 800.0]) {
     for (final showReadingOptions in [true, false]) {
-      testWidgets('navigation only opens the toolbar for variations at $width, '
+      testWidgets('floating controls never resize the reading area at $width, '
           'reading options: $showReadingOptions', (tester) async {
         final controller = await _pump(
           tester,
           width: width,
           showReadingOptions: showReadingOptions,
         );
-        var viewport = tester.getRect(_scrollView);
-        final mainlineViewport = viewport;
+        final viewport = tester.getRect(_scrollView);
         final forward = find.byIcon(Icons.chevron_right).last;
         final forwardRect = tester.getRect(forward);
         void expectStable() {
@@ -62,11 +61,31 @@ void main() {
           expect(tester.takeException(), isNull);
         }
 
+        expect(find.byKey(const ValueKey('pgn-branch-picker')), findsNothing);
+        expect(
+          viewport.bottom,
+          closeTo(
+            tester
+                    .getTopLeft(
+                      find.ancestor(
+                        of: forward,
+                        matching: find.byType(IconButton),
+                      ),
+                    )
+                    .dy -
+                4,
+            2,
+          ),
+        );
         // The fork picker appears after e4 and disappears after e5.
         for (final ply in [1, 2, 1, 0]) {
           controller.goToMainLineIndex(ply);
           await tester.pumpAndSettle();
           expectStable();
+          expect(
+            find.byKey(const ValueKey('pgn-branch-picker')),
+            ply == 1 ? findsOneWidget : findsNothing,
+          );
         }
         final view = tester.widget<PgnMovetextView>(
           find.byType(PgnMovetextView),
@@ -75,10 +94,6 @@ void main() {
         controller.goToVariationNode(sicilian, 1);
         await tester.pumpAndSettle();
         expect(find.text('Back to game'), findsOneWidget);
-        if (!showReadingOptions) {
-          viewport = tester.getRect(_scrollView);
-          expect(viewport.top, greaterThan(mainlineViewport.top));
-        }
         expectStable();
         final nested = sicilian.children.first.children[1];
         controller.goToVariationNode(nested, 1);
@@ -91,7 +106,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(controller.inVariation, isFalse);
         expect(find.text('Back to game'), findsNothing);
-        viewport = mainlineViewport;
         expectStable();
       });
     }
