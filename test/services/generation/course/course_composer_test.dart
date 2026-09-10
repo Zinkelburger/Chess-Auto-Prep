@@ -252,7 +252,7 @@ void main() {
         expect(position.fullmoves, 7);
         final movetext = entry.pgn.split('\n\n').last;
         expect(movetext, startsWith('1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6'));
-        expect(movetext.indexOf('[%eval'), greaterThan(movetext.indexOf('d6')));
+        expect(movetext, isNot(contains('{')));
       }
     });
 

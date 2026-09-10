@@ -48,7 +48,7 @@ const Map<String, String> _enumAlternatives = {
   'search_algorithm': 'pure',
   'build_mode': 'dbExplorer',
   'selection_mode': 'engineOnly',
-  'annotation_detail': 'none',
+  'annotation_detail': 'full',
 };
 
 /// Keys whose naive `+7` / `+0.125` mutation would land outside a clamp that
@@ -191,6 +191,57 @@ List<String> _lostKeys(
 }
 
 void main() {
+  testWidgets('PGN metrics start unchecked and can be selected independently', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _throughForm(
+      tester,
+      const TreeBuildConfig(startFen: _startFen, playAsWhite: true),
+    );
+    await tester.tap(find.text('Advanced…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PGN output').first);
+    await tester.pumpAndSettle();
+    final state = tester.state<GenerationConfigFormState>(
+      find.byType(GenerationConfigForm),
+    );
+    MoveAnnotationDetail selected() =>
+        state.toConfig(startFen: _startFen, playAsWhite: true).annotationDetail;
+    expect(selected(), MoveAnnotationDetail.none);
+    final eval = find.text('Include evaluations');
+    await tester.ensureVisible(eval);
+    await tester.tap(eval);
+    await tester.pumpAndSettle();
+    expect(selected(), const MoveAnnotationDetail(evaluations: true));
+    final expected = find.text('Include expectimax values');
+    await tester.ensureVisible(expected);
+    await tester.tap(expected);
+    await tester.pumpAndSettle();
+    expect(
+      selected(),
+      const MoveAnnotationDetail(evaluations: true, expectimax: true),
+    );
+    final probabilities = find.text(
+      'Include Maia probabilities / database frequencies',
+    );
+    await tester.ensureVisible(probabilities);
+    await tester.tap(probabilities);
+    await tester.pumpAndSettle();
+    expect(
+      selected(),
+      const MoveAnnotationDetail(
+        evaluations: true,
+        expectimax: true,
+        probabilities: true,
+      ),
+    );
+    expect(selected().explanations, isFalse);
+  });
+
   group('config survives a trip through the form', () {
     testWidgets('every field the form does not deliberately transform', (
       tester,

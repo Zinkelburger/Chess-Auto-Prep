@@ -97,6 +97,14 @@ they drifted. `MoveAnnotation` carries everything the tree knows about a move
 are omitted rather than defaulted: an unmeasured score must not read like an
 even one.
 
+New builds default to no generated comments or glyphs. In Advanced → PGN output,
+independent checkboxes include evaluations, expectimax values, source-labelled
+move probabilities/frequencies, and generated explanations/extra statistics.
+The settings also govern snapshot and model-game comments; moves and variations
+remain intact. Ranking metadata stays in PGN headers. Saved `none`, `likelihood`
+and `full` choices still load, while custom combinations serialize in
+`annotation_detail`. Existing PGNs are not rewritten by changing the setting.
+
 ## The ChessDB mainline book (`BuildMode.chessDbBook`)
 
 A mode with a different bargain from every other one: the database decides,

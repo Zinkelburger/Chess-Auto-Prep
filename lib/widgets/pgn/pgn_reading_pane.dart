@@ -287,104 +287,114 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
         borderRadius: BorderRadius.circular(8),
         child: Column(
           children: [
-            if (widget.showReadingOptions || branches.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
-                ),
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Color(0xFF363B43))),
-                ),
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 10,
-                  runSpacing: 8,
-                  children: [
-                    if (widget.previewingComment)
-                      const Text('Comment preview', style: AppTextStyles.muted),
-                    TextButton(
-                      onPressed: branches.isEmpty && !widget.previewingComment
-                          ? null
-                          : _mainline,
-                      child: const Tooltip(
-                        message: 'Return to mainline',
-                        child: Text('Main line', style: AppTextStyles.muted),
-                      ),
-                    ),
-                    for (final branch in branches) ...[
-                      const Icon(Icons.chevron_right, size: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: Color(0xFF363B43))),
+              ),
+              // Keep the toolbar to one row, including on nested lines.
+              // Its mainline control reserves the height when no branch is active.
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 10,
+                    children: [
+                      if (widget.previewingComment)
+                        const Text(
+                          'Comment preview',
+                          style: AppTextStyles.muted,
+                        ),
                       TextButton(
-                        onPressed: () =>
-                            widget.onNode(branch.root, branch.branchPly),
-                        child: Text(_label(branch), style: AppTextStyles.mono),
+                        onPressed: branches.isEmpty && !widget.previewingComment
+                            ? null
+                            : _mainline,
+                        child: const Tooltip(
+                          message: 'Return to mainline',
+                          child: Text('Main line', style: AppTextStyles.muted),
+                        ),
                       ),
+                      for (final branch in branches) ...[
+                        const Icon(Icons.chevron_right, size: 14),
+                        TextButton(
+                          onPressed: () =>
+                              widget.onNode(branch.root, branch.branchPly),
+                          child: Text(
+                            _label(branch),
+                            style: AppTextStyles.mono,
+                          ),
+                        ),
+                      ],
+                      if (branches.isNotEmpty)
+                        ShortcutTooltip(
+                          description: 'Return to parent line',
+                          shortcut: AppShortcut.returnToParentLine,
+                          child: TextButton.icon(
+                            onPressed: returnToParent,
+                            icon: const Icon(
+                              Icons.subdirectory_arrow_left,
+                              size: 18,
+                            ),
+                            label: const Text('Return to parent'),
+                          ),
+                        ),
+                      if (branches.isNotEmpty &&
+                          branches.last.root.id != _scope?.root.id)
+                        ShortcutTooltip(
+                          description: 'Read this variation at full width',
+                          shortcut: AppShortcut.focusVariation,
+                          child: TextButton.icon(
+                            onPressed: focusVariation,
+                            icon: const Icon(Icons.zoom_in, size: 18),
+                            label: const Text('Focus variation'),
+                          ),
+                        ),
+                      if (widget.showReadingOptions)
+                        PopupMenuButton<String>(
+                          tooltip: 'Reading options',
+                          icon: const Icon(Icons.tune, size: 18),
+                          onSelected: _applyReadingOption,
+                          itemBuilder: (_) => [
+                            CheckedPopupMenuItem(
+                              value: '0',
+                              checked: _anchor == 0,
+                              child: const Text('Anchor near top'),
+                            ),
+                            CheckedPopupMenuItem(
+                              value: '0.35',
+                              checked: _anchor == .35,
+                              child: const Text('Anchor near middle'),
+                            ),
+                            CheckedPopupMenuItem(
+                              value: '0.68',
+                              checked: _anchor == .68,
+                              child: const Text('Anchor near bottom'),
+                            ),
+                            const PopupMenuDivider(),
+                            const PopupMenuItem(
+                              value: 'expand',
+                              child: Text('Expand all variations'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'fold',
+                              child: Text('Fold deep variations'),
+                            ),
+                          ],
+                        ),
                     ],
-                    if (branches.isNotEmpty)
-                      ShortcutTooltip(
-                        description: 'Return to parent line',
-                        shortcut: AppShortcut.returnToParentLine,
-                        child: TextButton.icon(
-                          onPressed: returnToParent,
-                          icon: const Icon(
-                            Icons.subdirectory_arrow_left,
-                            size: 18,
-                          ),
-                          label: const Text('Return to parent'),
-                        ),
-                      ),
-                    if (branches.isNotEmpty &&
-                        branches.last.root.id != _scope?.root.id)
-                      ShortcutTooltip(
-                        description: 'Read this variation at full width',
-                        shortcut: AppShortcut.focusVariation,
-                        child: TextButton.icon(
-                          onPressed: focusVariation,
-                          icon: const Icon(Icons.zoom_in, size: 18),
-                          label: const Text('Focus variation'),
-                        ),
-                      ),
-                    if (widget.showReadingOptions)
-                      PopupMenuButton<String>(
-                        tooltip: 'Reading options',
-                        icon: const Icon(Icons.tune, size: 18),
-                        onSelected: _applyReadingOption,
-                        itemBuilder: (_) => [
-                          CheckedPopupMenuItem(
-                            value: '0',
-                            checked: _anchor == 0,
-                            child: const Text('Anchor near top'),
-                          ),
-                          CheckedPopupMenuItem(
-                            value: '0.35',
-                            checked: _anchor == .35,
-                            child: const Text('Anchor near middle'),
-                          ),
-                          CheckedPopupMenuItem(
-                            value: '0.68',
-                            checked: _anchor == .68,
-                            child: const Text('Anchor near bottom'),
-                          ),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(
-                            value: 'expand',
-                            child: Text('Expand all variations'),
-                          ),
-                          const PopupMenuItem(
-                            value: 'fold',
-                            child: Text('Fold deep variations'),
-                          ),
-                        ],
-                      ),
-                  ],
+                  ),
                 ),
               ),
+            ),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final inset = constraints.maxWidth >= 700 ? 45.0 : 32.0;
                   return Stack(
+                    fit: StackFit.expand,
                     children: [
                       NotificationListener<UserScrollNotification>(
                         onNotification: (notification) {

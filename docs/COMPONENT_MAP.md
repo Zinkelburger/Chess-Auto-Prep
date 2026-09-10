@@ -705,6 +705,10 @@ notes and replay from their embedded FEN. Dotted-underlined comment moves offer
 **Preview comment move** tooltips and show **Comment preview** while navigating.
 Their active highlight uses the mainline’s borderless pill around the move alone;
 move numbers and separating spaces stay outside, and selection preserves text weight.
+The variation toolbar and continuation picker keep a stable single-row height
+as moves and branches change; overflow scrolls horizontally instead of wrapping.
+The mainline control remains visible when reading options live in the host menu,
+and the picker reserves its space at positions without a choice.
 The note stays in view during preview. They never become saved mainline moves
 or variations. Explicit move numbers and sides must match the preview position;
 bare square references in prose are not inferred as pawn moves. Move numbers, check signs
@@ -1129,7 +1133,8 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `generation/pgn_freq_map.dart` | PGN frequency map (Dart port of C `pgn_freq.c`): isolate-based PGN parsing via `file_text_reader` (UTF-8 with Latin-1 fallback), FEN-based prefix matching (games reaching target via transposed move orders), per-position move frequencies keyed by 4-field canonical FEN, min-elo filtering, move probability filtering; detailed parse warnings (first 10 failures); tracks `fileReadErrors` in stats. `pgn_freq_parser.dart` treats `--`/`Z0` as a turn pass (no `recordMove`) so later same-side SAN stays legal |
 | `generation/pgn_freq_cache.dart` | Disk cache for parsed frequency maps (`<pgn>.freq.cache`); manifest keyed on file path/size/mtime + `startFen`/`startMoves`/`maxPly`/`minElo`; binary format compatible with C `PFREQ` layout |
 | `generation/line_extractor.dart` | Extract lines from tree; PGN `{engine-injected}` on injected opponent moves |
-| `generation/pgn_export.dart` | Export generated lines to PGN (includes `{engine-injected}` annotation) |
+| `generation/pgn_export.dart` | Shared generated PGN export through `export/pgn_game_writer.dart`. New exports have no generated comments. Advanced output checkboxes independently enable evaluations, expectimax values, source-labelled Maia probabilities/database frequencies, and explanations/extra statistics. Saved explicit annotation choices still load. Ranking metadata stays in headers. |
+| `generation/repertoire_slice.dart` | Cut lines ranks a loaded selected build by weighted decision coverage, preserves required transposition owners, and matches PGN entries using the saved starting-move prefix. It deletes matching entries only; it neither restores earlier cuts nor folds new sidelines. Coverage is relative to the saved build. |
 | `generation/generation_config.dart` | `TreeBuildConfig` (default `evalDepth` 14, `relativeEval` true), build modes; `summaryLabel` / `buildModeLabel` / `engineResourceLabel` for Jobs panel; DB Explorer fields: `pgnFilePaths`, `dbMinGames`, `dbMinProb`, `minElo` |
 | `generation/tree_eval_resolver.dart` | Eval resolution during build |
 | `generation/tree_ease.dart` | Opponent ease calculation |

@@ -102,7 +102,7 @@ String writePgnGame(PgnGameSpec spec, {required MoveAnnotationDetail detail}) {
   buffer.writeln();
 
   final comment = spec.leadingComment;
-  if (comment != null && comment.isNotEmpty) {
+  if (detail.explanations && comment != null && comment.isNotEmpty) {
     buffer.write('{$comment} ');
   }
 
@@ -128,7 +128,7 @@ String? _suffixFor(PgnGameSpec spec, int index, MoveAnnotationDetail detail) {
     final annotation = spec.annotations[annotationIndex];
     // `Nh3!` / `e5?` — the glyph sits on the SAN, before any comment, which
     // is where every viewer (and the app's own parser) expects it.
-    final glyph = annotation.glyph;
+    final glyph = detail.explanations ? annotation.glyph : null;
     if (glyph != null) buffer.write(glyph);
     final comment = annotation.toPgnComment(detail);
     if (comment != null) buffer.write(' {$comment}');
@@ -142,7 +142,9 @@ String? _suffixFor(PgnGameSpec spec, int index, MoveAnnotationDetail detail) {
       startMoveNumber: _moveNumberAt(spec, index),
       whiteToMoveFirst: _isWhiteAt(spec, index),
       suffix: (i) =>
-          i == 0 && note != null && note.isNotEmpty ? ' {$note}' : null,
+          detail.explanations && i == 0 && note != null && note.isNotEmpty
+          ? ' {$note}'
+          : null,
     );
     if (inner.isNotEmpty) buffer.write(' ($inner)');
   }
