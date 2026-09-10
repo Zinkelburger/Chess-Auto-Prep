@@ -103,7 +103,8 @@ class _OpeningTreeMoveRowState extends State<OpeningTreeMoveRow> {
     // are continuation paths, not games; use the same WDL-based distinction
     // as the position header so a 300-chapter course never claims thousands
     // of games were loaded.
-    final noun = entry.hasWdl ? 'games' : 'paths';
+    final noun =
+        '${entry.hasWdl ? 'game' : 'path'}${entry.gamesPlayed == 1 ? '' : 's'}';
     final frequency = entry.viaTransposition
         ? '${entry.gamesPlayed} $noun (transp.)'
         : '${entry.gamesPlayed} $noun · ${playedPercent.round()}%';

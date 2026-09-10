@@ -6,12 +6,12 @@ import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/widgets/opening_tree/opening_tree_move_row.dart';
 import 'package:chess_auto_prep/widgets/opening_tree/win_draw_loss_bar.dart';
 
-PositionGroup _entry({required bool scored}) {
+PositionGroup _entry({required bool scored, int count = 3}) {
   final node = OpeningTreeNode(
     move: 'e4',
     fen: Chess.initial.play(Chess.initial.parseSan('e4')!).fen,
   );
-  for (var i = 0; i < 3; i++) {
+  for (var i = 0; i < count; i++) {
     node.updateStats(scored ? 1 : null);
   }
   return PositionGroup([node]);
@@ -27,6 +27,13 @@ Future<void> _pump(WidgetTester tester, PositionGroup entry) =>
     );
 
 void main() {
+  testWidgets('single paths and games use singular labels', (tester) async {
+    await _pump(tester, _entry(scored: false, count: 1));
+    expect(find.text('1 path · 25%'), findsOneWidget);
+    await _pump(tester, _entry(scored: true, count: 1));
+    expect(find.text('1 game · 25%'), findsOneWidget);
+  });
+
   testWidgets('unscored course variations are labelled as paths', (
     tester,
   ) async {
