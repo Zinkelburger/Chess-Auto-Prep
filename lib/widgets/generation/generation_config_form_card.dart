@@ -3,8 +3,8 @@ part of 'generation_config_form.dart';
 /// The always-visible generation form: opponent rating, the two search
 /// algorithms with their three numbers, the two output switches, and the
 /// build source.  Everything here is a real knob with a real name — no
-/// bundled "style" or "effort" modifiers that quietly rewrite several
-/// settings at once.  Rarely-touched knobs live in the Advanced dialog and
+/// hidden modifiers. The ChessDB starter profile is explicit and optional.
+/// Rarely touched knobs live in the Advanced dialog and
 /// edit the same controllers, so the two can never disagree.
 mixin _GenerationConfigCard
     on
@@ -43,7 +43,22 @@ mixin _GenerationConfigCard
   // ── Opponent ────────────────────────────────────────────────────────────
 
   Widget _opponentSection() {
-    return _cardSection('Opponent', leadingRule: false, [
+    if (_buildMode == BuildMode.chessDbBook) {
+      return _cardSection('Opponent replies', [
+        _labeledCheckbox(
+          'Cover replies from master games',
+          _useMasterGames,
+          (v) => setState(() => _useMasterGames = v),
+          tooltip: 'Off, follow a single ChessDB mainline for both sides.',
+        ),
+        _caption(
+          'One ChessDB move for your side; master-game replies for your opponent. '
+          'Outside master practice, continue with one ChessDB mainline. No Maia model.',
+        ),
+        ..._masterGamesDownloadRow(),
+      ]);
+    }
+    return _cardSection('Opponent', [
       if (_buildMode != BuildMode.stockfishExpectimax)
         _labeledCheckbox(
           'Target master opponents',
@@ -102,13 +117,16 @@ mixin _GenerationConfigCard
         tooltip:
             'The database is empty. Ticked, the build waits for the last '
             '$years years of The Week in Chess to download, then builds on '
-            'master practice. Unticked, it builds now from Maia and the engine '
-            'alone. Also in Settings → Master games.',
+            'master practice. Unticked, ChessDB books follow a single mainline '
+            'without it; other modes use Maia. Also in Settings → Master games.',
       ),
       _caption(
         service.isSyncing
             ? 'A download is already running — the build waits for it '
                   'to finish.'
+            : _buildMode == BuildMode.chessDbBook
+            ? 'Without master games, a ChessDB book has no opponent branches. '
+                  'This download can be reused by future builds.'
             : 'One download for every future build. Untick to build now '
                   'without master practice.',
       ),
@@ -141,7 +159,8 @@ mixin _GenerationConfigCard
             'repetition history begins at the supplied starting position.';
 
   Widget _searchSection() {
-    return _cardSection('Search', [
+    final isBook = _buildMode == BuildMode.chessDbBook;
+    return _cardSection(isBook ? 'Book size' : 'Search', [
       if (_buildMode == BuildMode.stockfishExpectimax)
         DropdownButtonFormField<SearchAlgorithm>(
           key: const ValueKey('generation-search-method'),
@@ -162,7 +181,14 @@ mixin _GenerationConfigCard
             if (value != null) setState(() => _searchAlgorithm = value);
           },
         ),
-      _caption(_searchAlgorithmCaption()),
+      if (_buildMode == BuildMode.stockfishExpectimax)
+        _caption(_searchAlgorithmCaption()),
+      if (isBook)
+        _caption(
+          'Depths count half-moves from the current board. Branching stops first; '
+          'each line then continues to the line limit, or until ChessDB runs out. '
+          'Starting moves are included in the exported PGN. A FEN alone keeps its setup position.',
+        ),
       const SizedBox(height: 10),
       Wrap(
         spacing: 8,
@@ -170,11 +196,38 @@ mixin _GenerationConfigCard
         children: [
           _numField(
             _maxPlyCtrl,
-            'Max line length (half-moves)',
+            isBook
+                ? 'Branching depth (half-moves)'
+                : 'Max line length (half-moves)',
             defaultText: '4',
             onEdited: () => setState(() {}),
-            tooltip: 'How deep lines are allowed to grow.',
+            tooltip: isBook
+                ? 'Stop adding opponent branches at this depth.'
+                : 'How deep lines are allowed to grow.',
           ),
+          if (isBook) ...[
+            _numField(
+              _bookTailMaxPlyCtrl,
+              'Line limit (half-moves)',
+              onEdited: () => setState(() {}),
+              tooltip:
+                  'Total length from the build position, including the branching portion. Never shorter than the branching depth.',
+            ),
+            _numField(
+              _oppMaxChildrenCtrl,
+              'Opponent replies per position',
+              onEdited: () => setState(() {}),
+              tooltip:
+                  'Limit replies after the root. The root includes every qualifying master reply to cover the opening systems.',
+            ),
+            _numField(
+              _oppMassTargetCtrl,
+              'Reply coverage (0–1)',
+              onEdited: () => setState(() {}),
+              tooltip:
+                  'Share of master-game replies to cover at each position, subject to the reply limit. This is not a guarantee of overall repertoire coverage.',
+            ),
+          ],
           _numField(
             _timeBudgetCtrl,
             'Stop after (minutes)',
@@ -194,7 +247,7 @@ mixin _GenerationConfigCard
 
   Widget _outputSection() {
     final isDb = _buildMode == BuildMode.dbExplorer;
-    return _cardSection('What to build', [
+    return _cardSection('What to build', leadingRule: false, [
       ChoiceField<BuildMode>(
         label: 'Build from',
         value: _buildMode,
@@ -227,6 +280,13 @@ mixin _GenerationConfigCard
         },
       ),
       _caption(_buildModeDescription()),
+      if (_buildMode == BuildMode.chessDbBook)
+        TextButton.icon(
+          key: const ValueKey('chessdb-starter-settings'),
+          onPressed: widget.isGenerating ? null : _applyChessDbPreset,
+          icon: const Icon(Icons.menu_book_outlined, size: 16),
+          label: const Text('Use compact repertoire settings'),
+        ),
       const SizedBox(height: 8),
       _labeledCheckbox(
         'Only traps',
@@ -262,6 +322,14 @@ mixin _GenerationConfigCard
   void _applyPresetJson(Map<String, dynamic> json) {
     setState(() {
       _applyInitialConfig(TreeBuildConfig.fromJson(json, startFen: ''));
+    });
+  }
+
+  void _applyChessDbPreset() {
+    setState(() {
+      _applyInitialConfig(
+        chessDbRepertoirePreset(playAsWhite: widget.playAsWhite),
+      );
     });
   }
 
@@ -346,6 +414,8 @@ mixin _GenerationConfigCard
       enabled: !widget.isGenerating,
       onSelected: (value) async {
         switch (value) {
+          case '::chessdb':
+            _applyChessDbPreset();
           case '::reset':
             _resetToDefaults();
           case '::save':
@@ -359,6 +429,11 @@ mixin _GenerationConfigCard
         }
       },
       itemBuilder: (ctx) => [
+        const PopupMenuItem(
+          value: '::chessdb',
+          child: Text('ChessDB compact repertoire'),
+        ),
+        const PopupMenuDivider(),
         const PopupMenuItem(value: '::reset', child: Text('Reset to defaults')),
         const PopupMenuItem(
           value: '::save',
@@ -433,6 +508,20 @@ mixin _GenerationConfigCard
     final ply = int.tryParse(_maxPlyCtrl.text.trim()) ?? 20;
     final depth = BulkAnalysisSettings.instance.depth;
     final budget = int.tryParse(_timeBudgetCtrl.text.trim()) ?? 0;
+    if (_buildMode == BuildMode.chessDbBook) {
+      final tail = int.tryParse(_bookTailMaxPlyCtrl.text.trim()) ?? 40;
+      return [
+        widget.playAsWhite ? 'As White' : 'As Black',
+        'ChessDB best moves',
+        _useMasterGames ? 'master replies' : 'single mainline',
+        'branch for $ply half-moves',
+        'continue to ${tail < ply ? ply : tail}',
+        if (_bookEngineFallback) 'Stockfish on database misses',
+        if ((_seedConfig?.maxNodes ?? 0) > 0)
+          '${_seedConfig!.maxNodes} nodes maximum',
+        if (budget > 0) 'build budget ${budget}m',
+      ].join(' · ');
+    }
     final source = switch (_buildMode) {
       BuildMode.stockfishExpectimax => 'Stockfish + Maia',
       BuildMode.maiaDbExplore => 'database win rates',

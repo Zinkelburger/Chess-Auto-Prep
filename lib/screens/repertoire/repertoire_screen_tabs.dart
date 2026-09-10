@@ -115,6 +115,13 @@ mixin _RepertoireTabContent
       onHoverMove: (uci) => _boardPreview.setHoverArrow(
         uci == null ? null : BoardAnnotation.arrowFromUci(uci),
       ),
+      onBuildChessDb: () => unawaited(
+        _openLineBuildDialog(
+          initialConfig: chessDbRepertoirePreset(
+            playAsWhite: _controller.isRepertoireWhite,
+          ),
+        ),
+      ),
       onPlanLines: () => unawaited(_openPlanner()),
       onCutLines: () => unawaited(_openLineBuildDialog(cutOnly: true)),
     );

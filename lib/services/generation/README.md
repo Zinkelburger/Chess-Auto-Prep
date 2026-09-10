@@ -158,3 +158,20 @@ encyclopedia branches everywhere, and the reader is looking for a code. The
 group carries its own `OpeningLabel` because lines reaching one code by
 different move orders share a shorter prefix than the code's defining
 position.
+
+The board-side Generate pane offers **Build ChessDB repertoire…**. Its form
+also offers **Presets → ChessDB compact repertoire**, or **Use compact
+repertoire settings** after choosing ChessDB mainline book. This uses
+the same method as `test/benchmark/chessdb_book_build.dart`, which produced the
+King’s Indian book. The preset keeps one move for our side and limits branching
+through master reply count, local reply coverage and branching depth. Root
+systems remain broad; line deduplication and folded sidelines keep repeated
+decisions out of the training list. Results depend on the position, available
+master games, current ChessDB data and build budget; the preset does not promise
+a fixed line count or full coverage.
+
+Both the app and the headless harness export the known starting moves before
+each generated continuation. For example, `START_MOVES="d4 Nf6 c4 g6 Nc3 Bg7
+e4 d6"` builds from the KID position but writes a PGN beginning `1. d4 Nf6`.
+The harness records that prefix on its saved tree as well. A custom FEN without
+move history stays a setup-position PGN; no move order is invented.

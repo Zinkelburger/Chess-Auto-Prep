@@ -25,9 +25,26 @@ mixin _GenerationConfigAdvanced
           'Opponent model',
           Icons.person_outline,
           _opponentModelSection,
+          unavailable: () => _buildMode == BuildMode.chessDbBook
+              ? 'ChessDB books use master-game replies. Set reply limits under Book size.'
+              : null,
         ),
-        AdvancedSection('Move choice', Icons.alt_route, _moveChoiceSection),
-        AdvancedSection('Search tuning', Icons.tune, _searchBudgetSection),
+        AdvancedSection(
+          'Move choice',
+          Icons.alt_route,
+          _moveChoiceSection,
+          unavailable: () => _buildMode == BuildMode.chessDbBook
+              ? 'ChessDB chooses your move. Tie-breaking options are under ChessDB book.'
+              : null,
+        ),
+        AdvancedSection(
+          'Search tuning',
+          Icons.tune,
+          _searchBudgetSection,
+          unavailable: () => _buildMode == BuildMode.chessDbBook
+              ? 'Book size controls branching and line length. The starter profile limits the build to 12,000 nodes and 120 minutes; incomplete builds can be resumed.'
+              : null,
+        ),
         if (_buildMode != BuildMode.stockfishExpectimax)
           AdvancedSection(
             'Master games',
@@ -265,9 +282,11 @@ mixin _GenerationConfigAdvanced
   /// contribute to the book.
   List<Widget> _masterGamesSection(VoidCallback refresh) => [
     _caption(
-      'Select Target master opponents on the main form to use master-game '
-      'reply frequencies. Untick it for Maia at your chosen rating throughout. '
-      'Master games do not change the search horizon or receive extra search priority.',
+      _buildMode == BuildMode.chessDbBook
+          ? 'Cover replies from master games on the main form enables branching. Without master practice, both sides follow a single ChessDB mainline.'
+          : 'Select Target master opponents on the main form to use master-game '
+                'reply frequencies. Untick it for Maia at your chosen rating throughout. '
+                'Master games do not change the search horizon or receive extra search priority.',
     ),
   ];
 
@@ -277,17 +296,6 @@ mixin _GenerationConfigAdvanced
         spacing: 16,
         runSpacing: 8,
         children: [
-          _numField(
-            _bookTailMaxPlyCtrl,
-            'Book tail depth (plies)',
-            defaultText: '40',
-            onEdited: refresh,
-            tooltip:
-                'How far a ChessDB mainline runs after it leaves master '
-                'practice, where there is one database move per side so depth '
-                'costs a node per ply instead of a fan-out. Stops earlier if '
-                'ChessDB runs out; values below the depth limit are ignored.',
-          ),
           _numField(
             _bookTieBreakCtrl,
             'Book tie-break window (cp)',

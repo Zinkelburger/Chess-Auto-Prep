@@ -18,6 +18,7 @@ void main() {
     addTearDown(gen.dispose);
     final calls = <({String? san, int depth, int cores})>[];
     String? played;
+    var booksOpened = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -38,11 +39,15 @@ void main() {
                   },
               onPlayMove: (san) => played = san,
               onPlanLines: () {},
+              onBuildChessDb: () => booksOpened++,
             ),
           ),
         ),
       ),
     );
+    await tester.tap(find.byKey(const ValueKey('build-chessdb-repertoire')));
+    expect(booksOpened, 1);
+    expect(calls, isEmpty);
     expect(find.text('??'), findsWidgets);
     expect(
       find.text('Saved analysis: My book / Main · scores for White'),

@@ -89,6 +89,7 @@ import '../features/planner/controllers/plan_runner.dart';
 import '../features/planner/widgets/plan_build_screen.dart';
 import '../features/planner/widgets/plan_runner_banner.dart';
 import '../services/generation/generation_config.dart';
+import '../services/generation/generation_presets.dart';
 import '../constants/chess_constants.dart';
 import '../services/storage/app_paths.dart';
 
@@ -259,19 +260,27 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   }
 
   /// Line planning and trimming use their own configuration route.
-  Future<void> _openLineBuildDialog({bool cutOnly = false}) async {
+  Future<void> _openLineBuildDialog({
+    bool cutOnly = false,
+    TreeBuildConfig? initialConfig,
+  }) async {
     if (_configRouteOpen) return;
     _configRouteOpen = true;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
-          title: cutOnly ? 'Cut lines' : 'Build planned lines',
+          title: cutOnly
+              ? 'Cut lines'
+              : initialConfig?.isChessDbBook == true
+              ? 'Build ChessDB repertoire'
+              : 'Build planned lines',
           startSignal: _generationController,
           hasStarted: () => _generationController.isGenerating,
           child: RepertoireGenerationTab(
             key: _generationTabKey,
             cutOnly: cutOnly,
+            initialConfig: initialConfig,
             fen: _controller.fen,
             isWhiteRepertoire: _controller.isRepertoireWhite,
             currentRepertoire: _controller.currentRepertoire,

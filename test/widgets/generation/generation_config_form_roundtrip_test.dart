@@ -373,6 +373,58 @@ void main() {
     },
   );
 
+  testWidgets(
+    'ChessDB starter profile exposes book controls and survives reopening',
+    (tester) async {
+      await _throughForm(
+        tester,
+        const TreeBuildConfig(
+          startFen: _startFen,
+          playAsWhite: false,
+          buildMode: BuildMode.chessDbBook,
+        ),
+        playAsWhite: false,
+      );
+      final starter = find.byKey(const ValueKey('chessdb-starter-settings'));
+      await tester.ensureVisible(starter);
+      await tester.tap(starter);
+      await tester.pumpAndSettle();
+      final state = tester.state<GenerationConfigFormState>(
+        find.byType(GenerationConfigForm),
+      );
+      final config = state.toConfig(startFen: _startFen, playAsWhite: false);
+      expect(config.playAsWhite, isFalse);
+      expect(config.buildMode, BuildMode.chessDbBook);
+      expect(config.maxPly, 20);
+      expect(config.bookTailMaxPly, 34);
+      expect(config.oppMaxChildren, 5);
+      expect(config.oppMassTarget, 0.90);
+      expect(config.maxNodes, 12000);
+      expect(config.useMasterGames, isTrue);
+      expect(config.enableChessDbApi, isTrue);
+      expect(config.bookEngineFallback, isFalse);
+      expect(config.verifyFinal, isFalse);
+      expect(config.chessDbApiConcurrency, 1);
+      expect(find.text('Opponent rating (Elo)'), findsNothing);
+      expect(find.textContaining('Pure finite-horizon search'), findsNothing);
+      expect(find.textContaining('master practice, Maia'), findsNothing);
+      expect(find.text('Line limit (half-moves)'), findsOneWidget);
+      final lineLimit = find.widgetWithText(
+        TextField,
+        'Line limit (half-moves)',
+      );
+      await tester.ensureVisible(lineLimit);
+      await tester.enterText(lineLimit, '30');
+      await tester.pumpAndSettle();
+      final edited = state.toConfig(startFen: _startFen, playAsWhite: false);
+      expect(edited.bookTailMaxPly, 30);
+      final reopened = await _throughForm(tester, edited, playAsWhite: false);
+      expect(reopened.bookTailMaxPly, 30);
+      expect(reopened.maxPly, 20);
+      expect(reopened.oppMassTarget, 0.90);
+    },
+  );
+
   group('the deliberate transforms', () {
     testWidgets('Pure clears retired novelty weights from presets', (
       tester,

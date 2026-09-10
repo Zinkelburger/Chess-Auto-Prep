@@ -25,6 +25,7 @@ class GeneratePositionPane extends StatefulWidget {
     this.onHoverMove,
     this.lookupChessDb,
     this.onCutLines,
+    this.onBuildChessDb,
   });
   final String fen;
   final String databaseName;
@@ -39,6 +40,7 @@ class GeneratePositionPane extends StatefulWidget {
   final ValueChanged<String?>? onHoverMove;
   final VoidCallback onPlanLines;
   final VoidCallback? onCutLines;
+  final VoidCallback? onBuildChessDb;
   final Future<DbMoveList> Function(String fen)? lookupChessDb;
 
   @override
@@ -436,6 +438,13 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
               child: Wrap(
                 spacing: 8,
                 children: [
+                  if (widget.onBuildChessDb != null)
+                    TextButton.icon(
+                      key: const ValueKey('build-chessdb-repertoire'),
+                      onPressed: busy ? null : widget.onBuildChessDb,
+                      icon: const Icon(Icons.menu_book_outlined, size: 16),
+                      label: const Text('Build ChessDB repertoire…'),
+                    ),
                   TextButton(
                     onPressed: widget.onPlanLines,
                     child: const Text('Plan lines from here'),

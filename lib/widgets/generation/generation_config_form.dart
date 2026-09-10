@@ -109,9 +109,9 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Source (What to build) sits above the search fields it gates;
-        // _opponentSection draws no leading rule so the top stays clean.
-        _opponentSection(),
+        // the source picker leads so its dependent controls stay below it.
         _outputSection(),
+        _opponentSection(),
         _searchSection(),
         const Divider(height: 24),
         if (_buildMode != BuildMode.stockfishExpectimax) _skeletonSection(),
@@ -141,16 +141,20 @@ class GenerationConfigFormState extends _GenerationConfigFormStateBase
                   color: AppColors.onSurfaceSoft,
                 ),
                 const SizedBox(width: 4),
-                const Text(
-                  'Evaluation databases (optional)',
-                  style: TextStyle(
+                Text(
+                  _buildMode == BuildMode.chessDbBook
+                      ? 'ChessDB source (required)'
+                      : 'Evaluation databases (optional)',
+                  style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.onSurfaceSoft,
                   ),
                 ),
                 const SizedBox(width: 4),
                 Tooltip(
-                  message: _cdbDirectAvailable
+                  message: _buildMode == BuildMode.chessDbBook
+                      ? 'ChessDB books need ranked moves from the local dump or ChessDB API. Score-only databases cannot supply these moves.'
+                      : _cdbDirectAvailable
                       ? 'Optional eval lookup chain before Stockfish:\n'
                             'project cache → ChessDB dump → ChessDB slice → '
                             'Lichess evals → ChessDB API → engine.\n'

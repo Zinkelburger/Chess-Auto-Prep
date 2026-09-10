@@ -31,6 +31,7 @@ import 'starting_position_card.dart';
 class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
   final bool cutOnly;
+  final TreeBuildConfig? initialConfig;
 
   /// Removes the repertoire lines whose move-sequence keys are given, and
   /// reports how many went. Null when the host cannot edit the file, which
@@ -56,6 +57,7 @@ class RepertoireGenerationTab extends StatefulWidget {
   const RepertoireGenerationTab({
     super.key,
     this.cutOnly = false,
+    this.initialConfig,
     this.onTrimLines,
     required this.fen,
     required this.isWhiteRepertoire,
@@ -386,16 +388,16 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 4),
                             child: Text(
-                              'Runs the tree search from this position — Fast '
-                              'or Pure, under Search — and saves the lines it '
-                              'finds into this chapter.',
+                              'Builds from this position using the selected method '
+                              'and saves the resulting lines into this chapter.',
                               style: AppTextStyles.caption,
                             ),
                           ),
                           const SizedBox(height: 8),
                           GenerationConfigForm(
                             key: _configFormKey,
-                            initialConfig: ctrl.lastConfig,
+                            initialConfig:
+                                widget.initialConfig ?? ctrl.lastConfig,
                             isGenerating: ctrl.isGenerating,
                             playAsWhite: widget.isWhiteRepertoire,
                           ),
