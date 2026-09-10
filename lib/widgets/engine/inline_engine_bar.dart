@@ -390,15 +390,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             // PGN below us as streamed lines disappear and arrive.
             ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight:
-                    EnginePvRow.lineHeight(context) *
-                    _settings.multiPv *
-                    _settings.pvRows,
-                maxHeight:
-                    (EnginePvRow.lineHeight(context) *
-                            _settings.multiPv *
-                            _settings.pvRows)
-                        .clamp(240.0, double.infinity),
+                minHeight: EnginePvRow.lineHeight(context) * _settings.multiPv,
+                maxHeight: (EnginePvRow.lineHeight(context) * _settings.multiPv)
+                    .clamp(240.0, double.infinity),
               ),
               child: SingleChildScrollView(
                 child: EngineGate.isLocked
@@ -516,9 +510,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       children: List.generate(_settings.multiPv, (index) {
         final line = byRank[index + 1];
         return line == null
-            ? SizedBox(
-                height: EnginePvRow.lineHeight(context) * _settings.pvRows,
-              )
+            ? SizedBox(height: EnginePvRow.lineHeight(context))
             : _buildLineRow(context, line);
       }),
     );
@@ -555,7 +547,6 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       ),
       sanMoves: sanMoves,
       startPly: plyFromFen(_searchFen),
-      rows: _settings.pvRows,
       onMoveTapped: !_threatMode && widget.onLineMoveTapped != null
           ? (idx) {
               if (!mounted) return;

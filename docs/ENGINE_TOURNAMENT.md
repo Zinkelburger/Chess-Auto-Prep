@@ -17,9 +17,17 @@ or a power cut keeps the games it had already played.
 
 **Engine Tournament** in the mode menu. New tournament asks for the engines,
 the starting position (a FEN, the board's current position, or the clipboard),
-the time control, the schedule, and the adjudication rules. While it runs you
-get the live board and the game in progress; when it is done you get the
-crosstable and one row per game. Clicking a row opens that game in the PGN
+the time control, the schedule, and the adjudication rules. The **Engine controls**
+tab exposes the selected tournament's setup, including the board editor and
+per-participant cores and memory using the shared engine controls. **Start new run**
+creates a separate tournament with those settings. **Edit & run again** also
+opens the saved setup for changes before starting. Running games keep their
+captured settings. While a tournament runs you get the live board and the game
+in progress; when it is done you get the crosstable and one row per game.
+**Show final positions** switches between board thumbnails and compact rows;
+the choice is remembered. Thumbnails replay the saved PGN, including matches
+created by older versions. Length is shown in **Moves**, counting a final
+unpaired half-move as a move. Clicking a row opens that game in the PGN
 Viewer with the whole match still loaded, so Prev/Next walk the rest of it.
 
 ### History
@@ -62,15 +70,14 @@ the fifty-move rule, threefold repetition. An engine that crashes, hangs, or
 plays an illegal move **loses that game** rather than aborting the tournament —
 which is the whole point of running one.
 
-The crosstable reports score, W/D/L, draw rate, Sonneborn-Berger, the rating
-difference the score implies with its 95% interval, and the likelihood of
-superiority. Read the interval before the estimate: `+0 ±252` after ten games
+The crosstable shows score, W/D/L and bounded head-to-head summaries for each
+opponent. **Show rating statistics** adds draw rate, Sonneborn-Berger, the
+rating difference with its 95% interval, and the likelihood of superiority. Read the interval before the estimate: `+0 ±252` after ten games
 means the match has not decided anything.
 
 ### Your own engines
 
-The rest of the app only ever runs the bundled Stockfish. **Engines…** in the
-overflow menu is the one place a binary you chose gets launched, and nothing
+The rest of the app only ever runs the bundled Stockfish. **Manage engines…** in Engine controls is the one place a binary you chose gets launched, and nothing
 gets into the list without passing a real check: the process must start, answer
 `uci` with `uciok`, answer `isready`, and play a **legal** move from the
 starting position. A wrapper script, an XBoard-only engine, or a binary for the

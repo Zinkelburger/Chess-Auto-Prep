@@ -11,7 +11,6 @@ class EnginePvRow extends StatefulWidget {
     required this.evaluation,
     required this.sanMoves,
     required this.startPly,
-    this.rows = 1,
     this.evalColor,
     this.moveColor,
     this.trailing,
@@ -23,7 +22,6 @@ class EnginePvRow extends StatefulWidget {
   final String evaluation;
   final List<String> sanMoves;
   final int startPly;
-  final int rows;
   final Color? evalColor;
   final Color? moveColor;
   final Widget? trailing;
@@ -47,7 +45,7 @@ class _EnginePvRowState extends State<EnginePvRow> {
       sanMoves: widget.sanMoves,
       startPly: widget.startPly,
       maxMoves: widget.sanMoves.length,
-      maxLines: widget.rows,
+      maxLines: 1,
       singleLine: !_expanded,
       fontSize: 13,
       moveColor: widget.moveColor,
@@ -88,9 +86,7 @@ class _EnginePvRowState extends State<EnginePvRow> {
               // Expansion is an explicit resize; subsequent updates scroll in
               // the same six-row viewport, including when the PV gets shorter.
               child: SizedBox(
-                height:
-                    EnginePvRow.lineHeight(context) *
-                    (_expanded ? 6 : widget.rows),
+                height: EnginePvRow.lineHeight(context) * (_expanded ? 6 : 1),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: _expanded

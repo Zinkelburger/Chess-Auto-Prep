@@ -126,12 +126,9 @@ void main() {
   ) async {
     final settings = EngineSettings.instance;
     final previousMultiPv = settings.multiPv;
-    final previousPvRows = settings.pvRows;
     settings.multiPv = 3;
-    settings.pvRows = 3;
     addTearDown(() {
       settings.multiPv = previousMultiPv;
-      settings.pvRows = previousPvRows;
     });
     final connection = _Connection(autoReply: false);
     StockfishConnectionFactory.createForTest = () async => connection;
