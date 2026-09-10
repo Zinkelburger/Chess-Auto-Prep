@@ -79,6 +79,11 @@ void main() {
     expect(find.text('1/3'), findsNWidgets(2));
     expect(find.text('vs Alpha'), findsOneWidget);
     expect(find.text('vs Beta'), findsOneWidget);
+    expect(find.text('1 W · 2 D · 0 L'), findsOneWidget);
+    expect(find.text('Elo ±'), findsNothing);
+    await tester.tap(find.text('Show rating statistics'));
+    await tester.pump();
+    expect(find.text('Elo ±'), findsOneWidget);
   });
 
   testWidgets('an empty crosstable says so rather than rendering blank', (
@@ -101,6 +106,10 @@ void main() {
       MatchGamesTable(games: _rows, onOpenGame: (game) => opened = game),
     );
 
+    expect(find.text('Moves'), findsOneWidget);
+    expect(find.text('Plies'), findsNothing);
+    expect(find.text('25'), findsOneWidget);
+    expect(find.text('26'), findsNWidgets(2));
     expect(find.text('1-0'), findsOneWidget);
     expect(find.text('1/2-1/2'), findsNWidgets(2));
     // Game numbers are 1-based and match the position in games.pgn.

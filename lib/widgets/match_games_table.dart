@@ -15,6 +15,7 @@ import '../models/game_outcome.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/time_format.dart';
+import 'common/static_board_thumbnail.dart';
 
 /// One row of the table.
 class MatchGameRow {
@@ -28,6 +29,7 @@ class MatchGameRow {
     required this.naturalEnd,
     required this.plies,
     required this.durationMs,
+    this.finalFen,
   });
 
   /// As shown, 1-based.
@@ -50,6 +52,7 @@ class MatchGameRow {
 
   final int plies;
   final int durationMs;
+  final String? finalFen;
 }
 
 class MatchGamesTable extends StatelessWidget {
@@ -60,6 +63,7 @@ class MatchGamesTable extends StatelessWidget {
     this.whiteHeading = 'White',
     this.blackHeading = 'Black',
     this.selectedNumber,
+    this.showFinalPositions = false,
   });
 
   final List<MatchGameRow> games;
@@ -72,6 +76,7 @@ class MatchGamesTable extends StatelessWidget {
 
   /// The row to mark as the one currently open, if any.
   final int? selectedNumber;
+  final bool showFinalPositions;
 
   @override
   Widget build(BuildContext context) {
@@ -84,11 +89,16 @@ class MatchGamesTable extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _GamesHeaderRow(white: whiteHeading, black: blackHeading),
+        _GamesHeaderRow(
+          white: whiteHeading,
+          black: blackHeading,
+          showFinalPositions: showFinalPositions,
+        ),
         const Divider(height: 1, color: AppColors.divider),
         for (var i = 0; i < games.length; i++)
           _GameRow(
             game: games[i],
+            showFinalPosition: showFinalPositions,
             striped: i.isOdd,
             selected: games[i].number == selectedNumber,
             onTap: () => onOpenGame(games[i]),
@@ -101,11 +111,17 @@ class MatchGamesTable extends StatelessWidget {
 const double _kNumberWidth = 44;
 const double _kRoundWidth = 44;
 const double _kResultWidth = 66;
-const double _kPliesWidth = 56;
+const double _kMovesWidth = 56;
 const double _kTimeWidth = 68;
 
 class _GamesHeaderRow extends StatelessWidget {
-  const _GamesHeaderRow({required this.white, required this.black});
+  const _GamesHeaderRow({
+    required this.white,
+    required this.black,
+    required this.showFinalPositions,
+  });
+
+  final bool showFinalPositions;
 
   final String white;
   final String black;
@@ -117,6 +133,11 @@ class _GamesHeaderRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
+          if (showFinalPositions)
+            const SizedBox(
+              width: 92,
+              child: Text('Final position', style: style),
+            ),
           const SizedBox(
             width: _kNumberWidth,
             child: Text('Game', style: style),
@@ -133,8 +154,8 @@ class _GamesHeaderRow extends StatelessWidget {
           ),
           const Expanded(flex: 4, child: Text('Ended', style: style)),
           const SizedBox(
-            width: _kPliesWidth,
-            child: Text('Plies', style: style),
+            width: _kMovesWidth,
+            child: Text('Moves', style: style),
           ),
           const SizedBox(
             width: _kTimeWidth,
@@ -152,12 +173,14 @@ class _GameRow extends StatelessWidget {
     required this.striped,
     required this.selected,
     required this.onTap,
+    required this.showFinalPosition,
   });
 
   final MatchGameRow game;
   final bool striped;
   final bool selected;
   final VoidCallback onTap;
+  final bool showFinalPosition;
 
   @override
   Widget build(BuildContext context) {
@@ -176,6 +199,26 @@ class _GameRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           child: Row(
             children: [
+              if (showFinalPosition)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: game.finalFen == null
+                      ? const SizedBox(
+                          width: 80,
+                          height: 80,
+                          child: Center(
+                            child: Tooltip(
+                              message: 'Final position unavailable',
+                              child: Icon(Icons.hide_image_outlined, size: 20),
+                            ),
+                          ),
+                        )
+                      : StaticBoardThumbnail(
+                          fen: game.finalFen!,
+                          size: 80,
+                          flipped: false,
+                        ),
+                ),
               SizedBox(
                 width: _kNumberWidth,
                 child: Text('${game.number}', style: AppTextStyles.muted),
@@ -222,8 +265,11 @@ class _GameRow extends StatelessWidget {
                 ),
               ),
               SizedBox(
-                width: _kPliesWidth,
-                child: Text('${game.plies}', style: AppTextStyles.muted),
+                width: _kMovesWidth,
+                child: Text(
+                  '${(game.plies + 1) ~/ 2}',
+                  style: AppTextStyles.muted,
+                ),
               ),
               SizedBox(
                 width: _kTimeWidth,

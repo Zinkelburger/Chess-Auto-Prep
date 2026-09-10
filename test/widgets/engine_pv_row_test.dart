@@ -55,11 +55,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final rows in [1, 2, 4]) {
-    testWidgets('$rows PV rows stay fixed across short and wrapped updates', (
+  for (final textScale in [1.0, 1.5, 2.0]) {
+    testWidgets('PV stays fixed across updates at text scale $textScale', (
       tester,
     ) async {
       Widget viewer(List<String> moves) => MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: SizedBox(
             width: 260,
@@ -69,7 +75,6 @@ void main() {
                   evaluation: '+0.20',
                   sanMoves: moves,
                   startPly: 0,
-                  rows: rows,
                   onMoveTapped: (_) {},
                 ),
                 const Text('Next engine line'),

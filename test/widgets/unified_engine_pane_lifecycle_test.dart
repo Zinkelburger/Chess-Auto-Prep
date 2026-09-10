@@ -159,9 +159,7 @@ void main() {
       await pumpFrames(tester);
       final connection = connections.single;
       expect(connection.searching, isTrue);
-      EngineSettings.instance.pvRows = EngineSettings.instance.pvRows == 3
-          ? 4
-          : 3;
+      EngineSettings.instance.toggleAnalysisColumnMuted(EngineSettings.colEval);
       await pumpFrames(tester);
       expect(connection.commands, isNot(contains('stop')));
       connection.output.add('info depth 20 multipv 1 score cp 25 pv e2e4');
