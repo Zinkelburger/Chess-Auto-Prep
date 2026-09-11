@@ -10,12 +10,15 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "prebuild": "python3 ../../../tools/bughouse_web/prepare_assets.py",
+    "predev": "python3 ../../../tools/bughouse_web/prepare_assets.py"
   },
   "dependencies": {
     "astro": "^6.1.0",
     "chess.js": "^1.4.0",
-    "chessground": "^9.2.1"
+    "chessground": "^9.2.1",
+    "onnxruntime-web": "1.22.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",

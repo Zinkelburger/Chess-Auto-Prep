@@ -1,3 +1,5 @@
+import { BrowserEngine } from './engine';
+
 type BoardName = 'A' | 'B';
 type Colour = 'white' | 'black';
 interface Move { uci: string; san: string }
@@ -16,7 +18,7 @@ interface Analysis {
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const names: BoardName[] = ['A', 'B'];
 const pieceNames: Record<string, string> = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
-const endpoint = (import.meta.env.PUBLIC_BUGHOUSE_API_URL ?? import.meta.env.PUBLIC_API_URL).replace(/\/$/, '');
+const engine = new BrowserEngine((message) => status(message));
 const teamInput = el<HTMLSelectElement>('bh-team');
 const requiredInput = el<HTMLSelectElement>('bh-required');
 const budgetInput = el<HTMLSelectElement>('bh-budget');
@@ -27,6 +29,7 @@ let state: Position | null = null;
 let selected: { board: BoardName; from?: string; drop?: string } | null = null;
 let flipped = false;
 let busy = false;
+let searching = false;
 let analysis: Analysis | null = null;
 
 function status(text: string, error = false) {
@@ -34,24 +37,8 @@ function status(text: string, error = false) {
   el('bh-status').dataset.error = String(error);
 }
 
-async function api<T>(path: string, payload: object): Promise<T> {
-  try {
-    const response = await fetch(`${endpoint}/api/bughouse/${path}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload), signal: AbortSignal.timeout(45_000),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'The request could not be completed.');
-    return data as T;
-  } catch (error) {
-    if (error instanceof TypeError || error instanceof SyntaxError) {
-      throw new Error('Cannot reach Bughouse Lab. Please try New position again in a moment.');
-    }
-    if (error instanceof DOMException && error.name === 'TimeoutError') {
-      throw new Error('The server took too long to answer. Please try again shortly.');
-    }
-    throw error;
-  }
+async function request<T>(action: string, payload: object): Promise<T> {
+  return engine.request<T>(action, payload);
 }
 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : 'Something went wrong. Please try again.'; }
@@ -70,6 +57,8 @@ function lock(value: boolean) {
   el<HTMLButtonElement>('bh-undo').disabled = value || moves.length === 0;
   el<HTMLButtonElement>('bh-analyse').disabled = value || !state;
   el<HTMLButtonElement>('bh-copy').disabled = value || !state;
+  el<HTMLButtonElement>('bh-stop').disabled = !searching;
+  el('bh-stop').hidden = !searching;
   renderBoards();
 }
 
@@ -84,7 +73,7 @@ async function load(nextFen: string | null, nextMoves: string[]) {
   if (busy) return;
   lock(true);
   try {
-    const next = await api<Position>('position', { dual_fen: nextFen, moves: nextMoves, team: teamInput.value });
+    const next = await request<Position>('position', { dual_fen: nextFen, moves: nextMoves, team: teamInput.value });
     state = next; baseFen = nextFen; moves = [...nextMoves]; selected = null;
     el<HTMLTextAreaElement>('bh-fen').value = baseFen ?? '';
     el<HTMLTextAreaElement>('bh-moves').value = moves.join(' ');
@@ -225,24 +214,26 @@ function renderAnalysis(result: Analysis) {
     row.insertCell().append(button);
   });
   container.append(table);
-  const note = document.createElement('p'); note.className = 'dim'; note.textContent = `Both teams searched. ${result.nodes.toLocaleString()} nodes in our search. Sit = wait; it does not advance that board.`;
+  const note = document.createElement('p'); note.className = 'dim';
+  note.textContent = `${result.calibration.source === 'measured' ? 'Both teams searched. ' : ''}${result.nodes.toLocaleString()} nodes in our search. Sit = wait; it does not advance that board.`;
   container.append(note);
 }
 
 el('bh-analyse-form').onsubmit = async (event) => {
   event.preventDefault(); if (busy || !state) return;
-  lock(true); status('Hivemind is comparing both teams…'); clearResult();
+  searching = true; lock(true); status('Hivemind is comparing both teams…'); clearResult();
   el('bh-result').textContent = 'Thinking about moves, drops and whether to sit…';
   try {
-    analysis = await api<Analysis>('analyse', {
+    analysis = await request<Analysis>('analyse', {
       dual_fen: state.dual_fen, team: teamInput.value,
       time_advantage: clockInput.checked, require_move_on: requiredInput.value,
       movetime_ms: Number(budgetInput.value), multipv: 3,
     });
     status('Analysis ready. Play a suggestion to explore what happens next.');
-  } catch (error) { status(errorMessage(error), true); clearResult(); }
-  finally { lock(false); if (analysis) renderAnalysis(analysis); }
+  } catch (error) { const message = errorMessage(error); status(message, !message.includes('cancelled')); clearResult(); }
+  finally { searching = false; lock(false); if (analysis) renderAnalysis(analysis); }
 };
+el('bh-stop').onclick = () => { engine.cancel(); el<HTMLButtonElement>('bh-stop').disabled = true; status('Stopping after the current evaluation…'); };
 el('bh-position-form').onsubmit = (event) => { event.preventDefault(); void load(el<HTMLTextAreaElement>('bh-fen').value.trim() || null, el<HTMLTextAreaElement>('bh-moves').value.trim().split(/\s+/).filter(Boolean)); };
 el('bh-reset').onclick = () => { requiredInput.value = 'none'; void load(null, []); };
 el('bh-undo').onclick = () => { void load(baseFen, moves.slice(0, -1)); };

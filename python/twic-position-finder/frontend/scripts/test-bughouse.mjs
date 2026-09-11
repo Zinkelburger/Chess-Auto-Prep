@@ -8,13 +8,25 @@ const browser = await puppeteer.launch({
   headless: true,
   args: ['--disable-dev-shm-usage'],
 });
+let page;
 try {
-  const page = await browser.newPage();
+  page = await browser.newPage();
+  page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) console.log('Page:', frame.url()); });
   await page.setViewport({ width: 1360, height: 1100, deviceScaleFactor: 1 });
   const errors = [];
+  const apiRequests = [];
+  page.on('request', (request) => {
+    if (request.isNavigationRequest()) console.log('Navigation request:', request.url());
+    if (request.method() !== 'GET' || request.url().includes('/api/bughouse/')) apiRequests.push(request.url());
+  });
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`${origin}/bughouse/`, { waitUntil: 'networkidle0' });
   const ready = () => page.waitForFunction(() => !document.querySelector('#bh-analyse').disabled);
+  const analysisReady = async () => {
+    await page.waitForFunction(() => !location.pathname.startsWith('/bughouse') || document.querySelector('.bh-table') ||
+      (!document.querySelector('#bh-analyse').disabled && document.querySelector('#bh-status').dataset.error === 'true'), { timeout: 120_000 });
+    assert.ok(await page.$('.bh-table'), await page.$eval('#bh-status', (node) => node.textContent));
+  };
   await ready();
   assert.equal(await page.$$eval('.bh-square', (squares) => squares.length), 128);
   assert.equal(await page.$$eval('.bh-square img', (pieces) => pieces.length), 64);
@@ -41,9 +53,27 @@ try {
   await page.click('#bh-flip');
   await page.click('#bh-reset'); await ready();
 
+  // A failed initial model download is recoverable without refreshing.
+  await page.setRequestInterception(true);
+  let interrupted = false;
+  const interrupt = (request) => {
+    if (!interrupted && /\/model-.*\.bin$/.test(request.url())) {
+      interrupted = true;
+      void request.abort();
+    } else void request.continue();
+  };
+  page.on('request', interrupt);
+  await page.click('#bh-analyse');
+  await ready();
+  assert.ok(interrupted);
+  assert.equal(await page.$eval('#bh-status', (node) => node.dataset.error), 'true');
+  await page.setRequestInterception(false);
+  page.off('request', interrupt);
+
   // Real engine, both calibrated searches, then actually play its joint move.
   await page.click('#bh-analyse');
-  await page.waitForSelector('.bh-table', { timeout: 45_000 });
+  await analysisReady();
+  console.log('Static neural analysis and board controls passed.');
   assert.ok((await page.$eval('#bh-result', (node) => node.textContent)).includes('Both teams searched'));
   await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({ path: path.join(output, 'bughouse-desktop.png'), fullPage: true });
@@ -68,23 +98,30 @@ try {
   await ready();
   assert.match(await page.$eval(square('A', 'a8'), (button) => button.getAttribute('aria-label')), /white knight/);
 
-  // Busy and unavailable responses must restore usable controls.
+  // Stop interrupts a real long search and leaves the worker reusable.
   await page.click('#bh-reset'); await ready();
-  await page.setRequestInterception(true);
-  const busyResponse = (request) => request.url().endsWith('/analyse')
-    ? request.respond({ status: 429, contentType: 'application/json', body: JSON.stringify({ detail: 'The engine is helping someone else. Try again shortly.' }) })
-    : request.continue();
-  page.on('request', busyResponse);
-  await page.click('#bh-analyse'); await ready();
-  assert.match(await page.$eval('#bh-status', (node) => node.textContent), /helping someone else/);
-  page.off('request', busyResponse);
-  await page.setRequestInterception(false);
+  await page.select('#bh-budget', '30000');
+  await page.click('#bh-analyse');
+  await page.waitForFunction(() => document.querySelector('#bh-status').textContent.includes('searching for our team'));
+  await page.click('#bh-stop'); await ready();
+  assert.match(await page.$eval('#bh-status', (node) => node.textContent), /cancelled/);
+  await page.select('#bh-budget', '3000');
+  console.log('Cancellation and recovery passed.');
 
+  // Once loaded, moves and actual neural searches work with ALL networking off.
+  await page.setOfflineMode(true);
   await page.click('#bh-example'); await ready();
+  console.log('Offline example loaded:', page.url());
   await page.click('.bh-editor summary');
   await page.select('#bh-team', 'black');
-  await page.click('#bh-analyse');
-  await page.waitForSelector('.bh-table', { timeout: 45_000 });
+  // Collapsing the editor can leave scroll anchoring under the sticky nav.
+  await page.evaluate(async () => {
+    scrollTo(0, 0);
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+  });
+  await page.locator('#bh-analyse').click();
+  await analysisReady();
   await page.evaluate(() => scrollTo(0, 0));
   await page.screenshot({ path: path.join(output, 'bughouse-capture-drop.png'), fullPage: true });
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
@@ -92,8 +129,16 @@ try {
   await page.screenshot({ path: path.join(output, 'bughouse-mobile.png'), fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile page overflows horizontally');
   assert.deepEqual(errors, []);
-  console.log('Browser passed: 128 squares, captures, partner drops, undo, flip, real analysis + play, invalid FEN, underpromotion, busy recovery, mobile layout.');
+  assert.deepEqual(apiRequests, [], 'Static Bughouse must never call an API or POST a position');
+  console.log('STATIC browser passed: 128 squares, captures, partner drops, undo, flip, download retry, real WASM + ONNX analysis/play, invalid FEN, underpromotion, Stop/recovery, offline analysis, phone layout. No API requests.');
   console.log(`Screenshots: ${output}`);
+} catch (error) {
+  if (page) {
+    console.error('Original failure:', error);
+    console.error('Browser status:', page.url(), await page.evaluate(() => document.querySelector('#bh-status')?.textContent ?? document.body?.textContent?.slice(0, 500)));
+    await page.screenshot({ path: path.join(output, 'bughouse-failure.png'), fullPage: true });
+  }
+  throw error;
 } finally {
   await browser.close();
 }

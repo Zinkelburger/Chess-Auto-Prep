@@ -13,16 +13,16 @@ import '../styles/bughouse.css';
       </div>
     </header>
     <p class="bh-intro dim">Move on either board. Captures go to your partner. Select a reserve piece to drop it.</p>
-    <p id="bh-status" class="bh-status" role="status" aria-live="polite">Connecting to Bughouse Lab…</p>
+    <p id="bh-status" class="bh-status" role="status" aria-live="polite">Loading the browser engine…</p>
     <noscript><p class="alert alert-error">Enable JavaScript to move pieces and request analysis.</p></noscript>
     <section class="bh-controls card" aria-labelledby="bh-analysis-heading">
       <div class="bh-section-heading"><h2 id="bh-analysis-heading">Find a move</h2><span class="dim">Your team plays opposite colours.</span></div>
       <form id="bh-analyse-form" class="bh-settings">
         <label>Our team<select id="bh-team"><option value="white">White A + Black B</option><option value="black">Black A + White B</option></select></label>
         <label>Must move on<select id="bh-required"><option value="none">Either board</option><option value="A">Board A</option><option value="B">Board B</option></select></label>
-        <label>Search<select id="bh-budget"><option value="1500">Quick · 1.5s per team</option><option value="3000">Longer · 3s per team</option></select></label>
+        <label>Search<select id="bh-budget"><option value="3000">Quick · 3s per team</option><option value="10000">Deeper · 10s per team</option><option value="30000">Long · 30s per team</option></select></label>
         <label class="bh-clock"><input type="checkbox" id="bh-clock" /> Ahead on diagonal clock <span class="dim">Allows sitting on both boards.</span></label>
-        <button class="btn btn-primary" id="bh-analyse" type="submit">Analyse position</button>
+        <button class="btn btn-primary" id="bh-analyse" type="submit">Analyse position</button><button class="btn btn-outline" id="bh-stop" type="button" hidden>Stop</button>
       </form>
     </section>
     <div class="bh-boards">
@@ -38,7 +38,7 @@ import '../styles/bughouse.css';
     </div>
 
     <section class="bh-analysis card" aria-label="Hivemind recommendations">
-      <div id="bh-result" class="bh-result" aria-live="polite"><p class="dim">Hivemind looks at both boards together. Analysis runs on the server; no app download or account needed.</p></div>
+      <div id="bh-result" class="bh-result" aria-live="polite"><p class="dim">Hivemind looks at both boards together. Analysis runs on your device. No account or analysis server needed.</p></div>
     </section>
 
     <details class="bh-editor card">
@@ -52,7 +52,8 @@ import '../styles/bughouse.css';
         <div class="bh-actions"><button class="btn btn-outline" type="submit">Load position</button><button id="bh-copy" class="btn btn-outline" type="button">Copy current FEN</button><button id="bh-example" class="btn btn-outline" type="button">Try a capture &amp; drop</button></div>
       </form>
     </details>
-    <p class="bh-footnote dim">An analysis board, without live game clocks. “Sit” means wait for your partner. The advantage estimate compares searches from both teams; it is not a Stockfish pawn score or a measured win probability. Short searches can disagree.</p>
+    <p class="bh-footnote dim">Runs entirely in your browser. First analysis downloads about 44 MB of engine assets; the network is cached when browser storage is available. No positions are uploaded. This is an analysis board without live game clocks. “Sit” means wait for your partner. The advantage estimate compares searches from both teams; it is not a Stockfish pawn score or a measured win probability. Short searches can disagree.</p>
+    <p class="bh-footnote dim"><a href="/bughouse-engine/hivemind-source.tar.gz">Engine source</a> · <a href="/bughouse-engine/HIVEMIND_LICENSE.txt">Hivemind license</a> · <a href="/bughouse-engine/ONNXRUNTIME_THIRD_PARTY_NOTICES.txt">Runtime notices</a></p>
     <dialog id="bh-promotion" aria-labelledby="bh-promotion-title"><h2 id="bh-promotion-title">Promote to</h2><div id="bh-promotion-options" class="bh-actions"></div><button id="bh-promotion-cancel" class="btn btn-outline">Cancel</button></dialog>
   </div>
 </Base>

@@ -21,7 +21,7 @@
 .bh-coordinate { position: absolute; font-size: 12px; font-weight: 700; line-height: 1; color: #17302c; pointer-events: none; }
 .bh-coordinate.file { right: 3px; bottom: 3px; }
 .bh-coordinate.rank { left: 3px; top: 3px; }
-.bh-reserve { min-height: 49px; display: flex; align-items: center; gap: 4px; padding: 4px 0; }
+.bh-reserve { min-height: 49px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 4px 0; }
 .bh-reserve-label { color: var(--text-dim); font-size: 13px; margin-right: 4px; }
 .bh-pocket { display: flex; align-items: center; padding: 0 5px 0 1px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-input); color: var(--text); cursor: pointer; min-height: 38px; }
 .bh-pocket img { width: 32px; height: 32px; }
@@ -52,3 +52,4 @@
 #bh-promotion::backdrop { background: #0009; }
 #bh-promotion h2, #bh-promotion-options { margin-bottom: 16px; }
 @media (max-width: 700px) { .bh-boards { grid-template-columns: 1fr; gap: 16px; } .bh-header { gap: 12px; } .bh-analysis { padding: 16px; } .bh-section-heading { gap: 4px; } .bh-settings > label { flex: 1 1 145px; } .bh-settings select { width: 100%; } .bh-settings > button { width: 100%; } .bh-table th, .bh-table td { padding: 8px 4px; } }
+@media (max-width: 440px) { .bh-settings > label { flex-basis: 100%; } }
