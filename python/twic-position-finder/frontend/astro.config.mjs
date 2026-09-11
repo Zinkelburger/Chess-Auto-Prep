@@ -9,6 +9,9 @@ export default defineConfig({
       'import.meta.env.PUBLIC_API_URL': JSON.stringify(
         process.env.PUBLIC_API_URL || 'https://api.chessautoprep.com'
       ),
+      'import.meta.env.PUBLIC_BUGHOUSE_API_URL': JSON.stringify(
+        process.env.PUBLIC_BUGHOUSE_API_URL ?? process.env.PUBLIC_API_URL ?? 'https://api.chessautoprep.com'
+      ),
       'import.meta.env.PUBLIC_TURNSTILE_SITE_KEY': JSON.stringify(
         process.env.PUBLIC_TURNSTILE_SITE_KEY || ''
       ),

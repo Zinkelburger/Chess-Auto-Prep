@@ -1,11 +1,12 @@
 # chessautoprep.com — frontend
 
-Static Astro site deployed to Cloudflare Pages. Three tools, one shared shell:
+Static Astro site deployed to Cloudflare Pages. Four tools, one shared shell:
 
 | Route                 | What                                                                 | Code                                   |
 | --------------------- | -------------------------------------------------------------------- | -------------------------------------- |
 | `/twic-notifications` | TWIC Alerts — create alerts anonymously, or manage them signed in    | `src/lib/alerts-page.ts` + `src/lib/*` |
 | `/tactics`            | Tactics Trainer — Stockfish in the browser mines puzzles from games  | `src/tactics/*`                        |
+| `/bughouse`           | Two linked boards, reserves and Hivemind analysis through the bounded HTTP service | `src/bughouse/app.ts`, `../../bughouse-web/` |
 | `/charles-clock`      | Charles Clock — a full-screen phone clock with its own `<html>`      | `src/pages/charles-clock.astro`        |
 
 `/dashboard` forwards to `/twic-notifications` (with the query string, so old
@@ -21,6 +22,10 @@ npx astro check    # type-check .ts and .astro (the clock's script is untyped JS
 
 Environment (build-time): `PUBLIC_API_URL` (default `https://api.chessautoprep.com`),
 `PUBLIC_TURNSTILE_SITE_KEY` (empty disables the CAPTCHA widget).
+`PUBLIC_BUGHOUSE_API_URL` selects the independent bughouse service (defaults
+to `PUBLIC_API_URL`, or `https://api.chessautoprep.com`; an empty string means
+same origin). Deploy that service before publishing `/bughouse`; see the
+[Bughouse hosting guide](../../bughouse-web/README.md).
 
 ## Layout
 

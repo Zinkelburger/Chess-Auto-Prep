@@ -11,13 +11,14 @@ interface Props {
 const {
   title,
   wide = false,
-  description = 'Chess Auto Prep — TWIC alerts, a tactics trainer built from your own games, and the Charles Clock.',
+  description = 'Chess Auto Prep — TWIC alerts, tactics from your games, Bughouse Lab, and the Charles Clock.',
 } = Astro.props;
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 
 const NAV = [
   { href: '/twic-notifications', label: 'TWIC Alerts', match: ['/twic-notifications', '/dashboard', '/verify', '/unsubscribe'] },
   { href: '/tactics', label: 'Tactics Trainer', match: ['/tactics'] },
+  { href: '/bughouse', label: 'Bughouse Lab', match: ['/bughouse'] },
   { href: '/charles-clock', label: 'Charles Clock', match: ['/charles-clock'] },
 ];
 ---
@@ -175,8 +176,9 @@ const NAV = [
   }
   .nav-links a:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
   .nav-links a.active { color: var(--accent); background: var(--accent-bg); }
-  @media (max-width: 560px) {
+  @media (max-width: 760px) {
     .nav-inner { flex-direction: column; height: auto; padding: 10px 16px; gap: 6px; }
+    .nav-links { flex-wrap: wrap; justify-content: center; }
     .nav-links a { font-size: 0.82rem; padding: 5px 10px; }
   }
 
