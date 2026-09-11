@@ -1,0 +1,7 @@
+# Model chunks and ORT runtime are reproducibly prepared at build time.
+# The small compiled Hivemind module and build provenance are committed.
+model-*.bin
+model.json
+ort-wasm-*
+*_LICENSE.txt
+*_NOTICES.txt
