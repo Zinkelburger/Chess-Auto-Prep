@@ -144,7 +144,7 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
           _numberField(
             key: const Key('book-check-games-field'),
             controller: _bookCheck,
-            label: 'Games per site',
+            label: 'Games per site to check against my repertoires',
           ),
           _label('When it runs'),
           AppCheckbox(
@@ -160,23 +160,29 @@ class _HomeReviewSettingsDialogState extends State<HomeReviewSettingsDialog> {
       ),
     );
     if (widget.embedded) {
-      return Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: content),
-            const SizedBox(height: 12),
-            if (_saveMessage != null)
-              Text(_saveMessage!, style: AppTextStyles.muted),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: _saving ? null : _apply,
-                child: Text(_saving ? 'Saving…' : 'Apply'),
+      return LayoutBuilder(
+        builder: (context, constraints) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (constraints.hasBoundedHeight)
+                Flexible(child: content)
+              else
+                content,
+              const SizedBox(height: 12),
+              if (_saveMessage != null)
+                Text(_saveMessage!, style: AppTextStyles.muted),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: _saving ? null : _apply,
+                  child: Text(_saving ? 'Saving…' : 'Save download settings'),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }

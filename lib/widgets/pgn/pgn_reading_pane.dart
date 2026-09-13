@@ -86,6 +86,10 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
   double? _restoreOffset;
   int _scrollRequest = 0;
 
+  double get readingAnchor => _anchor;
+
+  void applyReadingOption(String value) => _applyReadingOption(value);
+
   void _applyReadingOption(String value) {
     if (!mounted) return;
     setState(() {

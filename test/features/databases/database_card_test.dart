@@ -128,16 +128,12 @@ void main() {
     expect(find.text('knobs'), findsNothing);
   });
 
-  testWidgets('settings stay behind a disclosure until asked for', (
-    tester,
-  ) async {
+  testWidgets('database preferences are immediately visible', (tester) async {
     await tester.pumpWidget(
       _host(_card(details: const Text('Years of games'))),
     );
 
-    expect(find.text('Years of games'), findsNothing);
-    await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
+    expect(find.byType(ExpansionTile), findsNothing);
     expect(find.text('Years of games'), findsOneWidget);
   });
 

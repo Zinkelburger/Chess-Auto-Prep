@@ -62,7 +62,7 @@ void main() {
       find.byKey(const Key('book-check-games-field')),
       '123',
     );
-    await tester.tap(find.text('Apply'));
+    await tester.tap(find.text('Save download settings'));
     await tester.pumpAndSettle();
     expect(saved!.window.bookCheckGames, 123);
     expect(find.byType(HomeReviewSettingsDialog), findsOneWidget);

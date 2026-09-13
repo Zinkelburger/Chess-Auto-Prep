@@ -3,6 +3,7 @@ import 'package:chess_auto_prep/screens/settings_screen.dart';
 import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
 import 'package:chess_auto_prep/widgets/app_settings_button.dart';
+import 'package:chess_auto_prep/widgets/settings/settings_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -121,24 +122,32 @@ void main() {
       expect(find.text('Preferences for Tactics'), findsOneWidget);
       expect(find.text('Your chess usernames'), findsNothing);
       final settingsState = tester.state(find.byType(SettingsScreen));
-      expect(find.text('VIEWS'), findsOneWidget);
-      expect(find.text('GLOBAL'), findsOneWidget);
+      expect(find.text('VIEWS'), findsNothing);
+      expect(find.text('GLOBAL'), findsNothing);
       await tester.tap(
         find.byKey(const ValueKey('settings-view-repertoireTrainer')),
       );
       await tester.pumpAndSettle();
       expect(tester.state(find.byType(SettingsScreen)), same(settingsState));
-      expect(app.currentMode, AppMode.repertoireTrainer);
-      expect(app.settingsMode, isNull);
-      expect(find.byType(SettingsScreen), findsOneWidget);
-      expect(find.text('Preferences for Repertoire trainer'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.close));
+      expect(app.currentMode, AppMode.tactics);
+      final registry = ViewSettingsRegistry.forApp(app);
+      expect(registry.requestedModes, contains(AppMode.repertoireTrainer));
+      var inactiveClosed = 0;
+      registry.register(
+        AppMode.repertoireTrainer,
+        Object(),
+        (_) => const Text('Training preferences'),
+        () => inactiveClosed++,
+      );
       await tester.pumpAndSettle();
-      expect(find.byType(SettingsScreen), findsNothing);
-      // Reopening still starts in the current view, not the last global tab.
+      expect(find.text('Training preferences'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close settings (Esc)'));
+      await tester.pumpAndSettle();
+      expect(app.currentMode, AppMode.tactics);
+      expect(inactiveClosed, 0);
       await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
-      expect(find.text('Preferences for Repertoire trainer'), findsOneWidget);
+      expect(find.text('Preferences for Tactics'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -165,10 +174,10 @@ void main() {
       final target = find.byKey(
         const ValueKey('settings-view-repertoireTrainer'),
       );
-      expect(tester.widget<ListTile>(target).enabled, isFalse);
+      expect(tester.widget<ListTile>(target).enabled, isTrue);
       await tester.tap(target);
       await tester.pumpAndSettle();
-      expect(find.text('VIEWS'), findsOneWidget);
+      expect(find.text('VIEWS'), findsNothing);
       expect(app.currentMode, AppMode.tactics);
       expect(tester.takeException(), isNull);
     },

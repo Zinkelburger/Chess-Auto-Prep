@@ -156,7 +156,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AppSwitch(
-          label: 'Look here before the engine',
+          label: 'Use offline ChessDB',
           value: _settings.enableCdbDirect,
           onChanged: (v) => _settings.setEnableCdbDirect(v),
           enabled: available,
@@ -197,7 +197,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           tooltip:
               'Reads a larger block around each lookup — worth it on a '
               'spinning disk, wasted work on an SSD.',
-          disabledReason: 'Turn on "Look here before the engine" first.',
+          disabledReason: 'Turn on offline ChessDB first.',
         ),
         if (_mediaAdvice != null) ...[
           const SizedBox(height: 2),

@@ -137,26 +137,8 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
               const AppModeSwitcher(),
               AppSettingsButton(
                 mode: AppMode.engineTournament,
-                contentBuilder: (_) => ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    ListTile(
-                      title: const Text('Engines'),
-                      subtitle: const Text(
-                        'Manage engine executables and their options',
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: _manageEngines,
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                        'Time controls and match rules are chosen when creating a tournament.',
-                        style: AppTextStyles.muted,
-                      ),
-                    ),
-                  ],
-                ),
+                contentBuilder: (_) =>
+                    EngineManagerBody(controller: _controller, embedded: true),
               ),
             ],
           ),

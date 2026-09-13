@@ -58,7 +58,7 @@ class _LichessEvalSettingsPanelState extends State<LichessEvalSettingsPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AppSwitch(
-          label: 'Look here before the engine',
+          label: 'Use saved Lichess evaluations',
           value: _settings.enableLichessEvals,
           onChanged: (v) => unawaited(_settings.setEnableLichessEvals(v)),
           enabled: _controller.isReady,

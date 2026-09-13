@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/training_settings.dart';
-import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../settings/settings_widgets.dart';
-import '../settings/settings_navigation.dart';
 import '../common/choice_field.dart';
 
 /// Focused preference pages, using the same rows and cards as app settings.
@@ -19,6 +17,9 @@ class TrainingSettingsPanel extends StatefulWidget {
   final ValueChanged<RepetitionMode> onRepetitionModeChanged;
   final bool? playingWhite;
   final VoidCallback? onChangePlayingSide;
+  final ValueChanged<bool?>? onPlayingSideChanged;
+  final bool? playingSideOverride;
+  final Widget? chapterPreview;
   final VoidCallback? onOpenChapterSetup;
   final VoidCallback? onOpenAppSettings;
   final bool chaptersDeclined;
@@ -35,6 +36,9 @@ class TrainingSettingsPanel extends StatefulWidget {
     required this.onRepetitionModeChanged,
     this.playingWhite,
     this.onChangePlayingSide,
+    this.onPlayingSideChanged,
+    this.playingSideOverride,
+    this.chapterPreview,
     this.onOpenChapterSetup,
     this.onOpenAppSettings,
     this.chaptersDeclined = false,
@@ -45,30 +49,7 @@ class TrainingSettingsPanel extends StatefulWidget {
 }
 
 class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
-  int _selected = 0;
   TrainingSettings get settings => widget.settings;
-  static const _sections = [
-    (
-      label: 'Session',
-      icon: Icons.school_outlined,
-      description: 'Choose what to practise and how much to do.',
-    ),
-    (
-      label: 'Learning',
-      icon: Icons.psychology_outlined,
-      description: 'Choose how moves are learned and reviewed.',
-    ),
-    (
-      label: 'Playback',
-      icon: Icons.play_circle_outline,
-      description: 'Set the pace and when to move on.',
-    ),
-    (
-      label: 'Material',
-      icon: Icons.menu_book_outlined,
-      description: 'The side you play and how your lines are listed.',
-    ),
-  ];
 
   void _change(
     VoidCallback update, {
@@ -85,125 +66,10 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final sharedChapter = SettingsChapterScope.maybeOf(context);
-    if (sharedChapter != null) {
-      return ListView(
-        key: ValueKey(sharedChapter),
-        padding: const EdgeInsets.all(24),
-        children: switch (sharedChapter) {
-          0 => _session(),
-          1 => _learning(),
-          2 => _playback(),
-          _ => _material(),
-        },
-      );
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 760;
-        final section = _sections[_selected];
-        final content = Expanded(
-          child: ListView(
-            key: ValueKey(_selected),
-            padding: EdgeInsets.all(compact ? 20 : 28),
-            children: [
-              Text(section.label, style: AppTextStyles.title),
-              const SizedBox(height: 8),
-              Text(section.description, style: AppTextStyles.muted),
-              const SizedBox(height: 24),
-              ...switch (_selected) {
-                0 => _session(),
-                1 => _learning(),
-                2 => _playback(),
-                _ => _material(),
-              },
-            ],
-          ),
-        );
-        if (compact) {
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: ChoiceField<int>(
-                  key: const Key('training-settings-section'),
-                  value: _selected,
-                  label: 'Section',
-                  items: [
-                    for (var i = 0; i < _sections.length; i++)
-                      ChoiceItem(value: i, label: _sections[i].label),
-                  ],
-                  onChanged: (value) {
-                    if (!mounted) return;
-                    setState(() => _selected = value);
-                  },
-                ),
-              ),
-              content,
-              if (widget.onOpenAppSettings != null)
-                TextButton(
-                  onPressed: widget.onOpenAppSettings,
-                  child: const Text('App settings…'),
-                ),
-            ],
-          );
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: 200,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  for (var i = 0; i < _sections.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: ListTile(
-                        key: Key('training-settings-nav-$i'),
-                        selected: _selected == i,
-                        selectedTileColor: AppColors.accent.withValues(
-                          alpha: 0.12,
-                        ),
-                        selectedColor: AppColors.ink,
-                        iconColor: AppColors.onSurfaceMuted,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        leading: Icon(_sections[i].icon, size: 20),
-                        title: Text(
-                          _sections[i].label,
-                          style: _selected == i
-                              ? AppTextStyles.bodyStrong
-                              : AppTextStyles.body,
-                        ),
-                        onTap: () {
-                          if (!mounted) return;
-                          setState(() => _selected = i);
-                        },
-                      ),
-                    ),
-                  if (widget.onOpenAppSettings != null) ...[
-                    const Divider(height: 32),
-                    ListTile(
-                      title: const Text(
-                        'App settings…',
-                        style: AppTextStyles.body,
-                      ),
-                      onTap: widget.onOpenAppSettings,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const VerticalDivider(width: 1, color: AppColors.divider),
-            content,
-          ],
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(24),
+    children: [..._session(), ..._learning(), ..._playback(), ..._material()],
+  );
 
   List<Widget> _session() => [
     SettingsGroup(
@@ -235,16 +101,16 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
       SettingsGroup(
         title: 'Session size',
         icon: Icons.format_list_numbered,
-        subtitle: 'Lines per session. Use 0 for no limit.',
+        subtitle: 'Maximum lines per session.',
         children: [
-          _number(
+          _sessionLimit(
             'New lines',
             settings.newLinesPerSession,
             0,
             500,
             (n) => settings.newLinesPerSession = n,
           ),
-          _number(
+          _sessionLimit(
             'Reviews',
             settings.reviewsPerSession,
             0,
@@ -261,39 +127,41 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
       icon: Icons.psychology_outlined,
       children: [
         _number(
-          'Correct answers to memorize',
+          'Correct answers in a row',
           settings.correctStreakThreshold,
           1,
           10,
           (n) => settings.correctStreakThreshold = n,
           description: 'Consecutive correct answers needed for each move.',
         ),
-        SettingsValueRow(
-          label: 'Drill depth',
-          description:
-              'Train the first N moves. Leave empty for the whole line.',
-          control: SizedBox(
-            width: 100,
-            child: TextFormField(
-              key: const Key('training-depth'),
-              initialValue: settings.trainingDepth?.toString() ?? '',
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                hintText: 'All',
-                border: OutlineInputBorder(),
+        SettingsSwitchTile(
+          label: 'Train the whole line',
+          value: settings.trainingDepth == null,
+          onChanged: (whole) =>
+              _change(() => settings.trainingDepth = whole ? null : 10),
+        ),
+        if (settings.trainingDepth != null)
+          SettingsValueRow(
+            label: 'Train the first N moves',
+            control: SizedBox(
+              width: 100,
+              child: TextFormField(
+                key: const Key('training-depth'),
+                initialValue: settings.trainingDepth?.toString() ?? '',
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  hintText: 'All',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (text) {
+                  final n = int.tryParse(text);
+                  if (n != null && n >= 1 && n <= 200) {
+                    _change(() => settings.trainingDepth = n);
+                  }
+                },
               ),
-              onChanged: (text) {
-                final n = int.tryParse(text);
-                if (text.trim().isEmpty || (n != null && n >= 1 && n <= 200)) {
-                  _change(
-                    () =>
-                        settings.trainingDepth = text.trim().isEmpty ? null : n,
-                  );
-                }
-              },
             ),
           ),
-        ),
         _toggle(
           'Replay missed moves',
           'Practise mistakes again before rating the line.',
@@ -382,10 +250,29 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
             label: 'You play ${widget.playingWhite! ? 'White' : 'Black'}',
             description:
                 'Change this if the trainer asks you for the opponent’s moves.',
-            control: OutlinedButton(
-              onPressed: widget.onChangePlayingSide,
-              child: const Text('Change side…'),
-            ),
+            control: widget.onPlayingSideChanged == null
+                ? OutlinedButton(
+                    onPressed: widget.onChangePlayingSide,
+                    child: const Text('Change side…'),
+                  )
+                : SizedBox(
+                    width: 180,
+                    child: ChoiceField<String>(
+                      value: widget.playingSideOverride == null
+                          ? 'file'
+                          : widget.playingSideOverride!
+                          ? 'white'
+                          : 'black',
+                      items: const [
+                        ChoiceItem(value: 'file', label: 'From file'),
+                        ChoiceItem(value: 'white', label: 'White'),
+                        ChoiceItem(value: 'black', label: 'Black'),
+                      ],
+                      onChanged: (value) => widget.onPlayingSideChanged!(
+                        value == 'file' ? null : value == 'white',
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -447,13 +334,35 @@ class _TrainingSettingsPanelState extends State<TrainingSettingsPanel> {
               alignment: Alignment.centerLeft,
               child: OutlinedButton(
                 onPressed: widget.onOpenChapterSetup,
-                child: const Text('Preview chapter grouping…'),
+                child: const Text('Preview chapter grouping'),
               ),
             ),
           ),
+        if (widget.chapterPreview != null) widget.chapterPreview!,
       ],
     ),
   ];
+
+  final Map<String, int> _lastLimits = {};
+  Widget _sessionLimit(
+    String label,
+    int value,
+    int min,
+    int max,
+    ValueChanged<int> update,
+  ) => Column(
+    children: [
+      SettingsSwitchTile(
+        label: 'Unlimited ${label.toLowerCase()}',
+        value: value == 0,
+        onChanged: (unlimited) => _change(() {
+          if (unlimited) _lastLimits[label] = value;
+          update(unlimited ? 0 : (_lastLimits[label] ?? 20));
+        }),
+      ),
+      if (value > 0) _number(label, value, 1, max, update),
+    ],
+  );
 
   Widget _number(
     String label,

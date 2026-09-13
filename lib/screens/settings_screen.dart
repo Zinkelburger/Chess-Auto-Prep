@@ -1,4 +1,4 @@
-/// Shared settings shell with expandable view chapters and global preferences.
+/// Flat shared preferences and directly editable view settings.
 library;
 
 import 'dart:async';
@@ -24,7 +24,8 @@ import '../utils/san_display.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/analysis/stockfish_settings_dialog.dart';
 import '../widgets/analysis/analysis_panels_dialog.dart';
-import '../widgets/common/choice_field.dart';
+import '../widgets/common/list_search_field.dart';
+import '../features/databases/widgets/databases_screen.dart';
 import '../widgets/common/confirm_dialog.dart';
 import '../widgets/settings/account_settings_section.dart';
 import '../widgets/settings/settings_widgets.dart';
@@ -40,12 +41,11 @@ class SettingsScreen extends StatefulWidget {
     this.initialGlobalSection = 0,
     this.viewContentBuilder,
   });
-
   final AppMode? initialMode;
+  // Kept as deep-link input; chapters now resolve to a flat section.
   final int initialChapter;
   final int initialGlobalSection;
   final WidgetBuilder? viewContentBuilder;
-
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -54,27 +54,127 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static final _projectUri = Uri.parse(
     'https://github.com/Zinkelburger/Chess-Auto-Prep',
   );
-
   final _engine = EngineSettings.instance;
-  late int _selected = widget.initialGlobalSection;
-  late AppMode? _mode = widget.initialMode;
-  late int _chapter = widget.initialChapter;
-  bool get _global => _mode == null;
+  late int _selected;
+  AppMode? _mode;
+  String _query = '';
+  final _visitedGlobals = <int>{};
+  final _visitedViews = <AppMode>{};
   late ViewSettingsRegistry _registry;
   final _navigationScroll = ScrollController();
+  bool get _global => _mode == null;
+  static const _sections = [
+    (
+      label: 'Accounts',
+      icon: Icons.person_outline,
+      words: 'username lichess chess.com login token connect',
+    ),
+    (
+      label: 'Board & moves',
+      icon: Icons.grid_on_outlined,
+      words: 'coordinates legal dots notation symbols display',
+    ),
+    (
+      label: 'Repertoires',
+      icon: Icons.menu_book_outlined,
+      words: 'white black books import pgn side board size',
+    ),
+    (
+      label: 'Analysis',
+      icon: Icons.tune,
+      words:
+          'engine stockfish cores cpu memory depth lines maia rating panels expectimax evaluations',
+    ),
+    (
+      label: 'Data & storage',
+      icon: Icons.storage_outlined,
+      words:
+          'database master games years download lichess chessdb offline online quota cache trash folder',
+    ),
+    (
+      label: 'App',
+      icon: Icons.info_outline,
+      words: 'about update install version reset defaults licenses github',
+    ),
+    (
+      label: 'Shortcuts',
+      icon: Icons.keyboard_outlined,
+      words: 'keyboard keys reference',
+    ),
+  ];
+  static const _views = [
+    (
+      mode: AppMode.repertoireTrainer,
+      label: 'Training',
+      words:
+          'session learn review schedule repetition lines quiz delay speed chapters grouping side unlimited whole depth correct answers streak replay missed difficulty rating next introduction comments separator file',
+    ),
+    (
+      mode: AppMode.tactics,
+      label: 'Tactics',
+      words:
+          'puzzle order mistakes blunders inaccuracies expiry winning downloads games time controls startup age dates unreviewed star alternative group book review per site',
+    ),
+    (
+      mode: AppMode.pgnViewer,
+      label: 'Game viewer',
+      words:
+          'pgn playback speed autosave opening eco orientation move list variations top middle bottom expand fold current anchor',
+    ),
+    (
+      mode: AppMode.repertoire,
+      label: 'Repertoires',
+      words: 'books white black import pgn side board size',
+    ),
+    (
+      mode: AppMode.engineTournament,
+      label: 'Tournament engines',
+      words: 'uci executable add test verify options threads hash ponder',
+    ),
+    (
+      mode: AppMode.bughouse,
+      label: 'Bughouse',
+      words: 'engine cpu cores lines memory time batch',
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.initialGlobalSection;
+    _mode = widget.initialMode;
+    if (_mode == AppMode.databases) {
+      _mode = null;
+      _selected = 4;
+    }
+    if (_mode == AppMode.study ||
+        _mode == AppMode.positionAnalysis ||
+        (_mode == AppMode.repertoire && widget.initialChapter == 1) ||
+        (_mode == AppMode.pgnViewer && widget.initialChapter == 2)) {
+      _mode = null;
+      _selected = 3;
+    }
+    if (_mode == null && _selected == 2) _mode = AppMode.repertoire;
+    if (_global) {
+      _visitedGlobals.add(_selected);
+    } else {
+      _visitedViews.add(_mode!);
+    }
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _registry = ViewSettingsRegistry.forApp(context.read<AppState>());
-    if (_mode != null) {
-      if (!_registry.entries.containsKey(_mode!) &&
-          widget.viewContentBuilder == null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _mode != null) _selectView(_mode!, chapter: _chapter);
-        });
-      }
+    if (_mode != null && widget.viewContentBuilder == null) {
+      _requestView(_mode!);
     }
+  }
+
+  void _requestView(AppMode mode) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _registry.requestView(mode);
+    });
   }
 
   @override
@@ -88,392 +188,252 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _mode = null;
       _selected = index;
+      _visitedGlobals.add(index);
     });
   }
 
-  void _selectView(AppMode mode, {int chapter = 0}) {
-    final app = context.read<AppState>();
-    if (!mounted ||
-        !mode.isAvailable ||
-        (app.isRepertoireGenerating && mode != app.currentMode)) {
-      return;
-    }
+  void _selectView(AppMode mode) {
+    if (!mounted || !mode.isAvailable) return;
     setState(() {
       _mode = mode;
-      _chapter = chapter;
+      _visitedViews.add(mode);
     });
-    // Mount lazy feature controllers while keeping this settings route open.
-    if (mode != app.currentMode) {
-      app.setMode(mode);
-    }
+    _requestView(mode);
   }
 
-  static const _sections = [
-    (label: 'Accounts', icon: Icons.person_outline),
-    (label: 'Display', icon: Icons.grid_on_outlined),
-    (label: 'Repertoires', icon: Icons.menu_book_outlined),
-    (label: 'Engine', icon: Icons.tune),
-    (label: 'Data', icon: Icons.storage_outlined),
-    (label: 'About', icon: Icons.info_outline),
-    (label: 'Keyboard shortcuts', icon: Icons.keyboard_outlined),
+  bool _matches(String label, String words) => _query
+      .trim()
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .every((term) => '$label $words'.toLowerCase().contains(term));
+  List<Widget> _navigation() => [
+    for (final i in [0, 1, 3])
+      if (_matches(_sections[i].label, _sections[i].words)) _globalNavTile(i),
+    for (final view in _views)
+      if (view.mode.isAvailable && _matches(view.label, view.words))
+        ListTile(
+          key: ValueKey('settings-view-${view.mode.name}'),
+          dense: true,
+          minTileHeight: 38,
+          selected: _mode == view.mode,
+          selectedTileColor: AppColors.accent.withValues(alpha: .12),
+          title: Text(
+            view.label,
+            style: _mode == view.mode
+                ? AppTextStyles.bodyStrong
+                : AppTextStyles.body,
+          ),
+          onTap: () => _selectView(view.mode),
+        ),
+    for (final i in [4, 5, 6])
+      if (_matches(_sections[i].label, _sections[i].words)) _globalNavTile(i),
   ];
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surface,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        surfaceTintColor: Colors.transparent,
-        titleSpacing: 8,
-        title: const Text('Settings', style: AppTextStyles.bodyStrong),
-        // The way out sits where the gear that opened this screen was, so the
-        // pointer is already over it; a back arrow on the far left left users
-        // hunting for the exit.
-        automaticallyImplyLeading: false,
-        actions: [
-          ShortcutIconButton(
-            description: 'Close settings',
-            shortcut: AppShortcut.leave,
-            icon: const Icon(Icons.close, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-          const SizedBox(width: 4),
-        ],
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: AppColors.divider),
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.surface,
+    appBar: AppBar(
+      title: const Text('Settings', style: AppTextStyles.bodyStrong),
+      automaticallyImplyLeading: false,
+      actions: [
+        ShortcutIconButton(
+          description: 'Close settings',
+          shortcut: AppShortcut.leave,
+          icon: const Icon(Icons.close, size: 20),
+          onPressed: () => Navigator.pop(context),
         ),
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 760;
-          final content = Expanded(
-            child: ListenableBuilder(
-              listenable: _engine,
-              builder: (context, _) => IndexedStack(
-                index: _global ? 0 : 1,
+        const SizedBox(width: 4),
+      ],
+    ),
+    body: LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+        final navigation = _navigation();
+        final search = Padding(
+          padding: const EdgeInsets.all(12),
+          child: ListSearchField(
+            hintText: 'Find a setting',
+            onChanged: (value) {
+              if (mounted) setState(() => _query = value);
+            },
+          ),
+        );
+        final content = Expanded(
+          child: ListenableBuilder(
+            listenable: Listenable.merge([_engine, _registry]),
+            builder: (context, _) => IndexedStack(
+              index: _global
+                  ? _selected
+                  : 7 + _views.indexWhere((v) => v.mode == _mode),
+              children: [
+                for (var i = 0; i < _sections.length; i++)
+                  if (!_visitedGlobals.contains(i))
+                    const SizedBox.shrink()
+                  else if (i == 4)
+                    const DatabasesScreen(embedded: true)
+                  else
+                    _globalPage(i, compact),
+                for (final view in _views)
+                  if (_visitedViews.contains(view.mode))
+                    _viewContent(view.mode)
+                  else
+                    const SizedBox.shrink(),
+              ],
+            ),
+          ),
+        );
+        if (compact) {
+          return Column(
+            children: [
+              search,
+              SizedBox(
+                height: 48,
+                child: navigation.isEmpty
+                    ? const Center(child: Text('No matching settings'))
+                    : ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          for (final tile in navigation)
+                            SizedBox(width: 170, child: tile),
+                        ],
+                      ),
+              ),
+              const Divider(height: 1),
+              content,
+            ],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: 220,
+              child: Column(
                 children: [
-                  IndexedStack(
-                    index: _selected,
-                    children: [
-                      _page(0, const [
-                        ChessUsernamesSection(),
-                        LichessLoginSection(),
-                      ], compact),
-                      _page(1, [_buildDisplaySection()], compact),
-                      _page(2, const [MyRepertoiresSection()], compact),
-                      _page(3, [
-                        const StockfishSettingsBody(),
-                        _buildMaiaSection(),
-                      ], compact),
-                      _page(4, [_buildDatabasesSection()], compact),
-                      _page(5, [
-                        const UpdateSettingsSection(),
-                        _buildAboutSection(),
-                        _buildResetButton(),
-                      ], compact),
-                      _page(6, const [KeyboardShortcutsSection()], compact),
-                    ],
-                  ),
-                  ListenableBuilder(
-                    listenable: _registry,
-                    builder: (context, _) => _global
-                        ? const SizedBox.shrink()
-                        : _viewContent(compact),
+                  search,
+                  Expanded(
+                    child: Scrollbar(
+                      controller: _navigationScroll,
+                      child: ListView(
+                        key: const Key('settings-navigation'),
+                        controller: _navigationScroll,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        children: navigation.isEmpty
+                            ? [
+                                const ListTile(
+                                  title: Text('No matching settings'),
+                                ),
+                              ]
+                            : navigation,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          );
-          if (compact) {
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: ChoiceField<int>(
-                    key: const Key('settings-section-picker'),
-                    label: 'Section',
-                    helper: context.watch<AppState>().isRepertoireGenerating
-                        ? 'View switching is paused while a repertoire is generating.'
-                        : null,
-                    value: _global
-                        ? _selected
-                        : -availableModeMenuOrder().indexOf(_mode!) - 1,
-                    items: [
-                      for (var i = 0; i < availableModeMenuOrder().length; i++)
-                        if (!context.watch<AppState>().isRepertoireGenerating ||
-                            availableModeMenuOrder()[i] ==
-                                context.read<AppState>().currentMode)
-                          ChoiceItem(
-                            value: -i - 1,
-                            label:
-                                'Views · ${availableModeMenuOrder()[i].label}',
-                          ),
-                      for (var i = 0; i < _sections.length; i++)
-                        ChoiceItem(
-                          value: i,
-                          label: 'Global · ${_sections[i].label}',
-                          icon: _sections[i].icon,
-                        ),
-                    ],
-                    onChanged: (value) {
-                      if (value < 0) {
-                        _selectView(availableModeMenuOrder()[-value - 1]);
-                      } else {
-                        _selectGlobal(value);
-                      }
-                    },
-                  ),
-                ),
-                if (!_global)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: ChoiceField<int>(
-                      key: ValueKey('settings-chapter-picker-${_mode!.name}'),
-                      label: 'Chapter',
-                      value: _chapter,
-                      items: [
-                        for (
-                          var i = 0;
-                          i < settingsChapters(_mode!).length;
-                          i++
-                        )
-                          ChoiceItem(
-                            value: i,
-                            label: settingsChapters(_mode!)[i].label,
-                          ),
-                      ],
-                      onChanged: (value) => _selectView(_mode!, chapter: value),
-                    ),
-                  ),
-                content,
-              ],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                width: 248,
-                child: Scrollbar(
-                  controller: _navigationScroll,
-                  thumbVisibility: true,
-                  child: ListView(
-                    controller: _navigationScroll,
-                    padding: const EdgeInsets.fromLTRB(16, 28, 16, 24),
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(12, 0, 12, 16),
-                        child: Text('VIEWS', style: AppTextStyles.eyebrow),
-                      ),
-                      for (final mode in availableModeMenuOrder()) ...[
-                        ListTile(
-                          key: ValueKey('settings-view-${mode.name}'),
-                          minTileHeight: 40,
-                          dense: true,
-                          selected: _mode == mode,
-                          title: Text(
-                            mode.label,
-                            style: AppTextStyles.bodyStrong,
-                          ),
-                          trailing: Icon(
-                            _mode == mode
-                                ? Icons.expand_more
-                                : Icons.chevron_right,
-                            size: 18,
-                          ),
-                          enabled:
-                              !context
-                                  .watch<AppState>()
-                                  .isRepertoireGenerating ||
-                              mode == context.read<AppState>().currentMode,
-                          onTap: () => _selectView(mode),
-                        ),
-                        if (_mode == mode)
-                          for (
-                            var i = 0;
-                            i < settingsChapters(mode).length;
-                            i++
-                          )
-                            Padding(
-                              padding: const EdgeInsets.only(left: 16),
-                              child: ListTile(
-                                key: ValueKey(
-                                  'settings-chapter-${mode.name}-$i',
-                                ),
-                                minTileHeight: 36,
-                                dense: true,
-                                selected: _chapter == i,
-                                selectedTileColor: AppColors.accent.withValues(
-                                  alpha: 0.12,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                title: Text(
-                                  settingsChapters(mode)[i].label,
-                                  style: _chapter == i
-                                      ? AppTextStyles.bodyStrong
-                                      : AppTextStyles.body,
-                                ),
-                                onTap: () => _selectView(mode, chapter: i),
-                              ),
-                            ),
-                      ],
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(12, 16, 12, 8),
-                        child: Text('GLOBAL', style: AppTextStyles.eyebrow),
-                      ),
-                      for (var i = 0; i < _sections.length; i++)
-                        _globalNavTile(i),
-                    ],
-                  ),
-                ),
-              ),
-              const VerticalDivider(width: 1, color: AppColors.divider),
-              content,
-            ],
-          );
-        },
-      ),
-    );
-  }
+            const VerticalDivider(width: 1),
+            content,
+          ],
+        );
+      },
+    ),
+  );
 
-  Widget _globalNavTile(int index, {bool nested = false}) {
-    final selected = _global && _selected == index;
-    return Padding(
-      padding: EdgeInsets.only(left: nested ? 24 : 0, bottom: 2),
-      child: ListTile(
-        key: Key('settings-nav-$index'),
-        minTileHeight: 36,
-        dense: true,
-        selected: selected,
-        selectedTileColor: AppColors.accent.withValues(alpha: 0.12),
-        selectedColor: AppColors.ink,
-        iconColor: AppColors.onSurfaceMuted,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        leading: nested ? null : Icon(_sections[index].icon, size: 20),
-        horizontalTitleGap: 12,
-        title: Text(
-          _sections[index].label,
-          style: selected ? AppTextStyles.bodyStrong : AppTextStyles.body,
-        ),
-        onTap: () => _selectGlobal(index),
-      ),
-    );
-  }
+  Widget _globalNavTile(int index) => ListTile(
+    key: Key('settings-nav-$index'),
+    dense: true,
+    minTileHeight: 38,
+    selected: _global && _selected == index,
+    selectedTileColor: AppColors.accent.withValues(alpha: .12),
+    title: Text(
+      _sections[index].label,
+      style: _global && _selected == index
+          ? AppTextStyles.bodyStrong
+          : AppTextStyles.body,
+    ),
+    onTap: () => _selectGlobal(index),
+  );
 
-  Widget _viewContent(bool compact) {
-    final mode = _mode!;
-    final chapter = settingsChapters(mode)[_chapter];
-    final entry = _registry.entries[mode];
-    final builder =
-        mode == widget.initialMode && widget.viewContentBuilder != null
-        ? widget.viewContentBuilder
-        : entry?.builder;
-    return Align(
-      alignment: Alignment.topLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 728),
-        child: SettingsChapterScope(
-          index: _chapter,
+  Widget _globalPage(int index, bool compact) => ListView(
+    key: PageStorageKey('settings-page-$index'),
+    padding: EdgeInsets.all(compact ? 16 : 24),
+    children: [
+      Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 820),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  compact ? 16 : 24,
-                  24,
-                  compact ? 16 : 24,
-                  0,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${mode.label} › ${chapter.label}',
-                      style: AppTextStyles.bodyStrong,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: builder != null
-                    ? Builder(key: ValueKey(mode), builder: builder)
-                    : _viewPage(mode, compact),
-              ),
+              Text(_sections[index].label, style: AppTextStyles.bodyStrong),
+              const SizedBox(height: 12),
+              ...switch (index) {
+                0 => const [ChessUsernamesSection(), LichessLoginSection()],
+                1 => [_buildDisplaySection()],
+                2 => const [MyRepertoiresSection()],
+                3 => [
+                  const Text(
+                    'Shared by board analysis across the app. Game analysis depth is used by reviews and new builds.',
+                    style: AppTextStyles.muted,
+                  ),
+                  const SizedBox(height: 12),
+                  const StockfishSettingsBody(),
+                  _buildMaiaSection(),
+                  const SettingsGroup(
+                    title: 'Analysis panels and move tables',
+                    icon: Icons.view_column,
+                    subtitle:
+                        'Shared across views that show these panels. Study uses the board engine controls above.',
+                    children: [AnalysisPanelsSettingsBody()],
+                  ),
+                ],
+                5 => [
+                  const UpdateSettingsSection(),
+                  _buildAboutSection(),
+                  _buildResetButton(),
+                ],
+                6 => const [KeyboardShortcutsSection()],
+                _ => <Widget>[],
+              },
             ],
           ),
         ),
       ),
-    );
-  }
+    ],
+  );
 
-  Widget _viewPage(AppMode mode, bool compact) {
-    if (mode != AppMode.positionAnalysis &&
-        mode != AppMode.study &&
-        mode != AppMode.databases) {
-      return const Center(
-        child: Text('Loading view settings…', style: AppTextStyles.muted),
-      );
-    }
-    return ListView(
-      key: ValueKey('settings-default-${mode.name}-$_chapter'),
-      padding: EdgeInsets.all(compact ? 16 : 24),
-      children: [
-        if (mode == AppMode.databases)
-          _buildDatabasesSection()
-        else if (mode == AppMode.study && _chapter == 0)
-          const SettingsGroup(
-            title: 'Board analysis',
-            icon: Icons.tune,
-            children: [
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: StockfishSettingsBody(showBulkDepth: false),
+  Widget _viewContent(AppMode mode) {
+    final builder =
+        mode == widget.initialMode && widget.viewContentBuilder != null
+        ? widget.viewContentBuilder
+        : _registry.entries[mode]?.builder;
+    return Align(
+      alignment: Alignment.topLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 900),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+              child: Text(
+                _views.firstWhere((v) => v.mode == mode).label,
+                style: AppTextStyles.bodyStrong,
               ),
-            ],
-          )
-        else if (_chapter == 0)
-          const SettingsGroup(
-            title: 'Analysis panels',
-            icon: Icons.view_column,
-            children: [AnalysisPanelsSettingsBody()],
-          )
-        else
-          _buildDisplaySection(),
-      ],
-    );
-  }
-
-  Widget _page(int index, List<Widget> children, bool compact) {
-    final section = _sections[index];
-    return ListView(
-      key: PageStorageKey('settings-page-$index'),
-      primary: false,
-      padding: EdgeInsets.fromLTRB(
-        compact ? 16 : 24,
-        16,
-        compact ? 16 : 24,
-        24,
-      ),
-      children: [
-        Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(section.label, style: AppTextStyles.bodyStrong),
-                const SizedBox(height: 16),
-                ...children,
-              ],
             ),
-          ),
+            Expanded(
+              child: builder == null
+                  ? const Center(
+                      child: Text(
+                        'Loading settings…',
+                        style: AppTextStyles.muted,
+                      ),
+                    )
+                  : Builder(key: ValueKey(mode), builder: builder),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -561,7 +521,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'Board coordinates',
               value: display.coordinates,
               items: const [
-                (BoardCoordinates.none, 'No'),
+                (BoardCoordinates.none, 'Off'),
                 (BoardCoordinates.inside, 'Inside the board'),
                 (BoardCoordinates.outside, 'Outside the board'),
                 (BoardCoordinates.everySquare, 'Every square'),
@@ -569,7 +529,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (v) => unawaited(display.setCoordinates(v)),
             ),
             SettingsSwitchTile(
-              label: 'Legal move dots',
+              label: 'Show legal moves',
               description: 'Show possible destinations when selecting a piece',
               value: display.showLegalMoves,
               onChanged: (value) => unawaited(display.setShowLegalMoves(value)),
@@ -599,7 +559,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── Engine section ─────────────────────────────────────────────────────────
 
   Widget _buildMaiaSection() => SettingsStepperTile(
-    label: 'Opponent rating',
+    label: 'Opponent rating for predictions',
     description: 'Maia predictions',
     value: _engine.maiaElo,
     min: kMinMaiaElo,
@@ -608,66 +568,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     suffix: 'Elo',
     onChanged: (v) => _engine.maiaElo = v,
   );
-
-  // ── Databases section ──────────────────────────────────────────────────────
-
-  /// A pointer, not a panel.
-  ///
-  /// Master games, your own games and the two offline evaluation stores each
-  /// had a section here, and between them they filled more of this screen than
-  /// everything else put together — while still not answering "how much disk
-  /// is this using", because no section could see the others. They live on the
-  /// Databases page now. What stays is the one switch that is a
-  /// preference about *this machine's* network use rather than a fact about a
-  /// store on its disk.
-  Widget _buildDatabasesSection() {
-    return SettingsGroup(
-      title: 'Databases',
-      icon: Icons.storage,
-      children: [
-        ListTile(
-          titleTextStyle: AppTextStyles.bodyStrong,
-          subtitleTextStyle: AppTextStyles.muted,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 8,
-          ),
-          leading: const Icon(Icons.dns_outlined, size: 22),
-          title: const Text('Open Databases'),
-          trailing: const Icon(Icons.chevron_right, size: 20),
-          // Settings is a pushed route over the mode host, so switching mode
-          // without popping would change the screen underneath and leave the
-          // user still looking at Settings.
-          onTap: () {
-            final appState = context.read<AppState>();
-            Navigator.pop(context);
-            appState.setMode(AppMode.databases);
-          },
-        ),
-        const Divider(
-          height: 1,
-          indent: 20,
-          endIndent: 20,
-          color: AppColors.divider,
-        ),
-        ListenableBuilder(
-          listenable: EvalDatabaseSettings.instance,
-          builder: (context, _) {
-            final settings = EvalDatabaseSettings.instance;
-            return SettingsValueRow(
-              label: 'Online evaluation lookups',
-              description: 'Uses your daily ChessDB quota.',
-              control: Switch(
-                value: settings.chessDbApiForExpectimax,
-                onChanged: (value) =>
-                    unawaited(settings.setChessDbApiForExpectimax(value)),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
 
   // ── Reset button ───────────────────────────────────────────────────────────
 
@@ -678,9 +578,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _confirmResetToDefaults() async {
     final confirmed = await confirmAction(
       context,
-      title: 'Reset Settings',
+      title: 'Reset analysis, board and data preferences?',
       message:
-          'Reset all engine, analysis, display, and database settings to '
+          'Reset engine, analysis, display, and database preferences to '
           'factory defaults?',
       confirmLabel: 'Reset',
     );
@@ -696,7 +596,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildResetButton() {
     return SettingsGroup(
-      title: 'Restore defaults',
+      title: 'Reset analysis, board and data preferences',
       icon: Icons.restore,
       subtitle:
           'Reset engine, analysis, display and database preferences. Your accounts, games and repertoires are kept.',

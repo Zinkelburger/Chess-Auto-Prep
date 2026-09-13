@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../../widgets/analysis/analysis_panels_dialog.dart';
 
 import '../../../core/pgn_viewer_controller.dart' show Perspective;
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../widgets/game_nav_bar.dart' show kAutoPlaySpeeds;
 import '../../../widgets/settings/settings_widgets.dart';
-import '../../../widgets/settings/settings_navigation.dart';
 import '../../../widgets/shortcut_tooltip.dart';
 import '../models/game_view_preferences.dart';
 
@@ -21,6 +19,8 @@ class GameViewSettingsDialog extends StatefulWidget {
     required this.onPerspective,
     this.player,
     this.onReadingOptions,
+    this.onReadingOptionChanged,
+    this.readingAnchor = 0,
     this.onFullscreen,
     this.embedded = false,
   });
@@ -33,6 +33,8 @@ class GameViewSettingsDialog extends StatefulWidget {
   final ValueChanged<Perspective> onPerspective;
   final String? player;
   final VoidCallback? onReadingOptions;
+  final ValueChanged<String>? onReadingOptionChanged;
+  final double readingAnchor;
   final VoidCallback? onFullscreen;
 
   @override
@@ -40,6 +42,7 @@ class GameViewSettingsDialog extends StatefulWidget {
 }
 
 class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
+  late double _anchor = widget.readingAnchor;
   late GameViewPreferences _prefs = widget.preferences;
   late String _orientation = widget.perspective.toHeaderValue();
 
@@ -94,97 +97,120 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (SettingsChapterScope.maybeOf(context) == 2)
-          const AnalysisPanelsSettingsBody(),
-        if (SettingsChapterScope.maybeOf(context) == null ||
-            SettingsChapterScope.maybeOf(context) == 0)
-          SettingsGroup(
-            title: 'Playback',
-            icon: Icons.play_arrow_outlined,
-            children: [
-              SettingsSwitchTile(
-                label: 'Playback controls',
-                description:
-                    'Show controls for stepping through or automatically playing moves.',
-                value: _prefs.playback,
-                onChanged: (v) => _update(_prefs.copyWith(playback: v)),
+        SettingsGroup(
+          title: 'Playback',
+          icon: Icons.play_arrow_outlined,
+          children: [
+            SettingsSwitchTile(
+              label: 'Playback controls',
+              description:
+                  'Show controls for stepping through or automatically playing moves.',
+              value: _prefs.playback,
+              onChanged: (v) => _update(_prefs.copyWith(playback: v)),
+            ),
+            if (_prefs.playback) ...[
+              SettingsChoiceTile<double>(
+                label: 'Seconds per move',
+                value: _prefs.speed,
+                items: [
+                  (_prefs.speed, '${_prefs.speed}s per move'),
+                  for (final speed in kAutoPlaySpeeds)
+                    if (speed != _prefs.speed) (speed, '${speed}s per move'),
+                ],
+                onChanged: (v) => _update(_prefs.copyWith(speed: v)),
               ),
-              if (_prefs.playback) ...[
-                SettingsChoiceTile<double>(
-                  label: 'Speed',
-                  value: _prefs.speed,
-                  items: [
-                    (_prefs.speed, '${_prefs.speed}s per move'),
-                    for (final speed in kAutoPlaySpeeds)
-                      if (speed != _prefs.speed) (speed, '${speed}s per move'),
-                  ],
-                  onChanged: (v) => _update(_prefs.copyWith(speed: v)),
-                ),
-                SettingsSwitchTile(
-                  label: 'Continue to next game',
-                  description:
-                      'At the final move, start playing the next game in this collection.',
-                  value: _prefs.autoNext,
-                  onChanged: (v) => _update(_prefs.copyWith(autoNext: v)),
-                ),
-              ],
+              SettingsSwitchTile(
+                label: 'Continue to next game',
+                description:
+                    'At the final move, start playing the next game in this collection.',
+                value: _prefs.autoNext,
+                onChanged: (v) => _update(_prefs.copyWith(autoNext: v)),
+              ),
             ],
-          ),
-        if (SettingsChapterScope.maybeOf(context) == null ||
-            SettingsChapterScope.maybeOf(context) == 1)
-          SettingsGroup(
-            title: 'Board and moves',
-            icon: Icons.grid_on_outlined,
-            children: [
-              SettingsSwitchTile(
-                label: 'Autosave PGN edits',
-                description: 'Save comments and variations automatically.',
-                value: _prefs.autoSave,
-                onChanged: (v) => _update(_prefs.copyWith(autoSave: v)),
+          ],
+        ),
+        SettingsGroup(
+          title: 'Board and moves',
+          icon: Icons.grid_on_outlined,
+          children: [
+            SettingsSwitchTile(
+              label: 'Autosave PGN edits',
+              description: 'Save comments and variations automatically.',
+              value: _prefs.autoSave,
+              onChanged: (v) => _update(_prefs.copyWith(autoSave: v)),
+            ),
+            SettingsSwitchTile(
+              label: 'Fill missing opening names and ECO codes',
+              description:
+                  'Identify openings in every game and save missing ECO and Opening tags to the PGN. Existing tags are kept.',
+              value: _prefs.autoDetectOpenings,
+              onChanged: (v) => _update(_prefs.copyWith(autoDetectOpenings: v)),
+            ),
+            if (widget.onReadingOptionChanged != null) ...[
+              SettingsChoiceTile<double>(
+                label: 'Keep current move near',
+                value: _anchor,
+                items: const [(0, 'Top'), (.35, 'Middle'), (.68, 'Bottom')],
+                onChanged: (v) {
+                  if (!mounted) return;
+                  setState(() => _anchor = v);
+                  widget.onReadingOptionChanged!(v.toString());
+                },
               ),
-              SettingsSwitchTile(
-                label: 'Auto-detect ECO and opening',
-                description:
-                    'Identify openings in every game and save missing ECO and Opening tags to the PGN. Existing tags are kept.',
-                value: _prefs.autoDetectOpenings,
-                onChanged: (v) =>
-                    _update(_prefs.copyWith(autoDetectOpenings: v)),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton(
+                      onPressed: () => widget.onReadingOptionChanged!('expand'),
+                      child: const Text('Expand variations'),
+                    ),
+                    TextButton(
+                      onPressed: () => widget.onReadingOptionChanged!('fold'),
+                      child: const Text('Fold deep variations'),
+                    ),
+                  ],
+                ),
               ),
+            ] else if (!widget.embedded)
               _action('Move list…', widget.onReadingOptions),
+            if (!widget.embedded)
               _action(
                 'Flip board',
                 widget.onFlip,
                 shortcut: AppShortcut.flipBoard,
               ),
-              SettingsChoiceTile<String>(
-                label: 'Board orientation',
-                value: _orientation,
-                items: [
-                  ('white', 'Always White'),
-                  ('black', 'Always Black'),
-                  if (widget.player case final player?)
-                    (player, 'Follow $player'),
-                  if (_orientation != 'white' &&
-                      _orientation != 'black' &&
-                      _orientation != widget.player)
-                    (_orientation, 'Follow $_orientation'),
-                ],
-                onChanged: (value) {
-                  if (!mounted) return;
-                  setState(() => _orientation = value);
-                  widget.onPerspective(Perspective.fromHeaderValue(value));
-                },
-              ),
+            SettingsChoiceTile<String>(
+              label: 'Board orientation',
+              value: _orientation,
+              items: [
+                ('white', 'Always White'),
+                ('black', 'Always Black'),
+                if (widget.player case final player?)
+                  (player, 'Follow $player'),
+                if (_orientation != 'white' &&
+                    _orientation != 'black' &&
+                    _orientation != widget.player)
+                  (_orientation, 'Follow $_orientation'),
+              ],
+              onChanged: (value) {
+                if (!mounted) return;
+                setState(() => _orientation = value);
+                widget.onPerspective(Perspective.fromHeaderValue(value));
+              },
+            ),
+            if (!widget.embedded)
               _action(
                 'Fullscreen',
                 widget.onFullscreen,
                 shortcut: AppShortcut.fullScreen,
               ),
-            ],
-          ),
+          ],
+        ),
         TextButton(
           onPressed: () => _update(const GameViewPreferences()),
-          child: const Text('Restore simple defaults'),
+          child: const Text('Reset game viewer preferences'),
         ),
       ],
     ),

@@ -15,6 +15,7 @@ import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_settings_button.dart';
+import '../widgets/settings/settings_navigation.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../features/tactics/widgets/tactics_view_settings.dart';
 import '../features/tactics/widgets/tactics_control_panel.dart';
@@ -64,6 +65,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final Set<AppMode> _scheduledModeBuilds = <AppMode>{};
 
   AppState? _appState;
+  ViewSettingsRegistry? _settingsRegistry;
   AppMode? _lastMode;
 
   /// Watches for "open this tournament" requests written by the MCP tools.
@@ -88,6 +90,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       final appState = Provider.of<AppState>(context, listen: false);
       _appState = appState;
+      _settingsRegistry = ViewSettingsRegistry.forApp(appState);
+      _settingsRegistry!.addListener(_mountSettingsViews);
       _lastMode = appState.currentMode;
       appState.addListener(_onAppStateChanged);
       unawaited(_startTournamentOpenWatcher(appState));
@@ -130,6 +134,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _mountSettingsViews() {
+    final requested = _settingsRegistry!.requestedModes
+        .where((mode) => mode.isAvailable && !_modeViews.containsKey(mode))
+        .toList();
+    if (requested.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        for (final mode in requested) {
+          _modeViews[mode] ??= _createModeView(mode);
+        }
+      });
+    });
+  }
+
   void _onAppStateChanged() {
     final appState = _appState;
     if (appState == null) return;
@@ -154,6 +173,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _settingsRegistry?.removeListener(_mountSettingsViews);
     _appState?.removeListener(_onAppStateChanged);
     unawaited(_tournamentOpenWatcher?.stop());
     _tournamentOpenWatcher = null;

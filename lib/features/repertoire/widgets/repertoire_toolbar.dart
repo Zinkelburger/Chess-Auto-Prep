@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../widgets/settings/settings_navigation.dart';
 
 import '../../../models/repertoire_metadata.dart';
 import '../../../theme/app_colors.dart';
@@ -7,8 +6,8 @@ import '../../../theme/app_text_styles.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_settings_button.dart';
+import '../../games/widgets/my_repertoires_section.dart';
 import '../../../core/app_state.dart';
-import '../../../widgets/analysis/analysis_panels_dialog.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/layout/board_zone.dart';
@@ -121,19 +120,18 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           contentBuilder: (context) => ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              if (SettingsChapterScope.maybeOf(context) == 0)
-                if (repertoireSettingsBuilder != null)
-                  repertoireSettingsBuilder!(context)
-                else
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text(
-                      'Open a repertoire in the builder to change its playing side and board size.',
-                      style: AppTextStyles.muted,
-                    ),
+              const MyRepertoiresSection(),
+              const Text('Current repertoire', style: AppTextStyles.bodyStrong),
+              if (repertoireSettingsBuilder != null)
+                repertoireSettingsBuilder!(context)
+              else
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Open a repertoire in the builder to change its playing side and board size.',
+                    style: AppTextStyles.muted,
                   ),
-              if (SettingsChapterScope.maybeOf(context) == 1)
-                const AnalysisPanelsSettingsBody(),
+                ),
             ],
           ),
         ),

@@ -194,6 +194,11 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   @override
   void returnToMainline() => _state?._returnToMainline();
 
+  double get readingAnchor =>
+      _state?._readingPaneKey.currentState?.readingAnchor ?? 0;
+  void applyReadingOption(String value) =>
+      _state?._readingPaneKey.currentState?.applyReadingOption(value);
+
   void showReadingOptions() =>
       _state?._readingPaneKey.currentState?.showReadingOptions();
 

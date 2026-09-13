@@ -34,7 +34,7 @@ class StockfishSettingsBody extends StatelessWidget {
             onHashChanged: (v) => settings.hashMb = v,
           ),
           _row(
-            'Board depth',
+            'Board analysis depth',
             'engine-board-depth',
             settings.depth,
             kMinDepth,
@@ -43,7 +43,7 @@ class StockfishSettingsBody extends StatelessWidget {
           ),
           if (showBulkDepth)
             _row(
-              'Bulk depth',
+              'Game analysis depth',
               'engine-bulk-depth',
               bulk.depth,
               BulkAnalysisSettings.minDepth,
@@ -51,7 +51,7 @@ class StockfishSettingsBody extends StatelessWidget {
               bulk.setDepth,
             ),
           _row(
-            'Lines',
+            'Suggested lines',
             'engine-lines',
             settings.multiPv,
             kMinMultiPv,

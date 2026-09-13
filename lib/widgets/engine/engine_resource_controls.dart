@@ -24,7 +24,7 @@ class EngineResourceControls extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     children: [
       _row(
-        'Cores',
+        'CPU cores',
         'engine-cores',
         cores,
         1,

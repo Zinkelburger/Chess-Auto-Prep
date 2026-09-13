@@ -40,7 +40,6 @@ import '../widgets/training/trainer_browser.dart';
 import '../widgets/training/training_board_controls.dart';
 import '../widgets/training/training_results_panel.dart';
 import '../widgets/training/training_settings_panel.dart';
-import '../widgets/training/training_side_dialog.dart';
 import 'repertoire_selection_screen.dart';
 import 'repertoire_chapters_screen.dart';
 
@@ -75,7 +74,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   String? _pgnRevealedLineId;
 
   /// Prevent duplicate chapter previews.
-  bool _chapterPromptOpen = false;
 
   @override
   void initState() {
@@ -108,34 +106,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   }
 
   // Grouping is an explicit preference, never an interruption on opening a file.
-  void _openChapterSetup() {
-    if (_chapterPromptOpen) return;
-    _training.reopenChapterPrompt();
-    _chapterPromptOpen = true;
-    unawaited(_showChapterPrompt());
-  }
-
-  Future<void> _showChapterPrompt() async {
-    final proposal = _training.pendingChapterPrompt;
-    if (!mounted || proposal == null) {
-      _chapterPromptOpen = false;
-      return;
-    }
-    final answer = await showChapterSetupDialog(
-      context,
-      proposal: proposal,
-      chaptersCurrentlyOn:
-          !_training.chaptersDeclined && _training.chapters.isNotEmpty,
-    );
-    _chapterPromptOpen = false;
-    if (!mounted) return;
-    if (answer == null) {
-      // Dismissal keeps the current grouping without recording a preference.
-      _training.dismissChapterPrompt();
-      return;
-    }
-    await _training.answerChapterPrompt(answer);
-  }
+  void _openChapterSetup() => _training.reopenChapterPrompt();
 
   Future<void> _initialize() async {
     await _training.loadSettings();
@@ -644,21 +615,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       ? null
       : '${_training.sourceIsBlack ? 'Black' : 'White'} repertoire';
 
-  /// Ask which side this file trains, and reload with the answer.
-  Future<void> _chooseTrainingSide() async {
-    final choice = await showTrainingSideDialog(
-      context,
-      currentIsWhite: !_training.sourceIsBlack,
-      overridden: _training.colorOverrideIsWhite != null,
-    );
-    if (choice == null) return;
-    await _training.setTrainingColor(switch (choice) {
-      TrainingSideChoice.white => true,
-      TrainingSideChoice.black => false,
-      TrainingSideChoice.fromFile => null,
-    });
-  }
-
   /// Trainer settings as a dialog — the landing page has no tab bar, and
   /// knobs belong behind one labelled entry point either way.
   Widget _buildBoardPane() {
@@ -1031,7 +987,19 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       playingWhite: _training.repertoire == null || _training.sourceIsStudy
           ? null
           : !_training.sourceIsBlack,
-      onChangePlayingSide: _chooseTrainingSide,
+      playingSideOverride: _training.colorOverrideIsWhite,
+      onPlayingSideChanged: (value) =>
+          unawaited(_training.setTrainingColor(value)),
+      chapterPreview: _training.pendingChapterPrompt == null
+          ? null
+          : ChapterSetupPanel(
+              proposal: _training.pendingChapterPrompt!,
+              chaptersOn:
+                  !_training.chaptersDeclined && _training.chapters.isNotEmpty,
+              embedded: true,
+              onChoose: (value) =>
+                  unawaited(_training.answerChapterPrompt(value)),
+            ),
       onOpenChapterSetup: _training.canOfferChapters ? _openChapterSetup : null,
       chaptersDeclined: _training.chaptersDeclined,
       onOpenAppSettings: onOpenAppSettings,
