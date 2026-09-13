@@ -495,9 +495,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     final handoff = appState.takeHandoff<OpenBuilder>();
     if (handoff == null) return;
 
-    // Load the requested repertoire if different from current
+    // A library handoff reloads structural edits even for the current file.
     final currentPath = _controller.currentRepertoire?.filePath;
-    if (currentPath != handoff.repertoirePath) {
+    if (currentPath != handoff.repertoirePath || handoff.reloadFromDisk) {
       unawaited(
         _controller.setRepertoire(
           RepertoireMetadata(

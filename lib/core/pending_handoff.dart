@@ -46,9 +46,13 @@ final class OpenBuilder extends PendingHandoff {
     this.lineId,
     this.moveSequence,
     this.generationPgnPaths,
+    this.reloadFromDisk = false,
   });
 
   final String repertoirePath;
+
+  /// Material management may have changed this file while Builder was parked.
+  final bool reloadFromDisk;
 
   /// Line to focus once the repertoire is loaded.
   final String? lineId;

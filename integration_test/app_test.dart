@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/screens/repertoire_creation_screen.dart';
 import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
@@ -146,6 +147,37 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets('opens the standalone repertoire library', (tester) async {
+      await pumpApp(tester);
+      await tester.tap(find.byKey(AppModeSwitcher.switcherKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Repertoires'));
+      await tester.pumpAndSettle();
+      expect(find.text('Your repertoires'), findsOneWidget);
+      expect(find.text('Create new repertoire'), findsOneWidget);
+      expect(find.byType(ChessBoardWidget), findsNothing);
+    });
+
+    testWidgets(
+      'trainer creation opens a fresh shared screen and cancels back to trainer',
+      (tester) async {
+        await pumpApp(tester);
+        await tester.tap(find.byKey(AppModeSwitcher.switcherKey));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.widgetWithText(MenuItemButton, 'Repertoire trainer'),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Create new repertoire'));
+        await tester.pumpAndSettle();
+        expect(find.byType(RepertoireCreationScreen), findsOneWidget);
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(find.text('Repertoire trainer'), findsWidgets);
+        expect(find.text('Create new repertoire'), findsOneWidget);
+      },
+    );
 
     testWidgets('switches to Repertoire Builder', (tester) async {
       await pumpApp(tester);

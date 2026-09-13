@@ -77,6 +77,7 @@ class RepertoireOutlinePanel extends StatefulWidget {
     required this.onOpenChapter,
     required this.onOpenLine,
     this.currentMoves = const [],
+    this.showPositionFilter = true,
     this.selectedLine,
     this.onGenerateInto,
     this.onAuditChapter,
@@ -99,6 +100,9 @@ class RepertoireOutlinePanel extends StatefulWidget {
 
   /// The SAN sequence on the board — used by the "at this position" filter.
   final List<String> currentMoves;
+
+  /// Material-only hosts have no board position to filter against.
+  final bool showPositionFilter;
 
   /// The line the editor is on, if any: `(chapterPath, gameIndex)`.
   final ({String chapterPath, int gameIndex})? selectedLine;
@@ -217,6 +221,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
               searchKey: ValueKey(_searchRevision),
               onChanged: _onSearchChanged,
               atPosition: _atPosition,
+              showPositionFilter: widget.showPositionFilter,
               atPositionEnabled: widget.currentMoves.isNotEmpty,
               onAtPositionChanged: (v) {
                 if (!mounted) return;
@@ -1229,6 +1234,7 @@ class _FilterRow extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final bool atPosition;
   final bool atPositionEnabled;
+  final bool showPositionFilter;
   final ValueChanged<bool> onAtPositionChanged;
 
   const _FilterRow({
@@ -1236,6 +1242,7 @@ class _FilterRow extends StatelessWidget {
     required this.onChanged,
     required this.atPosition,
     required this.atPositionEnabled,
+    required this.showPositionFilter,
     required this.onAtPositionChanged,
   });
 
@@ -1252,25 +1259,26 @@ class _FilterRow extends StatelessWidget {
               onChanged: onChanged,
             ),
           ),
-          PopupMenuButton<bool>(
-            tooltip: atPosition
-                ? 'Chapter filters · at this position'
-                : 'Chapter filters',
-            icon: Icon(
-              Icons.filter_list,
-              size: 18,
-              color: atPosition ? AppColors.accent : AppColors.onSurfaceMuted,
-            ),
-            onSelected: onAtPositionChanged,
-            itemBuilder: (_) => [
-              CheckedPopupMenuItem<bool>(
-                value: !atPosition,
-                checked: atPosition,
-                enabled: atPositionEnabled || atPosition,
-                child: const Text('At this position'),
+          if (showPositionFilter)
+            PopupMenuButton<bool>(
+              tooltip: atPosition
+                  ? 'Chapter filters · at this position'
+                  : 'Chapter filters',
+              icon: Icon(
+                Icons.filter_list,
+                size: 18,
+                color: atPosition ? AppColors.accent : AppColors.onSurfaceMuted,
               ),
-            ],
-          ),
+              onSelected: onAtPositionChanged,
+              itemBuilder: (_) => [
+                CheckedPopupMenuItem<bool>(
+                  value: !atPosition,
+                  checked: atPosition,
+                  enabled: atPositionEnabled || atPosition,
+                  child: const Text('At this position'),
+                ),
+              ],
+            ),
         ],
       ),
     );

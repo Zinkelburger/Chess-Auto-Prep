@@ -15,6 +15,8 @@ import 'common/item_title.dart';
 
 import '../models/repertoire_metadata.dart';
 import '../screens/repertoire_chapters_screen.dart';
+import '../screens/repertoire_creation_screen.dart';
+import '../services/repertoire_creation.dart';
 import '../features/repertoire/widgets/repertoire_import_dialog.dart';
 import '../services/storage/storage_factory.dart';
 import 'pgn_import_dialog.dart';
@@ -45,9 +47,6 @@ class RepertoireListBody extends StatefulWidget {
   /// custom-tactics sets) and tapping one calls this instead.
   final ValueChanged<RepertoireMetadata>? onStudySelected;
 
-  /// Opens the builder to create a repertoire when supplied by the trainer.
-  final VoidCallback? onCreateRepertoire;
-
   /// Open a folder directly; chapter browsing remains a separate action.
   final ValueChanged<RepertoireMetadata>? onRepertoireSelected;
 
@@ -59,7 +58,6 @@ class RepertoireListBody extends StatefulWidget {
     this.onCourseChapterSelected,
     this.onRepertoireSelected,
     this.onStudySelected,
-    this.onCreateRepertoire,
     this.pickPgn = pickPgnImport,
   });
 
@@ -166,13 +164,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
         children: [
           _buildToolbar(),
           const Divider(height: 1, thickness: 1),
-          Expanded(
+          const Expanded(
             child: EmptyStatePlaceholder(
               icon: Icons.library_books,
               title: 'No repertoires yet',
-              subtitle: widget.onCreateRepertoire == null
-                  ? 'Open a PGN file to get started.'
-                  : 'Open a PGN file or create a new repertoire in the builder.',
+              subtitle:
+                  'Open a PGN file or create a repertoire to get started.',
             ),
           ),
         ],
@@ -239,12 +236,11 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                     : const Icon(Icons.folder_open, size: 20),
                 label: Text(importingFile ? 'Importing…' : 'Open PGN file…'),
               ),
-              if (widget.onCreateRepertoire != null)
-                OutlinedButton.icon(
-                  onPressed: _importing ? null : widget.onCreateRepertoire,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Create new repertoire'),
-                ),
+              OutlinedButton.icon(
+                onPressed: _importing ? null : _createRepertoire,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Create new repertoire'),
+              ),
               TextButton.icon(
                 onPressed: _importing
                     ? null
@@ -404,6 +400,47 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     }
   }
 
+  Future<void> _createRepertoire() async {
+    final created = await Navigator.of(context).push<RepertoireCreationResult>(
+      MaterialPageRoute(
+        builder: (_) => RepertoireCreationScreen(pickPgn: widget.pickPgn),
+      ),
+    );
+    if (!mounted || created == null) return;
+    await _loadRepertoires();
+    if (!mounted) return;
+    if (created.gameCount == 0) {
+      showAppSnackBar(
+        context,
+        'Created “${p.basename(created.directoryPath)}”. Add moves before training.',
+      );
+      return;
+    }
+    await _openCreated(created);
+  }
+
+  Future<void> _openCreated(RepertoireCreationResult created) async {
+    if (created.chapterPaths.length > 1) {
+      await _openRepertoire(
+        RepertoireMetadata(
+          filePath: created.directoryPath,
+          name: p.basename(created.directoryPath),
+          gameCount: created.chapterPaths.length,
+          lastModified: DateTime.now(),
+        ),
+      );
+    } else {
+      widget.onSelected(
+        RepertoireMetadata(
+          filePath: created.chapterPath,
+          name: p.basenameWithoutExtension(created.chapterPath),
+          gameCount: created.gameCount,
+          lastModified: DateTime.now(),
+        ),
+      );
+    }
+  }
+
   Future<void> _importRepertoire({bool paste = false}) async {
     if (!mounted || _importing) return;
     setState(() {
@@ -425,25 +462,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
         'Imported “${p.basename(created.directoryPath)}”. '
         'Rename it from your repertoire list.',
       );
-      if (created.chapterPaths.length > 1) {
-        await _openRepertoire(
-          RepertoireMetadata(
-            filePath: created.directoryPath,
-            name: p.basename(created.directoryPath),
-            gameCount: created.gameCount,
-            lastModified: DateTime.now(),
-          ),
-        );
-      } else {
-        widget.onSelected(
-          RepertoireMetadata(
-            filePath: created.chapterPath,
-            name: p.basenameWithoutExtension(created.chapterPath),
-            gameCount: created.gameCount,
-            lastModified: DateTime.now(),
-          ),
-        );
-      }
+      await _openCreated(created);
       if (mounted) await _loadRepertoires();
     } finally {
       if (mounted) setState(() => _importing = false);

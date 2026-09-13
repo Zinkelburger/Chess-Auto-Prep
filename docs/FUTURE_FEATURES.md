@@ -34,8 +34,13 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 | Item | Status | Notes |
 |------|--------|-------|
 | Preserve mode toolbar in material pickers | **Partial** | Player Analysis now embeds its picker. `RepertoireSelectionScreen` and `RepertoireChaptersScreen` still push full-screen routes with only a Back action, hiding Actions / View / Settings; embed them beneath their owning mode toolbar. |
-| Bound simple lists and forms | **Partial** | Player Analysis caps its picker at 1040px; Settings and Databases already cap forms. Repertoire/chapter lists and `TournamentsScreen` group cards still fill the window; bound these, while retaining room for multi-column player tables and board workspaces. |
+| Bound simple lists and forms | **Partial** | Player Analysis caps its picker at 1040px; Settings and Databases already cap forms. Repertoire/chapter lists are capped at 920px and the library organizer at 1040px. `TournamentsScreen` group cards still fill the window; bound these, while retaining room for multi-column player tables and board workspaces. |
 | Preserve navigation in prep and planning workflows | **Not started** | `TournamentsScreen`, `PeopleScreen`, `TournamentScreen`, `BuildConfigScreen` and `PlanBuildScreen` replace the mode bar with route-specific controls. Keep their navigation under a persistent mode bar; planner boards/tables benefit from width, but the question/review form should have its own readable cap. |
+| Players & prep destination | **Not started** | Promote existing People / Groups / tournament preparation routes out of Player analysis; link selected people to games, studies and analysis. See the standalone workflow audit in COMPONENT_MAP. |
+| My games destination | **Not started** | Share downloading, game catalog/filtering and opening review currently embedded in Tactics with Viewer and Player analysis; keep the Tactics home shortcut. |
+| Builds destination | **Not started** | Give plan/configuration, jobs and run history an entry independent of Builder's active file; keep position-seeded build shortcuts in the editor. |
+| Saved reports catalog | **Deferred** | One entry to persisted audit and hole-hunt results with links to their source; preserve report-specific renderers and models. |
+| Repertoire organization follow-ups | **Partial** | Standalone Repertoires and shared creation are implemented. Existing outline moves chapters into folders and reorders lines. Arbitrary sibling chapter ordering, cross-repertoire dragging and importing directly into an existing folder remain follow-ups. |
 | Ultrawide four-zone layout (≥ 1600 px) | **Not started** | `kWideBreakpoint` exists; no fourth column |
 | Draggable zone dividers | **Not started** | Fixed flex ratios only (`RepertoireLayout`) |
 | Eval bar docked on board (Lichess-style) | **Not started** | Engine output lives in context panel / analysis dock, not under board |

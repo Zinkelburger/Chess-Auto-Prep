@@ -189,6 +189,7 @@ main.dart
 |------|--------|-------------|
 | `tactics` | Embedded `_TacticsModeView` | Tactics from user's own games (Stockfish analysis + Maia line extension) |
 | `positionAnalysis` | `AnalysisScreen` | Weak positions from user games |
+| `repertoireLibrary` | `RepertoireLibraryScreen` | Import, create and organize repertoire material; explicit Read / Train / Build handoffs |
 | `repertoire` | `RepertoireScreen` | Opening repertoire builder |
 | `repertoireTrainer` | `RepertoireTrainingScreen` | Spaced repetition training |
 | `pgnViewer` | `PgnViewerScreen` | Standalone game PGN + inline engine |
@@ -197,7 +198,7 @@ main.dart
 | `bughouse` | `BughouseScreen` | Two-board analysis and matches |
 | `databases` | `DatabasesScreen` | Local data inventory, downloads and storage |
 
-Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens on hover or click with a grouped, text-only menu (Train / Build / Analyse / Lab / Data, order in `kAppModeGroups`); switching views uses this menu, with no Ctrl/Cmd+number bindings.
+Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens on hover or click with a grouped, text-only menu (Train / Library / Build / Analyse / Lab / Data, order in `kAppModeGroups`); switching views uses this menu, with no Ctrl/Cmd+number bindings.
 
 #### View composition audit (September 2026)
 
@@ -232,6 +233,60 @@ flow, preserving answers when leaving practice, searchable scope navigation and
 stable controls. Listudy was consulted for the guided/repetition flow. We reuse
 these interaction principles rather than importing an unrelated training model,
 predictive learnability score or mandatory daily quota.
+
+#### Standalone workflow audit (September 13, 2026)
+
+The inventory includes all mode roots and their substantial nested routes,
+selection states, tabs and dialogs. A workflow merits a destination when users
+can finish a useful job there and several consumers use its output. A board,
+settings form or confirmation alone does not merit another mode.
+
+| Current root and implicit views | Ownership decision |
+|---|---|
+| Repertoire trainer: material picker, chapter/line browser, learn/review/drill, mistakes, results, settings | Material creation and organization belong to **Repertoires**. Keep lesson phases and session results in Trainer; Read uses PGN Viewer. |
+| Repertoire builder: outline, editor, Engine/Database sources, build configuration, planner, jobs, audit/traps/coverage/coherence | The outline is shared with Repertoires. Editing and position-dependent tools stay in Builder. Planning/build queues and saved reports are candidates below. |
+| Tactics: recent games/downloads, opening review, puzzle catalog/import, puzzle/game tabs, session recap | **My games** is a strong next destination: downloading, filtering and reviewing games is useful without starting tactics and feeds Player analysis, PGN Viewer and preparation. Retain the recent-games shortcut on Tactics. Puzzle import/catalog can remain Trainer-local until another workflow needs to manage it. |
+| Player analysis: player picker/import, position analysis, hole/engine hunts, People, Groups, tournament details, identity matching and linked studies | **Players & prep** is the strongest next extraction. People and group preparation already have independent screens/data; they should be reachable without selecting a player to analyze. Keep the analysis board in Player analysis and link from a selected person. |
+| PGN Viewer: collection/import, filters, Game/Book/Explorer/Analysis/Tree panels, annotation and solitaire | Keep it the canonical reader for games, studies and repertoire lines. Explorer/Tree are reusable position panels; adding another top-level reader would duplicate its job. Collection management could later share the My games catalog. |
+| Study: study/chapter pickers, chapter ordering, annotations, board/engine, reading/training handoffs | Keep Study as the authoring destination. A future material catalog may include studies, but do not merge their puzzle/annotation storage semantics with repertoires. |
+| Engine tournament: results, setup, games, engine registry | Already an independent workflow. Registry is shared Settings; tournament game reading uses PGN Viewer. |
+| Bughouse: positions, reserves, analysis, game/match setup and archives | Keep the distinct two-board workspace. Its analysis and match controls depend on both boards. |
+| Databases: inventories, downloads, local engine-eval stores, own-game storage, recovery trash | Already standalone. Keep storage maintenance here; a My games view would own chess browsing/review rather than disk maintenance. |
+| Shared Settings: accounts, board/moves, analysis, training, tactics, viewer, repertoires, engines, data, app and shortcuts | Already independent. Keep configuration centralized with contextual links; creation/import belongs beside material. |
+
+Next extractions, in order: **Players & prep**, **My games**, then a
+**Builds** destination combining plan/configure/run/history without requiring
+an already-open editor. **Reports** is a later candidate for saved repertoire
+audits and player/engine hole hunts: share a catalog and source links while
+retaining the different report models. Generation setup, engine settings,
+chapter naming and import confirmations should remain contextual forms rather
+than extra modes. These are recommendations, not newly implemented screens;
+remaining work is tracked in [Layout & navigation](FUTURE_FEATURES.md#layout--navigation).
+
+#### Repertoire library and shared creation
+
+`RepertoireLibraryScreen` is available under **Library → Repertoires**. It
+reuses `RepertoireListBody` for search, direct file/paste imports and repertoire
+rename/delete. Opening a repertoire shows `RepertoireOutlinePanel` with its
+existing controller/service, independent of a board or engine: folders,
+chapters, line moves/reordering, drag/drop and Undo use the same disk operations
+as Builder. Chapter selection stays in the organizer. Explicit actions send the
+selected chapter to Read, Train or Build; Train repertoire sends the folder.
+Opening a line hands its game index to PGN Viewer. Returning to the library
+refreshes material changed in another mode.
+
+`RepertoireCreationScreen` is the shared creation route from the library,
+Builder and Trainer material selectors. It accepts a name, White/Black side,
+file or pasted PGN, or an explicitly empty repertoire. It returns a
+`RepertoireCreationResult` without switching modes or loading Builder's last
+file. Valid imported material returns to the caller's selection flow; a
+multi-chapter course keeps chapter selection. Empty creation returns to the
+list without attempting a lesson. Cancel writes nothing, duplicate names are
+refused, and write failures retain the form. Direct **Open PGN file…** continues
+to import immediately; users need not fill a creation form for that shortcut.
+The outline supports moving chapters **into folders** and reordering **lines**;
+arbitrary sibling chapter ordering and cross-repertoire drag/drop are not added
+by this extraction.
 
 #### App bar conventions (unified June 2026)
 

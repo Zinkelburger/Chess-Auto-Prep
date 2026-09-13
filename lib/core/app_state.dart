@@ -19,6 +19,7 @@ enum AppMode {
   engineTournament,
   bughouse,
   databases,
+  repertoireLibrary,
 }
 
 extension AppModeLabel on AppMode {
@@ -36,12 +37,14 @@ extension AppModeLabel on AppMode {
     AppMode.engineTournament => 'Engine tournament',
     AppMode.bughouse => 'Bughouse lab',
     AppMode.databases => 'Databases',
+    AppMode.repertoireLibrary => 'Repertoires',
   };
 }
 
 /// The mode menu, grouped by what you are doing rather than listed flat.
 const List<({String heading, List<AppMode> modes})> kAppModeGroups = [
   (heading: 'Train', modes: [AppMode.tactics, AppMode.repertoireTrainer]),
+  (heading: 'Library', modes: [AppMode.repertoireLibrary]),
   (heading: 'Build', modes: [AppMode.repertoire, AppMode.study]),
   (heading: 'Analyse', modes: [AppMode.pgnViewer, AppMode.positionAnalysis]),
   (heading: 'Lab', modes: [AppMode.engineTournament, AppMode.bughouse]),
@@ -108,7 +111,8 @@ extension AppModeEngine on AppMode {
     AppMode.repertoireTrainer ||
     AppMode.engineTournament ||
     AppMode.bughouse ||
-    AppMode.databases => false,
+    AppMode.databases ||
+    AppMode.repertoireLibrary => false,
   };
 }
 

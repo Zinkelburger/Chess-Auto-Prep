@@ -146,6 +146,21 @@ void main() {
     if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
   });
 
+  testWidgets('library handoff reloads edits to the already open chapter', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final app = await _pumpScreen(tester, repertoirePath: path);
+    await _settleUntil(tester, find.text('Italian Game'));
+    app.setMode(AppMode.repertoireLibrary);
+    File(path).writeAsStringSync(
+      _chapterPgn.replaceAll('Italian Game', 'Updated in library'),
+    );
+    app.handOff(OpenBuilder(repertoirePath: path, reloadFromDisk: true));
+    await _settleUntil(tester, find.text('Updated in library'));
+    expect(find.text('Italian Game'), findsNothing);
+  });
+
   group('wide layout', () {
     testWidgets('renders the loaded chapter, its lines, and the side panel', (
       tester,

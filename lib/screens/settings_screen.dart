@@ -142,7 +142,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _selected = widget.initialGlobalSection;
-    _mode = widget.initialMode;
+    _mode = widget.initialMode == AppMode.repertoireLibrary
+        ? AppMode.repertoire
+        : widget.initialMode;
     if (_mode == AppMode.databases) {
       _mode = null;
       _selected = 4;
