@@ -205,8 +205,8 @@ void main() {
       final snap = (await persistence.load(_pgn))!;
       expect(snap.config.mistakeThresholdCp, 120);
       expect(snap.config.clashUsername, 'rival');
-      expect(snap.isComplete, isTrue, reason: 'a re-save is a complete one');
-      expect(snap.checkedFens, isEmpty);
+      expect(snap.isComplete, isFalse);
+      expect(snap.checkedFens, {_fen});
       expect(snap.result.findings.single.missingMove, 'Nf6');
     });
 
@@ -287,6 +287,23 @@ void main() {
     });
   });
 
+  test(
+    'dismissing a partial report preserves resume scope and checked positions',
+    () async {
+      final result = _result([_missing()]);
+      await persistence.saveProgress(_pgn, result, _config, {
+        _fen,
+      }, startFen: _fen);
+      result.findings.single.dismissed = true;
+      await persistence.saveResult(_pgn, result);
+      final restored = (await persistence.load(_pgn))!;
+      expect(restored.isComplete, isFalse);
+      expect(restored.checkedFens, {_fen});
+      expect(restored.startFen, _fen);
+      expect(restored.result.findings.single.dismissed, isTrue);
+    },
+  );
+
   group('failure paths', () {
     test('missing, empty and corrupt files load as null', () async {
       expect(await persistence.load(_pgn), isNull);
@@ -320,12 +337,6 @@ void main() {
   });
 
   group('AuditConfig map defaults', () {
-    // BUG: `AuditConfig.fromMap` defaults `useLichessDb` to true while the
-    // constructor defaults it to false, so a config map missing the key
-    // (hand-edited, or written before the key existed) comes back with the
-    // Lichess source switched on. Harmless today because the Explorer fetch
-    // is mothballed, but it is the one field where the two defaults
-    // disagree.
     test('fromMap on an empty map matches the constructor defaults', () {
       final fromMap = AuditConfig.fromMap(const {});
       const ctor = AuditConfig();
@@ -333,6 +344,6 @@ void main() {
       expect(fromMap.useMaia, ctor.useMaia);
       expect(fromMap.useChessDb, ctor.useChessDb);
       expect(fromMap.useLichessDb, ctor.useLichessDb);
-    }, skip: 'documents bug: fromMap defaults useLichessDb=true, ctor false');
+    });
   });
 }

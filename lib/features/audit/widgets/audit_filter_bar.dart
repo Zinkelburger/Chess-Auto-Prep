@@ -16,6 +16,7 @@ class AuditFilterBar extends StatelessWidget {
     required this.activeFilters,
     required this.onToggle,
     this.clashOnly = false,
+    this.includeDismissed = false,
     this.onToggleClashOnly,
   });
 
@@ -30,6 +31,7 @@ class AuditFilterBar extends StatelessWidget {
 
   /// When true, only clash-sourced missing responses are shown.
   final bool clashOnly;
+  final bool includeDismissed;
 
   /// Toggle the clash-only source filter.
   final VoidCallback? onToggleClashOnly;
@@ -38,15 +40,16 @@ class AuditFilterBar extends StatelessWidget {
   Widget build(BuildContext context) {
     if (findings.isEmpty) return const SizedBox.shrink();
 
-    int countOf(AuditFindingType t) =>
-        findings.where((f) => f.type == t && !f.dismissed).length;
+    int countOf(AuditFindingType t) => findings
+        .where((f) => f.type == t && (includeDismissed || !f.dismissed))
+        .length;
 
     final clashCount = findings
         .where(
           (f) =>
               f.type == AuditFindingType.missingResponse &&
               f.source == MissingResponseSource.clash &&
-              !f.dismissed,
+              (includeDismissed || !f.dismissed),
         )
         .length;
 
@@ -75,7 +78,7 @@ class AuditFilterBar extends StatelessWidget {
               type: AuditFindingType.missingResponse,
               color: AppColors.findingMissingResponse,
             ),
-            if (clashCount > 0) ...[
+            if (clashCount > 0 || clashOnly) ...[
               const SizedBox(width: 4),
               _chip(
                 label: 'Clashes',
@@ -147,6 +150,8 @@ class AuditFilterBar extends StatelessWidget {
     color: color,
     isActive: activeFilters.contains(type),
     showZeroCount: false,
-    onSelected: count > 0 ? () => onToggle(type) : null,
+    onSelected: count > 0 || activeFilters.contains(type)
+        ? () => onToggle(type)
+        : null,
   );
 }

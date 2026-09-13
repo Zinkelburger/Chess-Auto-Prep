@@ -603,6 +603,36 @@ void main() {
 
   group('cancel and resume', () {
     test(
+      'resume keeps full node counts without rechecking completed leaves',
+      () async {
+        final db = _ScriptedDb({});
+        final config = _quiet.copyWith(useChessDb: true);
+        final service = RepertoireAuditService(chessDbProvider: db);
+        final first = await service.audit(
+          tree: white,
+          isWhiteRepertoire: true,
+          config: config,
+        );
+        final checked = service.checkedFens;
+        db.calls.clear();
+        final resumed = await service.audit(
+          tree: white,
+          isWhiteRepertoire: true,
+          config: config,
+          skipFens: checked,
+          priorFindings: first.findings,
+          priorWarnings: first.warnings,
+        );
+        expect(db.calls, isEmpty);
+        expect(resumed.ourMoveNodesChecked, first.ourMoveNodesChecked);
+        expect(resumed.opponentNodesChecked, first.opponentNodesChecked);
+        expect(resumed.leafNodesChecked, first.leafNodesChecked);
+        expect(resumed.warnings, isNotEmpty);
+        expect(resumed.warnings, first.warnings);
+      },
+    );
+
+    test(
       'skipped positions are not re-checked but their children are',
       () async {
         final e5 = at(white, ['e4', 'e5']);

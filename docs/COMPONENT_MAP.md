@@ -244,24 +244,24 @@ settings form or confirmation alone does not merit another mode.
 | Current root and implicit views | Ownership decision |
 |---|---|
 | Repertoire trainer: material picker, chapter/line browser, learn/review/drill, mistakes, results, settings | Material creation and organization belong to **Repertoires**. Keep lesson phases and session results in Trainer; Read uses PGN Viewer. |
-| Repertoire builder: outline, editor, Engine/Database sources, build configuration, planner, jobs, audit/traps/coverage/coherence | The outline is shared with Repertoires. Editing and position-dependent tools stay in Builder. Planning/build queues and saved reports are candidates below. |
-| Tactics: recent games/downloads, opening review, puzzle catalog/import, puzzle/game tabs, session recap | **My games** is a strong next destination: downloading, filtering and reviewing games is useful without starting tactics and feeds Player analysis, PGN Viewer and preparation. Retain the recent-games shortcut on Tactics. Puzzle import/catalog can remain Trainer-local until another workflow needs to manage it. |
+| Repertoire builder: outline, editor, Engine/Database sources, build configuration, planner, jobs, audit/traps/coverage/coherence | The outline is shared with Repertoires. Editing and position-dependent tools stay in Builder. Build configuration, queues and audit reports remain attached to the selected repertoire/chapter. |
+| Tactics: recent games/downloads, opening review, puzzle catalog/import, puzzle/game tabs, session recap | **My games stays in Tactics**: improve the embedded download, filtering and opening-review UI and keep direct links to Viewer and Player analysis. Puzzle import/catalog can remain Trainer-local until another workflow needs to manage it. |
 | Player analysis: player picker/import, position analysis, hole/engine hunts, People, Groups, tournament details, identity matching and linked studies | **Players & prep** is the strongest next extraction. People and group preparation already have independent screens/data; they should be reachable without selecting a player to analyze. Keep the analysis board in Player analysis and link from a selected person. |
-| PGN Viewer: collection/import, filters, Game/Book/Explorer/Analysis/Tree panels, annotation and solitaire | Keep it the canonical reader for games, studies and repertoire lines. Explorer/Tree are reusable position panels; adding another top-level reader would duplicate its job. Collection management could later share the My games catalog. |
+| PGN Viewer: collection/import, filters, Game/Book/Explorer/Analysis/Tree panels, annotation and solitaire | Keep it the canonical reader for games, studies and repertoire lines. Explorer/Tree are reusable position panels; adding another top-level reader would duplicate its job. Share game selection helpers with the My games area in Tactics. |
 | Study: study/chapter pickers, chapter ordering, annotations, board/engine, reading/training handoffs | Keep Study as the authoring destination. A future material catalog may include studies, but do not merge their puzzle/annotation storage semantics with repertoires. |
 | Engine tournament: results, setup, games, engine registry | Already an independent workflow. Registry is shared Settings; tournament game reading uses PGN Viewer. |
 | Bughouse: positions, reserves, analysis, game/match setup and archives | Keep the distinct two-board workspace. Its analysis and match controls depend on both boards. |
-| Databases: inventories, downloads, local engine-eval stores, own-game storage, recovery trash | Already standalone. Keep storage maintenance here; a My games view would own chess browsing/review rather than disk maintenance. |
+| Databases: inventories, downloads, local engine-eval stores, own-game storage, recovery trash | Already standalone. Keep storage maintenance here; the My games area in Tactics owns chess browsing/review rather than disk maintenance. |
 | Shared Settings: accounts, board/moves, analysis, training, tactics, viewer, repertoires, engines, data, app and shortcuts | Already independent. Keep configuration centralized with contextual links; creation/import belongs beside material. |
 
-Next extractions, in order: **Players & prep**, **My games**, then a
-**Builds** destination combining plan/configure/run/history without requiring
-an already-open editor. **Reports** is a later candidate for saved repertoire
-audits and player/engine hole hunts: share a catalog and source links while
-retaining the different report models. Generation setup, engine settings,
-chapter naming and import confirmations should remain contextual forms rather
-than extra modes. These are recommendations, not newly implemented screens;
-remaining work is tracked in [Layout & navigation](FUTURE_FEATURES.md#layout--navigation).
+**Players & prep** remains the next standalone candidate. My games stays in
+Tactics. Builds start from a repertoire, with the output chapter explicit in
+setup; planning and run history should improve there. Audits remain in Builder:
+reviewing a finding requires its line, board and editing context. Improve those
+contextual workflows before considering a separate reports catalog. Generation
+setup, engine settings, chapter naming and import confirmations remain forms,
+not modes. These are ownership decisions; the remaining work is tracked in
+[Layout & navigation](FUTURE_FEATURES.md#layout--navigation).
 
 #### Repertoire library and shared creation
 
@@ -574,38 +574,21 @@ CoverageCalculatorWidget / CoverageService
 
 ### Audit
 
-Config in dialog, results in bottom pane:
+Configuration opens as a route; results stay in Builder's bottom pane.
+See [the audit feature](#libfeaturesaudit) for lifecycle and persisted report details.
 
 ```
-AuditSessionController (owns RepertoireAuditService + all audit state)
-  ← Screen delegates pause/resume/cancel via controller methods
-  ← tryRestore() on repertoire load; launchResume() for interrupted audits
-  ← Persistence: saveProgress/saveComplete/onResultChanged via AuditPersistence
+AuditConfigPanel → AuditSessionController.launch
+  → engine setup → RepertoireAuditService.audit → engine cleanup
+  → guarded progress and findings → AuditFindingsPanel
+  → chapter-specific partial / complete snapshot
 
-AuditConfigDialog (toolbar button)
-  → Wraps AuditConfigPanel in a modal dialog
-  → Config: source toggles (Stockfish/Maia; Lichess DB mothballed, `useLichessDb` defaults false), thresholds, scope
-  → Start button closes dialog, task runs in background
-  → Bottom pane auto-opens to Findings tab
-  → RepertoireAuditService.audit(openingTree, config)
-       BFS: our moves → StockfishPool.discoverMoves (eval loss check)
-       BFS: opponent turns → MaiaFactory (gap check); ProbabilityService mothballed (no Lichess API); clash tree from book PGNs (source: clash)
-       BFS: leaves → dead-end detection (stores uncovered move SANs)
-       Cumulative probability: product of opponent move frequencies from root
-  → Callbacks: controller.onAuditingChanged, .onResultReady, .onLiveFinding
-
-AuditFindingsPanel (bottom pane Findings tab)
-  → Receives AuditResult from controller; `interruptedSnapshot` + resume banner when incomplete audit detected
-  → onResumeAudit / onStartFreshAudit → controller.launchResume / startFresh
-  → FindingsDisplayFilter: auto-scales when >100 findings (drops info → raises reach floor)
-  → Summary card: soundness %, coverage %, clickable type badges
-  → Filter bar: severity chips (Critical/Warning/Info), "X of N" counter
-  → Findings list: sort (severity/reach/ply), filter by type
-  → Bulk dismiss: right-click → dismiss similar / at depth / all of type
-  → Keyboard: ↓/↑ cycle findings when panel focused (board navigates); dismiss with the row menu
-  → Selected finding highlighted, board arrows shown
-  → Dismissed section: count + "Restore all" at bottom
-  → Finding tap → RepertoireController.loadMoveSequence()
+AuditFindingsPanel
+  → chapter, checked positions, settings tooltip, source warnings and errors
+  → Priority / Frequency sort, move/line search, type and clash filters
+  → configurable cap, stable selected finding, board navigation
+  → dismiss / restore / bulk dismiss, keyboard navigation
+  → interrupted report: Resume original scope / Start fresh
 
 Controller state:
   → AuditResult + liveFindings + interruptedSnapshot + progress + _activeRepertoireId
@@ -1141,7 +1124,7 @@ Used by:
 | `generation_progress.dart` | Throttled BFS / phase stats for the Jobs panel; owned by the session controller | `update`, `setStatus`, `handleBuildProgress`, `flushNotify` |
 | `snapshot_exporter.dart` | Mid-run export of lines found so far to a new repertoire file | `export`, `nameSuggestion` |
 | `generation_session_types.dart` | `GenerationRequest`, `GeneratedLineExport`, `TreeAnalysis`, `ExtractedLines` | — |
-| `audit_session_controller.dart` | **Audit session state** — owns `RepertoireAuditService` + result, live findings, progress, config, interrupted snapshot; handles persistence via `AuditPersistence`; `onLiveFinding` creates a new list on each addition (avoids stale-reference bugs in widget comparisons) | `pause`, `resume`, `cancel`, `saveProgress`, `tryRestore`, `launchResume`, `startFresh`, `onAuditingChanged`, `onResultReady`, `onLiveFinding`, `onProgress` |
+| `audit_session_controller.dart` | **Audit session state** — owns `RepertoireAuditService` + result, live findings, progress, config, interrupted snapshot; handles persistence via `AuditPersistence`; `onLiveFinding` creates a new list on each addition (avoids stale-reference bugs in widget comparisons) | `pause`, `resume`, `cancel`, `saveProgress`, `tryRestore`, `launch`, `launchResume`, `startFresh`, `onAuditingChanged`, `onResultReady`, `onLiveFinding`, `onProgress` |
 | `coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
@@ -1247,40 +1230,46 @@ Repertoire quality audit — BFS over the existing `OpeningTree` to detect mista
 | **services/audit_config.dart** | `AuditConfig` thresholds (mistake/inaccuracy cp, min games, Maia prob, depth); `useLichessDb` defaults `false`; `clashPgnPaths` for repertoire-clash checking against book/course PGNs; `toMap()`/`fromMap()` serialization; `summaryLabel` compact display |
 | **services/repertoire_audit_service.dart** | BFS walker: Stockfish MultiPV for our moves, Maia for opponent gaps (Lichess mothballed), repertoire-clash check against book/course PGN tree (`MissingResponseSource.clash`); reads/writes `EvalCache`; computes cumulative reach probability per finding; transposition detection for missing moves (checks if resulting FEN exists in tree's `fenToNodes`); `pause()`/`resume()`/`cancel()`; exposes `checkedFens` for resume support; accepts `skipFens`/`priorFindings` to resume interrupted audits |
 | **services/audit_persistence.dart** | `AuditPersistence` singleton: centralized save/load for audit snapshots (`AuditSnapshot` = result + config + checked FENs + completion state). Auto-loads on repertoire open, auto-saves on dismiss changes. Handles v1 (legacy) and v2 (envelope) JSON formats |
-| **widgets/audit_config_panel.dart** | Compact audit configuration: always uses Stockfish + Maia (no source toggles), scope toggle (subtree-only chip), key thresholds (Eval Depth/Max Ply/Maia Elo) shown by default, detailed thresholds under "More thresholds" expander (Mistake cp, Inaccuracy cp, Min Maia Prob — minGames hidden since Lichess mothballed), **Repertoire Clashes** section with PGN file picker for checking against book/course lines, compact start/cancel with inline progress; `useLichessDb` hardcoded false; accepts external `RepertoireAuditService` for pause/resume from Jobs tab |
-| **widgets/audit_config_dialog.dart** | Modal dialog wrapping AuditConfigPanel; forwards `auditService` and `onConfigChanged` |
-| **widgets/audit_findings_panel.dart** | Results display: category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends) + Clashes source filter (purple, shown when clash findings exist), sorted by reach probability with per-tile probability label, user-configurable visible cap (default 20, inline text field), reach range shown in status row, bulk dismiss context menu, keyboard navigation (↓/↑ and D when panel focused; suppressed in text fields), selected state, timestamp display, "Re-run audit" button; resume banner when `interruptedSnapshot` set (`onResumeAudit`, `onStartFreshAudit`) |
+| **widgets/audit_config_panel.dart** | Configuration-only route: Current chapter / current-position subtree, Stockfish + Maia, optional ChessDB strong replies, depth/ply/rating and validated detailed thresholds, optional clash PGNs. Calls `onStart(config, startFen)`; the session controller owns execution after the route closes. |
+| **widgets/audit_findings_panel.dart** | Builder Findings tab: severity-first Priority or estimated Frequency sort, move/line search, category and clash filters, configurable visible cap, dismiss/restore, keyboard navigation and stable live selection. Chapter/count/settings context, source warnings, visible run errors, and interrupted-run Resume / Start fresh. |
 
-**Entry points:** Toolbar "Audit" button is context-aware: opens bottom pane Findings tab if audit running or results exist; opens config dialog otherwise. Force-open config via "Re-run audit" button in findings panel. Results appear in bottom pane Findings tab.
+**Entry points:** Builder's context-aware Audit action opens Findings for a run
+or saved report, otherwise the **Check this chapter** configuration route.
+The findings refresh action opens configuration again. Creation and organization
+remain in Repertoires; audits stay beside the lines being reviewed.
 
-**Persistence:** Audit results are saved to `<repertoire>_audit.json` via `AuditPersistence`. Results auto-load when a repertoire is opened (`AuditSessionController.tryRestore()` in `_onRepertoireChanged`), so findings survive app restarts. Dismissal changes auto-save via `controller.onResultChanged`. Cancel/dispose call `controller.saveProgress()` → `AuditPersistence.saveProgress()`. `tryRestore()` checks `isComplete` and sets `interruptedSnapshot` for incomplete audits; `controller.launchResume()` resumes with `skipFens`/`priorFindings`. The snapshot envelope (v2) stores the `AuditConfig`, checked FEN set, and completion state.
+**Persistence and lifecycle:** `<chapter>_audit.json` stores the result, config,
+completion state, checked FENs for interrupted runs and optional subtree start
+FEN. Old v1/v2 reports still load. Dismissal edits preserve partial status and
+resume scope. Writes are serialized per report path. `AuditSessionController.launch`
+owns engine preparation, service execution and cleanup; run versions guard
+callbacks, and replacement runs wait for cancelled work to finish. Cancellation
+and chapter switches save progress before invalidating the run. Engine startup
+and run failures keep an interrupted report and expose an error. Resume traverses
+already-checked positions for complete statistics without rechecking leaves.
 
-**Data flow:**
-```
-AuditSessionController._launchAuditConfig() (via screen)
-  ├─ AuditConfigDialog → AuditConfigPanel._startAudit()
-  │    ├─ onConfigChanged → controller.lastConfig (stored on controller + job.configSnapshot)
-  │    ├─ EngineLifecycle.enterGeneration(1)
-  │    ├─ EvalCache.init()  ← shared SQLite eval store
-  │    ├─ controller.service.audit(openingTree, config, ...)
-  │    │    ├─ BFS over OpeningTree nodes (tracks cumulative reach probability)
-  │    │    ├─ Our turn: StockfishPool.discoverMoves → cache best-line eval
-  │    │    │    └─ Per-move: EvalCache hit? → skip Stockfish : evaluateFen → cache
-  │    │    ├─ Opponent turn: MaiaFactory → check coverage (ProbabilityService mothballed)
-  │    │    └─ Leaves: check for uncovered opponent continuations
-  │    ├─ onProgress → controller.nodesChecked/totalNodes + currentJob.updateProgress()
-  │    ├─ onLiveFinding → controller.liveFindings
-  │    └─ onResultReady → controller.result + persisted to <repertoire>_audit.json
-  ├─ RepertoireAuditService owned by controller → pause/resume/cancel from Jobs tab
-  └─ EngineLifecycle.exitGeneration() on cancel
-```
+**Data flow:** configuration → controller.launch → engine preparation → service
+BFS → guarded findings/progress callbacks → report save → engine cleanup.
+The service checks our moves with Stockfish MultiPV and per-move evals, checks
+opponent replies with Maia / ChessDB / Stockfish / clash PGNs, and probes line
+endings. Stockfish and Maia reuse the generation caches. Jobs controls pause,
+resume and cancel through the controller.
+
+**Practical limits:** This is a targeted chapter check, not proof of a sound or
+complete repertoire. Depth, MultiPV, reply windows and source availability limit
+coverage. Unavailable sources and unscored ChessDB positions produce persisted
+warnings. Frequency estimates combine repertoire branch counts and source
+probabilities; they are not measured frequencies from the user's games. Whole-
+repertoire aggregation and automatic detection of edits since the saved audit
+remain follow-ups. Rerun after changing lines. Soundness counts affected positions
+once even when one move produces both a move-quality and weak-position finding.
 
 **Finding UX:**
 - Clicking a finding navigates within the existing repertoire tree (via `navigateToLineMove`) — the full tree with all variations is preserved.
 - **Missing-move ephemeral preview:** Clicking a missing-move finding navigates to the parent position AND shows the missing move played ephemerally on the board (position after the missing move). A blue "Go to position" bar appears below the board with the missing move name; clicking it navigates to that position in the tree. Close button dismisses the ephemeral preview. Ephemeral state auto-clears when the user navigates normally.
 - **Transposition detection:** Missing-move findings check if the resulting FEN (after playing the missing move) already exists in the repertoire tree. If so, the finding is tagged "transposes" in the summary — indicating the gap is less critical because the position is already covered elsewhere.
 - Category filter chips: Blunders, Inaccuracies, Missing, Weak, Dead Ends — click to toggle (multi-select). Counts shown per chip.
-- **Auto-scaling:** At most ~20 findings shown at a time (sorted by reach probability, highest first). As findings are dismissed, lower-probability ones surface. Status bar shows "20 of 150 findings" when capped.
+- **Auto-scaling:** At most ~20 findings shown at a time (severity first by default). As findings are dismissed, the next priority items surface. Frequency ordering remains available. Status bar shows "20 of 150 findings" when capped.
 - **Probability display:** Missing moves show Maia probability (e.g. "p=0.003 Maia" for small values). Uses adaptive formatting: ≥10% → integer, ≥1% → 1 decimal, ≥0.001 → 3 decimals, smaller → scientific notation.
 - Move numbers in summaries: "Missing: 3...Nd2" instead of "Missing: Nd2". Also for mistakes/inaccuracies.
 - Dismiss button: 16px icon with 32px hit target and hover feedback.

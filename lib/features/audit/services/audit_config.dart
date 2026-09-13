@@ -139,7 +139,7 @@ class AuditConfig {
     maxPly: m['maxPly'] as int? ?? 30,
     maiaElo: m['maiaElo'] as int? ?? 2200,
     useStockfish: m['useStockfish'] as bool? ?? true,
-    useLichessDb: m['useLichessDb'] as bool? ?? true,
+    useLichessDb: m['useLichessDb'] as bool? ?? false,
     useMaia: m['useMaia'] as bool? ?? true,
     useChessDb: m['useChessDb'] as bool? ?? true,
     strongReplyWindowCp: m['strongReplyWindowCp'] as int? ?? 50,

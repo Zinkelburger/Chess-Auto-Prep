@@ -328,11 +328,15 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   Future<void> _openAuditConfigRoute() async {
     if (_configRouteOpen) return;
     _configRouteOpen = true;
+    final tree = _controller.openingTree;
+    final path = _repertoireFilePath;
+    final isWhite = _controller.isRepertoireWhite;
+    final label = _controller.currentRepertoire?.name;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
-          title: 'Audit for gaps',
+          title: 'Check this chapter',
           startSignal: _auditController,
           hasStarted: () => _auditController.isAuditing,
           child: AuditConfigPanel(
@@ -341,19 +345,20 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
             currentFen: _controller.fen,
             currentMoveSequence: _controller.currentMoveSequence,
             repertoireFilePath: _repertoireFilePath,
-            auditService: _auditController.service,
-            onConfigChanged: _auditController.onConfigChanged,
-            onAuditingChanged: _onAuditingChanged,
-            onResultReady: (result) {
-              if (mounted) {
-                _auditController.onResultReady(result, _repertoireFilePath);
-              }
-            },
-            onLiveFinding: (finding) {
-              if (mounted) _auditController.onLiveFinding(finding);
-            },
-            onProgress: (checked, total) {
-              if (mounted) _auditController.onProgress(checked, total);
+            onStart: (config, startFen) {
+              if (!mounted || tree == null) return;
+              unawaited(
+                _auditController.launch(
+                  config: config,
+                  tree: tree,
+                  isWhiteRepertoire: isWhite,
+                  jobManager: _jobManager,
+                  repertoireLabel: label,
+                  repertoireFilePath: path,
+                  startFen: startFen,
+                ),
+              );
+              _openBottomPane(BottomPaneTab.findings);
             },
           ),
         ),
@@ -362,16 +367,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     _configRouteOpen = false;
     if (!mounted) return;
     _reclaimFocus();
-  }
-
-  void _onAuditingChanged(bool auditing) {
-    if (!mounted) return;
-    _auditController.onAuditingChanged(
-      auditing,
-      _jobManager,
-      _controller.currentRepertoire?.name ?? 'Audit',
-    );
-    if (auditing) _openBottomPane(BottomPaneTab.findings);
   }
 
   void _discoverTrapsFromRepertoire() {

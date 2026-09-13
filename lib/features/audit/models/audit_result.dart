@@ -16,6 +16,9 @@ class AuditResult {
   final Duration elapsed;
   final DateTime? timestamp;
 
+  /// Enabled sources that could not check all requested positions.
+  final List<String> warnings;
+
   AuditResult({
     required this.findings,
     required this.nodesChecked,
@@ -26,6 +29,7 @@ class AuditResult {
     this.evalCacheMisses = 0,
     required this.elapsed,
     DateTime? timestamp,
+    this.warnings = const [],
   }) : timestamp = timestamp ?? DateTime.now();
 
   static final empty = AuditResult(
@@ -72,8 +76,26 @@ class AuditResult {
 
   double get soundnessPercent {
     if (ourMoveNodesChecked == 0) return 100.0;
-    final moveIssues = mistakeCount + inaccuracyCount + weakPositionCount;
-    return ((ourMoveNodesChecked - moveIssues) / ourMoveNodesChecked) * 100;
+    final affectedPositions = findings
+        .where(
+          (f) =>
+              f.type == AuditFindingType.mistake ||
+              f.type == AuditFindingType.inaccuracy ||
+              f.type == AuditFindingType.weakPosition,
+        )
+        .map(
+          (f) => f.movePath
+              .take(f.movePath.isEmpty ? 0 : f.movePath.length - 1)
+              .join(' '),
+        )
+        .toSet()
+        .length;
+    return ((ourMoveNodesChecked - affectedPositions).clamp(
+              0,
+              ourMoveNodesChecked,
+            ) /
+            ourMoveNodesChecked) *
+        100;
   }
 
   /// Fraction of opponent-turn nodes where every common reply is covered.
@@ -122,6 +144,7 @@ class AuditResult {
     'evalCacheMisses': evalCacheMisses,
     'elapsedMs': elapsed.inMilliseconds,
     'findings': findings.map((f) => f.toJson()).toList(),
+    if (warnings.isNotEmpty) 'warnings': warnings,
   };
 
   factory AuditResult.fromJsonString(String s) =>
@@ -138,6 +161,7 @@ class AuditResult {
         .toList();
     return AuditResult(
       findings: findings,
+      warnings: (j['warnings'] as List?)?.cast<String>() ?? const [],
       nodesChecked: j['nodesChecked'] as int? ?? 0,
       ourMoveNodesChecked: j['ourMoveNodesChecked'] as int? ?? 0,
       opponentNodesChecked: j['opponentNodesChecked'] as int? ?? 0,

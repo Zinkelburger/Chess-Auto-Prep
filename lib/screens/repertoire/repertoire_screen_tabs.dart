@@ -208,6 +208,9 @@ mixin _RepertoireTabContent
       isAuditing: ac.isAuditing,
       auditNodesChecked: ac.nodesChecked,
       auditTotalNodes: ac.totalNodes,
+      errorText: ac.error,
+      chapterName: _controller.currentRepertoire?.name,
+      config: ac.lastConfig,
       onFindingSelected: _onFindingSelected,
       onResultChanged: (updatedResult) {
         ac.onResultChanged(updatedResult, _repertoireFilePath);

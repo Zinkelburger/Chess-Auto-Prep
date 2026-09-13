@@ -12,6 +12,7 @@ import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
 import 'package:chess_auto_prep/features/audit/models/audit_result.dart';
 import 'package:chess_auto_prep/features/audit/services/audit_config.dart';
 import 'package:chess_auto_prep/features/audit/services/audit_persistence.dart';
+import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
@@ -52,6 +53,29 @@ class _MemoryStorage implements StorageService {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('${invocation.memberName} is not used here');
+}
+
+class _GatedAudit extends RepertoireAuditService {
+  final completions = <Completer<AuditResult>>[];
+  final starts = <String?>[];
+  @override
+  Future<AuditResult> audit({
+    required OpeningTree tree,
+    required bool isWhiteRepertoire,
+    required AuditConfig config,
+    String? startFen,
+    AuditProgressCallback? onProgress,
+    void Function(AuditFinding)? onFinding,
+    Set<String> skipFens = const {},
+    List<AuditFinding> priorFindings = const [],
+    List<String> priorWarnings = const [],
+  }) {
+    starts.add(startFen);
+    final done = Completer<AuditResult>();
+    completions.add(done);
+    onFinding?.call(_finding('Nf6'));
+    return done.future;
+  }
 }
 
 const _a = '/reps/A/Main.pgn';
@@ -297,18 +321,11 @@ void main() {
       expect(controller.hasResults, isFalse);
     });
 
-    // BUG: the audit run belongs to the config panel, which hands its
-    // result to `onResultReady` with whatever repertoire path the screen
-    // has *now*. After a switch mid-run, the old repertoire's partial
-    // findings arrive as the new repertoire's complete audit: they replace
-    // the state `tryRestore` just loaded for B and are written to B's
-    // `_audit.json`. The controller has no way to tell that result from a
-    // fresh one, so a fix needs the panel to tag results with the run they
-    // came from (or the controller to own the run).
     test(
       'a result from the run cancelled by the switch is not adopted',
       () async {
         startAudit();
+        final oldRun = controller.runVersion;
         controller.onLiveFinding(_finding('Nf6'));
         controller.onRepertoireSwitching(_a);
         storage.files[_bJson] = jsonEncode(
@@ -321,13 +338,16 @@ void main() {
         expect(controller.result!.findings.single.missingMove, 'c5');
 
         // ...and then A's cancelled run returns through the panel.
-        controller.onResultReady(_result([_finding('Nf6')]), _b);
+        controller.onResultReady(
+          _result([_finding('Nf6')]),
+          _b,
+          runVersion: oldRun,
+        );
         await settle();
 
         expect(controller.result!.findings.single.missingMove, 'c5');
         expect(snapshotAt(_bJson).result.findings.single.missingMove, 'c5');
       },
-      skip: 'documents bug: stale result of A overwrites B after a switch',
     );
   });
 
@@ -467,10 +487,127 @@ void main() {
       expect(controller.liveFindings, isEmpty);
       expect(controller.totalNodes, 5);
 
-      final saved = snapshotAt(_aJson);
+      final saved = (await AuditPersistence.instance.load(_a))!;
       expect(saved.isComplete, isTrue);
       expect(saved.result.findings.single.missingMove, 'Nf6');
       expect(saved.config.mistakeThresholdCp, 55);
+    });
+  });
+
+  group('owned run lifecycle', () {
+    late OpeningTree tree;
+    setUp(() async {
+      tree = await OpeningTreeBuilder.buildTree(
+        pgnList: const ['1. e4 e5 *'],
+        username: '',
+        userIsWhite: true,
+        strictPlayerMatching: false,
+        maxDepth: 4,
+      );
+    });
+
+    Future<void> launch(String path, {AuditConfig config = _quiet}) =>
+        controller.launch(
+          config: config,
+          tree: tree,
+          isWhiteRepertoire: true,
+          jobManager: jobs,
+          repertoireLabel: path,
+          repertoireFilePath: path,
+        );
+
+    test(
+      'cancelled completion cannot mark the saved partial report complete',
+      () async {
+        final service = _GatedAudit();
+        controller.dispose();
+        controller = AuditSessionController(service: service);
+        final run = launch(_a);
+        await settle();
+        controller.cancel(_a);
+        await settle();
+        expect(controller.interruptedSnapshot, isNotNull);
+        service.completions.single.complete(_result([_finding('d5')]));
+        await run;
+        await settle();
+        expect(snapshotAt(_aJson).isComplete, isFalse);
+        expect(controller.liveFindings.single.missingMove, 'Nf6');
+        expect(controller.result, isNull);
+      },
+    );
+
+    test(
+      'switching chapters discards late completion and serializes the next run',
+      () async {
+        final service = _GatedAudit();
+        controller.dispose();
+        controller = AuditSessionController(service: service);
+        final first = launch(_a);
+        await settle();
+        controller.onRepertoireSwitching(_a);
+        final second = launch(_b);
+        await settle();
+        expect(service.completions, hasLength(1));
+        service.completions.first.complete(_result([_finding('old')]));
+        await first;
+        await settle();
+        expect(service.completions, hasLength(2));
+        expect(controller.result, isNull);
+        service.completions.last.complete(_result([_finding('new')]));
+        await second;
+        await settle();
+        expect(controller.result!.findings.single.missingMove, 'new');
+        expect(snapshotAt(_aJson).isComplete, isFalse);
+        expect(snapshotAt(_bJson).result.findings.single.missingMove, 'new');
+      },
+    );
+
+    test(
+      'engine startup failure clears running state and reports an error',
+      () async {
+        var releases = 0;
+        controller.dispose();
+        controller = AuditSessionController(
+          prepareEngine: () async => throw StateError('Engine unavailable'),
+          releaseEngine: () async {
+            releases++;
+          },
+        );
+        final run = launch(_a, config: _quiet.copyWith(useStockfish: true));
+        final job = controller.currentJob!;
+        await run;
+        await settle();
+        expect(controller.error, contains('Engine unavailable'));
+        expect(controller.isAuditing, isFalse);
+        expect(job.status, JobStatus.failed);
+        expect(releases, 1);
+        expect(snapshotAt(_aJson).isComplete, isFalse);
+      },
+    );
+
+    test('resume retains its original subtree', () async {
+      final service = _GatedAudit();
+      controller.dispose();
+      controller = AuditSessionController(service: service);
+      final snapshot = AuditSnapshot(
+        result: _result([]),
+        config: _quiet,
+        startFen: _fen,
+        isComplete: false,
+      );
+      final run = controller.launchResume(
+        snapshot: snapshot,
+        tree: tree,
+        isWhiteRepertoire: true,
+        jobManager: jobs,
+        repertoireLabel: 'A',
+        repertoireFilePath: _a,
+      );
+      await settle();
+      expect(service.starts.single, _fen);
+      service.completions.single.complete(_result([]));
+      await run;
+      expect((await AuditPersistence.instance.load(_a))!.startFen, _fen);
     });
   });
 
