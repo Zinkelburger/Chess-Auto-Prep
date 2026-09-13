@@ -784,7 +784,9 @@ class PgnViewerController extends ChangeNotifier
         if (!_isCurrentLoad(loadEpoch)) return;
         pgnWidgetController.goToMainLineIndex(cursorPly);
       });
-      unawaited(_buildFenIndex());
+      // Resume enrichment if this visit was left before it finished. Its
+      // retained games may differ from today's file, so rebuild their index.
+      unawaited(_prepareCollection(loadEpoch, restoreIndex: false));
       return true;
     };
   }
@@ -832,7 +834,11 @@ class PgnViewerController extends ChangeNotifier
   bool isPreparingCollection = false;
 
   /// Optional collection-wide work never holds the reader's loading overlay.
-  Future<void> _prepareCollection(int epoch, {bool classify = true}) async {
+  Future<void> _prepareCollection(
+    int epoch, {
+    bool classify = true,
+    bool restoreIndex = true,
+  }) async {
     if (!_isCurrentLoad(epoch)) return;
     isPreparingCollection = true;
     notifyListeners();
@@ -843,7 +849,7 @@ class PgnViewerController extends ChangeNotifier
       if (classify) await classifyOpenings();
       if (!_isCurrentLoad(epoch)) return;
       final path = filePath;
-      if (path != null && _fenIndex.value == null) {
+      if (restoreIndex && path != null && _fenIndex.value == null) {
         await _fenIndex.tryLoadPersisted(path, allGames.length);
       }
       if (!_isCurrentLoad(epoch)) return;

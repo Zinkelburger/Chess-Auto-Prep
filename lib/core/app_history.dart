@@ -1,5 +1,6 @@
-/// App-level navigation history. Manual mode switches start a fresh trail; cross-screen
-/// handoffs append destinations. Back returns to the retained screen in the IndexedStack.
+/// App-level navigation history. Manual mode switches start a fresh trail;
+/// cross-screen handoffs append destinations. Back returns to the retained
+/// screen in the IndexedStack.
 /// A handoff is replayed only if a later visit overwrote that mode's screen.
 library;
 
