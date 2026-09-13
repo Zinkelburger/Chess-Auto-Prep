@@ -59,6 +59,7 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
       _boardSize = BoardSize.fromName(prefs.getString(boardSizeKey));
       _outlinePanelCollapsed = prefs.getBool(outlineCollapsedKey) ?? false;
       _outlinePanelWidth = prefs.getDouble(outlineWidthKey);
+      _databaseHeight = prefs.getDouble(databaseHeightKey);
       notifyListeners();
     } catch (e) {
       log.w('Failed to load layout prefs', name: 'RepertoireLayout', error: e);
@@ -118,6 +119,30 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
     await _write((prefs) => prefs.setString(boardSizeKey, size.name));
   }
 
+  static const databaseHeightKey = 'repertoire.database_height';
+  double? _databaseHeight;
+
+  double resolveDatabaseHeight(double availableHeight) =>
+      (_databaseHeight ?? availableHeight * .34).clamp(
+        200.0,
+        math.max(200.0, availableHeight * .55),
+      );
+
+  void dragDatabaseHeight(double value, double availableHeight) {
+    _databaseHeight = value.clamp(
+      200.0,
+      math.max(200.0, availableHeight * .55),
+    );
+    notifyListeners();
+  }
+
+  Future<void> saveDatabaseHeight() async {
+    final height = _databaseHeight;
+    if (height != null) {
+      await _write((prefs) => prefs.setDouble(databaseHeightKey, height));
+    }
+  }
+
   // ── Layout arithmetic ────────────────────────────────────────────────────
 
   /// Widest the Lines panel may be for a body [availableWidth] — a little
@@ -138,7 +163,7 @@ class RepertoireLayoutPrefs extends ChangeNotifier with SafeChangeNotifier {
   /// The outline column's width: dragged width if set, else a proportional
   /// default, inside [minPanelWidth]..[maxLinesPanelWidth].
   double resolveOutlinePanelWidth(double availableWidth) {
-    final defaultWidth = (availableWidth * 0.20).clamp(240.0, 340.0);
+    final defaultWidth = (availableWidth * 0.18).clamp(220.0, 280.0);
     return (_outlinePanelWidth ?? defaultWidth)
         .clamp(minPanelWidth, maxLinesPanelWidth(availableWidth))
         .toDouble();

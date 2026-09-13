@@ -107,6 +107,18 @@ void main() {
     });
   });
 
+  test('database dock resizing is bounded and restored', () async {
+    final prefs = RepertoireLayoutPrefs();
+    prefs.dragDatabaseHeight(900, 700);
+    expect(prefs.resolveDatabaseHeight(700), closeTo(385, .001));
+    await prefs.saveDatabaseHeight();
+    final restored = RepertoireLayoutPrefs();
+    await restored.load();
+    expect(restored.resolveDatabaseHeight(700), closeTo(385, .001));
+    prefs.dispose();
+    restored.dispose();
+  });
+
   group('panel width', () {
     test('follows a proportional default until the user drags', () async {
       final prefs = RepertoireLayoutPrefs();

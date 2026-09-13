@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_text_styles.dart';
 import '../theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
@@ -510,96 +511,103 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     // Stretch: the movetext box fills the pane it is given.  Left to size
     // itself it was exactly as wide as its longest row, which put a lone
     // "1. e4" in a black strip with empty pane either side.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.pgnSurface,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.ephemeralTitle != null) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.pgnSurface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (widget.ephemeralTitle != null) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.warning_amber_rounded,
+                            size: 14,
+                            color: AppColors.warning,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              widget.ephemeralTitle!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1, color: AppColors.divider),
+                    const SizedBox(height: 4),
+                  ] else if (_showTitleField) ...[
+                    Row(
                       children: [
                         const Icon(
-                          Icons.warning_amber_rounded,
-                          size: 14,
-                          color: AppColors.warning,
+                          Icons.drive_file_rename_outline,
+                          size: 15,
+                          color: AppColors.onSurfaceMuted,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(
-                            widget.ephemeralTitle!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.warning,
+                          child: TextField(
+                            controller: _titleController,
+                            decoration: const InputDecoration(
+                              hintText: 'Line title',
+                              hintStyle: TextStyle(
+                                color: AppColors.onSurfaceMuted,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(vertical: 4),
                             ),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.inkSoft,
+                            ),
+                            onChanged: (_) {
+                              widget.onDirty?.call();
+                              _scheduleAutoSave();
+                            },
                           ),
                         ),
                       ],
                     ),
+                    const Divider(height: 1, color: AppColors.divider),
+                    const SizedBox(height: 4),
+                  ],
+                  Expanded(
+                    child: SingleChildScrollView(child: _buildMovesDisplay()),
                   ),
-                  const Divider(height: 1, color: AppColors.divider),
-                  const SizedBox(height: 4),
-                ] else if (_showTitleField) ...[
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.drive_file_rename_outline,
-                        size: 15,
-                        color: AppColors.onSurfaceMuted,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: TextField(
-                          controller: _titleController,
-                          decoration: const InputDecoration(
-                            hintText: 'Line title',
-                            hintStyle: TextStyle(
-                              color: AppColors.onSurfaceMuted,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(vertical: 4),
-                          ),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.inkSoft,
-                          ),
-                          onChanged: (_) {
-                            widget.onDirty?.call();
-                            _scheduleAutoSave();
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 1, color: AppColors.divider),
-                  const SizedBox(height: 4),
                 ],
-                Expanded(
-                  child: SingleChildScrollView(child: _buildMovesDisplay()),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
-        if (_showTitleField || widget.showAnnotationPanel)
-          _buildAnnotationPanel(),
-      ],
+          if (_showTitleField || widget.showAnnotationPanel)
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: constraints.maxHeight * .55,
+              ),
+              child: SingleChildScrollView(child: _buildAnnotationPanel()),
+            ),
+        ],
+      ),
     );
   }
 
@@ -612,6 +620,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final atRoot = path.isEmpty;
     final raw = widget.tree.commentAt(path) ?? '';
     return PgnAnnotationPanel(
+      compact: _showTitleField,
       key: ObjectKey(widget.tree),
       // Tree mutations are cheap and the host already debounces disk saves.
       // Commit before a chapter switch changes the controller's target tree.
@@ -640,7 +649,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   Widget _buildMovesDisplay() {
     if (widget.tree.isEmpty && widget.tree.rootComment == null) {
-      return const SizedBox.shrink();
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 18),
+        child: Text(
+          'Play a move or select a saved line.',
+          style: AppTextStyles.muted,
+        ),
+      );
     }
 
     final (startMoveNumber, startIsWhite) = MoveTree.moveNumberFromFen(

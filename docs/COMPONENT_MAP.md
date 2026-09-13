@@ -246,9 +246,14 @@ Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 - **Action padding** is `right: 8` for all toolbar action widgets.
 - **Shared constants** live in `constants/ui_breakpoints.dart`.
 
-### Repertoire screen layout (right pane + bottom pane, redesigned June 2026)
+### Repertoire builder workspace
 
-Design principles (Chessable-style, Aug 2026): **what the repertoire contains** on the left (the outline: folders → chapters → lines, a real file structure), **the position** in the middle (board + PGN editor; no eval bar by design), **evidence about the position** on the right (Analysis panel: Engine | Database | Generate). **Bottom pane** = job output (Findings, Jobs/config) — collapsed by default. Generation and audit config are inline in the Jobs tab; the outline's chapter menu ("Generate lines into this chapter…") switches to that chapter, puts the board on the chapter's shared root, and opens it.
+The wide workspace keeps chapters on the left, the board beside notation, and
+engine analysis below notation. A resizable reference database dock spans the
+board and notation columns. This uses the simultaneous panes in the supplied
+[Chess.ceo reference](https://chess.ceo/) as a layout reference, with the app's
+existing typography and controls. Compact windows retain tabs. Notes in the
+builder start collapsed and expand when clicked or focused through the annotation action. Board navigation sits immediately beneath the board.
 
 ```
 RepertoireScreen (composition root — wires controllers to widgets)
@@ -263,18 +268,14 @@ RepertoireScreen (composition root — wires controllers to widgets)
   ├─ TrapIndexService
   │
   ├─ Wide (≥ kCompactBreakpoint):
-  │     Row: Outline column (resizable, collapsible → "Chapters" strip)
-  │          | Board (square, annotated)
-  │          | PGN editor (PgnWithAnalysisPane) + NavControls
-  │          | Analysis panel (resizable, collapsible → "Analysis" strip)
-  │              TabBar: Engine | Database | Generate
-  │                Engine: InlineEngineBar over InlineExpectimaxBar
-  │                Database: RepertoireDatabasePane (Repertoire / Opening explorer source selector)
-  │                Generate: GeneratePositionPane (local analysis, live scores, single-move PV)
-  │       Outline column content = RepertoireOutlinePanel (default)
-  │          | line-metrics view (old RepertoireLinesBrowser: coverage/ease/coherence/traps, via
-  │            the header's metrics button, "Back to chapters" returns)
-  │       BottomPane (collapsed by default, full width): Findings | Jobs
+  │     Outline column (resizable, collapsible → "Chapters" strip)
+  │       beside a workspace containing:
+  │         Board + NavControls | Notation (PgnWithAnalysisPane)
+  │                             | Engine / Generate tabs
+  │         Reference database dock (height remembered across sessions)
+  │           Repertoire | Opening explorer | Local PGN
+  │     Outline content = RepertoireOutlinePanel, or the optional line-metrics view
+  │     BottomPane (collapsed by default, full width): Findings | Jobs
   │
   ├─ Compact (<960px):
   │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN (with engine bars) | Chapters | Database | Generate
@@ -315,10 +316,37 @@ The quiz uses `services/eco_trie.dart` to identify opening forks and `services/p
 
 **Line metrics view (outline column):** The old `RepertoireLinesBrowser` (search/filter/sort, coverage/ease/coherence columns, gap buttons) plus the Lines/Traps segmented toggle, reached from the outline header's metrics button; "Back to chapters" returns to the outline. The Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges, and expandable detail cards. `BoardPreviewController` is threaded through; a `FloatingBoardPreview` overlay is mounted in the view's `Stack`.
 
-**Database tab (analysis panel):** The Repertoire source shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **paths** (including variations) when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
+**Reference database dock (compact: Database tab):** The Repertoire source shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **paths** (including variations) when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
 
 The separate Tree tab has been removed. Database offers the repertoire tree and
-live opening explorer through a compact source switcher. Copying moves stays in
+live opening explorer and local PGN databases through a compact source switcher.
+The selected source is remembered. Explorer games open in a separate reference
+viewer at the board position, preserving the repertoire cursor. `ExplorerGameOpener.fetchPgn`
+fetches the game without adding a copy to a collection.
+
+**Local PGN** (`features/repertoire/services/local_reference_database.dart`,
+`widgets/local_reference_pane.dart`): choose any standard-chess PGN, switch among
+eight recent paths, or refresh after changing the file. A cancellable isolate
+streams one game at a time into a SQLite cache under
+`<application cache>/repertoire-reference/`. The original PGN is read-only.
+Completed indexes are keyed by source path, size, modification time and schema
+version; incomplete builds use private staging directories and are not reused.
+The index stores original single-game PGNs, a canonical-FEN game index and
+pre-aggregated move counts. All mainline positions, including terminal positions,
+are indexed; each game contributes only its first continuation at a repeated
+position. Transpositions merge, FEN starts are supported, and illegal/unsupported
+mainlines are skipped with a visible count. Variations and annotations are
+preserved for reading but do not inflate played-game statistics. Unknown results
+count as games, not draws.
+
+Move statistics and matching games appear side by side at wider dock sizes;
+narrow docks use Moves / Games tabs. Search filters the matching games by player,
+event, site or ECO; it does not change the position's move statistics. Queries
+run off the UI isolate, return at most 50 PGNs per page, and discard superseded
+results. A move row plays the move; its explicit `+` adds it to the repertoire.
+Game rows reuse `PgnTreeGamesList` with host-owned search and paging, and open a
+separate board/notation dialog. This source supplies browsing evidence; automatic
+generation continues to use its existing configured sources. Copying moves stays in
 the PGN editor context menu. Repertoire selection uses compact searchable rows:
 clicking a repertoire opens it directly (Builder opens its first file with the
 full outline available), while Browse chapters is an optional action.
