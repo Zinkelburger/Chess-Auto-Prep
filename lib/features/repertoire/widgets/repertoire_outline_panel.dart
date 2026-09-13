@@ -1237,43 +1237,45 @@ class _FilterRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: SizedBox(
-              height: 30,
-              child: TextField(
-                controller: controller,
-                onChanged: onChanged,
-                style: const TextStyle(fontSize: 12),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                  prefixIcon: const Icon(Icons.search, size: 16),
-                  prefixIconConstraints: const BoxConstraints(minWidth: 28),
-                  hintText: 'Find a chapter or line',
-                  hintStyle: const TextStyle(fontSize: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+          SizedBox(
+            height: 30,
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              style: const TextStyle(fontSize: 12),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                prefixIcon: const Icon(Icons.search, size: 16),
+                prefixIconConstraints: const BoxConstraints(minWidth: 28),
+                hintText: 'Find a chapter or line',
+                hintStyle: const TextStyle(fontSize: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 6),
-          Tooltip(
-            message: atPositionEnabled
-                ? 'Only lines that reach the position on the board'
-                : 'Play a move on the board to filter by position',
-            child: FilterChip(
-              label: const Text(
-                'At this position',
-                style: TextStyle(fontSize: 12),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Tooltip(
+              message: atPositionEnabled
+                  ? 'Only lines that reach the position on the board'
+                  : 'Play a move on the board to filter by position',
+              child: FilterChip(
+                label: const Text(
+                  'At this position',
+                  style: TextStyle(fontSize: 12),
+                ),
+                selected: atPosition,
+                onSelected: atPositionEnabled ? onAtPositionChanged : null,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
               ),
-              selected: atPosition,
-              onSelected: atPositionEnabled ? onAtPositionChanged : null,
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
             ),
           ),
         ],

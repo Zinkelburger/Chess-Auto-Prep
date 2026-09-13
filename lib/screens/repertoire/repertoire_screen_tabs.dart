@@ -439,8 +439,14 @@ mixin _RepertoireTabContent
     final tree = _controller.tree;
     final path = _controller.path;
     final children = path.isEmpty ? tree.roots : tree.nodeAt(path)?.children;
-    if (children == null) return const {};
-    return {for (final c in children) c.san};
+    final saved = _controller.openingTree;
+    return {
+      if (children != null)
+        for (final child in children) child.san,
+      if (saved != null)
+        for (final group in saved.continuationsAt(_controller.fen))
+          if (!group.viaTransposition) group.move,
+    };
   }
 
   /// Echo the hovered explorer row on the board, the way Lichess arrows a

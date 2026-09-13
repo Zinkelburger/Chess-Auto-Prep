@@ -54,6 +54,9 @@ class PgnAnnotationPanel extends StatefulWidget {
   /// Tree editors commit immediately; PGN-file hosts debounce serialization.
   final Duration commentDebounce;
 
+  /// Builder workspaces disclose notes on demand to leave room for notation.
+  final bool compact;
+
   const PgnAnnotationPanel({
     super.key,
     required this.targetKey,
@@ -63,6 +66,7 @@ class PgnAnnotationPanel extends StatefulWidget {
     required this.onToggleNag,
     required this.onCommentChanged,
     this.glyphsEnabled = true,
+    this.compact = false,
     this.commentDebounce = const Duration(milliseconds: 400),
   });
 
@@ -79,6 +83,7 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
   final FocusNode _focusNode = FocusNode(debugLabel: 'PgnAnnotationPanel');
   Timer? _debounce;
   bool _confirmingDelete = false;
+  bool _expanded = false;
 
   bool get _hasComment => widget.comment.trim().isNotEmpty;
   bool get _blankReplacement => _hasComment && _controller.text.trim().isEmpty;
@@ -104,6 +109,13 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
   }
 
   void _focusComment() {
+    if (widget.compact && !_expanded) {
+      setState(() => _expanded = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focusComment();
+      });
+      return;
+    }
     _focusNode.requestFocus();
     _controller.selection = TextSelection.collapsed(
       offset: _controller.text.length,
@@ -211,82 +223,125 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            enabled ? 'Notes · ${widget.moveLabel}' : 'Notes',
-            style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
-          ),
-          const SizedBox(height: 8),
-          // The glyph strip wraps instead of overflowing: the panel lives in
-          // side panels the user can drag down to ~190px, where six glyphs
-          // no longer fit on one line.
-          Wrap(
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final nag in kMoveNags)
-                GlyphButton(
-                  symbol: nag.symbol,
-                  name: nag.name,
-                  color: nag.color,
-                  isActive: widget.nags.contains(nag.id),
-                  onTap: enabled && widget.glyphsEnabled
-                      ? () => widget.onToggleNag(nag.id)
-                      : null,
+          if (widget.compact)
+            InkWell(
+              onTap: () {
+                if (mounted) setState(() => _expanded = !_expanded);
+              },
+              child: SizedBox(
+                height: 28,
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.notes,
+                      size: 16,
+                      color: AppColors.onSurfaceMuted,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _hasComment && !_expanded
+                            ? widget.comment.replaceAll('\n', ' ')
+                            : 'Notes · ${widget.moveLabel}',
+                        style: AppTextStyles.muted,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Tooltip(
+                      message: _expanded ? 'Collapse notes' : 'Edit notes',
+                      child: Icon(
+                        _expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 18,
+                      ),
+                    ),
+                  ],
                 ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _blankReplacement ? 'Comment kept until deleted' : 'Comment:',
-                  style: _blankReplacement
-                      ? AppTextStyles.caption
-                      : AppTextStyles.bodyStrong.copyWith(color: Colors.white),
+              ),
+            )
+          else
+            Text(
+              enabled ? 'Notes · ${widget.moveLabel}' : 'Notes',
+              style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
+            ),
+          if (!widget.compact || _expanded) ...[
+            const SizedBox(height: 8),
+            // The glyph strip wraps instead of overflowing: the panel lives in
+            // side panels the user can drag down to ~190px, where six glyphs
+            // no longer fit on one line.
+            Wrap(
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final nag in kMoveNags)
+                  GlyphButton(
+                    symbol: nag.symbol,
+                    name: nag.name,
+                    color: nag.color,
+                    isActive: widget.nags.contains(nag.id),
+                    onTap: enabled && widget.glyphsEnabled
+                        ? () => widget.onToggleNag(nag.id)
+                        : null,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _blankReplacement
+                        ? 'Comment kept until deleted'
+                        : 'Comment:',
+                    style: _blankReplacement
+                        ? AppTextStyles.caption
+                        : AppTextStyles.bodyStrong.copyWith(
+                            color: Colors.white,
+                          ),
+                  ),
                 ),
-              ),
-              IconButton(
-                tooltip: 'Delete comment',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.delete_outline, size: 18),
-                onPressed: enabled && _hasComment ? _deleteComment : null,
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _controller,
-            focusNode: _focusNode,
-            enabled: enabled,
-            onChanged: _onTextChanged,
-            minLines: 2,
-            maxLines: 4,
-            style: AppTextStyles.body,
-            cursorColor: AppColors.ink,
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: enabled ? null : 'Select a move to add notes',
-              filled: true,
-              fillColor: AppColors.surfaceElevated,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 8,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Colors.white),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Colors.white, width: 2),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Colors.white),
+                IconButton(
+                  tooltip: 'Delete comment',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  onPressed: enabled && _hasComment ? _deleteComment : null,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              enabled: enabled,
+              onChanged: _onTextChanged,
+              minLines: 2,
+              maxLines: 4,
+              style: AppTextStyles.body,
+              cursorColor: AppColors.ink,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: enabled ? null : 'Select a move to add notes',
+                filled: true,
+                fillColor: AppColors.surfaceElevated,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: Colors.white),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: Colors.white, width: 2),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: const BorderSide(color: Colors.white),
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

@@ -277,35 +277,31 @@ void main() {
     expect(find.textContaining('Names cannot contain'), findsOneWidget);
   });
 
-  testWidgets('a line dragged onto another chapter moves there, with Undo', (
-    tester,
-  ) async {
-    await tester.runAsync(() async {
-      await pump(tester);
-      await tester.tap(find.text('Sidelines'));
-      await tester.pumpAndSettle();
-      final advance = p.join(root, 'Advance.pgn');
-      final exchange = p.join(root, 'Sidelines', 'Exchange.pgn');
+  testWidgets(
+    'a line dragged onto another chapter updates both files quietly',
+    (tester) async {
+      await tester.runAsync(() async {
+        await pump(tester);
+        await tester.tap(find.text('Sidelines'));
+        await tester.pumpAndSettle();
+        final advance = p.join(root, 'Advance.pgn');
+        final exchange = p.join(root, 'Sidelines', 'Exchange.pgn');
 
-      await mouseDrag(
-        tester,
-        find.text('Nh6 idea'),
-        tester.getCenter(find.text('Exchange')),
-      );
-      await untilOutline(
-        tester,
-        (o) => o.findChapter(exchange)!.lineCount == 2,
-      );
-      expect(namesIn(advance), ['Main line']);
-      expect(namesIn(exchange), ['Exchange', 'Nh6 idea']);
-      expect(find.text('Moved "Nh6 idea" to "Exchange".'), findsOneWidget);
-
-      await tester.tap(find.text('Undo'));
-      await untilOutline(tester, (o) => o.findChapter(advance)!.lineCount == 2);
-      expect(namesIn(advance), ['Main line', 'Nh6 idea']);
-      expect(namesIn(exchange), ['Exchange']);
-    });
-  });
+        await mouseDrag(
+          tester,
+          find.text('Nh6 idea'),
+          tester.getCenter(find.text('Exchange')),
+        );
+        await untilOutline(
+          tester,
+          (o) => o.findChapter(exchange)!.lineCount == 2,
+        );
+        expect(namesIn(advance), ['Main line']);
+        expect(namesIn(exchange), ['Exchange', 'Nh6 idea']);
+        expect(find.byType(SnackBar), findsNothing);
+      });
+    },
+  );
 
   testWidgets('a line dropped on the top half of another goes before it', (
     tester,
@@ -324,7 +320,7 @@ void main() {
         (o) => o.findChapter(advance)!.lines!.first.name == 'Nh6 idea',
       );
       expect(namesIn(advance), ['Nh6 idea', 'Main line']);
-      expect(find.text('Reordered "Nh6 idea".'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
     });
   });
 
@@ -355,7 +351,7 @@ void main() {
       );
       expect(namesIn(advance), isEmpty);
       expect(namesIn(exchange), ['Exchange', 'Main line', 'Nh6 idea']);
-      expect(find.text('Moved 2 lines to "Exchange".'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
     });
   });
 
@@ -381,7 +377,7 @@ void main() {
       expect(namesIn(made), ['Nh6 idea']);
       expect(namesIn(p.join(root, 'Advance.pgn')), ['Main line']);
       expect(opened, [made]);
-      expect(find.text('Made "Nh6 idea" from 1 line.'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
     });
   });
 
@@ -406,7 +402,7 @@ void main() {
       await gesture.up();
       await untilOutline(tester, (o) => o.findChapter(moved) != null);
       expect(find.text('Move to the top level'), findsNothing);
-      expect(find.text('Moved "Exchange" to the top level.'), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
     });
   });
 
@@ -433,23 +429,23 @@ void main() {
     });
   });
 
-  testWidgets('deleting a line needs no confirmation and can be undone', (
-    tester,
-  ) async {
-    await tester.runAsync(() async {
-      await pump(tester);
-      final advance = p.join(root, 'Advance.pgn');
-      await rightClick(tester, find.text('Main line'));
-      await tester.tap(find.text('Delete line'));
-      await untilOutline(tester, (o) => o.findChapter(advance)!.lineCount == 1);
-      expect(namesIn(advance), ['Nh6 idea']);
-      expect(find.text('Deleted "Main line".'), findsOneWidget);
-
-      await tester.tap(find.text('Undo'));
-      await untilOutline(tester, (o) => o.findChapter(advance)!.lineCount == 2);
-      expect(namesIn(advance), ['Main line', 'Nh6 idea']);
-    });
-  });
+  testWidgets(
+    'deleting a line updates the chapter without a completion toast',
+    (tester) async {
+      await tester.runAsync(() async {
+        await pump(tester);
+        final advance = p.join(root, 'Advance.pgn');
+        await rightClick(tester, find.text('Main line'));
+        await tester.tap(find.text('Delete line'));
+        await untilOutline(
+          tester,
+          (o) => o.findChapter(advance)!.lineCount == 1,
+        );
+        expect(namesIn(advance), ['Nh6 idea']);
+        expect(find.byType(SnackBar), findsNothing);
+      });
+    },
+  );
 
   testWidgets('right-clicking empty space offers a chapter or folder', (
     tester,

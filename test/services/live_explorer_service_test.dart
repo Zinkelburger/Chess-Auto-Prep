@@ -48,6 +48,16 @@ Future<void> _settle() =>
 void main() {
   setUp(LiveExplorerService.clearCacheForTest);
 
+  test('disposing during a request discards its response', () async {
+    final service = LiveExplorerService(
+      client: _FakeClient(),
+      isLoggedIn: () => true,
+    );
+    service.request('fen-closing', _query);
+    service.dispose();
+    await _settle();
+  });
+
   test('a lone request fetches on the leading edge, without waiting', () async {
     final client = _FakeClient();
     final service = LiveExplorerService(

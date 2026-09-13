@@ -23,16 +23,29 @@ class _ScriptedClient extends LichessApiClient {
     String ratings = '2000,2200,2500',
     bool useMasters = false,
   }) async {
-    return ExplorerResponse.fromJson({
-      'white': 90,
-      'draws': 60,
-      'black': 50,
-      'opening': {'eco': 'B20', 'name': 'Sicilian Defense'},
-      'moves': [
-        {'san': 'Nf3', 'uci': 'g1f3', 'white': 60, 'draws': 40, 'black': 20},
-        {'san': 'Nc3', 'uci': 'b1c3', 'white': 30, 'draws': 20, 'black': 30},
-      ],
-    }, fen: fen);
+    return ExplorerResponse.fromJson(
+      {
+        'white': 90,
+        'draws': 60,
+        'black': 50,
+        'opening': {'eco': 'B20', 'name': 'Sicilian Defense'},
+        'topGames': [
+          {
+            'id': 'reference',
+            'white': {'name': 'Player A', 'rating': 2300},
+            'black': {'name': 'Player B', 'rating': 2250},
+            'winner': 'white',
+            'year': 2026,
+          },
+        ],
+        'moves': [
+          {'san': 'Nf3', 'uci': 'g1f3', 'white': 60, 'draws': 40, 'black': 20},
+          {'san': 'Nc3', 'uci': 'b1c3', 'white': 30, 'draws': 20, 'black': 30},
+        ],
+      },
+      fen: fen,
+      gameSource: ExplorerGameSource.lichess,
+    );
   }
 }
 
@@ -107,6 +120,40 @@ void main() {
     }
     return svc;
   }
+
+  testWidgets('wide dock shows move evidence and sample games side by side', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final service = LiveExplorerService(
+      client: _ScriptedClient(),
+      isLoggedIn: () => true,
+    );
+    addTearDown(service.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: OpeningExplorerPanel(
+            service: service,
+            fen: _fenA,
+            sideBySideGames: true,
+            onPlayMove: (_) {},
+            onOpenGame: (_) async {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Player A – Player B'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Player A – Player B')).dx,
+      greaterThan(tester.getTopLeft(find.text('Nf3')).dx),
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('renders the opening, column captions, rows and Σ totals', (
     tester,

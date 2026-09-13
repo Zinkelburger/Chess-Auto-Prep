@@ -5,8 +5,8 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
+import '../../../utils/keyboard_shortcut_utils.dart' show KeyBinding;
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import '../../../utils/fen_utils.dart';
@@ -74,7 +74,7 @@ class TacticsPanelHooks {
     this.sessionCompleted,
     this.back,
     this.start,
-    this.navigationKey,
+    this.keyBindings,
   });
 
   /// Async board writes (opponent replies, wrong-answer reset).
@@ -100,12 +100,8 @@ class TacticsPanelHooks {
   /// and Study tactics in the left pane.
   final VoidCallback? start;
 
-  /// A navigation key pressed while the move-input field owns focus (Space,
-  /// the arrows, J) — routed to the panel's trainer shortcuts so those
-  /// keys drive the puzzle instead of typing into the field. Returns true
-  /// when the key was consumed. The move input and the panel are siblings in
-  /// the focus tree, so key events cannot bubble between them.
-  final bool Function(LogicalKeyboardKey key)? navigationKey;
+  /// Current panel commands, consumed by the screen's shared keyboard scope.
+  final List<KeyBinding> Function()? keyBindings;
 }
 
 class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {

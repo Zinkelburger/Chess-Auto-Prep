@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 
 import '../../theme/app_text_styles.dart';
 import '../chess_board_widget.dart';
+import '../board_keyboard_scope.dart';
+import '../../utils/keyboard_shortcut_utils.dart' show isTextInputFocused;
 import '../../utils/chess_utils.dart'
     show toAlgebraic, isCastlingMove, castlingKingDestination;
 
@@ -24,14 +26,8 @@ class MoveInputWidget extends StatefulWidget {
   final void Function(CompletedMove move) onMove;
   final bool enabled;
 
-  /// Optional hook for keys that should act as screen shortcuts rather than
-  /// edit the move text (e.g. Space, S/P, the arrow keys). The field offers
-  /// every key that isn't plain editing here; if this returns true the key is
-  /// swallowed so it never types into — or moves the caret within — the field.
-  /// Hosts pass `handleMoveInputNavigationKey` (keyboard_shortcut_utils.dart),
-  /// which only claims keys that can never appear in typed move text — so
-  /// "e4"/"Nf3" always type normally while non-move shortcut keys keep
-  /// working mid-type.
+  /// Optional navigation override for standalone use. In board screens,
+  /// navigation is inherited from [BoardKeyboardScope]'s binding list.
   final bool Function(KeyEvent event)? onNavigationKey;
 
   const MoveInputWidget({
@@ -52,26 +48,24 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
   String? _error;
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (!mounted || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
 
     final key = event.logicalKey;
 
-    if (key == LogicalKeyboardKey.escape) {
+    if (key == LogicalKeyboardKey.escape && event is KeyDownEvent) {
       _controller.clear();
       setState(() => _error = null);
       _focusNode.unfocus();
       return KeyEventResult.handled;
     }
 
-    // Tab is offered to the host first (the tactics trainer uses it to flip
-    // between the Tactic and PGN tabs); if unclaimed it blurs the input,
-    // returning keyboard control to the panel shortcuts.
+    // Unclaimed Tab/Shift+Tab use Flutter's normal focus traversal.
     if (key == LogicalKeyboardKey.tab) {
-      if (widget.onNavigationKey?.call(event) ?? false) {
-        return KeyEventResult.handled;
-      }
-      _focusNode.unfocus();
-      return KeyEventResult.handled;
+      return _onNavigationKey(event)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     }
 
     // While there's text being typed, ←/→ reposition the caret so a typo in a
@@ -90,7 +84,7 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
     // claims is a navigation key that must never reach the text field — swallow
     // it here so the EditableText neither inserts a character nor moves the
     // caret. Move characters aren't claimed, so they still type normally.
-    if (widget.onNavigationKey?.call(event) ?? false) {
+    if (_onNavigationKey(event)) {
       return KeyEventResult.handled;
     }
 
@@ -104,7 +98,6 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
   @override
   void initState() {
     super.initState();
-    _focusNode.onKeyEvent = _handleKeyEvent;
     _legalMoves = _buildLegalMoves(widget.position);
   }
 
@@ -116,14 +109,11 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
       _controller.clear();
       _error = null;
     }
-    if (widget.enabled && !oldWidget.enabled) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _focusNode.canRequestFocus) {
-          _focusNode.requestFocus();
-        }
-      });
-    }
   }
+
+  bool _onNavigationKey(KeyEvent event) =>
+      widget.onNavigationKey?.call(event) ??
+      BoardKeyboardScope.handleNavigationKey(context, event);
 
   @override
   void dispose() {
@@ -138,6 +128,11 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
 
   /// Focus the text field programmatically (e.g. after opponent moves).
   void focus() {
+    if (!mounted || !widget.enabled || !TickerMode.valuesOf(context).enabled) {
+      return;
+    }
+    if (ModalRoute.of(context)?.isCurrent == false) return;
+    if (isTextInputFocused() && !hasFocus) return;
     if (_focusNode.canRequestFocus) _focusNode.requestFocus();
   }
 
@@ -147,22 +142,34 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
   }
 
   /// Route a move character typed while the *host* owned focus into this
-  /// field, as if it had been typed here: focus the field, append the
-  /// character, and run the same unique-match logic as normal typing. This is
+  /// field, as if it had been typed here: focus the field, insert the
+  /// character at its selection, and run the same unique-match logic as normal typing. This is
   /// what makes the box feel permanently hot — the user never has to click it
   /// before typing "Qxb5". Returns false when the character was refused
   /// (disabled field, non-move character, or already at the length cap).
   bool typeCharacter(String character) {
-    if (!widget.enabled) return false;
+    if (!mounted || !widget.enabled || !_focusNode.canRequestFocus) {
+      return false;
+    }
     // Mirror the field's own input rules — programmatic writes bypass the
     // inputFormatters, so re-apply them here.
     if (!RegExp(r'^[a-zA-Z0-9\-]$').hasMatch(character)) return false;
-    final text = _controller.text + character;
+    final value = _controller.value;
+    final selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final text = value.text.replaceRange(
+      selection.start,
+      selection.end,
+      character,
+    );
     if (text.length > 7) return false;
     focus();
     _controller.value = TextEditingValue(
       text: text,
-      selection: TextSelection.collapsed(offset: text.length),
+      selection: TextSelection.collapsed(
+        offset: selection.start + character.length,
+      ),
     );
     _onChanged(text);
     return true;
@@ -242,6 +249,7 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
   // ---------------------------------------------------------------------------
 
   void _onChanged(String value) {
+    if (!mounted) return;
     if (value.isEmpty) {
       setState(() => _error = null);
       return;
@@ -337,127 +345,128 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
     final hasError = _error != null;
     final inputText = _controller.text.trim();
 
-    return SizedBox(
-      height: 36,
-      child: TextField(
-        controller: _controller,
-        focusNode: _focusNode,
-        enabled: widget.enabled,
-        // Grab focus as soon as the field becomes the user's input target so
-        // typed moves land here rather than an ancestor Focus node.
-        autofocus: widget.enabled,
-        // This is a move catcher, not a document editor. Keep keyboard input
-        // live without advertising text-editing focus with a blinking caret.
-        showCursor: false,
-        // A click on the board must not kill typing. Flutter's default
-        // tap-outside behaviour unfocuses a text field on every pointer down
-        // elsewhere in the window — and on desktop that includes the board
-        // right above this box. Focus then lands on the enclosing route scope,
-        // which is an *ancestor* of the trainer panel's Focus, so neither this
-        // field nor the panel's shortcut handler is in the key-dispatch chain
-        // any more: typing a move and every trainer key silently stop working
-        // until something focusable is clicked. The box is the trainer's
-        // keyboard home while a move is wanted, so it keeps focus instead.
-        onTapOutside: (_) {},
-        autocorrect: false,
-        enableSuggestions: false,
-        textCapitalization: TextCapitalization.none,
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9\-]')),
-          LengthLimitingTextInputFormatter(7),
-        ],
-        style: TextStyle(
-          fontFamily: AppTextStyles.monoFamily,
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-          color: hasError
-              ? theme.colorScheme.error
-              : theme.colorScheme.onSurface.withValues(alpha: 0.8),
-        ),
-        decoration: InputDecoration(
-          hintText: widget.enabled ? 'Type a move…' : '',
-          hintStyle: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            color: theme.colorScheme.onSurfaceVariant,
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: _handleKeyEvent,
+      child: SizedBox(
+        height: 36,
+        child: TextField(
+          controller: _controller,
+          focusNode: _focusNode,
+          enabled: widget.enabled,
+          // Scoped screens focus the keyboard home first; typing selects this
+          // editor on demand without stealing focus from another control.
+          autofocus: widget.enabled && !BoardKeyboardScope.contains(context),
+          showCursor: false,
+          // Desktop defaults select all on focus. That would select the first
+          // routed character and let the next native keystroke replace it.
+          selectAllOnFocus: false,
+          autocorrect: false,
+          enableSuggestions: false,
+          textCapitalization: TextCapitalization.none,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9\-]')),
+            LengthLimitingTextInputFormatter(7),
+          ],
+          style: TextStyle(
+            fontFamily: AppTextStyles.monoFamily,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: hasError
+                ? theme.colorScheme.error
+                : theme.colorScheme.onSurface.withValues(alpha: 0.8),
           ),
-          prefixIcon: Padding(
-            padding: const EdgeInsets.only(left: 8, right: 4),
-            child: Icon(
-              Icons.keyboard_alt_outlined,
-              size: 16,
-              color: widget.enabled
-                  ? theme.colorScheme.onSurfaceVariant
-                  : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.15),
+          decoration: InputDecoration(
+            hintText: widget.enabled ? 'Type a move…' : '',
+            hintStyle: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-          ),
-          prefixIconConstraints: const BoxConstraints(
-            minWidth: 28,
-            minHeight: 0,
-          ),
-          // Keep this slot present in both states. Adding a suffix icon only
-          // after the first character makes InputDecorator adopt Flutter's
-          // 48px icon minimum inside this 36px field, visibly jolting the box.
-          suffixIcon: IgnorePointer(
-            ignoring: inputText.isEmpty,
-            child: Opacity(
-              opacity: inputText.isEmpty ? 0 : 1,
-              child: IconButton(
-                icon: const Icon(Icons.clear, size: 14),
-                onPressed: () {
-                  _controller.clear();
-                  setState(() => _error = null);
-                },
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+            prefixIcon: Padding(
+              padding: const EdgeInsets.only(left: 8, right: 4),
+              child: Icon(
+                Icons.keyboard_alt_outlined,
+                size: 16,
+                color: widget.enabled
+                    ? theme.colorScheme.onSurfaceVariant
+                    : theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.15,
+                      ),
+              ),
+            ),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 28,
+              minHeight: 0,
+            ),
+            // Keep this slot present in both states. Adding a suffix icon only
+            // after the first character makes InputDecorator adopt Flutter's
+            // 48px icon minimum inside this 36px field, visibly jolting the box.
+            suffixIcon: IgnorePointer(
+              ignoring: inputText.isEmpty,
+              child: Opacity(
+                opacity: inputText.isEmpty ? 0 : 1,
+                child: IconButton(
+                  icon: const Icon(Icons.clear, size: 14),
+                  onPressed: () {
+                    if (!mounted) return;
+                    _controller.clear();
+                    setState(() => _error = null);
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                ),
+              ),
+            ),
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 28,
+              minHeight: 0,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 4,
+              vertical: 8,
+            ),
+            isDense: true,
+            filled: false,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(
+                color: hasError
+                    ? theme.colorScheme.error.withValues(alpha: 0.4)
+                    : theme.colorScheme.outline,
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(
+                color: hasError
+                    ? theme.colorScheme.error.withValues(alpha: 0.4)
+                    : theme.colorScheme.outline,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(
+                color: hasError
+                    ? theme.colorScheme.error.withValues(alpha: 0.6)
+                    : theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.1),
               ),
             ),
           ),
-          suffixIconConstraints: const BoxConstraints(
-            minWidth: 28,
-            minHeight: 0,
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 4,
-            vertical: 8,
-          ),
-          isDense: true,
-          filled: false,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: BorderSide(
-              color: hasError
-                  ? theme.colorScheme.error.withValues(alpha: 0.4)
-                  : theme.colorScheme.outline,
-            ),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: BorderSide(
-              color: hasError
-                  ? theme.colorScheme.error.withValues(alpha: 0.4)
-                  : theme.colorScheme.outline,
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: BorderSide(
-              color: hasError
-                  ? theme.colorScheme.error.withValues(alpha: 0.6)
-                  : theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          disabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: BorderSide(
-              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.1),
-            ),
-          ),
+          onChanged: _onChanged,
+          onSubmitted: (_) {
+            focus();
+          },
         ),
-        onChanged: _onChanged,
-        onSubmitted: (_) {
-          _focusNode.requestFocus();
-        },
       ),
     );
   }
