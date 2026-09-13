@@ -823,10 +823,11 @@ a screen of blank space.
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
   → StorageService.fileExists / readFile (absolute paths as-is; relative → app documents)
-  → compute(parseMultiGamePgn) → allGames / filteredGames
+  → compute(parseMultiGamePgn) → lightweight headers/raw text in allGames / filteredGames; only the selected game is parsed into the reader
   → on failure: controller.errorMessage + debugPrint; screen shows SnackBar + inline error in empty state
   → on success: recent-files prefs, missing ECO/Opening tags, optional saved slice and reading-session restore, loadCurrentGame
   → viewer startup reopens the last file, filters, sort order, game and mainline move; explicit file/game handoffs take precedence. Closing the collection clears auto-reopen, keeping its per-file bookmark. `ViewerSessionStore` validates game identity before restoring a cursor, including when a file was reordered.
+  → ordinary opens make the selected game available before background opening classification and position indexing finish (saved filters needing opening tags wait for classification). Opening-tag autosaves match source game ranges in one pass and assemble the document in an isolate under the atomic file lock; they preserve untouched text and reject changed/duplicate source games.
   → default-on **Board and moves → Auto-detect ECO and opening** classifies every game's mainline using the bundled opening book (including transpositions). Missing/placeholder ECO and Opening tags are patched into the source PGN without replacing existing values or reserializing movetext. Detected tags appear above the game and in exported/copied PGNs. Turning this off stops detection and hides that label; previously saved tags remain in the PGN.
   → game change (↓/↑, dropdown, slice, sort): `loadCurrentGame` resets `currentPosition` to start; `PgnViewerWidget._loadGame` defers `onPositionChanged` to a post-frame callback (avoids setState-during-build when called from `didUpdateWidget`)
 Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].pgnText` → `Clipboard.setData` + `AppMessages.pgnCopied` snackbar

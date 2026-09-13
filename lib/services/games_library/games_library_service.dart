@@ -320,7 +320,7 @@ class GamesLibraryService {
         patched++;
       }
       if (patched == 0) return current;
-      return patchPgnDocument(current, replacements);
+      return patchPgnDocumentAsync(current, replacements);
     });
     return patched;
   }
