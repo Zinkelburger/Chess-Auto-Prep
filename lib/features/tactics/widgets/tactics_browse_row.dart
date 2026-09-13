@@ -79,145 +79,222 @@ class TacticsBrowseRow extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) {
-    final pos = position;
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => constraints.maxWidth < 760
+        ? _buildCompact(context)
+        : _buildTableRow(context),
+  );
 
-    final isDimmed = pos.rating == 1;
+  Widget _buildCompact(BuildContext context) => InkWell(
+    onTap: onTap,
+    child: Container(
+      decoration: BoxDecoration(
+        color: isSelected || checked ? AppColors.surfaceContainer : null,
+        border: const Border(bottom: BorderSide(color: AppColors.divider)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Row(
+        children: [
+          if (selectMode)
+            Checkbox(value: checked, onChanged: (_) => onTap())
+          else
+            StaticBoardThumbnail(fen: position.fen),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ItemTitle(
+                  '${position.gameWhite} vs ${position.gameBlack}',
+                  maxLines: 1,
+                  style: AppTextStyles.bodyStrong,
+                ),
+                ItemTitle(
+                  '${position.positionContext} · ${displaySan(context, position.userMove)} → ${displaySanList(context, position.correctLine).join(' ')}',
+                  style: AppTextStyles.caption,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        position.mistakeLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.caption.copyWith(
+                          color: _severityColor(position.mistakeType),
+                        ),
+                      ),
+                    ),
+                    _BrowseStarRating(
+                      rating: position.rating,
+                      onSetRating: onSetRating,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (!selectMode)
+            PopupMenuButton<String>(
+              tooltip: 'Tactic actions',
+              onSelected: (action) {
+                switch (action) {
+                  case 'train':
+                    onTrain?.call();
+                  case 'edit':
+                    onEdit();
+                  case 'delete':
+                    onDelete();
+                }
+              },
+              itemBuilder: (_) => [
+                if (onTrain != null)
+                  const PopupMenuItem(
+                    value: 'train',
+                    child: Text('Train this tactic'),
+                  ),
+                const PopupMenuItem(value: 'edit', child: Text('Edit tactic')),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Delete tactic'),
+                ),
+              ],
+            ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildTableRow(BuildContext context) {
+    final pos = position;
 
     return InkWell(
       onTap: onTap,
-      child: Opacity(
-        opacity: isDimmed ? 0.45 : 1.0,
-        child: Container(
-          decoration: BoxDecoration(
-            color: isSelected || checked
-                ? Theme.of(
-                    context,
-                  ).colorScheme.primaryContainer.withValues(alpha: 0.3)
-                : (index.isEven ? Colors.transparent : AppColors.rowStripe),
-            border: const Border(bottom: BorderSide(color: AppColors.divider)),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          child: Row(
-            children: [
-              StaticBoardThumbnail(fen: position.fen),
-              const SizedBox(width: 8),
-              if (selectMode)
-                Checkbox(
-                  value: checked,
-                  onChanged: (_) => onTap(),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                )
-              else ...[
-                if (onTrain != null)
-                  IconButton(
-                    onPressed: onTrain,
-                    icon: const Icon(Icons.play_arrow, size: 18),
-                    tooltip: 'Train this tactic',
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
-                    ),
-                    padding: EdgeInsets.zero,
-                  ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected || checked
+              ? Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withValues(alpha: 0.3)
+              : (index.isEven ? Colors.transparent : AppColors.rowStripe),
+          border: const Border(bottom: BorderSide(color: AppColors.divider)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Row(
+          children: [
+            StaticBoardThumbnail(fen: position.fen),
+            const SizedBox(width: 8),
+            if (selectMode)
+              Checkbox(
+                value: checked,
+                onChanged: (_) => onTap(),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              )
+            else ...[
+              if (onTrain != null)
                 IconButton(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit, size: 16),
-                  tooltip: 'Edit tactic',
+                  onPressed: onTrain,
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  tooltip: 'Train this tactic',
                   constraints: const BoxConstraints(
                     minWidth: 32,
                     minHeight: 32,
                   ),
                   padding: EdgeInsets.zero,
                 ),
-                IconButton(
-                  onPressed: onDelete,
-                  // Neutral, like every other icon in the row: a red X on
-                  // every line reads as a warning about the tactic rather
-                  // than as one of three equal-weight row actions. The
-                  // confirm dialog is what guards the delete.
-                  icon: const Icon(
-                    Icons.close,
-                    size: 16,
-                    color: AppColors.onSurfaceMuted,
-                  ),
-                  tooltip: 'Delete tactic',
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
-                  padding: EdgeInsets.zero,
-                ),
-              ],
-              const SizedBox(width: 4),
-              SizedBox(
-                width: 72,
-                // The severity in words, matching the trainer's "You played
-                // h5 (blunder)". `??`/`?`/`?!` was one glyph the reader had
-                // to decode, and the column it saved was never needed. In the
-                // usual blue/amber/red, so the column can also be read as a
-                // colour while scrolling.
-                child: Text(
-                  pos.mistakeType == 'custom' ? 'custom' : pos.mistakeLabel,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: _severityColor(pos.mistakeType),
-                  ),
-                ),
+              IconButton(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit, size: 16),
+                tooltip: 'Edit tactic',
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 80,
-                child: _BrowseStarRating(
-                  rating: pos.rating,
-                  onSetRating: onSetRating,
+              IconButton(
+                onPressed: onDelete,
+                // Neutral, like every other icon in the row: a red X on
+                // every line reads as a warning about the tactic rather
+                // than as one of three equal-weight row actions. The
+                // confirm dialog is what guards the delete.
+                icon: const Icon(
+                  Icons.close,
+                  size: 16,
+                  color: AppColors.onSurfaceMuted,
                 ),
+                tooltip: 'Delete tactic',
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  '${pos.gameWhite} vs ${pos.gameBlack}',
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 2,
-                // Where the position sits, and nothing else. The flaw
-                // tags ("reversed · miss · middlegame · hasty") used to
-                // trail this line: taxonomy the miner needs and a solver
-                // never reads, four items wide on every row. They are still
-                // stored, and still filterable from the bar above.
-                child: Text(
-                  pos.positionContext,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  // The whole trainable line, not just its first move: a
-                  // 3-move tactic listed as "h5 → Qf3" was indistinguishable
-                  // from a one-mover.
-                  '${displaySan(context, pos.userMove)} → '
-                  '${displaySanList(context, pos.correctLine).join(' ')}',
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontFamily: AppTextStyles.monoFamily,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              PuzzleStatsDisplay(position: pos),
             ],
-          ),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 72,
+              // The severity in words, matching the trainer's "You played
+              // h5 (blunder)". `??`/`?`/`?!` was one glyph the reader had
+              // to decode, and the column it saved was never needed. In the
+              // usual blue/amber/red, so the column can also be read as a
+              // colour while scrolling.
+              child: Text(
+                pos.mistakeType == 'custom' ? 'custom' : pos.mistakeLabel,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: _severityColor(pos.mistakeType),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 80,
+              child: _BrowseStarRating(
+                rating: pos.rating,
+                onSetRating: onSetRating,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 3,
+              child: Text(
+                '${pos.gameWhite} vs ${pos.gameBlack}',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              // Where the position sits, and nothing else. The flaw
+              // tags ("reversed · miss · middlegame · hasty") used to
+              // trail this line: taxonomy the miner needs and a solver
+              // never reads, four items wide on every row. They are still
+              // stored, and still filterable from the bar above.
+              child: Text(
+                pos.positionContext,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: Text(
+                // The whole trainable line, not just its first move: a
+                // 3-move tactic listed as "h5 → Qf3" was indistinguishable
+                // from a one-mover.
+                '${displaySan(context, pos.userMove)} → '
+                '${displaySanList(context, pos.correctLine).join(' ')}',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontFamily: AppTextStyles.monoFamily,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            PuzzleStatsDisplay(position: pos),
+          ],
         ),
       ),
     );

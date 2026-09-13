@@ -264,7 +264,9 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
       children: [
         Text(
           'Repertoire Builder',
-          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppColors.onSurfaceMuted,
+          ),
         ),
         const SizedBox(height: 1),
         Row(
@@ -292,7 +294,11 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(Icons.chevron_right, size: 18, color: Colors.grey[500]),
+            const Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: AppColors.onSurfaceMuted,
+            ),
             Flexible(child: _buildChapterMenu(context, theme)),
           ],
         ),
@@ -319,7 +325,7 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
           Icon(
             Icons.arrow_drop_down,
             size: 20,
-            color: enabled ? Colors.grey[400] : Colors.grey[700],
+            color: enabled ? AppColors.onSurfaceMuted : Colors.grey[700],
           ),
         ],
       ),

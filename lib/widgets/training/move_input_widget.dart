@@ -379,7 +379,7 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
           hintStyle: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w400,
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.35),
+            color: theme.colorScheme.onSurfaceVariant,
           ),
           prefixIcon: Padding(
             padding: const EdgeInsets.only(left: 8, right: 4),
@@ -387,7 +387,7 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
               Icons.keyboard_alt_outlined,
               size: 16,
               color: widget.enabled
-                  ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)
+                  ? theme.colorScheme.onSurfaceVariant
                   : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.15),
             ),
           ),
@@ -428,7 +428,7 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
             borderSide: BorderSide(
               color: hasError
                   ? theme.colorScheme.error.withValues(alpha: 0.4)
-                  : theme.colorScheme.outlineVariant.withValues(alpha: 0.25),
+                  : theme.colorScheme.outline,
             ),
           ),
           enabledBorder: OutlineInputBorder(
@@ -436,7 +436,7 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
             borderSide: BorderSide(
               color: hasError
                   ? theme.colorScheme.error.withValues(alpha: 0.4)
-                  : theme.colorScheme.outlineVariant.withValues(alpha: 0.25),
+                  : theme.colorScheme.outline,
             ),
           ),
           focusedBorder: OutlineInputBorder(
@@ -444,7 +444,7 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
             borderSide: BorderSide(
               color: hasError
                   ? theme.colorScheme.error.withValues(alpha: 0.6)
-                  : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                  : theme.colorScheme.onSurfaceVariant,
             ),
           ),
           disabledBorder: OutlineInputBorder(

@@ -4,6 +4,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../common/item_title.dart';
+
 import '../../services/training/chapter_layout.dart';
 import '../../theme/app_colors.dart';
 
@@ -35,6 +37,7 @@ class _ChapterSetupDialog extends StatelessWidget {
     final chapters = proposal.chapters;
 
     return AlertDialog(
+      scrollable: true,
       title: Text('Looks like ${proposal.formatLabel}'),
       // A *tight* width, not a max: [AlertDialog] wraps its content in an
       // [IntrinsicWidth], and asking a lazy viewport for its intrinsic width
@@ -58,8 +61,8 @@ class _ChapterSetupDialog extends StatelessWidget {
               style: theme.textTheme.titleSmall,
             ),
             const SizedBox(height: 10),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 300),
+            SizedBox(
+              height: 300,
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
@@ -82,11 +85,10 @@ class _ChapterSetupDialog extends StatelessWidget {
                         child: Row(
                           children: [
                             Expanded(
-                              child: Text(
+                              child: ItemTitle(
                                 chapter.name,
                                 style: theme.textTheme.bodyMedium,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
                               ),
                             ),
                             const SizedBox(width: 12),

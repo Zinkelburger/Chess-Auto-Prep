@@ -18,6 +18,7 @@ import 'package:path/path.dart' as p;
 import '../services/eval/storage_volumes.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import 'common/item_title.dart';
 
 /// What the picker currently points at.
 class StorageDestination {
@@ -253,10 +254,9 @@ class _StorageDestinationPickerState extends State<StorageDestinationPicker> {
             _selectionMark(_customDir != null),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
+              child: ItemTitle(
                 _customDir ?? 'Another folder…',
-                style: const TextStyle(fontSize: 13),
-                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.muted,
               ),
             ),
             _browseButton(),
@@ -288,6 +288,7 @@ class _StorageDestinationPickerState extends State<StorageDestinationPicker> {
 
     return InkWell(
       onTap: () {
+        if (!mounted) return;
         setState(() {
           _volume = v;
           _customDir = null;
@@ -296,47 +297,40 @@ class _StorageDestinationPickerState extends State<StorageDestinationPicker> {
         _notify();
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _selectionMark(selected),
             const SizedBox(width: 12),
             Expanded(
-              flex: 3,
-              child: Text(
-                v.mountPoint,
-                style: const TextStyle(fontSize: 13),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(v.mediaLabel, style: AppTextStyles.caption),
-            ),
-            Expanded(
-              flex: 3,
-              child: Text(
-                '${formatBytes(v.freeBytes)} free of '
-                '${formatBytes(v.totalBytes)}',
-                style: AppTextStyles.caption,
-              ),
-            ),
-            SizedBox(
-              width: 130,
-              child: after == null
-                  ? const SizedBox.shrink()
-                  : Text(
-                      fits
-                          ? '${formatBytes(after)} to spare'
-                          : 'short by ${formatBytes(-after)}',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: fits
-                            ? AppColors.onSurfaceSoft
-                            : AppColors.danger,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ItemTitle(v.mountPoint, style: AppTextStyles.body),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 4,
+                    children: [
+                      Text(v.mediaLabel, style: AppTextStyles.caption),
+                      Text(
+                        '${formatBytes(v.freeBytes)} free of ${formatBytes(v.totalBytes)}',
+                        style: AppTextStyles.caption,
                       ),
-                    ),
+                      if (after != null)
+                        Text(
+                          fits
+                              ? '${formatBytes(after)} to spare'
+                              : 'short by ${formatBytes(-after)}',
+                          style: AppTextStyles.caption.copyWith(
+                            color: fits ? AppColors.ink : AppColors.danger,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),

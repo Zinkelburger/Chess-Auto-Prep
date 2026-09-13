@@ -830,7 +830,16 @@ available, including ungrouped games. Search matches game labels, chapters,
 players, event, place, dates, openings and study text within the selected group;
 empty results offer Search all games. A number still offers Go to game N.
 Narrow windows move the compact group rows into a horizontal strip. Repertoire
-and training chapter pickers also use reduced row padding.
+and training chapter pickers use compact rows with at most two title lines and
+full-name tooltips. Full-screen repertoire and chapter libraries cap their reading
+width at 920px. Embedded course contents show three chapters initially, with a
+Show all / Show fewer toggle; searching reveals matching chapters even when
+collapsed. Line counts use bright 13px text; trainer chapter cards keep progress counts without repeating a full progress bar per row. Chapter setup scrolls within short
+windows, and study chapter names expose full titles on hover.
+Shared tooltips wrap at 480px. Database destination rows wrap drive metadata beneath a bounded path instead of reserving fixed columns. Review zero counts, one-star tactics and selectable
+game-window alternatives retain readable ink. Below 760px, optional tactics filters and sorting collapse behind a disclosure; actions and sort choices wrap. Tactics browse rows stack game and move details with a per-row actions menu instead of squeezing the full table. Move entry hints and borders remain
+visible before typing; annotation and finding colors use brighter green, red and
+purple for dark surfaces.
 
 PGN moves use a consistent 16px regular weight across annotated moves,
 unannotated moves and variations. The current move is marked by its background

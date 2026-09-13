@@ -11,6 +11,8 @@ import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
 
+import 'common/item_title.dart';
+
 import '../models/repertoire_metadata.dart';
 import '../screens/repertoire_chapters_screen.dart';
 import '../features/repertoire/widgets/repertoire_import_dialog.dart';
@@ -119,7 +121,15 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topCenter,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 920),
+      child: _buildContents(context),
+    ),
+  );
+
+  Widget _buildContents(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -303,7 +313,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    ItemTitle(
                       study.name,
                       style: const TextStyle(
                         fontSize: 18,
@@ -339,7 +349,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
       leading: const Icon(Icons.library_books_outlined, size: 22),
-      title: Text(name, style: AppTextStyles.bodyStrong),
+      title: ItemTitle(name, style: AppTextStyles.bodyStrong),
       subtitle: Text(
         '$chapterCount chapter${chapterCount == 1 ? '' : 's'} · Modified $timeAgo',
         style: AppTextStyles.caption,

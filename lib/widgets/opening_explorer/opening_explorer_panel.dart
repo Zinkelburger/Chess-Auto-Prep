@@ -315,19 +315,22 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Row(
           children: [
-            Icon(Icons.tune, size: 14, color: Colors.grey[400]),
+            const Icon(Icons.tune, size: 14, color: AppColors.onSurfaceMuted),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
                 summary,
-                style: TextStyle(fontSize: 12, color: Colors.grey[300]),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceMuted,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             Icon(
               _filtersExpanded ? Icons.expand_less : Icons.expand_more,
               size: 16,
-              color: Colors.grey[400],
+              color: AppColors.onSurfaceMuted,
             ),
           ],
         ),
@@ -550,12 +553,15 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 24, color: Colors.grey[600]),
+            Icon(icon, size: 24, color: AppColors.onSurfaceMuted),
             const SizedBox(height: 8),
             Text(
               text,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
+              ),
             ),
           ],
         ),
