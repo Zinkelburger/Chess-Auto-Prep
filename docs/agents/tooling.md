@@ -17,12 +17,12 @@ heavy checks/builds use `scripts/ci.sh with -- COMMAND`.
 | `tools/bughouse_db/` | Offline FICS opening book; `python3 -m bughouse_db <command>` from `tools/`, with `fetch`, `index`, `explore` or `status`; test with `tools/test_bughouse_db.py` |
 | `tools/lichess_broadcasts.py` | Collect over-the-board games from Lichess broadcasts into `Documents/lichess_broadcasts/<collection>/` (per-broadcast PGNs, manifest, merged PGN); `by USER`, `tour ID`, `search`, `status`. Community broadcasts are found by owner or tour id, not `search`; tests in `tools/test_lichess_broadcasts.py`. Method, APIs and the committed Massachusetts collection (`scripts/data/broadcasts/`): [docs/BROADCAST_GAMES.md](../BROADCAST_GAMES.md) |
 | `tools/chesscom_events.py` | Same collection from chess.com Events (`search`, `event <slug>`, `status`); moves come over the events websocket, spoken with a stdlib Socket.IO client. A game on both sites is kept once; tests in `tools/test_chesscom_events.py` |
-| `tools/chessable_extension/` | Chrome/Firefox extension that saves a Chessable variation, chapter or course you own as a course-shaped PGN (chapter in `[White]`, line in `[Black]`); install and limits in its README; tests in `tools/test_chessable_extension.py` (Node, headless Chrome when present) and `test/services/chessable_extension_export_test.dart` |
 | `tools/master_import_pgn.dart` | Turn PGN files into a master-format database (`games` + `book`) with the app's importer: `MASTER_IMPORT_ARGS="out.db in.pgn" scripts/ci.sh test tools/master_import_pgn.dart`; query it with the chess-prep MCP `db` parameter |
 | `tools/run_engine_tournament.dart` | Headless engine matches; see `docs/ENGINE_TOURNAMENT.md` |
 | `tools/bench/`, `tools/dart_api_test/`, `tools/experiments/` | Standalone benchmarks/API harnesses; nothing here is imported by `lib/` |
 | `tree_builder/` | Standalone C prototype and cdbdirect native build; see its README. The Dart generation pipeline is canonical |
 | `python/twic-position-finder/` | Separately deployed web service; follow its README |
+| (external) [Chessable-PGN-Download](https://github.com/Zinkelburger/Chessable-PGN-Download) | Browser extension that saves a Chessable course as the course-shaped PGN this app reads (chapter in `[White]`, line in `[Black]`); lives in its own repository |
 | `packaging/`, `install_linux_desktop.sh` | Release-bundle installers, built by release CI |
 
 The app hides Bughouse Lab without the optional bughouse assets. Archive/book

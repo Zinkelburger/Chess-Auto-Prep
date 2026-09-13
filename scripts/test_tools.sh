@@ -26,7 +26,6 @@ TESTS=(
   tools/test_bughouse_db.py
   tools/test_lichess_broadcasts.py
   tools/test_chesscom_events.py
-  tools/test_chessable_extension.py
 )
 
 for test_file in "${TESTS[@]}"; do
