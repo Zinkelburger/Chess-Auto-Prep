@@ -282,6 +282,16 @@ void main() {
       editMode: true,
       initialMainLineIndex: 1,
     );
+    final label = tester.widget<Text>(find.text('Comment:'));
+    expect(label.style?.color, Colors.white);
+    final field = tester.widget<TextField>(
+      find.descendant(
+        of: find.byType(PgnAnnotationPanel),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(field.decoration?.enabledBorder?.borderSide.color, Colors.white);
+    expect(field.decoration?.focusedBorder?.borderSide.color, Colors.white);
     await tester.enterText(
       find.descendant(
         of: find.byType(PgnAnnotationPanel),

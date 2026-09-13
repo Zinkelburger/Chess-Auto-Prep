@@ -6,6 +6,31 @@ import 'package:chess_auto_prep/utils/chess_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'live child evaluation updates without rebuilding the saved database',
+    () {
+      final node = BuildTreeNode(
+        fen: playUciMove(kStandardStartFen, 'e2e4')!,
+        moveSan: 'e4',
+        moveUci: 'e2e4',
+        ply: 1,
+        isWhiteToMove: false,
+        nodeId: 1,
+      )..engineEvalCp = -25;
+      BuildTreeNode? lookup(String fen) =>
+          canonicalizeFen(fen) == canonicalizeFen(node.fen) ? node : null;
+      expect(
+        positionMoves(kStandardStartFen, liveNodeAt: lookup).first.evalCp,
+        25,
+      );
+      node.engineEvalCp = -42;
+      expect(
+        positionMoves(kStandardStartFen, liveNodeAt: lookup).first.evalCp,
+        42,
+      );
+    },
+  );
+
   test('lists all legal moves even without analysis', () {
     final rows = positionMoves(kStandardStartFen);
     expect(rows.length, 20);

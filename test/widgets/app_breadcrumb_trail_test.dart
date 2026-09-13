@@ -76,6 +76,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Back stays available when the breadcrumb labels are hidden', (
+    tester,
+  ) async {
+    final history = await pumpBar(tester, width: 400);
+    history.recordPush(AppMode.pgnViewer, null, 'Game 12 vs foo');
+    await tester.pump();
+
+    expect(find.byTooltip('Back to Tactics'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('app-history-back')));
+    await tester.pump();
+
+    expect(history.length, 1);
+    expect(history.entries.single.mode, AppMode.tactics);
+    expect(find.byKey(const ValueKey('app-history-back')), findsNothing);
+  });
+
   testWidgets('clicking an earlier crumb pops back to it', (tester) async {
     final history = await pumpBar(tester, width: 900);
 

@@ -544,8 +544,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ── Display section ────────────────────────────────────────────────────────
 
-  /// The two lila Display preferences a beginner asks for first: where the
-  /// coordinates are, and whether a knight is an N or a ♘. Global on purpose —
+  /// Board coordinates, legal destinations and piece notation. Global on purpose —
   /// a board that is labelled in Tactics and bare in Study is two boards to
   /// learn. The preview under the controls is live, so the choice is seen
   /// before the screen is left.
@@ -568,6 +567,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 (BoardCoordinates.everySquare, 'Every square'),
               ],
               onChanged: (v) => unawaited(display.setCoordinates(v)),
+            ),
+            SettingsSwitchTile(
+              label: 'Legal move dots',
+              description: 'Show possible destinations when selecting a piece',
+              value: display.showLegalMoves,
+              onChanged: (value) => unawaited(display.setShowLegalMoves(value)),
             ),
             SettingsChoiceTile<PieceNotation>(
               label: 'Piece notation',

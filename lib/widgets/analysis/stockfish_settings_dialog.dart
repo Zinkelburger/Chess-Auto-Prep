@@ -5,6 +5,7 @@ import '../../models/bulk_analysis_settings.dart';
 import '../../models/engine_settings.dart';
 import '../../theme/app_text_styles.dart';
 import '../common/number_stepper.dart';
+import '../engine/engine_resource_controls.dart';
 import '../app_settings_button.dart';
 
 Future<void> showStockfishSettingsDialog(BuildContext context) =>
@@ -26,22 +27,11 @@ class StockfishSettingsBody extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _row(
-            'Cores',
-            'engine-cores',
-            settings.cores,
-            1,
-            EngineSettings.systemCores,
-            (v) => settings.cores = v,
-          ),
-          _row(
-            'Memory (MB)',
-            'engine-memory',
-            settings.hashMb,
-            kMinHashMb,
-            kMaxHashMb,
-            (v) => settings.hashMb = v,
-            step: 16,
+          EngineResourceControls(
+            cores: settings.cores,
+            hashMb: settings.hashMb,
+            onCoresChanged: (v) => settings.cores = v,
+            onHashChanged: (v) => settings.hashMb = v,
           ),
           _row(
             'Board depth',
@@ -67,14 +57,6 @@ class StockfishSettingsBody extends StatelessWidget {
             kMinMultiPv,
             kMaxMultiPv,
             (v) => settings.multiPv = v,
-          ),
-          _row(
-            'PV rows per line',
-            'engine-pv-rows',
-            settings.pvRows,
-            kMinPvRows,
-            kMaxPvRows,
-            (v) => settings.pvRows = v,
           ),
         ],
       ),

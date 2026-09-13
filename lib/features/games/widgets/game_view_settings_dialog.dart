@@ -138,8 +138,7 @@ class _GameViewSettingsDialogState extends State<GameViewSettingsDialog> {
             children: [
               SettingsSwitchTile(
                 label: 'Autosave PGN edits',
-                description:
-                    'Save comments and variations automatically. Turn off to use the Save button.',
+                description: 'Save comments and variations automatically.',
                 value: _prefs.autoSave,
                 onChanged: (v) => _update(_prefs.copyWith(autoSave: v)),
               ),

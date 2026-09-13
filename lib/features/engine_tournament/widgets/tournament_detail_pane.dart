@@ -2,7 +2,11 @@
 /// every game.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/tournament_game_positions.dart';
 
 import '../../../constants/chess_constants.dart';
 import '../../../theme/app_colors.dart';
@@ -18,7 +22,7 @@ import '../../../widgets/crosstable_view.dart';
 import '../../../widgets/match_games_table.dart';
 import 'tournament_list_pane.dart' show TournamentStatusChip;
 
-class TournamentDetailPane extends StatelessWidget {
+class TournamentDetailPane extends StatefulWidget {
   const TournamentDetailPane({
     super.key,
     required this.controller,
@@ -37,6 +41,55 @@ class TournamentDetailPane extends StatelessWidget {
   final VoidCallback onRerun;
 
   @override
+  State<TournamentDetailPane> createState() => _TournamentDetailPaneState();
+}
+
+class _TournamentDetailPaneState extends State<TournamentDetailPane> {
+  static const _preference = 'tournament.show_final_positions';
+  bool _showFinalPositions = true;
+  List<String?> _positions = const [];
+  int _loadGeneration = 0;
+  EngineTournamentController get controller => widget.controller;
+  StoredTournament get tournament => widget.tournament;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadPreference());
+    unawaited(_loadPositions());
+  }
+
+  Future<void> _loadPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => _showFinalPositions = prefs.getBool(_preference) ?? true);
+  }
+
+  Future<void> _loadPositions() async {
+    final generation = ++_loadGeneration;
+    final positions = await loadTournamentFinalPositions(tournament.pgnPath);
+    if (!mounted || generation != _loadGeneration) return;
+    setState(() => _positions = positions);
+  }
+
+  @override
+  void didUpdateWidget(TournamentDetailPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tournament.id != tournament.id ||
+        oldWidget.tournament.gamesPlayed != tournament.gamesPlayed) {
+      _positions = const [];
+      unawaited(_loadPositions());
+    }
+  }
+
+  Future<void> _togglePositions(bool value) async {
+    if (!mounted) return;
+    setState(() => _showFinalPositions = value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_preference, value);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final config = tournament.config;
     final running = controller.isRunningTournament(tournament.id);
@@ -46,9 +99,9 @@ class TournamentDetailPane extends StatelessWidget {
         _Header(
           tournament: tournament,
           running: running,
-          onOpenAllGames: onOpenAllGames,
-          onDelete: onDelete,
-          onRerun: onRerun,
+          onOpenAllGames: widget.onOpenAllGames,
+          onDelete: widget.onDelete,
+          onRerun: widget.onRerun,
           onStop: controller.cancelRun,
         ),
         const SizedBox(height: 14),
@@ -73,26 +126,58 @@ class TournamentDetailPane extends StatelessWidget {
         _PanelCard(
           title: 'Games',
           trailing: TextButton.icon(
-            onPressed: tournament.games.isEmpty ? null : onOpenAllGames,
+            onPressed: tournament.games.isEmpty ? null : widget.onOpenAllGames,
             icon: const Icon(Icons.menu_book, size: 16),
             label: const Text('Open in PGN Viewer'),
           ),
-          child: MatchGamesTable(
-            games: [
-              for (final game in tournament.games)
-                MatchGameRow(
-                  number: game.gameNumber,
-                  round: game.round,
-                  white: game.whiteName,
-                  black: game.blackName,
-                  result: game.result,
-                  outcomeLabel: game.outcomeLabel,
-                  naturalEnd: game.termination.isNaturalEnd,
-                  plies: game.plies,
-                  durationMs: game.durationMs,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CheckboxListTile(
+                key: const ValueKey('tournament-final-positions'),
+                value: _showFinalPositions,
+                onChanged: (value) => _togglePositions(value ?? false),
+                title: const Text(
+                  'Show final positions',
+                  style: AppTextStyles.body,
                 ),
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+              ),
+              LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width:
+                        constraints.maxWidth < (_showFinalPositions ? 860 : 760)
+                        ? (_showFinalPositions ? 860 : 760)
+                        : constraints.maxWidth,
+                    child: MatchGamesTable(
+                      showFinalPositions: _showFinalPositions,
+                      games: [
+                        for (final game in tournament.games)
+                          MatchGameRow(
+                            number: game.gameNumber,
+                            round: game.round,
+                            white: game.whiteName,
+                            black: game.blackName,
+                            result: game.result,
+                            outcomeLabel: game.outcomeLabel,
+                            naturalEnd: game.termination.isNaturalEnd,
+                            plies: game.plies,
+                            durationMs: game.durationMs,
+                            finalFen: game.gameIndex < _positions.length
+                                ? _positions[game.gameIndex]
+                                : null,
+                          ),
+                      ],
+                      onOpenGame: (row) =>
+                          widget.onOpenGame(tournament.games[row.number - 1]),
+                    ),
+                  ),
+                ),
+              ),
             ],
-            onOpenGame: (row) => onOpenGame(tournament.games[row.number - 1]),
           ),
         ),
       ],
@@ -216,7 +301,7 @@ class _Header extends StatelessWidget {
                     OutlinedButton.icon(
                       onPressed: onRerun,
                       icon: const Icon(Icons.replay, size: 16),
-                      label: const Text('Run again'),
+                      label: const Text('Edit & run again'),
                     ),
                   OutlinedButton.icon(
                     onPressed: tournament.games.isEmpty ? null : onOpenAllGames,
@@ -358,11 +443,11 @@ class _PanelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
+    return Material(
+      color: AppColors.surfaceElevated,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.divider),
+        side: const BorderSide(color: AppColors.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

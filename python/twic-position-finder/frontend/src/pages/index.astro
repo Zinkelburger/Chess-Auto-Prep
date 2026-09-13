@@ -16,6 +16,13 @@ const FEATURES = [
     cta: 'Start training',
   },
   {
+    href: '/bughouse',
+    icon: '/piece/wQ.svg',
+    title: 'Bughouse Lab',
+    copy: 'Two boards, one team. Explore moves, drops and sitting with <strong>Hivemind</strong>, the bughouse engine. No app download needed.',
+    cta: 'Explore a position',
+  },
+  {
     href: '/charles-clock',
     icon: '/piece/wR.svg',
     title: 'Charles Clock',
@@ -27,7 +34,7 @@ const FEATURES = [
 <Base title="Home" wide>
   <div class="hero">
     <h1>Chess Auto Prep</h1>
-    <p class="lede">Three small tools for serious preparation. No accounts, no passwords — just your email or your username.</p>
+    <p class="lede">Tools for serious preparation. Explore positions, train from your games, and follow the latest chess.</p>
   </div>
 
   <div class="features">
@@ -46,7 +53,7 @@ const FEATURES = [
   .hero { text-align: center; padding: 40px 0 36px; }
   .hero h1 { font-size: 2.4rem; letter-spacing: -0.03em; margin-bottom: 10px; }
   .hero .lede { margin: 0 auto; }
-  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
   @media (max-width: 720px) {
     .features { grid-template-columns: 1fr; }
     .hero { padding: 20px 0 28px; }

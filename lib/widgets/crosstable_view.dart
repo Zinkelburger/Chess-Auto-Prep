@@ -10,7 +10,7 @@ import '../models/crosstable.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 
-class CrosstableView extends StatelessWidget {
+class CrosstableView extends StatefulWidget {
   const CrosstableView({
     super.key,
     required this.crosstable,
@@ -26,6 +26,16 @@ class CrosstableView extends StatelessWidget {
   /// What the name column is called. "Engine" everywhere one binary is one
   /// player; "Team" in bughouse, where a participant is a pair of seats.
   final String participantHeading;
+
+  @override
+  State<CrosstableView> createState() => _CrosstableViewState();
+}
+
+class _CrosstableViewState extends State<CrosstableView> {
+  bool _showStatistics = false;
+  Crosstable get crosstable => widget.crosstable;
+  List<String> get names => widget.names;
+  String get participantHeading => widget.participantHeading;
 
   @override
   Widget build(BuildContext context) {
@@ -44,102 +54,129 @@ class CrosstableView extends StatelessWidget {
     // top-to-bottom and left-to-right.
     final opponents = standings.map((r) => r.engineIndex).toList();
 
-    return Scrollbar(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowHeight: 34,
-          dataRowMinHeight: 32,
-          dataRowMaxHeight: 38,
-          horizontalMargin: 12,
-          columnSpacing: 18,
-          headingTextStyle: AppTextStyles.caption.copyWith(
-            fontWeight: FontWeight.w600,
-            color: AppColors.onSurfaceSoft,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: CheckboxListTile(
+            value: _showStatistics,
+            onChanged: (value) {
+              if (!mounted) return;
+              setState(() => _showStatistics = value ?? false);
+            },
+            title: const Text(
+              'Show rating statistics',
+              style: AppTextStyles.body,
+            ),
+            controlAffinity: ListTileControlAffinity.leading,
+            dense: true,
           ),
-          dataTextStyle: AppTextStyles.body,
-          columns: [
-            const DataColumn(label: Text('#')),
-            DataColumn(label: Text(participantHeading)),
-            const DataColumn(label: Text('Score'), numeric: true),
-            const DataColumn(label: Text('W'), numeric: true),
-            const DataColumn(label: Text('D'), numeric: true),
-            const DataColumn(label: Text('L'), numeric: true),
-            const DataColumn(label: Text('Draw %'), numeric: true),
-            const DataColumn(
-              label: _HeaderWithHint(
-                label: 'Elo ±',
-                hint:
-                    'Rating difference implied by the score, with the 95% '
-                    'confidence interval. A margin wider than the estimate '
-                    'means the match has not decided anything yet.',
-              ),
-              numeric: true,
-            ),
-            const DataColumn(
-              label: _HeaderWithHint(
-                label: 'LOS',
-                hint:
-                    'Likelihood of superiority — the chance the win/loss '
-                    'split is a real edge rather than noise. Draws carry no '
-                    'information here.',
-              ),
-              numeric: true,
-            ),
-            const DataColumn(
-              label: _HeaderWithHint(
-                label: 'SB',
-                hint:
-                    'Sonneborn-Berger tiebreak: the full score of everyone '
-                    'you beat plus half the score of everyone you drew.',
-              ),
-              numeric: true,
-            ),
-            for (final index in opponents)
-              DataColumn(label: Text('vs ${names[index]}')),
-          ],
-          rows: [
-            for (final row in standings)
-              DataRow(
-                cells: [
-                  DataCell(Text('${row.rank}')),
-                  DataCell(
-                    Text(
-                      row.name,
-                      style: AppTextStyles.bodyStrong,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  DataCell(
-                    Text(row.scoreLabel, style: AppTextStyles.bodyStrong),
-                  ),
-                  DataCell(Text('${row.wins}')),
-                  DataCell(Text('${row.draws}')),
-                  DataCell(Text('${row.losses}')),
-                  DataCell(
-                    Text('${(row.drawFraction * 100).toStringAsFixed(0)}%'),
-                  ),
-                  DataCell(_EloCell(row: row)),
-                  DataCell(
-                    Text(
-                      '${(row.likelihoodOfSuperiority * 100).toStringAsFixed(1)}%',
-                    ),
-                  ),
-                  DataCell(Text(row.sonnebornBerger.toStringAsFixed(1))),
-                  for (final index in opponents)
-                    DataCell(
-                      _HeadToHeadCell(
-                        cell: index == row.engineIndex
-                            ? null
-                            : crosstable.cell(row.engineIndex, index),
-                        isSelf: index == row.engineIndex,
-                      ),
-                    ),
-                ],
-              ),
-          ],
         ),
-      ),
+        Scrollbar(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowHeight: 34,
+              dataRowMinHeight: 54,
+              dataRowMaxHeight: 60,
+              horizontalMargin: 12,
+              columnSpacing: 18,
+              headingTextStyle: AppTextStyles.caption.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppColors.onSurfaceSoft,
+              ),
+              dataTextStyle: AppTextStyles.body,
+              columns: [
+                const DataColumn(label: Text('#')),
+                DataColumn(label: Text(participantHeading)),
+                const DataColumn(label: Text('Score'), numeric: true),
+                const DataColumn(label: Text('W'), numeric: true),
+                const DataColumn(label: Text('D'), numeric: true),
+                const DataColumn(label: Text('L'), numeric: true),
+                if (_showStatistics) ...[
+                  const DataColumn(label: Text('Draw %'), numeric: true),
+                  const DataColumn(
+                    label: _HeaderWithHint(
+                      label: 'Elo ±',
+                      hint:
+                          'Rating difference implied by the score, with the 95% '
+                          'confidence interval. A margin wider than the estimate '
+                          'means the match has not decided anything yet.',
+                    ),
+                    numeric: true,
+                  ),
+                  const DataColumn(
+                    label: _HeaderWithHint(
+                      label: 'LOS',
+                      hint:
+                          'Likelihood of superiority — the chance the win/loss '
+                          'split is a real edge rather than noise. Draws carry no '
+                          'information here.',
+                    ),
+                    numeric: true,
+                  ),
+                  const DataColumn(
+                    label: _HeaderWithHint(
+                      label: 'SB',
+                      hint:
+                          'Sonneborn-Berger tiebreak: the full score of everyone '
+                          'you beat plus half the score of everyone you drew.',
+                    ),
+                    numeric: true,
+                  ),
+                ],
+                for (final index in opponents)
+                  DataColumn(label: Text('vs ${names[index]}')),
+              ],
+              rows: [
+                for (final row in standings)
+                  DataRow(
+                    cells: [
+                      DataCell(Text('${row.rank}')),
+                      DataCell(
+                        Text(
+                          row.name,
+                          style: AppTextStyles.bodyStrong,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DataCell(
+                        Text(row.scoreLabel, style: AppTextStyles.bodyStrong),
+                      ),
+                      DataCell(Text('${row.wins}')),
+                      DataCell(Text('${row.draws}')),
+                      DataCell(Text('${row.losses}')),
+                      if (_showStatistics) ...[
+                        DataCell(
+                          Text(
+                            '${(row.drawFraction * 100).toStringAsFixed(0)}%',
+                          ),
+                        ),
+                        DataCell(_EloCell(row: row)),
+                        DataCell(
+                          Text(
+                            '${(row.likelihoodOfSuperiority * 100).toStringAsFixed(1)}%',
+                          ),
+                        ),
+                        DataCell(Text(row.sonnebornBerger.toStringAsFixed(1))),
+                      ],
+                      for (final index in opponents)
+                        DataCell(
+                          _HeadToHeadCell(
+                            cell: index == row.engineIndex
+                                ? null
+                                : crosstable.cell(row.engineIndex, index),
+                            isSelf: index == row.engineIndex,
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -169,8 +206,7 @@ class _EloCell extends StatelessWidget {
   }
 }
 
-/// `5.5/10  =1=0==1==0` — the score against one opponent and the games that
-/// made it, in the order they were played.
+/// Bounded head-to-head score and named result counts.
 class _HeadToHeadCell extends StatelessWidget {
   const _HeadToHeadCell({required this.cell, required this.isSelf});
 
@@ -186,30 +222,22 @@ class _HeadToHeadCell extends StatelessWidget {
     if (data == null || data.played == 0) {
       return const Text('—', style: AppTextStyles.muted);
     }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '${_trim(data.points)}/${data.played}',
-          style: AppTextStyles.bodyStrong,
-        ),
-        const SizedBox(width: 8),
-        for (final letter in data.results)
-          Padding(
-            padding: const EdgeInsets.only(right: 1),
-            child: Text(
-              letter,
-              style: AppTextStyles.body.copyWith(
-                fontFeatures: const [],
-                color: switch (letter) {
-                  '1' => AppColors.success,
-                  '0' => AppColors.danger,
-                  _ => AppColors.onSurfaceMuted,
-                },
-              ),
-            ),
+    final wins = data.results.where((r) => r == '1').length;
+    final draws = data.results.where((r) => r == '=').length;
+    final losses = data.results.where((r) => r == '0').length;
+    return Tooltip(
+      message: '$wins wins, $draws draws, $losses losses',
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${_trim(data.points)}/${data.played}',
+            style: AppTextStyles.bodyStrong,
           ),
-      ],
+          Text('$wins W · $draws D · $losses L', style: AppTextStyles.caption),
+        ],
+      ),
     );
   }
 

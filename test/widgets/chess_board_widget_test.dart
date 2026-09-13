@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/widgets/common/piece_image.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   Position after(List<String> sans) {
@@ -43,6 +44,50 @@ void main() {
 
     return axisOnGrid(origin.dx) && axisOnGrid(origin.dy);
   }
+
+  testWidgets('legal destinations are opt-in without changing move input', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = BoardDisplaySettings.fresh();
+    String? played;
+    await tester.pumpWidget(
+      DisplaySettingsScope(
+        settings: settings,
+        child: MaterialApp(
+          home: Center(
+            child: SizedBox.square(
+              dimension: 320,
+              child: ChessBoardWidget(
+                position: Chess.initial,
+                onMove: (move) => played = move.uci,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    BoardSquarePainter surface() => tester
+        .widgetList<CustomPaint>(find.byType(CustomPaint))
+        .map((w) => w.painter)
+        .whereType<BoardSquarePainter>()
+        .single;
+    final origin = tester.getTopLeft(find.byType(ChessBoardWidget));
+    await tester.tapAt(origin + const Offset(180, 260));
+    await tester.pump();
+    expect(surface().selectedSquare, 'e2');
+    expect(surface().legalMoveSquares, isEmpty);
+    await settings.setShowLegalMoves(true);
+    await tester.pump();
+    expect(surface().legalMoveSquares, {'e3', 'e4'});
+    await settings.setShowLegalMoves(false);
+    await tester.pump();
+    await tester.tapAt(origin + const Offset(180, 180));
+    await tester.pump();
+    expect(played, 'e2e4');
+    await tester.pumpWidget(const SizedBox());
+    settings.dispose();
+  });
 
   testWidgets('sibling-line jump does not throw', (tester) async {
     await tester.pumpWidget(board(after(['d4', 'd5', 'c4', 'c6'])));
@@ -126,7 +171,7 @@ void main() {
           await tester.tapAt(before.center);
           await tester.pump();
           expect(surface().selectedSquare, 'd7');
-          expect(surface().legalMoveSquares, {'d6', 'd5'});
+          expect(surface().legalMoveSquares, isEmpty);
           expect(surface().highlightedSquares, isEmpty);
           expect(tester.getRect(pawn), before);
           await tester.tapAt(before.center);

@@ -2,12 +2,14 @@ import 'package:chess_auto_prep/core/board_editor_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/models/bughouse_state.dart';
 import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_board_card.dart';
+import 'package:chess_auto_prep/models/board_display_settings.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/widgets/board_editor/editable_board.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// Dropping a reserve piece by dragging it, which is how a piece gets onto a
 /// bughouse board most of the time.
@@ -15,6 +17,70 @@ void main() {
   const withPawn =
       'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[P] w KQkq - 0 1';
   const plain = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[] w KQkq - 0 1';
+
+  testWidgets('reserve artwork follows board size and coordinate margins', (
+    tester,
+  ) async {
+    final controller = BughouseController();
+    addTearDown(controller.dispose);
+    controller.loadDualFen('$withPawn|$plain');
+
+    for (final coordinates in [
+      BoardCoordinates.inside,
+      BoardCoordinates.outside,
+    ]) {
+      final settings = BoardDisplaySettings.fresh(coordinates: coordinates);
+      addTearDown(settings.dispose);
+      for (final mode in [BughouseMode.play, BughouseMode.setup]) {
+        controller.setMode(mode);
+        for (final width in [240.0, 338.0, 400.0]) {
+          await tester.pumpWidget(
+            MaterialApp(
+              home: DisplaySettingsScope(
+                settings: settings,
+                child: Scaffold(
+                  body: SingleChildScrollView(
+                    child: SizedBox(
+                      width: width,
+                      child: BughouseBoardCard(
+                        controller: controller,
+                        which: BughouseBoard.a,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final board = find.byType(
+            mode == BughouseMode.setup ? EditableBoard : ChessBoardWidget,
+          );
+          final boardPiece = find
+              .descendant(of: board, matching: find.byType(SvgPicture))
+              .first;
+          for (final side in Side.values) {
+            for (final role in ['pawn', 'knight', 'bishop', 'rook', 'queen']) {
+              final slot = find.byKey(
+                ValueKey('bughouse-pocket-a-${side.name}-$role'),
+              );
+              final reservePiece = find.descendant(
+                of: slot,
+                matching: find.byType(SvgPicture),
+              );
+              expect(
+                tester.getSize(reservePiece),
+                tester.getSize(boardPiece),
+                reason: '$mode, $coordinates, $width: ${side.name} $role',
+              );
+            }
+          }
+          expect(tester.takeException(), isNull);
+        }
+      }
+    }
+  });
 
   /// The centre of [square] on a board drawn in [rect].
   ///
@@ -33,6 +99,9 @@ void main() {
   testWidgets('a reserve piece dragged onto a square lands there', (
     tester,
   ) async {
+    // Keep the board and both full-size reserves inside the hit-test viewport.
+    await tester.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final controller = BughouseController();
     addTearDown(controller.dispose);
     controller.loadDualFen('$withPawn|$plain');
@@ -62,7 +131,7 @@ void main() {
       const ValueKey('bughouse-pocket-a-white-pawn'),
       skipOffstage: false,
     );
-    expect(pawn, findsOneWidget);
+    expect(pawn.hitTestable(), findsOneWidget);
 
     final gesture = await tester.startGesture(tester.getCenter(pawn));
     await tester.pump(const Duration(milliseconds: 30));
@@ -83,6 +152,8 @@ void main() {
   testWidgets('a drop lands on the square under the pointer, either way up', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     // `_DropTarget` re-derives the board's geometry rather than asking the
     // board widget for it, so the two can drift apart silently — a padding or
     // a border on `ChessBoardWidget` would send every drop to the wrong
@@ -142,6 +213,8 @@ void main() {
   });
 
   testWidgets('a drag that ends off the board changes nothing', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final controller = BughouseController();
     addTearDown(controller.dispose);
     controller.loadDualFen('$withPawn|$plain');
@@ -170,6 +243,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 30));
     await gesture.moveTo(const Offset(4, 4));
     await tester.pump();
+    expect(controller.pendingDrop, isNotNull);
     await gesture.up();
     await tester.pumpAndSettle();
 

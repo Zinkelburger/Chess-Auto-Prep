@@ -6,7 +6,12 @@ import '../services/player_list_parser.dart';
 
 /// Pasting and previewing happens on the group page, not in a dialog.
 class PlayerImportPanel extends StatefulWidget {
-  const PlayerImportPanel({super.key, required this.onImport});
+  const PlayerImportPanel({
+    super.key,
+    required this.onImport,
+    this.importLabel = 'Add to group',
+  });
+  final String importLabel;
   final Future<void> Function(OpponentList) onImport;
   @override
   State<PlayerImportPanel> createState() => _PlayerImportPanelState();
@@ -89,7 +94,7 @@ class _PlayerImportPanelState extends State<PlayerImportPanel> {
         ),
         Row(
           children: [
-            TextButton(
+            OutlinedButton(
               onPressed: _busy ? null : _preview,
               child: Text(_busy ? 'Working…' : 'Preview players'),
             ),
@@ -98,7 +103,7 @@ class _PlayerImportPanelState extends State<PlayerImportPanel> {
               const SizedBox(width: 12),
               FilledButton(
                 onPressed: _busy ? null : _import,
-                child: const Text('Add to group'),
+                child: Text(widget.importLabel),
               ),
             ],
           ],

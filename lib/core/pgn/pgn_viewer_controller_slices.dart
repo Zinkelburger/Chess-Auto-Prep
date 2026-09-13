@@ -140,6 +140,9 @@ mixin _SliceOps on ChangeNotifier {
         activeSliceConfig.sequencePattern != null &&
         activeSliceConfig.sequencePattern!.isNotEmpty;
     String? newPositionInput = activeSliceConfig.positionInput;
+    final newPositions = List<String>.from(
+      activeSliceConfig.additionalPositions,
+    );
     String? newSequencePattern = activeSliceConfig.sequencePattern;
     int newSequenceGap = activeSliceConfig.sequenceGap;
     final newHeaders = List<HeaderFilterConfig>.from(
@@ -152,6 +155,13 @@ mixin _SliceOps on ChangeNotifier {
       idx = -1;
     } else if (hasPos) {
       idx--;
+    }
+
+    if (idx >= 0 && idx < newPositions.length) {
+      newPositions.removeAt(idx);
+      idx = -1;
+    } else if (idx >= 0) {
+      idx -= newPositions.length;
     }
 
     if (idx >= 0 && hasSeq && idx == 0) {
@@ -174,6 +184,8 @@ mixin _SliceOps on ChangeNotifier {
 
     final newConfig = SliceConfig(
       positionInput: newPositionInput,
+      additionalPositions: newPositions,
+      matchAny: activeSliceConfig.matchAny,
       headerFilters: newHeaders,
       sequencePattern: newSequencePattern,
       sequenceGap: newSequenceGap,
@@ -202,6 +214,8 @@ mixin _SliceOps on ChangeNotifier {
     await recomputeAndApplyConfig(
       SliceConfig(
         positionInput: activeSliceConfig.positionInput,
+        additionalPositions: activeSliceConfig.additionalPositions,
+        matchAny: activeSliceConfig.matchAny,
         headerFilters: newHeaders,
         sequencePattern: activeSliceConfig.sequencePattern,
         sequenceGap: activeSliceConfig.sequenceGap,

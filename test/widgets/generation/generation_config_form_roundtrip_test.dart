@@ -48,7 +48,7 @@ const Map<String, String> _enumAlternatives = {
   'search_algorithm': 'pure',
   'build_mode': 'dbExplorer',
   'selection_mode': 'engineOnly',
-  'annotation_detail': 'none',
+  'annotation_detail': 'full',
 };
 
 /// Keys whose naive `+7` / `+0.125` mutation would land outside a clamp that
@@ -191,6 +191,57 @@ List<String> _lostKeys(
 }
 
 void main() {
+  testWidgets('PGN metrics start unchecked and can be selected independently', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _throughForm(
+      tester,
+      const TreeBuildConfig(startFen: _startFen, playAsWhite: true),
+    );
+    await tester.tap(find.text('Advanced…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PGN output').first);
+    await tester.pumpAndSettle();
+    final state = tester.state<GenerationConfigFormState>(
+      find.byType(GenerationConfigForm),
+    );
+    MoveAnnotationDetail selected() =>
+        state.toConfig(startFen: _startFen, playAsWhite: true).annotationDetail;
+    expect(selected(), MoveAnnotationDetail.none);
+    final eval = find.text('Include evaluations');
+    await tester.ensureVisible(eval);
+    await tester.tap(eval);
+    await tester.pumpAndSettle();
+    expect(selected(), const MoveAnnotationDetail(evaluations: true));
+    final expected = find.text('Include expectimax values');
+    await tester.ensureVisible(expected);
+    await tester.tap(expected);
+    await tester.pumpAndSettle();
+    expect(
+      selected(),
+      const MoveAnnotationDetail(evaluations: true, expectimax: true),
+    );
+    final probabilities = find.text(
+      'Include Maia probabilities / database frequencies',
+    );
+    await tester.ensureVisible(probabilities);
+    await tester.tap(probabilities);
+    await tester.pumpAndSettle();
+    expect(
+      selected(),
+      const MoveAnnotationDetail(
+        evaluations: true,
+        expectimax: true,
+        probabilities: true,
+      ),
+    );
+    expect(selected().explanations, isFalse);
+  });
+
   group('config survives a trip through the form', () {
     testWidgets('every field the form does not deliberately transform', (
       tester,
@@ -355,13 +406,11 @@ void main() {
       expect(result.isRollingSearch, isTrue);
       expect(result.useMasterGames, isFalse);
       expect(find.text('Target master opponents'), findsNothing);
-      expect(find.text('Fast — 4-ply lookahead'), findsOneWidget);
+      expect(find.text('Fast · 4-ply'), findsOneWidget);
       expect(find.textContaining('approximate policy'), findsOneWidget);
       final control = find.byKey(const ValueKey('generation-search-method'));
       await tester.ensureVisible(control);
-      await tester.tap(control);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Pure — full horizon').last);
+      await tester.tap(find.text('Pure'));
       await tester.pumpAndSettle();
       final state = tester.state<GenerationConfigFormState>(
         find.byType(GenerationConfigForm),
@@ -370,6 +419,58 @@ void main() {
         state.toConfig(startFen: _startFen, playAsWhite: true).isRollingSearch,
         isFalse,
       );
+    },
+  );
+
+  testWidgets(
+    'ChessDB starter profile exposes book controls and survives reopening',
+    (tester) async {
+      await _throughForm(
+        tester,
+        const TreeBuildConfig(
+          startFen: _startFen,
+          playAsWhite: false,
+          buildMode: BuildMode.chessDbBook,
+        ),
+        playAsWhite: false,
+      );
+      final starter = find.byKey(const ValueKey('chessdb-starter-settings'));
+      await tester.ensureVisible(starter);
+      await tester.tap(starter);
+      await tester.pumpAndSettle();
+      final state = tester.state<GenerationConfigFormState>(
+        find.byType(GenerationConfigForm),
+      );
+      final config = state.toConfig(startFen: _startFen, playAsWhite: false);
+      expect(config.playAsWhite, isFalse);
+      expect(config.buildMode, BuildMode.chessDbBook);
+      expect(config.maxPly, 20);
+      expect(config.bookTailMaxPly, 34);
+      expect(config.oppMaxChildren, 5);
+      expect(config.oppMassTarget, 0.90);
+      expect(config.maxNodes, 12000);
+      expect(config.useMasterGames, isTrue);
+      expect(config.enableChessDbApi, isTrue);
+      expect(config.bookEngineFallback, isFalse);
+      expect(config.verifyFinal, isFalse);
+      expect(config.chessDbApiConcurrency, 1);
+      expect(find.text('Opponent rating (Elo)'), findsNothing);
+      expect(find.textContaining('Pure finite-horizon search'), findsNothing);
+      expect(find.textContaining('master practice, Maia'), findsNothing);
+      expect(find.text('Line limit (half-moves)'), findsOneWidget);
+      final lineLimit = find.widgetWithText(
+        TextField,
+        'Line limit (half-moves)',
+      );
+      await tester.ensureVisible(lineLimit);
+      await tester.enterText(lineLimit, '30');
+      await tester.pumpAndSettle();
+      final edited = state.toConfig(startFen: _startFen, playAsWhite: false);
+      expect(edited.bookTailMaxPly, 30);
+      final reopened = await _throughForm(tester, edited, playAsWhite: false);
+      expect(reopened.bookTailMaxPly, 30);
+      expect(reopened.maxPly, 20);
+      expect(reopened.oppMassTarget, 0.90);
     },
   );
 

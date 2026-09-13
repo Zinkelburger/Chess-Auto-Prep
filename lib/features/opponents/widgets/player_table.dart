@@ -24,12 +24,14 @@ class PlayerTable extends StatefulWidget {
     required this.onRemove,
     this.group,
     this.newPersonId,
+    this.onOpenGames,
   });
   final OpponentStore store;
   final OpponentActions actions;
   final List<PersonRecord> people;
   final Tournament? group;
   final String? newPersonId;
+  final Future<void> Function(AnalysisPlayerInfo)? onOpenGames;
   final Future<void> Function(PersonRecord) onAnalyse;
   final Future<void> Function(PersonRecord) onRemove;
 
@@ -103,27 +105,31 @@ class _PlayerTableState extends State<PlayerTable> {
 
   static const _widths = [
     52.0,
-    250.0,
+    180.0,
     118.0,
-    148.0,
-    148.0,
-    260.0,
-    136.0,
+    150.0,
+    150.0,
+    210.0,
+    160.0,
     82.0,
-    190.0,
+    180.0,
     44.0,
   ];
-  Widget _cell(int index, Widget child) => SizedBox(
-    width: _widths[index],
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-      child: child,
-    ),
-  );
+  Widget _cell(int index, Widget child) => index == 0 && widget.group == null
+      ? const SizedBox.shrink()
+      : SizedBox(
+          width: _widths[index],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            child: child,
+          ),
+        );
 
   @override
   Widget build(BuildContext context) {
-    final width = _widths.reduce((a, b) => a + b);
+    final width =
+        _widths.reduce((a, b) => a + b) -
+        (widget.group == null ? _widths.first : 0);
     return Column(
       children: [
         if (_error != null)
@@ -161,7 +167,7 @@ class _PlayerTableState extends State<PlayerTable> {
                               'USCF ID',
                               'Chess.com accounts',
                               'Lichess accounts',
-                              'Files / study chapters',
+                              'Reference studies',
                               'Games',
                               'Rating',
                               'Notes',
@@ -177,7 +183,9 @@ class _PlayerTableState extends State<PlayerTable> {
                       Expanded(
                         child: widget.people.isEmpty
                             ? const Center(
-                                child: Text('Add players to start your list.'),
+                                child: Text(
+                                  'Add your first player, or paste a list from a spreadsheet.',
+                                ),
                               )
                             : ListView(
                                 children: [
@@ -228,6 +236,7 @@ class _PlayerTableState extends State<PlayerTable> {
     return Container(
       key: Key('opponent-row-${person.id}'),
       decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         border: Border(
           bottom: BorderSide(color: Theme.of(context).dividerColor),
         ),
@@ -349,9 +358,9 @@ class _PlayerTableState extends State<PlayerTable> {
                                 widget.store.person(person.id)!,
                               );
                             }),
-                            child: const Text('Create prep'),
+                            child: const Text('New study'),
                           ),
-                        TextButton(
+                        OutlinedButton(
                           key: Key('player-link-${person.id}'),
                           onPressed: () {
                             if (mounted) {
@@ -388,8 +397,11 @@ class _PlayerTableState extends State<PlayerTable> {
                           : '${sets.length} saved sources',
                       style: AppTextStyles.caption,
                     ),
-                    TextButton(
+                    FilledButton(
                       key: Key('prepare-${person.id}'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
                       onPressed:
                           _busy != null || (!person.hasAccount && sets.isEmpty)
                           ? null
@@ -399,7 +411,13 @@ class _PlayerTableState extends State<PlayerTable> {
                                 widget.store.person(person.id)!,
                               ),
                             ),
-                      child: Text(_busy == person.id ? 'Working…' : 'Prepare'),
+                      child: Text(
+                        _busy == person.id
+                            ? 'Working…'
+                            : widget.group == null
+                            ? 'Analyze games'
+                            : 'Prepare',
+                      ),
                     ),
                     if (sets.isNotEmpty)
                       TextButton(
@@ -412,7 +430,7 @@ class _PlayerTableState extends State<PlayerTable> {
                             );
                           }
                         },
-                        child: const Text('Accounts / files'),
+                        child: const Text('Saved sources'),
                       ),
                   ],
                 ),
@@ -468,10 +486,14 @@ class _PlayerTableState extends State<PlayerTable> {
                   for (final set in sets)
                     OutlinedButton(
                       onPressed: () {
-                        if (mounted) {
-                          Navigator.of(
-                            context,
-                          ).pop(set.copyWith(group: group?.name));
+                        if (!mounted) return;
+                        final info = set.copyWith(group: group?.name);
+                        if (widget.onOpenGames != null) {
+                          unawaited(
+                            _run(person.id, () => widget.onOpenGames!(info)),
+                          );
+                        } else {
+                          Navigator.of(context).pop(info);
                         }
                       },
                       child: Text(

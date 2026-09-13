@@ -135,6 +135,40 @@ BuildTree _probe() {
 }
 
 void main() {
+  test(
+    'bounded analysis overlays older positions without altering their policy',
+    () {
+      final host = _host();
+      final old = host.root.children.first;
+      final probe = _probe();
+      probe.configSnapshot = {'bounded_database': true};
+      probe.root.engineEvalCp = 99;
+      final bundle = GeneratedRepertoire.fromTree(
+        host,
+        playAsWhite: true,
+        probes: [probe],
+      );
+      expect(bundle.fenMap.getCanonical(probe.root.fen), same(probe.root));
+      expect(old.children, isEmpty);
+      expect(old.engineEvalCp, 30);
+    },
+  );
+
+  test(
+    'engine PV round trip preserves evidence without adding policy branches',
+    () {
+      final tree = _host();
+      tree.root.enginePv = ['e2e4', 'c7c5', 'g1f3'];
+      final loaded = ExpectimaxProbeStore.decode(
+        ExpectimaxProbeStore.encode([tree]),
+      ).single;
+      expect(loaded.root.enginePv, ['e2e4', 'c7c5', 'g1f3']);
+      expect(loaded.root.children, hasLength(2));
+      expect(loaded.root.children.first.children, isEmpty);
+      expect(loaded.root.hasExpectimax, isFalse);
+    },
+  );
+
   group('graftProbe', () {
     test('adds the probe below the matching node, rebased', () {
       final host = _host();

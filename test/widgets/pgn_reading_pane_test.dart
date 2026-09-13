@@ -20,6 +20,8 @@ Future<PgnViewerWidgetController> _pump(
   WidgetTester tester, {
   String pgn = _tree,
   double width = 520,
+  bool showReadingOptions = true,
+  VoidCallback? onPaint,
 }) async {
   final controller = PgnViewerWidgetController();
   await tester.pumpWidget(
@@ -28,7 +30,14 @@ Future<PgnViewerWidgetController> _pump(
       home: Scaffold(
         body: SizedBox(
           width: width,
-          child: PgnViewerWidget(pgnText: pgn, controller: controller),
+          child: CustomPaint(
+            foregroundPainter: onPaint == null ? null : _PaintObserver(onPaint),
+            child: PgnViewerWidget(
+              pgnText: pgn,
+              controller: controller,
+              showReadingOptions: showReadingOptions,
+            ),
+          ),
         ),
       ),
     ),
@@ -37,7 +46,260 @@ Future<PgnViewerWidgetController> _pump(
   return controller;
 }
 
+class _PaintObserver extends CustomPainter {
+  final VoidCallback onPaint;
+  _PaintObserver(this.onPaint);
+
+  @override
+  void paint(Canvas canvas, Size size) => onPaint();
+
+  @override
+  bool shouldRepaint(_PaintObserver oldDelegate) => true;
+}
+
 void main() {
+  testWidgets('move navigation anchors immediately across long comments', (
+    tester,
+  ) async {
+    final note = List.filled(
+      80,
+      'A long explanation of this position.',
+    ).join(' ');
+    final controller = await _pump(
+      tester,
+      pgn: '1. e4 {$note} e5 {$note} 2. Nf3 {$note} Nc6 *',
+    );
+    final scroll = tester
+        .widget<SingleChildScrollView>(_scrollView)
+        .controller!;
+    controller.goForward();
+    await tester.pump();
+    final firstOffset = scroll.offset;
+
+    controller.goForward();
+    await tester.pump();
+    final secondOffset = scroll.offset;
+    expect(secondOffset, greaterThan(firstOffset + 500));
+    expect(scroll.position.isScrollingNotifier.value, isFalse);
+
+    // Reversing before an animation could finish must follow the latest move.
+    controller.goBack();
+    await tester.pump();
+    expect(scroll.offset, closeTo(firstOffset, 1));
+    controller.goForward();
+    await tester.pump();
+    expect(scroll.offset, closeTo(secondOffset, 1));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(scroll.offset, closeTo(secondOffset, 1));
+    final active = find.byWidgetPredicate(
+      (w) => w is PgnReadingPassage && w.active,
+    );
+    expect(
+      tester.getTopLeft(active).dy - tester.getTopLeft(_scrollView).dy,
+      closeTo(52, 1),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'offscreen navigation paints the destination in its first frame',
+    (tester) async {
+      final note = List.filled(
+        80,
+        'A long explanation of this position.',
+      ).join(' ');
+      final paintedTops = <double>[];
+      final controller = await _pump(
+        tester,
+        pgn: '1. e4 {$note} e5 {$note} 2. Nf3 {$note} Nc6 *',
+        onPaint: () {
+          final active = find.byWidgetPredicate(
+            (w) => w is PgnReadingPassage && w.active,
+          );
+          if (active.evaluate().isNotEmpty) {
+            paintedTops.add(
+              tester.getTopLeft(active).dy - tester.getTopLeft(_scrollView).dy,
+            );
+          }
+        },
+      );
+      controller.goForward();
+      await tester.pumpAndSettle();
+
+      for (final ply in [2, 3, 2, 1, 3, 1]) {
+        paintedTops.clear();
+        controller.goToMainLineIndex(ply);
+        await tester.pump();
+        expect(paintedTops, isNotEmpty, reason: 'must inspect the first paint');
+        expect(
+          paintedTops,
+          everyElement(closeTo(ply == 1 ? 32 : 52, 1)),
+          reason:
+              'no frame may show the new selection at the old scroll offset',
+        );
+        await tester.pumpAndSettle();
+        expect(paintedTops, everyElement(closeTo(ply == 1 ? 32 : 52, 1)));
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'reading options reposition the current move without navigation',
+    (tester) async {
+      final note = List.filled(
+        80,
+        'A long explanation of this position.',
+      ).join(' ');
+      final controller = await _pump(
+        tester,
+        pgn: '1. e4 {$note} e5 {$note} 2. Nf3 *',
+      );
+      controller.goToMainLineIndex(2);
+      await tester.pumpAndSettle();
+      for (final option in {
+        'Anchor near middle': .35,
+        'Anchor near bottom': .68,
+        'Anchor near top': 0.0,
+      }.entries) {
+        await tester.tap(find.byTooltip('Reading options'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(option.key));
+        await tester.pumpAndSettle();
+        final active = find.byWidgetPredicate(
+          (w) => w is PgnReadingPassage && w.active,
+        );
+        final viewport = tester.getRect(_scrollView);
+        expect(
+          tester.getTopLeft(active).dy - viewport.top,
+          closeTo(option.value == 0 ? 52 : viewport.height * option.value, 1),
+        );
+        expect(controller.mainLineIndex, 2);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('navigation stops an in-flight scroll at the selected move', (
+    tester,
+  ) async {
+    final note = List.filled(
+      80,
+      'A long explanation of this position.',
+    ).join(' ');
+    final controller = await _pump(
+      tester,
+      pgn: '1. e4 {$note} e5 {$note} 2. Nf3 {$note} Nc6 *',
+    );
+    await tester.fling(_scrollView, const Offset(0, -200), 2000);
+    await tester.pump(const Duration(milliseconds: 16));
+    controller.goToMainLineIndex(2);
+    await tester.pump();
+    final scroll = tester
+        .widget<SingleChildScrollView>(_scrollView)
+        .controller!;
+    final anchored = scroll.offset;
+    await tester.pumpAndSettle();
+    expect(scroll.offset, closeTo(anchored, 1));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final width in [320.0, 800.0]) {
+    for (final showReadingOptions in [true, false]) {
+      testWidgets('floating controls never resize the reading area at $width, '
+          'reading options: $showReadingOptions', (tester) async {
+        final controller = await _pump(
+          tester,
+          width: width,
+          showReadingOptions: showReadingOptions,
+        );
+        final viewport = tester.getRect(_scrollView);
+        final forward = find.byIcon(Icons.chevron_right).last;
+        final forwardRect = tester.getRect(forward);
+        void expectStable() {
+          expect(tester.getRect(_scrollView), viewport);
+          expect(tester.getRect(forward), forwardRect);
+          expect(tester.takeException(), isNull);
+        }
+
+        expect(find.byKey(const ValueKey('pgn-branch-picker')), findsNothing);
+        expect(
+          viewport.bottom,
+          closeTo(
+            tester
+                    .getTopLeft(
+                      find.ancestor(
+                        of: forward,
+                        matching: find.byType(IconButton),
+                      ),
+                    )
+                    .dy -
+                4,
+            2,
+          ),
+        );
+        // The fork picker appears after e4 and disappears after e5.
+        for (final ply in [1, 2, 1, 0]) {
+          controller.goToMainLineIndex(ply);
+          await tester.pumpAndSettle();
+          expectStable();
+          expect(
+            find.byKey(const ValueKey('pgn-branch-picker')),
+            ply == 1 ? findsOneWidget : findsNothing,
+          );
+        }
+        final view = tester.widget<PgnMovetextView>(
+          find.byType(PgnMovetextView),
+        );
+        final sicilian = view.variationsByPly[1]!.single;
+        controller.goToVariationNode(sicilian, 1);
+        await tester.pumpAndSettle();
+        expect(find.text('Back to game'), findsOneWidget);
+        expectStable();
+        final nested = sicilian.children.first.children[1];
+        controller.goToVariationNode(nested, 1);
+        await tester.pumpAndSettle();
+        expectStable();
+        controller.focusVariation();
+        await tester.pumpAndSettle();
+        expectStable();
+        await tester.tap(find.text('Back to game'));
+        await tester.pumpAndSettle();
+        expect(controller.inVariation, isFalse);
+        expect(find.text('Back to game'), findsNothing);
+        expectStable();
+      });
+    }
+  }
+
+  testWidgets('a crowded fork scrolls without moving the reading area', (
+    tester,
+  ) async {
+    final controller = await _pump(
+      tester,
+      width: 320,
+      pgn:
+          '1. e4 e5 (1... c5) (1... e6) (1... c6) (1... d5) '
+          '(1... d6) (1... Nf6) (1... g6) (1... a5) 2. Nf3 *',
+    );
+    final viewport = tester.getRect(_scrollView);
+    controller.goForward();
+    await tester.pumpAndSettle();
+    expect(tester.getRect(_scrollView), viewport);
+    final lastChoice = find.descendant(
+      of: find.byKey(const ValueKey('pgn-branch-picker')),
+      matching: find.text('a5'),
+    );
+    await tester.ensureVisible(lastChoice);
+    await tester.tap(lastChoice);
+    await tester.pumpAndSettle();
+    expect(controller.inVariation, isTrue);
+    final view = tester.widget<PgnMovetextView>(find.byType(PgnMovetextView));
+    expect(controller.currentFen, view.variationsByPly[1]!.last.fen);
+    expect(tester.getRect(_scrollView), viewport);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final note in ['', '{A short explanation.}']) {
     testWidgets('a fitting game keeps its title visible with note="$note"', (
       tester,
@@ -270,6 +532,9 @@ void main() {
       findsOneWidget,
     );
     expect(_move('e5'), findsNWidgets(2));
+    await tester.ensureVisible(
+      find.widgetWithText(TextButton, 'Focus variation'),
+    );
     await tester.tap(find.widgetWithText(TextButton, 'Focus variation'));
     await tester.pumpAndSettle();
     expect(
@@ -289,6 +554,9 @@ void main() {
     controller.goForward();
     await tester.pumpAndSettle();
     expect(controller.currentFen, e5.children.first.fen);
+    await tester.ensureVisible(
+      find.widgetWithText(TextButton, 'Return to parent'),
+    );
     await tester.tap(find.widgetWithText(TextButton, 'Return to parent'));
     await tester.pumpAndSettle();
     expect(controller.currentFen, d4.fen);
@@ -358,7 +626,13 @@ void main() {
       expect(_move('e4'), findsOneWidget);
       final headingTop = tester.getTopLeft(_move('e4')).dy;
       expect(headingTop, closeTo(tester.getTopLeft(_scrollView).dy, 2));
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is SingleChildScrollView && w.scrollDirection == Axis.vertical,
+        ),
+        findsOneWidget,
+      );
       expect(
         find.textContaining('Readable prose needs space.', findRichText: true),
         findsOneWidget,

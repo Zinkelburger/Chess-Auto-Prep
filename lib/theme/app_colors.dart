@@ -18,7 +18,7 @@ abstract final class AppColors {
   static const surface = Color(0xFF121212);
 
   /// Cool slate separates engine analysis from the neutral PGN canvas.
-  static const engineSurface = Color(0xFF252D34);
+  static const engineSurface = Color(0xFF1C2329);
 
   static const surfaceElevated = Color(0xFF1E1E1E);
   static const surfaceContainer = Color(0xFF2A2A2A);
@@ -31,6 +31,9 @@ abstract final class AppColors {
 
   /// ColorScheme.secondary — slider tracks, switches, selection chrome.
   static const surfaceHighlight = Color(0xFF606060);
+
+  /// Mid-gray reserve tray keeps both black and white chess pieces visible.
+  static const pocketSurface = onSurfaceDisabled;
 
   // ── Ink hierarchy (text/icons on the dark surfaces) ──────────────────────
 

@@ -54,6 +54,16 @@ void main() {
     expect(controller.hasSavedSidelines, isFalse);
     expect(writes, isEmpty);
     expect(find.text('Comment preview'), findsOneWidget);
+    final previewFen = expected.fen;
+    controller.addEphemeralMove('Nc6');
+    await tester.pumpAndSettle();
+    expected = expected.play(expected.parseSan('Nc6')!);
+    expect(controller.currentFen, expected.fen);
+    expect(writes, isEmpty);
+    expect(controller.hasSavedSidelines, isFalse);
+    controller.goBack();
+    await tester.pumpAndSettle();
+    expect(controller.currentFen, previewFen);
     controller.returnToMainline();
     await tester.pumpAndSettle();
     expect(controller.inVariation, isFalse);

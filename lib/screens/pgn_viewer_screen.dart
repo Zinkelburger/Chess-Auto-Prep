@@ -23,6 +23,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
+import '../core/app_history.dart';
 import '../services/scid/scid_writer.dart';
 import '../utils/open_in_file_manager.dart';
 import '../core/pgn_viewer_controller.dart';
@@ -68,6 +69,7 @@ import '../widgets/fullscreen_game_view.dart';
 import '../widgets/game_analysis_tab.dart';
 import '../core/pgn/pgn_workspace.dart';
 import '../widgets/pgn/pgn_workspace_bar.dart';
+import '../widgets/pgn/pgn_slice_chips.dart';
 import '../widgets/pgn/pgn_database_picker.dart';
 import '../widgets/pgn/pgn_database_panel.dart';
 import '../widgets/pgn/pgn_collection_panel.dart';
@@ -79,6 +81,7 @@ import '../widgets/game_search_dialog.dart';
 import '../widgets/study/add_to_study_flow.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
+import '../widgets/pgn/pgn_opening_label.dart';
 import '../widgets/pgn/pgn_tree_toolbar.dart';
 import '../widgets/pgn/solitaire_status_widgets.dart';
 import '../widgets/pgn_viewer_widget.dart';
@@ -131,6 +134,23 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   List<GameRecord> _filterRecords = [];
   int? _filterRevision;
   String? _filterOriginFen;
+  List<PgnGameEntry>? _filterReturnSource;
+
+  @override
+  bool get _canReturnToFilters =>
+      _filterReturnSource != null &&
+      identical(_filterReturnSource, _controller.allGames) &&
+      _tabController.index == PgnWorkspace.game;
+
+  @override
+  void _returnToFilters() {
+    if (!mounted || !_canReturnToFilters) return;
+    _controller.stopAutoPlay();
+    _tabController.index = PgnWorkspace.filters;
+    setState(() => _filterReturnSource = null);
+    _reclaimFocus();
+  }
+
   final Map<int, PgnDatabasePanelController> _databasePanels = {};
   final Map<int, PgnGameEntry> _referenceGames = {};
   final Map<int, PgnViewerWidgetController> _referenceReaders = {};
@@ -173,12 +193,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (mounted) setState(() {});
   }
 
-  /// Whether the PGN Viewer is the app's visible mode, so that arriving here
-  /// can be told from any other [AppState] change (see [_onAppStateChanged]).
-  bool _isCurrentMode = false;
-
   /// Cached so [dispose] does not [BuildContext.read] after unmount.
   AppState? _appState;
+  VoidCallback? _unregisterHistoryContext;
+  int _navigationRestoreEpoch = 0;
 
   @override
   void initState() {
@@ -216,8 +234,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       if (mounted) {
         final appState = context.read<AppState>();
         _appState = appState;
+        _unregisterHistoryContext = context
+            .read<AppHistory?>()
+            ?.registerContext(AppMode.pgnViewer, _captureNavigationContext);
         appState.addListener(_onAppStateChanged);
-        _isCurrentMode = appState.currentMode == AppMode.pgnViewer;
         // The screen may have been created by the very mode switch that set
         // the pending file (listener not registered yet) — consume it now.
         _consumePendingViewerFile(appState);
@@ -301,7 +321,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _controller.stopAutoPlay();
     if (!mounted) return;
     if (index == PgnWorkspace.filters && _tabController.index != index) {
-      _filterOriginFen = normalizeFen(_controller.currentPosition.fen);
+      if (!identical(_filterReturnSource, _controller.allGames)) {
+        _filterOriginFen = normalizeFen(_controller.currentPosition.fen);
+      }
+      _filterReturnSource = null;
     }
     if (index == _lineTabIndex) _lineTabVisited = true;
     _tabController.index = index;
@@ -314,6 +337,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     _controller.stopAutoPlay();
     _tabController.close(id);
+    if (id == PgnWorkspace.filters) _filterReturnSource = null;
     if (_databasePickerTab == id) _databasePickerTab = null;
     _databasePaths.remove(id);
     _databasePanels.remove(id);
@@ -405,12 +429,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final appState = _appState;
     if (appState == null) return;
     final isCurrent = appState.currentMode == AppMode.pgnViewer;
-    final arrived = isCurrent && !_isCurrentMode;
-    _isCurrentMode = isCurrent;
-    if (!isCurrent) return;
-    if (!_consumePendingViewerFile(appState) && arrived) {
-      _dropHandedOffGame();
+    if (!isCurrent) {
+      _navigationRestoreEpoch++;
+      return;
     }
+    _consumePendingViewerFile(appState);
     _reclaimFocus();
   }
 
@@ -424,23 +447,31 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     return true;
   }
 
-  /// Entering the viewer from the mode menu asks for the viewer itself, not
-  /// for the last game something else sent here: "Review" on a game card
-  /// leaves the whole games cache loaded and focused on one game, and meeting
-  /// that file again — instead of the start screen — reads as the viewer
-  /// having opinions about what you want to look at. So a single-game handoff
-  /// is dropped on the way back in; the file stays in the recent list, which
-  /// is the one click back.
-  ///
-  /// A collection *you* opened here (browse, recent, paste, a study, a sliced
-  /// player-analysis dataset) is your own choice and stays put. So does a game
-  /// whose engine review is still running — you left to let it finish.
-  void _dropHandedOffGame() {
-    if (!_singleGameFocus || _analysisController.isAnalyzing) return;
-    unawaited(_closeFile());
+  VoidCallback _captureNavigationContext() {
+    final restoreCollection = _controller.captureNavigationContext();
+    final selectedTab = _tabController.index;
+    final openTabs = _tabController.openTabs;
+    final singleGame = _singleGameFocus;
+    return () {
+      if (!mounted) return;
+      final epoch = ++_navigationRestoreEpoch;
+      unawaited(() async {
+        final restored = await restoreCollection();
+        if (!mounted || !restored || epoch != _navigationRestoreEpoch) return;
+        _singleGameFocus = singleGame;
+        for (final tab in _tabController.openTabs) {
+          if (!openTabs.contains(tab) && tab < 7) _tabController.close(tab);
+        }
+        for (final tab in openTabs) {
+          _tabController.openInBackground(tab);
+        }
+        _tabController.index = selectedTab;
+      }());
+    };
   }
 
   Future<void> _openFromHandoff(OpenPgnViewer handoff) async {
+    _navigationRestoreEpoch++;
     final gameId = handoff.gameId;
     // Arriving with one game named is a different job from opening a
     // collection: the app bar's slice machinery (player presets, add-filter
@@ -694,6 +725,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void dispose() {
+    _unregisterHistoryContext?.call();
     _appState?.removeListener(_onAppStateChanged);
     windowManager.removeListener(this);
     unawaited(windowManager.setPreventClose(false));
@@ -927,11 +959,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       fenIndex: _controller.fenIndex,
       onApply: (indices, config) {
         if (!mounted || !identical(source, _controller.allGames)) return;
+        _filterReturnSource = null;
         _controller.applySlice(indices, config);
         _showPanel(PgnWorkspace.game);
       },
       onOpenGame: (indices, config, gameIndex) {
         if (!mounted || !identical(source, _controller.allGames)) return;
+        _filterReturnSource = source;
         _controller.applySlice(indices, config);
         _controller.goToGame(
           _controller.filteredGames.indexOf(source[gameIndex]),

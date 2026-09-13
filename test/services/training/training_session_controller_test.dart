@@ -11,7 +11,7 @@ import 'package:chess_auto_prep/services/repertoire_review_service.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:chess_auto_prep/services/training/training_phase.dart';
 import 'package:chess_auto_prep/services/training/training_session_controller.dart';
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess/dartchess.dart' hide File;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
@@ -233,6 +233,55 @@ void main() {
     filePath: repPath(),
     name: 'Rep',
     lastModified: DateTime.now(),
+  );
+
+  test(
+    'whole-folder training keeps same-named chapter line identities separate',
+    () async {
+      final folder = Directory('${tempDir.path}/Course')..createSync();
+      final first = File('${folder.path}/One.pgn')
+        ..writeAsStringSync('1. e4 e5 *');
+      final second = File('${folder.path}/Two.pgn')
+        ..writeAsStringSync('1. e4 e5 *');
+      repService.lines = [
+        _line('shared', ['e4', 'e5']),
+      ];
+      reviewService.entries = [
+        _entry(
+          first.path,
+          'shared',
+          due: DateTime.now().toUtc().add(const Duration(days: 1)),
+        ),
+        _entry(
+          second.path,
+          'shared',
+          due: DateTime.now().toUtc().subtract(const Duration(days: 1)),
+        ),
+      ];
+      final controller = buildController();
+      controller.setRepertoire(
+        RepertoireMetadata(
+          filePath: folder.path,
+          name: 'Course',
+          lastModified: DateTime.now(),
+        ),
+      );
+      await controller.loadRepertoire();
+      expect(controller.error, isNull);
+      expect(controller.lines, hasLength(2));
+      expect(controller.lines.map((line) => line.id).toSet(), hasLength(2));
+      expect(controller.lines.map((line) => line.persistedId), [
+        'shared',
+        'shared',
+      ]);
+      final firstLine = controller.lines.first;
+      final secondLine = controller.lines.last;
+      expect(controller.reviewMap[firstLine.id]!.repertoireId, first.path);
+      expect(controller.reviewMap[secondLine.id]!.repertoireId, second.path);
+      controller.startReviewSession();
+      expect(controller.currentLine!.sourcePath, second.path);
+      controller.dispose();
+    },
   );
 
   group('loadRepertoire', () {
@@ -547,7 +596,7 @@ void main() {
       // Wrong replay attempt: stays in replay with a retry prompt.
       await controller.handleUserMove(_move(uci: 'g1h3', san: 'Nh3'));
       expect(controller.phase, TrainingPhase.replaying);
-      expect(controller.feedback, 'Try again — the move is Nf3');
+      expect(controller.feedback, 'Play Nf3');
 
       // Correct replay: line is finished and awaits a rating.
       await controller.handleUserMove(_move(uci: 'g1f3', san: 'Nf3'));
@@ -1253,7 +1302,7 @@ void main() {
     });
 
     test(
-      'a line failed inside the sitting comes back before it ends',
+      'a corrected line rated Again is not mixed into later lines',
       () async {
         final controller = await loadedController();
         controller.startLearnSession();
@@ -1271,8 +1320,9 @@ void main() {
           due: DateTime.now().toUtc().add(const Duration(days: 1)),
         );
         controller.rebuildQueueAndAdvance();
-        expect(controller.currentLine!.id, 'A', reason: 'the failed line');
-        expect(controller.runComplete, isFalse);
+        expect(controller.currentLine!.id, 'B');
+        expect(controller.runComplete, isTrue);
+        expect(controller.reviewMap['A']!.lastRating, 'again');
         controller.dispose();
       },
     );

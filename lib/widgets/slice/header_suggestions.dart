@@ -21,7 +21,9 @@ class HeaderSuggestions {
   }
 
   List<HeaderSuggestion> _index(String field) {
-    final counts = <String, int>{};
+    final counts = <String, int>{
+      if (field == 'Result') ...{'1-0': 0, '0-1': 0, '1/2-1/2': 0, '*': 0},
+    };
     for (final game in games) {
       // A player appearing on both sides still occurs in just one game.
       final values = field == kPlayerHeaderField

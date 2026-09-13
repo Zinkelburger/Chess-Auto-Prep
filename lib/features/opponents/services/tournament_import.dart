@@ -69,43 +69,9 @@ class TournamentImport {
     var already = 0;
     var newPeople = 0;
     for (final row in list.opponents) {
-      var person = store.matchPerson(
-        uscfId: row.uscfId,
-        chesscom: row.chesscom,
-        lichess: row.lichess,
-        name: row.name,
-      );
-      if (person == null) {
-        person = await store.savePerson(
-          PersonRecord.create(
-            name: row.name,
-            uscfId: row.uscfId,
-            chesscom: row.chesscom,
-            lichess: row.lichess,
-            rating: row.rating,
-            title: row.title,
-            notes: row.note ?? '',
-          ),
-        );
-        newPeople++;
-      } else {
-        // Fill blanks only: the directory is the user's, the list is advice.
-        final filled = person.copyWith(
-          uscfId: person.uscfId ?? row.uscfId,
-          chesscom: person.chesscom ?? row.chesscom,
-          lichess: person.lichess ?? row.lichess,
-          rating: person.rating ?? row.rating,
-          title: person.title ?? row.title,
-        );
-        if (filled.uscfId != person.uscfId ||
-            filled.chesscom != person.chesscom ||
-            filled.lichess != person.lichess ||
-            filled.rating != person.rating ||
-            filled.title != person.title) {
-          person = await store.savePerson(filled);
-        }
-      }
-
+      final before = store.people.length;
+      final person = await importPerson(row);
+      if (store.people.length > before) newPeople++;
       final existing = target.indexOf(person.id);
       final entry = TournamentEntry(
         personId: person.id,
@@ -129,5 +95,48 @@ class TournamentImport {
       newPeople: newPeople,
       warnings: list.warnings,
     );
+  }
+
+  /// Merge a directory row without creating a tournament or group.
+  /// Existing user-entered values win; imports only fill missing fields.
+  Future<PersonRecord> importPerson(OpponentEntry row) async {
+    await store.ensureLoaded();
+    var person = store.matchPerson(
+      uscfId: row.uscfId,
+      chesscom: row.chesscom,
+      lichess: row.lichess,
+      name: row.name,
+    );
+    if (person == null) {
+      person = await store.savePerson(
+        PersonRecord.create(
+          name: row.name,
+          uscfId: row.uscfId,
+          chesscom: row.chesscom,
+          lichess: row.lichess,
+          rating: row.rating,
+          title: row.title,
+          notes: row.note ?? '',
+        ),
+      );
+    } else {
+      // Fill blanks only: the directory is the user's, the list is advice.
+      final filled = person.copyWith(
+        uscfId: person.uscfId ?? row.uscfId,
+        chesscom: person.chesscom ?? row.chesscom,
+        lichess: person.lichess ?? row.lichess,
+        rating: person.rating ?? row.rating,
+        title: person.title ?? row.title,
+      );
+      if (filled.uscfId != person.uscfId ||
+          filled.chesscom != person.chesscom ||
+          filled.lichess != person.lichess ||
+          filled.rating != person.rating ||
+          filled.title != person.title) {
+        person = await store.savePerson(filled);
+      }
+    }
+
+    return person;
   }
 }

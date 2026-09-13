@@ -121,6 +121,8 @@ class PgnTreeToolbar extends StatelessWidget {
                             controller.recomputeAndApplyConfig(
                               SliceConfig(
                                 positionInput: config.positionInput,
+                                additionalPositions: config.additionalPositions,
+                                matchAny: config.matchAny,
                                 headerFilters: config.headerFilters
                                     .where(
                                       (filter) =>

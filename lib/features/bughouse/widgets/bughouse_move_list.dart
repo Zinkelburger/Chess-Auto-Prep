@@ -40,9 +40,9 @@ class BughouseBoardMovetext extends StatelessWidget {
   ///
   /// The board above it is sized from the height left over (see the pane's
   /// `_Boards.fit`), so a movetext that grew with the game would shrink the
-  /// boards mid-game or push the controls off the bottom. Three lines, and it
+  /// boards mid-game or push the controls off the bottom. Two readable lines; it
   /// scrolls inside itself after that.
-  static const double height = 60;
+  static const double height = 68;
 
   @override
   Widget build(BuildContext context) {
@@ -54,13 +54,14 @@ class BughouseBoardMovetext extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.pgnSurface,
+        color: AppColors.surfaceContainer,
         borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.outline),
       ),
       child: entries.isEmpty
-          ? const Text(
+          ? Text(
               'No moves on this board yet.',
-              style: AppTextStyles.caption,
+              style: AppTextStyles.muted.copyWith(fontSize: 16),
             )
           : SingleChildScrollView(
               child: Wrap(
@@ -76,6 +77,7 @@ class BughouseBoardMovetext extends StatelessWidget {
                       Text(
                         entry.ply.numberLabel,
                         style: AppTextStyles.monoDense.copyWith(
+                          fontSize: 16,
                           color: AppColors.pgnMoveNumber,
                         ),
                       ),
@@ -117,6 +119,7 @@ class _MoveChip extends StatelessWidget {
         child: Text(
           ply.san,
           style: AppTextStyles.monoDense.copyWith(
+            fontSize: 16,
             color: selected ? AppColors.pgnMoveCurrentFg : AppColors.pgnMove,
           ),
         ),
@@ -159,6 +162,7 @@ class BughouseLineControls extends StatelessWidget {
           child: Text(
             '${history.cursor} / ${history.length}',
             style: AppTextStyles.monoDense.copyWith(
+              fontSize: 16,
               color: AppColors.onSurfaceMuted,
             ),
           ),
@@ -259,11 +263,11 @@ class _CopyTableMenu extends StatelessWidget {
     // Sized to the nav buttons beside it: a popup button's default padding
     // is larger than an icon button's, which stood this one proud of the row.
     return SizedBox(
-      width: 34,
-      height: 32,
+      width: 40,
+      height: 36,
       child: PopupMenuButton<int>(
         icon: const Icon(Icons.copy),
-        iconSize: 18,
+        iconSize: 22,
         padding: EdgeInsets.zero,
         tooltip: 'Copy the table',
         onSelected: (i) => entries[i].onRun(),
@@ -296,8 +300,10 @@ class _NavButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       icon: Icon(icon),
-      iconSize: 18,
-      visualDensity: VisualDensity.compact,
+      iconSize: 22,
+      visualDensity: VisualDensity.standard,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 40, height: 36),
       tooltip: tooltip,
       onPressed: onPressed,
     );

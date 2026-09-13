@@ -167,7 +167,7 @@ void main() {
       'USCF ID',
       'Chess.com accounts',
       'Lichess accounts',
-      'Files / study chapters',
+      'Reference studies',
       'Games',
       'Notes',
     ]) {

@@ -9,6 +9,7 @@ mixin _PgnViewerMoveEdits on _PgnViewerWidgetStateBase {
   // ── Adding user moves ──
 
   void _addAnalysisMove(String san) {
+    if (!mounted) return;
     // Editable file readers retain board moves in either mode. Other hosts
     // can still use scratch analysis; solitaire always remains temporary.
     final editing =
@@ -16,15 +17,25 @@ mixin _PgnViewerMoveEdits on _PgnViewerWidgetStateBase {
         widget.onCommentsChanged != null &&
         _m.reveal == null;
 
-    // While an inline comment-preview is active, _currentPosition is the
-    // preview board (not the mainline tail), so the mainline fast paths are
-    // off the table: appending `san` there would splice a move that is
-    // illegal from the real last position into the persisted mainline.
-    final kind = _m.addMove(
-      san,
-      editing: editing,
-      allowMainline: !_inlineActive,
-    );
+    if (_inlineActive) {
+      // Reject bad input before changing either the preview or the move tree.
+      if (_currentPosition.parseSan(san) == null) return;
+      final baseIndex = _inlineAnchorFen == null
+          ? _inlineBaseIndex
+          : _m.mainlineIndexOfFen(_inlineAnchorFen!);
+      final attached =
+          baseIndex != null &&
+          _m.materializePreviewLine(baseIndex, _inlineSans, _inlineCursor);
+      if (!attached) {
+        // An independent comment diagram has no legal parent in this game.
+        // Keep its continuation in the preview, never serialize it as a RAV
+        // under an unrelated mainline position.
+        _inlineSans = [..._inlineSans.take(_inlineCursor), san];
+        _setInlineCursor(_inlineCursor + 1);
+        return;
+      }
+    }
+    final kind = _m.addMove(san, editing: editing, allowMainline: true);
     if (kind == ViewerMoveKind.illegal) return;
 
     setState(_clearInlineLine);

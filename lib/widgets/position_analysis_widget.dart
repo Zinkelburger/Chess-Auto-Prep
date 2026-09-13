@@ -3,7 +3,7 @@
 /// Left: the ranked lists that drive the board — Positions · Holes, chosen
 /// with a selector that always shows the report's finding count.
 /// Centre: chess board. Right: engine bar + a tabbed pane of views onto the
-/// *current* position (Move Tree · Games · PGN · Analysis), four tabs so none
+/// *current* position (Move Tree · Games · Try moves), three tabs so none
 /// of them can be pushed off a scrolling tab bar.
 ///
 /// The study / puzzle / PGN-viewer handoffs are exposed to the host screen's
@@ -14,7 +14,7 @@
 /// [_navigateTo] so the board, move tree, games list and PGN viewer always
 /// stay in sync.
 ///
-/// The **Analysis tab** holds a scratch [MoveTree] (same editor as Study
+/// The **Try moves tab** holds a scratch [MoveTree] (same editor as Study
 /// mode): off-book board moves land there as variations instead of
 /// dead-ending, engine PV clicks append there, and the result can be saved
 /// to a study chapter.
@@ -59,7 +59,7 @@ part 'position_analysis_widget.scratch.dart';
 part 'position_analysis_widget.handoffs.dart';
 part 'position_analysis_widget.navigation.dart';
 
-const int _kAnalysisTabIndex = 3;
+const int _kAnalysisTabIndex = 2;
 
 /// What the left column is listing. Both are "pick an item, the board jumps
 /// there" lists, which is why they share one column instead of being
@@ -241,7 +241,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   void initState() {
     super.initState();
     widget.actions?._attach(this);
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_onTabChanged);
   }
 
@@ -295,6 +295,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
   /// Every settled tab change rebuilds, so the arrow-key bindings (whose
   /// meaning depends on the active tab) are re-read.
   void _onTabChanged() {
+    if (!mounted) return;
     if (_tabController.indexIsChanging) return;
     if (_tabController.index == _kAnalysisTabIndex && _currentFen != null) {
       final path = _ensureScratchPathForFen(_currentFen!);
@@ -454,7 +455,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
       ),
     ],
     // PGN tab: arrow keys navigate the PGN.
-    if (_tabController.index == 2) ...[
+    if (_tabController.index == 1 && _selectedGame != null) ...[
       ...KeyBinding.forShortcut(
         AppShortcut.backOneMove,
         'Back one move',
@@ -611,15 +612,14 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
           previewFlipped: widget.playerIsWhite == false,
         ),
         const Divider(height: 1),
-        // Four tabs, all of them views of the position you are on, so they
+        // Three tabs, all of them views of the position you are on, so they
         // fit without scrolling — no label can be pushed off the edge.
         TabBar(
           controller: _tabController,
           tabs: const [
             Tab(text: 'Move Tree'),
             Tab(text: 'Games'),
-            Tab(text: 'PGN'),
-            Tab(text: 'Analysis'),
+            Tab(text: 'Try moves'),
           ],
           labelPadding: const EdgeInsets.symmetric(horizontal: 4),
         ),
@@ -628,12 +628,7 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
             controller: _tabController,
             children: [
               _buildMoveTreeTab(),
-              GamesListWidget(
-                games: _currentGames,
-                currentFen: _currentFen,
-                onGameSelected: _onGameSelected,
-              ),
-              _buildPgnTab(),
+              _buildGamesTab(),
               _buildScratchTab(),
             ],
           ),
@@ -683,6 +678,36 @@ class _PositionAnalysisWidgetState extends _PositionAnalysisWidgetStateBase
             onViewGamePgn: _onGameSelected,
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildGamesTab() {
+    if (_selectedGame == null) {
+      return GamesListWidget(
+        games: _currentGames,
+        currentFen: _currentFen,
+        onGameSelected: _onGameSelected,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: OutlinedButton.icon(
+              key: const Key('back-to-games'),
+              onPressed: () {
+                if (mounted) setState(() => _selectedGame = null);
+              },
+              icon: const Icon(Icons.arrow_back, size: 16),
+              label: const Text('Back to games'),
+            ),
+          ),
+        ),
+        Expanded(child: _buildPgnTab()),
       ],
     );
   }

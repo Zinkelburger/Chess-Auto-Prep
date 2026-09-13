@@ -94,6 +94,11 @@ class GeneratedRepertoire {
     for (final probe in probes) {
       fenMap.populate(probe.root);
     }
+    for (final probe in probes) {
+      if (probe.configSnapshot['bounded_database'] == true) {
+        fenMap.overlay(probe.root);
+      }
+    }
     return fenMap..freeze();
   }
 

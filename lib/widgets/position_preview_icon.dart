@@ -15,16 +15,44 @@ import 'chess_board_widget.dart';
 ///
 /// [inputGetter] is called on each hover to obtain the current text input;
 /// [bestEffortPositionFromInput] resolves it to a renderable position.
-class PositionPreviewIcon extends StatefulWidget {
+class PositionPreviewIcon extends StatelessWidget {
   final String Function() inputGetter;
 
   const PositionPreviewIcon({super.key, required this.inputGetter});
 
   @override
-  State<PositionPreviewIcon> createState() => _PositionPreviewIconState();
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 4),
+    child: PositionHoverPreview(
+      inputGetter: inputGetter,
+      child: const Tooltip(
+        message: 'Preview position',
+        child: Icon(
+          Icons.visibility_outlined,
+          size: 16,
+          color: AppColors.onSurfaceSoft,
+        ),
+      ),
+    ),
+  );
 }
 
-class _PositionPreviewIconState extends State<PositionPreviewIcon> {
+/// Shows a board while hovering a position's text or another supplied target.
+class PositionHoverPreview extends StatefulWidget {
+  final String Function() inputGetter;
+  final Widget child;
+
+  const PositionHoverPreview({
+    super.key,
+    required this.inputGetter,
+    required this.child,
+  });
+
+  @override
+  State<PositionHoverPreview> createState() => _PositionHoverPreviewState();
+}
+
+class _PositionHoverPreviewState extends State<PositionHoverPreview> {
   OverlayEntry? _overlayEntry;
 
   static const double _boardSize = 200;
@@ -34,6 +62,13 @@ class _PositionPreviewIconState extends State<PositionPreviewIcon> {
   void dispose() {
     _removeOverlay();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(PositionHoverPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Editing or changing the source must never leave an old board floating.
+    _removeOverlay();
   }
 
   void _showOverlay() {
@@ -96,21 +131,9 @@ class _PositionPreviewIconState extends State<PositionPreviewIcon> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: MouseRegion(
-        onEnter: (_) => _showOverlay(),
-        onExit: (_) => _removeOverlay(),
-        child: const Tooltip(
-          message: 'Preview position',
-          child: Icon(
-            Icons.visibility_outlined,
-            size: 16,
-            color: AppColors.onSurfaceSoft,
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => _showOverlay(),
+    onExit: (_) => _removeOverlay(),
+    child: widget.child,
+  );
 }

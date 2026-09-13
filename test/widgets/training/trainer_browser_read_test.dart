@@ -53,8 +53,16 @@ void main() {
     expect(read?.map((l) => l.id), ['a', 'b']);
   });
 
-  testWidgets('no Read button on the chapter list', (tester) async {
-    await _pump(tester, activeChapter: null, onReadLines: (_) {});
-    expect(find.text('Read'), findsNothing);
+  testWidgets('Read opens all lines without requiring a chapter', (
+    tester,
+  ) async {
+    List<RepertoireLine>? read;
+    await _pump(
+      tester,
+      activeChapter: null,
+      onReadLines: (lines) => read = lines,
+    );
+    await tester.tap(find.text('Read'));
+    expect(read?.map((line) => line.id), ['a', 'b', 'c']);
   });
 }

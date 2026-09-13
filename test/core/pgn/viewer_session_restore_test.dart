@@ -63,6 +63,46 @@ void main() {
   });
 
   test(
+    'OR and multiple positions survive reopen, chip removal and presets',
+    () async {
+      final first = make();
+      await first.loadFile(path);
+      const config = SliceConfig(
+        matchAny: true,
+        positionInput: '1. c4',
+        additionalPositions: ['1. e4', '1. d4'],
+        headerFilters: [
+          HeaderFilterConfig(
+            field: 'Event',
+            mode: MatchMode.exact,
+            value: 'Game 0',
+          ),
+        ],
+      );
+      await first.recomputeAndApplyConfig(config);
+      await first.persistSliceConfig(config);
+      final reopened = make();
+      await reopened.loadFile(path);
+      expect(reopened.filteredGames, hasLength(40));
+      expect(reopened.activeSliceConfig.toJsonString(), config.toJsonString());
+      await reopened.removeSliceChip(1);
+      expect(reopened.filteredGames, hasLength(1));
+      expect(reopened.activeSliceConfig.additionalPositions, ['1. d4']);
+      expect(reopened.activeSliceConfig.matchAny, isTrue);
+      await reopened.applySlicePreset(
+        const HeaderFilterConfig(
+          field: 'Black',
+          mode: MatchMode.exact,
+          value: 'Opponent 1',
+        ),
+      );
+      expect(reopened.filteredGames, hasLength(2));
+      expect(reopened.activeSliceConfig.additionalPositions, ['1. d4']);
+      expect(reopened.activeSliceConfig.matchAny, isTrue);
+    },
+  );
+
+  test(
     'opening detection never writes staged edits in manual-save mode',
     () async {
       final c = make()..setAutoSave(false);

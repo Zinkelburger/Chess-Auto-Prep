@@ -55,30 +55,93 @@ enum PostBookContinuation {
   };
 }
 
-/// How much per-move detail an export carries.
-enum MoveAnnotationDetail {
-  /// Bare movetext.
-  none,
+/// Independently selected PGN annotations. The three old preset names remain
+/// readable so saved builds and presets retain their explicit choices.
+class MoveAnnotationDetail {
+  const MoveAnnotationDetail({
+    this.evaluations = false,
+    this.expectimax = false,
+    this.probabilities = false,
+    this.explanations = false,
+    this.extraMetrics = false,
+  });
 
-  /// Opponent move likelihood only — the historical default.
-  likelihood,
+  final bool evaluations;
+  final bool expectimax;
+  final bool probabilities;
+  final bool explanations;
+  final bool extraMetrics;
 
-  /// Everything available: eval, ease, practical score, recency.
-  full;
+  static const none = MoveAnnotationDetail();
+  static const likelihood = MoveAnnotationDetail(
+    probabilities: true,
+    explanations: true,
+  );
+  static const full = MoveAnnotationDetail(
+    evaluations: true,
+    expectimax: true,
+    probabilities: true,
+    explanations: true,
+    extraMetrics: true,
+  );
+  static const values = [none, likelihood, full];
 
-  bool get emitsAnything => this != MoveAnnotationDetail.none;
-  bool get emitsMetrics => this == MoveAnnotationDetail.full;
+  bool get emitsAnything => _mask != 0;
+  bool get emitsMetrics => extraMetrics;
+  int get _mask =>
+      (evaluations ? 1 : 0) |
+      (expectimax ? 2 : 0) |
+      (probabilities ? 4 : 0) |
+      (explanations ? 8 : 0) |
+      (extraMetrics ? 16 : 0);
 
-  static MoveAnnotationDetail parse(String? name) =>
-      MoveAnnotationDetail.values.firstWhere(
-        (d) => d.name == name,
-        orElse: () => MoveAnnotationDetail.likelihood,
-      );
+  String get name => this == none
+      ? 'none'
+      : this == likelihood
+      ? 'likelihood'
+      : this == full
+      ? 'full'
+      : 'custom:$_mask';
 
-  /// Restore the setting from the two booleans that preceded this enum, so
-  /// presets and paused builds saved before the change still load.
+  static MoveAnnotationDetail parse(String? name) {
+    for (final preset in values) {
+      if (preset.name == name) return preset;
+    }
+    final mask = name != null && name.startsWith('custom:')
+        ? int.tryParse(name.substring(7))
+        : null;
+    if (mask == null || mask < 0 || mask > 31) return none;
+    return MoveAnnotationDetail(
+      evaluations: mask & 1 != 0,
+      expectimax: mask & 2 != 0,
+      probabilities: mask & 4 != 0,
+      explanations: mask & 8 != 0,
+      extraMetrics: mask & 16 != 0,
+    );
+  }
+
+  MoveAnnotationDetail copyWith({
+    bool? evaluations,
+    bool? expectimax,
+    bool? probabilities,
+    bool? explanations,
+    bool? extraMetrics,
+  }) => MoveAnnotationDetail(
+    evaluations: evaluations ?? this.evaluations,
+    expectimax: expectimax ?? this.expectimax,
+    probabilities: probabilities ?? this.probabilities,
+    explanations: explanations ?? this.explanations,
+    extraMetrics: extraMetrics ?? this.extraMetrics,
+  );
+
   static MoveAnnotationDetail fromLegacyFlags({required bool annotate}) =>
-      annotate ? MoveAnnotationDetail.likelihood : MoveAnnotationDetail.none;
+      annotate ? likelihood : none;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MoveAnnotationDetail && other._mask == _mask;
+  @override
+  int get hashCode => _mask.hashCode;
 }
 
 class MoveAnnotation {
@@ -150,9 +213,8 @@ class MoveAnnotation {
 
   /// Free text emitted ahead of the `[%…]` tokens, for the rare move that
   /// needs a sentence rather than a number — currently the hand-off from
-  /// prepared theory to a raw engine continuation. Survives at any detail
-  /// level above [MoveAnnotationDetail.none], because a reader who has
-  /// turned the metrics off still needs to know where preparation stopped.
+  /// prepared theory to a raw engine continuation. Included only when
+  /// [MoveAnnotationDetail.explanations] is enabled.
   final String? note;
 
   /// Set on the last move of a line that ends by transposing into a
@@ -309,6 +371,7 @@ class MoveAnnotation {
         gameCount: gameCount,
         practicalScore: practicalScore,
         evalCp: evalCp,
+        expectimaxValue: expectimaxValue,
         opponentEase: opponentEase,
         myEase: myEase,
         isOnlyMove: isOnlyMove,
@@ -352,6 +415,7 @@ class MoveAnnotation {
       gameCount: gameCount,
       practicalScore: practicalScore,
       evalCp: evalCp,
+      expectimaxValue: expectimaxValue,
       opponentEase: opponentEase,
       myEase: myEase,
       isOnlyMove: isOnlyMove,
@@ -417,28 +481,33 @@ class MoveAnnotation {
     if (!detail.emitsAnything || isEmpty) return null;
 
     final tokens = <String>[];
-    if (note != null && note!.isNotEmpty) tokens.add(note!);
-    // Prose survives at every emitting level, like [note]: a reader who has
-    // switched the metrics off still wants to know a move is forced.
+    if (detail.explanations && note != null && note!.isNotEmpty) {
+      tokens.add(note!);
+    }
+    // Explanations are independent of the optional numeric annotations.
     final why = explanation;
-    if (why.isNotEmpty) tokens.add(why);
+    if (detail.explanations && why.isNotEmpty) tokens.add(why);
     // Machine-readable twin of the transposition note; survives like it.
-    if (transposesTo != null) {
+    if (detail.explanations && transposesTo != null) {
       tokens.add('[%transposes ${transposesTo!.join(' ')}]');
     }
-    if (likelihood != null && likelihoodSource != null) {
+    if (detail.probabilities &&
+        likelihood != null &&
+        likelihoodSource != null) {
       tokens.add(
         '[%${likelihoodSource!.pgnTag} ${likelihood!.toStringAsFixed(3)}]',
       );
     }
 
+    if (detail.evaluations && evalCp != null) {
+      tokens.add('[%eval ${_formatPawns(evalCp!)}]');
+    }
+    if (detail.expectimax && expectimaxValue != null) {
+      tokens.add(
+        '[%expectimax ${_formatPawns(expectedCpFromWinProb(expectimaxValue!))}]',
+      );
+    }
     if (detail.emitsMetrics) {
-      if (evalCp != null) tokens.add('[%eval ${_formatPawns(evalCp!)}]');
-      if (expectimaxValue != null) {
-        tokens.add(
-          '[%expectimax ${_formatPawns(expectedCpFromWinProb(expectimaxValue!))}]',
-        );
-      }
       if (isOnlyMove) tokens.add('[%onlyMove]');
       if (myEase != null) {
         tokens.add('[%myEase ${myEase!.toStringAsFixed(2)}]');

@@ -100,6 +100,8 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
 
   if (node.fen.isNotEmpty) obj['fen'] = node.fen;
 
+  if (node.enginePv.isNotEmpty) obj['engine_pv'] = node.enginePv;
+
   if (node.hasEngineEval) {
     obj['engine_eval_cp'] = node.engineEvalCp!;
   }
@@ -263,6 +265,8 @@ BuildTreeNode _nodeFromJson(
   node.terminalValue = (obj['terminal_value'] as num?)?.toDouble();
   node.valueLower = (obj['value_lower'] as num?)?.toDouble() ?? 0;
   node.valueUpper = (obj['value_upper'] as num?)?.toDouble() ?? 1;
+  node.enginePv =
+      (obj['engine_pv'] as List?)?.whereType<String>().toList() ?? const [];
   if (obj.containsKey('engine_eval_cp')) {
     node.engineEvalCp = (obj['engine_eval_cp'] as num).toInt();
   }

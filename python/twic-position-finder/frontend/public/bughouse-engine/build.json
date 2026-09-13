@@ -1,0 +1,16 @@
+{
+  "source": "https://github.com/Zinkelburger/hivemind.git",
+  "revision": "5508ba9daf4164e48a8a8a9b39e101efdc60e97a",
+  "emscripten": "4.0.15",
+  "sha256": {
+    "hivemind.mjs": "a43a2fa2de7d170b49514e4044ebe79820352bd6fe74f8778236d44010b2e952",
+    "hivemind.wasm": "4efcb701ab43a67d7d675f05a1b93dbca386721cd5edf4a4e4757da220260184",
+    "hivemind-source.tar.gz": "3bb09bee3fca41ea69c8c36e109b2e136f51a86191470cfaa362354d4b5e6cf1"
+  },
+  "bridge_sha256": {
+    "CMakeLists.txt": "7633f9a0623cacc3265b0020e53b3ca2b4e83b7d483cc685dead040454d6a372",
+    "thread_web.cc": "e5f3a9a692c3d0367fecdb81f4e5087a2d7e600fe989f92f1f9c7f1f4302fa93",
+    "engine_web.cc": "53896306b676525ee834fa753f75477da7afae833bc41e47ec3da9cc9a2b20b5",
+    "bridge.cc": "bb2612087f9da6ed1e18d80d50c323a51b7b73a7aee5dd6ed72583edd587023a"
+  }
+}

@@ -5,6 +5,7 @@ import '../../../utils/san_display.dart';
 import '../models/tactics_position.dart';
 import '../../../theme/app_colors.dart';
 import '../../../widgets/common/list_search_field.dart';
+import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
 import 'puzzle_stats_display.dart';
 import 'tactics_browse_filter.dart';

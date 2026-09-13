@@ -288,7 +288,7 @@ $moves''';
       await review(game('mated3', moves: '1. e4 e5 *'));
       expect(
         annotated[key('mated3')],
-        '1. e4 \$4 { [%eval #-3,$kDepth] [%pv e4] } 1... e5 *',
+        '1. e4 \$4 { [%eval #-3,$kDepth] [%bestline e4] } ( 1. e4 ) 1... e5 *',
       );
 
       // As Black with a mate in two, my first move of it reads #-1 in the
@@ -341,7 +341,7 @@ $moves''';
         annotated[key('foolwhite')],
         '1. f3 { [%eval -0.30,$kDepth] [%pv e4] } '
         'e5 { [%eval -0.30,$kDepth] [%pv e5] } '
-        '2. g4 \$4 { [%eval #-1,$kDepth] [%pv Nc3] } 2... Qh4# 0-1',
+        '2. g4 \$4 { [%eval #-1,$kDepth] [%bestline Nc3] } ( 2. Nc3 ) 2... Qh4# 0-1',
       );
       // The shared cache is centipawns-only: the mated position is not
       // filed, the others are, White-normalized.

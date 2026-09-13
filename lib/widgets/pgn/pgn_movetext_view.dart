@@ -226,8 +226,7 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
     var forceBlackEllipsis = false;
 
     // Root style for RichText runs of mainline moves; comments/variations
-    // use their own styles via [PgnTextStyles]. Weight-free so prose spans
-    // don't inherit the mainline's semibold.
+    // use their own styles via [PgnTextStyles].
     final baseStyle = PgnTextStyles.rowRootAt(0);
 
     void flushSpans() {
@@ -286,16 +285,21 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       }
     }
 
+    final decoratedRoots = <int>{};
+
     /// Keep the verdict and suggested line together, inset from the game and
     /// with enough space below to clearly resume the played moves.
     void emitEvalNote(_EvalNote note, int moveIndex) {
-      final spans = [
-        ..._evalNoteSpans(note),
-        if (note.pv.isNotEmpty) ...[
-          const TextSpan(text: '\n'),
-          ..._bestLineSpans(view, note.pv, moveIndex),
-        ],
-      ];
+      final root = note.pv.isEmpty
+          ? null
+          : view.variationsByPly[moveIndex]
+                ?.where(
+                  (node) =>
+                      node.san == note.pv.first &&
+                      (view.reveal?.isNodeVisible(node, moveIndex) ?? true),
+                )
+                .firstOrNull;
+      if (root != null) decoratedRoots.add(root.id);
       emitFullWidthRow(
         Container(
           margin: const EdgeInsets.fromLTRB(20, 6, 0, 14),
@@ -310,8 +314,31 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
               ),
             ),
           ),
-          child: RichText(
-            text: TextSpan(style: PgnTextStyles.commentAt(0), children: spans),
+          child: Column(
+            key: ValueKey('pgn-analysis-line-$moveIndex'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              RichText(
+                text: TextSpan(
+                  style: PgnTextStyles.commentAt(0),
+                  children: _evalNoteSpans(note),
+                ),
+              ),
+              if (root != null)
+                _buildVariationDocument(
+                  view,
+                  root,
+                  ply: moveIndex,
+                  branchPly: moveIndex,
+                  depth: 1,
+                  branchVisibility: _branchVisibility,
+                  onToggleBranch: _toggleBranch,
+                  leadingLabel: 'Best: ',
+                  nodeVisible: view.reveal == null
+                      ? null
+                      : (node) => view.reveal!.isNodeVisible(node, moveIndex),
+                ),
+            ],
           ),
         ),
         vertical: 0,
@@ -327,9 +354,9 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       final inline = _buildInlineVariationAtPly(
         view,
         ply,
-        nodeVisible: reveal == null
-            ? null
-            : (node) => reveal.isNodeVisible(node, ply),
+        nodeVisible: (node) =>
+            !decoratedRoots.contains(node.id) &&
+            (reveal?.isNodeVisible(node, ply) ?? true),
       );
       if (inline != null) {
         spans.addAll(inline);
@@ -338,9 +365,9 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       final rows = _buildVariationRowsAtPly(
         view,
         ply,
-        nodeVisible: reveal == null
-            ? null
-            : (node) => reveal.isNodeVisible(node, ply),
+        nodeVisible: (node) =>
+            !decoratedRoots.contains(node.id) &&
+            (reveal?.isNodeVisible(node, ply) ?? true),
         branchVisibility: _branchVisibility,
         onToggleBranch: _toggleBranch,
       );
@@ -435,11 +462,8 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       // The current move keeps the mainline's weight and size; only the pill
       // changes, so navigating never reflows the wrapped movetext.
       final moveStyle = isCurrentMove
-          ? PgnTextStyles.moveAt(
-              0,
-              quiet: !annotated,
-            ).copyWith(color: AppColors.pgnMoveCurrentFg)
-          : PgnTextStyles.moveAt(0, quiet: !annotated);
+          ? PgnTextStyles.moveAt(0).copyWith(color: AppColors.pgnMoveCurrentFg)
+          : PgnTextStyles.moveAt(0);
 
       // Build SAN + NAG text (always shown — annotations survive view mode).
       // Every NAG, not just the six editable quality glyphs: `⩲`, `∞`, `→` and

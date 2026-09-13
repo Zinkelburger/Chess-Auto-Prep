@@ -111,7 +111,7 @@ abstract class _GenerationConfigFormStateBase
   late final TextEditingController _engineTailCtrl = _ctrl('6');
 
   bool _rankLinesByImportance = true;
-  MoveAnnotationDetail _annotationDetail = MoveAnnotationDetail.full;
+  MoveAnnotationDetail _annotationDetail = MoveAnnotationDetail.none;
 
   bool _organizeIntoChapters = true;
   bool _chaptersByEco = false;

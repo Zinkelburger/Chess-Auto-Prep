@@ -439,7 +439,7 @@ class CourseComposer {
   /// see from the movetext: everything here is real preparation, it is just
   /// too close to the mainline above to be worth quizzing separately.
   String? _foldComment(FoldedLine fold) {
-    if (!config.annotationDetail.emitsAnything) return null;
+    if (!config.annotationDetail.explanations) return null;
     const base = 'Same idea as the mainline';
     // A reach that rounds to 0.0% says nothing; "rare" is the honest reading
     // of it, and a third decimal place would only look precise.
@@ -585,9 +585,7 @@ class CourseComposer {
         startMoveNumber: startMoveNumber,
         result: result,
       ),
-      // `likelihood` rather than `none`: it writes notes and nothing else
-      // here (model games carry no metrics), and `none` would drop the note.
-      detail: MoveAnnotationDetail.likelihood,
+      detail: config.annotationDetail,
     );
   }
 

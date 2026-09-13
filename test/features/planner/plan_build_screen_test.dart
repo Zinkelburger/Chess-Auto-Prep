@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/services/opening_catalog.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/features/planner/models/plan_models.dart';
 import 'package:chess_auto_prep/features/planner/services/eco_trie.dart';
@@ -172,13 +173,13 @@ void main() {
 
     // Start screen: root position only, moves the board was on, and the
     // choice of what to walk — the book by default, or your games.
-    expect(find.text('Where should this start?'), findsOneWidget);
+    expect(find.text('Starting positions'), findsOneWidget);
     expect(find.text('1.d4 d5 2.c4'), findsWidgets);
     expect(find.text('Opening book'), findsOneWidget);
     expect(find.text('My games'), findsOneWidget);
     expect(find.text('Prefer lines I play in my games'), findsNothing);
     // Nothing else competes for attention on this screen.
-    expect(find.textContaining('replies'), findsNothing);
+    expect(find.textContaining('Reply coverage'), findsNothing);
     expect(find.textContaining('rating'), findsNothing);
 
     // Retired arrow shortcuts leave the setup unchanged.
@@ -248,6 +249,131 @@ void main() {
       expect(builds, contains('d4 d5 c4 e6 $reply'), reason: reply);
     }
     expect(result.plan.chapters.length, lessThan(builds.length));
+  });
+
+  testWidgets(
+    'multiple named positions can skip the quiz and return a ChessDB batch',
+    (tester) async {
+      final holder = <PlanBuildResult?>[null];
+      await pumpPlanner(tester, holder);
+      final input = find.byKey(const ValueKey('plan-starting-lines'));
+      await tester.enterText(
+        input,
+        'Main KID | 1.d4 Nf6 2.c4 g6 3.Nc3 Bg7 4.e4 d6\nFianchetto KID | 1.d4 Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 d6\nLondon | 1.d4 Nf6 2.Bf4 d5',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('plan-preview-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('1.d4 Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 d6'), findsOneWidget);
+      await tester.ensureVisible(find.text('Use these positions'));
+      await tester.tap(find.text('Use these positions'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Review & build'));
+      await tester.tap(find.text('Review & build'));
+      await tester.pumpAndSettle();
+      expect(find.text('3 chapters to create'), findsOneWidget);
+      await tester.tap(find.text('Edit starting lines'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(input).controller!.text,
+        contains('Fianchetto KID'),
+      );
+      await tester.ensureVisible(find.text('Review & build'));
+      await tester.tap(find.text('Review & build'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Create 3 & generate'));
+      await tester.pumpAndSettle();
+      final result = holder.single!;
+      expect(result.config.buildMode, BuildMode.chessDbBook);
+      expect(result.plan.isWhite, isFalse);
+      expect(result.plan.chapters.map((c) => c.name), [
+        'Main KID',
+        'Fianchetto KID',
+        'London',
+      ]);
+      expect(result.plan.chapters.map((c) => c.points.single.moves.length), [
+        8,
+        8,
+        4,
+      ]);
+    },
+  );
+
+  testWidgets(
+    'adding and removing a board starting position preserves the other line',
+    (tester) async {
+      await pumpPlanner(tester, <PlanBuildResult?>[null]);
+      await tester.tap(find.byKey(const ValueKey('plan-add-start')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ChoiceChip, '1.e4'));
+      await tester.pumpAndSettle();
+      final input = tester.widget<TextField>(
+        find.byKey(const ValueKey('plan-starting-lines')),
+      );
+      expect(input.controller!.text, contains('1.d4 d5 2.c4'));
+      expect(input.controller!.text, contains('Line 2 | 1.e4'));
+      await tester.tap(find.byKey(const ValueKey('plan-remove-start')));
+      await tester.pumpAndSettle();
+      expect(input.controller!.text, '1.d4 d5 2.c4');
+    },
+  );
+
+  testWidgets(
+    'ECO selection adds an edited named start alongside existing starts',
+    (tester) async {
+      await tester.runAsync(OpeningCatalog.load);
+      await pumpPlanner(tester, [null]);
+      final choose = find.byKey(const ValueKey('plan-choose-eco'));
+      await tester.ensureVisible(choose);
+      await tester.tap(choose);
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('opening-search')),
+        'B00 Barnes',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('opening-moves')),
+        '1.e4 c5',
+      );
+      await tester.tap(find.text('Add starting lines (1)'));
+      await tester.pumpAndSettle();
+      final input = tester.widget<TextField>(
+        find.byKey(const ValueKey('plan-starting-lines')),
+      );
+      expect(input.controller!.text, contains('1.d4 d5 2.c4'));
+      expect(input.controller!.text, contains('B00 Barnes Defense | 1.e4 c5'));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('invalid and overlapping starting lines cannot advance', (
+    tester,
+  ) async {
+    await pumpPlanner(tester, <PlanBuildResult?>[null]);
+    final input = find.byKey(const ValueKey('plan-starting-lines'));
+    for (final text in ['1.d4 Nf6 2.Kxe8', '1.d4\n1.d4 Nf6']) {
+      await tester.enterText(input, text);
+      await tester.pumpAndSettle();
+      final next = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Next'),
+      );
+      expect(next.onPressed, isNull);
+    }
+    await tester.enterText(input, '1.d4 Nf6');
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Next'))
+          .onPressed,
+      isNotNull,
+    );
   });
 
   testWidgets('Finish now mid-walk goes to review without errors', (

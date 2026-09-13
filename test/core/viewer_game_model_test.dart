@@ -52,6 +52,47 @@ void main() {
       expect(m2.buildAnnotatedMovetext(), isNot(contains('c5')));
     });
 
+    test('materializing reuses saved ancestry and retains valid PV suffix', () {
+      final m = _loaded('1. e4 e5 2. Nf3 (2. Bc4 Nf6) *');
+      final root = m.variationsByPly[2]!.single;
+      final reply = root.children.single;
+      m.setInlinePreviewPosition(2, reply.position);
+      expect(
+        m.materializePreviewLine(2, ['Bc4', 'Nf6', 'd3', 'bad'], 2),
+        isTrue,
+      );
+      expect(m.analysisPath, [root, reply]);
+      expect(reply.children.single.san, 'd3');
+      expect(reply.children.single.isEphemeral, isTrue);
+      expect(m.currentPosition.fen, reply.fen);
+      expect(m.variationsByPly[2], [root]);
+      expect(m.buildAnnotatedMovetext(), isNot(contains('d3')));
+    });
+
+    test('preview attachment rejects an unrelated board without mutation', () {
+      final m = _loaded('1. e4 e5 *');
+      m.setInlinePreviewPosition(1, Chess.initial);
+      expect(m.materializePreviewLine(1, ['c5', 'Nf3'], 2), isFalse);
+      expect(m.currentPosition.fen, Chess.initial.fen);
+      expect(m.variationsByPly, isEmpty);
+      expect(m.mainLineIndex, 1);
+    });
+
+    test('a Black-to-move setup uses normal preview variation ancestry', () {
+      const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 7';
+      final m = _loaded('[FEN "$fen"]\n[SetUp "1"]\n\n7... e5 *');
+      var pos = m.startPosition;
+      for (final san in ['c5', 'Nf3']) {
+        pos = pos.play(pos.parseSan(san)!);
+      }
+      m.setInlinePreviewPosition(0, pos);
+      expect(m.materializePreviewLine(0, ['c5', 'Nf3'], 2), isTrue);
+      m.addMove('d6', editing: true, allowMainline: true);
+      expect(m.analysisPath.map((n) => n.san), ['c5', 'Nf3', 'd6']);
+      expect(m.analysisPath.every((n) => !n.isEphemeral), isTrue);
+      expect(m.buildAnnotatedMovetext(), contains('7... c5 8. Nf3 d6'));
+    });
+
     test('custom-FEN games carry FEN/SetUp headers in line PGN', () {
       const fen = '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1';
       final m = _loaded('[FEN "$fen"]\n[SetUp "1"]\n\n1. e4 Kd7 *');

@@ -144,7 +144,7 @@ class LearnPhase {
       _s.session.playMove(expectedSan);
       _s.learnQuizzing = false;
       _s.waitingForUser = false;
-      _s.feedback = 'Correct!';
+      _s.feedback = null;
       _s.emitChange();
       await Future.delayed(Duration(milliseconds: _s.settings.moveSpeedMs));
       if (generation != _s.lineGeneration) return;
@@ -154,7 +154,9 @@ class LearnPhase {
       // Input stays off while the correction animates so a second answer
       // can't interleave with it; 'Try again' below re-enables it.
       _s.waitingForUser = false;
-      _s.feedback = 'Wrong — the move is $expectedSan';
+      _s.feedback = 'Play $expectedSan';
+      _s.currentAnnotation =
+          _s.currentLine!.comments[_s.currentMoveIndex.toString()];
       _s.emitChange();
       await Future.delayed(const Duration(milliseconds: 1200));
       if (generation != _s.lineGeneration) return;
@@ -162,7 +164,7 @@ class LearnPhase {
       await Future.delayed(const Duration(milliseconds: 800));
       if (generation != _s.lineGeneration) return;
       _s.session.goBack();
-      _s.feedback = 'Try again';
+      _s.feedback = 'Play $expectedSan';
       _s.waitingForUser = true;
       _s.emitChange();
     }

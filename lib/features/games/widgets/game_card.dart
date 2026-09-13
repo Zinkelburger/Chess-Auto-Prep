@@ -601,6 +601,9 @@ class _DeviationLine extends StatelessWidget {
       }
       return Text(message, style: muted);
     }
+    if (report.differentOpening) {
+      return Text('Different opening · ${report.chapterName}', style: muted);
+    }
     if (report.inBook) {
       return Row(
         children: [

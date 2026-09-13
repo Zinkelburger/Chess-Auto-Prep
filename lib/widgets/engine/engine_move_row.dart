@@ -44,7 +44,6 @@ class EngineMoveRow extends StatelessWidget {
         evaluation: move.evalString,
         sanMoves: sanMoves,
         startPly: plyFromFen(fen),
-        rows: settings.pvRows,
         evalColor:
             !move.hasStockfish ||
                 settings.isAnalysisColumnMuted(EngineSettings.colEval)

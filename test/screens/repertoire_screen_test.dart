@@ -257,7 +257,7 @@ void main() {
       await tester.ensureVisible(find.widgetWithText(Tab, 'Generate'));
       await tester.tap(find.widgetWithText(Tab, 'Generate'));
       await _settle(tester);
-      expect(find.text('Plan lines from here'), findsOneWidget);
+      expect(find.text('Plan starting lines…'), findsOneWidget);
     });
   }
 

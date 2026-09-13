@@ -341,8 +341,8 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
 
   // Inline-comment line preview: steps the board through a clickable analysis
   // line embedded in a comment WITHOUT injecting it into the move tree, so the
-  // comment keeps its pretty inline rendering. Fully decoupled from
-  // _analysisPath / ephemeral nodes.
+  // comment keeps its inline rendering. Playing a move first materializes
+  // its ancestry in _m, then uses ordinary variation editing/navigation.
   List<String> _inlineSans = const [];
   int _inlineBaseIndex = 0; // mainline ply before the line's first move
   String? _inlineAnchorFen; // FEN the line starts from, when comment-anchored
@@ -362,7 +362,8 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   // Cross-group members: each is implemented in the named part-file mixin.
   void _clearAnalysis(); // move edits
   void _deleteAnalysisNode(int nodeId); // move edits
-  void _clearInlineLine(); // navigation
+  void _clearInlineLine();
+  void _setInlineCursor(int cursor); // navigation
   void _startEditingComment(int moveIndex); // annotations
   void _notifyCommentsChanged(); // line actions
 }
@@ -442,11 +443,25 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     if (pgnText == null || _isLoading || _m.game == null) return false;
     try {
       final adopted = _m.adoptAnnotations(PgnGame.parsePgn(pgnText));
-      if (adopted) setState(() {});
+      if (adopted) {
+        setState(() {});
+        _persistMigratedAnalysis();
+      }
       return adopted;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Old cached reviews gain real RAVs through the host's usual save policy.
+  /// Defer during widget updates and bind the callback to this exact game.
+  void _persistMigratedAnalysis() {
+    if (!_m.didMaterializeAnalysis || !widget.persistMoves) return;
+    final game = _m.game;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !identical(_m.game, game)) return;
+      _notifyCommentsChanged();
+    });
   }
 
   Future<void> _loadGame() async {
@@ -511,6 +526,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
         }
         widget.onGameLoaded?.call();
       });
+      _persistMigratedAnalysis();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -729,6 +745,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
           child: PgnReadingPane(
             key: _readingPaneKey,
             showReadingOptions: widget.showReadingOptions,
+            continuationPicker: _buildBranchChips(),
             previewingComment: _inlineActive,
             selection: (
               _game,
@@ -746,7 +763,6 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
             documentBuilder: _buildMovetext,
           ),
         ),
-        ?_buildBranchChips(),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(

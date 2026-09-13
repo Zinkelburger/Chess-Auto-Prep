@@ -218,9 +218,8 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     return _currentPosition.turn == Side.black;
   }
 
-  /// Bare mode switch — the mode menu and defensive fallbacks. Erases the
-  /// breadcrumb trail down to the new mode's root ("click Tactics and the
-  /// history is gone"). Use [pushMode] to keep the trail instead.
+  /// Mode-menu navigation preserves the trail so Back can return to the
+  /// previous view with its retained context.
   ///
   /// Also drops any still-parked handoff: it belongs to the navigation this
   /// switch abandons, and would otherwise fire the next time its screen is
@@ -244,7 +243,9 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
 
   void setMode(AppMode mode) {
     _settingsMode = null;
-    _history?.recordReset(mode);
+    if (mode != _currentMode) {
+      _history?.recordPush(mode, null, mode.label);
+    }
     _pendingHandoff = null;
     _currentMode = mode;
     notifyListeners();

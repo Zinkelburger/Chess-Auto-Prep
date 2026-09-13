@@ -243,8 +243,8 @@ class _Boards extends StatelessWidget {
   static const _minBoardWidth = 240.0;
 
   /// Everything stacked above and below a board inside its column, plus the
-  /// line controls under the pair: two seat rows, two reserves, the header,
-  /// the movetext and the gaps between them.
+  /// line controls under the pair, excluding the pieces in the two reserves:
+  /// two seat rows, reserve padding, the header, movetext and gaps.
   ///
   /// A board is square, so its width is bounded by the height left over once
   /// all of that is accounted for — the same reasoning the repertoire builder
@@ -252,18 +252,17 @@ class _Boards extends StatelessWidget {
   /// rows, the reserves and the movetext off the bottom of the window, which
   /// is exactly the content that makes the pane worth looking at.
   ///
-  /// It is a constant because every part of it is: the movetext has a fixed
-  /// height for this reason, so the boards do not resize as the game is
-  /// played. Measured against the built pane rather than guessed.
+  /// Each reserve adds one board square in height. The movetext stays fixed
+  /// so the boards do not resize as the game is played.
   static const double chromeHeight =
-      24 +
+      BughouseBoardCard.headerHeight +
       6 +
-      30 +
-      46 +
+      BughouseBoardCard.seatHeight +
       6 +
       6 +
-      46 +
-      30 +
+      6 +
+      6 +
+      BughouseBoardCard.seatHeight +
       8 +
       BughouseBoardMovetext.height +
       4 +
@@ -275,7 +274,8 @@ class _Boards extends StatelessWidget {
   /// The largest board that fits both ways.
   static double fit({required double width, required double height}) {
     final byWidth = (width - _gap) / 2;
-    final byHeight = height - chromeHeight;
+    // Board plus two reserves: width + 2 * width / 8.
+    final byHeight = (height - chromeHeight) / 1.25;
     final natural = byWidth < byHeight ? byWidth : byHeight;
     return natural.clamp(_minBoardWidth, _maxBoardWidth).toDouble();
   }

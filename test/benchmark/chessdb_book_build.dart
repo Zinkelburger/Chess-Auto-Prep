@@ -220,6 +220,24 @@ void main() {
       tree = await _buildTree(config, book);
     }
 
+    // A re-export must not attach an unrelated move order to a saved tree.
+    // Legacy trees need START_MOVES; otherwise retain their setup FEN.
+    final prefix = sans.isNotEmpty
+        ? sans
+        : tree.startMoves.split(' ').where((s) => s.isNotEmpty).toList();
+    if (prefix.isNotEmpty) {
+      final reached = fenAfterMoves(
+        kStandardStartFen,
+        prefix,
+        prefix.length - 1,
+      );
+      if (normalizeFen(reached) != normalizeFen(tree.root.fen)) {
+        fail('Starting moves do not reach the saved tree root');
+      }
+    }
+    final exportStartFen = prefix.isEmpty ? tree.root.fen : kStandardStartFen;
+    tree.startMoves = prefix.join(' ');
+
     // Phase 2, exactly as GenerationSessionController._analyzeTreePhase.
     // Trivial here — one child per our-move node — but selection is what
     // marks the moves extraction reads.
@@ -252,13 +270,11 @@ void main() {
     final namer = CourseNamer(
       namer: OpeningNamer(
         book: await OpeningBookService.instance.load(),
-        startFen: startFen,
+        startFen: exportStartFen,
       ),
-      rootWhiteToMove: isWhiteToMove(startFen),
-      startMoveNumber: fullMoveNumber(startFen),
-      // The build root *is* the repertoire root here, so lines need no
-      // prefix — the PGN carries a [FEN] header instead.
-      repertoirePrefix: const [],
+      rootWhiteToMove: isWhiteToMove(exportStartFen),
+      startMoveNumber: fullMoveNumber(exportStartFen),
+      repertoirePrefix: prefix,
       playAsWhite: _playAsWhite,
     );
     final modelGames = _modelGames <= 0
@@ -277,8 +293,8 @@ void main() {
     final course = CourseComposer(
       config: anchored,
       namer: namer,
-      repertoireStartFen: startFen,
-      repertoirePrefix: const [],
+      repertoireStartFen: exportStartFen,
+      repertoirePrefix: prefix,
       repertoireName: _name,
     ).compose(lines: lines, modelGames: modelGames);
 

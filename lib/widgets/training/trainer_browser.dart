@@ -285,13 +285,8 @@ class _TrainerBrowserState extends State<TrainerBrowser> {
               : () => _openChapter(null),
           onLearn: _selecting ? null : widget.onLearn,
           onReview: _selecting ? null : widget.onReview,
-          // Reading is per chapter: from the chapter list there is no one
-          // page to open, and a whole course is not a sitting.
-          onRead:
-              _selecting ||
-                  showingChapterList ||
-                  visible.isEmpty ||
-                  widget.onReadLines == null
+          // Read the selected chapter, or the whole source.
+          onRead: _selecting || visible.isEmpty || widget.onReadLines == null
               ? null
               : () => widget.onReadLines!(visible),
           learnBatchSize: widget.learnBatchSize,

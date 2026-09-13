@@ -26,6 +26,11 @@ bool isModelGameHeaders(Map<String, String> headers) =>
 
 class RepertoireLine {
   final String id;
+
+  /// Original source identity when browsing a whole repertoire folder.
+  final String? sourcePath;
+  final String? sourceLineId;
+  String get persistedId => sourceLineId ?? id;
   final String name; // e.g., "French Defense - Main Line"
   final List<String> moves; // SAN moves: ["e4", "e6", "d4", "d5", ...]
   final String color; // "white" or "black" - which side we're training
@@ -58,6 +63,8 @@ class RepertoireLine {
 
   RepertoireLine({
     required this.id,
+    this.sourcePath,
+    this.sourceLineId,
     required this.name,
     required this.moves,
     required this.color,
@@ -78,8 +85,27 @@ class RepertoireLine {
   /// colour and the parser reads it off the move tree instead.
   RepertoireLine copyWithColor(String newColor) => _copyWith(color: newColor);
 
+  RepertoireLine inSource(String path, String title) => RepertoireLine(
+    id: '$path::$id',
+    sourcePath: path,
+    sourceLineId: id,
+    name: name,
+    moves: moves,
+    color: color,
+    startPosition: startPosition,
+    fullPgn: fullPgn,
+    comments: comments,
+    headers: headers,
+    importance: importance,
+    chapter: chapter == null ? title : '$title / $chapter',
+    isModelGame: isModelGame,
+    gameIndex: gameIndex,
+  );
+
   RepertoireLine _copyWith({String? id, String? color}) => RepertoireLine(
     id: id ?? this.id,
+    sourcePath: sourcePath,
+    sourceLineId: sourceLineId,
     name: name,
     moves: moves,
     color: color ?? this.color,

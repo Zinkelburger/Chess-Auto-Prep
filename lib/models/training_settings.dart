@@ -187,8 +187,8 @@ class TrainingSettings {
     this.introSpeedMs = 600,
     this.chapterGrouping = ChapterGroupingMode.auto,
     this.chapterDelimiter = '#',
-    this.newLinesPerSession = 10,
-    this.reviewsPerSession = 40,
+    this.newLinesPerSession = 0,
+    this.reviewsPerSession = 0,
   });
 
   static const _keyStreakThreshold = 'trainer_streak_threshold';
@@ -209,6 +209,17 @@ class TrainingSettings {
 
   static Future<TrainingSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
+    // Old versions silently imposed these caps. Migrate those defaults once;
+    // explicit sizes chosen after this migration remain user preferences.
+    if (!(prefs.getBool('trainer_uncapped_default_v1') ?? false)) {
+      if (prefs.getInt(_keyNewPerSession) == 10) {
+        await prefs.setInt(_keyNewPerSession, 0);
+      }
+      if (prefs.getInt(_keyReviewsPerSession) == 40) {
+        await prefs.setInt(_keyReviewsPerSession, 0);
+      }
+      await prefs.setBool('trainer_uncapped_default_v1', true);
+    }
     return TrainingSettings(
       correctStreakThreshold: prefs.getInt(_keyStreakThreshold) ?? 3,
       trainingDepth: prefs.getInt(_keyTrainingDepth),
@@ -227,8 +238,8 @@ class TrainingSettings {
         prefs.getString(_keyChapterGrouping),
       ),
       chapterDelimiter: prefs.getString(_keyChapterDelimiter) ?? '#',
-      newLinesPerSession: prefs.getInt(_keyNewPerSession) ?? 10,
-      reviewsPerSession: prefs.getInt(_keyReviewsPerSession) ?? 40,
+      newLinesPerSession: prefs.getInt(_keyNewPerSession) ?? 0,
+      reviewsPerSession: prefs.getInt(_keyReviewsPerSession) ?? 0,
     );
   }
 

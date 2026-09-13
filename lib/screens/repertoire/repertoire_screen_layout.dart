@@ -112,7 +112,6 @@ mixin _RepertoireLayout
           height: 30,
           child: Text('Database', style: TextStyle(fontSize: 12)),
         ),
-        Tab(height: 30, child: Text('Tree', style: TextStyle(fontSize: 12))),
         Tab(
           height: 30,
           child: Text('Generate', style: TextStyle(fontSize: 12)),
@@ -125,7 +124,6 @@ mixin _RepertoireLayout
       children: [
         _cursorScoped((_) => _buildEngineTabContent()),
         _cursorScoped((_) => _buildDatabaseTabContent()),
-        _cursorScoped((_) => _buildTreeTabContent()),
         _cursorScoped((_) => _buildGenerateTabContent()),
       ],
     );
@@ -257,7 +255,6 @@ mixin _RepertoireLayout
             children: [
               _cursorScoped((_) => _buildPgnTabWithEngines()),
               _cursorScoped((_) => _buildSecondTabContent()),
-              _cursorScoped((_) => _buildTreeTabContent()),
               _cursorScoped((_) => _buildDatabaseTabContent()),
               _cursorScoped((_) => _buildGenerateTabContent()),
             ],
@@ -292,7 +289,6 @@ mixin _RepertoireLayout
       tabs: [
         _buildPgnTabLabel(),
         _buildLinesTabLabel(),
-        _buildTreeTabLabel(),
         const Tab(text: 'Database'),
         const Tab(text: 'Generate'),
       ],
@@ -307,8 +303,6 @@ mixin _RepertoireLayout
   Widget _buildLinesTabLabel() {
     return RepertoireLinesTabLabel(hasTraps: _trapSession.hasTraps);
   }
-
-  Widget _buildTreeTabLabel() => const RepertoireTreeTabLabel();
 
   Widget _buildNavControls() {
     return RepertoireNavControls(

@@ -42,6 +42,7 @@ import '../../../utils/fen_utils.dart';
 import '../../../services/generation/course/opening_namer.dart'
     show formatMoveReference;
 import '../models/plan_models.dart';
+import '../models/plan_starting_line.dart';
 import '../services/plan_data_source.dart';
 import '../services/plan_knowledge.dart';
 import '../../../utils/movetext_builder.dart';
@@ -96,8 +97,16 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
   /// Walking own games: a position is a question when at least this many of
   /// the user's games reached it. Resolved at [start] from the games at the
   /// root — [chapterShare] of them, never fewer than [minOwnGames].
-  int get ownFloor => _ownFloor;
-  int _ownFloor = minOwnGames;
+  int get ownFloor => _ownFloorFor(_step?.moves ?? const []);
+  final Map<String, int> _ownFloors = {};
+  int _ownFloorFor(List<String> path) {
+    for (var n = path.length; n >= 0; n--) {
+      final found = _ownFloors[path.take(n).join(' ')];
+      if (found != null) return found;
+    }
+    return minOwnGames;
+  }
+
   static const int minOwnGames = 3;
 
   bool get _walksOwnGames => basis == PlanBasis.ownGames;
@@ -167,31 +176,47 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
-  Future<void> start(List<String> rootMoves) async {
-    _epoch++;
+  Future<void> start(List<String> rootMoves) =>
+      startMany([PlanStartingLine(moves: rootMoves)]);
+
+  /// Walk every supplied system, or send the exact roots straight to review.
+  Future<void> startMany(
+    List<PlanStartingLine> roots, {
+    bool askQuestions = true,
+  }) async {
+    PlanStartingLine.validate(roots);
+    final epoch = ++_epoch;
     _manualRoots.clear();
     _seenFen.clear();
     _ourAnswerByFen.clear();
     _chapterOf.clear();
     _frontier
       ..clear()
-      ..add(List.of(rootMoves));
-    _reach
-      ..clear()
-      ..[rootMoves.join(' ')] = 1.0;
+      ..addAll(roots.map((r) => List.of(r.moves)));
+    _reach.clear();
+    _ownFloors.clear();
     _chapters.clear();
     _history.clear();
     decisions.clear();
     _step = null;
     _phase = PlanPhase.walking;
-    if (_walksOwnGames) {
-      final rootFen = _fenAfter(rootMoves);
-      final rootGames = rootFen == null ? 0 : knowledge.ownGamesAt(rootFen);
-      _ownFloor = math.max(minOwnGames, (rootGames * chapterShare).round());
+    for (final root in roots) {
+      _setReach(root.moves, 1.0);
+      if (_walksOwnGames) {
+        final rootGames = knowledge.ownGamesAt(_fenAfter(root.moves)!);
+        _ownFloors[root.moves.join(' ')] = math.max(
+          minOwnGames,
+          (rootGames * chapterShare).round(),
+        );
+      }
+      final chapter = await _chapterFor(root.moves);
+      if (epoch != _epoch) return;
+      if (root.name.isNotEmpty) chapter.name = root.name;
     }
-    // The root is the first chapter; everything belongs to it until the
-    // mass splits into another named system.
-    await _chapterFor(rootMoves);
+    if (!askQuestions) {
+      await finish();
+      return;
+    }
     notifyListeners();
     await _advance();
   }
@@ -427,7 +452,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     if (_walksOwnGames) {
       // Own games: a question wherever enough of them reached this position;
       // where they thin out the walk stops — asking first, never silently.
-      if (knowledge.ownGamesAt(fen) < _ownFloor && !isManual(path)) {
+      if (knowledge.ownGamesAt(fen) < _ownFloorFor(path) && !isManual(path)) {
         await _openLeafConfirm(path, fen);
         return true;
       }
@@ -699,7 +724,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
       // Every reply met often enough to be a question of its own.
       final ownCounts = knowledge.ownCountsAt(fen);
       for (final c in candidates) {
-        if ((ownCounts[c.san] ?? 0) >= _ownFloor) pre.add(c.san);
+        if ((ownCounts[c.san] ?? 0) >= _ownFloorFor(path)) pre.add(c.san);
       }
     } else {
       for (final c in candidates) {

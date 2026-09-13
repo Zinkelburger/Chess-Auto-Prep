@@ -93,6 +93,9 @@ class TreeBuildService {
   BuildTree? _currentTree;
   BuildTree? get currentTree => _currentTree;
 
+  /// Incremental position index of the active build; display lookup only.
+  BuildTreeNode? liveNodeAt(String fen) => _run?.fenMap.getCanonical(fen);
+
   bool get isPaused => _isPaused;
 
   /// Pause is honored at every async loop in the build (BFS, eval

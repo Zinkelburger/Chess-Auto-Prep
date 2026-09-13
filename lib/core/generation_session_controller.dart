@@ -70,6 +70,14 @@ export 'snapshot_exporter.dart';
 
 class GenerationSessionController extends ChangeNotifier
     with SafeChangeNotifier {
+  GenerationSessionController({
+    StockfishPool? enginePool,
+    EngineLifecycle? engineLifecycle,
+  }) : _enginePool = enginePool ?? StockfishPool.instance,
+       _engineLifecycle = engineLifecycle ?? EngineLifecycle.instance;
+
+  final StockfishPool _enginePool;
+  final EngineLifecycle _engineLifecycle;
   final TreeBuildService buildService = TreeBuildService();
   final CoherenceService coherenceService = CoherenceService();
 
@@ -310,6 +318,11 @@ class GenerationSessionController extends ChangeNotifier
   BuildTree? get generatedTree => _current?.tree;
   TreeBuildConfig? get generatedTreeConfig => _current?.config;
   FenMap? get generatedTreeFenMap => _current?.fenMap;
+
+  /// Read only the board's candidate positions during expansion. Indexing is
+  /// incremental at node attachment, never a whole-tree walk on a UI tick.
+  BuildTreeNode? liveNodeAt(String fen) =>
+      _isGenerating ? buildService.liveNodeAt(fen) : null;
 
   // ── Pipeline ─────────────────────────────────────────────────────────
 
@@ -558,7 +571,7 @@ class GenerationSessionController extends ChangeNotifier
     required String filePath,
   }) async {
     if (engineEntered) {
-      await EngineLifecycle.instance.exitGeneration();
+      await _engineLifecycle.exitGeneration();
     }
     // A discarded build leaves nothing to resume: drop the partial tree
     // that cancelBuild would otherwise have saved.
@@ -624,9 +637,7 @@ class GenerationSessionController extends ChangeNotifier
   /// they were claimed, so [_endRun] knows whether to release them.
   Future<bool> _enterEngineIfNeeded(TreeBuildConfig config) async {
     if (!config.needsStockfish) return false;
-    await EngineLifecycle.instance.enterGeneration(
-      config.resolvedEngineThreads,
-    );
+    await _engineLifecycle.enterGeneration(config.resolvedEngineThreads);
     return true;
   }
 
@@ -1438,6 +1449,130 @@ class GenerationSessionController extends ChangeNotifier
     }
   }
 
+  /// Evaluate a single move and persist its engine continuation, without
+  /// exploring an opponent-policy tree or manufacturing an expected score.
+  Future<String?> computeMovePv(ExpectimaxProbeTarget target) async {
+    if (_isGenerating) return 'A calculation is already running.';
+    final moves = [
+      ...target.movesFromStart,
+      if (target.moveSan != null) target.moveSan!,
+    ];
+    final fen = fenAfterMoves(
+      target.repertoireStartFen,
+      moves,
+      moves.length - 1,
+    );
+    if (plyFromFen(fen) - plyFromFen(target.repertoireStartFen) !=
+        moves.length) {
+      return 'The selected move is not legal from this position.';
+    }
+    if (_databasePath != target.repertoireFilePath) {
+      await loadSavedTreeFor(target.repertoireFilePath);
+      if (isDisposed ||
+          _isGenerating ||
+          _databasePath != target.repertoireFilePath) {
+        return 'The analysis session changed.';
+      }
+    }
+    final config = TreeBuildConfig.formDefaults(
+      startFen: fen,
+      playAsWhite: target.playAsWhite,
+    ).copyWith(engineThreads: target.engineThreads, verifyFinal: false);
+    final request = GenerationRequest(
+      config: config,
+      repertoireFilePath: target.repertoireFilePath,
+      buildRootFen: fen,
+      lineMovePrefix: moves,
+      repertoireStartFen: target.repertoireStartFen,
+      onLinesSaved: (_) {},
+      expectimaxOnly: true,
+    );
+    _beginRun(request, moves);
+    var entered = false;
+    try {
+      entered = await _enterEngineIfNeeded(config);
+      if (_cancelRequested) {
+        lastRunSummary = 'Move evaluation cancelled.';
+        return null;
+      }
+      progress.setStatus(
+        'Evaluating ${target.moveSan ?? 'position'} · engine depth ${config.evalDepth}',
+        GenerationPhase.buildingTree,
+      );
+      final result = await _enginePool.discoverMoves(
+        fen: fen,
+        depth: config.evalDepth,
+        multiPv: 1,
+        isWhiteToMove: fen.split(' ')[1] == 'w',
+      );
+      if (_cancelRequested) {
+        lastRunSummary = 'Move evaluation cancelled.';
+        return null;
+      }
+      if (result.lines.isEmpty) {
+        throw StateError('Stockfish returned no continuation');
+      }
+      final line = result.lines.first;
+      final root = BuildTreeNode(
+        fen: fen,
+        moveSan: '',
+        moveUci: '',
+        ply: 0,
+        isWhiteToMove: fen.split(' ')[1] == 'w',
+        nodeId: 0,
+      );
+      root.engineEvalCp = line.effectiveCp * (root.isWhiteToMove ? 1 : -1);
+      root.enginePv = List.unmodifiable(line.pv);
+      final probe = BuildTree(
+        root: root,
+        startMoves: moves.join(' '),
+        configSnapshot: config.toJson(),
+      )..computeMetadata();
+      final bundle = _current;
+      final at = bundle?.fenMap.getCanonical(fen);
+      final host = at == null ? null : treeOwning(at, bundle!.allTrees);
+      if (host != null && at != null) {
+        // A PV is evidence about this position, never extra policy branches.
+        // Grafting its replies into a searched chance node corrupts Maia mass.
+        at.engineEvalCp = root.engineEvalCp;
+        at.enginePv = root.enginePv;
+        onTreeBuilt(
+          bundle!.tree,
+          probes: List.of(_probes),
+          mainIsProbe: _mainTreeIsProbe,
+        );
+      } else if (bundle == null) {
+        onTreeBuilt(probe, probes: const [], mainIsProbe: true);
+      } else {
+        onTreeBuilt(
+          bundle.tree,
+          probes: [..._probes, probe],
+          mainIsProbe: _mainTreeIsProbe,
+        );
+      }
+      await _persistExpectimaxDatabase(
+        target.repertoireFilePath,
+        mainTreeChanged: host != null && identical(host, bundle?.tree),
+      );
+      lastRunSummary =
+          '${target.moveSan ?? 'Position'} evaluated · engine depth ${config.evalDepth} · ${root.enginePv.length} PV moves saved';
+      return null;
+    } catch (error) {
+      if (_cancelRequested) {
+        lastRunSummary = 'Move evaluation cancelled.';
+        return null;
+      }
+      lastError = 'Move evaluation failed: $error';
+      currentJob?.fail(lastError!);
+      return lastError;
+    } finally {
+      await _endRun(
+        engineEntered: entered,
+        filePath: target.repertoireFilePath,
+      );
+    }
+  }
+
   /// Start an on-demand expectimax probe: a small build rooted at
   /// [target]'s position that is folded into the repertoire's expectimax
   /// database when it finishes. Returns why it could not start, or null
@@ -1475,6 +1610,9 @@ class GenerationSessionController extends ChangeNotifier
       await loadSavedTreeFor(target.repertoireFilePath);
       if (isDisposed) return 'Generation was closed.';
       if (_isGenerating) return 'A generation is already running.';
+      if (_databasePath != target.repertoireFilePath) {
+        return 'The analysis session changed.';
+      }
     }
 
     final base =
@@ -1489,6 +1627,10 @@ class GenerationSessionController extends ChangeNotifier
       startFen: fen,
       playAsWhite: target.playAsWhite,
       maxPly: target.plies,
+      boundedDatabase: true,
+      ourMultipv: target.engineMoves.clamp(1, 20),
+      oppMassTarget: target.maiaCoverage.clamp(.01, 1),
+      searchAlgorithm: SearchAlgorithm.pure,
       // Coverage answers and master extensions belong to line planning.
       // A position search observes the depth the user asked for.
       coverMinProb: 0,
@@ -1532,6 +1674,35 @@ class GenerationSessionController extends ChangeNotifier
       'Adding to the expectimax database...',
       GenerationPhase.computingExpectimax,
     );
+    if (request.config.boundedDatabase) {
+      // Each probe has its own root history, horizon and truncated policy.
+      // Mixing it into a Pure tree can corrupt normalized chance nodes.
+      final bundle = _current;
+      probe.startMoves = prefix.join(' ');
+      rescoreTree(probe, request.config, FenMap()..populate(probe.root));
+      if (bundle == null) {
+        onTreeBuilt(probe, probes: const [], mainIsProbe: true);
+      } else {
+        final retained = _probes.where(
+          (old) =>
+              old.configSnapshot['bounded_database'] != true ||
+              canonicalizeFen(old.root.fen) != canonicalizeFen(probe.root.fen),
+        );
+        onTreeBuilt(
+          bundle.tree,
+          probes: [...retained, probe],
+          mainIsProbe: _mainTreeIsProbe,
+        );
+      }
+      await _persistExpectimaxDatabase(
+        request.repertoireFilePath,
+        mainTreeChanged: false,
+      );
+      lastRunSummary =
+          '${probe.totalNodes} positions saved · depth ${probe.maxPlyReached}/${request.config.maxPly}';
+      progress.setStatus(lastRunSummary, GenerationPhase.computingExpectimax);
+      return;
+    }
     final bundle = _current;
     final playAsWhite = request.config.playAsWhite;
     final existing = <BuildTree>[if (bundle != null) ...bundle.allTrees];
@@ -1623,6 +1794,7 @@ class GenerationSessionController extends ChangeNotifier
         name: 'GenerationSession',
         error: e,
       );
+      rethrow;
     }
   }
 

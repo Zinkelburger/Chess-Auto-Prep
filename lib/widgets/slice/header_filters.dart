@@ -14,15 +14,19 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../common/choice_field.dart';
 import 'header_suggestions.dart';
+import 'eco_filter_chips.dart';
 
 final _ecoExact = RegExp(r'^[A-E]\d{2}$');
 
 class HeaderFilters extends StatefulWidget {
   final SliceFilterController controller;
 
-  /// Use a single plus menu in the collection workspace; both hosts keep
+  /// Use inset spreadsheet controls in the collection workspace; both hosts keep
   /// editable Field / Rule / Value rows.
   final bool simple;
+
+  /// Browse the opening catalog for this ECO condition.
+  final ValueChanged<int>? onBrowseEco;
 
   /// Source games for distinct header suggestions and their game counts.
   /// Pass a new list when the source collection changes.
@@ -33,6 +37,7 @@ class HeaderFilters extends StatefulWidget {
     required this.controller,
     this.games,
     this.simple = false,
+    this.onBrowseEco,
   });
 
   @override
@@ -66,52 +71,73 @@ class _HeaderFiltersState extends State<HeaderFilters> {
         final wide =
             constraints.maxWidth >=
             460 * MediaQuery.textScalerOf(context).scale(14) / 14;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (controller.headerRows.length > 1) ...[
-              Text(
-                'Match all conditions',
-                style: AppTextStyles.forTheme(
-                  context,
-                  AppTextStyles.bodyStrong,
+        return Theme(
+          data: Theme.of(context).copyWith(
+            inputDecorationTheme: Theme.of(context).inputDecorationTheme
+                .copyWith(
+                  filled: true,
+                  visualDensity: VisualDensity.standard,
+                  fillColor: Theme.of(context).colorScheme.surface,
+                  hintStyle: AppTextStyles.forTheme(
+                    context,
+                    AppTextStyles.hint,
+                  ),
+                  constraints: const BoxConstraints(minHeight: 48),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 12,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: const BorderSide(color: AppColors.outline),
+                  ),
+                  disabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: const BorderSide(color: AppColors.outline),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: const BorderSide(color: AppColors.accent),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (wide && controller.headerRows.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _columns(
+                    Text(
+                      'Field',
+                      style: AppTextStyles.forTheme(
+                        context,
+                        AppTextStyles.bodyStrong,
+                      ),
+                    ),
+                    Text(
+                      'Rule',
+                      style: AppTextStyles.forTheme(
+                        context,
+                        AppTextStyles.bodyStrong,
+                      ),
+                    ),
+                    Text(
+                      'Value',
+                      style: AppTextStyles.forTheme(
+                        context,
+                        AppTextStyles.bodyStrong,
+                      ),
+                    ),
+                    const SizedBox(width: 44),
+                  ),
+                ),
+              for (var i = 0; i < controller.headerRows.length; i++)
+                _buildRow(i, wide: wide),
+              _buildAddButtons(),
             ],
-            if (wide && controller.headerRows.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _columns(
-                  Text(
-                    'Field',
-                    style: AppTextStyles.forTheme(
-                      context,
-                      AppTextStyles.bodyStrong,
-                    ),
-                  ),
-                  Text(
-                    'Rule',
-                    style: AppTextStyles.forTheme(
-                      context,
-                      AppTextStyles.bodyStrong,
-                    ),
-                  ),
-                  Text(
-                    'Value',
-                    style: AppTextStyles.forTheme(
-                      context,
-                      AppTextStyles.bodyStrong,
-                    ),
-                  ),
-                  const SizedBox(width: 44),
-                ),
-              ),
-            for (var i = 0; i < controller.headerRows.length; i++)
-              _buildRow(i, wide: wide),
-            _buildAddButtons(),
-          ],
+          ),
         );
       },
     ),
@@ -121,7 +147,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
       Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 3, child: field),
+          Expanded(flex: 4, child: field),
           const SizedBox(width: 8),
           Expanded(flex: 4, child: rule),
           const SizedBox(width: 8),
@@ -146,36 +172,26 @@ class _HeaderFiltersState extends State<HeaderFilters> {
     MatchMode.notContains => 'Does not contain',
     MatchMode.exact => 'Exact',
     MatchMode.regex => 'Matches regex',
-    MatchMode.after => field == 'Date' ? 'After' : 'At least',
-    MatchMode.before => field == 'Date' ? 'Before' : 'At most',
+    MatchMode.after => field == 'Date' ? 'After ≥' : 'At least ≥',
+    MatchMode.before => field == 'Date' ? 'Before ≤' : 'At most ≤',
   };
-
-  void _addField(String field) {
-    if (!mounted) return;
-    controller.addHeaderRow();
-    final index = controller.headerRows.length - 1;
-    controller.setHeaderField(index, field);
-    if (field == 'Result') controller.setHeaderMode(index, MatchMode.exact);
-    if (field == 'Date') controller.setHeaderMode(index, MatchMode.after);
-  }
 
   Widget _buildAddButtons() => Align(
     alignment: Alignment.centerLeft,
-    child: widget.simple
-        ? PopupMenuButton<String>(
-            tooltip: 'Add filter',
-            icon: const Icon(Icons.add),
-            onSelected: _addField,
-            itemBuilder: (_) => [
-              for (final field in kHeaderFieldOptions)
-                PopupMenuItem(value: field, child: Text(_fieldLabel(field))),
-            ],
-          )
-        : TextButton.icon(
-            onPressed: () => _addField(kPlayerHeaderField),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add condition'),
-          ),
+    child: TextButton.icon(
+      key: const ValueKey('add-filter-row'),
+      style: TextButton.styleFrom(
+        foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+        minimumSize: const Size(120, 40),
+        textStyle: AppTextStyles.muted,
+      ),
+      onPressed: () {
+        if (!mounted) return;
+        controller.addHeaderRow(field: widget.simple ? '' : kPlayerHeaderField);
+      },
+      icon: const Icon(Icons.add, size: 20),
+      label: const Text('Add filter'),
+    ),
   );
 
   Widget _buildRow(int index, {required bool wide}) {
@@ -189,11 +205,15 @@ class _HeaderFiltersState extends State<HeaderFilters> {
     }
 
     final field = _NewConditionFocus(
-      focusOnMount: row.value.isEmpty && !widget.simple,
+      focusOnMount:
+          row.value.isEmpty &&
+          (!widget.simple || controller.headerRows.length > 1),
       child: ChoiceField<String>(
         label: wide ? null : 'Field',
-        hint: 'Choose field',
-        value: row.field,
+        hint: 'Search…',
+        prefixIcon: row.field.isEmpty ? Icons.search : null,
+        style: AppTextStyles.forTheme(context, AppTextStyles.body),
+        value: row.field.isEmpty ? null : row.field,
         items: [
           for (final field in kHeaderFieldOptions)
             ChoiceItem(
@@ -202,42 +222,99 @@ class _HeaderFiltersState extends State<HeaderFilters> {
               searchText: '$field ${_fieldLabel(field)}',
             ),
         ],
-        onChanged: (field) => edit((i) => controller.setHeaderField(i, field)),
+        onChanged: (field) => edit((i) {
+          controller.setHeaderField(i, field);
+          if (field == 'Result') controller.setHeaderMode(i, MatchMode.exact);
+          if (field == 'Date') controller.setHeaderMode(i, MatchMode.after);
+        }),
       ),
     );
+    final ecoCodes = row.field == 'ECO'
+        ? selectedEcoCodes(row.value, row.mode)
+        : <String>[];
     final rule = ChoiceField<MatchMode>(
       label: wide ? null : 'Rule',
       hint: 'Choose rule',
-      value: row.mode,
+      enabled: row.field.isNotEmpty,
+      style: AppTextStyles.forTheme(context, AppTextStyles.body),
+      value: row.field.isEmpty ? null : row.mode,
       items: [
         for (final mode in modesForField(row.field))
           ChoiceItem(
             value: mode,
-            label: _ruleLabel(row.field, mode),
+            label: mode == MatchMode.regex && ecoCodes.length > 1
+                ? 'Any of'
+                : _ruleLabel(row.field, mode),
             searchText: '${mode.name} ${_ruleLabel(row.field, mode)}',
           ),
       ],
       onChanged: (mode) => edit((i) => controller.setHeaderMode(i, mode)),
     );
-    final value = _NewConditionFocus(
-      focusOnMount: row.value.isEmpty && widget.simple,
-      child: _HeaderValueEditor(
-        // Refresh autocomplete when its source/rule changes. In particular,
-        // choosing the same value again after switching rules must set Exact.
-        key: ValueKey((row.controller, row.field, row.mode, _suggestions)),
-        row: row,
-        label: wide ? null : 'Value',
-        suggestions: _suggestions,
-        onChanged: (value) => edit((i) => controller.setHeaderValue(i, value)),
-        onSelected: (value) => edit((i) {
-          controller.setHeaderValue(i, value);
-          controller.setHeaderMode(i, MatchMode.exact);
-        }),
-      ),
-    );
+    final Widget value = ecoCodes.isNotEmpty
+        ? EcoFilterChips(
+            codes: ecoCodes,
+            onChanged: (codes) => edit((i) {
+              final value = ecoCodeExpression(codes);
+              row.controller.text = value;
+              controller.setHeaderValue(i, value);
+              controller.setHeaderMode(
+                i,
+                codes.length > 1 ? MatchMode.regex : MatchMode.exact,
+              );
+            }),
+          )
+        : _NewConditionFocus(
+            key: ValueKey(row.field),
+            focusOnMount:
+                row.field.isNotEmpty && row.value.isEmpty && widget.simple,
+            child: _HeaderValueEditor(
+              // Refresh autocomplete when its source/rule changes. In particular,
+              // choosing the same value again after switching rules must set Exact.
+              key: ValueKey((
+                row.controller,
+                row.field,
+                row.mode,
+                _suggestions,
+              )),
+              row: row,
+              label: wide ? null : 'Value',
+              suggestions: _suggestions,
+              onBrowseEco: row.field == 'ECO' && widget.onBrowseEco != null
+                  ? () => edit((i) => widget.onBrowseEco!(i))
+                  : null,
+              onChanged: (value) =>
+                  edit((i) => controller.setHeaderValue(i, value)),
+              onSelected: (value) => edit((i) {
+                controller.setHeaderValue(i, value);
+                if (row.mode == MatchMode.contains ||
+                    row.mode == MatchMode.regex) {
+                  controller.setHeaderMode(i, MatchMode.exact);
+                }
+              }),
+            ),
+          );
+    final valueCell = ecoCodes.isNotEmpty && widget.onBrowseEco != null
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              value,
+              TextButton.icon(
+                key: ValueKey(('browse-eco', row)),
+                onPressed: () => edit((i) => widget.onBrowseEco!(i)),
+                icon: const Icon(Icons.search, size: 18),
+                label: const Text('Edit openings…'),
+              ),
+            ],
+          )
+        : value;
     final remove = IconButton(
       tooltip: 'Remove filter',
-      onPressed: () => edit(controller.removeHeaderRow),
+      onPressed: () => edit((i) {
+        controller.removeHeaderRow(i);
+        if (widget.simple && controller.headerRows.isEmpty) {
+          controller.addHeaderRow(field: '');
+        }
+      }),
       icon: const Icon(Icons.close, size: 20),
       constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
     );
@@ -249,7 +326,7 @@ class _HeaderFiltersState extends State<HeaderFilters> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (wide)
-            _columns(field, rule, value, remove)
+            _columns(field, rule, valueCell, remove)
           else ...[
             Row(
               children: [
@@ -260,9 +337,10 @@ class _HeaderFiltersState extends State<HeaderFilters> {
               ],
             ),
             const SizedBox(height: 8),
-            value,
+            valueCell,
           ],
-          if (widget.games != null &&
+          if (!widget.simple &&
+              widget.games != null &&
               row.field == kPlayerHeaderField &&
               row.mode == MatchMode.contains &&
               row.value.trim().isNotEmpty &&
@@ -310,8 +388,8 @@ class _HeaderFiltersState extends State<HeaderFilters> {
   }
 }
 
-/// Free text remains a filter; only explicitly picking an actual value makes
-/// it exact. RawAutocomplete supplies keyboard navigation and dismissal.
+/// Picking a value resolves contains/regex to Exact; bounds and exclusions
+/// retain their chosen operator. Free text remains a filter. RawAutocomplete supplies keyboard navigation and dismissal.
 class _HeaderValueEditor extends StatefulWidget {
   const _HeaderValueEditor({
     super.key,
@@ -320,6 +398,7 @@ class _HeaderValueEditor extends StatefulWidget {
     required this.suggestions,
     required this.onChanged,
     required this.onSelected,
+    this.onBrowseEco,
   });
 
   final HeaderFilterRow row;
@@ -327,6 +406,7 @@ class _HeaderValueEditor extends StatefulWidget {
   final HeaderSuggestions suggestions;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSelected;
+  final VoidCallback? onBrowseEco;
 
   @override
   State<_HeaderValueEditor> createState() => _HeaderValueEditorState();
@@ -374,26 +454,47 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
         },
         fieldViewBuilder: (context, text, focus, submit) => TextField(
           controller: text,
+          enabled: row.field.isNotEmpty,
+          onTap: row.value.isEmpty ? widget.onBrowseEco : null,
           focusNode: focus,
           style: AppTextStyles.forTheme(context, AppTextStyles.body),
           decoration: InputDecoration(
+            constraints: const BoxConstraints(minHeight: 48),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 12,
+            ),
+            prefixIcon: row.value.isEmpty
+                ? const Icon(Icons.search, size: 16)
+                : null,
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 32,
+              minHeight: 44,
+            ),
+            suffixIcon: widget.onBrowseEco == null
+                ? null
+                : IconButton(
+                    tooltip: 'Browse ECO openings',
+                    onPressed: widget.onBrowseEco,
+                    icon: const Icon(Icons.manage_search, size: 20),
+                  ),
             labelText: widget.label,
             errorText: error,
             errorMaxLines: 2,
             hintText: switch (row.field) {
-              kPlayerHeaderField => 'Player name, either colour',
+              kPlayerHeaderField => 'Search players',
+              'White' || 'Black' => 'Search players',
+              '' => 'Value',
+              'Result' => 'Search results',
               'Date' => 'Year or date',
-              'ECO' => 'ECO code or prefix',
+              'ECO' =>
+                widget.onBrowseEco == null
+                    ? 'ECO code or prefix'
+                    : 'Browse ECO openings…',
               'WhiteElo' || 'BlackElo' || 'StudyRating' => 'Rating',
-              _ => 'Type a value',
+              _ => 'Search values',
             },
-            helperText: showEcoWarn
-                ? 'Expected A00–E99'
-                : row.field == 'Date' &&
-                      (row.mode == MatchMode.after ||
-                          row.mode == MatchMode.before)
-                ? 'Includes this year or date'
-                : null,
+            helperText: showEcoWarn ? 'Expected A00–E99' : null,
             helperMaxLines: 3,
             helperStyle: showEcoWarn
                 ? AppTextStyles.forTheme(
@@ -401,7 +502,9 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
                     AppTextStyles.caption,
                   ).copyWith(color: Theme.of(context).colorScheme.error)
                 : AppTextStyles.forTheme(context, AppTextStyles.caption),
-            isDense: true,
+            // Keep the painted input at the same 48px minimum as the
+            // choice fields, even when there is no search icon or text.
+            isDense: false,
             border: const OutlineInputBorder(),
           ),
           onChanged: (value) {
@@ -418,7 +521,7 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
           final highlighted = AutocompleteHighlightedOption.of(context);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted || !_optionsScroll.hasClients) return;
-            const itemHeight = 64.0;
+            const itemHeight = 40.0;
             final top = highlighted * itemHeight;
             final bottom = top + itemHeight;
             final position = _optionsScroll.position;
@@ -444,20 +547,10 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Text(
-                          'Values in games · select for Exact',
-                          style: AppTextStyles.forTheme(
-                            context,
-                            AppTextStyles.caption,
-                          ),
-                        ),
-                      ),
                       Flexible(
                         child: ListView.builder(
                           controller: _optionsScroll,
-                          itemExtent: 64,
+                          itemExtent: 40,
                           shrinkWrap: true,
                           padding: EdgeInsets.zero,
                           itemCount: visible.length,
@@ -481,7 +574,7 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
                                   ),
                                 ),
                               ),
-                              subtitle: Text(
+                              trailing: Text(
                                 '${option.count} ${option.count == 1 ? 'game' : 'games'}',
                                 style: AppTextStyles.forTheme(
                                   context,
@@ -511,7 +604,11 @@ class _HeaderValueEditorState extends State<_HeaderValueEditor> {
 /// A new condition must take focus even when an existing row is being edited.
 /// Keep this scope local to the choice so traversal can continue to its value.
 class _NewConditionFocus extends StatefulWidget {
-  const _NewConditionFocus({required this.focusOnMount, required this.child});
+  const _NewConditionFocus({
+    super.key,
+    required this.focusOnMount,
+    required this.child,
+  });
 
   final bool focusOnMount;
   final Widget child;

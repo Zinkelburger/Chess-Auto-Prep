@@ -9,12 +9,16 @@ import 'package:flutter/material.dart';
 import '../../core/board_editor_controller.dart';
 import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
+import '../../models/pgn_game_entry.dart';
 import '../../services/pgn_parsing_service.dart' as pgn;
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
 import '../board_editor/board_editor_panel.dart';
-import '../lines_preview_panel.dart';
+import 'pgn_tree_games_list.dart';
+import '../common/choice_field.dart';
+import '../opening_picker_dialog.dart';
 import '../slice/header_filters.dart';
+import '../slice/eco_filter_chips.dart';
 import '../slice/position_filter.dart';
 import '../slice/sequence_filter.dart';
 
@@ -52,6 +56,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   late SliceFilterController _filters;
   late String _initialConfigJson;
   BoardEditorController? _board;
+  TextEditingController? _boardInput;
   String? _boardBaseline;
   bool _boardDirty = false;
   List<int> _matchingIndices = [];
@@ -61,10 +66,26 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   final _filterScroll = ScrollController();
   Timer? _debounce;
   int _generation = 0;
+  List<int>? _resultIndices;
+  List<PgnGameEntry> _resultGames = [];
+
+  List<PgnGameEntry> get _gamesForResults {
+    if (!identical(_resultIndices, _matchingIndices)) {
+      _resultIndices = _matchingIndices;
+      _resultGames = [
+        for (final i in _matchingIndices)
+          PgnGameEntry(
+            headers: widget.allGames[i].headers,
+            pgnText: widget.allGames[i].pgnText,
+          ),
+      ];
+    }
+    return _resultGames;
+  }
 
   bool get _hasFilters => !_filters.buildConfig().isEmpty;
   bool get _invalid =>
-      _filters.positionParse.error != null ||
+      _filters.hasInvalidPosition ||
       _filters.sequenceError != null ||
       _filters.headerRows.any((row) {
         if (row.hasMultiplePlayerNames) return true;
@@ -131,6 +152,38 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
     super.dispose();
   }
 
+  Future<void> _chooseOpenings(int index) async {
+    final row = _filters.headerRows[index];
+    final selection = await showOpeningPicker(
+      context,
+      forFilters: true,
+      initialEcoCodes: selectedEcoCodes(row.value, row.mode).toSet(),
+    );
+    if (!mounted || selection == null) return;
+    index = _filters.headerRows.indexOf(row);
+    if (index < 0 || row.field != 'ECO') return;
+    if (selection.positionLine case final line?) {
+      _filters.positionText.text = line.movetext.isEmpty
+          ? line.position.fen
+          : line.movetext;
+    } else if (selection.lines.isNotEmpty) {
+      final codes = selection.lines.map((line) => line.eco).toSet().toList()
+        ..sort();
+      _filters.setHeaderField(index, 'ECO');
+      _filters.setHeaderMode(
+        index,
+        codes.length == 1 ? MatchMode.exact : MatchMode.regex,
+      );
+      _filters.headerRows[index].controller.text = ecoCodeExpression(codes);
+      _filters.setHeaderValue(
+        index,
+        codes.length == 1
+            ? codes.single
+            : '^(${codes.map(RegExp.escape).join('|')})\$',
+      );
+    }
+  }
+
   void _onFiltersChanged() {
     if (!mounted) return;
     final config = _filters.buildConfig().toJsonString();
@@ -160,6 +213,8 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
       final indices = await pgn.computeSliceMatches(
         games: widget.allGames,
         targetFen: _filters.positionFen,
+        additionalTargetFens: _filters.additionalPositionFens,
+        matchAny: _filters.matchAny,
         filters: _filters.rawHeaderFilters,
         seqGroups: _filters.sequenceGroups,
         seqGap: _filters.sequenceGap,
@@ -183,6 +238,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
     for (var i = _filters.headerRows.length - 1; i >= 0; i--) {
       if (_filters.headerRows[i].value.isEmpty) _filters.removeHeaderRow(i);
     }
+    if (_filters.headerRows.isEmpty) _filters.addHeaderRow(field: '');
   }
 
   void _reset() {
@@ -192,10 +248,11 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
     _removeEmptyRows();
   }
 
-  void _editBoard() {
+  void _editBoard(TextEditingController input) {
     if (!mounted || _board != null) return;
+    _boardInput = input;
     final editor = BoardEditorController(
-      initialFen: _filters.positionFen ?? widget.currentFen,
+      initialFen: parsePositionInput(input.text).fen ?? widget.currentFen,
     );
     _boardBaseline = editor.fen;
     editor.addListener(_onBoardChanged);
@@ -215,6 +272,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
     final editor = _board;
     setState(() {
       _board = null;
+      _boardInput = null;
       _boardDirty = false;
       _boardBaseline = null;
     });
@@ -228,108 +286,179 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
   @override
   Widget build(BuildContext context) => Material(
     color: AppColors.surfaceElevated,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            controller: _filterScroll,
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildFilters(context),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: _board == null ? 300 : 660,
-                  child: _buildResults(context),
-                ),
-              ],
+    child: LayoutBuilder(
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: constraints.maxHeight * .55),
+            child: Scrollbar(
+              controller: _filterScroll,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _filterScroll,
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
+                child: _buildFilters(context),
+              ),
             ),
           ),
-        ),
-        _buildFooter(context),
-      ],
+          Expanded(
+            child: _board == null
+                ? _buildResults(context)
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(12),
+                    child: SizedBox(height: 660, child: _buildResults(context)),
+                  ),
+          ),
+          _buildFooter(context),
+        ],
+      ),
     ),
   );
 
   Widget _buildFilters(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      if (widget.collectionPlayer case final player?) ...[
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            for (final side in const ['White', 'Black'])
-              FilterChip(
-                label: Text('${player.split(',').first} as $side'),
-                selected: _filters.hasPresetHeaderFilter(
-                  side,
-                  player,
-                  mode: MatchMode.exact,
-                ),
-                onSelected: (_) {
-                  if (!mounted) return;
-                  _filters.togglePresetHeaderFilter(
-                    side,
-                    player,
-                    mode: MatchMode.exact,
-                  );
-                  _removeEmptyRows();
-                },
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-      ],
-      HeaderFilters(controller: _filters, games: widget.allGames, simple: true),
-      const SizedBox(height: 16),
-      IgnorePointer(
-        ignoring: _board != null,
-        child: Opacity(
-          opacity: _board == null ? 1 : .5,
-          child: PositionFilter(controller: _filters),
-        ),
-      ),
-      const SizedBox(height: 6),
-      Wrap(
-        spacing: 8,
-        runSpacing: 4,
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
         children: [
-          TextButton.icon(
-            icon: const Icon(Icons.grid_on, size: 16),
-            label: const Text('Current position'),
-            onPressed: _board != null
-                ? null
-                : () {
-                    if (!mounted) return;
-                    _filters.setPositionFen(widget.currentFen);
-                  },
+          Text(
+            'Combine',
+            style: AppTextStyles.forTheme(context, AppTextStyles.caption),
           ),
-          TextButton.icon(
-            onPressed: _board == null ? _editBoard : null,
-            icon: const Icon(Icons.edit_outlined, size: 16),
-            label: const Text('Set up a board'),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 90,
+            child: ChoiceField<bool>(
+              key: const ValueKey('filter-logic'),
+              value: _filters.matchAny,
+              compact: true,
+              style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+              items: const [
+                ChoiceItem(value: false, label: 'AND'),
+                ChoiceItem(value: true, label: 'OR'),
+              ],
+              onChanged: (value) {
+                if (!mounted) return;
+                _filters.setMatchAny(value);
+              },
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      HeaderFilters(
+        controller: _filters,
+        games: widget.allGames,
+        simple: true,
+        onBrowseEco: _board == null ? _chooseOpenings : null,
+      ),
+      const SizedBox(height: 12),
+      ExpansionTile(
+        key: ValueKey(('position-filter-section', _filters)),
+        tilePadding: EdgeInsets.zero,
+        dense: true,
+        initiallyExpanded:
+            _filters.hasPositionFilter ||
+            _filters.additionalPositions.isNotEmpty,
+        title: Text(
+          'Positions',
+          style: AppTextStyles.forTheme(
+            context,
+            _filters.hasPositionFilter
+                ? AppTextStyles.body
+                : AppTextStyles.caption,
+          ),
+        ),
+        children: [
+          _positionRow(_filters.positionText, first: true),
+          for (final input in _filters.additionalPositions) _positionRow(input),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('add-position'),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                minimumSize: const Size(120, 40),
+                textStyle: AppTextStyles.muted,
+              ),
+              onPressed: _board != null
+                  ? null
+                  : () {
+                      if (!mounted) return;
+                      _filters.addPosition();
+                    },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add position'),
+            ),
           ),
         ],
       ),
       ExpansionTile(
         tilePadding: EdgeInsets.zero,
+        dense: true,
         title: Text(
           'Move sequence',
-          style: AppTextStyles.forTheme(context, AppTextStyles.body),
+          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
         ),
         initiallyExpanded: _filters.hasSequenceFilter,
         children: [
           Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.only(bottom: 12),
             child: SequenceFilter(controller: _filters),
           ),
         ],
       ),
     ],
   );
+
+  Widget _positionRow(TextEditingController input, {bool first = false}) =>
+      Padding(
+        key: ObjectKey(input),
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            IgnorePointer(
+              ignoring: _board != null,
+              child: PositionFilter(
+                controller: _filters,
+                input: input,
+                showTitle: false,
+              ),
+            ),
+            ChoiceField<String>(
+              key: first ? const ValueKey('position-source') : null,
+              value: null,
+              hint: 'Choose position…',
+              compact: true,
+              enabled: _board == null,
+              style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+              items: [
+                const ChoiceItem(
+                  value: 'current',
+                  label: 'Use current position',
+                ),
+                const ChoiceItem(value: 'setup', label: 'Set up a board'),
+                if (!first)
+                  const ChoiceItem(value: 'remove', label: 'Remove position'),
+              ],
+              onChanged: (source) {
+                if (!mounted) return;
+                switch (source) {
+                  case 'current':
+                    input.text = widget.currentFen;
+                  case 'setup':
+                    _editBoard(input);
+                  case 'remove':
+                    _filters.removePosition(input);
+                }
+              },
+            ),
+          ],
+        ),
+      );
 
   Widget _buildResults(BuildContext context) {
     if (_board case final editor?) {
@@ -371,7 +500,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                     if (!mounted) return;
                     final position = editor.validPosition;
                     if (position == null) return;
-                    _filters.setPositionFen(position.fen);
+                    _boardInput!.text = position.fen;
                     _closeBoard();
                   },
             child: const Text('Use this position'),
@@ -379,76 +508,53 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
         ],
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          _computing
-              ? 'Finding games…'
-              : _invalid || _boardDirty
-              ? 'Preview paused'
-              : '${_matchingIndices.length} matching games',
-          style: AppTextStyles.forTheme(context, AppTextStyles.bodyStrong),
+    if (_computing) return const Center(child: CircularProgressIndicator());
+    if (_invalid) {
+      return Center(
+        child: Text(
+          'Check filters',
+          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
         ),
-        if (_invalid)
-          Text(
-            'Check the highlighted filters.',
-            style: AppTextStyles.forTheme(context, AppTextStyles.caption),
-          ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: _computing
-              ? const Center(child: CircularProgressIndicator())
-              : _invalid || _boardDirty
-              ? const SizedBox.shrink()
-              : _computeError != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _computeError!,
-                        style: AppTextStyles.forTheme(
-                          context,
-                          AppTextStyles.body,
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          if (!mounted) return;
-                          _scheduledConfig = null;
-                          _onFiltersChanged();
-                        },
-                        child: const Text('Try again'),
-                      ),
-                    ],
-                  ),
-                )
-              : _matchingIndices.isEmpty
-              ? Center(
-                  child: Text(
-                    'No matches. Try a shorter name or remove a condition.',
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.forTheme(context, AppTextStyles.muted),
-                  ),
-                )
-              : LinesPreviewPanel(
-                  allGames: widget.allGames,
-                  matchedIndices: _matchingIndices,
-                  showSearch: false,
-                  onGameTapped: widget.onOpenGame == null
-                      ? null
-                      : (index) {
-                          if (!mounted || !_canApply) return;
-                          widget.onOpenGame!(
-                            _matchingIndices,
-                            _filters.buildConfig(),
-                            index,
-                          );
-                        },
-                ),
+      );
+    }
+    if (_computeError != null) {
+      return Center(
+        child: TextButton(
+          onPressed: () {
+            if (!mounted) return;
+            _scheduledConfig = null;
+            _onFiltersChanged();
+          },
+          child: Text('$_computeError'),
         ),
-      ],
+      );
+    }
+    if (_matchingIndices.isEmpty) {
+      return Center(
+        child: Text(
+          'No games match',
+          style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+        ),
+      );
+    }
+    return PgnTreeGamesList(
+      games: _gamesForResults,
+      currentFen: null,
+      currentIndex: -1,
+      initiallyShowMoves: false,
+      subdued: true,
+      toolbarLeading: Text(
+        '${_matchingIndices.length} games',
+        style: AppTextStyles.forTheme(context, AppTextStyles.caption),
+      ),
+      onGameSelected: (index) {
+        if (!mounted || !_canApply || widget.onOpenGame == null) return;
+        widget.onOpenGame!(
+          _matchingIndices,
+          _filters.buildConfig(),
+          _matchingIndices[index],
+        );
+      },
     );
   }
 
@@ -473,6 +579,10 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
           ),
         FilledButton(
           key: const ValueKey('apply-game-filters'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            foregroundColor: AppColors.surface,
+          ),
           onPressed: _canApply && _matchingIndices.isNotEmpty
               ? () {
                   if (!mounted) return;
@@ -484,7 +594,7 @@ class _PgnGameFilterWorkspaceState extends State<PgnGameFilterWorkspace> {
                 ? 'Check filters'
                 : _computing
                 ? 'Finding games…'
-                : 'Show ${_matchingIndices.length} game${_matchingIndices.length == 1 ? '' : 's'}',
+                : 'Apply filter',
           ),
         ),
       ],

@@ -95,8 +95,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final coordinates =
-        widget.coordinates ?? BoardDisplaySettings.of(context).coordinates;
+    final display = BoardDisplaySettings.of(context);
+    final coordinates = widget.coordinates ?? display.coordinates;
     return LayoutBuilder(
       builder: (context, constraints) {
         final boardSize = constraints.maxWidth < constraints.maxHeight
@@ -155,7 +155,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                     highlightedSquares: widget.highlightedSquares,
                     legalMoveSquares: {
                       ...widget.legalMoveSquares,
-                      ..._legalMoveSquares,
+                      if (display.showLegalMoves) ..._legalMoveSquares,
                     },
                     occupiedSquares: {
                       for (final (square, _) in widget.position.board.pieces)

@@ -95,6 +95,31 @@ void main() {
     },
   );
 
+  test(
+    'navigation restores the selected game, filter and board position',
+    () async {
+      final c = _makeController();
+      addTearDown(c.dispose);
+      final games = [_game(white: 'First'), _game(white: 'Second')];
+      _seed(c, games);
+      c.applySlice([1], const SliceConfig.empty());
+      await c.loadCurrentGame();
+      const fen = '4k3/8/8/4p3/8/8/8/4K3 b - - 0 17';
+      c.pgnInitialFen = fen;
+      final restore = c.captureNavigationContext();
+      _seed(c, [_game(white: 'Other collection')]);
+      c.pgnInitialFen = null;
+
+      await restore();
+
+      expect(c.allGames, games);
+      expect(c.filteredGames, [games[1]]);
+      expect(c.currentGameIndex, 0);
+      expect(c.hasActiveFilters, isTrue);
+      expect(c.currentPosition.fen, Chess.fromSetup(Setup.parseFen(fen)).fen);
+    },
+  );
+
   group('load ordering', () {
     test('a slower file read cannot replace the newest selection', () async {
       final storage = _GatedStorage();

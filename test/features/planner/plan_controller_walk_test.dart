@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/features/planner/controllers/plan_controller.dart';
 import 'package:chess_auto_prep/features/planner/models/plan_models.dart';
+import 'package:chess_auto_prep/features/planner/models/plan_starting_line.dart';
 import 'package:chess_auto_prep/features/planner/services/eco_trie.dart';
 import 'package:chess_auto_prep/features/planner/services/plan_data_source.dart';
 import 'package:chess_auto_prep/features/planner/services/plan_knowledge.dart';
@@ -125,6 +126,81 @@ void main() {
       .expand((ch) => ch.buildPaths)
       .map((p) => p.join(' '))
       .toSet();
+
+  group('multiple starting systems', () {
+    final roots = PlanStartingLine.parse(
+      'Main KID | 1.d4 Nf6 2.c4 g6 3.Nc3 Bg7 4.e4 d6\nFianchetto KID | 1.d4 Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 d6\nLondon | 1.d4 Nf6 2.Bf4 d5',
+    );
+
+    test(
+      'direct plan keeps all named roots and their complete move paths',
+      () async {
+        final controller = make();
+        addTearDown(controller.dispose);
+        await controller.startMany(roots, askQuestions: false);
+        final result = await controller.finish();
+        expect(result.chapters.map((c) => c.name), roots.map((r) => r.name));
+        expect(buildPaths(result), roots.map((r) => r.moves.join(' ')).toSet());
+        expect(controller.phase, PlanPhase.review);
+        expect(controller.canGoBack, isFalse);
+      },
+    );
+
+    test(
+      'quiz visits every root and Back restores the preceding root',
+      () async {
+        final controller = make();
+        addTearDown(controller.dispose);
+        await controller.startMany(roots);
+        expect(controller.step!.moves, roots.first.moves);
+        await controller.stopHere();
+        expect(controller.step!.moves, roots[1].moves);
+        await controller.back();
+        expect(controller.step!.moves, roots.first.moves);
+        expect(controller.chapters, isEmpty);
+        await controller.stopHere();
+        await controller.stopHere();
+        expect(controller.step!.moves, roots[2].moves);
+        await controller.stopHere();
+        expect(
+          buildPaths(await controller.finish()),
+          roots.map((r) => r.moves.join(' ')).toSet(),
+        );
+      },
+    );
+
+    test(
+      'own-games thresholds follow each root rather than the largest sample',
+      () async {
+        final controller = make(
+          basis: PlanBasis.ownGames,
+          knowledge: PlanKnowledge(
+            ownReplies: {
+              normalizeFen(_fenAfter(roots[0].moves)): {'Nf3': 1000},
+              normalizeFen(_fenAfter(roots[1].moves)): {'Bg2': 10},
+            },
+          ),
+        );
+        addTearDown(controller.dispose);
+        await controller.startMany(roots.take(2).toList());
+        expect(controller.ownFloor, 80);
+        await controller.stopHere();
+        expect(controller.step!.moves, roots[1].moves);
+        expect(controller.ownFloor, 3);
+        expect(controller.step!.kind, PlanStepKind.theirMove);
+      },
+    );
+
+    test('Finish now includes every unvisited root', () async {
+      final controller = make();
+      addTearDown(controller.dispose);
+      await controller.startMany(roots);
+      expect(
+        buildPaths(await controller.finish()),
+        roots.map((r) => r.moves.join(' ')).toSet(),
+      );
+    });
+  });
 
   group('back() is exact', () {
     test(

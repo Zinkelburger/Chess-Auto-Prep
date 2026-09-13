@@ -48,23 +48,3 @@ class RepertoireLinesTabLabel extends StatelessWidget {
     );
   }
 }
-
-/// "Tree" tab label.
-class RepertoireTreeTabLabel extends StatelessWidget {
-  const RepertoireTreeTabLabel({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Tab(
-      height: 30,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.account_tree_outlined, size: 14),
-          SizedBox(width: 4),
-          Text('Tree', style: TextStyle(fontSize: 12)),
-        ],
-      ),
-    );
-  }
-}

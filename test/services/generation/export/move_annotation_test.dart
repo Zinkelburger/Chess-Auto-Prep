@@ -17,6 +17,33 @@ void main() {
       lastPlayedYear: 2024,
     );
 
+    test('each optional metric is independent and round-trips', () {
+      const choices = [
+        MoveAnnotationDetail(evaluations: true),
+        MoveAnnotationDetail(expectimax: true),
+        MoveAnnotationDetail(probabilities: true),
+      ];
+      const tags = ['[%eval ', '[%expectimax ', '[%humanFrequency '];
+      for (var i = 0; i < choices.length; i++) {
+        final detail = MoveAnnotationDetail.parse(choices[i].name);
+        expect(detail, choices[i]);
+        final comment = rich.toPgnComment(detail)!;
+        expect(comment, startsWith(tags[i]));
+        expect(comment, isNot(contains('Only move')));
+        for (var j = 0; j < tags.length; j++) {
+          if (i != j) expect(comment, isNot(contains(tags[j])));
+        }
+      }
+    });
+
+    test('all annotation selections survive saved config names', () {
+      for (var mask = 0; mask < 32; mask++) {
+        final detail = MoveAnnotationDetail.parse('custom:$mask');
+        expect(MoveAnnotationDetail.parse(detail.name), detail);
+      }
+      expect(MoveAnnotationDetail.parse('unknown'), MoveAnnotationDetail.none);
+    });
+
     test('none emits nothing', () {
       expect(rich.toPgnComment(MoveAnnotationDetail.none), isNull);
     });
@@ -308,11 +335,8 @@ void main() {
     test('parses its own names and defaults on anything else', () {
       expect(MoveAnnotationDetail.parse('full'), MoveAnnotationDetail.full);
       expect(MoveAnnotationDetail.parse('none'), MoveAnnotationDetail.none);
-      expect(
-        MoveAnnotationDetail.parse('nonsense'),
-        MoveAnnotationDetail.likelihood,
-      );
-      expect(MoveAnnotationDetail.parse(null), MoveAnnotationDetail.likelihood);
+      expect(MoveAnnotationDetail.parse('nonsense'), MoveAnnotationDetail.none);
+      expect(MoveAnnotationDetail.parse(null), MoveAnnotationDetail.none);
     });
 
     test('restores the setting from the boolean it replaced', () {

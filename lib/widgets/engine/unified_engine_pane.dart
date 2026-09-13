@@ -20,7 +20,7 @@ import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart';
 import 'engine_pane_footer.dart';
-import '../analysis/stockfish_settings_dialog.dart';
+import 'inline_engine_settings.dart';
 import 'floating_board_preview.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
@@ -305,13 +305,7 @@ class _UnifiedEnginePaneState extends _UnifiedEnginePaneStateBase
                   )
                 : const SizedBox.shrink(),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings, size: 18),
-            tooltip: 'Stockfish settings',
-            onPressed: () => showStockfishSettingsDialog(context),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
+          const InlineEngineSettings(),
         ],
       ),
     );

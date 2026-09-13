@@ -10,6 +10,7 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
 import '../../../widgets/common/confirm_dialog.dart';
+import '../../../widgets/common/choice_field.dart';
 import '../../../widgets/pgn_import_dialog.dart';
 import '../services/my_repertoire_settings.dart';
 
@@ -19,8 +20,8 @@ import '../services/my_repertoire_settings.dart';
 /// Flat on purpose. Each colour has its books listed and, beside the heading,
 /// the two ways to add one: **Import PGN…** goes straight to the system file
 /// picker and designates what it imports, named after the file; **Add
-/// existing** is a menu of the repertoires already in the app, with "New empty
-/// repertoire…" at its foot for someone who wants to build the lines in the
+/// existing** searches repertoires already in the app, with "New empty
+/// repertoire…" for someone who wants to build the lines in the
 /// Repertoire Builder first. It used to be a button that opened a chooser
 /// dialog that opened the picker that opened a naming dialog — four screens
 /// between "I have a PGN" and "it is my book" — and nobody got through it.
@@ -535,9 +536,7 @@ class _ColorDesignation extends StatelessWidget {
   }
 }
 
-/// "Add existing ▾": the repertoires already in the app that are not this
-/// colour's book yet, and a way to start an empty one. A menu, not a dialog:
-/// the list is short and the choice is one click.
+/// Search existing repertoires with the app-wide keyboard-accessible picker.
 class _AddExistingMenu extends StatelessWidget {
   const _AddExistingMenu({
     required this.candidates,
@@ -551,37 +550,34 @@ class _AddExistingMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MenuAnchor(
-      menuChildren: [
-        if (candidates.isEmpty)
-          const MenuItemButton(
-            onPressed: null,
-            child: Text('No other repertoires in the app'),
-          )
-        else
+    return SizedBox(
+      width: 200,
+      child: ChoiceField<String>(
+        key: const ValueKey('add-existing-repertoire'),
+        value: null,
+        hint: 'Add existing',
+        prefixIcon: Icons.search,
+        compact: true,
+        items: [
           for (final r in candidates)
-            MenuItemButton(
-              leadingIcon: const Icon(Icons.menu_book_outlined, size: 16),
-              onPressed: () => onDesignate(r),
-              child: Text(r.name),
+            ChoiceItem(
+              value: r.filePath,
+              label: r.name,
+              icon: Icons.menu_book_outlined,
             ),
-        const Divider(height: 1),
-        MenuItemButton(
-          leadingIcon: const Icon(Icons.create_new_folder_outlined, size: 16),
-          onPressed: onCreateEmpty,
-          child: const Text('New empty repertoire…'),
-        ),
-      ],
-      builder: (context, controller, _) => Tooltip(
-        message: 'Use a repertoire already in the app as this book',
-        child: OutlinedButton.icon(
-          onPressed: () =>
-              controller.isOpen ? controller.close() : controller.open(),
-          icon: const Icon(Icons.arrow_drop_down, size: 18),
-          iconAlignment: IconAlignment.end,
-          label: const Text('Add existing'),
-          style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-        ),
+          const ChoiceItem(
+            value: '__new__',
+            label: 'New empty repertoire…',
+            icon: Icons.create_new_folder_outlined,
+          ),
+        ],
+        onChanged: (path) {
+          if (path == '__new__') {
+            onCreateEmpty();
+          } else {
+            onDesignate(candidates.firstWhere((r) => r.filePath == path));
+          }
+        },
       ),
     );
   }

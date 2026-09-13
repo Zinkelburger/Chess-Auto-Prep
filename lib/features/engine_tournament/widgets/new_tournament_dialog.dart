@@ -1,18 +1,7 @@
-/// Set up a match or a tournament.
-///
-/// The dialog shows only what people actually change: the position, the
-/// name, how many games, and the time control. Everything else — which
-/// engines play, the clock's exact numbers, concurrency, adjudication — sits
-/// behind one **Advanced** toggle with defaults you would pick anyway: the
-/// bundled Stockfish against itself, two seconds a move, ten games with the
-/// colours alternating, one game at a time, and the adjudication rules that
-/// stop two equal engines shuffling a dead position for two hundred moves.
-///
-/// The FEN field starts *empty*, and empty means the standard starting
-/// position. A prefilled start FEN used to sit in the field, which made the
-/// one thing people came to type into look like something they should not
-/// touch.
+/// Reusable tournament setup, including participant controls and board editing.
 library;
+
+import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../../../constants/chess_constants.dart';
 import '../../../widgets/common/choice_field.dart';
+import '../../../widgets/engine/engine_resource_controls.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/fen_utils.dart';
@@ -35,7 +25,9 @@ Future<TournamentConfig?> showNewTournamentDialog(
   BuildContext context, {
   required List<EngineSpec> engines,
   required String boardFen,
-  required VoidCallback onManageEngines,
+  required FutureOr<void> Function() onManageEngines,
+  TournamentConfig? initialConfig,
+  List<EngineSpec> Function()? getEngines,
 }) {
   return showDialog<TournamentConfig>(
     context: context,
@@ -43,7 +35,11 @@ Future<TournamentConfig?> showNewTournamentDialog(
       insetPadding: const EdgeInsets.all(24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
-        child: _NewTournamentBody(
+        child: TournamentSetupPanel(
+          initialConfig: initialConfig,
+          getEngines: getEngines,
+          onStart: (config) => Navigator.of(context).pop(config),
+          onCancel: () => Navigator.of(context).pop(),
           engines: engines,
           boardFen: boardFen,
           onManageEngines: onManageEngines,
@@ -53,8 +49,15 @@ Future<TournamentConfig?> showNewTournamentDialog(
   );
 }
 
-class _NewTournamentBody extends StatefulWidget {
-  const _NewTournamentBody({
+class TournamentSetupPanel extends StatefulWidget {
+  const TournamentSetupPanel({
+    super.key,
+    this.initialConfig,
+    this.getEngines,
+    required this.onStart,
+    this.onCancel,
+    this.enabled = true,
+    this.embedded = false,
     required this.engines,
     required this.boardFen,
     required this.onManageEngines,
@@ -65,13 +68,27 @@ class _NewTournamentBody extends StatefulWidget {
   /// Whatever position the app's board is showing, offered as one click.
   final String boardFen;
 
-  final VoidCallback onManageEngines;
+  final FutureOr<void> Function() onManageEngines;
+  final TournamentConfig? initialConfig;
+  final List<EngineSpec> Function()? getEngines;
+  final ValueChanged<TournamentConfig> onStart;
+  final VoidCallback? onCancel;
+  final bool enabled;
+  final bool embedded;
 
   @override
-  State<_NewTournamentBody> createState() => _NewTournamentBodyState();
+  State<TournamentSetupPanel> createState() => _TournamentSetupPanelState();
 }
 
-class _NewTournamentBodyState extends State<_NewTournamentBody> {
+class _TournamentSetupPanelState extends State<TournamentSetupPanel>
+    with AutomaticKeepAliveClientMixin {
+  void _update(VoidCallback change) {
+    if (!mounted) return;
+    setState(change);
+  }
+
+  @override
+  bool get wantKeepAlive => true;
   static const _boardSize = 208.0;
 
   final _name = TextEditingController(text: 'Engine match');
@@ -80,11 +97,10 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
   /// Empty means [kStandardStartFen]; see [_effectiveFen].
   final _fen = TextEditingController();
 
-  /// Ids of the participants, in seeding order. The same engine may appear
-  /// twice — that is how you test a change against its own baseline.
-  late final List<String> _participants = [
-    widget.engines.first.id,
-    widget.engines.first.id,
+  late List<EngineSpec> _available = widget.engines;
+  late final List<EngineSpec> _participants = [
+    ...?widget.initialConfig?.engines,
+    if (widget.initialConfig == null) ...[_available.first, _available.first],
   ];
 
   TimeControl _timeControl = const TimeControl.perMove(2000);
@@ -101,6 +117,20 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
   @override
   void initState() {
     super.initState();
+    final config = widget.initialConfig;
+    if (config != null) {
+      _name.text = config.name;
+      _opening.text = config.openingLabel;
+      _setFen(config.startFen);
+      _timeControl = config.timeControl;
+      _gamesPerPairing = config.gamesPerPairing;
+      _alternateColors = config.alternateColors;
+      _format = config.format;
+      _concurrency = config.concurrency;
+      _annotateMoves = config.annotateMoves;
+      _adjudication = config.adjudication;
+    }
+    _showAdvanced = widget.embedded;
     _fen.addListener(_validateFen);
   }
 
@@ -130,7 +160,8 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
     }
     // Rebuild unconditionally: the preview board and the footer summary read
     // the FEN text directly, so an edit that stays valid must still repaint.
-    setState(() => _fenError = error);
+    if (!mounted) return;
+    _update(() => _fenError = error);
   }
 
   /// Put [fen] in the field — or clear it when it is the standard start, so
@@ -146,6 +177,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
       initialFen: _fenError == null ? _effectiveFen : null,
       actionLabel: 'Use this position',
     );
+    if (!mounted) return;
     if (position != null) _setFen(position.fen);
   }
 
@@ -163,13 +195,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
   bool get _canUseBoardPosition =>
       normalizeFen(widget.boardFen) != normalizeFen(_effectiveFen);
 
-  List<EngineSpec> get _selectedSpecs => [
-    for (final id in _participants)
-      widget.engines.firstWhere(
-        (e) => e.id == id,
-        orElse: () => widget.engines.first,
-      ),
-  ];
+  List<EngineSpec> get _selectedSpecs => _participants;
 
   /// Two participants sharing a name would produce a crosstable nobody could
   /// read, so repeats are suffixed the way cutechess does it.
@@ -191,10 +217,12 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
     ];
   }
 
-  bool get _canStart => _fenError == null && _participants.length >= 2;
+  bool get _canStart =>
+      widget.enabled && _fenError == null && _participants.length >= 2;
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final specs = _namedSpecs;
     final config = _buildConfig(specs);
     return Column(
@@ -205,23 +233,29 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
           child: Row(
             children: [
-              const Text('New tournament', style: AppTextStyles.title),
-              const Spacer(),
-              Tooltip(
-                message:
-                    'Which engines play, the exact clock, games at once, '
-                    'adjudication.',
-                child: TextButton.icon(
-                  key: const ValueKey('new-tournament-advanced'),
-                  onPressed: () =>
-                      setState(() => _showAdvanced = !_showAdvanced),
-                  icon: Icon(
-                    _showAdvanced ? Icons.expand_less : Icons.tune,
-                    size: 16,
-                  ),
-                  label: const Text('Advanced'),
-                ),
+              Text(
+                widget.embedded ? 'Configure next run' : 'New tournament',
+                style: AppTextStyles.title,
               ),
+              const Spacer(),
+              if (!widget.embedded)
+                Tooltip(
+                  message:
+                      'Which engines play, the exact clock, games at once, '
+                      'adjudication.',
+                  child: TextButton.icon(
+                    key: const ValueKey('new-tournament-advanced'),
+                    onPressed: () {
+                      if (!mounted) return;
+                      _update(() => _showAdvanced = !_showAdvanced);
+                    },
+                    icon: Icon(
+                      _showAdvanced ? Icons.expand_less : Icons.tune,
+                      size: 16,
+                    ),
+                    label: const Text('Engine controls'),
+                  ),
+                ),
             ],
           ),
         ),
@@ -250,7 +284,9 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
             children: [
               Expanded(
                 child: Text(
-                  _canStart
+                  !widget.enabled
+                      ? 'Wait for the current tournament to finish before starting another.'
+                      : _canStart
                       ? _summary(specs, config)
                       : (_fenError ?? 'Pick at least two engines.'),
                   style: AppTextStyles.hint.copyWith(
@@ -260,17 +296,18 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                   ),
                 ),
               ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
+              if (widget.onCancel != null)
+                TextButton(
+                  onPressed: widget.onCancel,
+                  child: const Text('Cancel'),
+                ),
               const SizedBox(width: 8),
               FilledButton(
                 key: const ValueKey('new-tournament-start'),
                 onPressed: _canStart
-                    ? () => Navigator.of(context).pop(config)
+                    ? () => widget.onStart(_buildConfig(_namedSpecs))
                     : null,
-                child: const Text('Start'),
+                child: Text(widget.embedded ? 'Start new run' : 'Start'),
               ),
             ],
           ),
@@ -293,12 +330,10 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
     adjudication: _adjudication,
   );
 
-  /// "Stockfish against itself · 10 games · 2 s / move · ≈ 47 min".
+  /// Participants, game count, time control and estimated duration.
   String _summary(List<EngineSpec> specs, TournamentConfig config) {
     final selected = _selectedSpecs;
     final who = switch (selected.length) {
-      2 when selected[0].id == selected[1].id =>
-        '${selected[0].name} against itself',
       2 => '${specs[0].name} vs ${specs[1].name}',
       _ => '${specs.length} engines',
     };
@@ -374,7 +409,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                       value: _gamesPerPairing,
                       min: 1,
                       max: 1000,
-                      onChanged: (v) => setState(() => _gamesPerPairing = v),
+                      onChanged: (v) => _update(() => _gamesPerPairing = v),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -431,7 +466,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           ChoiceItem(value: i, label: kTimeControlPresets[i].label),
       ],
       onChanged: (index) =>
-          setState(() => _timeControl = kTimeControlPresets[index].tc),
+          _update(() => _timeControl = kTimeControlPresets[index].tc),
     );
   }
 
@@ -444,7 +479,25 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
         _Section(
           title: 'Engines',
           trailing: TextButton(
-            onPressed: widget.onManageEngines,
+            onPressed: () async {
+              await widget.onManageEngines();
+              if (!mounted) return;
+              _update(() {
+                _available = widget.getEngines?.call() ?? widget.engines;
+                for (var i = 0; i < _participants.length; i++) {
+                  final selected = _participants[i];
+                  final updated = _available
+                      .where((e) => e.id == selected.id)
+                      .firstOrNull;
+                  if (updated != null) {
+                    _participants[i] = updated.copyWith(
+                      threads: selected.threads,
+                      hashMb: selected.hashMb,
+                    );
+                  }
+                }
+              });
+            },
             child: const Text('Manage engines…'),
           ),
           child: _buildParticipants(),
@@ -469,30 +522,62 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
         for (var i = 0; i < _participants.length; i++)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
+            child: Column(
               children: [
-                SizedBox(
-                  width: 24,
-                  child: Text('${i + 1}', style: AppTextStyles.muted),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      child: Text('${i + 1}', style: AppTextStyles.muted),
+                    ),
+                    Expanded(
+                      child: ChoiceField<String>(
+                        value: _participants[i].id,
+                        hint: 'Engine',
+                        items: [
+                          for (final engine in {
+                            for (final e in [..._participants, ..._available])
+                              e.id: e,
+                          }.values)
+                            ChoiceItem(value: engine.id, label: engine.name),
+                        ],
+                        onChanged: (value) => _update(
+                          () => _participants[i] = _available.firstWhere(
+                            (e) => e.id == value,
+                            orElse: () => _participants[i],
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Remove',
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: _participants.length <= 2
+                          ? null
+                          : () => _update(() => _participants.removeAt(i)),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: ChoiceField<String>(
-                    value: _participants[i],
-                    hint: 'Engine',
-                    items: [
-                      for (final engine in widget.engines)
-                        ChoiceItem(value: engine.id, label: engine.name),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _participants[i] = value),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Remove',
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: _participants.length <= 2
-                      ? null
-                      : () => setState(() => _participants.removeAt(i)),
+                EngineResourceControls(
+                  key: ValueKey('tournament-engine-$i'),
+                  cores: _participants[i].threads,
+                  hashMb: _participants[i].hashMb,
+                  onCoresChanged: (v) {
+                    if (!mounted) return;
+                    _update(
+                      () => _participants[i] = _participants[i].copyWith(
+                        threads: v,
+                      ),
+                    );
+                  },
+                  onHashChanged: (v) {
+                    if (!mounted) return;
+                    _update(
+                      () => _participants[i] = _participants[i].copyWith(
+                        hashMb: v,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -500,8 +585,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton(
-            onPressed: () =>
-                setState(() => _participants.add(widget.engines.first.id)),
+            onPressed: () => _update(() => _participants.add(_available.first)),
             child: const Text('Add engine'),
           ),
         ),
@@ -517,7 +601,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           value: _timeControl.movetimeMs,
           min: 10,
           max: 600000,
-          onChanged: (v) => setState(
+          onChanged: (v) => _update(
             () => _timeControl = _timeControl.copyWith(movetimeMs: v),
           ),
         );
@@ -530,7 +614,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                 value: _timeControl.baseMs,
                 min: 100,
                 max: 7200000,
-                onChanged: (v) => setState(
+                onChanged: (v) => _update(
                   () => _timeControl = _timeControl.copyWith(baseMs: v),
                 ),
               ),
@@ -542,7 +626,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                 value: _timeControl.incrementMs,
                 min: 0,
                 max: 60000,
-                onChanged: (v) => setState(
+                onChanged: (v) => _update(
                   () => _timeControl = _timeControl.copyWith(incrementMs: v),
                 ),
               ),
@@ -555,7 +639,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                 min: 0,
                 max: 200,
                 helper: '0 = sudden death',
-                onChanged: (v) => setState(
+                onChanged: (v) => _update(
                   () => _timeControl = _timeControl.copyWith(
                     movesPerSession: v == 0 ? null : v,
                   ),
@@ -571,7 +655,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           min: 1,
           max: 60,
           onChanged: (v) =>
-              setState(() => _timeControl = _timeControl.copyWith(depth: v)),
+              _update(() => _timeControl = _timeControl.copyWith(depth: v)),
         );
       case TimeControlKind.fixedNodes:
         return _NumberField(
@@ -580,7 +664,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           min: 1000,
           max: 1000000000,
           onChanged: (v) =>
-              setState(() => _timeControl = _timeControl.copyWith(nodes: v)),
+              _update(() => _timeControl = _timeControl.copyWith(nodes: v)),
         );
     }
   }
@@ -597,7 +681,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
             ],
             selected: {_format},
             showSelectedIcon: false,
-            onSelectionChanged: (s) => setState(() => _format = s.first),
+            onSelectionChanged: (s) => _update(() => _format = s.first),
           ),
           const SizedBox(height: 10),
         ],
@@ -611,7 +695,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                 min: 1,
                 max: getLogicalCores(),
                 helper: 'One is fairest',
-                onChanged: (v) => setState(() => _concurrency = v),
+                onChanged: (v) => _update(() => _concurrency = v),
               ),
             ),
             const SizedBox(width: 12),
@@ -633,7 +717,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           contentPadding: EdgeInsets.zero,
           controlAffinity: ListTileControlAffinity.leading,
           value: _alternateColors,
-          onChanged: (v) => setState(() => _alternateColors = v ?? true),
+          onChanged: (v) => _update(() => _alternateColors = v ?? true),
           title: const Text('Alternate colours', style: AppTextStyles.body),
           subtitle: Text(
             'Each pairing plays ${config.gamesPerPairing} games with the '
@@ -646,7 +730,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           contentPadding: EdgeInsets.zero,
           controlAffinity: ListTileControlAffinity.leading,
           value: _annotateMoves,
-          onChanged: (v) => setState(() => _annotateMoves = v ?? false),
+          onChanged: (v) => _update(() => _annotateMoves = v ?? false),
           title: const Text(
             'Annotate every move with the engine\'s eval',
             style: AppTextStyles.body,
@@ -671,7 +755,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           contentPadding: EdgeInsets.zero,
           controlAffinity: ListTileControlAffinity.leading,
           value: rules.drawEnabled,
-          onChanged: (v) => setState(
+          onChanged: (v) => _update(
             () => _adjudication = rules.copyWith(drawEnabled: v ?? true),
           ),
           title: const Text(
@@ -688,7 +772,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                   value: rules.drawMoveNumber,
                   min: 1,
                   max: 300,
-                  onChanged: (v) => setState(
+                  onChanged: (v) => _update(
                     () => _adjudication = rules.copyWith(drawMoveNumber: v),
                   ),
                 ),
@@ -700,7 +784,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                   value: rules.drawMoveCount,
                   min: 1,
                   max: 100,
-                  onChanged: (v) => setState(
+                  onChanged: (v) => _update(
                     () => _adjudication = rules.copyWith(drawMoveCount: v),
                   ),
                 ),
@@ -712,7 +796,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                   value: rules.drawScoreCp,
                   min: 0,
                   max: 200,
-                  onChanged: (v) => setState(
+                  onChanged: (v) => _update(
                     () => _adjudication = rules.copyWith(drawScoreCp: v),
                   ),
                 ),
@@ -725,7 +809,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           contentPadding: EdgeInsets.zero,
           controlAffinity: ListTileControlAffinity.leading,
           value: rules.resignEnabled,
-          onChanged: (v) => setState(
+          onChanged: (v) => _update(
             () => _adjudication = rules.copyWith(resignEnabled: v ?? true),
           ),
           title: const Text('Resign lost games', style: AppTextStyles.body),
@@ -739,7 +823,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                   value: rules.resignMoveCount,
                   min: 1,
                   max: 50,
-                  onChanged: (v) => setState(
+                  onChanged: (v) => _update(
                     () => _adjudication = rules.copyWith(resignMoveCount: v),
                   ),
                 ),
@@ -751,7 +835,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                   value: rules.resignScoreCp,
                   min: 100,
                   max: 5000,
-                  onChanged: (v) => setState(
+                  onChanged: (v) => _update(
                     () => _adjudication = rules.copyWith(resignScoreCp: v),
                   ),
                 ),
@@ -762,7 +846,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
                   contentPadding: const EdgeInsets.only(left: 12),
                   controlAffinity: ListTileControlAffinity.leading,
                   value: rules.twoSidedResign,
-                  onChanged: (v) => setState(
+                  onChanged: (v) => _update(
                     () => _adjudication = rules.copyWith(
                       twoSidedResign: v ?? true,
                     ),
@@ -780,7 +864,7 @@ class _NewTournamentBodyState extends State<_NewTournamentBody> {
           max: 2000,
           helper: 'Filed as a draw.',
           onChanged: (v) =>
-              setState(() => _adjudication = rules.copyWith(maxMoves: v)),
+              _update(() => _adjudication = rules.copyWith(maxMoves: v)),
         ),
       ],
     );
@@ -902,6 +986,7 @@ class _NumberFieldState extends State<_NumberField> {
         isDense: true,
       ),
       onChanged: (text) {
+        if (!mounted) return;
         final parsed = int.tryParse(text);
         if (parsed == null) return;
         widget.onChanged(parsed.clamp(widget.min, widget.max));

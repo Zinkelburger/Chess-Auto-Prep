@@ -11,10 +11,8 @@ import '../theme/app_text_styles.dart';
 /// above the bar. A second full-width bar for two words of navigation state
 /// was pure chrome; the app bar already has the room.
 ///
-/// The trail is strictly secondary, so it is dropped rather than allowed to
-/// squeeze the title: it appears only when there is a trail to show *and* the
-/// bar is wide enough that splitting it leaves the title workable. Below that
-/// the title renders exactly as it did before this widget existed.
+/// Back stays visible at every width. The optional breadcrumb labels appear
+/// only when the bar has enough room for them beside the title.
 class AppBarTitleWithTrail extends StatelessWidget {
   const AppBarTitleWithTrail({super.key, required this.title});
 
@@ -35,11 +33,21 @@ class AppBarTitleWithTrail extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < minWidthForTrail) return title;
+        final locked = context.select<AppState?, bool>(
+          (state) => state?.isRepertoireGenerating ?? false,
+        );
         return Row(
           children: [
+            IconButton(
+              key: const ValueKey('app-history-back'),
+              tooltip: 'Back to ${history.entries[history.length - 2].label}',
+              icon: const Icon(Icons.arrow_back, size: 20),
+              onPressed: locked ? null : history.back,
+              visualDensity: VisualDensity.compact,
+            ),
             Flexible(flex: 3, child: title),
-            const Flexible(flex: 2, child: AppBreadcrumbTrail()),
+            if (constraints.maxWidth >= minWidthForTrail)
+              const Flexible(flex: 2, child: AppBreadcrumbTrail()),
           ],
         );
       },

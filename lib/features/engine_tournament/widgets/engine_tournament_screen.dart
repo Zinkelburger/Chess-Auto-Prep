@@ -160,7 +160,62 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
               ),
             ],
           ),
-          body: _buildBody(selected),
+          body: DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                const TabBar(
+                  tabs: [
+                    Tab(
+                      icon: Icon(Icons.table_chart_outlined, size: 18),
+                      text: 'Results',
+                    ),
+                    Tab(
+                      icon: Icon(Icons.tune, size: 18),
+                      text: 'Engine controls',
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _buildBody(selected),
+                      if (_controller.engines.isEmpty)
+                        const Center(child: CircularProgressIndicator())
+                      else
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 900),
+                            child: Builder(
+                              builder: (tabContext) => TournamentSetupPanel(
+                                key: ValueKey(selected?.id ?? 'new'),
+                                embedded: true,
+                                initialConfig: selected?.config,
+                                engines: _controller.engines,
+                                getEngines: () => _controller.engines,
+                                boardFen: context
+                                    .read<AppState>()
+                                    .currentPosition
+                                    .fen,
+                                enabled: !_controller.isRunning,
+                                onManageEngines: _manageEngines,
+                                onStart: (config) {
+                                  if (!mounted) return;
+                                  DefaultTabController.of(
+                                    tabContext,
+                                  ).animateTo(0);
+                                  unawaited(_start(config));
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -202,22 +257,26 @@ class _EngineTournamentScreenState extends State<EngineTournamentScreen> {
               onOpenGame: (game) => _openInViewer(selected, game),
               onOpenAllGames: () => _openInViewer(selected, null),
               onDelete: () => unawaited(_delete(selected)),
-              onRerun: () => unawaited(_start(selected.config)),
+              onRerun: () =>
+                  unawaited(_newTournament(initialConfig: selected.config)),
             ),
     );
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
-  Future<void> _newTournament() async {
+  Future<void> _newTournament({TournamentConfig? initialConfig}) async {
+    if (!mounted) return;
     final appState = context.read<AppState>();
     final config = await showNewTournamentDialog(
       context,
+      initialConfig: initialConfig,
+      getEngines: () => _controller.engines,
       engines: _controller.engines,
       boardFen: appState.currentPosition.fen,
       onManageEngines: _manageEngines,
     );
-    if (config == null) return;
+    if (!mounted || config == null) return;
     await _start(config);
   }
 

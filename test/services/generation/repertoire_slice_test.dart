@@ -29,9 +29,9 @@ const _config = TreeBuildConfig(
 
 /// A tree taken through the real Phase 2, so the repertoire-move flags the
 /// extractor reads are the ones a build would have written.
-RepertoireSlicer _slicerForStandardTree() {
+RepertoireSlicer _slicerForStandardTree({String prefix = ''}) {
   final helper = StandardTree();
-  final tree = helper.toTree();
+  final tree = helper.toTree()..startMoves = prefix;
   final fenMap = helper.toFenMap();
   calculateTreeEase(tree);
   final eca = ExpectimaxCalculator(config: _config, fenMap: fenMap);
@@ -46,6 +46,26 @@ RepertoireSlicer _slicerForStandardTree() {
 
 void main() {
   group('RepertoireSlicer', () {
+    test('cut keys include the saved starting moves used by the export', () {
+      final bare = _slicerForStandardTree().plan(1);
+      final prefixed = _slicerForStandardTree(prefix: 'd4 Nf6 c4 g6').plan(1);
+      expect(prefixed.droppedKeys, isNotEmpty);
+      expect(prefixed.droppedKeys, {
+        for (final key in bare.droppedKeys) 'd4 Nf6 c4 g6 $key',
+      });
+      expect(
+        prefixed.removalsFrom([
+          prefixed.droppedKeys.first.split(' '),
+          bare.droppedKeys.first.split(' '),
+          ['e4', 'e5'],
+        ]),
+        1,
+      );
+      expect(prefixed.keptKeys, {
+        for (final key in bare.keptKeys) 'd4 Nf6 c4 g6 $key',
+      });
+    });
+
     test('ranks every line that teaches something', () {
       final slicer = _slicerForStandardTree();
       expect(slicer.maxLines, greaterThan(0));

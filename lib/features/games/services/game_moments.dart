@@ -79,7 +79,7 @@ List<GameMoment> buildGameMoments(RecentGame game) {
 }
 
 GameMoment? _bookMoment(DeviationReport? report) {
-  if (report == null || report.inBook) return null;
+  if (report == null || report.inBook || report.differentOpening) return null;
   final played = report.playedSan!;
   final fen = fenAfterMoves(
     Chess.initial.fen,

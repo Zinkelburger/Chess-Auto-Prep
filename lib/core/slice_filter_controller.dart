@@ -168,6 +168,38 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
     positionText.clear(); // listener resets parse state + notifies
   }
 
+  final List<TextEditingController> additionalPositions = [];
+  bool matchAny = false;
+
+  void setMatchAny(bool value) {
+    matchAny = value;
+    notifyListeners();
+  }
+
+  bool get hasInvalidPosition =>
+      positionParse.error != null ||
+      additionalPositions.any(
+        (input) => parsePositionInput(input.text).error != null,
+      );
+
+  List<String> get additionalPositionFens => [
+    for (final input in additionalPositions)
+      ?parsePositionInput(input.text).fen,
+  ];
+
+  void addPosition([String text = '']) {
+    final input = TextEditingController(text: text)
+      ..addListener(notifyListeners);
+    additionalPositions.add(input);
+    notifyListeners();
+  }
+
+  void removePosition(TextEditingController input) {
+    if (!additionalPositions.remove(input)) return;
+    input.dispose();
+    notifyListeners();
+  }
+
   // ── Sequence filter ──
 
   final TextEditingController sequenceText = TextEditingController();
@@ -226,19 +258,19 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Current filter configs (non-empty values only).
   List<HeaderFilterConfig> get headerConfigs => headerRows
-      .where((f) => f.value.isNotEmpty)
+      .where((f) => f.field.isNotEmpty && f.value.isNotEmpty)
       .map((f) => f.toConfig())
       .toList();
 
   /// Raw filter data for slice computation.
   List<({String field, MatchMode mode, String value})> get rawHeaderFilters =>
       headerRows
-          .where((f) => f.value.isNotEmpty)
+          .where((f) => f.field.isNotEmpty && f.value.isNotEmpty)
           .map((f) => (field: f.field, mode: f.mode, value: f.value))
           .toList();
 
-  void addHeaderRow() {
-    headerRows.add(HeaderFilterRow());
+  void addHeaderRow({String field = 'Black'}) {
+    headerRows.add(HeaderFilterRow(field: field));
     notifyListeners();
   }
 
@@ -310,6 +342,8 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
   /// Snapshot the current filters as a serializable config.
   SliceConfig buildConfig() => SliceConfig(
     positionInput: positionFen,
+    additionalPositions: additionalPositionFens,
+    matchAny: matchAny,
     headerFilters: headerConfigs,
     sequencePattern: hasSequenceFilter
         ? sequenceGroups.map((g) => g.join(' ')).join(' [gap] ')
@@ -328,6 +362,16 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void _applyConfig(SliceConfig? config) {
+    for (final input in additionalPositions) {
+      input.dispose();
+    }
+    additionalPositions.clear();
+    matchAny = config?.matchAny ?? false;
+    for (final text in config?.additionalPositions ?? <String>[]) {
+      additionalPositions.add(
+        TextEditingController(text: text)..addListener(notifyListeners),
+      );
+    }
     positionText.text = config?.positionInput ?? '';
     _lastParsedPositionText = positionText.text;
     _positionParse = positionText.text.isNotEmpty
@@ -356,6 +400,9 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
   @override
   void dispose() {
     positionText.dispose();
+    for (final input in additionalPositions) {
+      input.dispose();
+    }
     sequenceText.dispose();
     gapText.dispose();
     for (final row in headerRows) {

@@ -25,9 +25,26 @@ mixin _GenerationConfigAdvanced
           'Opponent model',
           Icons.person_outline,
           _opponentModelSection,
+          unavailable: () => _buildMode == BuildMode.chessDbBook
+              ? 'ChessDB books use master-game replies. Set reply limits under Book size.'
+              : null,
         ),
-        AdvancedSection('Move choice', Icons.alt_route, _moveChoiceSection),
-        AdvancedSection('Search tuning', Icons.tune, _searchBudgetSection),
+        AdvancedSection(
+          'Move choice',
+          Icons.alt_route,
+          _moveChoiceSection,
+          unavailable: () => _buildMode == BuildMode.chessDbBook
+              ? 'ChessDB chooses your move. Tie-breaking options are under ChessDB book.'
+              : null,
+        ),
+        AdvancedSection(
+          'Search tuning',
+          Icons.tune,
+          _searchBudgetSection,
+          unavailable: () => _buildMode == BuildMode.chessDbBook
+              ? 'Book size controls branching and line length. The starter profile limits the build to 12,000 nodes and 120 minutes; incomplete builds can be resumed.'
+              : null,
+        ),
         if (_buildMode != BuildMode.stockfishExpectimax)
           AdvancedSection(
             'Master games',
@@ -54,7 +71,7 @@ mixin _GenerationConfigAdvanced
               : null,
         ),
         AdvancedSection(
-          'Line order & tails',
+          'PGN output',
           Icons.playlist_add_check,
           _coverageSection,
         ),
@@ -146,33 +163,44 @@ mixin _GenerationConfigAdvanced
         },
       ),
       const SizedBox(height: 8),
-      ChoiceField<MoveAnnotationDetail>(
-        label: 'Per-move annotations',
-        value: _annotationDetail,
-        enabled: !widget.isGenerating,
-        items: const [
-          ChoiceItem(
-            value: MoveAnnotationDetail.none,
-            label: 'None — moves only',
-          ),
-          ChoiceItem(
-            value: MoveAnnotationDetail.likelihood,
-            label: 'Reply likelihood',
-          ),
-          ChoiceItem(
-            value: MoveAnnotationDetail.full,
-            label: 'Full — eval, ease, scores',
-          ),
-        ],
-        onChanged: (v) {
-          _annotationDetail = v;
+      _caption('PGN output · optional annotations (off by default)'),
+      _labeledCheckbox('Include evaluations', _annotationDetail.evaluations, (
+        v,
+      ) {
+        _annotationDetail = _annotationDetail.copyWith(evaluations: v);
+        refresh();
+      }),
+      _labeledCheckbox(
+        'Include expectimax values',
+        _annotationDetail.expectimax,
+        (v) {
+          _annotationDetail = _annotationDetail.copyWith(expectimax: v);
+          refresh();
+        },
+      ),
+      _labeledCheckbox(
+        'Include Maia probabilities / database frequencies',
+        _annotationDetail.probabilities,
+        (v) {
+          _annotationDetail = _annotationDetail.copyWith(probabilities: v);
+          refresh();
+        },
+      ),
+      _labeledCheckbox(
+        'Include generated explanations and extra statistics',
+        _annotationDetail.explanations,
+        (v) {
+          _annotationDetail = _annotationDetail.copyWith(
+            explanations: v,
+            extraMetrics: v,
+          );
           refresh();
         },
       ),
       _caption(
-        'Full writes the numbers the build already computed — evaluation, '
-        'how hard each move is to find, and how the move scores in real '
-        'games — next to every move.',
+        'Only available values are included. ChessDB books use database '
+        'frequencies, not Maia probabilities. These settings change the PGN '
+        'comments; saved analysis is retained.',
       ),
     ];
   }
@@ -265,9 +293,11 @@ mixin _GenerationConfigAdvanced
   /// contribute to the book.
   List<Widget> _masterGamesSection(VoidCallback refresh) => [
     _caption(
-      'Select Target master opponents on the main form to use master-game '
-      'reply frequencies. Untick it for Maia at your chosen rating throughout. '
-      'Master games do not change the search horizon or receive extra search priority.',
+      _buildMode == BuildMode.chessDbBook
+          ? 'Cover replies from master games on the main form enables branching. Without master practice, both sides follow a single ChessDB mainline.'
+          : 'Select Target master opponents on the main form to use master-game '
+                'reply frequencies. Untick it for Maia at your chosen rating throughout. '
+                'Master games do not change the search horizon or receive extra search priority.',
     ),
   ];
 
@@ -277,17 +307,6 @@ mixin _GenerationConfigAdvanced
         spacing: 16,
         runSpacing: 8,
         children: [
-          _numField(
-            _bookTailMaxPlyCtrl,
-            'Book tail depth (plies)',
-            defaultText: '40',
-            onEdited: refresh,
-            tooltip:
-                'How far a ChessDB mainline runs after it leaves master '
-                'practice, where there is one database move per side so depth '
-                'costs a node per ply instead of a fan-out. Stops earlier if '
-                'ChessDB runs out; values below the depth limit are ignored.',
-          ),
           _numField(
             _bookTieBreakCtrl,
             'Book tie-break window (cp)',

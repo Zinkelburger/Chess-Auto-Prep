@@ -1,3 +1,4 @@
+import 'package:dartchess/dartchess.dart' show PgnGame, PgnNodeData, Side;
 import 'package:flutter/material.dart';
 
 import '../../core/repertoire_controller.dart';
@@ -6,6 +7,8 @@ import '../../services/training/training_phase.dart';
 import '../../services/training/training_session_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../theme/pgn_text_styles.dart';
+import '../pgn/pgn_movetext_view.dart';
 import '../../utils/app_shortcuts.dart';
 import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../chess_board_widget.dart';
@@ -133,483 +136,163 @@ class TrainingPhasePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (playingIntro) {
-      return _IntroContent(
-        opponent: currentPairOpponent,
-        user: currentPairUser,
-      );
-    }
-    switch (phase) {
-      case TrainingPhase.learning:
-        return _LearnContent(
-          feedback: feedback,
-          learnQuizzing: learnQuizzing,
-          learnWaitingForAck: learnWaitingForAck,
-          opponentWaitingForAck: opponentWaitingForAck,
-          currentPairOpponent: currentPairOpponent,
-          currentPairUser: currentPairUser,
-          onLearnAcknowledged: onLearnAcknowledged,
-          onOpponentAcknowledged: onOpponentAcknowledged,
-        );
-      case TrainingPhase.drilling:
-        return _DrillContent(
-          feedback: feedback,
-          currentAnnotation: currentAnnotation,
-          currentPairOpponent: currentPairOpponent,
-          currentPairUser: currentPairUser,
-          waitingForUser: waitingForUser,
-          currentLine: currentLine,
-          currentMoveIndex: currentMoveIndex,
-          moveDifficulty: moveDifficulty,
-        );
-      case TrainingPhase.replaying:
-        return _ReplayContent(
-          feedback: feedback,
-          replayIndex: replayIndex,
-          wrongMoveCount: wrongMoveCount,
-        );
-      case TrainingPhase.finished:
-        return const SizedBox.shrink();
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// INTRO CONTENT — auto-playing the moves before the first comment
-// ---------------------------------------------------------------------------
-
-class _IntroContent extends StatelessWidget {
-  final MoveDisplayInfo? opponent;
-  final MoveDisplayInfo? user;
-
-  const _IntroContent({this.opponent, this.user});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Opening moves', style: AppTextStyles.muted),
-          if (opponent != null || user != null) ...[
-            const SizedBox(height: 12),
-            _MovePairCard(opponent: opponent, user: user),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// CHESSABLE-STYLE MOVE LINE — shows a single move header + comment
-// ---------------------------------------------------------------------------
-
-class _MoveLine extends StatelessWidget {
-  final MoveDisplayInfo display;
-  final bool showComment;
-
-  const _MoveLine({required this.display, this.showComment = true});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isOpponent = display.isOpponentMove;
-    // Scraped PGNs carry engine tokens and stray double spaces — show prose only.
-    final comment = display.comment == null
-        ? ''
-        : filterDisplayComment(display.comment!);
-    final headerText = isOpponent ? display.moveLabel : display.yourMoveLabel;
-    final headerColor = isOpponent
-        ? theme.colorScheme.onSurfaceVariant
-        : theme.colorScheme.primary;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          headerText,
-          style: theme.textTheme.titleSmall?.copyWith(
-            color: headerColor,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        if (showComment && comment.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            comment,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-              height: 1.65,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// MOVE PAIR CARD — one stable container for a move pair in every phase:
-// opponent context on top, your move (or the "Your move" prompt) below.
-// Layout stays put between states so nothing jumps around, and the learn
-// walkthrough and the drill that follows it look like the same thing.
-// ---------------------------------------------------------------------------
-
-class _MovePairCard extends StatelessWidget {
-  final MoveDisplayInfo? opponent;
-  final MoveDisplayInfo? user;
-
-  /// Off while the learn walkthrough is quizzing: the note on the reply you
-  /// just read can give the answer away.
-  final bool showOpponentComment;
-
-  /// Show the "Your move" row in the user slot instead of a move.
-  final bool showPrompt;
-
-  /// Right-aligned extra on the prompt row (the drill's difficulty chip).
-  final Widget? promptTrailing;
-
-  const _MovePairCard({
-    this.opponent,
-    this.user,
-    this.showOpponentComment = true,
-    this.showPrompt = false,
-    this.promptTrailing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final hasUserRow = user != null || showPrompt;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (opponent != null)
-            _MoveLine(display: opponent!, showComment: showOpponentComment),
-          if (opponent != null && hasUserRow)
-            Divider(
-              height: 20,
-              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-            ),
-          if (user != null)
-            _MoveLine(display: user!)
-          else if (showPrompt)
-            Row(
-              children: [
-                Icon(
-                  Icons.touch_app_outlined,
-                  size: 16,
-                  color: theme.colorScheme.primary.withValues(alpha: 0.6),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Your move',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Spacer(),
-                ?promptTrailing,
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Fixed-height line above the card: the verdict fades in and out without
-/// shifting the card below.
-class _FeedbackSlot extends StatelessWidget {
-  final String? feedback;
-
-  const _FeedbackSlot({this.feedback});
-
-  @override
-  Widget build(BuildContext context) {
-    final text = feedback;
-    return SizedBox(
-      height: 28,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 150),
-          child: text == null || text.isEmpty
-              ? const SizedBox.shrink()
-              : TrainingFeedbackText(key: ValueKey(text), feedback: text),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// NEXT BUTTON — the learn walkthrough's one gate
-// ---------------------------------------------------------------------------
-
-class _NextButton extends StatelessWidget {
-  final VoidCallback onPressed;
-
-  const _NextButton({required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: ShortcutTooltip(
-        description: 'Next',
-        shortcut: AppShortcut.toggleSolution,
-        child: FilledButton.icon(
-          onPressed: onPressed,
-          // Self-focus so Space activates "Next" no matter where focus was.
-          autofocus: true,
-          icon: const Icon(Icons.arrow_forward, size: 18),
-          label: const Text('Next'),
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// LEARN PHASE CONTENT — the walkthrough card, with Next when it is waiting
-// ---------------------------------------------------------------------------
-
-class _LearnContent extends StatelessWidget {
-  final String? feedback;
-  final bool learnQuizzing;
-  final bool learnWaitingForAck;
-  final bool opponentWaitingForAck;
-  final MoveDisplayInfo? currentPairOpponent;
-  final MoveDisplayInfo? currentPairUser;
-  final VoidCallback onLearnAcknowledged;
-  final VoidCallback onOpponentAcknowledged;
-
-  const _LearnContent({
-    this.feedback,
-    required this.learnQuizzing,
-    required this.learnWaitingForAck,
-    required this.opponentWaitingForAck,
-    this.currentPairOpponent,
-    this.currentPairUser,
-    required this.onLearnAcknowledged,
-    required this.onOpponentAcknowledged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (!learnQuizzing &&
-        currentPairOpponent == null &&
-        currentPairUser == null) {
-      return const SizedBox.shrink();
-    }
+    final learning = phase == TrainingPhase.learning;
+    final correction = feedback?.startsWith('Play ') ?? false;
     final onNext = learnWaitingForAck
         ? onLearnAcknowledged
         : opponentWaitingForAck
         ? onOpponentAcknowledged
         : null;
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _FeedbackSlot(feedback: feedback),
-          _MovePairCard(
-            opponent: currentPairOpponent,
-            // While quizzing, your move is the answer: hide it, and the note
-            // on the reply that could give it away.
-            user: learnQuizzing ? null : currentPairUser,
-            showOpponentComment: !learnQuizzing,
-            showPrompt: learnQuizzing,
-          ),
-          if (onNext != null) ...[
-            const SizedBox(height: 12),
-            _NextButton(onPressed: onNext),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// DRILL PHASE CONTENT
-// ---------------------------------------------------------------------------
-
-class _DrillContent extends StatelessWidget {
-  final String? feedback;
-  final String? currentAnnotation;
-  final MoveDisplayInfo? currentPairOpponent;
-  final MoveDisplayInfo? currentPairUser;
-  final bool waitingForUser;
-  final RepertoireLine? currentLine;
-  final int currentMoveIndex;
-  final double Function(RepertoireLine line, int moveIndex) moveDifficulty;
-
-  const _DrillContent({
-    this.feedback,
-    this.currentAnnotation,
-    this.currentPairOpponent,
-    this.currentPairUser,
-    required this.waitingForUser,
-    this.currentLine,
-    required this.currentMoveIndex,
-    required this.moveDifficulty,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Keep the prompt row during wrong-move feedback (input is off, but the
-    // user slot shouldn't collapse while the correction is pending).
-    final wrongPending =
-        currentPairUser == null && (feedback?.startsWith('Wrong') ?? false);
-    final showPrompt = waitingForUser || wrongPending;
-
-    if (!showPrompt && currentPairOpponent == null && currentPairUser == null) {
-      return const SizedBox.shrink();
-    }
-
-    final line = currentLine;
-    final chip =
-        showPrompt && line != null && currentMoveIndex < line.moves.length
-        ? TrainingMoveDifficultyChip(
-            difficulty: moveDifficulty(line, currentMoveIndex),
-          )
-        : null;
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _FeedbackSlot(feedback: feedback),
-          _MovePairCard(
-            opponent: currentPairOpponent,
-            user: currentPairUser,
-            showPrompt: showPrompt,
-            promptTrailing: chip,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// REPLAY CONTENT
-// ---------------------------------------------------------------------------
-
-class _ReplayContent extends StatelessWidget {
-  final String? feedback;
-  final int replayIndex;
-  final int wrongMoveCount;
-
-  const _ReplayContent({
-    this.feedback,
-    required this.replayIndex,
-    required this.wrongMoveCount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (feedback != null && feedback!.isNotEmpty) ...[
-          TrainingFeedbackText(feedback: feedback!),
-          const SizedBox(height: 12),
-        ],
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.warning.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+        SizedBox(
+          height: 32,
+          child: Text(
+            playingIntro
+                ? 'Opening moves'
+                : correction
+                ? feedback!
+                : phase == TrainingPhase.replaying
+                ? 'Practice this line · ${replayIndex + 1} of $wrongMoveCount'
+                : waitingForUser
+                ? 'Your move'
+                : '',
+            style: AppTextStyles.body.copyWith(
+              color: correction ? AppColors.warning : AppColors.onSurfaceMuted,
+              fontWeight: correction ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Replaying missed moves',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: AppColors.warning,
+        ),
+        Expanded(
+          child: learning && currentLine != null
+              ? _LessonMovetext(
+                  line: currentLine!,
+                  revealed:
+                      (currentMoveIndex +
+                              (learnQuizzing && !correction || playingIntro
+                                  ? 0
+                                  : 1))
+                          .clamp(0, currentLine!.moves.length),
+                  showComments: !learnQuizzing || correction,
+                )
+              : correction && currentAnnotation != null
+              ? SingleChildScrollView(
+                  child: Text(
+                    filterDisplayComment(currentAnnotation!),
+                    style: PgnTextStyles.comment,
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        SizedBox(
+          height: 40,
+          child: onNext == null
+              ? null
+              : ShortcutTooltip(
+                  description: 'Next',
+                  shortcut: AppShortcut.toggleSolution,
+                  child: FilledButton.tonalIcon(
+                    onPressed: onNext,
+                    autofocus: true,
+                    icon: const Icon(Icons.arrow_forward, size: 16),
+                    label: const Text('Next'),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${replayIndex + 1} of $wrongMoveCount',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-          ),
         ),
       ],
     );
   }
 }
 
-/// Colored feedback line (Correct / Wrong / Try again).
-class TrainingFeedbackText extends StatelessWidget {
-  final String feedback;
-
-  const TrainingFeedbackText({super.key, required this.feedback});
-
+/// The same annotated notation renderer as the PGN viewer, with only moves
+/// already shown on the board supplied to it. Future moves and sidelines
+/// never enter the widget, so the lesson cannot accidentally reveal answers.
+class _LessonMovetext extends StatefulWidget {
+  const _LessonMovetext({
+    required this.line,
+    required this.revealed,
+    required this.showComments,
+  });
+  final RepertoireLine line;
+  final int revealed;
+  final bool showComments;
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    Color color = theme.colorScheme.onSurfaceVariant;
-    if (feedback.startsWith('Correct')) {
-      color = AppColors.success;
-    } else if (feedback.startsWith('Wrong') || feedback.startsWith('Try')) {
-      color = theme.colorScheme.error;
-    }
-    return Text(
-      feedback,
-      style: theme.textTheme.titleSmall?.copyWith(
-        color: color,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
+  State<_LessonMovetext> createState() => _LessonMovetextState();
 }
 
-class TrainingMoveDifficultyChip extends StatelessWidget {
-  final double difficulty;
+class _LessonMovetextState extends State<_LessonMovetext> {
+  final _scroll = ScrollController();
+  PgnGame? _game;
+  void _readIntroduction() {
+    _game = widget.line.fullPgn.isEmpty
+        ? null
+        : PgnGame.parsePgn(widget.line.fullPgn);
+  }
 
-  const TrainingMoveDifficultyChip({super.key, required this.difficulty});
+  @override
+  void initState() {
+    super.initState();
+    _readIntroduction();
+  }
+
+  List<PgnNodeData> get _moves => [
+    for (int i = 0; i < widget.revealed; i++)
+      PgnNodeData(
+        san: widget.line.moves[i],
+        comments:
+            widget.showComments && widget.line.comments[i.toString()] != null
+            ? [widget.line.comments[i.toString()]!]
+            : [],
+      ),
+  ];
+  @override
+  void didUpdateWidget(_LessonMovetext oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.line != widget.line) _readIntroduction();
+    if (oldWidget.revealed != widget.revealed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _scroll.hasClients) {
+          _scroll.animateTo(
+            _scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    String label;
-    Color color;
-    if (difficulty >= 1.0) {
-      label = 'Memorized';
-      color = AppColors.success;
-    } else if (difficulty > 0) {
-      final pct = (difficulty * 100).round();
-      label = '$pct% learned';
-      color = AppColors.warning;
-    } else {
-      label = 'New move';
-      color = theme.colorScheme.onSurfaceVariant;
-    }
-
-    return Text(label, style: AppTextStyles.caption.copyWith(color: color));
+    return SingleChildScrollView(
+      controller: _scroll,
+      child: IgnorePointer(
+        child: PgnMovetextView(
+          game: widget.showComments && widget.revealed > 0 ? _game : null,
+          moveHistory: _moves,
+          variationsByPly: const {},
+          mainLineIndex: widget.revealed,
+          analysisPath: const [],
+          editingCommentIndex: null,
+          canEditComments: false,
+          bookFormatting: true,
+          startingMoveNumber: widget.line.startPosition.fullmoves,
+          startingWhiteTurn: widget.line.startPosition.turn == Side.white,
+          startPosition: widget.line.startPosition,
+          onMainLineMoveClicked: (_) {},
+          onShowMoveContextMenu: (_, _) {},
+          onSaveComment: (_, _) {},
+          onCancelEditingComment: () {},
+          onGoToAnalysisNode: (_, _) {},
+        ),
+      ),
+    );
   }
 }

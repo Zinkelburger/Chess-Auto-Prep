@@ -129,31 +129,28 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     }
   }
 
-  /// The moves that continue from the current position, as tappable chips.
-  /// Returns null unless there's a genuine branch (≥2 options) so the bar stays
-  /// unobtrusive on linear lines. Mirrors Lichess' inline branch picker.
-  /// Each chip carries a keycap badge; keys 1–9 play the matching candidate.
+  /// Float choices over the reader only when there is a real fork.
   Widget? _buildBranchChips() {
     final candidates = _branchCandidates();
     if (candidates.length < 2) return null;
-    final chips = <Widget>[
-      for (final c in candidates)
-        _branchChip(c.san, c.color, c.onTap, emphasized: c.emphasized),
-    ];
     return Padding(
-      padding: const EdgeInsets.only(left: 8, right: 8, top: 6),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          const Icon(
-            Icons.call_split,
-            size: 18,
-            color: AppColors.onSurfaceMuted,
-          ),
-          ...chips,
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: SingleChildScrollView(
+        key: const ValueKey('pgn-branch-picker'),
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          spacing: 8,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.call_split,
+              size: 18,
+              color: AppColors.onSurfaceMuted,
+            ),
+            for (final c in candidates)
+              _branchChip(c.san, c.color, c.onTap, emphasized: c.emphasized),
+          ],
+        ),
       ),
     );
   }
@@ -266,6 +263,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     int clickedIndex, {
     String? anchorFen,
   }) {
+    if (!mounted) return;
     // FEN-anchored lines start from the FEN, not a mainline position; keep the
     // mainline cursor where the user is so exiting returns there. Otherwise
     // locate the branch point by move number as before.
@@ -277,8 +275,8 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
             startFullmoves: _startPosition.fullmoves,
             startWhiteToMove: _startPosition.turn == Side.white,
           ).clamp(0, _moveHistory.length);
-    // Drop any ephemeral variation moves so we don't leave a stale sideline.
-    _clearAnalysis();
+    // Changing the preview must preserve variations the user has explored.
+    _clearInlineLine();
     _inlineBaseIndex = baseIndex;
     _inlineAnchorFen = anchorFen;
     _inlineSans = sans;
@@ -289,6 +287,7 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
 
   /// Move the inline-preview cursor to [cursor] moves played and update the
   /// board. A cursor of 0 (or below) exits preview back to the base position.
+  @override
   void _setInlineCursor(int cursor) {
     cursor = cursor.clamp(0, _inlineSans.length);
     if (cursor <= 0) {

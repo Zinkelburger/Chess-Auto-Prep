@@ -8,6 +8,7 @@ import '../models/repertoire_move_progress.dart';
 import '../models/training_settings.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
+import 'training/move_attempt_store.dart';
 
 class RepertoireReviewService {
   static const _header =
@@ -29,6 +30,40 @@ class RepertoireReviewService {
       '${e.repertoireId.length}:${e.repertoireId}${e.lineId}';
   String _progressKey(RepertoireMoveProgress e) =>
       '${e.repertoireId.length}:${e.repertoireId}${e.lineId}:${e.moveIndex}';
+
+  /// Append each answer immediately, independently of line ratings. A later
+  /// correct replay must never erase what the user originally played.
+  Future<void> recordAttempt({
+    required String repertoireId,
+    required String lineId,
+    required int moveIndex,
+    required String fen,
+    required String playedSan,
+    required String expectedSan,
+    required bool correct,
+    required String phase,
+  }) async {
+    await MoveAttemptStore(_storage).record(
+      repertoireId: repertoireId,
+      lineId: lineId,
+      moveIndex: moveIndex,
+      fen: fen,
+      playedSan: playedSan,
+      expectedSan: expectedSan,
+      correct: correct,
+      phase: phase,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> loadAttempts({String? repertoireId}) =>
+      MoveAttemptStore(_storage).load(repertoireId: repertoireId);
+
+  Future<void> repointAttempts({
+    required String from,
+    required Map<String, String> movedLinePaths,
+  }) => MoveAttemptStore(
+    _storage,
+  ).repoint(from: from, movedLinePaths: movedLinePaths);
 
   Future<List<RepertoireReviewEntry>> loadAll() async {
     final entries = trainingRows(

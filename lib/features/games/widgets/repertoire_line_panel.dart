@@ -2,8 +2,14 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart' show Position;
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../models/repertoire_line.dart';
+import '../../../models/repertoire_metadata.dart';
+import '../../../services/storage/storage_factory.dart';
+import '../../../widgets/common/choice_field.dart';
+import '../../../widgets/common/list_search_field.dart';
+import 'opening_position_preview.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/pgn_viewer_widget.dart';
@@ -38,6 +44,7 @@ class RepertoireLinePanel extends StatefulWidget {
     this.deviationService,
     this.settings,
     this.loadLines = loadBookLines,
+    this.loadContents = loadBookChapterContents,
   });
 
   /// How the game reads in the header ("Bob vs Alice, Jul 12").
@@ -75,6 +82,8 @@ class RepertoireLinePanel extends StatefulWidget {
   })
   loadLines;
 
+  final Future<List<RepertoireLine>> Function(String chapterPath) loadContents;
+
   @override
   State<RepertoireLinePanel> createState() => _RepertoireLinePanelState();
 }
@@ -94,6 +103,14 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
   String? _openFolder;
   List<RepertoireLine>? _openLines;
   int _lineIndex = 0;
+  int _request = 0;
+  int _lineRequest = 0;
+  List<RepertoireMetadata> _chapters = const [];
+  String? _chapterPath;
+  bool _matchingOnly = true;
+  String? _courseChapter;
+  String _lineSearch = '';
+  String? _loadError;
 
   GameDeviationService get _service =>
       widget.deviationService ?? GameDeviationService.instance;
@@ -133,48 +150,141 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
 
   Future<void> _run() async {
     if (!mounted) return;
+    final request = ++_request;
     setState(() => _reports = null);
     final reports = await _service.analyzeGameByRepertoire(
       gameSans: widget.sans,
       meWhite: _meWhite,
     );
-    if (!mounted) return;
+    if (!mounted || request != _request) return;
     setState(() => _reports = reports);
     // One book, one deviation: open it without making the user click twice.
     final only = reports.length == 1 ? reports.entries.first : null;
-    if (only != null && !only.value.inBook) {
+    if (only != null) {
       unawaited(_openLine(only.key, only.value));
     }
   }
 
   void _setColour(bool meWhite) {
-    if (_meWhite == meWhite) return;
+    if (!mounted || _meWhite == meWhite) return;
     setState(() => _meWhite = meWhite);
     _closeLine();
     unawaited(_run());
   }
 
   void _closeLine() {
+    if (!mounted) return;
+    ++_lineRequest;
     setState(() {
       _openFolder = null;
       _openLines = null;
       _lineIndex = 0;
+      _loadError = null;
     });
   }
 
   Future<void> _openLine(String folder, DeviationReport report) async {
+    if (!mounted) return;
     setState(() {
       _openFolder = folder;
+      _chapters = const [];
+      _chapterPath = report.chapterPath;
+      _matchingOnly = !report.differentOpening;
+      _courseChapter = null;
+      _lineSearch = '';
+      _loadError = null;
+    });
+    unawaited(_loadChapters(folder));
+    await _loadSelectedChapter();
+  }
+
+  Future<void> _loadChapters(String folder) async {
+    final List<RepertoireMetadata> chapters;
+    try {
+      chapters = await StorageFactory.instance.listChapters(folder);
+    } catch (_) {
+      return;
+    }
+    if (!mounted || _openFolder != folder) return;
+    setState(() => _chapters = chapters);
+  }
+
+  Future<void> _loadSelectedChapter() async {
+    if (!mounted) return;
+    final report = _reports?[_openFolder];
+    if (report == null || _chapterPath == null) return;
+    final request = ++_lineRequest;
+    setState(() {
       _openLines = null;
       _lineIndex = 0;
+      _loadError = null;
     });
-    final lines = await widget.loadLines(
-      chapterPath: report.chapterPath,
-      prefixSans: report.pathSans,
-    );
-    if (!mounted || _openFolder != folder) return;
-    setState(() => _openLines = lines);
+    try {
+      final lines = _matchingOnly
+          ? await widget.loadLines(
+              chapterPath: _chapterPath!,
+              prefixSans: report.pathSans,
+            )
+          : await widget.loadContents(_chapterPath!);
+      if (!mounted || request != _lineRequest) return;
+      setState(() => _openLines = lines);
+    } catch (_) {
+      if (!mounted || request != _lineRequest) return;
+      setState(() {
+        _openLines = const [];
+        _loadError = 'Could not read this chapter. Try opening it again.';
+      });
+    }
   }
+
+  Widget _buildContentsControls() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    child: Column(
+      children: [
+        if (_chapters.isNotEmpty)
+          ChoiceField<String>(
+            key: const ValueKey('book-chapter'),
+            value: _chapterPath,
+            label: 'Chapter',
+            items: [
+              for (final chapter in _chapters)
+                ChoiceItem(value: chapter.filePath, label: chapter.name),
+            ],
+            onChanged: (path) {
+              if (!mounted) return;
+              setState(() {
+                _chapterPath = path;
+                _lineSearch = '';
+                _courseChapter = null;
+                _matchingOnly = false;
+              });
+              unawaited(_loadSelectedChapter());
+            },
+          ),
+        const SizedBox(height: 4),
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: true, label: Text('Matching lines')),
+            ButtonSegment(value: false, label: Text('Chapter contents')),
+          ],
+          selected: {_matchingOnly},
+          showSelectedIcon: false,
+          style: SegmentedButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+          ),
+          onSelectionChanged: (selection) {
+            if (!mounted) return;
+            setState(() {
+              _matchingOnly = selection.first;
+              _courseChapter = null;
+              _lineSearch = '';
+            });
+            unawaited(_loadSelectedChapter());
+          },
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -183,17 +293,73 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
       children: [
         _buildColourRow(),
         const Divider(height: 1),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: _buildResults(),
-          ),
-        ),
-        if (_openFolder != null) ...[
-          const Divider(height: 1),
-          Expanded(flex: 2, child: _buildLinePane()),
+        if (_openFolder == null)
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(12),
+              child: _buildResults(),
+            ),
+          )
+        else ...[
+          _buildBookHeader(),
+          _buildContentsControls(),
+          Expanded(child: _buildLinePane()),
         ],
       ],
+    );
+  }
+
+  Widget _buildBookHeader() {
+    final report = _reports?[_openFolder];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: ChoiceField<String>(
+              value: _openFolder,
+              label: 'Book',
+              compact: true,
+              items: [
+                for (final folder in _reports?.keys ?? <String>[])
+                  ChoiceItem(value: folder, label: p.basename(folder)),
+              ],
+              onChanged: (folder) {
+                if (!mounted) return;
+                final selected = _reports?[folder];
+                if (selected != null) unawaited(_openLine(folder, selected));
+              },
+            ),
+          ),
+          if (report != null && widget.onEditInBuilder != null)
+            IconButton(
+              tooltip: 'Edit this chapter in the Repertoire Builder',
+              onPressed: () {
+                if (!mounted) return;
+                final chapterPath = _chapterPath ?? report.chapterPath;
+                final selectedLine = _openLines?.elementAtOrNull(_lineIndex);
+                final moves = _matchingOnly
+                    ? report.pathSans
+                    : selectedLine?.moves ?? const <String>[];
+                widget.onEditInBuilder!(
+                  DeviationReport(
+                    matchedPlies: moves.length,
+                    chapterPath: chapterPath,
+                    chapterName:
+                        _chapters
+                            .where((chapter) => chapter.filePath == chapterPath)
+                            .firstOrNull
+                            ?.name ??
+                        report.chapterName,
+                    pathSans: moves,
+                    lineName: selectedLine?.qualifiedName,
+                  ),
+                );
+              },
+              icon: const Icon(Icons.edit_outlined, size: 18),
+            ),
+        ],
+      ),
     );
   }
 
@@ -260,14 +426,12 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
         for (final folder in designated)
           if (reports[folder] case final report?)
             _ReportTile(
-              bookName: folder.split(RegExp(r'[/\\]')).last,
+              bookName: p.basename(folder),
               report: report,
               isOpen: _openFolder == folder,
-              onShowLine: report.inBook
-                  ? null
-                  : () => _openFolder == folder
-                        ? _closeLine()
-                        : _openLine(folder, report),
+              onShowLine: () => _openFolder == folder
+                  ? _closeLine()
+                  : _openLine(folder, report),
               onEditInBuilder: widget.onEditInBuilder == null
                   ? null
                   : () => widget.onEditInBuilder!(report),
@@ -290,9 +454,10 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
         padding: const EdgeInsets.all(16),
         child: Center(
           child: Text(
-            'Could not match this line inside ${report.chapterName} (it may '
-            'start from a custom position). Open the chapter in the builder '
-            'to look at it.',
+            _loadError ??
+                (_matchingOnly
+                    ? 'No matching lines in this chapter. Choose Chapter contents to browse it.'
+                    : 'This chapter has no entries.'),
             textAlign: TextAlign.center,
             style: AppTextStyles.body.copyWith(
               fontSize: 12,
@@ -302,61 +467,204 @@ class _RepertoireLinePanelState extends State<RepertoireLinePanel> {
         ),
       );
     }
+    final visible = <int>[
+      for (var i = 0; i < lines.length; i++)
+        if ((_courseChapter == null || lines[i].chapter == _courseChapter) &&
+            matchesSearch(_lineSearch, lines[i].qualifiedName))
+          i,
+    ];
     final index = _lineIndex.clamp(0, lines.length - 1);
     final line = lines[index];
-    // Both the game and this line are parked at the move that went wrong: the
-    // decision point, not the aftermath.
-    final landingMoveNumber = report.matchedPlies ~/ 2 + 1;
+    final bookPly = _matchingOnly ? report.pathSans.length : 0;
+    final landingMoveNumber = bookPly ~/ 2 + 1;
+    final chapters = lines
+        .map((line) => line.chapter)
+        .nonNulls
+        .toSet()
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (!_matchingOnly) ...[
+          if (chapters.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: ChoiceField<String>(
+                key: const ValueKey('book-course-chapter'),
+                value: _courseChapter ?? '',
+                label: 'Contents',
+                items: [
+                  const ChoiceItem(value: '', label: 'All chapters'),
+                  for (final chapter in chapters)
+                    ChoiceItem(value: chapter, label: chapter),
+                ],
+                onChanged: (chapter) {
+                  if (!mounted) return;
+                  setState(() {
+                    _courseChapter = chapter.isEmpty ? null : chapter;
+                    _lineSearch = '';
+                    _lineIndex = lines.indexWhere(
+                      (line) =>
+                          _courseChapter == null ||
+                          line.chapter == _courseChapter,
+                    );
+                  });
+                },
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+            child: ListSearchField(
+              key: ValueKey('book-contents-search-$_courseChapter'),
+              hintText: 'Search lines',
+              onChanged: (query) {
+                if (mounted) setState(() => _lineSearch = query);
+              },
+            ),
+          ),
+          Flexible(
+            child: visible.isEmpty
+                ? const Center(child: Text('No matching lines'))
+                : Scrollbar(
+                    child: ListView.builder(
+                      key: const ValueKey('book-contents-list'),
+                      itemCount: visible.length,
+                      itemBuilder: (context, row) {
+                        final i = visible[row];
+                        return ListTile(
+                          key: ValueKey('book-content-line-$i'),
+                          dense: true,
+                          selected: index == i,
+                          selectedTileColor: AppColors.surfaceInset,
+                          leading: Text(
+                            '${i + 1}',
+                            style: AppTextStyles.caption,
+                          ),
+                          title: Text(
+                            lines[i].qualifiedName,
+                            style: AppTextStyles.body,
+                          ),
+                          subtitle: Text(
+                            formatNumberedSans(lines[i].moves),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.mono.copyWith(
+                              color: AppColors.onSurfaceMuted,
+                            ),
+                          ),
+                          onTap: () {
+                            if (mounted) setState(() => _lineIndex = i);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+          ),
+          const Divider(height: 1),
+        ],
+        if (_matchingOnly &&
+            report.playedSan != null &&
+            !report.differentOpening)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+            child: Row(
+              children: [
+                OpeningPositionPreview(
+                  pathSans: report.pathSans,
+                  playedSan: report.playedSan,
+                  expectedSans: [?_bookMoveAt(line, bookPly)],
+                  byMe: report.byMe == true,
+                  bookEnded: report.bookEnded,
+                  flipped: !_meWhite,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _DivergenceNote(report: report, line: line),
+                ),
+              ],
+            ),
+          ),
+        if (report.inBook && _matchingOnly)
+          _hint(
+            'In book the whole way (${report.matchedPlies} plies matched).',
+          ),
+        if (report.differentOpening)
+          _hint('Different opening — browse this book below.'),
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 4, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
-              const Icon(
-                Icons.menu_book,
-                size: 15,
-                color: AppColors.onSurfaceMuted,
-              ),
-              const SizedBox(width: 6),
               Expanded(
-                child: Text(
-                  lines.length == 1
-                      ? line.qualifiedName
-                      : '${lines.length} book lines reach move '
-                            '$landingMoveNumber',
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.body.copyWith(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: _matchingOnly
+                    ? ChoiceField<int>(
+                        key: const ValueKey('book-line'),
+                        value: index,
+                        hint: 'Search lines',
+                        compact: true,
+                        items: [
+                          for (var i = 0; i < lines.length; i++)
+                            ChoiceItem(
+                              value: i,
+                              label: lines[i].qualifiedName,
+                              subtitle:
+                                  _matchingOnly &&
+                                      _bookMoveAt(lines[i], bookPly) != null
+                                  ? 'Book plays ${formatMoveAtPly(bookPly, _bookMoveAt(lines[i], bookPly)!)}'
+                                  : null,
+                            ),
+                        ],
+                        onChanged: (i) {
+                          if (!mounted) return;
+                          setState(() => _lineIndex = i);
+                        },
+                      )
+                    : Text(line.name, style: AppTextStyles.bodyStrong),
               ),
               IconButton(
-                icon: const Icon(Icons.close, size: 16),
-                tooltip: 'Hide this line',
-                visualDensity: VisualDensity.compact,
-                onPressed: _closeLine,
+                tooltip: 'Previous book line',
+                icon: const Icon(Icons.chevron_left),
+                onPressed: visible.indexOf(index) > 0
+                    ? () {
+                        if (!mounted) return;
+                        setState(
+                          () =>
+                              _lineIndex = visible[visible.indexOf(index) - 1],
+                        );
+                      }
+                    : null,
+              ),
+              Text(
+                '${index + 1} / ${lines.length}',
+                style: AppTextStyles.caption,
+              ),
+              IconButton(
+                tooltip: 'Next book line',
+                icon: const Icon(Icons.chevron_right),
+                onPressed:
+                    visible.contains(index) &&
+                        visible.indexOf(index) + 1 < visible.length
+                    ? () {
+                        if (!mounted) return;
+                        setState(
+                          () =>
+                              _lineIndex = visible[visible.indexOf(index) + 1],
+                        );
+                      }
+                    : null,
               ),
             ],
           ),
         ),
-        _DivergenceNote(report: report, line: line),
-        if (lines.length > 1)
-          _LineChoices(
-            lines: lines,
-            selected: index,
-            splitPly: report.matchedPlies,
-            onSelect: (i) => setState(() => _lineIndex = i),
-          ),
         Expanded(
+          flex: 2,
           child: PgnViewerWidget(
-            key: ValueKey('book-${line.id}-$index'),
+            key: ValueKey('book-${line.id}-$index-$_matchingOnly'),
             pgnText: line.fullPgn,
+            showReadingOptions: false,
+            bookFormatting: true,
             controller: widget.lineController,
             moveNumber: landingMoveNumber,
-            isWhiteToPlay: report.matchedPlies.isEven,
+            isWhiteToPlay: bookPly.isEven,
             onPositionChanged: widget.onShowPosition,
           ),
         ),
@@ -402,138 +710,49 @@ class _DivergenceNote extends StatelessWidget {
   Widget build(BuildContext context) {
     final played = report.playedSan;
     if (played == null) return const SizedBox.shrink();
-    final bookMove = _bookMoveAt(line, report.matchedPlies);
+    final bookMove = _bookMoveAt(line, report.pathSans.length);
     final who = report.byMe == true ? 'You' : 'They';
     final message = bookMove == null
         ? '$who played ${formatMoveAtPly(report.matchedPlies, played)} — this '
               'line stops here.'
         : '$who played ${formatMoveAtPly(report.matchedPlies, played)} — this '
-              'line plays ${formatMoveAtPly(report.matchedPlies, bookMove)}.';
+              'line plays ${formatMoveAtPly(report.pathSans.length, bookMove)}.';
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       child: Row(
         children: [
-          const Icon(Icons.fork_right, size: 14, color: AppColors.warning),
-          const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              message,
-              style: AppTextStyles.body.copyWith(
-                fontSize: 12,
-                color: AppColors.onSurfaceSoft,
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: '$who played '),
+                  TextSpan(
+                    text: formatMoveAtPly(report.matchedPlies, played),
+                    style: TextStyle(
+                      color: report.byMe == true && !report.bookEnded
+                          ? AppColors.danger
+                          : AppColors.onSurfaceMuted,
+                    ),
+                  ),
+                  TextSpan(
+                    text: bookMove == null
+                        ? ' — this line stops here.'
+                        : ' — this line plays ',
+                  ),
+                  if (bookMove != null) ...[
+                    TextSpan(
+                      text: formatMoveAtPly(report.pathSans.length, bookMove),
+                      style: const TextStyle(color: AppColors.success),
+                    ),
+                    const TextSpan(text: '.'),
+                  ],
+                ],
               ),
+              style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
+              semanticsLabel: message,
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// The book's answers at the deviation point, one row per distinct move.
-///
-/// A dropdown hid the only thing worth comparing: the lines are identical up to
-/// the fork, so what distinguishes them is the move they play *at* it. That move
-/// is the label, with the line's name beside it — pick by the move, not by
-/// remembering which chapter name meant what. Lines that play the same move at
-/// the fork are one row (the longest of them stands for the rest, and the row
-/// says how many there are): a course has ninety lines through `1.e4 c6 2.d4
-/// d5` and every one of them plays `3.Nc3`.
-class _LineChoices extends StatelessWidget {
-  const _LineChoices({
-    required this.lines,
-    required this.selected,
-    required this.splitPly,
-    required this.onSelect,
-  });
-
-  final List<RepertoireLine> lines;
-  final int selected;
-
-  /// Ply the game left the book at — the one move that differs between these.
-  final int splitPly;
-
-  final ValueChanged<int> onSelect;
-
-  /// Index of the first line (the longest, given the loader's order) for
-  /// each distinct fork move, in order of appearance, with how many lines
-  /// share it.
-  List<(int index, int count)> get _rows {
-    final byMove = <String?, (int, int)>{};
-    for (var i = 0; i < lines.length; i++) {
-      final move = _bookMoveAt(lines[i], splitPly);
-      final seen = byMove[move];
-      byMove[move] = seen == null ? (i, 1) : (seen.$1, seen.$2 + 1);
-    }
-    return byMove.values.toList();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = _rows;
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 108),
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.divider),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: ListView.builder(
-        padding: EdgeInsets.zero,
-        shrinkWrap: true,
-        itemCount: rows.length,
-        itemBuilder: (context, r) {
-          final (i, count) = rows[r];
-          final line = lines[i];
-          final move = _bookMoveAt(line, splitPly);
-          final isSelected = _bookMoveAt(lines[selected], splitPly) == move;
-          return InkWell(
-            onTap: () => onSelect(i),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              color: isSelected ? AppColors.chipActiveBg : null,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 62,
-                    child: Text(
-                      move == null
-                          ? 'ends'
-                          : formatMoveAtPly(splitPly, move).split(' ').last,
-                      style: AppTextStyles.mono.copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: move == null
-                            ? AppColors.onSurfaceMuted
-                            : AppColors.ink,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      count > 1
-                          ? '${line.qualifiedName} · $count lines'
-                          : line.qualifiedName,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.body.copyWith(
-                        fontSize: 12,
-                        color: AppColors.onSurfaceSoft,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${line.moves.length - splitPly} more',
-                    style: AppTextStyles.body.copyWith(
-                      fontSize: 12,
-                      color: AppColors.onSurfaceMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }
@@ -561,6 +780,11 @@ class _ReportTile extends StatelessWidget {
     final ply = report.matchedPlies;
     String at(String san) => formatMoveAtPly(ply, san);
     final (icon, color, verdict) = switch (report) {
+      DeviationReport(differentOpening: true) => (
+        Icons.menu_book_outlined,
+        AppColors.onSurfaceMuted,
+        'Different opening — this game did not enter this book. No repertoire mistake.',
+      ),
       DeviationReport(inBook: true) => (
         Icons.check_circle_outline,
         AppColors.successMuted,
@@ -573,7 +797,7 @@ class _ReportTile extends StatelessWidget {
             ' — the game continued ${at(report.playedSan!)}.',
       ),
       DeviationReport(byMe: true) => (
-        Icons.warning_amber,
+        Icons.alt_route,
         AppColors.warning,
         'You left book at move ${report.moveNumber}: '
             '${at(report.playedSan!)} instead of '
@@ -637,8 +861,8 @@ class _ReportTile extends StatelessWidget {
           Text(
             verdict,
             style: AppTextStyles.body.copyWith(
-              fontSize: 12,
-              color: AppColors.onSurfaceSoft,
+              fontWeight: FontWeight.w600,
+              color: AppColors.ink,
             ),
           ),
           if (report.pathSans.isNotEmpty) ...[

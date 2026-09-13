@@ -28,8 +28,7 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
       // analysis is still working — say so rather than telling the user to
       // press a button that is already running.
       line = widget.isImporting
-          ? 'Analysing your games — the first puzzles appear here as they are '
-                'found.'
+          ? 'Analyzing games…'
           : 'No puzzles yet — analyse your games first.';
     } else if (matchingCount == 0) {
       line =
@@ -39,7 +38,7 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
     } else {
       line = 'Ready to play: $_readyBreakdown';
       if (widget.isImporting) {
-        line = '$line — more are added as the review finds them';
+        line = '$line · Analyzing games…';
       }
     }
 
@@ -102,14 +101,20 @@ mixin _TacticsImportPanelStartCard on _TacticsImportPanelStateBase {
                 'loosen them',
       child: SizedBox(
         width: double.infinity,
-        height: 44,
+        height: 48,
         child: FilledButton.icon(
           key: const Key('play-tactics-button'),
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            foregroundColor: Theme.of(context).colorScheme.onPrimary,
+          ),
           onPressed: ready ? _startSession : null,
           icon: const Icon(Icons.play_arrow, size: 22),
           label: Text(
             ready ? 'Play tactics ($matchingCount)' : 'Play tactics',
-            style: AppTextStyles.bodyStrong,
+            style: AppTextStyles.bodyStrong.copyWith(
+              color: ready ? Theme.of(context).colorScheme.onPrimary : null,
+            ),
           ),
         ),
       ),

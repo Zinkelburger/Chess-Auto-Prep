@@ -138,12 +138,16 @@ class ExpectimaxCalculator {
           if (mass > 1 + 1e-9) {
             throw StateError('Opponent probability mass exceeds one: $mass');
           }
-          if (node.historyAware && node.explored && (mass - 1).abs() > 1e-9) {
+          if (node.historyAware &&
+              node.explored &&
+              !config.boundedDatabase &&
+              (mass - 1).abs() > 1e-9) {
             throw StateError(
               'Pure opponent expansion must contain its complete policy',
             );
           }
-          final missing = node.historyAware && node.explored
+          final missing =
+              node.historyAware && node.explored && !config.boundedDatabase
               ? 0.0
               : (1 - mass).clamp(0.0, 1.0);
           value +=

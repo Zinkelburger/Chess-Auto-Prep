@@ -16,6 +16,7 @@ import 'package:chess_auto_prep/services/maia/maia_factory.dart';
 import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';
 import 'engine_fakes.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 
 BuildTree treeAt(String fen) => BuildTree(
   root: BuildTreeNode(
@@ -83,6 +84,84 @@ BookMove bookMove(String uci, int n) => BookMove(
 );
 void main() {
   tearDown(() => MaiaFactory.testOverride = null);
+  test(
+    'bounded database unions four engine candidates with likely Maia moves',
+    () async {
+      final tree = treeAt(kStandardStartFen);
+      final pool = FakeStockfishPool();
+      const selected = ['e2e4', 'd2d4', 'c2c4', 'g1f3'];
+      MaiaFactory.testOverride = FakeMaiaEvaluator({
+        tree.root.fen: {'b1c3': .6, 'e2e4': .4},
+      });
+      pool.discoveryByFen[tree.root.fen] = DiscoveryResult(
+        lines: [
+          for (var i = 0; i < selected.length; i++)
+            discoveryLine(pvNumber: i + 1, cpWhite: 10 - i, pv: [selected[i]]),
+        ],
+        depth: 14,
+      );
+      for (final move in [...selected, 'b1c3']) {
+        pool.stmCpByFen[playUciMove(tree.root.fen, move)!] = 0;
+      }
+      final config = base.copyWith(
+        boundedDatabase: true,
+        ourMultipv: 4,
+        oppMassTarget: .6,
+      );
+      await PureTreeBuilder(runFor(config, tree, pool)).build();
+      expect(pool.discoverMultiPvCalls, [4]);
+      expect(pool.evalCalls, hasLength(5));
+      expect(
+        tree.root.children.map((n) => n.moveUci),
+        unorderedEquals([...selected, 'b1c3']),
+      );
+      expect(
+        TreeBuildConfig.fromJson(
+          config.toJson(),
+          startFen: config.startFen,
+        ).boundedDatabase,
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'bounded Maia replies reach coverage and retain omitted probability bounds',
+    () async {
+      final fen = playUciMove(kStandardStartFen, 'e2e4')!;
+      final tree = treeAt(fen);
+      MaiaFactory.testOverride = FakeMaiaEvaluator({
+        fen: {'e7e5': .4, 'c7c5': .3, 'e7e6': .2, 'c7c6': .1},
+      });
+      final pool = FakeStockfishPool();
+      pool.discoveryByFen[fen] = DiscoveryResult(
+        lines: [
+          discoveryLine(pvNumber: 1, cpWhite: 0, pv: ['e7e6']),
+        ],
+        depth: 14,
+      );
+      for (final move in ['e7e5', 'c7c5', 'e7e6']) {
+        pool.stmCpByFen[playUciMove(fen, move)!] = 0;
+      }
+      final config = base.copyWith(
+        startFen: fen,
+        boundedDatabase: true,
+        oppMassTarget: .6,
+      );
+      await PureTreeBuilder(runFor(config, tree, pool)).build();
+      expect(
+        tree.root.children.map((n) => n.moveUci),
+        unorderedEquals(['e7e5', 'c7c5', 'e7e6']),
+      );
+      expect(
+        tree.root.children.fold<double>(0, (a, n) => a + n.moveProbability),
+        closeTo(.9, 1e-8),
+      );
+      ExpectimaxCalculator(config: config).calculate(tree);
+      expect(tree.root.valueUpper - tree.root.valueLower, closeTo(.1, 1e-8));
+    },
+  );
+
   test('the safety limit is measured against every legal move', () async {
     final tree = treeAt(kStandardStartFen);
     final pool = FakeStockfishPool();

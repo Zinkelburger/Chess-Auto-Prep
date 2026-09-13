@@ -28,7 +28,7 @@ const Map<String, String> _enumAlternatives = {
   'search_algorithm': 'fast',
   'build_mode': 'dbExplorer',
   'selection_mode': 'engineOnly',
-  'annotation_detail': 'none',
+  'annotation_detail': 'full',
 };
 
 /// Keys deliberately exempt from the round-trip identity check.
@@ -60,6 +60,28 @@ Object? _mutate(String key, Object? value) {
 }
 
 void main() {
+  test('new and unconfigured exports default to no annotations', () {
+    const config = TreeBuildConfig(startFen: _startFen, playAsWhite: true);
+    expect(config.annotationDetail, MoveAnnotationDetail.none);
+    expect(
+      TreeBuildConfig.fromJson({}, startFen: _startFen).annotationDetail,
+      MoveAnnotationDetail.none,
+    );
+    final selected = config.copyWith(
+      annotationDetail: const MoveAnnotationDetail(
+        evaluations: true,
+        expectimax: true,
+      ),
+    );
+    expect(
+      TreeBuildConfig.fromJson(
+        selected.toJson(),
+        startFen: _startFen,
+      ).annotationDetail,
+      selected.annotationDetail,
+    );
+  });
+
   group('TreeBuildConfig serialization contract', () {
     test('every serialized field survives a toJson → fromJson round-trip', () {
       const original = TreeBuildConfig(startFen: _startFen, playAsWhite: true);

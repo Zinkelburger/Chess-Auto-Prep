@@ -374,6 +374,7 @@ class BuildRun {
   void attachPureChild(BuildTreeNode parent, BuildTreeNode child) {
     parent.children.add(child);
     tree.registerNode(child);
+    fenMap.putCanonical(child.fen, child);
     tree.totalNodes++;
     if (child.ply > tree.maxPlyReached) tree.maxPlyReached = child.ply;
     _countNode(child.ply, 1);

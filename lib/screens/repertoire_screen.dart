@@ -67,7 +67,6 @@ import '../widgets/common/name_entry_dialog.dart';
 import '../features/repertoire/services/repertoire_outline_service.dart';
 import '../features/repertoire/widgets/build_config_screen.dart';
 import '../features/repertoire/widgets/repertoire_lines_side_panel.dart';
-import '../features/repertoire/widgets/repertoire_tree_pane.dart';
 import '../features/repertoire/widgets/repertoire_database_pane.dart';
 import '../features/traps/controllers/trap_session_controller.dart';
 import '../features/traps/services/trap_line_builder.dart';
@@ -89,6 +88,7 @@ import '../features/planner/controllers/plan_runner.dart';
 import '../features/planner/widgets/plan_build_screen.dart';
 import '../features/planner/widgets/plan_runner_banner.dart';
 import '../services/generation/generation_config.dart';
+import '../services/generation/generation_presets.dart';
 import '../constants/chess_constants.dart';
 import '../services/storage/app_paths.dart';
 
@@ -250,28 +250,36 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// Reveal generation beside the board at its current position.
   Future<void> _openGenerateTab() async {
     if (_isCompactLayout) {
-      _toolsTabController.animateTo(4);
+      _toolsTabController.animateTo(3);
     } else {
       unawaited(_layout.setLinesPanelCollapsed(false));
-      _sidePanelTabController.animateTo(3);
+      _sidePanelTabController.animateTo(2);
     }
     _reclaimFocus();
   }
 
   /// Line planning and trimming use their own configuration route.
-  Future<void> _openLineBuildDialog({bool cutOnly = false}) async {
+  Future<void> _openLineBuildDialog({
+    bool cutOnly = false,
+    TreeBuildConfig? initialConfig,
+  }) async {
     if (_configRouteOpen) return;
     _configRouteOpen = true;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
-          title: cutOnly ? 'Cut lines' : 'Build planned lines',
+          title: cutOnly
+              ? 'Cut lines'
+              : initialConfig?.isChessDbBook == true
+              ? 'Build ChessDB repertoire'
+              : 'Build planned lines',
           startSignal: _generationController,
           hasStarted: () => _generationController.isGenerating,
           child: RepertoireGenerationTab(
             key: _generationTabKey,
             cutOnly: cutOnly,
+            initialConfig: initialConfig,
             fen: _controller.fen,
             isWhiteRepertoire: _controller.isRepertoireWhite,
             currentRepertoire: _controller.currentRepertoire,
@@ -445,8 +453,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   void initState() {
     super.initState();
 
-    _toolsTabController = TabController(length: 5, vsync: this);
-    _sidePanelTabController = TabController(length: 4, vsync: this);
+    _toolsTabController = TabController(length: 4, vsync: this);
+    _sidePanelTabController = TabController(length: 3, vsync: this);
     _outline = RepertoireOutlineController(
       onActiveChapterMoved: _onActiveChapterMoved,
     );
@@ -1024,6 +1032,16 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           onSelectRepertoire: _showRepertoireSelection,
         ),
         body: RepertoireListBody(
+          onRepertoireSelected: (repertoire) async {
+            final chapters = await StorageFactory.instance.listChapters(
+              repertoire.filePath,
+            );
+            if (!mounted) return;
+            if (chapters.isNotEmpty) {
+              await _controller.setRepertoire(chapters.first);
+            }
+            _reclaimFocus();
+          },
           onSelected: (repertoire) async {
             await _controller.setRepertoire(repertoire);
             _reclaimFocus();

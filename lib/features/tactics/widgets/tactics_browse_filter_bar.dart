@@ -270,18 +270,31 @@ class _FlawTagChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      tooltip: 'Filter by flaw tags (all selected tags must match)',
-      onSelected: onToggle,
-      itemBuilder: (_) => [
-        const PopupMenuItem(value: '', child: Text('Any tags')),
-        for (final tag in knownTags)
-          CheckedPopupMenuItem(
-            value: tag,
-            checked: selected.contains(tag),
-            child: Text(tag),
-          ),
-      ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () async {
+        final tag = await showSearchablePicker<String>(
+          context: context,
+          title: 'Flaw tags',
+          searchHint: 'Search flaw tags…',
+          items: [
+            const PickerItem(value: '', label: 'Any tags'),
+            for (final tag in knownTags)
+              PickerItem(
+                value: tag,
+                label: tag,
+                icon: selected.contains(tag)
+                    ? Icons.check
+                    : Icons.label_outline,
+                subtitle: selected.contains(tag)
+                    ? 'Selected · choose to remove'
+                    : null,
+              ),
+          ],
+        );
+        if (!context.mounted || tag == null) return;
+        onToggle(tag);
+      },
       child: Chip(
         label: Row(
           mainAxisSize: MainAxisSize.min,

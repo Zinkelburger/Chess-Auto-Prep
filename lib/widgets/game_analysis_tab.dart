@@ -413,6 +413,8 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
           ),
         if (evals.isNotEmpty) ...[
           GameAnalysisChart(
+            key: ValueKey(widget.pgnController.mainLineMoves.join(' ')),
+            totalPlies: widget.pgnController.mainLineLength,
             evals: evals,
             startWinChance: widget.analysisController.startWinChance,
             currentPly: _onMainline ? widget.currentPly : null,

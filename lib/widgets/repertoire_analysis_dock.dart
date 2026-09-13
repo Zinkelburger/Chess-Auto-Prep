@@ -26,6 +26,7 @@ import '../utils/ease_utils.dart' show expectedCpFromWinProb;
 import 'analysis/analysis_panels_dialog.dart';
 import 'engine/expectimax_panel_host.dart';
 import 'engine/unified_engine_pane.dart';
+import 'engine/inline_engine_settings.dart';
 
 /// Stockfish PV and expectimax PV shown together (split horizontally).
 class RepertoireAnalysisDock extends StatefulWidget {
@@ -164,6 +165,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
               ),
             ),
           const Spacer(),
+          if (_settings.showEngineDock) const InlineEngineSettings(),
           IconButton(
             icon: const Icon(Icons.view_column_outlined, size: 18),
             tooltip: 'Analysis panels',

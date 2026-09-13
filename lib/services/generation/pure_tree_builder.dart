@@ -54,8 +54,14 @@ class PureTreeBuilder {
         'eval_depth',
         'max_eval_loss_cp',
         'maia_elo',
+        'bounded_database',
+        if (config.boundedDatabase) 'our_multipv',
+        if (config.boundedDatabase) 'opp_mass_target',
       ]) {
-        if (previous[key] != current[key]) {
+        if ((key == 'bounded_database'
+                ? previous[key] ?? false
+                : previous[key]) !=
+            current[key]) {
           throw StateError(
             'Pure resume requires unchanged $key; start a new build.',
           );
@@ -163,11 +169,40 @@ class PureTreeBuilder {
       }
       final legal = pureLegalMoves(position);
       final ours = node.isWhiteToMove == config.playAsWhite;
-      final policy = ours ? <String, double>{} : await _policy(node, legal);
+      final policy = ours && !config.boundedDatabase
+          ? <String, double>{}
+          : await _policy(node, legal);
       final probabilities = policy;
       final moves = ours
-          ? legal
+          ? List<String>.of(legal)
           : legal.where((m) => probabilities[m]! > 0).toList();
+      if (config.boundedDatabase) {
+        final discovery = await run.pool.discoverMoves(
+          fen: node.fen,
+          depth: config.evalDepth,
+          multiPv: config.ourMultipv,
+          isWhiteToMove: node.isWhiteToMove,
+        );
+        if (discovery.lines.isEmpty) {
+          throw StateError('Stockfish returned no legal candidates');
+        }
+        final selected = discovery.lines
+            .take(config.ourMultipv)
+            .map((line) => line.moveUci)
+            .toSet();
+        final likely = legal.where((m) => probabilities[m]! > 0).toList()
+          ..sort((a, b) => probabilities[b]!.compareTo(probabilities[a]!));
+        var mass = 0.0;
+        for (final move in likely) {
+          if (mass >= config.oppMassTarget) break;
+          selected.add(move);
+          mass += probabilities[move]!;
+        }
+        // Every position includes strong rare replies as well as human moves.
+        // Keep actual Maia probabilities (including zero for engine-only moves).
+        moves.clear();
+        moves.addAll(legal.where(selected.contains));
+      }
       // Atomic expansions: a budget never leaves a partially specified
       // probability distribution or a partially enumerated action set.
       if (config.maxNodes > 0 &&
@@ -202,9 +237,12 @@ class PureTreeBuilder {
         final best = candidates
             .map((c) => c.evalForUs(config.playAsWhite))
             .reduce((a, b) => a > b ? a : b);
-        candidates.removeWhere(
-          (c) => c.evalForUs(config.playAsWhite) < best - config.maxEvalLossCp,
-        );
+        if (!config.boundedDatabase) {
+          candidates.removeWhere(
+            (c) =>
+                c.evalForUs(config.playAsWhite) < best - config.maxEvalLossCp,
+          );
+        }
         // Keep the fixed-depth child evaluation used by the parent guard.
         // A later expansion must never replace it with a different search.
       }

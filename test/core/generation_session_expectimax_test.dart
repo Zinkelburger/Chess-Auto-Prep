@@ -2,7 +2,12 @@
 // repertoire saved, refusing a probe it cannot place, and keeping a
 // probe-origin main tree when a full build arrives.
 
+import 'dart:async';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart';
+import '../services/generation/engine_fakes.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
@@ -17,9 +22,14 @@ const _afterE4C5 =
 
 class _MemoryStorage implements StorageService {
   final Map<String, String> files = {};
+  bool failWrites = false;
+  Future<void> Function(String)? beforeExists;
 
   @override
-  Future<bool> fileExists(String path) async => files.containsKey(path);
+  Future<bool> fileExists(String path) async {
+    await beforeExists?.call(path);
+    return files.containsKey(path);
+  }
 
   @override
   Future<String?> readFile(String path) async => files[path];
@@ -31,6 +41,7 @@ class _MemoryStorage implements StorageService {
     bool createOnly = false,
     String? expectedContent,
   }) async {
+    if (failWrites) throw StateError('disk full');
     if (createOnly && files.containsKey(path)) {
       throw StateError('file exists');
     }
@@ -77,6 +88,29 @@ class _CapturingGeneration extends GenerationSessionController {
   }
 }
 
+class _PvLifecycle extends EngineLifecycle {
+  _PvLifecycle() : super.fresh();
+  final entered = Completer<void>();
+  Completer<void>? gate;
+  @override
+  Future<void> enterGeneration(int threads) async {
+    if (!entered.isCompleted) entered.complete();
+    await gate?.future;
+  }
+
+  @override
+  Future<void> exitGeneration() async {}
+}
+
+const _pvTarget = ExpectimaxProbeTarget(
+  repertoireFilePath: '/r/x.pgn',
+  repertoireStartFen: kStandardStartFen,
+  movesFromStart: [],
+  moveSan: 'e4',
+  plies: 1,
+  playAsWhite: true,
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -86,6 +120,76 @@ void main() {
     StorageFactory.instanceForTest = storage;
   });
   tearDown(() => StorageFactory.instanceForTest = null);
+
+  test('PV save failure reports an error instead of durable success', () async {
+    storage.failWrites = true;
+    final pool = FakeStockfishPool();
+    pool.discoveryByFen[playUciMove(
+      kStandardStartFen,
+      'e2e4',
+    )!] = DiscoveryResult(
+      lines: [
+        discoveryLine(pvNumber: 1, cpWhite: 25, pv: ['e7e5', 'g1f3']),
+      ],
+      depth: 14,
+    );
+    final controller = GenerationSessionController(
+      enginePool: pool,
+      engineLifecycle: _PvLifecycle(),
+    );
+    addTearDown(controller.dispose);
+    final error = await controller.computeMovePv(_pvTarget);
+    expect(error, contains('disk full'));
+    expect(controller.lastRunSummary, isNot(contains('saved')));
+    expect(controller.isGenerating, isFalse);
+    expect(storage.files, isEmpty);
+  });
+
+  test('cancel during engine entry never starts PV discovery', () async {
+    final lifecycle = _PvLifecycle()..gate = Completer<void>();
+    final pool = FakeStockfishPool();
+    final controller = GenerationSessionController(
+      enginePool: pool,
+      engineLifecycle: lifecycle,
+    );
+    addTearDown(controller.dispose);
+    final pending = controller.computeMovePv(_pvTarget);
+    await lifecycle.entered.future;
+    controller.cancelBuild();
+    lifecycle.gate!.complete();
+    expect(await pending, isNull);
+    expect(pool.discoverMultiPvCalls, isEmpty);
+    expect(controller.lastRunSummary, contains('cancelled'));
+    expect(controller.lastError, isNull);
+    expect(storage.files, isEmpty);
+  });
+
+  for (final pv in [true, false]) {
+    test(
+      'superseded chapter load cannot launch ${pv ? 'PV' : 'tree'} against another database',
+      () async {
+        final entered = Completer<void>();
+        final release = Completer<void>();
+        storage.beforeExists = (path) async {
+          if (path == '/r/x_tree.json') {
+            entered.complete();
+            await release.future;
+          }
+        };
+        final controller = _CapturingGeneration();
+        addTearDown(controller.dispose);
+        final pending = pv
+            ? controller.computeMovePv(_pvTarget)
+            : controller.computeExpectimax(_pvTarget);
+        await entered.future;
+        await controller.loadSavedTreeFor('/r/other.pgn');
+        release.complete();
+        expect(await pending, contains('session changed'));
+        expect(controller.request, isNull);
+        expect(storage.files, isEmpty);
+      },
+    );
+  }
 
   group('loadSavedTreeFor', () {
     test('loads the build tree and its probes', () async {

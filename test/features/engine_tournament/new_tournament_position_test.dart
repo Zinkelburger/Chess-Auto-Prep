@@ -1,5 +1,5 @@
 /// The new-tournament dialog: basics first, an empty FEN field that means
-/// the standard start, and everything else behind Advanced.
+/// the standard start, and participant settings in Engine controls.
 library;
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
@@ -24,6 +24,7 @@ Future<void> _openDialog(
   WidgetTester tester, {
   String boardFen = _boardFen,
   List<TournamentConfig?>? result,
+  TournamentConfig? initialConfig,
 }) async {
   tester.view.physicalSize = const Size(1600, 1200);
   tester.view.devicePixelRatio = 1.0;
@@ -41,6 +42,7 @@ Future<void> _openDialog(
                 final config = await showNewTournamentDialog(
                   context,
                   engines: _engines,
+                  initialConfig: initialConfig,
                   boardFen: boardFen,
                   onManageEngines: () {},
                 );
@@ -61,6 +63,42 @@ String _fenText(WidgetTester tester) =>
     tester.widget<TextField>(_fenField).controller!.text;
 
 void main() {
+  testWidgets(
+    'rerun preserves its snapshot and edits participant resources independently',
+    (tester) async {
+      final original = TournamentConfig(
+        name: 'Saved setup',
+        startFen: _boardFen,
+        gamesPerPairing: 7,
+        engines: [
+          _engines.first.copyWith(hashMb: 256),
+          _engines.first.copyWith(hashMb: 512),
+        ],
+      );
+      final result = <TournamentConfig?>[];
+      await _openDialog(tester, result: result, initialConfig: original);
+      expect(_fenText(tester), _boardFen);
+      await tester.tap(find.byKey(const ValueKey('new-tournament-advanced')));
+      await tester.pumpAndSettle();
+      final memory = find.descendant(
+        of: find.byKey(const ValueKey('tournament-engine-0')),
+        matching: find.byKey(const Key('engine-memory')),
+      );
+      await tester.ensureVisible(memory);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(of: memory, matching: find.byTooltip('More')),
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('new-tournament-start')));
+      await tester.pumpAndSettle();
+      expect(result.single!.engines.map((e) => e.hashMb), [272, 512]);
+      expect(result.single!.startFen, _boardFen);
+      expect(result.single!.gamesPerPairing, 7);
+      expect(original.engines.first.hashMb, 256);
+    },
+  );
+
   testWidgets('an empty FEN field means the standard start', (tester) async {
     final result = <TournamentConfig?>[];
     await _openDialog(tester, result: result);
@@ -129,7 +167,9 @@ void main() {
     expect(_fenText(tester), isEmpty);
   });
 
-  testWidgets('engines and adjudication wait behind Advanced', (tester) async {
+  testWidgets('engine controls reveal participants and adjudication', (
+    tester,
+  ) async {
     await _openDialog(tester);
 
     expect(find.text('ADJUDICATION'), findsNothing);

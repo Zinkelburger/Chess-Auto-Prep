@@ -225,6 +225,37 @@ void main() {
       expect(course.entries.first.pgn, contains('1. d4 Nf6'));
     });
 
+    test('ChessDB KID exports replay from move one with the setup prefix', () {
+      const prefix = ['d4', 'Nf6', 'c4', 'g6', 'Nc3', 'Bg7', 'e4', 'd6'];
+      final course = _composer(
+        TreeBuildConfig(
+          startFen: _fenAfter(prefix),
+          playAsWhite: false,
+          buildMode: BuildMode.chessDbBook,
+        ),
+        prefix: prefix,
+      ).compose(lines: [_line('Nf3 O-O Be2 e5'), _line('f3 O-O Be3 Nc6')]);
+
+      for (final entry in course.entries) {
+        final game = PgnGame.parsePgn(entry.pgn);
+        expect(game.headers.containsKey('FEN'), isFalse);
+        expect(game.headers.containsKey('SetUp'), isFalse);
+        final sans = game.moves.mainline().map((m) => m.san).toList();
+        expect(sans.take(prefix.length), prefix);
+        expect(sans, entry.movesSan);
+        Position position = Chess.initial;
+        for (final san in sans) {
+          final move = position.parseSan(san);
+          expect(move, isNotNull, reason: '$san in ${position.fen}');
+          position = position.play(move!);
+        }
+        expect(position.fullmoves, 7);
+        final movetext = entry.pgn.split('\n\n').last;
+        expect(movetext, startsWith('1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6'));
+        expect(movetext, isNot(contains('{')));
+      }
+    });
+
     test('prefix moves carry no annotations', () {
       final course = _composer(
         _config(),

@@ -3,7 +3,7 @@ description: Chess tactics trainer and PGN analyzer
 
 publish_to: 'none'
 
-version: 1.17.0
+version: 1.17.1
 
 environment:
   sdk: '>=3.12.0 <4.0.0'
@@ -21,7 +21,7 @@ dependencies:
   provider: ^6.1.1
 
   # File handling and HTTP
-  file_picker: ^12.2.0
+  file_picker: ^12.3.0
   http: ^1.1.2
   crypto: ^3.0.6  # SHA-256 for Lichess OAuth PKCE
   path_provider: ^2.1.6
@@ -37,7 +37,7 @@ dependencies:
 
   # Persistent eval cache (desktop: Linux / macOS / Windows).
   sqflite_common_ffi: ^2.4.2+1
-  sqlite3: ^3.5.2
+  sqlite3: ^3.6.0
   # TWIC master-games download (zip per weekly issue).
   archive: ^4.2.0
   cdbdirect_flutter_libs:
