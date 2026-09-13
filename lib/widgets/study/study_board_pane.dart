@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import '../../core/study_controller.dart';
 import '../../models/board_annotation.dart';
 import '../../utils/board_shape_comments.dart';
-import '../../utils/keyboard_shortcut_utils.dart';
 import '../chess_board_widget.dart';
 import '../training/move_input_widget.dart';
 
@@ -16,13 +15,11 @@ class StudyBoardPane extends StatelessWidget {
     super.key,
     required this.study,
     required this.moveInputKey,
-    required this.keyBindings,
     required this.onShapeDrawn,
   });
 
   final StudyController study;
   final GlobalKey<MoveInputWidgetState> moveInputKey;
-  final List<KeyBinding> keyBindings;
   final void Function(String orig, String? dest) onShapeDrawn;
 
   @override
@@ -52,8 +49,6 @@ class StudyBoardPane extends StatelessWidget {
               key: moveInputKey,
               position: study.currentPosition,
               onMove: (move) => study.playSan(move.san),
-              onNavigationKey: (event) =>
-                  handleMoveInputNavigationKey(keyBindings, event),
             ),
           ),
         ],

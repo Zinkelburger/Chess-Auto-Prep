@@ -28,7 +28,7 @@ import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/shortcut_tooltip.dart';
-import '../widgets/trainer_keyboard_scope.dart';
+import '../widgets/board_keyboard_scope.dart';
 import '../services/storage/storage_factory.dart';
 import '../widgets/training/training_mistakes_panel.dart';
 import '../widgets/training/chapter_setup_dialog.dart';
@@ -247,52 +247,29 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Ancestor-only key handling (holdsFocus defaults to false): the scope must
-    // not take primary focus, or it swallows typed moves (e.g. "e6") instead of
-    // letting the move-input field receive them. Space still bubbles up to
-    // _onKeyEvent to advance the Learn step.
-    return TrainerKeyboardScope(
-      onKeyEvent: _onKeyEvent,
+    return BoardKeyboardScope(
+      moveInputKey: _moveInputKey,
+      bindings: () => _keyBindings,
       child: Scaffold(appBar: _buildAppBar(), body: _buildBody()),
     );
   }
 
-  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    // Space advances the Learn "Next" step. It's checked before the text-input
-    // guard because space is never a valid move character (the move input
-    // filters it out) and the disabled move-input field can retain focus. The
-    // "Next" button also self-focuses (see _NextButton.autofocus), so this is a
-    // secondary path — whichever the focused node is, space advances.
-    if (runKeyBindings(
-          KeyBinding.forShortcutIf(
-            AppShortcut.toggleSolution,
-            'Next learning step',
-            () {
-              if (_training.learnWaitingForAck) {
-                _training.learnAcknowledged();
-                return true;
-              }
-              if (_training.opponentWaitingForAck) {
-                _training.opponentAcknowledged();
-                return true;
-              }
-              return false;
-            },
-          ),
-          event.logicalKey,
-        ) ==
-        KeyEventResult.handled) {
-      return KeyEventResult.handled;
-    }
-
-    return handleKeyBindings(_keyBindings, event, node: node);
-  }
-
-  /// Trainer shortcuts, dispatched through [handleKeyBindings] (never while
-  /// typing a move).
   List<KeyBinding> get _keyBindings => [
+    ...KeyBinding.forShortcutIf(
+      AppShortcut.toggleSolution,
+      'Next learning step',
+      () {
+        if (_training.learnWaitingForAck) {
+          _training.learnAcknowledged();
+          return true;
+        }
+        if (_training.opponentWaitingForAck) {
+          _training.opponentAcknowledged();
+          return true;
+        }
+        return false;
+      },
+    ),
     for (final (shortcut, rating) in [
       (AppShortcut.rateAgain, ReviewRating.again),
       (AppShortcut.rateHard, ReviewRating.hard),
@@ -668,10 +645,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       waitingForUser: _training.waitingForUser,
       onMove: _training.handleUserMove,
       moveInputKey: _moveInputKey,
-      // Non-move keys (S skip, J manual-advance, …) keep working as
-      // shortcuts while a move is being typed; R stays typeable ("Rd1").
-      onNavigationKey: (event) =>
-          handleMoveInputNavigationKey(_keyBindings, event),
     );
   }
 
