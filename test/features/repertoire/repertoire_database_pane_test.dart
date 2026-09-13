@@ -30,10 +30,14 @@ void main() {
       expect(find.byTooltip('Copy moves'), findsNothing);
       await tester.tap(find.text('e4').first);
       expect(played, 'e4');
+      await tester.tap(find.byTooltip('Database source'));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Opening explorer'));
       await tester.pump();
       expect(find.byType(OpeningExplorerPanel), findsOneWidget);
       expect(find.byType(OpeningTreeWidget), findsNothing);
+      await tester.tap(find.byTooltip('Database source'));
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Repertoire').first);
       await tester.pump();
       expect(find.byType(OpeningTreeWidget), findsOneWidget);

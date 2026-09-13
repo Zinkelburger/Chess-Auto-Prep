@@ -50,6 +50,8 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onPlanBuild,
     this.onOpenAudit,
     this.onImportPgn,
+    this.onReload,
+    this.onGenerationSettings,
     this.repertoireSettingsBuilder,
   });
 
@@ -74,6 +76,8 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onPlanBuild;
   final VoidCallback? onOpenAudit;
   final VoidCallback? onImportPgn;
+  final VoidCallback? onReload;
+  final VoidCallback? onGenerationSettings;
 
   /// Controls for the selected repertoire, embedded in the shared settings pane.
   final WidgetBuilder? repertoireSettingsBuilder;
@@ -101,7 +105,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
-            label: isExpectimaxProbe ? 'Computing expectimax…' : null,
+            label: isExpectimaxProbe ? 'Generating evals…' : null,
             onTap: onOpenGeneration,
           ),
         RepertoireActionsMenu(
@@ -109,6 +113,10 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           onPlanBuild: onPlanBuild,
           onGenerate: onOpenGeneration,
           onImportPgn: onImportPgn,
+          onReload: onReload,
+          onGenerationSettings: onGenerationSettings,
+          onSettings: () =>
+              openAppSettings(context, initialMode: AppMode.repertoire),
           onTrain: showTrainAction ? onTrainRepertoire : null,
           onAudit: onOpenAudit,
           trainEnabled: !generationLocked,
@@ -490,6 +498,9 @@ class RepertoireActionsMenu extends StatelessWidget {
     this.onTrain,
     this.onAudit,
     this.onChoose,
+    this.onReload,
+    this.onGenerationSettings,
+    this.onSettings,
     this.trainEnabled = true,
   });
 
@@ -499,6 +510,9 @@ class RepertoireActionsMenu extends StatelessWidget {
   final VoidCallback? onTrain;
   final VoidCallback? onAudit;
   final VoidCallback? onChoose;
+  final VoidCallback? onReload;
+  final VoidCallback? onGenerationSettings;
+  final VoidCallback? onSettings;
 
   /// False keeps the Train row visible but greyed — while a build runs the
   /// chapter is changing under the trainer, so the row waits.
@@ -536,7 +550,7 @@ class RepertoireActionsMenu extends StatelessWidget {
       // pick a transport before it will show them the import.
       if (onImportPgn != null)
         AppMenuEntry(
-          label: 'From a PGN…',
+          label: 'Import PGN…',
           icon: Icons.description_outlined,
           onRun: onImportPgn!,
         ),
@@ -563,6 +577,24 @@ class RepertoireActionsMenu extends StatelessWidget {
       ..._headed(_import, import_),
       ..._headed(_train, train),
       ..._headed(_check, check),
+      if (onReload != null)
+        AppMenuEntry(
+          label: 'Check disk for changes',
+          icon: Icons.refresh,
+          onRun: onReload!,
+        ),
+      if (onGenerationSettings != null)
+        AppMenuEntry(
+          label: 'Generation settings…',
+          icon: Icons.tune,
+          onRun: onGenerationSettings!,
+        ),
+      if (onSettings != null)
+        AppMenuEntry(
+          label: 'Settings…',
+          icon: Icons.settings_outlined,
+          onRun: onSettings!,
+        ),
       if (onChoose != null)
         AppMenuEntry(
           heading: 'Library',

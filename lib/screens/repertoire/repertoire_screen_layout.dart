@@ -33,12 +33,9 @@ mixin _RepertoireLayout
             : _layout
                   .resolveOutlinePanelWidth(constraints.maxWidth)
                   .clamp(220.0, constraints.maxWidth * .24);
-        final databaseHeight = _layout.resolveDatabaseHeight(
-          constraints.maxHeight,
-        );
         final boardWidth = _layout.boardZoneWidth(
-          availableWidth: constraints.maxWidth - outlineWidth - 24,
-          availableHeight: constraints.maxHeight - databaseHeight - 20,
+          availableWidth: constraints.maxWidth - outlineWidth - 32,
+          availableHeight: constraints.maxHeight - 48,
         );
         return Padding(
           padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
@@ -54,59 +51,17 @@ mixin _RepertoireLayout
                 onWidthChanged: _layout.dragOutlinePanelWidth,
                 onDragEnd: _layout.saveOutlinePanelWidth,
               ),
-              Expanded(
+              SizedBox(
+                width: boardWidth,
                 child: Column(
                   children: [
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(
-                            width: boardWidth,
-                            child: Column(
-                              children: [
-                                Expanded(child: _buildBoardZone()),
-                                _buildNavControls(),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(child: _buildWideToolsColumn()),
-                        ],
-                      ),
-                    ),
-                    MouseRegion(
-                      cursor: SystemMouseCursors.resizeUpDown,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onVerticalDragUpdate: (details) =>
-                            _layout.dragDatabaseHeight(
-                              databaseHeight - details.delta.dy,
-                              constraints.maxHeight,
-                            ),
-                        onVerticalDragEnd: (_) => _layout.saveDatabaseHeight(),
-                        child: const SizedBox(
-                          height: 8,
-                          width: double.infinity,
-                          child: Center(
-                            child: SizedBox(
-                              width: 36,
-                              child: Divider(height: 1),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      height: databaseHeight,
-                      child: RepertoireWorkspacePanel(
-                        icon: Icons.storage_outlined,
-                        child: _cursorScoped((_) => _buildDatabaseTabContent()),
-                      ),
-                    ),
+                    Expanded(child: _buildBoardZone()),
+                    _buildNavControls(),
                   ],
                 ),
               ),
+              const SizedBox(width: 16),
+              Expanded(child: _buildWideToolsColumn()),
             ],
           ),
         );
@@ -154,7 +109,7 @@ mixin _RepertoireLayout
                   controller: _sidePanelTabController,
                   tabs: const [
                     Tab(text: 'Engine', height: 32),
-                    Tab(text: 'Generate', height: 32),
+                    Tab(text: 'Database', height: 32),
                   ],
                 ),
               ),
@@ -179,17 +134,7 @@ mixin _RepertoireLayout
               controller: _sidePanelTabController,
               children: [
                 _cursorScoped((_) => _buildEngineTabContent()),
-                LayoutBuilder(
-                  builder: (context, constraints) => SingleChildScrollView(
-                    child: SizedBox(
-                      height: constraints.maxHeight.clamp(
-                        520.0,
-                        double.infinity,
-                      ),
-                      child: _cursorScoped((_) => _buildGenerateTabContent()),
-                    ),
-                  ),
-                ),
+                _cursorScoped((_) => _buildDatabaseTabContent()),
               ],
             ),
           ),
@@ -208,7 +153,7 @@ mixin _RepertoireLayout
       focusNode: _focusNode,
       onPasteFenFromClipboard: _pastePositionFromClipboard,
       onUndo: _performUndo,
-      onToggleExpectimax: InlineExpectimaxBar.toggle,
+      onToggleExpectimax: () => unawaited(_openGenerateTab()),
       onToggleLinesTab: () {
         if (_isCompactLayout) {
           _toolsTabController.animateTo(_toolsTabController.index == 1 ? 0 : 1);
@@ -321,10 +266,10 @@ mixin _RepertoireLayout
             controller: _toolsTabController,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _cursorScoped((_) => _buildPgnTabWithEngines()),
+              _cursorScoped((_) => _buildPgnTab()),
               _cursorScoped((_) => _buildSecondTabContent()),
               _cursorScoped((_) => _buildDatabaseTabContent()),
-              _cursorScoped((_) => _buildGenerateTabContent()),
+              _cursorScoped((_) => _buildEngineTabContent()),
             ],
           ),
         ),
@@ -339,7 +284,6 @@ mixin _RepertoireLayout
         Expanded(
           flex: 3,
           child: RepertoireWorkspacePanel(
-            title: 'Notation',
             icon: Icons.edit_note,
             child: _cursorScoped((_) => _buildPgnTab()),
           ),
@@ -361,7 +305,7 @@ mixin _RepertoireLayout
         _buildPgnTabLabel(),
         _buildLinesTabLabel(),
         const Tab(text: 'Database'),
-        const Tab(text: 'Generate'),
+        const Tab(text: 'Engine'),
       ],
       labelPadding: const EdgeInsets.symmetric(horizontal: 12),
       indicatorSize: TabBarIndicatorSize.label,

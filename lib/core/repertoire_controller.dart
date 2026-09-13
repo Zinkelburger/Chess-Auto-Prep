@@ -628,16 +628,43 @@ class RepertoireController
     return removed;
   }
 
+  /// Capture a save destination before a debounced editor edit can outlive
+  /// its chapter. A completed save may update the open chapter only if the
+  /// same load generation is still displayed.
+  Future<bool> Function(String)? get selectedLineSaver {
+    if (_isLoading || _selectedPgnLine == null || _currentRepertoire == null) {
+      return null;
+    }
+    final filePath = _currentRepertoire!.filePath;
+    if (filePath.isEmpty) return null;
+    final lineId = _selectedPgnLine!.id;
+    final generation = _loadGeneration;
+    return (newPgn) => _updateLineContent(
+      newPgn,
+      filePath: filePath,
+      lineId: lineId,
+      generation: generation,
+    );
+  }
+
   /// Persist edits made to the currently selected line.
   Future<bool> updateSelectedLineContent(String newPgn) async {
-    if (_selectedPgnLine == null || _currentRepertoire == null) return false;
-    final filePath = _currentRepertoire!.filePath;
-    if (filePath.isEmpty) return false;
+    return await selectedLineSaver?.call(newPgn) ?? false;
+  }
 
-    final lineId = _selectedPgnLine!.id;
+  Future<bool> _updateLineContent(
+    String newPgn, {
+    required String filePath,
+    required String lineId,
+    required int generation,
+  }) async {
     final service = RepertoireService();
     final success = await service.updateLineContent(filePath, lineId, newPgn);
     if (!success) return false;
+    if (generation != _loadGeneration ||
+        _currentRepertoire?.filePath != filePath) {
+      return true;
+    }
 
     final idx = _repertoireLines.indexWhere((l) => l.id == lineId);
     if (idx != -1) {
@@ -670,7 +697,9 @@ class RepertoireController
         isModelGame: old.isModelGame,
       );
       _repertoireLines = updated;
-      _selectedPgnLine = updated[idx];
+      if (_selectedPgnLine?.id == lineId) {
+        _selectedPgnLine = updated[idx];
+      }
     }
 
     _notifyStructureChanged();

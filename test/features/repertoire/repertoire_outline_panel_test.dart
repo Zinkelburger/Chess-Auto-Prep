@@ -142,13 +142,17 @@ void main() {
     tester,
   ) async {
     await pump(tester);
-    expect(find.text('French'), findsOneWidget);
+    expect(find.text('Chapters'), findsOneWidget);
+    expect(find.text('French'), findsNothing);
     expect(find.text('Sidelines'), findsOneWidget);
     expect(find.text('Advance'), findsOneWidget);
     // Active chapter is unfolded; a collapsed folder's chapter is not shown.
     expect(find.text('Main line'), findsOneWidget);
     expect(find.text('Nh6 idea'), findsOneWidget);
     expect(find.text('Exchange'), findsNothing);
+    expect(find.textContaining('2 chapters · 3 lines'), findsNothing);
+    await tester.tap(find.byTooltip('Chapter options'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('2 chapters · 3 lines'), findsOneWidget);
   });
 
@@ -204,7 +208,9 @@ void main() {
       tester,
       currentMoves: ['e4', 'e6', 'd4', 'd5', 'e5', 'c5', 'c3'],
     );
-    await tester.tap(find.text('At this position'));
+    await tester.tap(find.byTooltip('Chapter filters'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(CheckedPopupMenuItem<bool>));
     await tester.pumpAndSettle();
     expect(find.text('Nh6 idea'), findsOneWidget);
     expect(find.text('Main line'), findsNothing);

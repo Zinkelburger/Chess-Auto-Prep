@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   testWidgets(
-    'compact notes expand via focus shortcut and retain edits when collapsed',
+    'compact comments expand via focus shortcut and retain edits when collapsed',
     (tester) async {
       String? comment;
       await tester.pumpWidget(
@@ -31,10 +31,10 @@ void main() {
       await tester.enterText(find.byType(TextField), 'Control the centre.');
       await tester.pump();
       expect(comment, 'Control the centre.');
-      await tester.tap(find.byTooltip('Collapse notes'));
+      await tester.tap(find.byTooltip('Collapse comment'));
       await tester.pump();
       expect(find.byType(TextField), findsNothing);
-      await tester.tap(find.byTooltip('Edit notes'));
+      await tester.tap(find.byTooltip('Edit comment'));
       await tester.pump();
       expect(find.text('Control the centre.'), findsOneWidget);
     },

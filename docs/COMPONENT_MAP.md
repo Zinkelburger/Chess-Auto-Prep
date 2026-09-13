@@ -210,7 +210,7 @@ finished. Update these rows when adding or retiring a route or parallel renderer
 | View | Duplicate surfaces retired in this pass | Canonical organization / retained feature surfaces |
 |---|---:|---|
 | Repertoire trainer | 4 (five bespoke reader/phase surfaces → one phase surface) | Library → browser → session/results. `TrainingPhasePanel` uses shared PGN movetext; Read opens PGN Viewer. Mistakes is a searchable panel, not another board/reader. Chapter selection is optional scope. |
-| Repertoire builder | 1 | Outline + board/editor + Engine/Database/Generate tabs. Repertoire tree and opening explorer are Database sources; background jobs remain in the bottom panel. Whole-repertoire opening bypasses the forced chapter gate. |
+| Repertoire builder | 1 | Outline + board/editor + Engine/Database tabs. Repertoire tree and opening explorer are Database sources; background jobs remain in the bottom panel. Whole-repertoire opening bypasses the forced chapter gate. |
 | Tactics | 1 | Queue/browser → puzzle. Opening-review cards hand off to PGN Viewer; the nested book/game review dialog is removed. |
 | PGN Viewer | 0 | Owns reading, game navigation, analysis graph, collection filtering and book comparison. Book contents and matching lines use the same Book panel. |
 | Player analysis | 0 | Compact player selection → `PositionAnalysisWidget`; findings reuse `HolesReportPanel`. |
@@ -265,13 +265,28 @@ Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 ### Repertoire builder workspace
 
-The wide workspace keeps chapters on the left, the board beside notation, and
-engine analysis below notation. A resizable reference database dock spans the
-board and notation columns. This uses the simultaneous panes in the supplied
-[Chess.ceo reference](https://chess.ceo/) as a layout reference, with the app's
-existing typography and controls. Compact windows retain tabs. Notes in the
-builder start collapsed and expand when clicked or focused through the annotation action. Board navigation sits immediately beneath the board. Go to start preserves the
-loaded line and annotations so Forward can continue through it.
+The wide workspace keeps chapters on the left, the board in the center, and
+moves/comments above Engine / Database tabs on the right. Database sources are
+Engine evals (generated locally or ChessDB), Repertoire, Opening explorer, and
+Local PGN. No permanent bottom reference dock or duplicate Expectimax panel is
+shown. The eval source shows a legal-move table first; depth, cores, engine-move
+count and Maia coverage live in a persisted settings overlay accessible from its
+gear and the Actions menu. Import PGN and disk refresh also live in Actions.
+TWIC download status belongs inside the database surface. The comment editor is
+labelled Comment and expands on click or annotation focus.
+
+The [interactive JS design reference](../design/repertoire-builder/index.html)
+is a standalone mockup using sample data, adapted from the supplied
+[Chess.ceo reference](https://chess.ceo/). Serve that directory with a local HTTP
+server or open the HTML directly. It is a layout reference, not a chess engine.
+Flutter retains the app's typography, theme and real data sources.
+
+Chapter switches keep the workspace mounted with a thin loading indicator and
+temporary input lock. Initial opening still shows a loading state while files
+are read and parsed. Debounced line saves capture their destination and content;
+late writes cannot change the newly opened chapter's in-memory state. Board
+navigation sits immediately beneath the board. Go to start preserves the loaded
+line and annotations so Forward can continue through it.
 
 ```
 RepertoireScreen (composition root — wires controllers to widgets)
@@ -288,23 +303,22 @@ RepertoireScreen (composition root — wires controllers to widgets)
   ├─ Wide (≥ kCompactBreakpoint):
   │     Outline column (resizable, collapsible → "Chapters" strip)
   │       beside a workspace containing:
-  │         Board + NavControls | Notation (PgnWithAnalysisPane)
-  │                             | Engine / Generate tabs
-  │         Reference database dock (height remembered across sessions)
-  │           Repertoire | Opening explorer | Local PGN
+  │         Board + NavControls | Moves + Comment (PgnWithAnalysisPane)
+  │                             | Engine / Database tabs
+  │         Database source menu: Engine evals | Repertoire | Opening explorer | Local PGN
   │     Outline content = RepertoireOutlinePanel, or the optional line-metrics view
   │     BottomPane (collapsed by default, full width): Findings | Jobs
   │
   ├─ Compact (<960px):
-  │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN (with engine bars) | Chapters | Database | Generate
+  │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN | Chapters | Database | Engine
   │
-  ├─ Inline config (in Jobs tab): Actions ▾ → Generate from here… / outline chapter menu → RepertoireGenerationTab;
+  ├─ Inline config (in Jobs tab): Actions ▾ → Generate from here… opens Database → Engine evals; outline chapter menu → RepertoireGenerationTab;
   │     Audit button / chapter menu → AuditConfigPanel
   ├─ RepertoireStatusBar (clickable badges → toggle bottom pane tabs)
   └─ optional TrapWalkthrough overlay
 ```
 
-**Outline panel** (`features/repertoire/widgets/repertoire_outline_panel.dart`): header (repertoire name, "N chapters · M lines", metrics button, collapse, `+` = New chapter…), search field, "At this position" filter chip; tree rows for folders (nestable, expand/collapse), chapters (active one highlighted; unfold to show lines; course-composer `[White]` sections shown as uppercase section headers), lines (name + move preview + ply count; model games italic). **Selection**: Ctrl/Cmd-click toggles a line, Shift-click extends; a selection lives in one chapter and a drag or menu on any picked line acts on all of them. **Right-click / long-press menus**: empty space → New chapter…, New folder…; folder → New chapter here…, New folder here…, Rename…, Move to…, Delete folder…; chapter → Open, Generate lines into this chapter…, Audit this chapter, Train this chapter, Rename…, Move to folder…, New chapter next to this…, Split into chapters… (course exports only), Delete chapter…; line → Load on the board, Train this line, Rename…, Move [N lines] to chapter…, Move [N lines] to a new chapter…, Delete [N lines] (no confirmation — the toast has Undo). **Drag & drop** (a mouse drags at once; touch after a press): a line onto a chapter row appends it, between two lines (top/bottom half of the row, drawn as an insertion line) lands it there — in another chapter or its own (reorder); lines onto a folder or the foot drop zone (shown only during a drag, = the top level) start a new chapter there, named after the first line; chapters and folders onto folders or the foot zone (a folder cannot be dropped into itself). A closed folder/chapter opens after the pointer rests on it 600 ms; the list auto-scrolls near its edges. Moves and deletions finish quietly. Edit outcomes retain undo callbacks (`OutlineEditOutcome.undo`), but no completion toast or toast action is displayed. A line that crosses files keeps its training progress: `ReviewProgressRepointer` pins `[LineID]` into the game and re-points the review CSVs (shared with the chapter splitter). Names go through the shared `showNameEntryDialog` with `RepertoireOutlineService.validateName` plus a same-folder duplicate check. Line edits address games by file index (`RepertoireLine.gameIndex`) because the move-based line id truncates and collides for lines sharing a long prefix.
+**Outline panel** (`features/repertoire/widgets/repertoire_outline_panel.dart`): header (Chapters, options menu with counts/metrics, collapse, `+` = New chapter…), visible search field, position filter in a menu; tree rows for folders (nestable, expand/collapse), chapters (active one highlighted; unfold to show lines; course-composer `[White]` sections shown as uppercase section headers), lines (name + move preview + ply count; model games italic). **Selection**: Ctrl/Cmd-click toggles a line, Shift-click extends; a selection lives in one chapter and a drag or menu on any picked line acts on all of them. **Right-click / long-press menus**: empty space → New chapter…, New folder…; folder → New chapter here…, New folder here…, Rename…, Move to…, Delete folder…; chapter → Open, Generate lines into this chapter…, Audit this chapter, Train this chapter, Rename…, Move to folder…, New chapter next to this…, Split into chapters… (course exports only), Delete chapter…; line → Load on the board, Train this line, Rename…, Move [N lines] to chapter…, Move [N lines] to a new chapter…, Delete [N lines] (no confirmation — the toast has Undo). **Drag & drop** (a mouse drags at once; touch after a press): a line onto a chapter row appends it, between two lines (top/bottom half of the row, drawn as an insertion line) lands it there — in another chapter or its own (reorder); lines onto a folder or the foot drop zone (shown only during a drag, = the top level) start a new chapter there, named after the first line; chapters and folders onto folders or the foot zone (a folder cannot be dropped into itself). A closed folder/chapter opens after the pointer rests on it 600 ms; the list auto-scrolls near its edges. Moves and deletions finish quietly. Edit outcomes retain undo callbacks (`OutlineEditOutcome.undo`), but no completion toast or toast action is displayed. A line that crosses files keeps its training progress: `ReviewProgressRepointer` pins `[LineID]` into the game and re-points the review CSVs (shared with the chapter splitter). Names go through the shared `showNameEntryDialog` with `RepertoireOutlineService.validateName` plus a same-folder duplicate check. Line edits address games by file index (`RepertoireLine.gameIndex`) because the move-based line id truncates and collides for lines sharing a long prefix.
 
 **Planner (`lib/features/planner/`, “Plan starting lines…”)**: full-width planning mode (`PlanBuildScreen`) accepts several named move sequences from the initial position, one per row (`Name | 1.d4 Nf6 …`). Users can add/remove positions, select a root to preview or extend on the board, and return from review to edit the starts. **Choose ECO openings…** opens the shared catalog picker: search by code/prefix or opening name, tick multiple named lines, preview their boards and edit their moves before adding them as named starting lines. Existing nonempty starts are preserved; duplicate/overlapping roots use the same validation as typed lines. `models/plan_starting_line.dart` canonicalizes legal SAN and rejects invalid moves, duplicate positions and overlapping ancestor/descendant paths instead of silently truncating input. **Guided choices** runs the opening-book or own-games quiz across every supplied root; Back and Finish now preserve the remaining roots. Own-games thresholds are relative to each root’s sample. **Use these positions** skips the questions, starts with the ChessDB compact profile and sends one named chapter per root to review. The review validates build settings before generation, permits renaming/removing chapters, and preserves settings when returning to setup. Generation limits apply per build point.
 

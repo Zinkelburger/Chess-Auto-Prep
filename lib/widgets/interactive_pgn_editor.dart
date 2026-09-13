@@ -123,6 +123,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   TreePath? _editingCommentPath;
 
   Timer? _autoSaveTimer;
+  VoidCallback? _pendingAutoSave;
   static const _autoSaveDelay = Duration(seconds: 2);
 
   /// The rendered movetext, kept across cursor moves.
@@ -155,6 +156,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       _titleController.text = widget.lineTitle ?? '';
     }
     if (!identical(widget.tree, oldWidget.tree)) {
+      _flushAutoSave();
       _editingCommentPath = null;
     }
     if (widget.currentPath != _selection.value) {
@@ -172,6 +174,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   @override
   void dispose() {
+    _flushAutoSave();
     _titleController.dispose();
     _selection.dispose();
     _autoSaveTimer?.cancel();
@@ -326,12 +329,20 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   void _scheduleAutoSave() {
     if (!widget.isEditingExistingLine) return;
     _autoSaveTimer?.cancel();
-    _autoSaveTimer = Timer(_autoSaveDelay, () {
-      if (!mounted) return;
-      final pgn = _buildFullPgnForSave();
-      final onSave = widget.onAutoSave ?? widget.onLineEdited;
-      onSave?.call(pgn);
-    });
+    // Capture both the content and destination now. Navigation may replace
+    // the widget's tree and callbacks before this debounce expires.
+    final pgn = _buildFullPgnForSave();
+    final onSave = widget.onAutoSave ?? widget.onLineEdited;
+    _pendingAutoSave = onSave == null ? null : () => onSave(pgn);
+    _autoSaveTimer = Timer(_autoSaveDelay, _flushAutoSave);
+  }
+
+  void _flushAutoSave() {
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = null;
+    final save = _pendingAutoSave;
+    _pendingAutoSave = null;
+    save?.call();
   }
 
   String _buildFullPgnForSave() {

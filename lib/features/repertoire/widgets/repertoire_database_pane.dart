@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../models/explorer_response.dart';
 import '../../../theme/app_text_styles.dart';
+import '../../../widgets/master_games_prompt_banner.dart';
 import 'local_reference_pane.dart';
 import 'reference_game_dialog.dart';
 import '../../../services/explorer_game_opener.dart';
@@ -28,6 +29,9 @@ class RepertoireDatabasePane extends StatefulWidget {
     required this.repertoireMovesAtPosition,
     required this.onPlayMove,
     this.tree,
+    this.source,
+    this.onSourceChanged,
+    this.evaluations,
     this.repertoireLines = const [],
     this.onHoverTreeMove,
     this.onGoBack,
@@ -38,6 +42,9 @@ class RepertoireDatabasePane extends StatefulWidget {
 
   /// Position the explorer looks up.
   final String fen;
+  final int? source;
+  final ValueChanged<int>? onSourceChanged;
+  final Widget? evaluations;
   final OpeningTree? tree;
   final List<RepertoireLine> repertoireLines;
   final ValueChanged<String?>? onHoverTreeMove;
@@ -65,13 +72,14 @@ class RepertoireDatabasePane extends StatefulWidget {
 }
 
 class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
-  int _source = 0;
+  int _selectedSource = 0;
+  int get _source => widget.source ?? _selectedSource;
   late final LiveExplorerService _explorer = LiveExplorerService();
 
   @override
   void initState() {
     super.initState();
-    unawaited(_restoreSource());
+    if (widget.source == null) unawaited(_restoreSource());
   }
 
   Future<void> _restoreSource() async {
@@ -79,7 +87,7 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
       final prefs = await SharedPreferences.getInstance();
       final source = prefs.getInt('repertoire.reference_source');
       if (mounted && source != null && source >= 0 && source <= 2) {
-        setState(() => _source = source);
+        setState(() => _selectedSource = source);
       }
     } catch (_) {
       // Source preferences are best-effort.
@@ -88,7 +96,8 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
 
   Future<void> _selectSource(int source) async {
     if (!mounted) return;
-    setState(() => _source = source);
+    setState(() => _selectedSource = source);
+    widget.onSourceChanged?.call(source);
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('repertoire.reference_source', source);
@@ -123,41 +132,45 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          child: LayoutBuilder(
-            builder: (context, constraints) => Row(
-              children: [
-                if (constraints.maxWidth >= 550) ...[
-                  const Icon(Icons.storage_outlined, size: 16),
-                  const SizedBox(width: 8),
-                  const Text('Reference database', style: AppTextStyles.muted),
-                  const Spacer(),
-                ],
-                Flexible(
-                  child: SegmentedButton<int>(
-                    showSelectedIcon: false,
-                    style: const ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    segments: const [
-                      ButtonSegment(value: 0, label: Text('Repertoire')),
-                      ButtonSegment(value: 1, label: Text('Opening explorer')),
-                      ButtonSegment(value: 2, label: Text('Local PGN')),
-                    ],
-                    selected: {_source},
-                    onSelectionChanged: (v) {
-                      unawaited(_selectSource(v.first));
-                    },
+        Align(
+          alignment: Alignment.centerLeft,
+          child: PopupMenuButton<int>(
+            tooltip: 'Database source',
+            initialValue: _source,
+            onSelected: (source) => unawaited(_selectSource(source)),
+            itemBuilder: (_) => [
+              if (widget.evaluations != null)
+                const PopupMenuItem(value: 3, child: Text('Engine evals')),
+              const PopupMenuItem(value: 0, child: Text('Repertoire')),
+              const PopupMenuItem(value: 1, child: Text('Opening explorer')),
+              const PopupMenuItem(value: 2, child: Text('Local PGN')),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    const [
+                      'Repertoire',
+                      'Opening explorer',
+                      'Local PGN',
+                      'Engine evals',
+                    ][_source],
+                    style: AppTextStyles.body,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  const Icon(Icons.arrow_drop_down, size: 18),
+                ],
+              ),
             ),
           ),
         ),
+        if (_source == 1 || _source == 2) const MasterGamesPromptBanner(),
         Expanded(
-          child: _source == 0
+          child: _source == 3 && widget.evaluations != null
+              ? widget.evaluations!
+              : _source == 0
               ? widget.tree == null
                     ? const Center(child: Text('No repertoire moves yet'))
                     : OpeningTreeWidget(
@@ -180,7 +193,7 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
                 )
               : OpeningExplorerPanel(
                   service: _explorer,
-                  sideBySideGames: true,
+                  sideBySideGames: false,
                   onOpenGame: _openGame,
                   fen: widget.fen,
                   movePath: widget.currentMoveSequence,

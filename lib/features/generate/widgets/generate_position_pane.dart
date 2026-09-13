@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../core/generation_session_controller.dart';
 import '../../../services/eval/chessdb_api_provider.dart';
@@ -9,9 +8,8 @@ import '../../../services/eval/db_move_list.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/chess_utils.dart';
-import '../../../utils/system_info.dart';
 import '../services/position_moves.dart';
-import '../../../widgets/common/number_stepper.dart';
+import 'position_generation_settings.dart';
 
 /// Board-side generation. Starting a run only adds analysis to the database.
 class GeneratePositionPane extends StatefulWidget {
@@ -52,15 +50,6 @@ class GeneratePositionPane extends StatefulWidget {
 
 class _GeneratePositionPaneState extends State<GeneratePositionPane>
     with AutomaticKeepAliveClientMixin {
-  late final _depth = TextEditingController(
-    text: '${widget.generation.lastConfig?.maxPly ?? 6}',
-  );
-  late final _cores = TextEditingController(
-    text: '${widget.generation.lastConfig?.resolvedEngineThreads ?? 1}',
-  );
-  int _engineMoves = 4;
-  int _maiaCoverage = 60;
-  final _form = GlobalKey<FormState>();
   final _chessDb = ChessDbApiProvider();
   bool _showChessDb = false;
   bool _loading = false;
@@ -85,14 +74,8 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
     }
   }
 
-  @override
-  void dispose() {
-    _depth.dispose();
-    _cores.dispose();
-    super.dispose();
-  }
-
   Future<void> _lookup() async {
+    if (!mounted) return;
     final version = ++_lookupVersion;
     final fen = widget.fen;
     setState(() {
@@ -112,7 +95,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
         _dbMoves = result;
         _loading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted || version != _lookupVersion) return;
       setState(() {
         _loading = false;
@@ -121,24 +104,36 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
     }
   }
 
+  void _selectSource(bool chessDb) {
+    if (!mounted) return;
+    setState(() {
+      _showChessDb = chessDb;
+      _error = null;
+      _loading = false;
+      _lookupVersion++;
+    });
+    if (chessDb) unawaited(_lookup());
+  }
+
   Future<void> _generate([String? san]) async {
-    if (_starting ||
-        widget.generation.isGenerating ||
-        !_form.currentState!.validate()) {
-      return;
-    }
+    if (!mounted || _starting || widget.generation.isGenerating) return;
+    final fen = widget.fen;
     setState(() {
       _starting = true;
       _showChessDb = false;
+      _lookupVersion++;
+      _loading = false;
       _error = null;
     });
     try {
+      final settings = await PositionGenerationSettings.load(widget.generation);
+      if (!mounted || fen != widget.fen) return;
       final error = await widget.onGenerate(
         moveSan: san,
-        plies: int.parse(_depth.text),
-        cores: int.parse(_cores.text),
-        engineMoves: _engineMoves,
-        maiaCoverage: _maiaCoverage / 100,
+        plies: settings.plies,
+        cores: settings.cores,
+        engineMoves: settings.engineMoves,
+        maiaCoverage: settings.maiaCoverage / 100,
       );
       if (mounted) setState(() => _error = error);
     } catch (e) {
@@ -148,34 +143,6 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
     }
   }
 
-  Widget _number(
-    String label,
-    TextEditingController controller,
-    int max,
-    String tooltip,
-    bool busy,
-  ) => SizedBox(
-    width: 76,
-    child: Tooltip(
-      message: tooltip,
-      child: TextFormField(
-        controller: controller,
-        enabled: !busy,
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          border: const OutlineInputBorder(),
-        ),
-        validator: (text) {
-          final value = int.tryParse(text ?? '');
-          return value == null || value < 1 || value > max ? '1–$max' : null;
-        },
-      ),
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -184,6 +151,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
       builder: (context, _) {
         final gen = widget.generation;
         final busy = gen.isGenerating || _starting;
+        final stmWhite = widget.fen.split(' ').elementAtOrNull(1) == 'w';
         final rows = positionMoves(
           widget.fen,
           database: gen.generatedTreeFenMap,
@@ -192,167 +160,165 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
           chessDb: _dbMoves,
           sortByChessDb: _showChessDb,
         );
+        // The visible score determines the ordering; expected-score analysis
+        // belongs to the generation pipeline, not a second table column.
+        if (!_showChessDb && rows.isNotEmpty) {
+          rows.sort((a, b) {
+            final x = a.evalCp, y = b.evalCp;
+            if (x == null && y != null) return 1;
+            if (y == null && x != null) return -1;
+            final score = x != null && y != null
+                ? (stmWhite ? y.compareTo(x) : x.compareTo(y))
+                : 0;
+            return score != 0 ? score : a.san.compareTo(b.san);
+          });
+        }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.all(12),
-              child: Form(
-                key: _form,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 10,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _number(
-                      'Depth',
-                      _depth,
-                      60,
-                      'Half-moves to explore from the board position.',
-                      busy,
-                    ),
-                    _number(
-                      'Cores',
-                      _cores,
-                      getLogicalCores(),
-                      'CPU cores used for generation.',
-                      busy,
-                    ),
-                    FilledButton(
-                      onPressed: busy || rows.isEmpty
-                          ? null
-                          : () => _generate(),
-                      child: const Text('Generate'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 8,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Engine moves', style: AppTextStyles.caption),
-                      NumberStepper(
-                        key: const ValueKey('generate-engine-moves'),
-                        value: _engineMoves,
-                        min: 1,
-                        max: 20,
-                        fieldWidth: 32,
-                        enabled: !busy,
-                        onChanged: (v) {
-                          if (mounted) setState(() => _engineMoves = v);
-                        },
+                  Expanded(
+                    child: PopupMenuButton<bool>(
+                      key: const ValueKey('evaluation-source'),
+                      tooltip: 'Evaluation source',
+                      initialValue: _showChessDb,
+                      onSelected: _selectSource,
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: false,
+                          child: Text('Generated evals'),
+                        ),
+                        PopupMenuItem(value: true, child: Text('ChessDB')),
+                      ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _showChessDb ? 'ChessDB' : 'Generated evals',
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.muted,
+                              ),
+                            ),
+                            const Icon(Icons.arrow_drop_down, size: 18),
+                          ],
+                        ),
                       ),
-                    ],
+                    ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Maia coverage', style: AppTextStyles.caption),
-                      NumberStepper(
-                        key: const ValueKey('generate-maia-coverage'),
-                        value: _maiaCoverage,
-                        min: 1,
-                        max: 100,
-                        step: 5,
-                        suffix: '%',
-                        fieldWidth: 32,
-                        enabled: !busy,
-                        onChanged: (v) {
-                          if (mounted) setState(() => _maiaCoverage = v);
-                        },
+                  TextButton.icon(
+                    onPressed: busy || rows.isEmpty ? null : () => _generate(),
+                    icon: const Icon(Icons.play_arrow, size: 16),
+                    label: Text(_starting ? 'Starting…' : 'Generate'),
+                  ),
+                  IconButton(
+                    key: const ValueKey('generation-settings'),
+                    tooltip: 'Generation settings',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      if (!mounted) return;
+                      unawaited(showPositionGenerationSettings(context, gen));
+                    },
+                    icon: const Icon(Icons.settings_outlined, size: 18),
+                  ),
+                  PopupMenuButton<String>(
+                    key: const ValueKey('generation-actions'),
+                    tooltip: 'More evaluation actions',
+                    icon: const Icon(Icons.more_horiz, size: 18),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 220),
+                    onSelected: (action) {
+                      if (!mounted) return;
+                      switch (action) {
+                        case 'chessdb':
+                          widget.onBuildChessDb?.call();
+                        case 'plan':
+                          widget.onPlanLines();
+                        case 'cut':
+                          widget.onCutLines?.call();
+                        case 'refresh':
+                          unawaited(_lookup());
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      if (_showChessDb)
+                        const PopupMenuItem(
+                          value: 'refresh',
+                          child: Text('Refresh ChessDB'),
+                        ),
+                      if (widget.onBuildChessDb != null)
+                        PopupMenuItem(
+                          key: const ValueKey('build-chessdb-repertoire'),
+                          value: 'chessdb',
+                          enabled: !busy,
+                          child: const Text('Build ChessDB repertoire…'),
+                        ),
+                      const PopupMenuItem(
+                        value: 'plan',
+                        child: Text('Plan starting lines…'),
                       ),
+                      if (widget.onCutLines != null)
+                        PopupMenuItem(
+                          value: 'cut',
+                          enabled: !busy,
+                          child: const Text('Cut lines…'),
+                        ),
                     ],
                   ),
                 ],
               ),
             ),
             if (gen.isGenerating) ...[
-              const LinearProgressIndicator(),
+              const LinearProgressIndicator(minHeight: 2),
               Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        '${gen.progress.depthExplored.fold<int>(0, (a, b) => a + b)} positions completed · depth ${gen.progress.depth}/${gen.progress.maxPlyConfig}\n${gen.progress.status}',
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.caption,
+                      child: Tooltip(
+                        message: gen.progress.status,
+                        child: Text(
+                          '${gen.progress.depthExplored.fold<int>(0, (a, b) => a + b)} positions evaluated',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.caption,
+                        ),
                       ),
                     ),
                     TextButton(
-                      onPressed: gen.isCancelling ? null : gen.cancelBuild,
+                      onPressed: gen.isCancelling
+                          ? null
+                          : () {
+                              if (mounted) gen.cancelBuild();
+                            },
                       child: Text(gen.isCancelling ? 'Stopping…' : 'Stop'),
                     ),
                   ],
                 ),
               ),
-            ] else if (gen.lastRunSummary.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text(
-                  gen.lastRunSummary,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.caption,
-                ),
-              ),
+            ],
             if (_error != null || gen.lastError != null)
               Padding(
                 padding: const EdgeInsets.all(8),
                 child: Text(
                   _error ?? gen.lastError!,
-                  style: const TextStyle(color: AppColors.danger),
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.danger,
+                  ),
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-              child: Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  ChoiceChip(
-                    label: const Text('Local analysis'),
-                    selected: !_showChessDb,
-                    onSelected: (_) => setState(() => _showChessDb = false),
-                  ),
-                  ChoiceChip(
-                    label: const Text('ChessDB'),
-                    selected: _showChessDb,
-                    onSelected: (_) {
-                      setState(() => _showChessDb = true);
-                      unawaited(_lookup());
-                    },
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Text(
-                _showChessDb
-                    ? 'Source: chessdb.cn · scores for White'
-                    : 'Top $_engineMoves engine + $_maiaCoverage% Maia moves · scores for White',
-                style: AppTextStyles.caption,
-              ),
-            ),
-            if (_showChessDb && _loading) const LinearProgressIndicator(),
+            if (_showChessDb && _loading)
+              const LinearProgressIndicator(minHeight: 2),
             if (_showChessDb && !_loading && _dbMoves.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+              Align(
+                alignment: Alignment.centerLeft,
                 child: TextButton(
                   onPressed: _lookup,
-                  child: const Text('No ChessDB scores returned · Retry'),
+                  child: const Text('No ChessDB scores · Retry'),
                 ),
               ),
             const Divider(height: 1),
@@ -360,24 +326,24 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  const Expanded(
+                  const SizedBox(
+                    width: 60,
                     child: Text('Move', style: AppTextStyles.caption),
                   ),
-                  SizedBox(
-                    width: 65,
+                  const SizedBox(
+                    width: 84,
+                    child: Tooltip(
+                      message: 'Evaluation from White’s perspective',
+                      child: Text('Evaluation', style: AppTextStyles.caption),
+                    ),
+                  ),
+                  Expanded(
                     child: Text(
-                      _showChessDb ? 'Rank' : 'Engine',
+                      _showChessDb ? 'Annotation' : 'Continuation',
                       style: AppTextStyles.caption,
                     ),
                   ),
-                  SizedBox(
-                    width: 65,
-                    child: Text(
-                      _showChessDb ? 'Score' : 'Expected',
-                      style: AppTextStyles.caption,
-                    ),
-                  ),
-                  const SizedBox(width: 36),
+                  const SizedBox(width: 32),
                 ],
               ),
             ),
@@ -388,76 +354,74 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                       itemCount: rows.length,
                       itemBuilder: (context, index) {
                         final row = rows[index];
-                        final stmWhite = widget.fen.split(' ')[1] == 'w';
                         final dbScore = row.chessDb?.stmCp;
                         final score = _showChessDb
                             ? dbScore == null
                                   ? null
                                   : dbScore * (stmWhite ? 1 : -1)
-                            : row.expectedCp;
+                            : row.evalCp;
+                        final detail = _showChessDb
+                            ? row.chessDb?.note ?? ''
+                            : row.pvSan.join(' ');
                         return MouseRegion(
-                          onEnter: (_) => widget.onHoverMove?.call(row.uci),
-                          onExit: (_) => widget.onHoverMove?.call(null),
+                          onEnter: (_) {
+                            if (mounted) widget.onHoverMove?.call(row.uci);
+                          },
+                          onExit: (_) {
+                            if (mounted) widget.onHoverMove?.call(null);
+                          },
                           child: InkWell(
-                            onTap: () => widget.onPlayMove(row.san),
+                            onTap: () {
+                              if (mounted) widget.onPlayMove(row.san);
+                            },
                             child: Container(
-                              color: index.isEven
-                                  ? AppColors.onSurfaceMuted.withValues(
-                                      alpha: 0.04,
-                                    )
-                                  : null,
+                              color: index.isEven ? AppColors.rowStripe : null,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
-                                vertical: 2,
+                                vertical: 3,
                               ),
                               child: Row(
                                 children: [
-                                  Expanded(
+                                  SizedBox(
+                                    width: 60,
                                     child: Text(
                                       row.san,
                                       style: AppTextStyles.bodyStrong,
                                     ),
                                   ),
                                   SizedBox(
-                                    width: 65,
+                                    width: 84,
+                                    child: Text(
+                                      score == null
+                                          ? '—'
+                                          : formatPackedEval(
+                                              score,
+                                              decimals: 2,
+                                            ),
+                                      style: AppTextStyles.mono.copyWith(
+                                        color: score == null || score == 0
+                                            ? AppColors.onSurfaceMuted
+                                            : score > 0
+                                            ? AppColors.evalPositive
+                                            : AppColors.evalNegative,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
                                     child: Tooltip(
-                                      message: row.pvSan.isEmpty
-                                          ? 'Engine evaluation'
-                                          : row.pvSan.join(' '),
+                                      message: detail,
                                       child: Text(
-                                        _showChessDb
-                                            ? '${row.chessDb?.rank ?? '—'}'
-                                            : row.evalCp == null
-                                            ? '—'
-                                            : formatPackedEval(
-                                                row.evalCp!,
-                                                decimals: 2,
-                                              ),
-                                        style: AppTextStyles.caption,
+                                        detail.isEmpty ? '—' : detail,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: AppTextStyles.mono.copyWith(
+                                          color: AppColors.onSurfaceMuted,
+                                        ),
                                       ),
                                     ),
                                   ),
                                   SizedBox(
-                                    width: 65,
-                                    child: Tooltip(
-                                      message: _showChessDb
-                                          ? row.chessDb?.note ?? 'ChessDB score'
-                                          : score == null
-                                          ? 'Generate from this position to calculate an expected score.'
-                                          : 'Expected score from opponent move probabilities',
-                                      child: Text(
-                                        score == null
-                                            ? '—'
-                                            : formatPackedEval(
-                                                score,
-                                                decimals: 2,
-                                              ),
-                                        style: AppTextStyles.caption,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    width: 36,
+                                    width: 32,
                                     child: IconButton(
                                       tooltip:
                                           'Evaluate ${row.san} and save engine PV',
@@ -482,31 +446,6 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                         );
                       },
                     ),
-            ),
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Wrap(
-                spacing: 8,
-                children: [
-                  if (widget.onBuildChessDb != null)
-                    TextButton.icon(
-                      key: const ValueKey('build-chessdb-repertoire'),
-                      onPressed: busy ? null : widget.onBuildChessDb,
-                      icon: const Icon(Icons.menu_book_outlined, size: 16),
-                      label: const Text('Build ChessDB repertoire…'),
-                    ),
-                  TextButton(
-                    onPressed: widget.onPlanLines,
-                    child: const Text('Plan starting lines…'),
-                  ),
-                  if (widget.onCutLines != null)
-                    TextButton(
-                      onPressed: busy ? null : widget.onCutLines,
-                      child: const Text('Cut lines…'),
-                    ),
-                ],
-              ),
             ),
           ],
         );

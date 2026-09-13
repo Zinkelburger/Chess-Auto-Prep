@@ -242,14 +242,14 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                       child: Text(
                         _hasComment && !_expanded
                             ? widget.comment.replaceAll('\n', ' ')
-                            : 'Notes · ${widget.moveLabel}',
+                            : 'Comment',
                         style: AppTextStyles.muted,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Tooltip(
-                      message: _expanded ? 'Collapse notes' : 'Edit notes',
+                      message: _expanded ? 'Collapse comment' : 'Edit comment',
                       child: Icon(
                         _expanded ? Icons.expand_less : Icons.expand_more,
                         size: 18,
@@ -261,7 +261,7 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
             )
           else
             Text(
-              enabled ? 'Notes · ${widget.moveLabel}' : 'Notes',
+              'Comment',
               style: AppTextStyles.bodyStrong.copyWith(color: AppColors.ink),
             ),
           if (!widget.compact || _expanded) ...[

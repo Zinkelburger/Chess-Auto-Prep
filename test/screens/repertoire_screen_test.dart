@@ -11,7 +11,9 @@
 /// way the rest of the app does: an [AppState] handoff.
 library;
 
+import 'dart:async';
 import 'dart:io';
+import 'package:chess_auto_prep/widgets/pgn_with_analysis_pane.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
@@ -23,6 +25,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/features/repertoire/widgets/repertoire_loading_frame.dart';
 import 'package:chess_auto_prep/screens/repertoire_screen.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 
@@ -121,6 +125,10 @@ void main() {
   late Directory storageRoot;
   late PathProviderPlatform originalPaths;
   setUp(() async {
+    // The storage service serializes directory counts through a Future tail.
+    // A tail created by the previous widget test belongs to its fake-async
+    // zone; retaining it can leave the next test's outline awaiting forever.
+    StorageFactory.instanceForTest = null;
     useScriptedBoardEngine();
     SharedPreferences.setMockInitialValues({});
     storageRoot = await Directory.systemTemp.createTemp(
@@ -131,6 +139,7 @@ void main() {
     GameStoreService.setTestInstance(GameStoreService());
   });
   tearDown(() async {
+    StorageFactory.instanceForTest = null;
     GameStoreService.instance.close();
     PathProviderPlatform.instance = originalPaths;
     if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
@@ -154,19 +163,17 @@ void main() {
       // (Engine | Database | Tree) sits on the right. Both start expanded.
       expect(find.byTooltip('Hide chapters'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'Engine'), findsOneWidget);
-      expect(find.text('Reference database'), findsOneWidget);
-      expect(find.text('Local PGN'), findsOneWidget);
-      expect(find.text('Notation'), findsOneWidget);
-      expect(
-        tester.getTopLeft(find.text('Reference database')).dy,
-        greaterThan(tester.getBottomLeft(find.byTooltip('Go to start')).dy),
-      );
+      expect(find.widgetWithText(Tab, 'Database'), findsOneWidget);
+      expect(find.text('Reference database'), findsNothing);
+      expect(find.text('Notation'), findsNothing);
+      expect(find.byTooltip('Analysis panels'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Generate'), findsNothing);
       expect(find.byTooltip('Hide analysis panel'), findsOneWidget);
 
       // The chapter's single line is listed in the outline.
       await _settleUntil(tester, find.text('Italian Game'));
       expect(find.text('Italian Game'), findsOneWidget);
-      expect(find.textContaining('1 chapter · 1 line'), findsOneWidget);
+      expect(find.text('Chapters'), findsOneWidget);
 
       // Board-size control is offered (there is width to trade here).
       expect(find.byTooltip('Board size: Large'), findsOneWidget);
@@ -205,7 +212,7 @@ void main() {
 
       expect(find.byTooltip('Show analysis panel'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'Engine'), findsOneWidget);
-      expect(find.text('Reference database'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Database'), findsOneWidget);
 
       final prefs = await tester.runAsync(SharedPreferences.getInstance);
       expect(prefs!.getBool('repertoire.lines_panel_collapsed'), isTrue);
@@ -250,7 +257,7 @@ void main() {
         repertoirePath: _writeRepertoire(tester),
         size: const Size(1280, 500),
       );
-      expect(find.text('Notation'), findsOneWidget);
+      expect(find.byType(InteractivePgnEditor), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -289,19 +296,19 @@ void main() {
       );
       await tester.tap(find.byTooltip('Generate from here…'));
       await _settle(tester);
-      expect(find.widgetWithText(TextFormField, 'Depth'), findsOneWidget);
-      expect(find.widgetWithText(TextFormField, 'Cores'), findsOneWidget);
-      expect(find.widgetWithText(Tab, 'Generate'), findsOneWidget);
-      expect(find.text('Generate Repertoire'), findsNothing);
-      await tester.tap(
-        find.widgetWithText(Tab, width < 960 ? 'Database' : 'Engine'),
-      );
+      expect(find.widgetWithText(TextFormField, 'Depth'), findsNothing);
+      expect(find.widgetWithText(TextFormField, 'Cores'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Generate'), findsNothing);
+      expect(find.text('Engine evals'), findsOneWidget);
+      expect(find.text('Move'), findsOneWidget);
+      expect(find.text('Evaluation'), findsOneWidget);
+      expect(find.text('Continuation'), findsOneWidget);
+      await tester.tap(find.byTooltip('Generation settings'));
       await _settle(tester);
-      await tester.ensureVisible(find.widgetWithText(Tab, 'Generate'));
-      await tester.tap(find.widgetWithText(Tab, 'Generate'));
+      expect(find.text('Generation settings'), findsWidgets);
+      expect(find.text('Depth (half-moves)'), findsOneWidget);
+      await tester.tap(find.text('Done'));
       await _settle(tester);
-      await tester.ensureVisible(find.text('Plan starting lines…'));
-      expect(find.text('Plan starting lines…'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -310,12 +317,47 @@ void main() {
     tester,
   ) async {
     await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+    await tester.tap(find.widgetWithText(Tab, 'Database'));
+    await _settle(tester);
+    await tester.tap(find.byTooltip('Database source'));
+    await _settle(tester, cycles: 5);
     await tester.tap(find.text('Opening explorer'));
     await _settle(tester);
-    expect(find.text('Notation'), findsOneWidget);
+    expect(find.byType(InteractivePgnEditor), findsOneWidget);
     expect(find.byTooltip('Go to start'), findsOneWidget);
+    await tester.tap(find.byTooltip('Database source'));
+    await _settle(tester, cycles: 5);
     await tester.tap(find.text('Repertoire').last);
     await _settle(tester);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('reload preserves the board editor while the chapter loads', (
+    tester,
+  ) async {
+    await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+    final controller = tester
+        .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
+        .controller;
+    final editor = tester.state(find.byType(InteractivePgnEditor));
+    final gate = Completer<void>();
+    controller.debugBeforeRepertoireApply = () => gate.future;
+    unawaited(controller.loadRepertoire());
+    await tester.pump();
+    expect(find.text('Loading repertoire...'), findsNothing);
+    expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
+    expect(find.byType(LinearProgressIndicator), findsWidgets);
+    gate.complete();
+    // Alternate real I/O and fake-async frames until the load lands. Awaiting
+    // this fake-zone future solely inside runAsync cannot advance its queued
+    // callbacks and would deadlock the test.
+    await _settleUntil(
+      tester,
+      find.byWidgetPredicate(
+        (widget) => widget is RepertoireLoadingFrame && !widget.isLoading,
+      ),
+    );
+    expect(controller.isLoading, isFalse);
+    expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
+    controller.debugBeforeRepertoireApply = null;
   });
 }

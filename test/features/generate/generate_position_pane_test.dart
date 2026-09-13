@@ -11,82 +11,116 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
-  testWidgets('depth and cores apply to position and per-move computation', (
-    tester,
-  ) async {
-    final gen = GenerationSessionController();
-    addTearDown(gen.dispose);
-    final calls = <({String? san, int depth, int cores})>[];
-    final coverageCalls = <(int, double)>[];
-    String? played;
-    var booksOpened = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 320,
-            child: GeneratePositionPane(
-              fen: kStandardStartFen,
-              databaseName: 'My book / Main',
-              generation: gen,
-              onGenerate:
-                  ({
-                    String? moveSan,
-                    required int plies,
-                    required int cores,
-                    required int engineMoves,
-                    required double maiaCoverage,
-                  }) async {
-                    calls.add((san: moveSan, depth: plies, cores: cores));
-                    coverageCalls.add((engineMoves, maiaCoverage));
-                    return null;
-                  },
-              onPlayMove: (san) => played = san,
-              onPlanLines: () {},
-              onBuildChessDb: () => booksOpened++,
+  testWidgets(
+    'settings stay in the overlay and apply to both generation actions',
+    (tester) async {
+      final gen = GenerationSessionController();
+      addTearDown(gen.dispose);
+      final calls = <({String? san, int depth, int cores})>[];
+      final coverageCalls = <(int, double)>[];
+      String? played;
+      var booksOpened = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 320,
+              child: GeneratePositionPane(
+                fen: kStandardStartFen,
+                databaseName: 'My book / Main',
+                generation: gen,
+                onGenerate:
+                    ({
+                      String? moveSan,
+                      required int plies,
+                      required int cores,
+                      required int engineMoves,
+                      required double maiaCoverage,
+                    }) async {
+                      calls.add((san: moveSan, depth: plies, cores: cores));
+                      coverageCalls.add((engineMoves, maiaCoverage));
+                      return null;
+                    },
+                onPlayMove: (san) => played = san,
+                onPlanLines: () {},
+                onBuildChessDb: () => booksOpened++,
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.tap(find.byKey(const ValueKey('build-chessdb-repertoire')));
-    expect(booksOpened, 1);
-    expect(calls, isEmpty);
-    expect(find.text('—'), findsWidgets);
-    expect(
-      find.text('Top 4 engine + 60% Maia moves · scores for White'),
-      findsOneWidget,
-    );
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const ValueKey('generate-engine-moves')),
-        matching: find.byTooltip('More'),
-      ),
-    );
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const ValueKey('generate-maia-coverage')),
-        matching: find.byTooltip('More'),
-      ),
-    );
-    await tester.enterText(find.byType(TextFormField).at(0), '3');
-    await tester.enterText(find.byType(TextFormField).at(1), '1');
-    await tester.tap(find.text('Generate'));
-    await tester.pump();
-    expect(calls.single, (san: null, depth: 3, cores: 1));
-    expect(coverageCalls.single, (5, .65));
-    await tester.tap(find.byTooltip('Evaluate Na3 and save engine PV'));
-    await tester.pump();
-    expect(calls.last, (san: 'Na3', depth: 3, cores: 1));
-    await tester.tap(find.text('Na3'));
-    expect(played, 'Na3');
-    expect(tester.takeException(), isNull);
-    await tester.enterText(find.byType(TextFormField).at(0), '0');
-    await tester.tap(find.text('Generate'));
-    await tester.pump();
-    expect(calls.length, 2);
-    expect(find.text('1–60'), findsOneWidget);
-  });
+      );
+      expect(find.text('Depth (half-moves)'), findsNothing);
+      expect(find.text('Expected'), findsNothing);
+      expect(find.text('Continuation'), findsOneWidget);
+      expect(find.text('My book / Main'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('generation-actions')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('build-chessdb-repertoire')));
+      await tester.pumpAndSettle();
+      expect(booksOpened, 1);
+      expect(calls, isEmpty);
+      expect(find.text('—'), findsWidgets);
+      await tester.tap(find.byKey(const ValueKey('generation-settings')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('generate-engine-moves')),
+          matching: find.byTooltip('More'),
+        ),
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('generate-maia-coverage')),
+          matching: find.byTooltip('More'),
+        ),
+      );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('generate-depth')),
+          matching: find.byType(TextField),
+        ),
+        '3',
+      );
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('generate-cores')),
+          matching: find.byType(TextField),
+        ),
+        '1',
+      );
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.text('Depth (half-moves)'), findsNothing);
+      await tester.tap(find.text('Generate'));
+      await tester.pump();
+      expect(calls.single, (san: null, depth: 3, cores: 1));
+      expect(coverageCalls.single, (5, .65));
+      await tester.tap(find.byTooltip('Evaluate Na3 and save engine PV'));
+      await tester.pump();
+      expect(calls.last, (san: 'Na3', depth: 3, cores: 1));
+      await tester.tap(find.text('Na3'));
+      expect(played, 'Na3');
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const ValueKey('generation-settings')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('generate-depth')),
+          matching: find.byType(TextField),
+        ),
+        '0',
+      );
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Generate'));
+      await tester.pumpAndSettle();
+      expect(calls.last, (san: null, depth: 1, cores: 1));
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('position_generation.plies'), 1);
+      expect(prefs.getInt('position_generation.engineMoves'), 5);
+      expect(prefs.getInt('position_generation.maiaCoverage'), 65);
+    },
+  );
   testWidgets('late ChessDB results cannot populate a different position', (
     tester,
   ) async {
@@ -116,6 +150,8 @@ void main() {
       ),
     );
     await tester.pumpWidget(pane(kStandardStartFen));
+    await tester.tap(find.byKey(const ValueKey('evaluation-source')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('ChessDB'));
     await tester.pump();
     final next = playUciMove(kStandardStartFen, 'e2e4')!;
