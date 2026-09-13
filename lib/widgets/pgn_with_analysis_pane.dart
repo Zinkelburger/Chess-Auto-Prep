@@ -255,6 +255,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       repertoireColor: widget.repertoireColor,
       isEditingExistingLine: widget.isEditingExistingLine,
       onLineEdited: widget.onLineEdited,
+      onPendingAutoSaveChanged: widget.controller.setPendingLineSave,
       onViewInLines: widget.onViewInLines,
       ephemeralTitle: widget.ephemeralTitle,
     );

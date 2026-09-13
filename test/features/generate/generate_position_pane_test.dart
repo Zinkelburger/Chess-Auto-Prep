@@ -173,4 +173,83 @@ void main() {
     expect(find.text('-0.25'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('shared source control handles switching and generation', (
+    tester,
+  ) async {
+    final gen = GenerationSessionController();
+    addTearDown(gen.dispose);
+    final requests = <Completer<DbMoveList>>[];
+    var chessDb = true;
+    var generated = 0;
+    late StateSetter update;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              update = setState;
+              return GeneratePositionPane(
+                fen: kStandardStartFen,
+                databaseName: 'Main',
+                generation: gen,
+                sourceControl: Text(
+                  chessDb ? 'Shared ChessDB' : 'Shared generated',
+                ),
+                chessDbSource: chessDb,
+                onShowGenerated: () => setState(() => chessDb = false),
+                lookupChessDb: (_) {
+                  final request = Completer<DbMoveList>();
+                  requests.add(request);
+                  return request.future;
+                },
+                onGenerate:
+                    ({
+                      String? moveSan,
+                      required int plies,
+                      required int cores,
+                      required int engineMoves,
+                      required double maiaCoverage,
+                    }) async {
+                      generated++;
+                      return null;
+                    },
+                onPlayMove: (_) {},
+                onPlanLines: () {},
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    expect(requests, hasLength(1));
+    expect(find.byKey(const ValueKey('evaluation-source')), findsNothing);
+    update(() => chessDb = false);
+    await tester.pump();
+    requests.first.complete(
+      const DbMoveList(
+        source: DbMoveSource.chessDbApi,
+        moves: [DbMove(uci: 'e2e4', stmCp: 1234)],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('+12.34'), findsNothing);
+    update(() => chessDb = true);
+    await tester.pump();
+    expect(requests, hasLength(2));
+    requests.last.complete(
+      const DbMoveList(
+        source: DbMoveSource.chessDbApi,
+        moves: [DbMove(uci: 'e2e4', stmCp: 25)],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('+0.25'), findsOneWidget);
+    await tester.tap(find.text('Generate'));
+    await tester.pumpAndSettle();
+    expect(chessDb, isFalse);
+    expect(generated, 1);
+    expect(find.text('Shared generated'), findsOneWidget);
+    expect(find.text('+0.25'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

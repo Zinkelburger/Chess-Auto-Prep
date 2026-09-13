@@ -31,15 +31,21 @@ void main() {
       await tester.tap(find.text('e4').first);
       expect(played, 'e4');
       await tester.tap(find.byTooltip('Database source'));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(find.text('Opening explorer'));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.byType(OpeningExplorerPanel), findsOneWidget);
       expect(find.byType(OpeningTreeWidget), findsNothing);
       await tester.tap(find.byTooltip('Database source'));
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.text('Repertoire').first);
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(
+        find.widgetWithText(PopupMenuItem<int>, 'Repertoire').last,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.byType(OpeningTreeWidget), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(seconds: 1));

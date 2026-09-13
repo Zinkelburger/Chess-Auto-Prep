@@ -267,7 +267,7 @@ Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 The wide workspace keeps chapters on the left, the board in the center, and
 moves/comments above Engine / Database tabs on the right. Database sources are
-Engine evals (generated locally or ChessDB), Repertoire, Opening explorer, and
+Engine evals (generated locally), ChessDB, Repertoire, Opening explorer, and
 Local PGN. No permanent bottom reference dock or duplicate Expectimax panel is
 shown. The eval source shows a legal-move table first; depth, cores, engine-move
 count and Maia coverage live in a persisted settings overlay accessible from its
@@ -284,7 +284,8 @@ Flutter retains the app's typography, theme and real data sources.
 Chapter switches keep the workspace mounted with a thin loading indicator and
 temporary input lock. Initial opening still shows a loading state while files
 are read and parsed. Debounced line saves capture their destination and content;
-late writes cannot change the newly opened chapter's in-memory state. Board
+reloads flush and await queued writes before reading, and late writes cannot
+change the newly opened chapter's in-memory state. Board
 navigation sits immediately beneath the board. Go to start preserves the loaded
 line and annotations so Forward can continue through it.
 
@@ -348,7 +349,7 @@ The quiz uses `services/eco_trie.dart` to identify opening forks and `services/p
 
 **Line metrics view (outline column):** The old `RepertoireLinesBrowser` (search/filter/sort, coverage/ease/coherence columns, gap buttons) plus the Lines/Traps segmented toggle, reached from the outline header's metrics button; "Back to chapters" returns to the outline. The Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges, and expandable detail cards. `BoardPreviewController` is threaded through; a `FloatingBoardPreview` overlay is mounted in the view's `Stack`.
 
-**Reference database dock (compact: Database tab):** The Repertoire source shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **paths** (including variations) when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
+**Database tab:** The Repertoire source shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **paths** (including variations) when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
 
 The separate Tree tab has been removed. Database offers the repertoire tree and
 live opening explorer and local PGN databases through a compact source switcher.

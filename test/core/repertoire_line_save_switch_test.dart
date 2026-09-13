@@ -53,6 +53,48 @@ void main() {
   );
 
   test(
+    'same-file reload flushes pending edits before reading the PGN',
+    () async {
+      final save = controller.selectedLineSaver!;
+      Future<bool>? write;
+      controller.setPendingLineSave(() {
+        write = save(_pgn.replaceFirst('e5', 'e5 {Pending comment}'));
+      });
+      controller.debugAfterRepertoireRead = () async {
+        expect(
+          await File(first.filePath).readAsString(),
+          contains('Pending comment'),
+        );
+      };
+      await controller.loadRepertoire();
+      expect(await write, isTrue);
+      expect(
+        controller.repertoireLines.single.fullPgn,
+        contains('Pending comment'),
+      );
+      expect(controller.loadError, isNull);
+    },
+  );
+
+  test('rapid A to B to A waits for original chapter edits', () async {
+    final save = controller.selectedLineSaver!;
+    Future<bool>? write;
+    controller.setPendingLineSave(() {
+      write = save(_pgn.replaceFirst('e5', 'e5 {Saved before returning}'));
+    });
+    final loadB = controller.setRepertoire(second);
+    final loadA = controller.setRepertoire(first);
+    await Future.wait([loadB, loadA]);
+    expect(await write, isTrue);
+    expect(controller.currentRepertoire, first);
+    expect(
+      controller.repertoireLines.single.fullPgn,
+      contains('Saved before returning'),
+    );
+    expect(await File(second.filePath).readAsString(), _pgn);
+  });
+
+  test(
     'a debounced save stays with its original chapter after a switch',
     () async {
       final saveFirst = controller.selectedLineSaver!;

@@ -25,6 +25,9 @@ class GeneratePositionPane extends StatefulWidget {
     this.lookupChessDb,
     this.onCutLines,
     this.onBuildChessDb,
+    this.sourceControl,
+    this.chessDbSource,
+    this.onShowGenerated,
   });
   final String fen;
   final String databaseName;
@@ -43,6 +46,11 @@ class GeneratePositionPane extends StatefulWidget {
   final VoidCallback? onCutLines;
   final VoidCallback? onBuildChessDb;
   final Future<DbMoveList> Function(String fen)? lookupChessDb;
+
+  /// The enclosing database pane can share this toolbar's source selector.
+  final Widget? sourceControl;
+  final bool? chessDbSource;
+  final VoidCallback? onShowGenerated;
 
   @override
   State<GeneratePositionPane> createState() => _GeneratePositionPaneState();
@@ -63,9 +71,17 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
   bool get wantKeepAlive => true;
 
   @override
+  void initState() {
+    super.initState();
+    _showChessDb = widget.chessDbSource ?? false;
+    if (_showChessDb) unawaited(_lookup());
+  }
+
+  @override
   void didUpdateWidget(covariant GeneratePositionPane old) {
     super.didUpdateWidget(old);
-    if (old.fen != widget.fen) {
+    if (old.fen != widget.fen || old.chessDbSource != widget.chessDbSource) {
+      _showChessDb = widget.chessDbSource ?? _showChessDb;
       _lookupVersion++;
       _dbMoves = DbMoveList.empty;
       _error = null;
@@ -126,6 +142,8 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
       _error = null;
     });
     try {
+      widget.onShowGenerated?.call();
+      if (!mounted) return;
       final settings = await PositionGenerationSettings.load(widget.generation);
       if (!mounted || fen != widget.fen) return;
       final error = await widget.onGenerate(
@@ -181,34 +199,38 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
               child: Row(
                 children: [
                   Expanded(
-                    child: PopupMenuButton<bool>(
-                      key: const ValueKey('evaluation-source'),
-                      tooltip: 'Evaluation source',
-                      initialValue: _showChessDb,
-                      onSelected: _selectSource,
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(
-                          value: false,
-                          child: Text('Generated evals'),
-                        ),
-                        PopupMenuItem(value: true, child: Text('ChessDB')),
-                      ],
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                _showChessDb ? 'ChessDB' : 'Generated evals',
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.muted,
-                              ),
+                    child:
+                        widget.sourceControl ??
+                        PopupMenuButton<bool>(
+                          key: const ValueKey('evaluation-source'),
+                          tooltip: 'Evaluation source',
+                          initialValue: _showChessDb,
+                          onSelected: _selectSource,
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: false,
+                              child: Text('Generated evals'),
                             ),
-                            const Icon(Icons.arrow_drop_down, size: 18),
+                            PopupMenuItem(value: true, child: Text('ChessDB')),
                           ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    _showChessDb
+                                        ? 'ChessDB'
+                                        : 'Generated evals',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.muted,
+                                  ),
+                                ),
+                                const Icon(Icons.arrow_drop_down, size: 18),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
                   ),
                   TextButton.icon(
                     onPressed: busy || rows.isEmpty ? null : () => _generate(),
@@ -360,9 +382,15 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                                   ? null
                                   : dbScore * (stmWhite ? 1 : -1)
                             : row.evalCp;
-                        final detail = _showChessDb
+                        final fullDetail = _showChessDb
                             ? row.chessDb?.note ?? ''
                             : row.pvSan.join(' ');
+                        final detail = _showChessDb
+                            ? RegExp(
+                                    r'^[!?]+',
+                                  ).stringMatch(fullDetail.trim()) ??
+                                  ''
+                            : fullDetail;
                         return MouseRegion(
                           onEnter: (_) {
                             if (mounted) widget.onHoverMove?.call(row.uci);
@@ -409,7 +437,7 @@ class _GeneratePositionPaneState extends State<GeneratePositionPane>
                                   ),
                                   Expanded(
                                     child: Tooltip(
-                                      message: detail,
+                                      message: fullDetail,
                                       child: Text(
                                         detail.isEmpty ? '—' : detail,
                                         maxLines: 1,

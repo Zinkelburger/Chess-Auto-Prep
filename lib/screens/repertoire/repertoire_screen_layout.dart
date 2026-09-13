@@ -10,8 +10,7 @@ mixin _RepertoireLayout
         _RepertoireScreenStateBase,
         _RepertoireSessionHandlers,
         _RepertoireTabContent {
-  /// Chapters beside a board / notation workspace, with reference data
-  /// spanning the workspace below. The engine stays visible under notation.
+  /// Chapters, board and a moves / analysis column share the workspace.
   Widget _buildWideLayout() => LayoutBuilder(
     builder: (context, constraints) {
       // Opening a tall Jobs pane must not squeeze the workspace's controls
@@ -107,6 +106,9 @@ mixin _RepertoireLayout
               Expanded(
                 child: TabBar(
                   controller: _sidePanelTabController,
+                  indicatorColor: AppColors.accent,
+                  labelColor: AppColors.accent,
+                  unselectedLabelColor: AppColors.onSurfaceMuted,
                   tabs: const [
                     Tab(text: 'Engine', height: 32),
                     Tab(text: 'Database', height: 32),
@@ -282,7 +284,7 @@ mixin _RepertoireLayout
     return Column(
       children: [
         Expanded(
-          flex: 3,
+          flex: 2,
           child: RepertoireWorkspacePanel(
             icon: Icons.edit_note,
             child: _cursorScoped((_) => _buildPgnTab()),
@@ -292,7 +294,7 @@ mixin _RepertoireLayout
         if (_layout.linesPanelCollapsed)
           SizedBox(height: 34, child: _buildAnalysisDock())
         else
-          Expanded(flex: 2, child: _buildAnalysisDock()),
+          Expanded(flex: 3, child: _buildAnalysisDock()),
       ],
     );
   }

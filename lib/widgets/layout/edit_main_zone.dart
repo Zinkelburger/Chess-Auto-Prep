@@ -26,6 +26,7 @@ class EditMainZone extends StatelessWidget {
     required this.isEditingExistingLine,
     this.onLineEdited,
     this.onAutoSave,
+    this.onPendingAutoSaveChanged,
     this.onDirty,
     this.onCopyToClipboard,
     this.onViewInLines,
@@ -45,6 +46,7 @@ class EditMainZone extends StatelessWidget {
   final bool isEditingExistingLine;
   final void Function(String updatedPgn)? onLineEdited;
   final ValueChanged<String>? onAutoSave;
+  final ValueChanged<VoidCallback?>? onPendingAutoSaveChanged;
   final VoidCallback? onDirty;
   final void Function(String text, String successMessage)? onCopyToClipboard;
   final VoidCallback? onViewInLines;
@@ -69,6 +71,7 @@ class EditMainZone extends StatelessWidget {
       isEditingExistingLine: isEditingExistingLine,
       onLineEdited: onLineEdited,
       onAutoSave: onAutoSave,
+      onPendingAutoSaveChanged: onPendingAutoSaveChanged,
       onDirty: onDirty,
       onCopyToClipboard:
           onCopyToClipboard ??

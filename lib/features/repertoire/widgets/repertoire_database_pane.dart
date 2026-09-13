@@ -31,7 +31,7 @@ class RepertoireDatabasePane extends StatefulWidget {
     this.tree,
     this.source,
     this.onSourceChanged,
-    this.evaluations,
+    this.evaluationsBuilder,
     this.repertoireLines = const [],
     this.onHoverTreeMove,
     this.onGoBack,
@@ -44,7 +44,7 @@ class RepertoireDatabasePane extends StatefulWidget {
   final String fen;
   final int? source;
   final ValueChanged<int>? onSourceChanged;
-  final Widget? evaluations;
+  final Widget Function(Widget sourceMenu, bool chessDb)? evaluationsBuilder;
   final OpeningTree? tree;
   final List<RepertoireLine> repertoireLines;
   final ValueChanged<String?>? onHoverTreeMove;
@@ -97,6 +97,8 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
   Future<void> _selectSource(int source) async {
     if (!mounted) return;
     setState(() => _selectedSource = source);
+    widget.onHoverMove?.call(null);
+    widget.onHoverTreeMove?.call(null);
     widget.onSourceChanged?.call(source);
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -128,49 +130,55 @@ class _RepertoireDatabasePaneState extends State<RepertoireDatabasePane> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: PopupMenuButton<int>(
-            tooltip: 'Database source',
-            initialValue: _source,
-            onSelected: (source) => unawaited(_selectSource(source)),
-            itemBuilder: (_) => [
-              if (widget.evaluations != null)
-                const PopupMenuItem(value: 3, child: Text('Engine evals')),
-              const PopupMenuItem(value: 0, child: Text('Repertoire')),
-              const PopupMenuItem(value: 1, child: Text('Opening explorer')),
-              const PopupMenuItem(value: 2, child: Text('Local PGN')),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    const [
-                      'Repertoire',
-                      'Opening explorer',
-                      'Local PGN',
-                      'Engine evals',
-                    ][_source],
-                    style: AppTextStyles.body,
-                  ),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.arrow_drop_down, size: 18),
-                ],
-              ),
+  Widget _sourceMenu() => PopupMenuButton<int>(
+    tooltip: 'Database source',
+    initialValue: _source,
+    onSelected: (source) => unawaited(_selectSource(source)),
+    itemBuilder: (_) => [
+      if (widget.evaluationsBuilder != null) ...[
+        const PopupMenuItem(value: 3, child: Text('Engine evals')),
+        const PopupMenuItem(value: 4, child: Text('ChessDB')),
+      ],
+      const PopupMenuItem(value: 0, child: Text('Repertoire')),
+      const PopupMenuItem(value: 1, child: Text('Opening explorer')),
+      const PopupMenuItem(value: 2, child: Text('Local PGN')),
+    ],
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              const [
+                'Repertoire',
+                'Opening explorer',
+                'Local PGN',
+                'Engine evals',
+                'ChessDB',
+              ][_source],
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.body,
             ),
           ),
-        ),
+          const SizedBox(width: 6),
+          const Icon(Icons.arrow_drop_down, size: 18),
+        ],
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    if (_source >= 3 && widget.evaluationsBuilder != null) {
+      return widget.evaluationsBuilder!(_sourceMenu(), _source == 4);
+    }
+    return Column(
+      children: [
+        Align(alignment: Alignment.centerLeft, child: _sourceMenu()),
         if (_source == 1 || _source == 2) const MasterGamesPromptBanner(),
         Expanded(
-          child: _source == 3 && widget.evaluations != null
-              ? widget.evaluations!
-              : _source == 0
+          child: _source == 0
               ? widget.tree == null
                     ? const Center(child: Text('No repertoire moves yet'))
                     : OpeningTreeWidget(

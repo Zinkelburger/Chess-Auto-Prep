@@ -60,6 +60,10 @@ class InteractivePgnEditor extends StatefulWidget {
   /// Falls back to [onLineEdited] when null.
   final ValueChanged<String>? onAutoSave;
 
+  /// Exposes the pending debounce to hosts that must save before reading a
+  /// replacement chapter. Null clears the registration after a flush.
+  final ValueChanged<VoidCallback?>? onPendingAutoSaveChanged;
+
   /// Called when comment edits mark the line dirty.
   final VoidCallback? onDirty;
 
@@ -99,6 +103,7 @@ class InteractivePgnEditor extends StatefulWidget {
     this.onMakeMainLine,
     this.onLineEdited,
     this.onAutoSave,
+    this.onPendingAutoSaveChanged,
     this.onDirty,
     this.onCopyToClipboard,
     this.onViewInLines,
@@ -335,6 +340,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final onSave = widget.onAutoSave ?? widget.onLineEdited;
     _pendingAutoSave = onSave == null ? null : () => onSave(pgn);
     _autoSaveTimer = Timer(_autoSaveDelay, _flushAutoSave);
+    widget.onPendingAutoSaveChanged?.call(_flushAutoSave);
   }
 
   void _flushAutoSave() {
@@ -342,6 +348,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     _autoSaveTimer = null;
     final save = _pendingAutoSave;
     _pendingAutoSave = null;
+    widget.onPendingAutoSaveChanged?.call(null);
     save?.call();
   }
 
@@ -515,7 +522,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   /// (repertoire builder). Hosts with their own naming UI (study chapters)
   /// pass no save callbacks and get a clean movetext-only surface.
   bool get _showTitleField =>
-      widget.onLineEdited != null || widget.onAutoSave != null;
+      widget.isEditingExistingLine ||
+      widget.onLineEdited != null ||
+      widget.onAutoSave != null;
 
   @override
   Widget build(BuildContext context) {

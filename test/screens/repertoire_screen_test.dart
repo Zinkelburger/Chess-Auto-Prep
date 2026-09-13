@@ -14,6 +14,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 import 'package:chess_auto_prep/widgets/pgn_with_analysis_pane.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
@@ -338,7 +339,22 @@ void main() {
     final controller = tester
         .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
         .controller;
+    await _settleUntil(tester, find.text('Italian Game'));
+    await tester.tap(find.text('Italian Game'));
+    await _settle(tester);
+    expect(PgnAnnotationPanel.focusActive(), isTrue);
+    await tester.pump();
+    await tester.pump();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(PgnAnnotationPanel),
+        matching: find.byType(TextField),
+      ),
+      'Save this before reloading',
+    );
     final editor = tester.state(find.byType(InteractivePgnEditor));
+    final titleField = find.widgetWithText(TextField, 'Italian Game');
+    expect(titleField, findsOneWidget);
     final gate = Completer<void>();
     controller.debugBeforeRepertoireApply = () => gate.future;
     unawaited(controller.loadRepertoire());
@@ -346,6 +362,7 @@ void main() {
     expect(find.text('Loading repertoire...'), findsNothing);
     expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
     expect(find.byType(LinearProgressIndicator), findsWidgets);
+    expect(titleField, findsOneWidget);
     gate.complete();
     // Alternate real I/O and fake-async frames until the load lands. Awaiting
     // this fake-zone future solely inside runAsync cannot advance its queued
@@ -357,6 +374,10 @@ void main() {
       ),
     );
     expect(controller.isLoading, isFalse);
+    expect(
+      controller.repertoireLines.single.fullPgn,
+      contains('Save this before reloading'),
+    );
     expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
     controller.debugBeforeRepertoireApply = null;
   });

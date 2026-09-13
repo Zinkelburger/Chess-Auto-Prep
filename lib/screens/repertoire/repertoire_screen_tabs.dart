@@ -93,8 +93,16 @@ mixin _RepertoireTabContent
     );
   }
 
-  Widget _buildGenerateTabContent() {
+  Widget _buildGenerateTabContent({
+    Widget? sourceControl,
+    bool? chessDbSource,
+  }) {
     return GeneratePositionPane(
+      sourceControl: sourceControl,
+      chessDbSource: chessDbSource,
+      onShowGenerated: () {
+        if (mounted) setState(() => _databaseSource = 3);
+      },
       fen: _controller.fen,
       databaseName:
           '${p.basename(p.dirname(_controller.currentRepertoire!.filePath))} / ${_controller.currentRepertoire!.name}',
@@ -156,7 +164,8 @@ mixin _RepertoireTabContent
       onSourceChanged: (source) {
         if (mounted) setState(() => _databaseSource = source);
       },
-      evaluations: _buildGenerateTabContent(),
+      evaluationsBuilder: (menu, chessDb) =>
+          _buildGenerateTabContent(sourceControl: menu, chessDbSource: chessDb),
       tree: _controller.openingTree,
       repertoireLines: _controller.repertoireLines,
       onHoverTreeMove: _onTreeMoveHover,
