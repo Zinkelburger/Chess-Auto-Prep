@@ -457,7 +457,10 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
           ),
           FilledButton.icon(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.danger,
+              foregroundColor: AppColors.onWarning,
+            ),
             icon: const Icon(Icons.delete_outline),
             label: const Text('Discard'),
           ),

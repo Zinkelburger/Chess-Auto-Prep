@@ -131,6 +131,8 @@ class TacticsBrowseRow extends StatelessWidget {
                       rating: position.rating,
                       onSetRating: onSetRating,
                     ),
+                    const SizedBox(width: 8),
+                    PuzzleStatsDisplay(position: position),
                   ],
                 ),
               ],

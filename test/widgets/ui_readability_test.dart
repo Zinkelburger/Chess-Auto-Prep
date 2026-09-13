@@ -67,6 +67,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      expect(find.text('new'), findsOneWidget);
       expectReadable(
         tester,
         find.text('${position.gameWhite} vs ${position.gameBlack}'),
