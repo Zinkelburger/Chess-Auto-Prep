@@ -24,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/repertoire_screen.dart';
+import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 
 import '../support/board_engine_fixture.dart';
 
@@ -153,8 +154,13 @@ void main() {
       // (Engine | Database | Tree) sits on the right. Both start expanded.
       expect(find.byTooltip('Hide chapters'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'Engine'), findsOneWidget);
-      expect(find.text('Database'), findsOneWidget);
-      expect(find.text('Tree'), findsOneWidget);
+      expect(find.text('Reference database'), findsOneWidget);
+      expect(find.text('Local PGN'), findsOneWidget);
+      expect(find.text('Notation'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Reference database')).dy,
+        greaterThan(tester.getBottomLeft(find.byTooltip('Go to start')).dy),
+      );
       expect(find.byTooltip('Hide analysis panel'), findsOneWidget);
 
       // The chapter's single line is listed in the outline.
@@ -166,6 +172,29 @@ void main() {
       expect(find.byTooltip('Board size: Large'), findsOneWidget);
     });
 
+    testWidgets(
+      'go to start preserves the selected line for forward navigation',
+      (tester) async {
+        await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+        await _settleUntil(tester, find.text('Italian Game'));
+        await tester.tap(find.text('Italian Game'));
+        await _settle(tester);
+        InteractivePgnEditor editor() =>
+            tester.widget(find.byType(InteractivePgnEditor));
+        final tree = editor().tree;
+        expect(editor().currentPath.isNotEmpty, isTrue);
+        await tester.tap(find.byTooltip('Go to start'));
+        await tester.pump();
+        expect(editor().currentPath.isEmpty, isTrue);
+        expect(editor().tree, same(tree));
+        expect(editor().isEditingExistingLine, isTrue);
+        await tester.tap(find.byTooltip('Forward (→)'));
+        await tester.pump();
+        expect(editor().currentPath.length, 1);
+        expect(editor().tree.sanSequenceAt(editor().currentPath), ['e4']);
+      },
+    );
+
     testWidgets('collapsing the analysis panel shows a strip and persists', (
       tester,
     ) async {
@@ -175,9 +204,8 @@ void main() {
       await tester.pump();
 
       expect(find.byTooltip('Show analysis panel'), findsOneWidget);
-      expect(find.text('Analysis'), findsOneWidget);
-      // The tab bar is gone with the panel.
-      expect(find.text('Tree'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Engine'), findsOneWidget);
+      expect(find.text('Reference database'), findsOneWidget);
 
       final prefs = await tester.runAsync(SharedPreferences.getInstance);
       expect(prefs!.getBool('repertoire.lines_panel_collapsed'), isTrue);
@@ -214,6 +242,19 @@ void main() {
     });
   });
 
+  testWidgets(
+    'short desktop windows retain accessible controls without overflow',
+    (tester) async {
+      await _pumpScreen(
+        tester,
+        repertoirePath: _writeRepertoire(tester),
+        size: const Size(1280, 500),
+      );
+      expect(find.text('Notation'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   group('compact layout', () {
     testWidgets('stacks the board over PGN | Chapters | Tree tabs', (
       tester,
@@ -227,7 +268,7 @@ void main() {
       // All three surfaces become tabs of one tools column.
       expect(find.text('PGN'), findsOneWidget);
       expect(find.text('Chapters'), findsOneWidget);
-      expect(find.text('Tree'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Database'), findsOneWidget);
 
       // No side panels, and no board-size control: the board is stacked
       // above the tools, so shrinking it hands width to nothing.
@@ -250,36 +291,31 @@ void main() {
       await _settle(tester);
       expect(find.widgetWithText(TextFormField, 'Depth'), findsOneWidget);
       expect(find.widgetWithText(TextFormField, 'Cores'), findsOneWidget);
-      expect(find.text('??'), findsWidgets);
+      expect(find.widgetWithText(Tab, 'Generate'), findsOneWidget);
       expect(find.text('Generate Repertoire'), findsNothing);
-      await tester.tap(find.text('Tree'));
+      await tester.tap(
+        find.widgetWithText(Tab, width < 960 ? 'Database' : 'Engine'),
+      );
       await _settle(tester);
       await tester.ensureVisible(find.widgetWithText(Tab, 'Generate'));
       await tester.tap(find.widgetWithText(Tab, 'Generate'));
       await _settle(tester);
+      await tester.ensureVisible(find.text('Plan starting lines…'));
       expect(find.text('Plan starting lines…'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   }
 
-  group('tree tab', () {
-    testWidgets('the book toggle reveals the opening explorer', (tester) async {
-      await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
-
-      await tester.tap(find.text('Tree'));
-      await _settle(tester);
-
-      // The pane is titled for the loaded repertoire now, not "Repertoire
-      // tree" — so there is no pre-load title left to wait on.
-      await _settleUntil(tester, find.text('Saved lines: Main'));
-
-      expect(find.text('Saved lines: Main'), findsOneWidget);
-      final book = find.byTooltip('Show Lichess opening explorer');
-      expect(book, findsOneWidget);
-
-      await tester.tap(book);
-      await tester.pump();
-
-      expect(find.byTooltip('Hide opening explorer'), findsOneWidget);
-    });
+  testWidgets('reference sources switch without hiding board or notation', (
+    tester,
+  ) async {
+    await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+    await tester.tap(find.text('Opening explorer'));
+    await _settle(tester);
+    expect(find.text('Notation'), findsOneWidget);
+    expect(find.byTooltip('Go to start'), findsOneWidget);
+    await tester.tap(find.text('Repertoire').last);
+    await _settle(tester);
+    expect(tester.takeException(), isNull);
   });
 }

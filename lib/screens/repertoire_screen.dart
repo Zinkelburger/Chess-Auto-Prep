@@ -62,6 +62,7 @@ import '../features/traps/widgets/trap_tour_bar.dart';
 import '../features/traps/widgets/traps_tab_content.dart';
 import '../widgets/engine/floating_board_preview.dart';
 import '../features/repertoire/controllers/repertoire_layout_prefs.dart';
+import '../features/repertoire/widgets/repertoire_workspace_panel.dart';
 import '../features/repertoire/services/chapter_store.dart';
 import '../widgets/common/name_entry_dialog.dart';
 import '../features/repertoire/services/repertoire_outline_service.dart';
@@ -253,7 +254,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
       _toolsTabController.animateTo(3);
     } else {
       unawaited(_layout.setLinesPanelCollapsed(false));
-      _sidePanelTabController.animateTo(2);
+      _sidePanelTabController.animateTo(1);
     }
     _reclaimFocus();
   }
@@ -454,7 +455,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     super.initState();
 
     _toolsTabController = TabController(length: 4, vsync: this);
-    _sidePanelTabController = TabController(length: 3, vsync: this);
+    _sidePanelTabController = TabController(length: 2, vsync: this);
     _outline = RepertoireOutlineController(
       onActiveChapterMoved: _onActiveChapterMoved,
     );

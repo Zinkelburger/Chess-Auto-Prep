@@ -1,4 +1,4 @@
-/// Navigation strip under the repertoire tools column: go-to-start, back,
+/// Navigation strip under the repertoire board: go-to-start, back,
 /// forward, generate-from-here, and flip-board buttons.
 /// Split out of lib/screens/repertoire_screen.dart.
 library;
@@ -35,7 +35,7 @@ class RepertoireNavControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 28,
+      height: 36,
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
       ),
@@ -47,14 +47,14 @@ class RepertoireNavControls extends StatelessWidget {
             onPressed: onGoToStart,
             tooltip: 'Go to start',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_left, size: 20),
             onPressed: onGoBack,
             tooltip: actionTooltip('Back', shortcut: AppShortcut.backOneMove),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right, size: 20),
@@ -64,7 +64,7 @@ class RepertoireNavControls extends StatelessWidget {
               shortcut: AppShortcut.forwardOneMove,
             ),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
           ),
           const SizedBox(width: 4),
           IconButton(
@@ -72,15 +72,18 @@ class RepertoireNavControls extends StatelessWidget {
             icon: const Icon(Icons.add, size: 16),
             tooltip: 'Generate from here…',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
           ),
           const SizedBox(width: 4),
           IconButton(
             icon: const Icon(Icons.flip, size: 14),
             onPressed: onFlipBoard,
-            tooltip: 'Flip board',
+            tooltip: actionTooltip(
+              'Flip board',
+              shortcut: AppShortcut.flipBoard,
+            ),
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
           ),
           if (boardSize != null && onBoardSizeChanged != null)
             PopupMenuButton<BoardSize>(
@@ -98,7 +101,7 @@ class RepertoireNavControls extends StatelessWidget {
               ],
               child: const SizedBox(
                 width: 28,
-                height: 28,
+                height: 36,
                 child: Icon(Icons.aspect_ratio, size: 15),
               ),
             ),
