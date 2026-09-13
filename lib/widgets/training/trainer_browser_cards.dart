@@ -54,13 +54,12 @@ class _BrowserHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    ItemTitle(
                       title,
                       style: dense
                           ? theme.textTheme.titleSmall
                           : theme.textTheme.titleLarge,
                       maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     if (subtitle != null && subtitle!.isNotEmpty)
                       Text(
@@ -276,7 +275,9 @@ class _PrimaryAction extends StatelessWidget {
 class _ProgressStrip extends StatelessWidget {
   final LineCounts counts;
 
-  const _ProgressStrip({required this.counts});
+  const _ProgressStrip({required this.counts, this.showBar = true});
+
+  final bool showBar;
 
   @override
   Widget build(BuildContext context) {
@@ -286,32 +287,34 @@ class _ProgressStrip extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: SizedBox(
-            height: 8,
-            child: Row(
-              children: [
-                if (counts.learned > 0)
-                  Expanded(
-                    flex: counts.learned,
-                    child: Container(color: AppColors.srsLearned),
-                  ),
-                if (counts.due > 0)
-                  Expanded(
-                    flex: counts.due,
-                    child: Container(color: AppColors.srsDue),
-                  ),
-                if (counts.untrained > 0)
-                  Expanded(
-                    flex: counts.untrained,
-                    child: Container(color: AppColors.surfaceInset),
-                  ),
-              ],
+        if (showBar) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 8,
+              child: Row(
+                children: [
+                  if (counts.learned > 0)
+                    Expanded(
+                      flex: counts.learned,
+                      child: Container(color: AppColors.srsLearned),
+                    ),
+                  if (counts.due > 0)
+                    Expanded(
+                      flex: counts.due,
+                      child: Container(color: AppColors.srsDue),
+                    ),
+                  if (counts.untrained > 0)
+                    Expanded(
+                      flex: counts.untrained,
+                      child: Container(color: AppColors.surfaceInset),
+                    ),
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 6),
+          const SizedBox(height: 6),
+        ],
         Text(
           '${counts.learned} learned · ${counts.due} due · '
           '${counts.untrained} untrained',
@@ -449,16 +452,15 @@ class _ChapterCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      ItemTitle(
                         title,
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
                       ),
                       const SizedBox(height: 4),
-                      _ProgressStrip(counts: counts),
+                      _ProgressStrip(counts: counts, showBar: false),
                     ],
                   ),
                 ),
@@ -468,9 +470,7 @@ class _ChapterCard extends StatelessWidget {
                       ? '$lineCount model game'
                             '${lineCount == 1 ? '' : 's'}'
                       : '$lineCount line${lineCount == 1 ? '' : 's'}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.onSurfaceMuted,
-                  ),
+                  style: AppTextStyles.muted.copyWith(color: AppColors.ink),
                 ),
                 const Icon(
                   Icons.chevron_right,
@@ -627,7 +627,7 @@ class _LineCard extends StatelessWidget {
                               TextSpan(
                                 text: '$introText ',
                                 style: moveStyle.copyWith(
-                                  color: AppColors.onSurfaceDisabled,
+                                  color: AppColors.onSurfaceMuted,
                                 ),
                               ),
                             TextSpan(text: trainedText, style: moveStyle),

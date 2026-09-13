@@ -2,6 +2,8 @@
 /// from `AuditFindingsPanel`.
 library;
 
+import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
@@ -50,8 +52,7 @@ class AuditFilterBar extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+      child: HorizontalWheelScroll(
         child: Row(
           children: [
             _typeChip(

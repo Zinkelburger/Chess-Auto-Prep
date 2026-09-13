@@ -135,9 +135,9 @@ mixin _PgnViewerNavigation on _PgnViewerWidgetStateBase {
     if (candidates.length < 2) return null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: SingleChildScrollView(
+      child: HorizontalWheelScroll(
         key: const ValueKey('pgn-branch-picker'),
-        scrollDirection: Axis.horizontal,
+
         child: Row(
           spacing: 8,
           mainAxisSize: MainAxisSize.min,

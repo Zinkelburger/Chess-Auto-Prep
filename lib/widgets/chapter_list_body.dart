@@ -18,6 +18,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'common/item_title.dart';
+
 import '../models/repertoire_metadata.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/repertoire_service.dart';
@@ -69,6 +71,8 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   bool _isLoading = true;
   String? _loadError;
   String _search = '';
+  final Set<String> _expandedCourses = {};
+  static const _chapterPreviewCount = 3;
 
   String get _dirPath => widget.repertoire.filePath;
 
@@ -148,7 +152,15 @@ class _ChapterListBodyState extends State<ChapterListBody> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topCenter,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 920),
+      child: _buildContents(context),
+    ),
+  );
+
+  Widget _buildContents(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -223,7 +235,10 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           Expanded(
             child: ListSearchField(
               hintText: 'Search chapters',
-              onChanged: (value) => setState(() => _search = value),
+              onChanged: (value) {
+                if (!mounted) return;
+                setState(() => _search = value);
+              },
             ),
           ),
           const SizedBox(width: 12),
@@ -239,6 +254,13 @@ class _ChapterListBodyState extends State<ChapterListBody> {
 
   Widget _buildChapterCard(RepertoireMetadata chapter) {
     final sections = _courseChaptersOf(chapter);
+    final searching = _search.trim().isNotEmpty;
+    final expanded = _expandedCourses.contains(chapter.filePath);
+    final visibleSections = searching && !matchesSearch(_search, chapter.name)
+        ? sections.where((section) => matchesSearch(_search, section.name))
+        : expanded || sections.length <= _chapterPreviewCount || searching
+        ? sections
+        : sections.take(_chapterPreviewCount);
     final lines =
         '${chapter.gameCount} line${chapter.gameCount == 1 ? '' : 's'}';
     final summary = sections.isEmpty
@@ -276,10 +298,9 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        ItemTitle(
                           chapter.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
@@ -288,9 +309,9 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                         const SizedBox(height: 4),
                         Text(
                           summary,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.ink,
                           ),
                         ),
                       ],
@@ -313,8 +334,30 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           ),
           if (sections.isNotEmpty) ...[
             const Divider(height: 1, thickness: 1),
-            for (final section in sections)
+            for (final section in visibleSections)
               _buildCourseChapterRow(chapter, section),
+            if (!searching && sections.length > _chapterPreviewCount)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () {
+                    if (!mounted) return;
+                    setState(() {
+                      if (expanded) {
+                        _expandedCourses.remove(chapter.filePath);
+                      } else {
+                        _expandedCourses.add(chapter.filePath);
+                      }
+                    });
+                  },
+                  icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                  label: Text(
+                    expanded
+                        ? 'Show fewer chapters'
+                        : 'Show all ${sections.length} chapters',
+                  ),
+                ),
+              ),
           ],
         ],
       ),
@@ -335,10 +378,9 @@ class _ChapterListBodyState extends State<ChapterListBody> {
         child: Row(
           children: [
             Expanded(
-              child: Text(
+              child: ItemTitle(
                 section.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
                 style: TextStyle(
                   fontWeight: matches ? FontWeight.w500 : FontWeight.normal,
                   color: matches ? AppColors.ink : AppColors.onSurfaceMuted,
@@ -348,7 +390,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
             const SizedBox(width: 12),
             Text(
               '${section.lineCount} line${section.lineCount == 1 ? '' : 's'}',
-              style: AppTextStyles.caption,
+              style: AppTextStyles.muted.copyWith(color: AppColors.ink),
             ),
           ],
         ),

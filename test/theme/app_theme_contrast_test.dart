@@ -46,6 +46,35 @@ void expectTextContrast(WidgetTester tester, String label, Color background) {
 }
 
 void main() {
+  test('readable semantic labels clear AA on dark panels', () {
+    for (final foreground in [
+      AppColors.ink,
+      AppColors.onSurfaceMuted,
+      AppColors.danger,
+      AppColors.nagBrilliant,
+      AppColors.nagGood,
+      AppColors.nagInteresting,
+      AppColors.nagBlunder,
+      AppColors.moveClassInteresting,
+      AppColors.findingTrickyMove,
+      AppColors.findingClash,
+    ]) {
+      for (final background in [
+        AppColors.surface,
+        AppColors.surfaceElevated,
+        AppColors.surfaceContainer,
+      ]) {
+        expect(
+          contrast(foreground, background),
+          greaterThanOrEqualTo(4.5),
+          reason: '$foreground on $background',
+        );
+      }
+    }
+    final scheme = AppTheme.dark().colorScheme;
+    expect(contrast(scheme.onError, scheme.error), greaterThanOrEqualTo(4.5));
+  });
+
   testWidgets(
     'Actions and Export submenus stay raised and readable on hover and focus',
     (tester) async {

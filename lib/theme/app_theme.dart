@@ -29,7 +29,7 @@ abstract final class AppTheme {
       tertiary: AppColors.expectimax,
       onTertiary: AppColors.surface,
       error: AppColors.danger,
-      onError: AppColors.ink,
+      onError: AppColors.onWarning,
     ),
     // Floating surfaces need both separation from the page and legible ink.
     // ColorScheme.dark otherwise falls back to surface for every container tier.
@@ -47,6 +47,7 @@ abstract final class AppTheme {
       ),
     ),
     tooltipTheme: TooltipThemeData(
+      constraints: const BoxConstraints(maxWidth: 480),
       textStyle: AppTextStyles.body.copyWith(fontSize: 13),
       decoration: BoxDecoration(
         color: AppColors.surfaceInset,

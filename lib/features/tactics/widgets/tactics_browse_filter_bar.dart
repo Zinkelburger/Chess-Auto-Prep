@@ -38,7 +38,12 @@ class _BrowseFilterBar extends StatelessWidget {
   final VoidCallback? onTrainSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) =>
+        _buildContents(context, constraints.maxWidth),
+  );
+
+  Widget _buildContents(BuildContext context, double width) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Column(
@@ -46,7 +51,10 @@ class _BrowseFilterBar extends StatelessWidget {
         children: [
           // Top row: count, then the one thing browsing is *for* — training
           // what the filters matched — then selection and the delete-all.
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
                 '$visibleCount / $totalCount tactics',
@@ -77,7 +85,6 @@ class _BrowseFilterBar extends StatelessWidget {
                     ),
                   ),
                 ),
-              const Spacer(),
               if (selectMode) ...[
                 Text(
                   '$selectedCount selected',
@@ -141,82 +148,96 @@ class _BrowseFilterBar extends StatelessWidget {
               ],
             ],
           ),
-          const SizedBox(height: 6),
-          // Filter row: mistake types + status + rating
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _MistakeTypeChip(
-                label: 'Blunders',
-                enabled: filter.types.contains('??'),
-                onToggle: () => onFilterChanged(filter.toggleType('??')),
-              ),
-              _MistakeTypeChip(
-                label: 'Mistakes',
-                enabled: filter.types.contains('?'),
-                onToggle: () => onFilterChanged(filter.toggleType('?')),
-              ),
-              _MistakeTypeChip(
-                label: 'Inaccuracies',
-                enabled: filter.types.contains('?!'),
-                onToggle: () => onFilterChanged(filter.toggleType('?!')),
-              ),
-              _MistakeTypeChip(
-                label: 'Custom',
-                enabled: filter.types.contains('custom'),
-                onToggle: () => onFilterChanged(filter.toggleType('custom')),
-              ),
-              const SizedBox(width: 8),
-              ...TacticsStatusFilter.values.map(
-                (f) => ChoiceChip(
-                  label: Text(f.label, style: const TextStyle(fontSize: 12)),
-                  selected: filter.status == f,
-                  onSelected: (_) =>
-                      onFilterChanged(filter.copyWith(status: f)),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _MinRatingChip(
-                minRating: filter.minRating,
-                onChanged: (r) =>
-                    onFilterChanged(filter.copyWith(minRating: r)),
-              ),
-              const SizedBox(width: 8),
-              _FlawTagChip(
-                selected: filter.tags,
-                onToggle: (tag) => onFilterChanged(filter.toggleTag(tag)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          // Sort row
-          Row(
-            children: [
-              const Icon(Icons.sort, size: 14, color: AppColors.onSurfaceMuted),
-              const SizedBox(width: 4),
-              ...TacticsBrowseSort.values.map(
-                (s) => Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: ChoiceChip(
-                    label: Text(s.label, style: const TextStyle(fontSize: 12)),
-                    selected: filter.sort == s,
-                    onSelected: (_) =>
-                        onFilterChanged(filter.copyWith(sort: s)),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          if (width < 760)
+            ExpansionTile(
+              title: const Text('Filters and sort', style: AppTextStyles.body),
+              tilePadding: EdgeInsets.zero,
+              children: [_filterControls()],
+            )
+          else
+            _filterControls(),
         ],
       ),
     );
   }
+
+  Widget _filterControls() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const SizedBox(height: 6),
+      // Filter row: mistake types + status + rating
+      Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _MistakeTypeChip(
+            label: 'Blunders',
+            enabled: filter.types.contains('??'),
+            onToggle: () => onFilterChanged(filter.toggleType('??')),
+          ),
+          _MistakeTypeChip(
+            label: 'Mistakes',
+            enabled: filter.types.contains('?'),
+            onToggle: () => onFilterChanged(filter.toggleType('?')),
+          ),
+          _MistakeTypeChip(
+            label: 'Inaccuracies',
+            enabled: filter.types.contains('?!'),
+            onToggle: () => onFilterChanged(filter.toggleType('?!')),
+          ),
+          _MistakeTypeChip(
+            label: 'Custom',
+            enabled: filter.types.contains('custom'),
+            onToggle: () => onFilterChanged(filter.toggleType('custom')),
+          ),
+          const SizedBox(width: 8),
+          ...TacticsStatusFilter.values.map(
+            (f) => ChoiceChip(
+              label: Text(f.label, style: const TextStyle(fontSize: 12)),
+              selected: filter.status == f,
+              onSelected: (_) => onFilterChanged(filter.copyWith(status: f)),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _MinRatingChip(
+            minRating: filter.minRating,
+            onChanged: (r) => onFilterChanged(filter.copyWith(minRating: r)),
+          ),
+          const SizedBox(width: 8),
+          _FlawTagChip(
+            selected: filter.tags,
+            onToggle: (tag) => onFilterChanged(filter.toggleTag(tag)),
+          ),
+        ],
+      ),
+      const SizedBox(height: 6),
+      // Sort row
+      Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Icon(Icons.sort, size: 14, color: AppColors.onSurfaceMuted),
+          const SizedBox(width: 4),
+          ...TacticsBrowseSort.values.map(
+            (s) => Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: ChoiceChip(
+                label: Text(s.label, style: const TextStyle(fontSize: 12)),
+                selected: filter.sort == s,
+                onSelected: (_) => onFilterChanged(filter.copyWith(sort: s)),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
 }
 
 class _MistakeTypeChip extends StatelessWidget {
@@ -308,7 +329,11 @@ class _FlawTagChip extends StatelessWidget {
             ),
             const SizedBox(width: 2),
             Text(
-              selected.isEmpty ? 'Any tags' : selected.join(' + '),
+              selected.isEmpty
+                  ? 'Any tags'
+                  : selected.length == 1
+                  ? selected.single
+                  : '${selected.length} tags',
               style: const TextStyle(fontSize: 12),
             ),
           ],

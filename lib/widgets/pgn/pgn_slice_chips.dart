@@ -1,6 +1,8 @@
 /// Compact, editable applied filters beside the PGN viewer title.
 library;
 
+import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
@@ -38,8 +40,7 @@ class PgnSliceChips extends StatelessWidget {
       for (final filter in config.headerFilters)
         if (filter.value.isNotEmpty) _headerLabel(filter),
     ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return HorizontalWheelScroll(
       child: Row(
         children: [
           for (var i = 0; i < labels.length; i++) ...[

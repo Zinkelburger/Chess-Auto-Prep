@@ -218,12 +218,6 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     return _currentPosition.turn == Side.black;
   }
 
-  /// Mode-menu navigation preserves the trail so Back can return to the
-  /// previous view with its retained context.
-  ///
-  /// Also drops any still-parked handoff: it belongs to the navigation this
-  /// switch abandons, and would otherwise fire the next time its screen is
-  /// built — yanking the user back to a file they had navigated away from.
   AppMode? _settingsMode;
   AppMode? get settingsMode => _settingsMode;
 
@@ -241,11 +235,12 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     return true;
   }
 
+  /// Manual view selection starts a fresh trail and drops a parked handoff
+  /// belonging to the abandoned navigation. Linked navigation uses handOff
+  /// or pushMode, so Back still returns through related views.
   void setMode(AppMode mode) {
     _settingsMode = null;
-    if (mode != _currentMode) {
-      _history?.recordPush(mode, null, mode.label);
-    }
+    _history?.recordReset(mode);
     _pendingHandoff = null;
     _currentMode = mode;
     notifyListeners();

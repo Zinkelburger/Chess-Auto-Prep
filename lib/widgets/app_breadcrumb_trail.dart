@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -73,8 +74,7 @@ class AppBreadcrumbTrail extends StatelessWidget {
       (s) => s?.isRepertoireGenerating ?? false,
     );
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    return HorizontalWheelScroll(
       // Newest crumb stays visible when the trail overflows.
       reverse: true,
       child: Row(

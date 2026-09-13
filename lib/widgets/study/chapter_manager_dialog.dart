@@ -7,6 +7,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../common/item_title.dart';
+
 import '../../core/study_controller.dart';
 import '../../models/pgn_deletion_summary.dart';
 import '../../theme/app_colors.dart';
@@ -96,13 +98,14 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(width: 10),
-                  Text(
-                    _isFiltering
-                        ? 'Reordering is off while searching'
-                        : 'Drag to reorder',
-                    style: AppTextStyles.caption,
+                  Expanded(
+                    child: Text(
+                      _isFiltering
+                          ? 'Reordering is off while searching'
+                          : 'Drag to reorder',
+                      style: AppTextStyles.caption,
+                    ),
                   ),
-                  const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close, size: 20),
@@ -163,9 +166,8 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                               color: AppColors.onSurfaceMuted,
                             ),
                           ),
-                    title: Text(
+                    title: ItemTitle(
                       chapter.name,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontWeight: isCurrent
                             ? FontWeight.bold

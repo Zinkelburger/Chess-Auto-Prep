@@ -239,7 +239,7 @@ Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 - **`titleSpacing: 16`** on every `AppBar`.
 - **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with the current mode name as its anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions open on hover or click and use named groups with leading Material icons across modes, with no settings-only ellipsis. Shared operations reuse the PGN viewer’s symbols for copy, import, edit and study actions. Shared Actions and view menus use 32px minimum rows, 13px labels, a 240px minimum width and 16px horizontal insets; faint inset 1px dividers separate groups, adding only 1px before section headings. Both Actions and the view selector support keyboard navigation, Escape and outside-click dismissal. Player Analysis keeps its player picker inside the mode body, below the same Actions / View / Settings bar; selecting or changing a player never replaces that bar. The picker is centered at a maximum width of 1040px, with one Add player button and direct Update games / Change range / Remove buttons per card (file imports only offer Remove). Cards wrap their actions below the metadata on narrower windows. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
-- **Back navigation**: `AppHistory` records mode switches and cross-view links. The shared toolbar keeps Back visible even when the breadcrumb is too narrow, returning to the previous destination. Mounted screens retain their context. PGN Viewer also captures its live collection, filters, game, reading position and tabs before leaving, so revisiting it with another game does not overwrite the earlier history entry.
+- **Back navigation**: `AppHistory` records cross-view links. Manually selecting a view starts a fresh trail, including when selecting the current view. The shared toolbar keeps Back visible even when the breadcrumb is too narrow, returning to the previous destination. Mounted screens retain their context. PGN Viewer also captures its live collection, filters, game, reading position and tabs before leaving, so revisiting it with another game does not overwrite the earlier history entry.
 - **Settings**: Every `AppSettingsButton(mode: ...)` opens the same persistent settings route at that view. Trainer chapters are Session, Learning, Playback and Material; Tactics has Session, Puzzle selection and Game downloads. Global Engine contains cores, memory, board depth, bulk depth and line count. PVs stay one row until explicitly expanded into a fixed scrolling viewport. The PGN viewer, tactics Analysis gear, repertoire dock and unified engine pane use the same compact engine popup and save shared preferences immediately. `BulkAnalysisSettings` owns the persisted depth for game reviews, full-game analysis, audits, hole hunts and new repertoire builds, migrating the old tactics depth; `EngineSettings.depth` controls live board analysis. Saved build configurations retain their captured depth for resume. Panel visibility and move-table controls remain in view settings. Settings use concise labels without introductory paragraphs. Game downloads use Apply; session and trainer preferences save automatically. PGN Viewer separates Playback, Board and moves, and Analysis panels. Narrow windows use searchable view and chapter pickers. `ViewSettingsRegistry` connects mounted view-owned builders; unmounted views initialise underneath the open route, respecting the generation lock. Global account drafts survive category navigation.
 - **Toolbar buttons collapse** from text+icon to icon-only below `kToolbarCompactBreakpoint` (900 px).
 - **Layout body splits** at `kCompactBreakpoint` (960 px) from side-by-side to stacked.
@@ -662,6 +662,16 @@ matching line for reading. `MoveAttemptStore` keeps this history attached when
 lines move or split into chapters, and when an owned chapter or repertoire
 folder is renamed or moved.
 
+Trainer loading shows the current stage (preparing lines or restoring progress),
+reuses the last parsed source when its contents and training side are unchanged,
+skips unchanged review-file writes, and computes builder-tree difficulty in a
+worker that returns only per-line scores. Difficulty preparation runs in the
+background unless the selected queue order requires it. Reading and training use
+the builder's saved PGN and stable line identities; edits require reloading the
+trainer's source. Keyboard ratings **1 / 2 / 3 / 4** select **Again / Hard / Good /
+Easy** on the manual review result screen, with interval previews and shortcut
+tooltips. These keys remain text while an input has focus.
+
 Trainer view organization: source browser, lesson and results share the same
 board/panel frame. One phase panel replaces separate intro/learn/drill/replay
 views and move-pair cards. The independent chapter reader was removed; PGN
@@ -674,6 +684,19 @@ excluded lines remain readable and can be restored from their line options.
 They do not contribute to Learn/Review counts or either scheduling queue.
 
 ### PGN viewer (Open PGN)
+
+Opening a collection reads its text and indexes game headers off the UI thread;
+the selected game becomes readable before collection-wide opening classification
+and position indexing. A thin progress bar identifies this background work while
+game navigation remains available. Saved filters are restored before reading
+(and may require opening classification); the previous game and ply are retained.
+A manual board flip becomes the fixed perspective for subsequent games; selecting
+a player perspective restores automatic orientation for that player.
+Shared horizontal reader controls, breadcrumbs, filter strips and evaluation
+graphs accept vertical mouse-wheel scrolling, including in Tactics. Horizontal
+trackpad scrolling is retained, and vertical scrolling passes to a surrounding
+scroll view when the strip reaches its edge.
+
 
 **Actions ▾** offers icon-labelled **Edit**, **Show opening / Hide opening**, **Show Engine / Hide Engine**,
 **Evaluation graph / Tree**, **Copy Game PGN**, **Copy mainline PGN (no comments)**,
@@ -858,7 +881,16 @@ available, including ungrouped games. Search matches game labels, chapters,
 players, event, place, dates, openings and study text within the selected group;
 empty results offer Search all games. A number still offers Go to game N.
 Narrow windows move the compact group rows into a horizontal strip. Repertoire
-and training chapter pickers also use reduced row padding.
+and training chapter pickers use compact rows with at most two title lines and
+full-name tooltips. Full-screen repertoire and chapter libraries cap their reading
+width at 920px. Embedded course contents show three chapters initially, with a
+Show all / Show fewer toggle; searching reveals matching chapters even when
+collapsed. Line counts use bright 13px text; trainer chapter cards keep progress counts without repeating a full progress bar per row. Chapter setup scrolls within short
+windows, and study chapter names expose full titles on hover.
+Shared tooltips wrap at 480px. Database destination rows wrap drive metadata beneath a bounded path instead of reserving fixed columns. Review zero counts, one-star tactics and selectable
+game-window alternatives retain readable ink. Below 760px, optional tactics filters and sorting collapse behind a disclosure; actions and sort choices wrap. Tactics browse rows stack game and move details with a per-row actions menu instead of squeezing the full table. Move entry hints and borders remain
+visible before typing; annotation and finding colors use brighter green, red and
+purple for dark surfaces.
 
 PGN moves use a consistent 16px regular weight across annotated moves,
 unannotated moves and variations. The current move is marked by its background
