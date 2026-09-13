@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
@@ -197,8 +198,7 @@ class _CoverageFilterRow extends StatelessWidget {
         const Text('Coverage:', style: AppTextStyles.caption),
         const SizedBox(width: 8),
         Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          child: HorizontalWheelScroll(
             child: Row(
               children: [
                 _chip(

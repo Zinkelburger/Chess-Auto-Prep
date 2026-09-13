@@ -243,9 +243,7 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
 
   void setMode(AppMode mode) {
     _settingsMode = null;
-    if (mode != _currentMode) {
-      _history?.recordPush(mode, null, mode.label);
-    }
+    _history?.recordReset(mode);
     _pendingHandoff = null;
     _currentMode = mode;
     notifyListeners();

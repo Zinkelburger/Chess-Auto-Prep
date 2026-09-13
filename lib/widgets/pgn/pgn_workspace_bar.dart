@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
 import 'package:flutter/material.dart';
 import '../../core/pgn/pgn_workspace.dart';
 import '../../theme/app_colors.dart';
@@ -51,8 +52,7 @@ class _PgnWorkspaceBarState extends State<PgnWorkspaceBar> {
       child: Row(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            child: HorizontalWheelScroll(
               child: Row(
                 children: [
                   for (final id in workspace.openTabs)
