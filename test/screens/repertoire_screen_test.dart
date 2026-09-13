@@ -24,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/repertoire_screen.dart';
+import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 
 import '../support/board_engine_fixture.dart';
 
@@ -170,6 +171,29 @@ void main() {
       // Board-size control is offered (there is width to trade here).
       expect(find.byTooltip('Board size: Large'), findsOneWidget);
     });
+
+    testWidgets(
+      'go to start preserves the selected line for forward navigation',
+      (tester) async {
+        await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+        await _settleUntil(tester, find.text('Italian Game'));
+        await tester.tap(find.text('Italian Game'));
+        await _settle(tester);
+        InteractivePgnEditor editor() =>
+            tester.widget(find.byType(InteractivePgnEditor));
+        final tree = editor().tree;
+        expect(editor().currentPath.isNotEmpty, isTrue);
+        await tester.tap(find.byTooltip('Go to start'));
+        await tester.pump();
+        expect(editor().currentPath.isEmpty, isTrue);
+        expect(editor().tree, same(tree));
+        expect(editor().isEditingExistingLine, isTrue);
+        await tester.tap(find.byTooltip('Forward (→)'));
+        await tester.pump();
+        expect(editor().currentPath.length, 1);
+        expect(editor().tree.sanSequenceAt(editor().currentPath), ['e4']);
+      },
+    );
 
     testWidgets('collapsing the analysis panel shows a strip and persists', (
       tester,

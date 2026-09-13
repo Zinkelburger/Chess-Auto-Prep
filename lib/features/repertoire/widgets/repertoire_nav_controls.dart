@@ -1,4 +1,4 @@
-/// Navigation strip under the repertoire tools column: go-to-start, back,
+/// Navigation strip under the repertoire board: go-to-start, back,
 /// forward, generate-from-here, and flip-board buttons.
 /// Split out of lib/screens/repertoire_screen.dart.
 library;

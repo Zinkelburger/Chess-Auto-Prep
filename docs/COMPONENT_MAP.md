@@ -253,7 +253,8 @@ engine analysis below notation. A resizable reference database dock spans the
 board and notation columns. This uses the simultaneous panes in the supplied
 [Chess.ceo reference](https://chess.ceo/) as a layout reference, with the app's
 existing typography and controls. Compact windows retain tabs. Notes in the
-builder start collapsed and expand when clicked or focused through the annotation action. Board navigation sits immediately beneath the board.
+builder start collapsed and expand when clicked or focused through the annotation action. Board navigation sits immediately beneath the board. Go to start preserves the
+loaded line and annotations so Forward can continue through it.
 
 ```
 RepertoireScreen (composition root — wires controllers to widgets)

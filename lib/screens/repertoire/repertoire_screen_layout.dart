@@ -377,7 +377,7 @@ mixin _RepertoireLayout
 
   Widget _buildNavControls() {
     return RepertoireNavControls(
-      onGoToStart: () => _controller.loadMoveSequence([]),
+      onGoToStart: _controller.goToStart,
       onGoBack: _sessionAwareGoBack,
       onGoForward: _sessionAwareGoForward,
       onGenerateFromHere: _openGenerateTab,
