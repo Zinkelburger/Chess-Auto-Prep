@@ -259,14 +259,15 @@ Widget _buildVariationDocument(
         children.add(
           Padding(
             padding: EdgeInsets.only(left: indent),
-            child:
-                rendered.block ??
-                Text.rich(
-                  TextSpan(
-                    style: PgnTextStyles.commentAt(depth),
-                    children: rendered.spans,
+            child: _readableProse(
+              rendered.block ??
+                  Text.rich(
+                    TextSpan(
+                      style: PgnTextStyles.commentAt(depth),
+                      children: rendered.spans,
+                    ),
                   ),
-                ),
+            ),
           ),
         );
         final passage = children.sublist(passageStart);
