@@ -2,6 +2,8 @@
 /// plus a tactics mode for training studies of custom puzzles.
 library;
 
+import '../models/repertoire_review_entry.dart' show ReviewRating;
+
 import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
@@ -291,6 +293,25 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   /// Trainer shortcuts, dispatched through [handleKeyBindings] (never while
   /// typing a move).
   List<KeyBinding> get _keyBindings => [
+    for (final (shortcut, rating) in [
+      (AppShortcut.rateAgain, ReviewRating.again),
+      (AppShortcut.rateHard, ReviewRating.hard),
+      (AppShortcut.rateGood, ReviewRating.good),
+      (AppShortcut.rateEasy, ReviewRating.easy),
+    ])
+      ...KeyBinding.forShortcutIf(shortcut, 'Rate recall', () {
+        if (_training.phase != TrainingPhase.finished ||
+            _training.currentLine == null ||
+            _training.runComplete ||
+            _training.dueQueue.isEmpty ||
+            _training.repetitionMode != RepetitionMode.spaced ||
+            !_training.settings.showRatingButtons ||
+            _training.hadLearnPhaseThisSession) {
+          return false;
+        }
+        unawaited(_training.rateLine(rating));
+        return true;
+      }),
     ...KeyBinding.forShortcut(
       AppShortcut.focusMoveInput,
       'Focus move input',
@@ -536,6 +557,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
         _training.lines.isEmpty) {
       return RepertoireSelectorPanel(
         isLoading: _training.isLoading,
+        loadingStatus: _training.loadingStatus,
         error: _training.error,
         hasLines: _training.lines.isNotEmpty,
         canStartTraining: false,

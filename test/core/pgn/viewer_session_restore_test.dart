@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +28,21 @@ class _Analysis extends GameAnalysisController {
   void cancel() {}
 }
 
+Future<void> _waitForPreparation(PgnViewerController controller) async {
+  if (!controller.isPreparingCollection) return;
+  final done = Completer<void>();
+  void changed() {
+    if (!controller.isPreparingCollection && !done.isCompleted) done.complete();
+  }
+
+  controller.addListener(changed);
+  try {
+    await done.future.timeout(const Duration(seconds: 15));
+  } finally {
+    controller.removeListener(changed);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory dir;
@@ -53,6 +69,7 @@ void main() {
 
   tearDown(() async {
     for (final controller in controllers) {
+      await _waitForPreparation(controller);
       await controller.flushPendingMetadata();
       await controller.saveSession();
       controller.dispose();
@@ -108,6 +125,7 @@ void main() {
       final c = make()..setAutoSave(false);
       final original = await File(path).readAsString();
       await c.loadFile(path);
+      await _waitForPreparation(c);
       expect(await File(path).readAsString(), original);
       expect(c.hasUnsavedChanges, isTrue);
       expect(c.allGames.first.headers['ECO'], isNotEmpty);
@@ -182,6 +200,7 @@ void main() {
     () async {
       final first = make();
       await first.loadFile(path);
+      await _waitForPreparation(first);
       final text = await File(path).readAsString();
       expect(text, startsWith('; Collection banner'));
       expect(
@@ -213,6 +232,7 @@ void main() {
       await File(other).writeAsString(raw);
       final off = make();
       await off.loadFile(other);
+      await _waitForPreparation(off);
       expect(off.autoDetectOpenings, isFalse);
       expect(off.allGames.single.headers['ECO'], isNull);
       expect(await File(other).readAsString(), raw);
