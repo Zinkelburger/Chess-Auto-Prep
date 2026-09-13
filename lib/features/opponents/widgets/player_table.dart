@@ -25,12 +25,14 @@ class PlayerTable extends StatefulWidget {
     this.group,
     this.newPersonId,
     this.onOpenGames,
+    this.refreshToken = 0,
   });
   final OpponentStore store;
   final OpponentActions actions;
   final List<PersonRecord> people;
   final Tournament? group;
   final String? newPersonId;
+  final int refreshToken;
   final Future<void> Function(AnalysisPlayerInfo)? onOpenGames;
   final Future<void> Function(PersonRecord) onAnalyse;
   final Future<void> Function(PersonRecord) onRemove;
@@ -51,6 +53,12 @@ class _PlayerTableState extends State<PlayerTable> {
   void initState() {
     super.initState();
     unawaited(_reload());
+  }
+
+  @override
+  void didUpdateWidget(PlayerTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken != widget.refreshToken) unawaited(_reload());
   }
 
   Future<void> _reload() async {

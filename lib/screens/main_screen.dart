@@ -34,6 +34,7 @@ import '../services/file_open_requests.dart';
 import '../services/storage/app_paths.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import 'analysis_screen.dart';
+import '../features/opponents/widgets/players_prep_screen.dart';
 import 'pgn_viewer_screen.dart';
 import 'repertoire_screen.dart';
 import 'repertoire_library_screen.dart';
@@ -59,6 +60,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     AppMode.bughouse,
     AppMode.databases,
     AppMode.repertoireLibrary,
+    AppMode.playersPrep,
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
@@ -274,6 +276,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return const EngineTournamentScreen();
       case AppMode.bughouse:
         return const BughouseScreen();
+      case AppMode.playersPrep:
+        return const PlayersPrepScreen();
       case AppMode.repertoireLibrary:
         return const RepertoireLibraryScreen();
       case AppMode.databases:

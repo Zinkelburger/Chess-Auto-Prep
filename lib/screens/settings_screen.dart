@@ -145,6 +145,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _mode = widget.initialMode == AppMode.repertoireLibrary
         ? AppMode.repertoire
         : widget.initialMode;
+    if (_mode == AppMode.playersPrep) {
+      _mode = null;
+      _selected = 0;
+    }
     if (_mode == AppMode.databases) {
       _mode = null;
       _selected = 4;

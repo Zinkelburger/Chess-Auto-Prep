@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../utils/app_messages.dart';
+import '../../../models/analysis_player_info.dart';
 import '../models/person_record.dart';
 import '../models/tournament.dart';
 import '../services/opponent_store.dart';
@@ -18,10 +19,16 @@ class TournamentScreen extends StatefulWidget {
     required this.tournamentId,
     this.store,
     this.actions,
+    this.embedded = false,
+    this.onOpenPlayer,
+    this.refreshToken = 0,
   });
   final String tournamentId;
   final OpponentStore? store;
   final OpponentActions? actions;
+  final bool embedded;
+  final int refreshToken;
+  final Future<void> Function(AnalysisPlayerInfo)? onOpenPlayer;
   @override
   State<TournamentScreen> createState() => _TournamentScreenState();
 }
@@ -93,7 +100,12 @@ class _TournamentScreenState extends State<TournamentScreen> {
       person,
       group: _group!.name,
     );
-    if (info != null && mounted) Navigator.of(context).pop(info);
+    if (info == null || !mounted) return;
+    if (widget.onOpenPlayer != null) {
+      await widget.onOpenPlayer!(info);
+    } else {
+      Navigator.of(context).pop(info);
+    }
   }
 
   Future<void> _remove(PersonRecord person) async {
@@ -126,25 +138,28 @@ class _TournamentScreenState extends State<TournamentScreen> {
           .map((p) => p.id)
           .toSet();
       return Scaffold(
-        appBar: AppBar(
-          title: SizedBox(
-            width: 340,
-            child: PlayerCell(
-              key: ValueKey(group.id),
-              value: group.name,
-              label: 'Group name',
-              validate: (name) => name.isEmpty
-                  ? 'Enter a group name.'
-                  : (_store.tournamentNamed(name) != null &&
-                        _store.tournamentNamed(name)!.id != group.id)
-                  ? 'That name is already used.'
-                  : null,
-              save: (name) async {
-                await _store.saveTournament(_group!.copyWith(name: name));
-              },
-            ),
-          ),
-        ),
+        appBar: widget.embedded
+            ? null
+            : AppBar(
+                titleSpacing: 16,
+                title: SizedBox(
+                  width: 340,
+                  child: PlayerCell(
+                    key: ValueKey(group.id),
+                    value: group.name,
+                    label: 'Group name',
+                    validate: (name) => name.isEmpty
+                        ? 'Enter a group name.'
+                        : (_store.tournamentNamed(name) != null &&
+                              _store.tournamentNamed(name)!.id != group.id)
+                        ? 'That name is already used.'
+                        : null,
+                    save: (name) async {
+                      await _store.saveTournament(_group!.copyWith(name: name));
+                    },
+                  ),
+                ),
+              ),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -298,10 +313,12 @@ class _TournamentScreenState extends State<TournamentScreen> {
               child: PlayerTable(
                 store: _store,
                 actions: _actions,
+                refreshToken: widget.refreshToken,
                 group: group,
                 people: people.where((p) => matches.contains(p.id)).toList(),
                 newPersonId: _newPerson,
                 onAnalyse: _analyse,
+                onOpenGames: widget.onOpenPlayer,
                 onRemove: _remove,
               ),
             ),

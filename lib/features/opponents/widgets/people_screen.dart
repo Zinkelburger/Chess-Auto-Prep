@@ -16,9 +16,19 @@ import 'opponent_actions.dart';
 import 'player_table.dart';
 
 class PeopleScreen extends StatefulWidget {
-  const PeopleScreen({super.key, this.store, this.actions});
+  const PeopleScreen({
+    super.key,
+    this.store,
+    this.actions,
+    this.embedded = false,
+    this.onOpenPlayer,
+    this.refreshToken = 0,
+  });
   final OpponentStore? store;
   final OpponentActions? actions;
+  final bool embedded;
+  final int refreshToken;
+  final Future<void> Function(AnalysisPlayerInfo)? onOpenPlayer;
   @override
   State<PeopleScreen> createState() => _PeopleScreenState();
 }
@@ -104,6 +114,10 @@ class _PeopleScreenState extends State<PeopleScreen> {
 
   Future<void> _openGames(AnalysisPlayerInfo info) async {
     if (!mounted) return;
+    if (widget.onOpenPlayer != null) {
+      await widget.onOpenPlayer!(info);
+      return;
+    }
     await Navigator.of(context).push<void>(
       MaterialPageRoute(builder: (_) => AnalysisScreen(initialPlayer: info)),
     );
@@ -137,9 +151,8 @@ class _PeopleScreenState extends State<PeopleScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Player database')),
-    body: ListenableBuilder(
+  Widget build(BuildContext context) {
+    final body = ListenableBuilder(
       listenable: _store,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -224,6 +237,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
                     key: ValueKey(_reload),
                     store: _store,
                     actions: _actions,
+                    refreshToken: widget.refreshToken,
                     people: _store.searchPeople(_search.text),
                     newPersonId: _newPerson,
                     onAnalyse: _analyse,
@@ -233,6 +247,15 @@ class _PeopleScreenState extends State<PeopleScreen> {
           ),
         ],
       ),
-    ),
-  );
+    );
+    return widget.embedded
+        ? body
+        : Scaffold(
+            appBar: AppBar(
+              titleSpacing: 16,
+              title: const Text('Player database'),
+            ),
+            body: body,
+          );
+  }
 }

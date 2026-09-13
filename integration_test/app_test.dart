@@ -6,6 +6,7 @@ import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/repertoire_creation_screen.dart';
 import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
+import 'package:chess_auto_prep/services/analysis_games_service.dart';
 
 import 'helpers/board_helpers.dart';
 import 'helpers/tactics_helpers.dart';
@@ -121,6 +122,13 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(MenuItemButton),
+          matching: find.text('Players & prep'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(MenuItemButton),
           matching: find.text('Player analysis'),
         ),
         findsOneWidget,
@@ -181,6 +189,52 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets(
+      'Players & prep opens independently and hands off to cold and warm analysis',
+      (tester) async {
+        await pumpApp(tester);
+        await tester.tap(find.byKey(AppModeSwitcher.switcherKey));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.ancestor(
+            of: find.text('Players & prep'),
+            matching: find.byType(MenuItemButton),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final app = getAppState(tester);
+        expect(app.currentMode, AppMode.playersPrep);
+        expect(find.byKey(const Key('people-add')), findsOneWidget);
+        expect(find.byType(ChessBoardWidget), findsNothing);
+        await tester.tap(
+          find.byKey(const ValueKey('view-settings-playersPrep')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Close settings (Esc)'));
+        await tester.pumpAndSettle();
+
+        final games = AnalysisGamesService();
+        for (final name in ['PrepFirst', 'PrepSecond']) {
+          final player = await tester.runAsync(
+            () => games.saveAnalysisGames(
+              '[Event "Preparation test"]\n[White "$name"]\n[Black "Opponent"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 Nc6 *',
+              platform: 'import',
+              username: name,
+              maxGames: 1,
+            ),
+          );
+          app.handOff(OpenPlayerAnalysis(player!));
+          await tester.pumpAndSettle();
+          expect(app.currentMode, AppMode.positionAnalysis);
+          expect(app.hasPending<OpenPlayerAnalysis>(), isFalse);
+          expect(find.textContaining(name), findsWidgets);
+          app.setMode(AppMode.playersPrep);
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('people-add')), findsOneWidget);
+        }
+      },
+    );
 
     testWidgets('switches to Repertoire Trainer', (tester) async {
       await pumpApp(tester);

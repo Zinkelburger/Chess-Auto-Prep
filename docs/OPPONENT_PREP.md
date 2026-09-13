@@ -4,8 +4,8 @@ Keep one saved record per person, link their online accounts and prep studies,
 and include them in any number of groups. A group can be a tournament entry
 list, club regulars, or any other list of players to prepare against.
 
-**Player analysis → Choose a player → Players & groups** opens Groups; **All
-players** opens the editable directory. The optional MCP tools below can help
+**Library → Players & prep** opens the editable directory; **Groups** opens
+your saved preparation lists. The optional MCP tools below can help
 identify accounts before importing, but ordinary editing and prep run in the app.
 
 ## The MCP server
@@ -197,10 +197,10 @@ The player workflow has two destinations:
 
 | View | Purpose | Navigation |
 |---|---|---|
-| **Player database** | All players in an autosaving table: names, USCF IDs, online accounts, ratings, notes and reference studies/chapters/PGN files | Open the filled **Player database** button on the player picker, or the entry in analysis's Actions menu. **Analyze games** pushes analysis; its labelled back button returns to the same table and search. |
+| **Players & prep** | All players in an autosaving table, plus preparation groups: names, USCF IDs, online accounts, ratings, notes, study links and group readiness | Open from Library in the mode menu, or the Players & prep shortcut in analysis. **Analyze games** switches to Player analysis. Return through the mode menu or breadcrumb; the selected group and filters remain. |
 | **Player analysis** | Choose a saved game set from the compact cards, download online games or import PGNs, then explore positions and games | Online and PGN are the two Add player sources. Advanced engine and study actions stay in the existing Actions menu. |
 
-The database opens directly to **All players**. Existing saved accounts and PGN
+Players & prep opens directly to **All players**. Existing saved accounts and PGN
 sets are linked on first opening; **Add saved accounts** can refresh those links.
 **Add player** inserts an editable row. Valid edits save automatically; failed
 saves show an error on the cell and Enter retries. Use commas, semicolons or
@@ -224,11 +224,16 @@ for aggregate continuations, **Games** for matching games and their reader
 (with **Back to games**), and **Try moves** for scratch variations. There is
 no separate PGN tab or ambiguously named Analysis tab inside Player analysis.
 
-Groups are deferred from this navigation. The legacy group files and code
-remain compatible, but there is no group landing page or tournament/prepared
-controls in the player workflow. Analysis no longer has a second prep toolbar
-with duplicated study, repertoire and save-line buttons. The existing Actions
-menu retains advanced tools and the player's personal study as a save target.
+**Groups** contains searchable saved lists for tournaments, clubs or practice.
+Create a named group, include saved people or paste a player list, and track
+prepared status per person. Removing someone from a group keeps their directory
+record. Group study, training, rating lookup and notes export remain available
+on the sheet. Both tabs and the sheet keep the mode picker and settings visible;
+this destination does not start an analysis engine. Game-set links refresh when
+you return after importing or analyzing elsewhere.
+
+Analysis keeps its board and advanced tools. Its Players & prep shortcut returns
+to the shared directory rather than opening another nested database route.
 
 Files remain backward compatible: `Documents/opponents/people.json` and
 `Documents/opponents/tournaments/<id>.json` retain their original format IDs.
