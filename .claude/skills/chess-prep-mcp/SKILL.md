@@ -20,7 +20,7 @@ spawns the same server for one request:
 
 ```
 M=.claude/skills/chess-prep-mcp/mcp_tools.py
-python3 $M check                     # server starts and lists its tools (44 today)
+python3 $M check                     # server starts and lists its tools (50 today)
 python3 $M list                      # every tool, one line; `list expectimax` filters
 python3 $M describe expectimax_run   # full description + every argument
 python3 $M call master_status        # call one; k=v args parse as JSON where they can
@@ -44,6 +44,7 @@ not yours to fix.
 | `my_games_*`, `my_game` — the user's own games database: collections, games at a position, games by player, one game | `app_games.db` beside it, read-only | nothing | no |
 | `pgn_*` — a PGN (repertoire, Chessable course, game collection) as a FEN-keyed tree: `open` once, then `position`, `walk`, `audit`, `eval` | the PGN you pass | `pgn_eval` and `pgn_audit` **run Stockfish** | yes |
 | `chessdb_query` — chessdb.cn moves from a position, best-first, with reply counts | the network | nothing | yes |
+| `chesscom_*` — find a chess.com account from rating clues ("blitz 2701 on June 13"): `search` → `search_status` → results; `rating_on`, `profile`, `who_plays` (opening line, cache only) | chess.com public API + website leaderboard; archive cache and SQLite index in `~/.local/share/chess-prep/chesscom/` | **`chesscom_search` starts a detached job making up to `max_requests` serial HTTP requests** (default 1500, ~5 min) | no |
 | `roster_*`, `identity_*`, `constraint_add`, `pairing_simulate`, `opponents_export`, `uscf_*`, `directory_*` — tournament entry list → identified online accounts → the opponent list Player Analysis imports | bundled directory in `tools/mcp/chess_prep/data/`, US Chess API (`uscf_*`) | `roster.json` / `opponents.json` in `~/.local/share/chess-prep/` | no |
 
 Full contracts: `mcp_tools.py describe <tool>`. The design notes behind the
@@ -75,6 +76,11 @@ families are `docs/OPPONENT_PREP.md` (roster pipeline), `docs/ENGINE_TOURNAMENT.
   (`.claude/skills/run-chess-auto-prep/driver.py`) already has an app up, the
   request lands there — fine for a screenshot, surprising if you did not
   expect it.
+- **One chess.com search at a time, and only when asked.** `chesscom_search`
+  refuses to start while another job runs. Matches show in `search_status`
+  as `complete: false` (an opponent-derived sighting) before the job verifies
+  them from the player's own archive; report only `complete: true` hits as
+  found. Rating clues are local dates — leave `tz` at `US` unless told.
 - **Move lists take any order; FENs are exact.** Trees are FEN-keyed and
   transpositions merge, so `moves="1. d4 Nf6 2. c4 c5"` finds the same node
   as the Benoni move order. Evals are reported from White's point of view.
@@ -85,7 +91,8 @@ Tests are plain `unittest`, offline by default, and the gate hook does not
 block Python:
 
 ```
-python3 tools/mcp/test_chess_prep.py          # roster / USCF / directory (79)
+python3 tools/mcp/test_chess_prep.py          # roster / USCF / directory (80)
+python3 tools/mcp/test_chesscom.py            # chess.com account search (15, offline)
 python3 tools/mcp/test_opening_tree.py        # pgn_* (needs python-chess)
 python3 tools/mcp/test_expectimax.py
 python3 tools/mcp/test_engine_tournament.py

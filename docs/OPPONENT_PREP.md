@@ -56,6 +56,10 @@ claude mcp add chess-prep -- python3 /abs/path/to/tools/mcp/chess_prep/__main__.
 | `tournament_stop` | Stop cleanly after the game in flight |
 | `tournament_open` | Open the app on a tournament |
 | `tournament_engines` / `tournament_add_engine` | List engines; verify and register a UCI binary |
+| `chesscom_profile` | One chess.com account: title, country, joined, current/best rating per category; with `months`, its games, busiest hours and an opening count |
+| `chesscom_rating_on` | What an account's rating read on a given day, rebuilt from its game archive |
+| `chesscom_who_plays` | Who in the local archive index opens with a line, as White or Black |
+| `chesscom_search` / `chesscom_search_status` / `chesscom_search_stop` | Background job: find the account that showed these ratings on these days |
 
 Working files live in `~/.local/share/chess-prep/` (macOS: `~/Library/
 Application Support/chess-prep/`; override with `CHESS_PREP_DATA_DIR`, or the
@@ -92,6 +96,42 @@ chessdb_query {moves: "1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d4 exd4 5. e5 Ng4 6. O-
 
 `pgn_eval` and the mistake half of `pgn_audit` need a Stockfish binary (`STOCKFISH` or on `PATH`); `chessdb_query` and the reply-gap half of `pgn_audit` need only the network.
 Chessable `Z0` dummy mainlines are promoted the same way as in the app.
+
+### Finding a chess.com account from rating clues
+
+"He was 2701 blitz on June 13 and 2724 on June 20, he's in the US, and he
+plays the Scotch with 6.Bd3." The public API has no rating history and shows
+only the top 50 of a leaderboard, but every monthly game archive records both
+players' post-game ratings, so a rating history can be rebuilt for any player
+*and every opponent they faced*. The `chesscom_*` tools cache archives under
+`~/.local/share/chess-prep/chesscom/archives/` (override the directory with
+`CHESS_PREP_CHESSCOM_DIR`; files are `<username>_<YYYY-MM>.json`, so an older
+cache can be linked in) and index them into `index.sqlite`: rating events and
+the first 20 plies of every game, for the archive owner and the opponent alike.
+
+```
+chesscom_search        {clues: [{category: "blitz", rating: 2701, date: "2026-06-13"},
+                                {category: "blitz", rating: 2724, date: "2026-06-20"}],
+                        country: "US", opening: "1.e4 e5 2.Nf3 Nc6 3.d4 exd4 4.Nxd4 Nf6 5.Nxc6 bxc6 6.Bd3"}
+chesscom_search_status {id}            # indexing → leaderboard → scanning → enriching → done
+chesscom_rating_on     {username, category: "blitz", date: "2026-06-13", rating: 2701}
+chesscom_profile       {username, months: ["2026-06"], opening: "1.e4 e5 2.Nf3 Nc6 3.d4"}
+chesscom_who_plays     {opening: "1.e4 e5 2.Nf3 Nc6 3.d4 exd4 4.Nxd4 Nf6 5.Nxc6 bxc6 6.Bd3", side: "white"}
+```
+
+The search is a detached process (`python3 -m chess_prep.chesscom --job DIR`,
+jobs under `chesscom/searches/`). It indexes any unindexed archive files,
+pages the website leaderboard callback (50 per page, far past the API's top
+50) for players currently within `band` (default 200) of each clue rating,
+downloads their archives for the clue months, and then verifies every
+opponent sighted at a clue rating from that opponent's own archive. That
+verification step is what finds an account that has since dropped off the
+leaderboard: the September 2026 search found its target only as somebody's
+opponent. Requests are serial with ~0.15 s spacing and a `max_requests`
+budget (default 1500); everything downloaded stays cached, so rerunning the
+same clues resumes for free. Dates are the player's local day: `tz: "US"`
+(default) spans every US zone, `UTC` is exact, or give an IANA zone. Friend
+counts are never visible logged out; followers are not friends.
 
 ### Master games (TWIC)
 
@@ -249,9 +289,11 @@ tools/mcp/chess_prep/
   swiss.py        Swiss pairer + Monte Carlo simulator
   opponents.py    the opponent-list export
   uscf.py         US Chess ratings API
+  chesscom.py     chess.com archive cache + rating/opening index, account search job
   paths.py        data + working-file locations
   data/           bundled directory (regenerate with scripts/build_directory_assets.py)
 tools/mcp/test_chess_prep.py
+tools/mcp/test_chesscom.py
 tools/mcp/test_opening_tree.py
 tools/mcp/requirements.txt   python-chess (opening-tree tools only)
 
@@ -263,7 +305,8 @@ lib/screens/player_selection_screen.dart     the picker ("Which player?")
 lib/models/analysis_player_info.dart         accounts / group
 ```
 
-Tests: `python3 tools/mcp/test_chess_prep.py` (79),
+Tests: `python3 tools/mcp/test_chess_prep.py` (80),
+`python3 tools/mcp/test_chesscom.py` (15),
 `python3 tools/mcp/test_opening_tree.py` (10),
 `flutter test test/services/opponent_list_test.dart
 test/services/analysis_games_service_download_test.dart

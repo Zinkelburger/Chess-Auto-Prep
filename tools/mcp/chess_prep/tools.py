@@ -18,6 +18,9 @@ agent play by exactly the same rules and quote the same numbers.
 Expectimax tools (`expectimax_run` and friends) shell out to `tree_builder/`
 for the same reason, and answer the one question an engine alone cannot:
 which of several objectively equal moves scores best against a human.
+`chesscom_*` tools find and describe chess.com accounts from rating clues
+("blitz 2701 on June 13"), reconstructing rating history from cached game
+archives; `chesscom_search` is a background job like the builds.
 """
 
 from __future__ import annotations
@@ -424,6 +427,10 @@ class Registry:
         from .chessdb import register_chessdb_tools
 
         register_chessdb_tools(self)
+
+        from .chesscom import register_chesscom_tools
+
+        register_chesscom_tools(self)
 
     # ── Handlers ───────────────────────────────────────────────────────────
 
