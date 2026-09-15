@@ -20,7 +20,7 @@ ORT 1.17.1 mismatch without assuming which Windows loader rule caused it.
 
 `hivemind-windows.exe.gz`, `hivemind-source.tar.gz`, the tiny test DLL and
 `build.json` are committed together, like the browser engine. App builds need
-no cross compiler. `fetch_bughouse.py` checks the executable and build-source
+no cross compiler. `fetch_assets.py` checks the executable and build-source
 hashes before installing it; changes require a rebuild. The complete modified
 engine source is included in the source archive (Hivemind MIT and embedded
 Fairy-Stockfish GPL-3.0 notices retained). The adapter is part of Chess Auto
@@ -43,11 +43,11 @@ containing the pinned revision). The builder reads that revision with
 
 ```sh
 scripts/ci.sh with -- python3 tools/bughouse_windows/build.py --source /path/to/hivemind
-python3 tools/fetch_bughouse.py --only bughouse-windows --force
+python3 tools/fetch_assets.py --only bughouse-windows --force
 ```
 
 The engine uses the baseline x86-64 instruction set and static C++ runtime.
-Commit the rebuilt files, metadata and updated `tools/bughouse.lock.json`.
+Commit the rebuilt files, metadata and updated `tools/assets.lock.json`.
 For an extracted corresponding-source archive, compile its `engine/` using
 the CMake arguments in `build-instructions/build.py`; the loader patch is
 already applied. Supply the SDK and compiler above.
