@@ -4,6 +4,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../common/item_title.dart';
+
 import '../../services/training/chapter_layout.dart';
 import '../../theme/app_colors.dart';
 
@@ -16,25 +18,32 @@ Future<bool?> showChapterSetupDialog(
 }) {
   return showDialog<bool>(
     context: context,
-    builder: (context) => _ChapterSetupDialog(
-      proposal: proposal,
-      chaptersOn: chaptersCurrentlyOn,
-    ),
+    builder: (context) =>
+        ChapterSetupPanel(proposal: proposal, chaptersOn: chaptersCurrentlyOn),
   );
 }
 
-class _ChapterSetupDialog extends StatelessWidget {
+class ChapterSetupPanel extends StatelessWidget {
   final ChapterLayoutProposal proposal;
   final bool chaptersOn;
 
-  const _ChapterSetupDialog({required this.proposal, required this.chaptersOn});
+  const ChapterSetupPanel({
+    super.key,
+    required this.proposal,
+    required this.chaptersOn,
+    this.embedded = false,
+    this.onChoose,
+  });
+  final bool embedded;
+  final ValueChanged<bool>? onChoose;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final chapters = proposal.chapters;
 
-    return AlertDialog(
+    final dialog = AlertDialog(
+      scrollable: true,
       title: Text('Looks like ${proposal.formatLabel}'),
       // A *tight* width, not a max: [AlertDialog] wraps its content in an
       // [IntrinsicWidth], and asking a lazy viewport for its intrinsic width
@@ -58,8 +67,8 @@ class _ChapterSetupDialog extends StatelessWidget {
               style: theme.textTheme.titleSmall,
             ),
             const SizedBox(height: 10),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 300),
+            SizedBox(
+              height: 300,
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
@@ -82,11 +91,10 @@ class _ChapterSetupDialog extends StatelessWidget {
                         child: Row(
                           children: [
                             Expanded(
-                              child: Text(
+                              child: ItemTitle(
                                 chapter.name,
                                 style: theme.textTheme.bodyMedium,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -119,7 +127,7 @@ class _ChapterSetupDialog extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               'This changes the trainer’s list only, not the PGN file. You can '
-              'return here from Training settings → Material.',
+              'return here from Training settings.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: AppColors.onSurfaceMuted,
               ),
@@ -129,15 +137,31 @@ class _ChapterSetupDialog extends StatelessWidget {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => embedded
+              ? onChoose?.call(false)
+              : Navigator.of(context).pop(false),
           child: Text(chaptersOn ? 'Use one flat list' : 'Keep one flat list'),
         ),
         FilledButton.icon(
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () =>
+              embedded ? onChoose?.call(true) : Navigator.of(context).pop(true),
           icon: const Icon(Icons.auto_awesome_motion_outlined, size: 18),
           label: const Text('Sort into chapters'),
         ),
       ],
+    );
+    if (!embedded) return dialog;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          dialog.content!,
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: dialog.actions!),
+        ],
+      ),
     );
   }
 }

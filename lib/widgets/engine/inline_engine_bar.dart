@@ -36,6 +36,9 @@ class InlineEngineBar extends StatefulWidget {
   final String fen;
   final bool isActive;
 
+  /// Keep technical search status in a tooltip in the repertoire workspace.
+  final bool compactChrome;
+
   /// Called when the user clicks a move in an engine line.
   /// Provides the full PV as SAN moves and the 0-based index of the clicked move.
   final void Function(List<String> sanMoves, int clickedIndex)?
@@ -49,6 +52,7 @@ class InlineEngineBar extends StatefulWidget {
     super.key,
     required this.fen,
     this.isActive = true,
+    this.compactChrome = false,
     this.onLineMoveTapped,
     this.previewFlipped = false,
     this.onThreatChanged,
@@ -414,6 +418,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   Widget _buildToggleBar(BuildContext context) {
+    if (widget.compactChrome) return _buildCompactToggleBar(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6),
       color: AppColors.engineSurface,
@@ -487,6 +492,72 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                 ? _toggleThreat
                 : null,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          const InlineEngineSettings(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactToggleBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        children: [
+          ShortcutTooltip(
+            description: _engineEnabled ? 'Stop analysis' : 'Start analysis',
+            shortcut: AppShortcut.toggleEngine,
+            child: TextButton.icon(
+              onPressed: () {
+                if (!_engineEnabled && !EngineGate.ensureAvailable(context)) {
+                  return;
+                }
+                _setEngineEnabled(!_engineEnabled);
+              },
+              icon: Icon(
+                _engineEnabled ? Icons.stop : Icons.play_arrow,
+                size: 18,
+              ),
+              label: Text(_engineEnabled ? 'Stop' : 'Start analysis'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Tooltip(
+              message: _engineEnabled
+                  ? 'Depth ${_discovery.depth} · ${formatNodes(_discovery.nodes)} nodes'
+                  : 'Local engine',
+              child: Text(
+                EngineGate.isLocked ? 'Engine busy' : 'Stockfish',
+                style: AppTextStyles.muted.copyWith(
+                  color: AppColors.onSurfaceMuted,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Analysis options',
+            icon: Icon(
+              Icons.more_horiz,
+              size: 20,
+              color: _threatMode ? AppColors.accent : AppColors.onSurfaceMuted,
+            ),
+            onSelected: (_) {
+              if (!mounted) return;
+              _toggleThreat();
+            },
+            itemBuilder: (_) => [
+              CheckedPopupMenuItem<String>(
+                value: 'threat',
+                checked: _threatMode,
+                enabled:
+                    _engineEnabled &&
+                    !EngineGate.isLocked &&
+                    threatPositionFen(widget.fen) != null,
+                child: const Text('Show threat'),
+              ),
+            ],
           ),
           const InlineEngineSettings(),
         ],

@@ -172,6 +172,15 @@ List<InlineSpan> _emphasisSpans(String text) {
   );
 }
 
+/// Keep prose readable while move runs use the wider document column.
+Widget _readableProse(Widget child) => Align(
+  alignment: Alignment.topLeft,
+  child: ConstrainedBox(
+    constraints: const BoxConstraints(maxWidth: 640),
+    child: SizedBox(width: double.infinity, child: child),
+  ),
+);
+
 /// Prose shares the document background at every length and nesting depth.
 Widget _proseContainer(Widget child) =>
     SizedBox(width: double.infinity, child: child);

@@ -52,7 +52,7 @@ class _GamesWindowPickerState extends State<GamesWindowPicker> {
     final byGames = widget.window.isGameCount;
 
     Color dimmed(bool active) =>
-        active ? AppColors.onSurfaceSoft : AppColors.onSurfaceDisabled;
+        active ? AppColors.ink : AppColors.onSurfaceMuted;
 
     // Both modes on one line, phrased the same way ("Last [N] games" /
     // "Last [N] days") so no separator word is needed. Each row is tappable;
@@ -166,21 +166,17 @@ class _FetchModeRow extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
-      child: AnimatedOpacity(
-        opacity: selected ? 1.0 : 0.40,
-        duration: const Duration(milliseconds: 150),
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(
-              left: BorderSide(
-                color: selected ? scheme.primary : Colors.transparent,
-                width: 3,
-              ),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: selected ? scheme.primary : Colors.transparent,
+              width: 3,
             ),
           ),
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-          child: child,
         ),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        child: child,
       ),
     );
   }

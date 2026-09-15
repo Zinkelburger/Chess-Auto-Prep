@@ -47,7 +47,7 @@ import '../widgets/study/study_import_status_chip.dart';
 import '../widgets/study/study_name_dialog.dart';
 import '../widgets/study/study_picker_bar.dart';
 import '../widgets/study/study_side_pane.dart';
-import '../widgets/trainer_keyboard_scope.dart';
+import '../widgets/board_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
 
 class StudyScreen extends StatefulWidget {
@@ -59,7 +59,9 @@ class StudyScreen extends StatefulWidget {
 
 class _StudyScreenState extends State<StudyScreen> {
   late final StudyController _study;
-  final FocusNode _focusNode = FocusNode();
+  final FocusScopeNode _focusNode = FocusScopeNode(
+    debugLabel: 'study keyboard',
+  );
   final GlobalKey<MoveInputWidgetState> _moveInputKey = GlobalKey();
 
   AppState? _appStateRef;
@@ -217,9 +219,6 @@ class _StudyScreenState extends State<StudyScreen> {
       PgnAnnotationPanel.focusActive,
     ),
   ];
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) =>
-      handleKeyBindings(_keyBindings, event, node: node);
 
   /// Click on an engine-line move: play the PV into the chapter up to and
   /// including the clicked move (existing moves are followed, new ones
@@ -670,116 +669,115 @@ class _StudyScreenState extends State<StudyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: Row(
-          children: [
-            Flexible(
-              child: AppBarTitleWithTrail(
-                title: StudyPickerBar(
-                  study: _study,
-                  focusNode: _focusNode,
-                  onPickStudy: () => unawaited(_pickStudy()),
-                ),
-              ),
-            ),
-            if (_study.doc.filePath != null) ...[
-              const SizedBox(width: 12),
+    return BoardKeyboardScope(
+      moveInputKey: _moveInputKey,
+      bindings: () => _keyBindings,
+      focusNode: _focusNode,
+      child: Scaffold(
+        appBar: AppBar(
+          titleSpacing: 16,
+          title: Row(
+            children: [
               Flexible(
-                child: PgnSaveStatus(
-                  filePath: _study.doc.filePath,
-                  autoSave: true,
-                  dirty: _study.dirty,
-                  error: _study.saveError,
+                child: AppBarTitleWithTrail(
+                  title: StudyPickerBar(
+                    study: _study,
+                    focusNode: _focusNode,
+                    onPickStudy: () => unawaited(_pickStudy()),
+                  ),
                 ),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          // Only visible while a collection download is running.
-          const StudyImportStatusChip(),
-          AppOverflowMenu(
-            entries: [
-              AppMenuEntry(
-                heading: 'Study',
-                label: 'New study',
-                icon: Icons.library_add_outlined,
-                onRun: () => unawaited(_newStudy()),
-              ),
-              AppMenuEntry(
-                heading: 'Import',
-                label: 'From URL…',
-                icon: Icons.link,
-                onRun: () => unawaited(_importFromUrl()),
-              ),
-              AppMenuEntry(
-                label: 'PGN file as chapters…',
-                icon: Icons.description_outlined,
-                onRun: () => unawaited(_importPgn()),
               ),
               if (_study.doc.filePath != null) ...[
-                AppMenuEntry(
-                  heading: 'Export',
-                  label: 'Copy study PGN',
-                  icon: Icons.copy,
-                  onRun: () => unawaited(_exportPgn()),
-                ),
-                AppMenuEntry(
-                  label: 'Save study PGN as…',
-                  icon: Icons.description_outlined,
-                  onRun: () => unawaited(_saveStudyAs()),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: PgnSaveStatus(
+                    filePath: _study.doc.filePath,
+                    autoSave: true,
+                    dirty: _study.dirty,
+                    error: _study.saveError,
+                  ),
                 ),
               ],
-              AppMenuEntry(
-                heading: 'Train',
-                label: 'Train this chapter',
-                icon: Icons.school_outlined,
-                onRun: () => _train(wholeStudy: false),
-              ),
-              AppMenuEntry(
-                label: 'Train whole study',
-                icon: Icons.school_outlined,
-                onRun: () => _train(wholeStudy: true),
-              ),
-              AppMenuEntry(
-                heading: 'Board',
-                label: 'Flip board',
-                icon: Icons.swap_vert,
-                onRun: _study.toggleFlipped,
-              ),
-              AppMenuEntry(
-                heading: 'Explore',
-                label: 'Browse in PGN viewer',
-                icon: Icons.open_in_new,
-                enabled: _study.doc.filePath != null,
-                onRun: _browseInViewer,
-              ),
-              if (_study.doc.filePath != null)
-                AppMenuEntry(
-                  heading: 'Manage',
-                  label: 'Delete study…',
-                  icon: Icons.delete_outline,
-                  onRun: () => unawaited(_deleteCurrentStudy()),
-                ),
             ],
           ),
-          const AppModeSwitcher(),
-          const AppSettingsButton(mode: AppMode.study),
-        ],
-      ),
-      body: TrainerKeyboardScope(
-        holdsFocus: true,
-        focusNode: _focusNode,
-        onKeyEvent: _handleKeyEvent,
-        child: LayoutBuilder(
+          actions: [
+            // Only visible while a collection download is running.
+            const StudyImportStatusChip(),
+            AppOverflowMenu(
+              entries: [
+                AppMenuEntry(
+                  heading: 'Study',
+                  label: 'New study',
+                  icon: Icons.library_add_outlined,
+                  onRun: () => unawaited(_newStudy()),
+                ),
+                AppMenuEntry(
+                  heading: 'Import',
+                  label: 'From URL…',
+                  icon: Icons.link,
+                  onRun: () => unawaited(_importFromUrl()),
+                ),
+                AppMenuEntry(
+                  label: 'PGN file as chapters…',
+                  icon: Icons.description_outlined,
+                  onRun: () => unawaited(_importPgn()),
+                ),
+                if (_study.doc.filePath != null) ...[
+                  AppMenuEntry(
+                    heading: 'Export',
+                    label: 'Copy study PGN',
+                    icon: Icons.copy,
+                    onRun: () => unawaited(_exportPgn()),
+                  ),
+                  AppMenuEntry(
+                    label: 'Save study PGN as…',
+                    icon: Icons.description_outlined,
+                    onRun: () => unawaited(_saveStudyAs()),
+                  ),
+                ],
+                AppMenuEntry(
+                  heading: 'Train',
+                  label: 'Train this chapter',
+                  icon: Icons.school_outlined,
+                  onRun: () => _train(wholeStudy: false),
+                ),
+                AppMenuEntry(
+                  label: 'Train whole study',
+                  icon: Icons.school_outlined,
+                  onRun: () => _train(wholeStudy: true),
+                ),
+                AppMenuEntry(
+                  heading: 'Board',
+                  label: 'Flip board',
+                  icon: Icons.swap_vert,
+                  onRun: _study.toggleFlipped,
+                ),
+                AppMenuEntry(
+                  heading: 'Explore',
+                  label: 'Browse in PGN viewer',
+                  icon: Icons.open_in_new,
+                  enabled: _study.doc.filePath != null,
+                  onRun: _browseInViewer,
+                ),
+                if (_study.doc.filePath != null)
+                  AppMenuEntry(
+                    heading: 'Manage',
+                    label: 'Delete study…',
+                    icon: Icons.delete_outline,
+                    onRun: () => unawaited(_deleteCurrentStudy()),
+                  ),
+              ],
+            ),
+            const AppModeSwitcher(),
+            const AppSettingsButton(mode: AppMode.study),
+          ],
+        ),
+        body: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxWidth < kCompactBreakpoint;
             final board = StudyBoardPane(
               study: _study,
               moveInputKey: _moveInputKey,
-              keyBindings: _keyBindings,
               // Shapes on the start position go into the chapter's
               // introduction comment, as they do on Lichess.
               onShapeDrawn: (orig, dest) => applyStudyBoardShape(

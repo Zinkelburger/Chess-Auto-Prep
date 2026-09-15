@@ -71,7 +71,7 @@ class ExplorerGameOpener {
     ExplorerGame game, {
     required String fen,
   }) async {
-    final pgn = await _pgnFor(game);
+    final pgn = await fetchPgn(game);
     if (pgn == null) return null;
     final normalized = _normalize(pgn);
 
@@ -100,7 +100,8 @@ class ExplorerGameOpener {
     );
   }
 
-  Future<String?> _pgnFor(ExplorerGame game) async {
+  /// Fetch a reference PGN without adding it to a collection.
+  Future<String?> fetchPgn(ExplorerGame game) async {
     switch (game.source) {
       case ExplorerGameSource.twic:
         final id = int.tryParse(game.id);

@@ -22,6 +22,7 @@ heavy checks/builds use `scripts/ci.sh with -- COMMAND`.
 | `tools/bench/`, `tools/dart_api_test/`, `tools/experiments/` | Standalone benchmarks/API harnesses; nothing here is imported by `lib/` |
 | `tree_builder/` | Standalone C prototype and cdbdirect native build; see its README. The Dart generation pipeline is canonical |
 | `python/twic-position-finder/` | Separately deployed web service; follow its README |
+| (external) [Chessable-PGN-Download](https://github.com/Zinkelburger/Chessable-PGN-Download) | Browser extension that saves a Chessable course as the course-shaped PGN this app reads (chapter in `[White]`, line in `[Black]`); lives in its own repository |
 | `packaging/`, `install_linux_desktop.sh` | Release-bundle installers, built by release CI |
 
 The app hides Bughouse Lab without the optional bughouse assets. Archive/book

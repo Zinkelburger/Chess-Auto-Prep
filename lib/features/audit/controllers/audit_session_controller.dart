@@ -22,13 +22,42 @@ import '../../../services/jobs/repertoire_job.dart';
 import '../../../utils/safe_change_notifier.dart';
 
 class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
+  AuditSessionController({
+    RepertoireAuditService? service,
+    Future<void> Function()? prepareEngine,
+    Future<void> Function()? releaseEngine,
+  }) : _service = service ?? RepertoireAuditService(),
+       _prepareEngine = prepareEngine ?? _prepareStockfish,
+       _releaseEngine =
+           releaseEngine ?? EngineLifecycle.instance.exitGeneration;
+
+  static Future<void> _prepareStockfish() async {
+    await EngineLifecycle.instance.enterGeneration(1);
+    await StockfishPool.instance.ensureWorkers(1);
+  }
+
+  final Future<void> Function() _prepareEngine;
+  final Future<void> Function() _releaseEngine;
+  Future<void>? _runTail;
+  int _runVersion = 0;
+  int get runVersion => _runVersion;
+  String? _error;
+  String? get error => _error;
+  String? _startFen;
+  String? get startFen => _startFen;
+  int? _serviceVersion;
+  Set<String> _resumeCheckedFens = const {};
+  List<String> _resumeWarnings = const [];
+
   @override
   void dispose() {
+    _runVersion++;
+    _service.cancel();
     _progressNotify.dispose();
     super.dispose();
   }
 
-  final RepertoireAuditService _service = RepertoireAuditService();
+  final RepertoireAuditService _service;
 
   AuditResult? _resultValue;
 
@@ -88,15 +117,16 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Call before loading a new repertoire. Saves in-flight progress to the
   /// OLD repertoire path and clears all in-memory audit state immediately.
   void onRepertoireSwitching(String? oldRepertoireFilePath) {
+    _error = null;
     if (_isAuditing) {
       _service.cancel();
       saveProgress(oldRepertoireFilePath);
       currentJob?.updateStatus(JobStatus.cancelled);
       currentJob = null;
-      unawaited(EngineLifecycle.instance.exitGeneration());
       _isAuditing = false;
       _isPaused = false;
     }
+    _runVersion++;
     _result = null;
     _liveFindings = [];
     _nodesChecked = 0;
@@ -128,9 +158,9 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     if (!_isAuditing) return;
     _service.cancel();
     saveProgress(repertoireFilePath);
+    _runVersion++;
     currentJob?.updateStatus(JobStatus.cancelled);
     currentJob = null;
-    unawaited(EngineLifecycle.instance.exitGeneration());
     _isAuditing = false;
     _isPaused = false;
     notifyListeners();
@@ -141,6 +171,9 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   void saveProgress(String? repertoireFilePath) {
     final config = _lastConfig;
     if (config == null) return;
+    final checkedFens = _serviceVersion == _runVersion
+        ? _service.checkedFens
+        : _resumeCheckedFens;
     final allFindings = <AuditFinding>[
       ...(_result?.findings ?? <AuditFinding>[]),
       ..._liveFindings,
@@ -152,23 +185,39 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
       opponentNodesChecked: _result?.opponentNodesChecked ?? 0,
       leafNodesChecked: _result?.leafNodesChecked ?? 0,
       elapsed: _result?.elapsed ?? Duration.zero,
+      warnings: _serviceVersion == _runVersion
+          ? _service.warnings
+          : (_result?.warnings ?? _resumeWarnings),
+    );
+    _interruptedSnapshot = AuditSnapshot(
+      result: partialResult,
+      config: config,
+      checkedFens: checkedFens,
+      startFen: _startFen,
+      isComplete: false,
     );
     unawaited(
       AuditPersistence.instance.saveProgress(
         repertoireFilePath,
         partialResult,
         config,
-        _service.checkedFens,
+        checkedFens,
+        startFen: _startFen,
       ),
     );
   }
 
   Future<void> tryRestore(String? repertoireId) async {
     _activeRepertoireId = repertoireId;
+    final version = _runVersion;
     final snapshot = await AuditPersistence.instance.load(repertoireId);
 
     // Guard: if the user switched repertoires during the async load, discard.
-    if (_activeRepertoireId != repertoireId) return;
+    if (isDisposed ||
+        _activeRepertoireId != repertoireId ||
+        version != _runVersion) {
+      return;
+    }
 
     if (snapshot == null) {
       _result = null;
@@ -181,6 +230,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     }
     _result = snapshot.result;
     _lastConfig = snapshot.config;
+    _startFen = snapshot.startFen;
     _liveFindings = [];
     _nodesChecked = snapshot.result.nodesChecked;
     _totalNodes = snapshot.result.nodesChecked;
@@ -201,6 +251,9 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   void onAuditingChanged(bool auditing, JobManager jobManager, String? label) {
     if (auditing && currentJob == null) {
+      _runVersion++;
+      _error = null;
+      _interruptedSnapshot = null;
       currentJob = jobManager.createJob(
         type: JobType.audit,
         label: label ?? 'Audit',
@@ -220,7 +273,12 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  void onResultReady(AuditResult auditResult, String? repertoireFilePath) {
+  void onResultReady(
+    AuditResult auditResult,
+    String? repertoireFilePath, {
+    int? runVersion,
+  }) {
+    if (runVersion != null && runVersion != _runVersion) return;
     _result = auditResult;
     _liveFindings = [];
     if (_lastConfig != null) {
@@ -229,6 +287,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
           repertoireFilePath,
           auditResult,
           _lastConfig!,
+          startFen: _startFen,
         ),
       );
     }
@@ -237,6 +296,16 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   void onResultChanged(AuditResult updatedResult, String? repertoireFilePath) {
     _result = updatedResult;
+    final interrupted = _interruptedSnapshot;
+    if (interrupted != null) {
+      _interruptedSnapshot = AuditSnapshot(
+        result: updatedResult,
+        config: interrupted.config,
+        checkedFens: interrupted.checkedFens,
+        startFen: interrupted.startFen,
+        isComplete: false,
+      );
+    }
     unawaited(
       AuditPersistence.instance.saveResult(
         repertoireFilePath,
@@ -286,6 +355,109 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
+  /// The controller owns the run after its configuration route closes.
+  /// Runs are serialized so a cancelled engine call must finish before a new
+  /// audit resets the shared service or acquires the engine pool.
+  Future<void> launch({
+    required AuditConfig config,
+    required OpeningTree tree,
+    required bool isWhiteRepertoire,
+    required JobManager jobManager,
+    required String? repertoireLabel,
+    required String? repertoireFilePath,
+    String? startFen,
+    AuditSnapshot? resumeSnapshot,
+  }) {
+    if (_isAuditing) return _runTail ?? Future.value();
+    _lastConfig = config;
+    _startFen = startFen;
+    _resumeCheckedFens = resumeSnapshot?.checkedFens ?? const {};
+    _resumeWarnings = resumeSnapshot?.result.warnings ?? const [];
+    _activeRepertoireId = repertoireFilePath;
+    onAuditingChanged(true, jobManager, repertoireLabel);
+    if (resumeSnapshot != null) {
+      _liveFindings = [...resumeSnapshot.result.findings];
+    }
+    final version = _runVersion;
+    final previous = _runTail;
+    final job = currentJob!;
+    final run = _execute(
+      previous: previous,
+      version: version,
+      job: job,
+      config: config,
+      tree: tree,
+      isWhiteRepertoire: isWhiteRepertoire,
+      repertoireFilePath: repertoireFilePath,
+      startFen: startFen,
+      resumeSnapshot: resumeSnapshot,
+    );
+    _runTail = run;
+    return run;
+  }
+
+  Future<void> _execute({
+    required Future<void>? previous,
+    required int version,
+    required RepertoireJob job,
+    required AuditConfig config,
+    required OpeningTree tree,
+    required bool isWhiteRepertoire,
+    required String? repertoireFilePath,
+    required String? startFen,
+    required AuditSnapshot? resumeSnapshot,
+  }) async {
+    bool current() => !isDisposed && version == _runVersion;
+    var engineOwned = false;
+    try {
+      await previous;
+      if (!current()) return;
+      if (config.useStockfish) {
+        engineOwned = true;
+        await _prepareEngine();
+      }
+      if (!current()) return;
+      _serviceVersion = version;
+      final resultFuture = _service.audit(
+        tree: tree,
+        isWhiteRepertoire: isWhiteRepertoire,
+        config: config,
+        startFen: startFen,
+        skipFens: resumeSnapshot?.checkedFens ?? const {},
+        priorFindings: resumeSnapshot?.result.findings ?? const [],
+        priorWarnings: _resumeWarnings,
+        onProgress: (progress) {
+          if (current()) onProgress(progress.nodesChecked, progress.totalNodes);
+        },
+        onFinding: (finding) {
+          if (current()) onLiveFinding(finding);
+        },
+      );
+      if (_isPaused) _service.pause();
+      final result = await resultFuture;
+      if (!current()) return;
+      onResultReady(result, repertoireFilePath, runVersion: version);
+      job.updateStatus(JobStatus.completed);
+    } catch (e) {
+      if (!current()) return;
+      _error = 'Audit could not finish. $e';
+      saveProgress(repertoireFilePath);
+      job.updateStatus(JobStatus.failed);
+    } finally {
+      try {
+        if (engineOwned) await _releaseEngine();
+      } catch (e) {
+        if (current()) _error = 'Could not release the audit engine. $e';
+      }
+      if (current()) {
+        _isAuditing = false;
+        _isPaused = false;
+        currentJob = null;
+        notifyListeners();
+      }
+    }
+  }
+
   Future<void> launchResume({
     required AuditSnapshot snapshot,
     required OpeningTree tree,
@@ -293,70 +465,20 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     required JobManager jobManager,
     required String? repertoireLabel,
     required String? repertoireFilePath,
-  }) async {
-    final config = snapshot.config;
-    _lastConfig = config;
-    _liveFindings = [];
-    _result = null;
-    _nodesChecked = 0;
-    _totalNodes = 0;
-    _isPaused = false;
-    _isAuditing = true;
-    _interruptedSnapshot = null;
-
-    currentJob = jobManager.createJob(
-      type: JobType.audit,
-      label: '${repertoireLabel ?? 'Audit'} (resumed)',
-    );
-    currentJob!.updateStatus(JobStatus.running);
-    notifyListeners();
-
-    if (config.useStockfish) {
-      await EngineLifecycle.instance.enterGeneration(1);
-      await StockfishPool.instance.ensureWorkers(1);
-    }
-    try {
-      final auditResult = await _service.audit(
-        tree: tree,
-        isWhiteRepertoire: isWhiteRepertoire,
-        config: config,
-        skipFens: snapshot.checkedFens,
-        priorFindings: snapshot.result.findings,
-        onProgress: (p) {
-          _nodesChecked = p.nodesChecked;
-          _totalNodes = p.totalNodes;
-          notifyListeners();
-        },
-        onFinding: (f) {
-          _liveFindings = [..._liveFindings, f];
-          notifyListeners();
-        },
-      );
-
-      _result = auditResult;
-      _liveFindings = [];
-      _isAuditing = false;
-      currentJob?.updateStatus(JobStatus.completed);
-      currentJob = null;
-      await AuditPersistence.instance.saveComplete(
-        repertoireFilePath,
-        auditResult,
-        config,
-      );
-      notifyListeners();
-    } catch (e) {
-      _isAuditing = false;
-      currentJob?.updateStatus(JobStatus.failed);
-      currentJob = null;
-      notifyListeners();
-    } finally {
-      if (config.useStockfish) {
-        await EngineLifecycle.instance.exitGeneration();
-      }
-    }
-  }
+  }) => launch(
+    config: snapshot.config,
+    tree: tree,
+    isWhiteRepertoire: isWhiteRepertoire,
+    jobManager: jobManager,
+    repertoireLabel: '${repertoireLabel ?? 'Audit'} (resumed)',
+    repertoireFilePath: repertoireFilePath,
+    startFen: snapshot.startFen,
+    resumeSnapshot: snapshot,
+  );
 
   void clearAll() {
+    _runVersion++;
+    _error = null;
     _result = null;
     _liveFindings = [];
     _nodesChecked = 0;

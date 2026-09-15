@@ -125,7 +125,7 @@ class TacticsSessionSettingsForm extends StatelessWidget {
             onChanged: (v) => onChanged(settings.copyWith(skipReviewed: v)),
           ),
           AppCheckbox(
-            label: 'Exclude 1-star rated',
+            label: 'Hide one-star puzzles',
             value: !settings.includeOneStar,
             onChanged: (v) => onChanged(settings.copyWith(includeOneStar: !v)),
           ),
@@ -219,7 +219,7 @@ class _ExpiryFieldState extends State<_ExpiryField> {
         Row(
           children: [
             const Text(
-              'Tactics expire after',
+              'Include puzzles from the last',
               style: TextStyle(fontSize: 13, color: AppColors.onSurfaceSoft),
             ),
             const SizedBox(width: 8),
@@ -250,7 +250,7 @@ class _ExpiryFieldState extends State<_ExpiryField> {
           ],
         ),
         AppCheckbox(
-          label: 'Never expire',
+          label: 'Include all dates',
           value: never,
           onChanged: (v) => widget.onChanged(
             v

@@ -69,6 +69,8 @@ class RepertoireAuditService {
   /// Useful for saving progress on cancellation.
   Set<String> get checkedFens => Set.unmodifiable(_checkedFens);
   final Set<String> _checkedFens = {};
+  final Set<String> _warnings = {};
+  List<String> get warnings => List.unmodifiable(_warnings);
 
   void cancel() => _control.cancel();
   void pause() => _control.pause();
@@ -91,8 +93,15 @@ class RepertoireAuditService {
     void Function(AuditFinding)? onFinding,
     Set<String> skipFens = const {},
     List<AuditFinding> priorFindings = const [],
+    List<String> priorWarnings = const [],
   }) async {
     _control.reset();
+    _warnings
+      ..clear()
+      ..addAll(priorWarnings);
+    if (config.useMaia && !MaiaFactory.isAvailable) {
+      _warnings.add('Maia is unavailable; common-reply checks were skipped.');
+    }
     _checkedFens.clear();
     _checkedFens.addAll(skipFens);
     final stopwatch = Stopwatch()..start();
@@ -187,10 +196,11 @@ class RepertoireAuditService {
       final isLeaf = node.children.isEmpty;
       final alreadyChecked = skipFens.contains(node.fen);
 
+      if (isOurTurn && !isLeaf) ourMoveNodes++;
+      if (!isOurTurn && !isLeaf) oppNodes++;
       if (alreadyChecked) {
         // Still enqueue children so we reach unchecked nodes.
       } else if (isOurTurn && !isLeaf) {
-        ourMoveNodes++;
         if (config.useStockfish) {
           final (newFindings, hits, misses) = await _checkOurMoves(
             node: node,
@@ -207,7 +217,6 @@ class RepertoireAuditService {
           }
         }
       } else if (!isOurTurn && !isLeaf) {
-        oppNodes++;
         final newFindings = await _checkOpponentCoverage(
           node: node,
           tree: tree,
@@ -225,7 +234,7 @@ class RepertoireAuditService {
 
       if (isLeaf) {
         leafNodes++;
-        if (!isOurTurn) {
+        if (!isOurTurn && !alreadyChecked) {
           final deadEndFindings = await _checkDeadEnd(
             node: node,
             movePath: entry.movePath,
@@ -283,6 +292,7 @@ class RepertoireAuditService {
 
     return AuditResult(
       findings: findings,
+      warnings: warnings,
       nodesChecked: checked,
       ourMoveNodesChecked: ourMoveNodes,
       opponentNodesChecked: oppNodes,
@@ -319,7 +329,10 @@ class RepertoireAuditService {
       );
       cacheMisses++;
 
-      if (discovery.lines.isEmpty) return (findings, cacheHits, cacheMisses);
+      if (discovery.lines.isEmpty) {
+        _warnings.add('Stockfish returned no evaluation for some positions.');
+        return (findings, cacheHits, cacheMisses);
+      }
 
       // Best move from Stockfish (white-normalized cp).
       final bestLine = discovery.lines.first;
@@ -362,7 +375,10 @@ class RepertoireAuditService {
           _evalCache.putEvalCpWhiteSoon(childFen, repCp, config.evalDepth);
         }
 
-        if (repCp == null) continue;
+        if (repCp == null) {
+          _warnings.add('Stockfish could not evaluate some repertoire moves.');
+          continue;
+        }
 
         // Compute eval loss from our perspective.
         // Positive = our move is worse than best.
@@ -418,6 +434,7 @@ class RepertoireAuditService {
         }
       }
     } catch (e) {
+      _warnings.add('Stockfish could not check some positions.');
       if (kDebugMode) debugPrint('[Audit] Stockfish error at ${node.fen}: $e');
     }
 
@@ -475,6 +492,7 @@ class RepertoireAuditService {
           }
         }
       } catch (e) {
+        _warnings.add('Lichess could not check some positions.');
         if (kDebugMode) {
           debugPrint('[Audit] Lichess Explorer error at ${node.fen}: $e');
         }
@@ -518,6 +536,7 @@ class RepertoireAuditService {
           );
         }
       } catch (e) {
+        _warnings.add('Maia could not check some positions.');
         if (kDebugMode) {
           debugPrint('[Audit] Maia error at ${node.fen}: $e');
         }
@@ -531,6 +550,11 @@ class RepertoireAuditService {
     if (config.useChessDb && db != null) {
       try {
         final list = await db.lookupMoves(node.fen);
+        if (list.isEmpty) {
+          _warnings.add(
+            'ChessDB had no scored replies for some positions (unknown or unavailable).',
+          );
+        }
         final best = list.bestStmCp;
         if (best != null) {
           final isWhiteTurn = _isWhiteTurnAtNode(node);
@@ -579,6 +603,7 @@ class RepertoireAuditService {
           }
         }
       } catch (e) {
+        _warnings.add('ChessDB could not check some positions.');
         if (kDebugMode) {
           debugPrint('[Audit] ChessDB error at ${node.fen}: $e');
         }
@@ -640,6 +665,7 @@ class RepertoireAuditService {
           }
         }
       } catch (e) {
+        _warnings.add('Stockfish could not check some opponent replies.');
         if (kDebugMode) {
           debugPrint('[Audit] Stockfish reply check error at ${node.fen}: $e');
         }
@@ -718,6 +744,9 @@ class RepertoireAuditService {
         final content = await io.File(path).readAsString();
         allGames.addAll(pgn.splitPgnIntoGames(content));
       } catch (e) {
+        _warnings.add(
+          'A clash PGN could not be read; its lines were not checked.',
+        );
         if (kDebugMode) {
           debugPrint('[Audit] Failed to read clash PGN $path: $e');
         }
@@ -760,7 +789,7 @@ class RepertoireAuditService {
           }
         }
       } catch (_) {
-        // Best-effort; failure here is non-fatal and intentionally ignored.
+        _warnings.add('Lichess could not check some line endings.');
       }
     }
 
@@ -778,7 +807,7 @@ class RepertoireAuditService {
             }
           }
         } catch (_) {
-          // Best-effort; failure here is non-fatal and intentionally ignored.
+          _warnings.add('Maia could not check some line endings.');
         }
       }
     }
@@ -789,12 +818,17 @@ class RepertoireAuditService {
         db != null) {
       try {
         final list = await db.lookupMoves(node.fen);
+        if (list.isEmpty) {
+          _warnings.add(
+            'ChessDB had no scored replies for some positions (unknown or unavailable).',
+          );
+        }
         for (final m in list.withinCp(config.strongReplyWindowCp)) {
           final san = _uciToSan(node.fen, m.uci) ?? m.san;
           if (san.isNotEmpty) moveSet.add(san);
         }
       } catch (_) {
-        // Best-effort; failure here is non-fatal and intentionally ignored.
+        _warnings.add('ChessDB could not check some line endings.');
       }
     }
 

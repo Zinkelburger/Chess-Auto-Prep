@@ -35,7 +35,7 @@ class AnalysisPanelsSettingsBody extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SettingsSwitchRow(
-              label: 'Stockfish PV',
+              label: 'Engine continuations',
               tooltip:
                   'Show the Stockfish principal variation panel — top engine '
                   'moves, eval, and continuation for the current board '
@@ -44,7 +44,7 @@ class AnalysisPanelsSettingsBody extends StatelessWidget {
               onChanged: (v) => settings.showEngineDock = v,
             ),
             SettingsSwitchRow(
-              label: 'Expectimax',
+              label: 'Practical move scores (Expectimax)',
               tooltip:
                   'Show the Expectimax panel — every move at the current '
                   'position with the practical value the build stored for '
@@ -53,18 +53,18 @@ class AnalysisPanelsSettingsBody extends StatelessWidget {
               onChanged: (v) => settings.showExpectimaxDock = v,
             ),
             SettingsSwitchRow(
-              label: 'Show Maia % column',
+              label: 'Predicted move frequency (Maia)',
               tooltip: 'Show the Maia prediction column in the move table.',
               value: settings.showMaia,
               onChanged: (v) => settings.showMaia = v,
             ),
             SettingsSwitchRow(
-              label: 'Stockfish evals in move table',
+              label: 'Engine scores in move table',
               value: settings.showStockfish,
               onChanged: (v) => settings.showStockfish = v,
             ),
             SettingsStepperTile(
-              label: 'Max table moves',
+              label: 'Moves shown',
               value: settings.maxAnalysisMoves,
               min: kMinMaxAnalysisMoves,
               max: kMaxMaxAnalysisMoves,

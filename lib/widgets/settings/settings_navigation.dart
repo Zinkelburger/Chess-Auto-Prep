@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_state.dart';
 
-/// View-owned builders are registered by mounted gears. Lazy views can mount
-/// underneath the settings route without replacing that route.
+/// View-owned settings stay attached to their live controllers. The host can
+/// mount a requested owner without changing the active workspace.
 class ViewSettingsRegistry extends ChangeNotifier {
   static final _registries = Expando<ViewSettingsRegistry>();
   static ViewSettingsRegistry forApp(AppState app) =>
@@ -14,6 +14,11 @@ class ViewSettingsRegistry extends ChangeNotifier {
     ({Object owner, WidgetBuilder? builder, VoidCallback? onClosed})
   >
   entries = {};
+
+  final Set<AppMode> requestedModes = {};
+  void requestView(AppMode mode) {
+    if (requestedModes.add(mode)) notifyListeners();
+  }
 
   void register(
     AppMode mode,
@@ -32,55 +37,4 @@ class ViewSettingsRegistry extends ChangeNotifier {
       WidgetsBinding.instance.addPostFrameCallback((_) => notifyListeners());
     }
   }
-}
-
-class SettingsChapter {
-  const SettingsChapter(this.label);
-  final String label;
-}
-
-List<SettingsChapter> settingsChapters(AppMode mode) => switch (mode) {
-  AppMode.repertoireTrainer => const [
-    SettingsChapter('Session'),
-    SettingsChapter('Learning'),
-    SettingsChapter('Playback'),
-    SettingsChapter('Material'),
-  ],
-  AppMode.tactics => const [
-    SettingsChapter('Session'),
-    SettingsChapter('Puzzle selection'),
-    SettingsChapter('Game downloads'),
-  ],
-  AppMode.pgnViewer => const [
-    SettingsChapter('Playback'),
-    SettingsChapter('Board and moves'),
-    SettingsChapter('Analysis panels'),
-  ],
-  AppMode.repertoire => const [
-    SettingsChapter('Repertoire'),
-    SettingsChapter('Analysis panels'),
-  ],
-  AppMode.study => const [
-    SettingsChapter('Engine'),
-    SettingsChapter('Display'),
-  ],
-  AppMode.databases => const [SettingsChapter('Data')],
-  AppMode.bughouse => const [SettingsChapter('Engine')],
-  AppMode.engineTournament => const [SettingsChapter('Engines')],
-  _ => const [SettingsChapter('Analysis panels'), SettingsChapter('Display')],
-};
-
-/// The shared shell owns chapter selection; feature widgets own live controls.
-class SettingsChapterScope extends InheritedWidget {
-  const SettingsChapterScope({
-    super.key,
-    required this.index,
-    required super.child,
-  });
-  final int index;
-  static int? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<SettingsChapterScope>()?.index;
-  @override
-  bool updateShouldNotify(SettingsChapterScope oldWidget) =>
-      index != oldWidget.index;
 }

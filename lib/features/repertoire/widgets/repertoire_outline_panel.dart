@@ -41,6 +41,7 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
 import '../../../widgets/common/confirm_dialog.dart';
+import '../../../widgets/common/list_search_field.dart';
 import '../../../widgets/common/name_entry_dialog.dart';
 import '../controllers/repertoire_outline_controller.dart';
 import '../models/outline_rows.dart';
@@ -76,6 +77,7 @@ class RepertoireOutlinePanel extends StatefulWidget {
     required this.onOpenChapter,
     required this.onOpenLine,
     this.currentMoves = const [],
+    this.showPositionFilter = true,
     this.selectedLine,
     this.onGenerateInto,
     this.onAuditChapter,
@@ -99,6 +101,9 @@ class RepertoireOutlinePanel extends StatefulWidget {
   /// The SAN sequence on the board — used by the "at this position" filter.
   final List<String> currentMoves;
 
+  /// Material-only hosts have no board position to filter against.
+  final bool showPositionFilter;
+
   /// The line the editor is on, if any: `(chapterPath, gameIndex)`.
   final ({String chapterPath, int gameIndex})? selectedLine;
 
@@ -121,7 +126,7 @@ class RepertoireOutlinePanel extends StatefulWidget {
   /// or null for none.
   final String? Function(String chapterPath)? chapterBadge;
 
-  /// Overrides the root folder's name in the header.
+  /// Legacy repertoire title; the outline header reads 'Chapters'.
   final String? title;
 
   @override
@@ -129,7 +134,7 @@ class RepertoireOutlinePanel extends StatefulWidget {
 }
 
 class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
-  final _searchController = TextEditingController();
+  int _searchRevision = 0;
   final _scroll = ScrollController();
   final _listKey = GlobalKey();
   String _search = '';
@@ -154,7 +159,6 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
   void dispose() {
     _debounce?.cancel();
     _autoScroll?.cancel();
-    _searchController.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -173,8 +177,9 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
   /// user just removed, leaving the field empty but the list still filtered.
   void _clearFilters() {
     _debounce?.cancel();
-    _searchController.clear();
+    if (!mounted) return;
     setState(() {
+      _searchRevision++;
       _search = '';
       _atPosition = false;
     });
@@ -202,7 +207,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Header(
-              title: widget.title ?? outline?.name ?? 'Repertoire',
+              title: 'Chapters',
               lineCount: outline?.lineCount ?? 0,
               chapterCount: outline == null ? 0 : outline.chapterList.length,
               loading: _c.isLoading,
@@ -213,11 +218,15 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
               onCollapse: widget.onCollapse,
             ),
             _FilterRow(
-              controller: _searchController,
+              searchKey: ValueKey(_searchRevision),
               onChanged: _onSearchChanged,
               atPosition: _atPosition,
+              showPositionFilter: widget.showPositionFilter,
               atPositionEnabled: widget.currentMoves.isNotEmpty,
-              onAtPositionChanged: (v) => setState(() => _atPosition = v),
+              onAtPositionChanged: (v) {
+                if (!mounted) return;
+                setState(() => _atPosition = v);
+              },
             ),
             const Divider(height: 1),
             Expanded(child: _buildBody(outline)),
@@ -249,9 +258,7 @@ class _RepertoireOutlinePanelState extends State<RepertoireOutlinePanel> {
       return _Empty(
         icon: Icons.menu_book_outlined,
         title: 'No chapters yet',
-        detail:
-            'A repertoire is chapters, and chapters hold lines. Make a '
-            'chapter, then fill it from the Actions menu.',
+        detail: 'Create a chapter, then add your moves.',
         action: Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -1169,34 +1176,38 @@ class _Header extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
+            child: Text(
+              title,
+              style: AppTextStyles.body.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppColors.onSurfaceMuted,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Chapter options',
+            icon: const Icon(Icons.more_horiz, size: 18),
+            onSelected: (value) {
+              if (value == 'metrics') onShowMetrics?.call();
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem<String>(
+                enabled: false,
+                child: Text(
                   loading
                       ? 'Reading…'
                       : '$chapterCount chapter${chapterCount == 1 ? '' : 's'} · '
                             '$lineCount line${lineCount == 1 ? '' : 's'}',
-                  style: AppTextStyles.caption,
                 ),
-              ],
-            ),
+              ),
+              if (onShowMetrics != null)
+                const PopupMenuItem<String>(
+                  value: 'metrics',
+                  child: Text('Line metrics'),
+                ),
+            ],
           ),
-          if (onShowMetrics != null)
-            IconButton(
-              tooltip: 'Line metrics (coverage, ease…)',
-              icon: const Icon(Icons.insights_outlined, size: 18),
-              visualDensity: VisualDensity.compact,
-              onPressed: onShowMetrics,
-            ),
           if (onCollapse != null)
             IconButton(
               tooltip: 'Hide chapters',
@@ -1219,63 +1230,55 @@ class _Header extends StatelessWidget {
 }
 
 class _FilterRow extends StatelessWidget {
-  final TextEditingController controller;
+  final Key searchKey;
   final ValueChanged<String> onChanged;
   final bool atPosition;
   final bool atPositionEnabled;
+  final bool showPositionFilter;
   final ValueChanged<bool> onAtPositionChanged;
 
   const _FilterRow({
-    required this.controller,
+    required this.searchKey,
     required this.onChanged,
     required this.atPosition,
     required this.atPositionEnabled,
+    required this.showPositionFilter,
     required this.onAtPositionChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       child: Row(
         children: [
           Expanded(
-            child: SizedBox(
-              height: 30,
-              child: TextField(
-                controller: controller,
-                onChanged: onChanged,
-                style: const TextStyle(fontSize: 12),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                  prefixIcon: const Icon(Icons.search, size: 16),
-                  prefixIconConstraints: const BoxConstraints(minWidth: 28),
-                  hintText: 'Find a chapter or line',
-                  hintStyle: const TextStyle(fontSize: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+            child: ListSearchField(
+              key: searchKey,
+              hintText: 'Find a chapter or line',
+              onChanged: onChanged,
+            ),
+          ),
+          if (showPositionFilter)
+            PopupMenuButton<bool>(
+              tooltip: atPosition
+                  ? 'Chapter filters · at this position'
+                  : 'Chapter filters',
+              icon: Icon(
+                Icons.filter_list,
+                size: 18,
+                color: atPosition ? AppColors.accent : AppColors.onSurfaceMuted,
+              ),
+              onSelected: onAtPositionChanged,
+              itemBuilder: (_) => [
+                CheckedPopupMenuItem<bool>(
+                  value: !atPosition,
+                  checked: atPosition,
+                  enabled: atPositionEnabled || atPosition,
+                  child: const Text('At this position'),
                 ),
-              ),
+              ],
             ),
-          ),
-          const SizedBox(width: 6),
-          Tooltip(
-            message: atPositionEnabled
-                ? 'Only lines that reach the position on the board'
-                : 'Play a move on the board to filter by position',
-            child: FilterChip(
-              label: const Text(
-                'At this position',
-                style: TextStyle(fontSize: 12),
-              ),
-              selected: atPosition,
-              onSelected: atPositionEnabled ? onAtPositionChanged : null,
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-            ),
-          ),
         ],
       ),
     );
@@ -1445,7 +1448,15 @@ class _RowShell extends StatelessWidget {
     final row = InkWell(
       onTap: onTap,
       child: Container(
-        color: highlighted ? AppColors.accent.withValues(alpha: 0.12) : null,
+        decoration: BoxDecoration(
+          color: highlighted ? AppColors.accent.withValues(alpha: 0.08) : null,
+          border: Border(
+            left: BorderSide(
+              color: highlighted ? AppColors.accent : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
         padding: EdgeInsets.only(left: 8.0 + depth * 14, right: 6),
         height: OutlineRow.height,
         child: child,
@@ -1676,10 +1687,9 @@ class _SectionRow extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              title.toUpperCase(),
+              title,
               style: const TextStyle(
                 fontSize: 12,
-                letterSpacing: 0.6,
                 fontWeight: FontWeight.w700,
                 color: AppColors.onSurfaceMuted,
               ),
@@ -1761,7 +1771,6 @@ class _LineRow extends StatelessWidget {
               ],
             ),
           ),
-          Text('${line.moves.length}', style: AppTextStyles.caption),
         ],
       ),
     );

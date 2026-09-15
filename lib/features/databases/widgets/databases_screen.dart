@@ -62,7 +62,8 @@ import '../services/database_inventory.dart';
 import 'database_card.dart';
 
 class DatabasesScreen extends StatefulWidget {
-  const DatabasesScreen({super.key});
+  const DatabasesScreen({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   State<DatabasesScreen> createState() => _DatabasesScreenState();
@@ -171,35 +172,71 @@ class _DatabasesScreenState extends State<DatabasesScreen> {
   Widget build(BuildContext context) {
     final master = context.watch<MasterGamesService>();
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: const AppBarTitleWithTrail(title: Text('Databases')),
-        actions: [
-          AppOverflowMenu(
-            entries: [
-              AppMenuEntry(
-                label: 'Re-measure what is on disk',
-                icon: Icons.refresh,
-                enabled: !_measuring,
-                onRun: () => unawaited(_measure()),
-              ),
-            ],
-          ),
-          const AppModeSwitcher(),
-          const AppSettingsButton(mode: AppMode.databases),
-        ],
-      ),
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              titleSpacing: 16,
+              title: const AppBarTitleWithTrail(title: Text('Databases')),
+              actions: [
+                AppOverflowMenu(
+                  entries: [
+                    AppMenuEntry(
+                      label: 'Re-measure what is on disk',
+                      icon: Icons.refresh,
+                      enabled: !_measuring,
+                      onRun: () => unawaited(_measure()),
+                    ),
+                  ],
+                ),
+                const AppModeSwitcher(),
+                const AppSettingsButton(mode: AppMode.databases),
+              ],
+            ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        padding: widget.embedded
+            ? const EdgeInsets.all(24)
+            : const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
           Align(
-            alignment: Alignment.topCenter,
+            alignment: widget.embedded
+                ? Alignment.topLeft
+                : Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 820),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (widget.embedded) ...[
+                    const Text(
+                      'Data & storage',
+                      style: AppTextStyles.bodyStrong,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   _intro(),
+                  if (widget.embedded) ...[
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Use online ChessDB during repertoire builds',
+                      ),
+                      subtitle: const Text('Uses your daily ChessDB quota.'),
+                      value: _settings.chessDbApiForExpectimax,
+                      onChanged: (value) => unawaited(
+                        _settings.setChessDbApiForExpectimax(value),
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: _measuring
+                            ? null
+                            : () => unawaited(_measure()),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Refresh storage usage'),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   _masterGamesCard(master),
                   _yourGamesCard(),

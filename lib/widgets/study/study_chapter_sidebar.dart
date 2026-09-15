@@ -10,6 +10,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../common/item_title.dart';
+
 import '../../core/study_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
@@ -211,9 +213,9 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
+              child: ItemTitle(
                 chapter.name,
-                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
                 style: TextStyle(
                   fontSize: 13,
                   color: active ? AppColors.ink : AppColors.onSurfaceSoft,

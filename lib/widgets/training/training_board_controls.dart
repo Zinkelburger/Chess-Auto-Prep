@@ -31,10 +31,6 @@ class TrainingBoardPane extends StatelessWidget {
   /// you type is worse than no field at all.
   final bool showMoveInput;
 
-  /// Forwarded to [MoveInputWidget.onNavigationKey] so non-move shortcut
-  /// keys (S, J, …) keep working while a move is being typed.
-  final bool Function(KeyEvent event)? onNavigationKey;
-
   const TrainingBoardPane({
     super.key,
     required this.session,
@@ -43,7 +39,6 @@ class TrainingBoardPane extends StatelessWidget {
     this.onMove,
     this.moveInputKey,
     this.showMoveInput = true,
-    this.onNavigationKey,
   });
 
   @override
@@ -81,7 +76,6 @@ class TrainingBoardPane extends StatelessWidget {
                 position: session.position,
                 enabled: waitingForUser,
                 onMove: onMove ?? (_) {},
-                onNavigationKey: onNavigationKey,
               ),
             ),
           ],

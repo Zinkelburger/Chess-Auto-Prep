@@ -59,34 +59,33 @@ bool isPgnCommentLine(String trimmedLine) =>
 /// replaces produced.
 ///
 /// This is isolate-safe (no instance state captured).
-List<String> splitPgnIntoGames(String content) {
-  final games = <String>[];
+List<String> splitPgnIntoGames(String content) => [
+  for (final range in pgnGameRanges(content))
+    '${range.prefix}${content.substring(range.start, range.end)}'
+        '${range.end == content.length ? '\n' : ''}',
+];
+
+/// Source offsets using the same boundaries as [splitPgnIntoGames]. Keeping
+/// offsets lets writers replace whole games in one pass without searching or
+/// rebuilding the entire document for every edit. `prefix` is synthetic and
+/// is never part of the source range (header-less repertoire input).
+Iterable<({int start, int end, String prefix})> pgnGameRanges(
+  String content,
+) sync* {
   final length = content.length;
-
-  // Start offset of the game being accumulated, or -1 before the first one.
   var gameStart = -1;
-  // Synthetic header block for header-less text, prepended to the chunk.
-  String? prefix;
-
-  void flush(int end) {
-    final body = content.substring(gameStart, end);
-    final text = prefix == null ? body : '$prefix$body';
-    if (text.trim().isNotEmpty) games.add(text);
-    prefix = null;
-  }
-
+  var prefix = '';
   var lineStart = 0;
   while (lineStart <= length) {
     var lineEnd = content.indexOf('\n', lineStart);
     if (lineEnd < 0) lineEnd = length;
     final firstNonBlank = _firstNonBlank(content, lineStart, lineEnd);
-
-    // The trailing space is load-bearing: a bare `[Event` prefix also matches
-    // `[EventDate "..."]`, which would split every game with that header in
-    // two.
     if (content.startsWith('[Event ', firstNonBlank)) {
-      if (gameStart >= 0) flush(lineStart);
+      if (gameStart >= 0) {
+        yield (start: gameStart, end: lineStart, prefix: prefix);
+      }
       gameStart = lineStart;
+      prefix = '';
     } else if (gameStart < 0 && firstNonBlank < lineEnd) {
       final trimmedLine = content.substring(firstNonBlank, lineEnd).trim();
       if (!isPgnCommentLine(trimmedLine)) {
@@ -97,15 +96,9 @@ List<String> splitPgnIntoGames(String content) {
     }
     lineStart = lineEnd + 1;
   }
-
   if (gameStart >= 0) {
-    // Every line is `\n`-terminated in a chunk, the final one included.
-    final body = content.substring(gameStart);
-    final text = '${prefix ?? ''}$body\n';
-    if (text.trim().isNotEmpty) games.add(text);
+    yield (start: gameStart, end: length, prefix: prefix);
   }
-
-  return games;
 }
 
 /// Offset of the line that starts the last game in [content] — the last

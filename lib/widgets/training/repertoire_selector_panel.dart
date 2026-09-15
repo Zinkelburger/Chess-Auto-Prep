@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 /// Bootstrap UI when no repertoire is loaded or training cannot start yet.
 class RepertoireSelectorPanel extends StatelessWidget {
   final bool isLoading;
+  final String loadingStatus;
   final String? error;
   final bool hasLines;
   final bool canStartTraining;
@@ -18,6 +19,7 @@ class RepertoireSelectorPanel extends StatelessWidget {
   const RepertoireSelectorPanel({
     super.key,
     required this.isLoading,
+    this.loadingStatus = 'Loading repertoire…',
     this.error,
     required this.hasLines,
     required this.canStartTraining,
@@ -29,13 +31,13 @@ class RepertoireSelectorPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Loading repertoire...'),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(loadingStatus, textAlign: TextAlign.center),
           ],
         ),
       );

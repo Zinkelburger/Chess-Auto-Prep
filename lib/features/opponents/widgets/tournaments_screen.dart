@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/analysis_player_info.dart';
 import '../../../widgets/common/confirm_dialog.dart';
+import '../../../widgets/common/list_search_field.dart';
 import '../models/tournament.dart';
 import '../services/opponent_store.dart';
 import 'opponent_actions.dart';
@@ -12,9 +13,17 @@ import 'player_cell.dart';
 import 'tournament_screen.dart';
 
 class TournamentsScreen extends StatefulWidget {
-  const TournamentsScreen({super.key, this.store, this.actions});
+  const TournamentsScreen({
+    super.key,
+    this.store,
+    this.actions,
+    this.embedded = false,
+    this.onOpenGroup,
+  });
   final OpponentStore? store;
   final OpponentActions? actions;
+  final bool embedded;
+  final ValueChanged<Tournament>? onOpenGroup;
   @override
   State<TournamentsScreen> createState() => _TournamentsScreenState();
 }
@@ -24,6 +33,7 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
   late final _actions = widget.actions ?? OpponentActions(store: _store);
   final _name = TextEditingController();
   String? _error;
+  String _search = '';
   bool _busy = false;
 
   @override
@@ -46,9 +56,20 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
     super.dispose();
   }
 
-  Future<void> _open(Tournament group) => _page(
-    TournamentScreen(tournamentId: group.id, store: _store, actions: _actions),
-  );
+  Future<void> _open(Tournament group) async {
+    if (widget.onOpenGroup != null) {
+      widget.onOpenGroup!(group);
+      return;
+    }
+    await _page(
+      TournamentScreen(
+        tournamentId: group.id,
+        store: _store,
+        actions: _actions,
+      ),
+    );
+  }
+
   Future<void> _page(Widget page) async {
     final picked = await Navigator.of(
       context,
@@ -98,22 +119,8 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Groups'),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 12),
-          child: OutlinedButton(
-            key: const Key('tournaments-people'),
-            onPressed: () =>
-                _page(PeopleScreen(store: _store, actions: _actions)),
-            child: const Text('All players'),
-          ),
-        ),
-      ],
-    ),
-    body: ListenableBuilder(
+  Widget build(BuildContext context) {
+    final body = ListenableBuilder(
       listenable: _store,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,18 +155,31 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
           ),
           if (_error != null)
             Padding(padding: const EdgeInsets.all(12), child: Text(_error!)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: ListSearchField(
+              hintText: 'Search groups',
+              onChanged: (value) {
+                if (mounted) setState(() => _search = value);
+              },
+            ),
+          ),
           Expanded(
             child: !_store.isLoaded
                 ? const Center(child: CircularProgressIndicator())
                 : _store.tournaments.isEmpty
                 ? const Center(
                     child: Text(
-                      'Create a group, or open All players to organize your saved accounts.',
+                      'Create a group to collect players for a tournament or training session.',
                     ),
                   )
+                : !_store.tournaments.any((g) => matchesSearch(_search, g.name))
+                ? const Center(child: Text('No groups match your search.'))
                 : ListView(
                     children: [
-                      for (final group in _store.tournaments)
+                      for (final group in _store.tournaments.where(
+                        (g) => matchesSearch(_search, g.name),
+                      ))
                         Card(
                           margin: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -217,6 +237,25 @@ class _TournamentsScreenState extends State<TournamentsScreen> {
           ),
         ],
       ),
-    ),
-  );
+    );
+    return widget.embedded
+        ? body
+        : Scaffold(
+            appBar: AppBar(
+              title: const Text('Groups'),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: OutlinedButton(
+                    key: const Key('tournaments-people'),
+                    onPressed: () =>
+                        _page(PeopleScreen(store: _store, actions: _actions)),
+                    child: const Text('All players'),
+                  ),
+                ),
+              ],
+            ),
+            body: body,
+          );
+  }
 }

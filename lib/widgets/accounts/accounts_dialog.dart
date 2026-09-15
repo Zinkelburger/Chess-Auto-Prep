@@ -18,7 +18,8 @@ import '../../theme/app_text_styles.dart';
 /// whole app, and a half-typed name landing in every "fetch games" form (and
 /// firing a download) is what per-keystroke commit bought.
 class AccountsDialog extends StatefulWidget {
-  const AccountsDialog({super.key});
+  const AccountsDialog({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   State<AccountsDialog> createState() => _AccountsDialogState();
@@ -34,6 +35,7 @@ Future<bool> showAccountsDialog(BuildContext context) async {
 }
 
 class _AccountsDialogState extends State<AccountsDialog> {
+  bool _saved = false;
   late final TextEditingController _lichess;
   late final TextEditingController _chesscom;
 
@@ -43,6 +45,12 @@ class _AccountsDialogState extends State<AccountsDialog> {
     final app = context.read<AppState>();
     _lichess = TextEditingController(text: app.lichessUsername ?? '');
     _chesscom = TextEditingController(text: app.chesscomUsername ?? '');
+    _lichess.addListener(_edited);
+    _chesscom.addListener(_edited);
+  }
+
+  void _edited() {
+    if (mounted && _saved) setState(() => _saved = false);
   }
 
   @override
@@ -58,12 +66,46 @@ class _AccountsDialogState extends State<AccountsDialog> {
     final chesscom = _chesscom.text.trim();
     app.setLichessUsername(lichess.isEmpty ? null : lichess);
     app.setChesscomUsername(chesscom.isEmpty ? null : chesscom);
-    Navigator.of(context).pop(true);
+    if (widget.embedded) {
+      setState(() => _saved = true);
+    } else {
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final app = context.read<AppState>();
+    if (widget.embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SiteField(
+            fieldKey: const Key('lichess-username-field'),
+            site: 'Lichess',
+            controller: _lichess,
+            lastFetch: app.lichessLastFetch,
+            onSubmitted: _save,
+          ),
+          const SizedBox(height: 12),
+          _SiteField(
+            fieldKey: const Key('chesscom-username-field'),
+            site: 'Chess.com',
+            controller: _chesscom,
+            lastFetch: app.chesscomLastFetch,
+            onSubmitted: _save,
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            key: const Key('accounts-save-button'),
+            onPressed: _save,
+            child: const Text('Save usernames'),
+          ),
+          if (_saved)
+            const Text('Usernames saved.', style: AppTextStyles.caption),
+        ],
+      );
+    }
     return AlertDialog(
       title: const Text('My accounts'),
       content: SizedBox(

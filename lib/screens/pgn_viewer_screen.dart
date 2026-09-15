@@ -1878,6 +1878,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                       primary: _buildBoardPane(),
                       secondary: _buildSidePanel(),
                     ),
+                    if (_controller.isPreparingCollection)
+                      const Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: Tooltip(
+                          message:
+                              'Preparing opening filters and position search',
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      ),
                     if (_controller.isLoading)
                       Positioned.fill(
                         child: ColoredBox(

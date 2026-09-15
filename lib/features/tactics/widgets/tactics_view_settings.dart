@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../widgets/settings/settings_navigation.dart';
 import '../../games/controllers/recent_games_controller.dart';
 import '../../games/services/home_review_runner.dart';
 import '../../games/widgets/home_review_settings_dialog.dart';
@@ -21,32 +20,29 @@ class TacticsViewSettings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chapter = SettingsChapterScope.maybeOf(context) ?? 0;
-    if (chapter >= 2) {
-      return HomeReviewSettingsDialog(
-        filters: games.filters,
-        window: games.window,
-        embedded: true,
-        onApply: (result) async {
-          await games.setFilters(result.filters, window: result.window);
-          runner.reset();
-        },
-      );
-    }
     return ListenableBuilder(
       listenable: session,
       builder: (context, _) => ListView(
-        key: ValueKey(chapter),
         padding: const EdgeInsets.all(24),
         children: [
           TacticsSessionSettingsForm(
             settings: session.sessionSettings,
             showCustomType: true,
-            section: chapter == 0
-                ? TacticsSettingsSection.session
-                : TacticsSettingsSection.selection,
             onChanged: session.setSessionSettings,
           ),
+          ...[
+            const Divider(height: 32),
+            const Text('Game downloads'),
+            HomeReviewSettingsDialog(
+              filters: games.filters,
+              window: games.window,
+              embedded: true,
+              onApply: (result) async {
+                await games.setFilters(result.filters, window: result.window);
+                runner.reset();
+              },
+            ),
+          ],
         ],
       ),
     );

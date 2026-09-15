@@ -5,6 +5,7 @@
 /// audit state survives app restarts.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -26,16 +27,21 @@ class AuditSnapshot {
   /// Whether this snapshot represents a completed audit.
   final bool isComplete;
 
+  /// Null audits the chapter root; otherwise resume the original subtree.
+  final String? startFen;
+
   const AuditSnapshot({
     required this.result,
     required this.config,
     this.checkedFens = const {},
     this.isComplete = true,
+    this.startFen,
   });
 
   Map<String, dynamic> toJson() => {
     'version': 2,
     'isComplete': isComplete,
+    if (startFen != null) 'startFen': startFen,
     'config': config.toMap(),
     'result': result.toJson(),
     if (!isComplete) 'checkedFens': checkedFens.toList(),
@@ -61,6 +67,7 @@ class AuditSnapshot {
           ? (j['checkedFens'] as List).cast<String>().toSet()
           : const {},
       isComplete: j['isComplete'] as bool? ?? true,
+      startFen: j['startFen'] as String?,
     );
   }
 }
@@ -68,6 +75,7 @@ class AuditSnapshot {
 class AuditPersistence {
   AuditPersistence._();
   static final instance = AuditPersistence._();
+  final Map<String, Future<void>> _writes = {};
 
   /// Derive the audit JSON path from the repertoire PGN path.
   String? auditPath(String? repertoireFilePath) {
@@ -85,6 +93,7 @@ class AuditPersistence {
       return null;
     }
     try {
+      await _writes[path];
       final exists = await StorageFactory.instance.fileExists(path);
       if (!exists) {
         debugPrint('[AuditPersistence] load: file not found at $path');
@@ -113,11 +122,13 @@ class AuditPersistence {
   Future<void> saveComplete(
     String? repertoireFilePath,
     AuditResult result,
-    AuditConfig config,
-  ) async {
+    AuditConfig config, {
+    String? startFen,
+  }) async {
     final snapshot = AuditSnapshot(
       result: result,
       config: config,
+      startFen: startFen,
       isComplete: true,
     );
     await _write(repertoireFilePath, snapshot);
@@ -128,12 +139,14 @@ class AuditPersistence {
     String? repertoireFilePath,
     AuditResult partialResult,
     AuditConfig config,
-    Set<String> checkedFens,
-  ) async {
+    Set<String> checkedFens, {
+    String? startFen,
+  }) async {
     final snapshot = AuditSnapshot(
       result: partialResult,
       config: config,
       checkedFens: checkedFens,
+      startFen: startFen,
       isComplete: false,
     );
     await _write(repertoireFilePath, snapshot);
@@ -149,8 +162,9 @@ class AuditPersistence {
     if (path == null) return;
 
     AuditConfig effectiveConfig = config ?? const AuditConfig();
+    AuditSnapshot? existing;
     try {
-      final existing = await load(repertoireFilePath);
+      existing = await load(repertoireFilePath);
       if (existing != null && config == null) {
         effectiveConfig = existing.config;
       }
@@ -161,7 +175,9 @@ class AuditPersistence {
     final snapshot = AuditSnapshot(
       result: result,
       config: effectiveConfig,
-      isComplete: true,
+      isComplete: existing?.isComplete ?? true,
+      checkedFens: existing?.checkedFens ?? const {},
+      startFen: existing?.startFen,
     );
     await _write(repertoireFilePath, snapshot);
   }
@@ -177,15 +193,19 @@ class AuditPersistence {
       );
       return;
     }
-    try {
-      final json = jsonEncode(snapshot.toJson());
-      await StorageFactory.instance.writeFile(path, json);
-      debugPrint(
-        '[AuditPersistence] saved ${snapshot.result.findings.length} '
-        'findings (complete=${snapshot.isComplete}) to $path',
-      );
-    } catch (e) {
-      debugPrint('[AuditPersistence] Failed to save: $e');
-    }
+    final storage = StorageFactory.instance;
+    final json = jsonEncode(snapshot.toJson());
+    final previous = _writes[path];
+    final write = () async {
+      await previous;
+      try {
+        await storage.writeFile(path, json);
+      } catch (e) {
+        debugPrint('[AuditPersistence] Failed to save: $e');
+      }
+    }();
+    _writes[path] = write;
+    await write;
+    if (identical(_writes[path], write)) unawaited(_writes.remove(path));
   }
 }

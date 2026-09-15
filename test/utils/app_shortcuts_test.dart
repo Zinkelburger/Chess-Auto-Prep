@@ -122,11 +122,15 @@ void main() {
         );
       }
     });
-    test('only essential chords remain in the active registry', () {
+    test('navigation and review chords remain in the active registry', () {
       final chords = AppShortcut.all.expand((s) => s.chords).toSet();
       expect(
         chords,
         unorderedEquals(const [
+          KeyChord(LogicalKeyboardKey.digit1),
+          KeyChord(LogicalKeyboardKey.digit2),
+          KeyChord(LogicalKeyboardKey.digit3),
+          KeyChord(LogicalKeyboardKey.digit4),
           KeyChord(LogicalKeyboardKey.arrowUp),
           KeyChord(LogicalKeyboardKey.arrowDown),
           KeyChord(LogicalKeyboardKey.arrowLeft),

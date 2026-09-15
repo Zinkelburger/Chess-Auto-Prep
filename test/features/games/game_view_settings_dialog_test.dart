@@ -41,14 +41,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(prefs.playback, isTrue);
     expect(prefs.autoDetectOpenings, isTrue);
-    await tester.ensureVisible(find.text('Auto-detect ECO and opening'));
-    await tester.tap(find.text('Auto-detect ECO and opening'));
+    await tester.ensureVisible(
+      find.text('Fill missing opening names and ECO codes'),
+    );
+    await tester.tap(find.text('Fill missing opening names and ECO codes'));
     await tester.pumpAndSettle();
     expect(prefs.autoDetectOpenings, isFalse);
     expect(find.byType(SettingsChoiceTile<double>), findsOneWidget);
-    await tester.ensureVisible(find.text('Restore simple defaults'));
+    await tester.ensureVisible(find.text('Reset game viewer preferences'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Restore simple defaults'));
+    await tester.tap(find.text('Reset game viewer preferences'));
     await tester.pumpAndSettle();
     expect(prefs.autoDetectOpenings, isTrue);
     expect(prefs.graph, isFalse);
@@ -57,4 +59,37 @@ void main() {
     expect(prefs.autoSave, isTrue);
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'reader placement and variation actions work without leaving Settings',
+    (tester) async {
+      tester.view.physicalSize = const Size(1100, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final actions = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: GameViewSettingsDialog(
+              preferences: const GameViewPreferences(),
+              onChanged: (_) {},
+              onFlip: () {},
+              onPerspective: (_) {},
+              embedded: true,
+              onReadingOptionChanged: actions.add,
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Top'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Middle').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Expand variations'));
+      await tester.tap(find.text('Fold deep variations'));
+      expect(actions, ['0.35', 'expand', 'fold']);
+      expect(find.byType(GameViewSettingsDialog), findsOneWidget);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

@@ -37,6 +37,23 @@ class _FakeAnalysisController extends GameAnalysisController {
   void cancel() {}
 }
 
+class _GatedOpeningController extends PgnViewerController {
+  _GatedOpeningController()
+    : super(
+        pgnWidgetController: PgnViewerWidgetController(),
+        analysisController: _FakeAnalysisController(),
+      );
+
+  final classificationStarted = Completer<void>();
+  final classificationFinished = Completer<void>();
+
+  @override
+  Future<void> classifyOpenings() async {
+    classificationStarted.complete();
+    await classificationFinished.future;
+  }
+}
+
 PgnGameEntry _game({String white = 'A', String black = 'B'}) {
   return PgnGameEntry(
     headers: {'White': white, 'Black': black},
@@ -117,6 +134,56 @@ void main() {
       expect(c.currentGameIndex, 0);
       expect(c.hasActiveFilters, isTrue);
       expect(c.currentPosition.fen, Chess.fromSetup(Setup.parseFen(fen)).fen);
+    },
+  );
+
+  test(
+    'reader opens and navigates while collection classification is pending',
+    () async {
+      final storage = _GatedStorage();
+      StorageFactory.instanceForTest = storage;
+      final c = _GatedOpeningController();
+      addTearDown(c.dispose);
+      final load = c.loadFile('/tmp/large.pgn', restoreSavedSlice: false);
+      await Future<void>.delayed(Duration.zero);
+      storage.reads['/tmp/large.pgn']!.complete(
+        List.generate(
+          1000,
+          (i) =>
+              '[Event "Game $i"]\n[White "A$i"]\n[Black "B$i"]\n\n1. e4 e5 *',
+        ).join('\n\n'),
+      );
+      await load;
+      await c.classificationStarted.future;
+      expect(c.isLoading, isFalse);
+      expect(c.isPreparingCollection, isTrue);
+      expect(c.allGames.length, 1000);
+      c.nextGame();
+      expect(c.currentGameIndex, 1);
+      c.closeFile();
+      c.classificationFinished.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(c.allGames, isEmpty);
+      expect(c.isPreparingCollection, isFalse);
+    },
+  );
+
+  test(
+    'manual flip survives next and previous games and a pasted game',
+    () async {
+      final c = _makeController();
+      addTearDown(c.dispose);
+      _seed(c, [_game(), _game()]);
+      c.toggleBoardFlipped();
+      c.nextGame();
+      await c.loadCurrentGame();
+      expect(c.boardFlipped, isTrue);
+      c.prevGame();
+      await c.loadCurrentGame();
+      expect(c.boardFlipped, isTrue);
+      await c.loadPgnContent('[Event "Another"]\n\n1. d4 d5 *');
+      expect(c.boardFlipped, isTrue);
+      c.closeFile();
     },
   );
 

@@ -48,11 +48,7 @@ class MasterGamesPromptBanner extends StatelessWidget {
               child: Text(
                 syncing
                     ? 'Downloading master games — ${service.status}'
-                    : 'Build repertoires on master games: download '
-                          'The Week in Chess (last $kMasterGamesDefaultYears '
-                          'years, ~3 GB) once and the generator uses '
-                          'titled-player practice, real model games and '
-                          '"improves on … in <game>" notes.',
+                    : 'Local master games · Download TWIC ($kMasterGamesDefaultYears years, ~3 GB)',
                 style: const TextStyle(fontSize: 13),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 2,

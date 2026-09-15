@@ -1,10 +1,6 @@
-/// Audit configuration panel — sources, thresholds, Start/Cancel, progress.
-///
-/// Lives in the right pane Audit tab. Triggers audits and reports results
-/// back to the screen via callbacks.
+/// Chapter audit configuration route: sources, scope and validated thresholds.
+/// Delegates execution to the session controller through onStart.
 library;
-
-import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,15 +8,10 @@ import '../../../models/bulk_analysis_settings.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../models/opening_tree.dart';
-import '../../../services/engine/engine_lifecycle.dart';
-import '../../../services/engine/stockfish_pool.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/engine/engine_gate.dart';
-import '../models/audit_finding.dart';
-import '../models/audit_result.dart';
 import '../services/audit_config.dart';
-import '../services/repertoire_audit_service.dart';
 import '../../../widgets/labeled_toggle.dart';
 import '../../../utils/movetext_builder.dart';
 import 'hunt_controls.dart';
@@ -32,14 +23,8 @@ class AuditConfigPanel extends StatefulWidget {
   final List<String> currentMoveSequence;
   final String? repertoireFilePath;
 
-  /// External service reference so pause/resume/cancel are accessible.
-  final RepertoireAuditService? auditService;
-
-  final void Function(bool auditing) onAuditingChanged;
-  final void Function(AuditResult result) onResultReady;
-  final void Function(AuditFinding finding)? onLiveFinding;
-  final void Function(int checked, int total)? onProgress;
-  final void Function(AuditConfig config)? onConfigChanged;
+  /// Configuration only: the session controller owns the run after this route closes.
+  final void Function(AuditConfig config, String? startFen) onStart;
 
   const AuditConfigPanel({
     super.key,
@@ -48,12 +33,7 @@ class AuditConfigPanel extends StatefulWidget {
     required this.currentFen,
     required this.currentMoveSequence,
     this.repertoireFilePath,
-    this.auditService,
-    required this.onAuditingChanged,
-    required this.onResultReady,
-    this.onLiveFinding,
-    this.onProgress,
-    this.onConfigChanged,
+    required this.onStart,
   });
 
   @override
@@ -61,10 +41,6 @@ class AuditConfigPanel extends StatefulWidget {
 }
 
 class AuditConfigPanelState extends State<AuditConfigPanel> {
-  RepertoireAuditService? _ownedService;
-  RepertoireAuditService get _service =>
-      widget.auditService ?? (_ownedService ??= RepertoireAuditService());
-
   final TextEditingController _mistakeCtrl = TextEditingController(text: '100');
   final TextEditingController _inaccuracyCtrl = TextEditingController(
     text: '40',
@@ -90,8 +66,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   final List<String> _clashPgnPaths = [];
 
   bool _isAuditing = false;
-  AuditProgress? _progress;
-  int _liveFindingCount = 0;
+  String? _validationError;
 
   bool get isAuditing => _isAuditing;
 
@@ -113,13 +88,6 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   }
 
   // ── Audit lifecycle ──────────────────────────────────────────────────
-
-  void cancelAudit() {
-    _service.cancel();
-    if (mounted) setState(() => _isAuditing = false);
-    widget.onAuditingChanged(false);
-    unawaited(EngineLifecycle.instance.exitGeneration());
-  }
 
   AuditConfig _buildConfig() {
     return AuditConfig(
@@ -156,56 +124,45 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     });
   }
 
-  Future<void> _startAudit() async {
-    if (widget.openingTree == null) return;
+  void _startAudit() {
+    if (_isAuditing || widget.openingTree == null) return;
+    final mistake = int.tryParse(_mistakeCtrl.text);
+    final inaccuracy = int.tryParse(_inaccuracyCtrl.text);
+    final depth = int.tryParse(_maxPlyCtrl.text);
+    final rating = int.tryParse(_maiaEloCtrl.text);
+    final probability = double.tryParse(_minMaiaProbCtrl.text);
+    final replyWindow = int.tryParse(_strongReplyWindowCtrl.text);
+    if (mistake == null ||
+        inaccuracy == null ||
+        inaccuracy < 0 ||
+        mistake <= inaccuracy ||
+        depth == null ||
+        depth < 1 ||
+        rating == null ||
+        rating < 1100 ||
+        rating > 2900 ||
+        probability == null ||
+        !probability.isFinite ||
+        probability < 0 ||
+        probability > 1 ||
+        replyWindow == null ||
+        replyWindow < 0) {
+      setState(
+        () => _validationError =
+            'Use positive whole-number depths, a Maia rating from 1100–2900, '
+            'probability from 0–1, and a mistake threshold above the inaccuracy threshold.',
+      );
+      return;
+    }
     if (!EngineGate.ensureAvailable(context)) return;
-
-    final config = _buildConfig();
-    widget.onConfigChanged?.call(config);
-
-    // Capture callbacks before the dialog potentially closes and unmounts us.
-    final onProgressCb = widget.onProgress;
-    final onLiveFindingCb = widget.onLiveFinding;
-    final onResultReadyCb = widget.onResultReady;
-    final onAuditingChangedCb = widget.onAuditingChanged;
-    final tree = widget.openingTree!;
-    final startFen = _auditSubtreeOnly ? widget.currentFen : null;
-    final isWhite = widget.isWhiteRepertoire;
-
     setState(() {
       _isAuditing = true;
-      _progress = null;
-      _liveFindingCount = 0;
+      _validationError = null;
     });
-    onAuditingChangedCb(true);
-
-    await EngineLifecycle.instance.enterGeneration(1);
-    await StockfishPool.instance.ensureWorkers(1);
-
-    try {
-      final result = await _service.audit(
-        tree: tree,
-        isWhiteRepertoire: isWhite,
-        config: config,
-        startFen: startFen,
-        onProgress: (p) {
-          if (mounted) setState(() => _progress = p);
-          onProgressCb?.call(p.nodesChecked, p.totalNodes);
-        },
-        onFinding: (f) {
-          if (mounted) setState(() => _liveFindingCount++);
-          onLiveFindingCb?.call(f);
-        },
-      );
-
-      if (mounted) setState(() => _isAuditing = false);
-      onResultReadyCb(result);
-    } catch (e) {
-      if (mounted) setState(() => _isAuditing = false);
-    } finally {
-      onAuditingChangedCb(false);
-      await EngineLifecycle.instance.exitGeneration();
-    }
+    widget.onStart(
+      _buildConfig(),
+      _auditSubtreeOnly ? widget.currentFen : null,
+    );
   }
 
   // ── Build ────────────────────────────────────────────────────────────
@@ -217,238 +174,224 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     final scopeLabel =
         _auditSubtreeOnly && widget.currentMoveSequence.isNotEmpty
         ? 'Subtree from ${_moveSequenceLabel(widget.currentMoveSequence)}'
-        : 'Full repertoire';
+        : 'Current chapter';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Scope toggle + label
-          Row(
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.account_tree_outlined,
-                size: 14,
-                color: AppColors.onSurfaceMuted,
+              // Scope toggle + label
+              Row(
+                children: [
+                  const Icon(
+                    Icons.account_tree_outlined,
+                    size: 14,
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(scopeLabel, style: AppTextStyles.caption),
+                  const Spacer(),
+                  AppCheckbox(
+                    label: 'Subtree only',
+                    value: _auditSubtreeOnly,
+                    onChanged: (v) {
+                      if (!mounted) return;
+                      setState(() => _auditSubtreeOnly = v);
+                    },
+                    enabled: !_isAuditing,
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              Text(scopeLabel, style: AppTextStyles.caption),
-              const Spacer(),
-              AppCheckbox(
-                label: 'Subtree only',
-                value: _auditSubtreeOnly,
-                onChanged: (v) => setState(() => _auditSubtreeOnly = v),
-                enabled: !_isAuditing,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-          // Uses Stockfish + Maia (always on); ChessDB is optional.
-          Row(
-            children: [
-              const Icon(
-                Icons.memory,
-                size: 13,
-                color: AppColors.onSurfaceMuted,
+              // Uses Stockfish + Maia (always on); ChessDB is optional.
+              Row(
+                children: [
+                  const Icon(
+                    Icons.memory,
+                    size: 13,
+                    color: AppColors.onSurfaceMuted,
+                  ),
+                  const SizedBox(width: 4),
+                  const Text('Stockfish + Maia', style: AppTextStyles.caption),
+                  const Spacer(),
+                  AppCheckbox(
+                    label: 'ChessDB replies',
+                    value: _useChessDb,
+                    onChanged: (v) {
+                      if (!mounted) return;
+                      setState(() => _useChessDb = v);
+                    },
+                    enabled: !_isAuditing,
+                    tooltip:
+                        'Flags uncovered opponent replies ChessDB scores close '
+                        'to their best, played or not. Needs the network.',
+                  ),
+                ],
               ),
-              const SizedBox(width: 4),
-              const Text('Stockfish + Maia', style: AppTextStyles.caption),
-              const Spacer(),
-              AppCheckbox(
-                label: 'ChessDB replies',
-                value: _useChessDb,
-                onChanged: (v) => setState(() => _useChessDb = v),
-                enabled: !_isAuditing,
-                tooltip:
-                    'Flags uncovered opponent replies ChessDB scores close '
-                    'to their best, played or not. Needs the network.',
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-          // Key thresholds
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _numField(
-                _maxPlyCtrl,
-                'Max depth (half-moves)',
-                tooltip:
-                    'How far into each line the audit walks, counted in '
-                    'half-moves from the start position.',
+              // Key thresholds
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _numField(
+                    _maxPlyCtrl,
+                    'Max depth (half-moves)',
+                    tooltip:
+                        'How far into each line the audit walks, counted in '
+                        'half-moves from the start position.',
+                  ),
+                  _numField(
+                    _maiaEloCtrl,
+                    'Maia rating',
+                    tooltip:
+                        'Playing strength of the Maia human model predicting '
+                        'opponent replies.',
+                  ),
+                ],
               ),
-              _numField(
-                _maiaEloCtrl,
-                'Maia rating',
-                tooltip:
-                    'Playing strength of the Maia human model predicting '
-                    'opponent replies.',
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-          DisclosureHeader(
-            label: 'More thresholds',
-            expanded: _showAdvanced,
-            onToggle: () => setState(() => _showAdvanced = !_showAdvanced),
-          ),
-          if (_showAdvanced) ...[
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _numField(
-                  _mistakeCtrl,
-                  'Mistake threshold (centipawns)',
-                  tooltip:
-                      'Eval loss versus the engine best move for a '
-                      'repertoire move to count as a mistake.',
-                ),
-                _numField(
-                  _inaccuracyCtrl,
-                  'Inaccuracy threshold (centipawns)',
-                  tooltip:
-                      'Eval loss versus the engine best move for a '
-                      'repertoire move to count as an inaccuracy.',
-                ),
-                _numField(
-                  _minMaiaProbCtrl,
-                  'Minimum Maia probability',
-                  tooltip:
-                      'Opponent replies predicted below this probability '
-                      '(0 to 1) are not checked.',
-                ),
-                _numField(
-                  _strongReplyWindowCtrl,
-                  'Strong reply window (centipawns)',
-                  tooltip:
-                      'An uncovered opponent reply is flagged when Stockfish '
-                      'or ChessDB scores it within this many centipawns of '
-                      'their best move.',
+              DisclosureHeader(
+                label: 'More thresholds',
+                expanded: _showAdvanced,
+                onToggle: () {
+                  if (!mounted) return;
+                  setState(() => _showAdvanced = !_showAdvanced);
+                },
+              ),
+              if (_showAdvanced) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _numField(
+                      _mistakeCtrl,
+                      'Mistake threshold (centipawns)',
+                      tooltip:
+                          'Eval loss versus the engine best move for a '
+                          'repertoire move to count as a mistake.',
+                    ),
+                    _numField(
+                      _inaccuracyCtrl,
+                      'Inaccuracy threshold (centipawns)',
+                      tooltip:
+                          'Eval loss versus the engine best move for a '
+                          'repertoire move to count as an inaccuracy.',
+                    ),
+                    _numField(
+                      _minMaiaProbCtrl,
+                      'Minimum Maia probability',
+                      tooltip:
+                          'Opponent replies predicted below this probability '
+                          '(0 to 1) are not checked.',
+                    ),
+                    _numField(
+                      _strongReplyWindowCtrl,
+                      'Strong reply window (centipawns)',
+                      tooltip:
+                          'An uncovered opponent reply is flagged when Stockfish '
+                          'or ChessDB scores it within this many centipawns of '
+                          'their best move.',
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-          const SizedBox(height: 10),
+              const SizedBox(height: 10),
 
-          // Repertoire Clashes
-          Row(
-            children: [
-              const Icon(
-                Icons.menu_book_outlined,
-                size: 14,
-                color: AppColors.onSurfaceMuted,
-              ),
-              const SizedBox(width: 6),
-              const Text('Repertoire Clashes', style: AppTextStyles.caption),
-              const Spacer(),
-              SizedBox(
-                height: 26,
-                child: TextButton.icon(
-                  onPressed: _isAuditing ? null : _addClashPgns,
-                  icon: const Icon(Icons.add, size: 14),
-                  label: const Text('Add PGN', style: TextStyle(fontSize: 12)),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero,
-                    visualDensity: VisualDensity.compact,
+              // Repertoire Clashes
+              Row(
+                children: [
+                  const Icon(
+                    Icons.menu_book_outlined,
+                    size: 14,
+                    color: AppColors.onSurfaceMuted,
                   ),
-                ),
-              ),
-            ],
-          ),
-          if (_clashPgnPaths.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: [
-                for (int i = 0; i < _clashPgnPaths.length; i++)
-                  InputChip(
-                    label: Text(
-                      p.basenameWithoutExtension(_clashPgnPaths[i]),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    deleteIcon: const Icon(Icons.close, size: 14),
-                    onDeleted: _isAuditing
-                        ? null
-                        : () => setState(() => _clashPgnPaths.removeAt(i)),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Repertoire Clashes',
+                    style: AppTextStyles.caption,
                   ),
-              ],
-            ),
-          ] else
-            const Padding(
-              padding: EdgeInsets.only(left: 20),
-              child: Text(
-                'Check against book & course lines',
-                style: AppTextStyles.caption,
-              ),
-            ),
-          const SizedBox(height: 10),
-
-          // Start / Cancel + progress
-          Row(
-            children: [
-              if (!_isAuditing)
-                FilledButton.icon(
-                  onPressed: widget.openingTree == null ? null : _startAudit,
-                  icon: const Icon(Icons.play_arrow, size: 16),
-                  label: const Text('Start', style: TextStyle(fontSize: 13)),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    minimumSize: Size.zero,
-                  ),
-                )
-              else
-                FilledButton.tonalIcon(
-                  onPressed: cancelAudit,
-                  icon: const Icon(Icons.stop, size: 16),
-                  label: const Text('Cancel', style: TextStyle(fontSize: 13)),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    minimumSize: Size.zero,
-                  ),
-                ),
-              if (_isAuditing && _progress != null) ...[
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      LinearProgressIndicator(
-                        value: _progress!.totalNodes > 0
-                            ? _progress!.nodesChecked / _progress!.totalNodes
-                            : null,
+                  const Spacer(),
+                  SizedBox(
+                    height: 26,
+                    child: TextButton.icon(
+                      onPressed: _isAuditing ? null : _addClashPgns,
+                      icon: const Icon(Icons.add, size: 14),
+                      label: const Text(
+                        'Add PGN',
+                        style: TextStyle(fontSize: 12),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${_progress!.nodesChecked}/${_progress!.totalNodes} · '
-                        '$_liveFindingCount findings',
-                        style: AppTextStyles.caption,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                        visualDensity: VisualDensity.compact,
                       ),
-                    ],
+                    ),
+                  ),
+                ],
+              ),
+              if (_clashPgnPaths.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (int i = 0; i < _clashPgnPaths.length; i++)
+                      InputChip(
+                        label: Text(
+                          p.basenameWithoutExtension(_clashPgnPaths[i]),
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        deleteIcon: const Icon(Icons.close, size: 14),
+                        onDeleted: _isAuditing
+                            ? null
+                            : () {
+                                if (!mounted) return;
+                                setState(() => _clashPgnPaths.removeAt(i));
+                              },
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                      ),
+                  ],
+                ),
+              ] else
+                const Padding(
+                  padding: EdgeInsets.only(left: 20),
+                  child: Text(
+                    'Check against book & course lines',
+                    style: AppTextStyles.caption,
                   ),
                 ),
+              const SizedBox(height: 10),
+
+              if (_validationError != null) ...[
+                Text(
+                  _validationError!,
+                  style: const TextStyle(color: AppColors.danger),
+                ),
+                const SizedBox(height: 8),
               ],
+              FilledButton.icon(
+                onPressed: _isAuditing || widget.openingTree == null
+                    ? null
+                    : _startAudit,
+                icon: const Icon(Icons.policy_outlined, size: 18),
+                label: Text(_isAuditing ? 'Starting…' : 'Start audit'),
+              ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

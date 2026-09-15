@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/repertoire_controller.dart';
-import '../../models/build_tree_node.dart' show BuildTreeNode;
 import '../../models/line_status.dart';
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_metadata.dart';
@@ -131,8 +130,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Empty when no tree.json exists for the repertoire.
   Map<String, double> playabilityMap = {};
 
-  BuildTreeNode? _treeRoot;
-  bool? _treeIsWhite;
+  String loadingStatus = 'Reading repertoire…';
 
   // -- Training state --
   List<RepertoireLine> dueQueue = [];
@@ -236,6 +234,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   @override
   void dispose() {
+    _loadGeneration++;
     _lineGeneration++;
     learn.cancelPending();
     // Get the session's schedules into the PGN before the timer that would
@@ -355,6 +354,8 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     run.clear();
     final loadIsStudy = sourceIsStudy;
     isLoading = true;
+    loadingStatus = 'Reading repertoire…';
+    playabilityMap = {};
     error = null;
     feedback = null;
     notifyListeners();
@@ -391,6 +392,8 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
                     subject: source.filePath,
                   )
                 : null);
+        loadingStatus = 'Preparing lines in ${source.name}…';
+        notifyListeners();
         final parsed = await repertoireService.parseRepertoireFile(
           source.filePath,
           trainingColor: sourceColor == null
@@ -407,7 +410,19 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
               .where((e) => e.repertoireId == source.filePath)
               .toList(),
         );
-        await reviewService.saveAll(merged, repertoireId: source.filePath);
+        loadingStatus = 'Restoring review progress…';
+        notifyListeners();
+        final previous = allEntries
+            .where((entry) => entry.repertoireId == source.filePath)
+            .map((entry) => entry.toCsvRow())
+            .toList();
+        if (!listEquals(
+          previous,
+          merged.map((entry) => entry.toCsvRow()).toList(),
+        )) {
+          await reviewService.saveAll(merged, repertoireId: source.filePath);
+        }
+        if (generation != _loadGeneration) return;
         final entriesById = {for (final e in merged) e.lineId: e};
         for (final line in parsed) {
           final scoped = folder
@@ -442,13 +457,14 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
             .toList(),
       );
 
-      if (loadIsStudy || folder) {
-        // No generated tree for studies — clear any repertoire leftovers.
-        _treeRoot = null;
-        _treeIsWhite = null;
-        playabilityMap = {};
-      } else {
-        await _loadTreeAndComputePlayability(filePath, parsedLines);
+      // Difficulty is optional builder metadata. Only the difficulty sort
+      // needs it before the first queue can be displayed.
+      if (!loadIsStudy &&
+          !folder &&
+          settings.reviewOrder == ReviewOrder.hardestFirst) {
+        loadingStatus = 'Preparing difficulty order…';
+        notifyListeners();
+        await _loadTreeAndComputePlayability(filePath, parsedLines, generation);
         if (generation != _loadGeneration) return;
       }
 
@@ -461,6 +477,13 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       }
       dueQueue = _buildQueue();
       notifyListeners();
+      if (!loadIsStudy &&
+          !folder &&
+          settings.reviewOrder != ReviewOrder.hardestFirst) {
+        unawaited(
+          _loadTreeAndComputePlayability(filePath, parsedLines, generation),
+        );
+      }
 
       // Land on the line browser; only jump straight into a line when the
       // caller asked for one (e.g. "Train this line" from the Builder).
@@ -484,35 +507,25 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   Future<void> _loadTreeAndComputePlayability(
     String filePath,
     List<RepertoireLine> parsedLines,
+    int generation,
   ) async {
-    _treeRoot = null;
-    _treeIsWhite = null;
-    playabilityMap = {};
-
-    final base = p.withoutExtension(filePath);
-    final treePath = '${base}_tree.json';
+    final treePath = '${p.withoutExtension(filePath)}_tree.json';
     final storage = StorageFactory.instance;
-
     try {
       if (!await storage.fileExists(treePath)) return;
       final json = await storage.readFile(treePath);
-      if (json == null || json.isEmpty) return;
-
-      // Multi-MB jsonDecode + recursive node build — off the UI isolate so
-      // opening the trainer doesn't freeze the frame.
-      final tree = await Isolate.run(() => deserializeTree(json));
-      _treeRoot = tree.root;
-
-      final config = tree.configSnapshot;
-      _treeIsWhite = config['play_as_white'] as bool? ?? true;
-
-      for (final line in parsedLines) {
-        final linePath = walkTreeForLine(_treeRoot!, line.moves);
-        if (linePath.length < 2) continue;
-
-        final lp = computeLinePlayability(linePath, _treeIsWhite!);
-        playabilityMap[line.id] = lp.playability;
-      }
+      if (json == null || json.isEmpty || generation != _loadGeneration) return;
+      final linePaths = [
+        for (final line in parsedLines) (id: line.id, moves: line.moves),
+      ];
+      // Keep both the tree walk and the large tree object off the UI isolate.
+      final scores = await Isolate.run(
+        () => _playabilityScores(json, linePaths),
+      );
+      if (generation != _loadGeneration) return;
+      playabilityMap = scores;
+      if (!isLoading && currentLine == null) dueQueue = _buildQueue();
+      notifyListeners();
     } catch (e) {
       debugPrint('[TrainingController] Failed to load tree: $e');
     }
@@ -1153,7 +1166,19 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  bool _ratingInFlight = false;
+
   Future<void> rateLine(ReviewRating rating) async {
+    if (_ratingInFlight) return;
+    _ratingInFlight = true;
+    try {
+      await _recordLineRating(rating);
+    } finally {
+      _ratingInFlight = false;
+    }
+  }
+
+  Future<void> _recordLineRating(ReviewRating rating) async {
     final line = currentLine;
     if (line == null) return;
     // Linear mode has no ratings — completion was recorded in _finishLine;
@@ -1273,4 +1298,18 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       }),
     );
   }
+}
+
+Map<String, double> _playabilityScores(
+  String json,
+  List<({String id, List<String> moves})> lines,
+) {
+  final tree = deserializeTree(json);
+  final isWhite = tree.configSnapshot['play_as_white'] as bool? ?? true;
+  return {
+    for (final line in lines)
+      if (walkTreeForLine(tree.root, line.moves) case final path
+          when path.length >= 2)
+        line.id: computeLinePlayability(path, isWhite).playability,
+  };
 }

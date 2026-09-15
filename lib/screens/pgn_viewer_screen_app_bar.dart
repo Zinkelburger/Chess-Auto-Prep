@@ -255,10 +255,12 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
     onFlip: _controller.toggleBoardFlipped,
     onPerspective: _controller.setPerspective,
     player: _controller.detectProtagonist(),
-    onReadingOptions: _controller.filteredGames.isEmpty
+    readingAnchor: (_onLineTab ? _lineWidgetController : _pgnWidgetController)
+        .readingAnchor,
+    onReadingOptionChanged: _controller.filteredGames.isEmpty
         ? null
         : (_onLineTab ? _lineWidgetController : _pgnWidgetController)
-              .showReadingOptions,
+              .applyReadingOption,
     onFullscreen:
         _controller.filteredGames.isNotEmpty && !_onLineTab && !_onReferenceTab
         ? _controller.toggleFullScreen

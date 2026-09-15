@@ -43,18 +43,18 @@ void main() {
       },
     );
 
-    test('mode menu preserves earlier destinations', () {
+    test('mode menu starts a fresh trail', () {
       final (state, history) = build();
       state.switchToPgnViewer(path: '/g.pgn');
       state.switchToBuilder(repertoirePath: '/r.pgn');
       expect(history.entries, hasLength(3));
 
       state.setMode(AppMode.study);
-      expect(history.entries, hasLength(4));
-      expect(history.entries.last.label, 'Study');
-      expect(history.canGoBack, isTrue);
+      expect(history.entries, hasLength(1));
+      expect(history.entries.single.label, 'Study');
+      expect(history.canGoBack, isFalse);
       history.back();
-      expect(state.currentMode, AppMode.repertoire);
+      expect(state.currentMode, AppMode.study);
     });
 
     test('pushMode pushes a payload-free crumb instead of resetting', () {
@@ -113,7 +113,7 @@ void main() {
         state.takeHandoff<OpenPgnViewer>();
         selectedGame = 12;
         selectedPly = 17;
-        state.setMode(AppMode.tactics);
+        state.pushMode(AppMode.tactics, historyLabel: 'Tactics');
         state.switchToPgnViewer(path: '/second.pgn');
         state.takeHandoff<OpenPgnViewer>();
         selectedGame = 1;
@@ -139,7 +139,7 @@ void main() {
         state.switchToPgnViewer(path: '/first.pgn');
         state.takeHandoff<OpenPgnViewer>();
         cursor = 17;
-        state.setMode(AppMode.tactics);
+        state.pushMode(AppMode.tactics, historyLabel: 'Tactics');
         state.switchToPgnViewer(path: '/second.pgn');
         state.takeHandoff<OpenPgnViewer>();
         cursor = 2;
@@ -163,7 +163,7 @@ void main() {
       );
       state.switchToPgnViewer(path: '/first.pgn');
       state.takeHandoff<OpenPgnViewer>();
-      state.setMode(AppMode.tactics);
+      state.pushMode(AppMode.tactics, historyLabel: 'Tactics');
       state.switchToPgnViewer(path: '/second.pgn');
       state.takeHandoff<OpenPgnViewer>();
       final before = history.entries;
@@ -190,11 +190,12 @@ void main() {
       expect(history.length, 2);
     });
 
-    test('reselecting the current mode does not add a duplicate', () {
+    test('reselecting the current mode keeps a single root', () {
       final (state, history) = build();
+      state.pushMode(AppMode.study, historyLabel: 'Study');
       state.setMode(AppMode.study);
       state.setMode(AppMode.study);
-      expect(history.length, 2);
+      expect(history.length, 1);
     });
 
     test('re-delivery does not re-record itself as a new crumb', () {

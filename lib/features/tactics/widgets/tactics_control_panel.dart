@@ -21,7 +21,6 @@ import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
 import '../../../widgets/common/confirm_dialog.dart';
 import '../../../widgets/engine/inline_engine_bar.dart';
-import '../../../widgets/trainer_keyboard_scope.dart';
 import '../../../widgets/pgn_viewer_widget.dart';
 import '../../../widgets/pgn_with_engine.dart';
 import 'tactics_board_bridge.dart';
@@ -80,10 +79,6 @@ abstract class _TacticsControlPanelStateBase extends State<TacticsControlPanel>
   /// What this panel does for the session controller and its sibling widgets
   /// (see [TacticsPanelHooks]); attached on mount, detached on dispose.
   late final TacticsPanelHooks _panelHooks;
-
-  /// Tracks opponent-waiting state to detect when it's the user's turn again
-  /// in multi-move puzzles (so we can refocus the move input).
-  bool _wasWaitingForOpponent = false;
 
   /// Tracks solution visibility so the reveal jump fires on the press that
   /// reveals it, not on every subsequent session notification.
@@ -145,9 +140,7 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
       // The Study-tactics button lives in the left pane, beside Review games;
       // setting a puzzle up is still this panel's job.
       start: () => _onStartSession(_session.sessionSettings),
-      // Navigation keys pressed while the move-input field owns focus come
-      // back here — the field is a focus-tree sibling, so they cannot bubble.
-      navigationKey: _handleTrainerNavigationKey,
+      keyBindings: () => _session.currentPosition == null ? [] : _keyBindings,
     );
     _session.attachPanel(_panelHooks);
     _session.addListener(_onSessionChanged);
@@ -247,23 +240,6 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
       }
       _wasShowingSolution = showingSolution;
 
-      // Auto-blur move input when puzzle is resolved or solution is shown.
-      if (_session.positionSolved || _session.showSolution) {
-        TacticsControlPanel.moveInputKey.currentState?.unfocus();
-        _focusNode.requestFocus();
-      }
-
-      // Refocus move input when the opponent finishes moving in a multi-move
-      // puzzle, or when the engine has finished judging a move and the
-      // answer was "not this one" — either way it is the user's turn again.
-      if (_wasWaitingForOpponent &&
-          !_session.inputLocked &&
-          !_session.positionSolved &&
-          !_session.showSolution) {
-        TacticsControlPanel.moveInputKey.currentState?.focus();
-      }
-      _wasWaitingForOpponent = _session.inputLocked;
-
       setState(() {});
     }
   }
@@ -292,15 +268,8 @@ class _TacticsControlPanelState extends _TacticsControlPanelStateBase
 
   @override
   Widget build(BuildContext context) {
-    // holdsFocus: the panel keeps keyboard focus for its navigation shortcuts
-    // and hands focus to the move input when typing is wanted. While the move
-    // input owns focus, keys that navigate the trainer (Space, arrows, and J)
-    // are routed back here through _handleTrainerNavigationKey — the
-    // field is a focus-tree sibling, so they can't bubble to _handleKeyEvent.
-    return TrainerKeyboardScope(
-      holdsFocus: true,
+    return Focus(
       focusNode: _focusNode,
-      onKeyEvent: _handleKeyEvent,
       child: Column(
         children: [
           if (_database.isExternalSet) _buildReviewBanner(),

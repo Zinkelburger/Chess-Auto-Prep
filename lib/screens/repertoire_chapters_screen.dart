@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../models/repertoire_metadata.dart';
 import '../widgets/chapter_list_body.dart';
+import '../widgets/common/item_title.dart';
 
 class RepertoireChaptersScreen extends StatelessWidget {
   final RepertoireMetadata repertoire;
@@ -20,7 +21,7 @@ class RepertoireChaptersScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: Text(repertoire.name),
+        title: ItemTitle(repertoire.name, maxLines: 1),
         actions: [
           IconButton(
             tooltip: 'Back',

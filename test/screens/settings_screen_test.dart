@@ -1,11 +1,7 @@
 import 'package:chess_auto_prep/core/app_state.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
-import 'package:chess_auto_prep/widgets/training/training_settings_panel.dart';
 import 'package:chess_auto_prep/models/board_display_settings.dart';
 import 'package:chess_auto_prep/models/engine_settings.dart';
-import 'package:chess_auto_prep/models/eval_database_settings.dart';
 import 'package:chess_auto_prep/screens/settings_screen.dart';
-import 'package:chess_auto_prep/widgets/settings/settings_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -32,79 +28,67 @@ void main() {
   }
 
   Future<void> selectGlobal(WidgetTester tester, Finder finder) async {
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, 1400));
+    await tester.drag(
+      find.descendant(
+        of: find.byKey(const Key('settings-navigation')),
+        matching: find.byType(Scrollable),
+      ),
+      const Offset(0, 1400),
+    );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       finder,
       180,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('settings-navigation')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.ensureVisible(finder);
     await tester.pumpAndSettle();
     await tester.tap(finder);
   }
 
-  testWidgets('trainer chapters stay inside one shared settings shell', (
+  testWidgets('flat sections preserve drafts and do not switch workspaces', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(1280, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    final settings = TrainingSettings();
-    await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => AppState(),
-        child: MaterialApp(
-          home: SettingsScreen(
-            initialMode: AppMode.repertoireTrainer,
-            viewContentBuilder: (_) => TrainingSettingsPanel(
-              settings: settings,
-              trainingMode: TrainingMode.repertoire,
-              repetitionMode: RepetitionMode.spaced,
-              onQueueSettingsChanged: () {},
-              onSettingsChanged: () {},
-              onTrainingModeChanged: (_) {},
-              onRepetitionModeChanged: (_) {},
-            ),
-          ),
-        ),
-      ),
+    await pumpSettings(tester, const Size(1280, 720));
+    final app = tester.element(find.byType(SettingsScreen)).read<AppState>();
+    final origin = app.currentMode;
+    expect(find.text('VIEWS'), findsNothing);
+    expect(find.text('GLOBAL'), findsNothing);
+    await tester.enterText(
+      find.byKey(const Key('lichess-username-field')),
+      'draft-name',
     );
+    await tester.tap(find.byKey(const Key('settings-nav-3')));
     await tester.pumpAndSettle();
-    expect(find.text('New lines'), findsOneWidget);
-    expect(find.byKey(const Key('training-settings-nav-0')), findsNothing);
-    expect(find.byKey(const Key('settings-view-tactics')), findsOneWidget);
-    await tester.enterText(find.byKey(const ValueKey('New lines')), '12');
+    expect(find.text('Board analysis depth'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settings-view-repertoireTrainer')));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('settings-chapter-repertoireTrainer-1')),
+    expect(app.currentMode, origin);
+    expect(find.text('Loading settings…'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settings-nav-0')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('lichess-username-field')))
+          .controller!
+          .text,
+      'draft-name',
     );
+    expect(app.lichessUsername, isNull);
+    await tester.tap(find.byKey(const Key('accounts-save-button')));
     await tester.pumpAndSettle();
-    expect(find.text('New lines'), findsNothing);
-    expect(find.byKey(const Key('training-depth')), findsOneWidget);
-    await tester.tap(
-      find.byKey(const Key('settings-chapter-repertoireTrainer-2')),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('training-depth')), findsNothing);
-    await tester.tap(
-      find.byKey(const Key('settings-chapter-repertoireTrainer-0')),
-    );
-    await tester.pumpAndSettle();
-    expect((await TrainingSettings.load()).newLinesPerSession, 12);
-    expect(find.text('12'), findsOneWidget);
+    expect(app.lichessUsername, 'draft-name');
+    expect(find.byType(AlertDialog), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Study settings control its board engine without table options', (
-    tester,
-  ) async {
+  testWidgets('Study gear lands on shared analysis controls', (tester) async {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final settings = EngineSettings.instance;
-    final depth = settings.depth;
-    addTearDown(() => settings.depth = depth);
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => AppState(),
@@ -114,47 +98,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Study › Engine'), findsOneWidget);
-    expect(find.text('Board depth'), findsOneWidget);
-    expect(find.text('Lines'), findsOneWidget);
-    expect(find.text('Show Maia % column'), findsNothing);
-    expect(find.text('Expectimax'), findsNothing);
-    expect(find.text('Bulk depth'), findsNothing);
-    await tester.enterText(
-      find.descendant(
-        of: find.byKey(const Key('engine-board-depth')),
-        matching: find.byType(TextField),
-      ),
-      '18',
-    );
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pumpAndSettle();
-    expect(settings.depth, 18);
-    await tester.tap(find.byKey(const Key('settings-chapter-study-1')));
-    await tester.pumpAndSettle();
-    expect(find.text('Board coordinates'), findsOneWidget);
-    expect(find.byKey(const Key('display-preview-board')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('navigation shows one section and preserves account edits', (
-    tester,
-  ) async {
-    await pumpSettings(tester, const Size(1280, 720));
-    expect(find.text('Your chess usernames'), findsOneWidget);
-    expect(find.text('CPU cores'), findsNothing);
-    await tester.tap(find.text('Use a personal access token instead'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'unsaved-token');
-
-    await selectGlobal(tester, find.byKey(const Key('settings-nav-3')));
-    await tester.pumpAndSettle();
-    expect(find.text('Cores'), findsOneWidget);
-    expect(find.text('Your chess usernames'), findsNothing);
-
-    await selectGlobal(tester, find.byKey(const Key('settings-nav-0')));
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextField, 'unsaved-token'), findsOneWidget);
+    expect(find.text('Board analysis depth'), findsOneWidget);
+    expect(find.byKey(const Key('settings-chapter-study-0')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -194,7 +139,10 @@ void main() {
     await tester.scrollUntilVisible(
       find.byKey(const Key('settings-nav-5')),
       60,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('settings-navigation')),
+        matching: find.byType(Scrollable),
+      ),
     );
     await tester.ensureVisible(find.byKey(const Key('settings-nav-5')));
     await tester.pumpAndSettle();
@@ -212,93 +160,38 @@ void main() {
     final cores = EngineSettings.instance.cores;
     await tester.tap(find.text('Reset settings…'));
     await tester.pumpAndSettle();
-    expect(find.text('Reset Settings'), findsOneWidget);
+    expect(
+      find.text('Reset analysis, board and data preferences?'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(EngineSettings.instance.cores, cores);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'narrow windows expose every category and usable engine controls',
-    (tester) async {
-      await pumpSettings(tester, const Size(400, 640));
-      for (final section in [
-        'Display',
-        'Repertoires',
-        'Engine',
-        'Data',
-        'About',
-        'Keyboard shortcuts',
-        'Accounts',
-      ]) {
-        // The picker is a text box: type part of the name, Enter takes the
-        // top match.
-        await tester.enterText(
-          find.byKey(const Key('settings-section-picker')),
-          'Global · $section',
-        );
-        await tester.pumpAndSettle();
-        await tester.testTextInput.receiveAction(TextInputAction.done);
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull, reason: section);
-        if (section == 'Engine') {
-          expect(find.text('Cores'), findsOneWidget);
-          expect(find.text('Memory (MB)'), findsOneWidget);
-          expect(find.text('Board depth'), findsOneWidget);
-          expect(find.text('Bulk depth'), findsOneWidget);
-          expect(find.text('Search'), findsNothing);
-          expect(find.text('Review performance'), findsNothing);
-          expect(find.byKey(const Key('settings-nav-7')), findsNothing);
-          expect(find.byType(SettingsStepperTile), findsOneWidget);
-        }
-      }
-    },
-  );
-
-  testWidgets(
-    'data preferences persist and the databases link returns to the app',
-    (tester) async {
-      final app = AppState();
-      addTearDown(app.dispose);
-      await tester.pumpWidget(
-        ChangeNotifierProvider<AppState>.value(
-          value: app,
-          child: MaterialApp(
-            home: Builder(
-              builder: (context) => Scaffold(
-                body: TextButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const SettingsScreen(),
-                    ),
-                  ),
-                  child: const Text('Open settings'),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('Open settings'));
-      await tester.pumpAndSettle();
-      await selectGlobal(tester, find.byKey(const Key('settings-nav-4')));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Years of games'), findsNothing);
-      expect(find.textContaining('ChessDB data directory'), findsNothing);
-      final settings = EvalDatabaseSettings.instance;
-      final before = settings.chessDbApiForExpectimax;
-      await tester.tap(find.byType(Switch));
-      await tester.pumpAndSettle();
-      expect(settings.chessDbApiForExpectimax, !before);
-      await settings.setChessDbApiForExpectimax(before);
-      await tester.tap(find.text('Open Databases'));
-      await tester.pumpAndSettle();
-      expect(find.byType(SettingsScreen), findsNothing);
-      expect(app.currentMode, AppMode.databases);
-    },
-  );
+  testWidgets('narrow settings find sections by control name', (tester) async {
+    await pumpSettings(tester, const Size(400, 700));
+    final search = find.widgetWithText(TextField, 'Find a setting');
+    await tester.enterText(search, 'memory');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings-nav-3')));
+    await tester.pumpAndSettle();
+    final field = find.descendant(
+      of: find.byKey(const Key('engine-board-depth')),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(field, '19');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(EngineSettings.instance.depth, 19);
+    await tester.enterText(search, 'coordinates');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings-nav-1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('display-preview-board')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('display preferences change the live preview and persist', (
     tester,

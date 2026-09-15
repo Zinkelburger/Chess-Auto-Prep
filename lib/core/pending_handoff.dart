@@ -19,6 +19,7 @@
 library;
 
 import 'app_state.dart' show AppMode;
+import '../models/analysis_player_info.dart';
 
 sealed class PendingHandoff {
   const PendingHandoff();
@@ -46,9 +47,13 @@ final class OpenBuilder extends PendingHandoff {
     this.lineId,
     this.moveSequence,
     this.generationPgnPaths,
+    this.reloadFromDisk = false,
   });
 
   final String repertoirePath;
+
+  /// Material management may have changed this file while Builder was parked.
+  final bool reloadFromDisk;
 
   /// Line to focus once the repertoire is loaded.
   final String? lineId;
@@ -221,4 +226,16 @@ final class OpenEngineTournament extends PendingHandoff {
   @override
   String get defaultHistoryLabel =>
       tournamentId == null ? 'Engine tournament' : 'Tournament: $tournamentId';
+}
+
+/// Open a saved player's games in the canonical analysis workspace.
+final class OpenPlayerAnalysis extends PendingHandoff {
+  const OpenPlayerAnalysis(this.player);
+  final AnalysisPlayerInfo player;
+
+  @override
+  AppMode get targetMode => AppMode.positionAnalysis;
+
+  @override
+  String get defaultHistoryLabel => 'Player: ${player.displayName}';
 }

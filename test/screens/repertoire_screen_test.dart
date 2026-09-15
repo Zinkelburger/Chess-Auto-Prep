@@ -11,7 +11,10 @@
 /// way the rest of the app does: an [AppState] handoff.
 library;
 
+import 'dart:async';
 import 'dart:io';
+import 'package:chess_auto_prep/widgets/pgn_with_analysis_pane.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
@@ -23,7 +26,10 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/features/repertoire/widgets/repertoire_loading_frame.dart';
 import 'package:chess_auto_prep/screens/repertoire_screen.dart';
+import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 
 import '../support/board_engine_fixture.dart';
 
@@ -120,6 +126,10 @@ void main() {
   late Directory storageRoot;
   late PathProviderPlatform originalPaths;
   setUp(() async {
+    // The storage service serializes directory counts through a Future tail.
+    // A tail created by the previous widget test belongs to its fake-async
+    // zone; retaining it can leave the next test's outline awaiting forever.
+    StorageFactory.instanceForTest = null;
     useScriptedBoardEngine();
     SharedPreferences.setMockInitialValues({});
     storageRoot = await Directory.systemTemp.createTemp(
@@ -130,9 +140,25 @@ void main() {
     GameStoreService.setTestInstance(GameStoreService());
   });
   tearDown(() async {
+    StorageFactory.instanceForTest = null;
     GameStoreService.instance.close();
     PathProviderPlatform.instance = originalPaths;
     if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
+  });
+
+  testWidgets('library handoff reloads edits to the already open chapter', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    final app = await _pumpScreen(tester, repertoirePath: path);
+    await _settleUntil(tester, find.text('Italian Game'));
+    app.setMode(AppMode.repertoireLibrary);
+    File(path).writeAsStringSync(
+      _chapterPgn.replaceAll('Italian Game', 'Updated in library'),
+    );
+    app.handOff(OpenBuilder(repertoirePath: path, reloadFromDisk: true));
+    await _settleUntil(tester, find.text('Updated in library'));
+    expect(find.text('Italian Game'), findsNothing);
   });
 
   group('wide layout', () {
@@ -153,18 +179,44 @@ void main() {
       // (Engine | Database | Tree) sits on the right. Both start expanded.
       expect(find.byTooltip('Hide chapters'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'Engine'), findsOneWidget);
-      expect(find.text('Database'), findsOneWidget);
-      expect(find.text('Tree'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Database'), findsOneWidget);
+      expect(find.text('Reference database'), findsNothing);
+      expect(find.text('Notation'), findsNothing);
+      expect(find.byTooltip('Analysis panels'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Generate'), findsNothing);
       expect(find.byTooltip('Hide analysis panel'), findsOneWidget);
 
       // The chapter's single line is listed in the outline.
       await _settleUntil(tester, find.text('Italian Game'));
       expect(find.text('Italian Game'), findsOneWidget);
-      expect(find.textContaining('1 chapter · 1 line'), findsOneWidget);
+      expect(find.text('Chapters'), findsOneWidget);
 
       // Board-size control is offered (there is width to trade here).
       expect(find.byTooltip('Board size: Large'), findsOneWidget);
     });
+
+    testWidgets(
+      'go to start preserves the selected line for forward navigation',
+      (tester) async {
+        await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+        await _settleUntil(tester, find.text('Italian Game'));
+        await tester.tap(find.text('Italian Game'));
+        await _settle(tester);
+        InteractivePgnEditor editor() =>
+            tester.widget(find.byType(InteractivePgnEditor));
+        final tree = editor().tree;
+        expect(editor().currentPath.isNotEmpty, isTrue);
+        await tester.tap(find.byTooltip('Go to start'));
+        await tester.pump();
+        expect(editor().currentPath.isEmpty, isTrue);
+        expect(editor().tree, same(tree));
+        expect(editor().isEditingExistingLine, isTrue);
+        await tester.tap(find.byTooltip('Forward (→)'));
+        await tester.pump();
+        expect(editor().currentPath.length, 1);
+        expect(editor().tree.sanSequenceAt(editor().currentPath), ['e4']);
+      },
+    );
 
     testWidgets('collapsing the analysis panel shows a strip and persists', (
       tester,
@@ -175,9 +227,8 @@ void main() {
       await tester.pump();
 
       expect(find.byTooltip('Show analysis panel'), findsOneWidget);
-      expect(find.text('Analysis'), findsOneWidget);
-      // The tab bar is gone with the panel.
-      expect(find.text('Tree'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Engine'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Database'), findsOneWidget);
 
       final prefs = await tester.runAsync(SharedPreferences.getInstance);
       expect(prefs!.getBool('repertoire.lines_panel_collapsed'), isTrue);
@@ -214,6 +265,19 @@ void main() {
     });
   });
 
+  testWidgets(
+    'short desktop windows retain accessible controls without overflow',
+    (tester) async {
+      await _pumpScreen(
+        tester,
+        repertoirePath: _writeRepertoire(tester),
+        size: const Size(1280, 500),
+      );
+      expect(find.byType(InteractivePgnEditor), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   group('compact layout', () {
     testWidgets('stacks the board over PGN | Chapters | Tree tabs', (
       tester,
@@ -227,7 +291,7 @@ void main() {
       // All three surfaces become tabs of one tools column.
       expect(find.text('PGN'), findsOneWidget);
       expect(find.text('Chapters'), findsOneWidget);
-      expect(find.text('Tree'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Database'), findsOneWidget);
 
       // No side panels, and no board-size control: the board is stacked
       // above the tools, so shrinking it hands width to nothing.
@@ -248,38 +312,88 @@ void main() {
       );
       await tester.tap(find.byTooltip('Generate from here…'));
       await _settle(tester);
-      expect(find.widgetWithText(TextFormField, 'Depth'), findsOneWidget);
-      expect(find.widgetWithText(TextFormField, 'Cores'), findsOneWidget);
-      expect(find.text('??'), findsWidgets);
-      expect(find.text('Generate Repertoire'), findsNothing);
-      await tester.tap(find.text('Tree'));
+      expect(find.widgetWithText(TextFormField, 'Depth'), findsNothing);
+      expect(find.widgetWithText(TextFormField, 'Cores'), findsNothing);
+      expect(find.widgetWithText(Tab, 'Generate'), findsNothing);
+      expect(find.text('Engine evals'), findsOneWidget);
+      expect(find.text('Move'), findsOneWidget);
+      expect(find.text('Evaluation'), findsOneWidget);
+      expect(find.text('Continuation'), findsOneWidget);
+      await tester.tap(find.byTooltip('Generation settings'));
       await _settle(tester);
-      await tester.ensureVisible(find.widgetWithText(Tab, 'Generate'));
-      await tester.tap(find.widgetWithText(Tab, 'Generate'));
+      expect(find.text('Generation settings'), findsWidgets);
+      expect(find.text('Depth (half-moves)'), findsOneWidget);
+      await tester.tap(find.text('Done'));
       await _settle(tester);
-      expect(find.text('Plan starting lines…'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   }
 
-  group('tree tab', () {
-    testWidgets('the book toggle reveals the opening explorer', (tester) async {
-      await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
-
-      await tester.tap(find.text('Tree'));
-      await _settle(tester);
-
-      // The pane is titled for the loaded repertoire now, not "Repertoire
-      // tree" — so there is no pre-load title left to wait on.
-      await _settleUntil(tester, find.text('Saved lines: Main'));
-
-      expect(find.text('Saved lines: Main'), findsOneWidget);
-      final book = find.byTooltip('Show Lichess opening explorer');
-      expect(book, findsOneWidget);
-
-      await tester.tap(book);
-      await tester.pump();
-
-      expect(find.byTooltip('Hide opening explorer'), findsOneWidget);
-    });
+  testWidgets('reference sources switch without hiding board or notation', (
+    tester,
+  ) async {
+    await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+    await tester.tap(find.widgetWithText(Tab, 'Database'));
+    await _settle(tester);
+    await tester.tap(find.byTooltip('Database source'));
+    await _settle(tester, cycles: 5);
+    await tester.tap(find.text('Opening explorer'));
+    await _settle(tester);
+    expect(find.byType(InteractivePgnEditor), findsOneWidget);
+    expect(find.byTooltip('Go to start'), findsOneWidget);
+    await tester.tap(find.byTooltip('Database source'));
+    await _settle(tester, cycles: 5);
+    await tester.tap(find.text('Repertoire').last);
+    await _settle(tester);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('reload preserves the board editor while the chapter loads', (
+    tester,
+  ) async {
+    await _pumpScreen(tester, repertoirePath: _writeRepertoire(tester));
+    final controller = tester
+        .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
+        .controller;
+    await _settleUntil(tester, find.text('Italian Game'));
+    await tester.tap(find.text('Italian Game'));
+    await _settle(tester);
+    expect(PgnAnnotationPanel.focusActive(), isTrue);
+    await tester.pump();
+    await tester.pump();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(PgnAnnotationPanel),
+        matching: find.byType(TextField),
+      ),
+      'Save this before reloading',
+    );
+    final editor = tester.state(find.byType(InteractivePgnEditor));
+    final titleField = find.widgetWithText(TextField, 'Italian Game');
+    expect(titleField, findsOneWidget);
+    final gate = Completer<void>();
+    controller.debugBeforeRepertoireApply = () => gate.future;
+    unawaited(controller.loadRepertoire());
+    await tester.pump();
+    expect(find.text('Loading repertoire...'), findsNothing);
+    expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
+    expect(find.byType(LinearProgressIndicator), findsWidgets);
+    expect(titleField, findsOneWidget);
+    gate.complete();
+    // Alternate real I/O and fake-async frames until the load lands. Awaiting
+    // this fake-zone future solely inside runAsync cannot advance its queued
+    // callbacks and would deadlock the test.
+    await _settleUntil(
+      tester,
+      find.byWidgetPredicate(
+        (widget) => widget is RepertoireLoadingFrame && !widget.isLoading,
+      ),
+    );
+    expect(controller.isLoading, isFalse);
+    expect(
+      controller.repertoireLines.single.fullPgn,
+      contains('Save this before reloading'),
+    );
+    expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
+    controller.debugBeforeRepertoireApply = null;
   });
 }

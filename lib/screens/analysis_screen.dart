@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../features/audit/models/audit_finding.dart';
@@ -21,7 +22,6 @@ import '../features/opponents/services/opponent_store.dart';
 import '../features/opponents/services/prep_context.dart';
 import '../features/opponents/services/repertoire_check.dart';
 import '../features/opponents/widgets/repertoire_check_dialog.dart';
-import '../features/opponents/widgets/people_screen.dart';
 import '../features/holes/services/hole_hunt_persistence.dart';
 import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/hole_hunt_config_dialog.dart';
@@ -163,9 +163,42 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
   }
 
   IsolateTask? _analysisTask;
+  AppState? _app;
+  bool _handoffScheduled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final app = context.read<AppState>();
+    if (!identical(_app, app)) {
+      _app?.removeListener(_onAppChanged);
+      _app = app;
+      app.addListener(_onAppChanged);
+    }
+    _onAppChanged();
+  }
+
+  void _onAppChanged() {
+    // Legacy pushed analysis screens must not consume the main view's handoff.
+    if (!mounted ||
+        widget.initialPlayer != null ||
+        _handoffScheduled ||
+        _app?.currentMode != AppMode.positionAnalysis ||
+        !_app!.hasPending<OpenPlayerAnalysis>()) {
+      return;
+    }
+    _handoffScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handoffScheduled = false;
+      if (!mounted || _app?.currentMode != AppMode.positionAnalysis) return;
+      final request = _app!.takeHandoff<OpenPlayerAnalysis>();
+      if (request != null) unawaited(_selectPlayer(request.player));
+    });
+  }
 
   @override
   void dispose() {
+    _app?.removeListener(_onAppChanged);
     _opponents.removeListener(_onOpponentsChanged);
     _analysisTask?.cancel();
     _evalService?.dispose();
@@ -379,16 +412,15 @@ class _AnalysisScreenState extends _AnalysisScreenStateBase
           onRun: _showPlayerSelection,
         ),
         AppMenuEntry(
-          label: 'Player database',
-          icon: Icons.table_chart_outlined,
+          label: 'Players & prep',
+          icon: Icons.people_outline,
           onRun: () {
-            if (widget.initialPlayer != null) {
-              Navigator.of(context).pop();
-            } else {
-              Navigator.of(context).push<void>(
-                MaterialPageRoute(builder: (_) => const PeopleScreen()),
-              );
-            }
+            if (!mounted) return;
+            context.read<AppState>().pushMode(
+              AppMode.playersPrep,
+              historyLabel: 'Players & prep',
+            );
+            popToRoot(context);
           },
         ),
       ],

@@ -15,10 +15,11 @@ import '../theme/app_colors.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_settings_button.dart';
+import '../widgets/settings/settings_navigation.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../features/tactics/widgets/tactics_view_settings.dart';
 import '../features/tactics/widgets/tactics_control_panel.dart';
-import '../widgets/trainer_keyboard_scope.dart';
+import '../widgets/board_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
 
 import '../features/games/controllers/recent_games_controller.dart';
@@ -33,8 +34,10 @@ import '../services/file_open_requests.dart';
 import '../services/storage/app_paths.dart';
 import '../widgets/app_breadcrumb_trail.dart';
 import 'analysis_screen.dart';
+import '../features/opponents/widgets/players_prep_screen.dart';
 import 'pgn_viewer_screen.dart';
 import 'repertoire_screen.dart';
+import 'repertoire_library_screen.dart';
 import 'repertoire_training_screen.dart';
 import 'study_screen.dart';
 
@@ -56,6 +59,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     AppMode.engineTournament,
     AppMode.bughouse,
     AppMode.databases,
+    AppMode.repertoireLibrary,
+    AppMode.playersPrep,
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
@@ -64,6 +69,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final Set<AppMode> _scheduledModeBuilds = <AppMode>{};
 
   AppState? _appState;
+  ViewSettingsRegistry? _settingsRegistry;
   AppMode? _lastMode;
 
   /// Watches for "open this tournament" requests written by the MCP tools.
@@ -88,6 +94,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       final appState = Provider.of<AppState>(context, listen: false);
       _appState = appState;
+      _settingsRegistry = ViewSettingsRegistry.forApp(appState);
+      _settingsRegistry!.addListener(_mountSettingsViews);
       _lastMode = appState.currentMode;
       appState.addListener(_onAppStateChanged);
       unawaited(_startTournamentOpenWatcher(appState));
@@ -130,6 +138,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _mountSettingsViews() {
+    final requested = _settingsRegistry!.requestedModes
+        .where((mode) => mode.isAvailable && !_modeViews.containsKey(mode))
+        .toList();
+    if (requested.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        for (final mode in requested) {
+          _modeViews[mode] ??= _createModeView(mode);
+        }
+      });
+    });
+  }
+
   void _onAppStateChanged() {
     final appState = _appState;
     if (appState == null) return;
@@ -154,6 +177,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _settingsRegistry?.removeListener(_mountSettingsViews);
     _appState?.removeListener(_onAppStateChanged);
     unawaited(_tournamentOpenWatcher?.stop());
     _tournamentOpenWatcher = null;
@@ -252,6 +276,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return const EngineTournamentScreen();
       case AppMode.bughouse:
         return const BughouseScreen();
+      case AppMode.playersPrep:
+        return const PlayersPrepScreen();
+      case AppMode.repertoireLibrary:
+        return const RepertoireLibraryScreen();
       case AppMode.databases:
         return const DatabasesScreen();
     }
@@ -364,82 +392,88 @@ class _TacticsModeScaffold extends StatelessWidget {
         ? const _TacticsBoardPane()
         : const TacticsGamesPane();
 
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        // The back arrow sits in the title row (not the `leading` slot) so
-        // the breadcrumb trail doesn't shift right when the arrow appears
-        // and disappears.
-        title: const AppBarTitleWithTrail(title: _TacticsAppBarBackButton()),
-        actions: [
-          AppOverflowMenu(
-            entries: [
-              AppMenuEntry(
-                heading: 'Practice',
-                label: 'Play tactics',
-                icon: Icons.extension_outlined,
-                enabled: !hasPuzzle,
-                onRun: () => context
-                    .read<TacticsSessionController>()
-                    .panel
-                    ?.start
-                    ?.call(),
-              ),
-              if (hasPuzzle)
+    return BoardKeyboardScope(
+      moveInputKey: TacticsControlPanel.moveInputKey,
+      bindings: () =>
+          context.read<TacticsSessionController>().panel?.keyBindings?.call() ??
+          [],
+      child: Scaffold(
+        appBar: AppBar(
+          titleSpacing: 16,
+          // The back arrow sits in the title row (not the `leading` slot) so
+          // the breadcrumb trail doesn't shift right when the arrow appears
+          // and disappears.
+          title: const AppBarTitleWithTrail(title: _TacticsAppBarBackButton()),
+          actions: [
+            AppOverflowMenu(
+              entries: [
                 AppMenuEntry(
-                  label: 'Leave puzzle',
-                  icon: Icons.exit_to_app,
+                  heading: 'Practice',
+                  label: 'Play tactics',
+                  icon: Icons.extension_outlined,
+                  enabled: !hasPuzzle,
                   onRun: () => context
                       .read<TacticsSessionController>()
                       .panel
-                      ?.back
+                      ?.start
                       ?.call(),
                 ),
-            ],
-          ),
-          const AppModeSwitcher(),
-          AppSettingsButton(
-            mode: AppMode.tactics,
-            contentBuilder: (_) => TacticsViewSettings(
-              session: context.read<TacticsSessionController>(),
-              games: context.read<RecentGamesController>(),
-              runner: context.read<HomeReviewRunner>(),
+                if (hasPuzzle)
+                  AppMenuEntry(
+                    label: 'Leave puzzle',
+                    icon: Icons.exit_to_app,
+                    onRun: () => context
+                        .read<TacticsSessionController>()
+                        .panel
+                        ?.back
+                        ?.call(),
+                  ),
+              ],
             ),
-          ),
-        ],
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isCompact = constraints.maxWidth < kCompactBreakpoint;
+            const AppModeSwitcher(),
+            AppSettingsButton(
+              mode: AppMode.tactics,
+              contentBuilder: (_) => TacticsViewSettings(
+                session: context.read<TacticsSessionController>(),
+                games: context.read<RecentGamesController>(),
+                runner: context.read<HomeReviewRunner>(),
+              ),
+            ),
+          ],
+        ),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < kCompactBreakpoint;
 
-          return isCompact
-              ? Column(
-                  children: [
-                    Expanded(flex: hasPuzzle ? 4 : 5, child: leftPane),
-                    const Divider(height: 1, thickness: 1),
-                    Expanded(
-                      flex: hasPuzzle ? 6 : 5,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: TacticsControlPanel(key: _panelKey),
+            return isCompact
+                ? Column(
+                    children: [
+                      Expanded(flex: hasPuzzle ? 4 : 5, child: leftPane),
+                      const Divider(height: 1, thickness: 1),
+                      Expanded(
+                        flex: hasPuzzle ? 6 : 5,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: TacticsControlPanel(key: _panelKey),
+                        ),
                       ),
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    Expanded(child: leftPane),
-                    Container(width: 1, color: AppColors.outline),
-                    SizedBox(
-                      width: kTacticsColumnWidth,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: TacticsControlPanel(key: _panelKey),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(child: leftPane),
+                      Container(width: 1, color: AppColors.outline),
+                      SizedBox(
+                        width: kTacticsColumnWidth,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: TacticsControlPanel(key: _panelKey),
+                        ),
                       ),
-                    ),
-                  ],
-                );
-        },
+                    ],
+                  );
+          },
+        ),
       ),
     );
   }
@@ -494,60 +528,39 @@ class _TacticsBoardPane extends StatelessWidget {
     final hasPuzzle = context.select<TacticsSessionController, bool>(
       (session) => session.hasActivePosition,
     );
-    return Listener(
-      // The board is not focusable, so clicking it leaves the keyboard
-      // orphaned on the route scope — out of reach of both the move box and
-      // the panel's shortcut handler. The move box keeps its own focus
-      // through a board click (MoveInputWidget.onTapOutside); this is the
-      // repair for a keyboard that was already orphaned before the click,
-      // and it is why the box goes hot again as soon as you touch the board.
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => scheduleMicrotask(() {
-        if (!keyboardFocusIsOrphaned()) return;
-        TacticsControlPanel.moveInputKey.currentState?.focus();
-      }),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Expanded(
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: ChessBoardWidget(
-                    position: appState.currentPosition,
-                    flipped: appState.boardFlipped,
-                    enableUserMoves: hasPuzzle,
-                    onPieceSelected: (square) {},
-                    onMove: (move) => _attemptMove(context, move.uci),
-                  ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: ChessBoardWidget(
+                  position: appState.currentPosition,
+                  flipped: appState.boardFlipped,
+                  enableUserMoves: hasPuzzle,
+                  onPieceSelected: (square) {},
+                  onMove: (move) => _attemptMove(context, move.uci),
                 ),
               ),
             ),
-            if (hasPuzzle) ...[
-              const SizedBox(height: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 320),
-                child: MoveInputWidget(
-                  key: TacticsControlPanel.moveInputKey,
-                  position: appState.currentPosition,
-                  onMove: (move) => _attemptMove(context, move.uci),
-                  // Route trainer navigation keys (Space, S/P, arrows, …) back
-                  // to the control panel so they cycle puzzles / step the
-                  // solution instead of typing into the field. Returns false for
-                  // move characters, which then type normally.
-                  onNavigationKey: (event) =>
-                      context
-                          .read<TacticsSessionController>()
-                          .panel
-                          ?.navigationKey
-                          ?.call(event.logicalKey) ??
-                      false,
+          ),
+          if (hasPuzzle) ...[
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: MoveInputWidget(
+                key: TacticsControlPanel.moveInputKey,
+                position: appState.currentPosition,
+                onMove: (move) => _attemptMove(context, move.uci),
+                enabled: !context.select<TacticsSessionController, bool>(
+                  (session) => session.inputLocked,
                 ),
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
