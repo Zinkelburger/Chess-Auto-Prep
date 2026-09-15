@@ -1,16 +1,31 @@
+/// View state of the eval-tree viewer: which snapshot is loaded, which node
+/// is selected, how much of the tree around it is shown, and pending "bring
+/// this node into view" requests the viewport consumes.
+library;
+
 import 'package:flutter/material.dart';
 
-import '../models/eval_tree_snapshot.dart';
 import '../../../utils/safe_change_notifier.dart';
+import '../models/eval_tree_snapshot.dart';
 
 enum EvalTreeMetricDisplayMode { cpl, eval }
 
 class EvalTreeController extends ChangeNotifier with SafeChangeNotifier {
+  /// How many plies below the selection may be shown.
+  static const int minVisiblePly = 1;
+  static const int maxVisiblePly = 8;
+
+  /// Bounds on the focused window's node budget (see the tree display
+  /// architecture doc: never lay out the whole tree).
+  static const int minDisplayNodes = 1;
+  static const int maxDisplayNodesCap = 1000;
+  static const int defaultMaxDisplayNodes = 400;
+
   EvalTreeSnapshot? _snapshot;
   int? _selectedNodeId;
-  int _visiblePly = 1;
+  int _visiblePly = minVisiblePly;
   bool _showAncestorSpine = true;
-  int _maxDisplayNodes = 400;
+  int _maxDisplayNodes = defaultMaxDisplayNodes;
   EvalTreeMetricDisplayMode _metricDisplayMode = EvalTreeMetricDisplayMode.cpl;
   int _focusRequestId = 0;
   int? _focusTargetNodeId;
@@ -26,13 +41,19 @@ class EvalTreeController extends ChangeNotifier with SafeChangeNotifier {
   bool get showAncestorSpine => _showAncestorSpine;
   int get maxDisplayNodes => _maxDisplayNodes;
   EvalTreeMetricDisplayMode get metricDisplayMode => _metricDisplayMode;
+
+  /// Bumped on every focus request so the viewport can tell a new request
+  /// from the one it already handled.
   int get focusRequestId => _focusRequestId;
   int? get focusTargetNodeId => _focusTargetNodeId;
   bool get focusResetZoom => _focusResetZoom;
 
+  /// The selected node, or the root when nothing was selected; null without
+  /// a snapshot.
   int? get selectedNodeId {
-    if (_snapshot == null) return null;
-    return _selectedNodeId ?? _snapshot!.rootNodeId;
+    final snapshot = _snapshot;
+    if (snapshot == null) return null;
+    return _selectedNodeId ?? snapshot.rootNodeId;
   }
 
   EvalTreeNodeSnapshot? get selectedNode {
@@ -62,7 +83,7 @@ class EvalTreeController extends ChangeNotifier with SafeChangeNotifier {
   void clearSnapshot() {
     _snapshot = null;
     _selectedNodeId = null;
-    _visiblePly = 1;
+    _visiblePly = minVisiblePly;
     _showAncestorSpine = true;
     _metricDisplayMode = EvalTreeMetricDisplayMode.cpl;
     _focusTargetNodeId = null;
@@ -71,23 +92,21 @@ class EvalTreeController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
+  /// Selects [nodeId]; returns false when it is unknown or already selected
+  /// without a focus request to renew.
   bool selectNode(int nodeId, {bool requestFocus = true}) {
     final snapshot = _snapshot;
     if (snapshot == null || !snapshot.containsNode(nodeId)) return false;
     if (_selectedNodeId == nodeId && !requestFocus) return false;
     _selectedNodeId = nodeId;
-    if (requestFocus) {
-      _requestFocus(nodeId);
-    }
+    if (requestFocus) _requestFocus(nodeId);
     notifyListeners();
     return true;
   }
 
   bool goParent() {
-    final snapshot = _snapshot;
-    final current = selectedNode;
-    if (snapshot == null || current?.parentId == null) return false;
-    return selectNode(current!.parentId!);
+    final parentId = selectedNode?.parentId;
+    return parentId != null && selectNode(parentId);
   }
 
   bool goPreferredChild() {
@@ -95,14 +114,12 @@ class EvalTreeController extends ChangeNotifier with SafeChangeNotifier {
     final nodeId = selectedNodeId;
     if (snapshot == null || nodeId == null) return false;
     final preferredChildId = snapshot.preferredChildId(nodeId);
-    if (preferredChildId == null) return false;
-    return selectNode(preferredChildId);
+    return preferredChildId != null && selectNode(preferredChildId);
   }
 
   bool goRoot() {
     final snapshot = _snapshot;
-    if (snapshot == null) return false;
-    return selectNode(snapshot.rootNodeId);
+    return snapshot != null && selectNode(snapshot.rootNodeId);
   }
 
   void requestFocusSelection({bool resetZoom = false}) {
@@ -123,18 +140,14 @@ class EvalTreeController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void setVisiblePly(int ply) {
-    final clamped = ply.clamp(1, 8);
+    final clamped = ply.clamp(minVisiblePly, maxVisiblePly);
     if (_visiblePly == clamped) return;
     _visiblePly = clamped;
     _requestFocus(selectedNodeId);
     notifyListeners();
   }
 
-  void toggleAncestorSpine() {
-    _showAncestorSpine = !_showAncestorSpine;
-    _requestFocus(selectedNodeId);
-    notifyListeners();
-  }
+  void toggleAncestorSpine() => setAncestorSpine(!_showAncestorSpine);
 
   void setAncestorSpine(bool value) {
     if (_showAncestorSpine == value) return;
@@ -144,7 +157,7 @@ class EvalTreeController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void setMaxDisplayNodes(int value) {
-    final clamped = value.clamp(1, 1000);
+    final clamped = value.clamp(minDisplayNodes, maxDisplayNodesCap);
     if (_maxDisplayNodes == clamped) return;
     _maxDisplayNodes = clamped;
     _requestFocus(selectedNodeId);

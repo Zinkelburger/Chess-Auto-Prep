@@ -1,15 +1,17 @@
 import 'dart:isolate';
-import 'dart:math';
 
-import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+
+import '../../../services/storage/storage_factory.dart';
+import '../../../utils/log.dart';
+import '../../../utils/safe_change_notifier.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
-import '../../../services/storage/storage_factory.dart';
-import 'tactics_pgn_codec.dart';
 import 'tactics_document.dart';
-import 'package:chess_auto_prep/utils/log.dart';
-import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
+import 'tactics_pgn_codec.dart';
+import 'tactics_session_queue.dart';
+import 'tactics_set_migrations.dart';
 
 /// Manages tactical positions and review data.
 ///
@@ -30,9 +32,10 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   static const String defaultSetName = 'Default';
 
   List<TacticsPosition> positions = [];
-  Set<String> analyzedGameIds = {}; // Track which games have been analyzed
+
+  /// Games whose puzzles have been mined, so they are never analyzed twice.
+  Set<String> analyzedGameIds = {};
   ReviewSession currentSession = ReviewSession();
-  int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
   Future<void> _completedGameTail = Future<void>.value();
 
@@ -58,7 +61,14 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   /// True while [loadPositions] is reading and decoding the set file, so the
   /// browse UI can show a loading state instead of "no tactics yet".
   bool isLoading = false;
+
+  /// Why the set could not be read, when it could not; saving is disabled
+  /// while set so a partial decode can never overwrite the original file.
   String? loadError;
+
+  /// Why the last queued write failed, cleared by the next successful one.
+  String? lastWriteError;
+
   String? _persistedContent;
   bool _hasCheckpoint = false;
 
@@ -87,17 +97,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   /// Whether the one-time named-set → studies migration ran this launch.
   bool _setsMigrated = false;
 
-  /// The filtered + ordered queue for the active session.
-  /// `null` when no session is active.
-  List<int> _sessionQueue = [];
-
-  /// Index into [_sessionQueue].
-  int _sessionQueueIndex = 0;
-
-  /// Furthest queue index reached this session (the "head"). Navigating back
-  /// with Previous doesn't lower it, so `_sessionQueueIndex < head` means the
-  /// user is reviewing an already-seen puzzle.
-  int _sessionMaxQueueIndex = 0;
+  final _sessionQueue = TacticsSessionQueue();
 
   /// Settings for the current session (kept for mid-session rating logic).
   TacticsSessionSettings _sessionSettings = const TacticsSessionSettings();
@@ -120,19 +120,16 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
 
     try {
-      final storage = StorageFactory.instance;
-      await storage.migrateLegacyTacticsCsv(defaultSetName);
-      await _migrateCsvSetsToPgn();
-      await _migrateNamedSetsToStudies();
+      await _runMigrations();
 
-      final content = await storage.readFile(await activeSetFilePath());
+      final content = await StorageFactory.instance.readFile(
+        await activeSetFilePath(),
+      );
       if (generation != _loadGeneration) return positions.length;
       _persistedContent = content;
       loadError = null;
       final document = readTacticsDocument(content ?? '');
       _hasCheckpoint = document.analyzed != null;
-      final puzzleText = document.pgn;
-      if (generation != _loadGeneration) return positions.length;
 
       if (content == null || content.trim().isEmpty) {
         // No set file yet — load analyzed games list (legacy or empty state).
@@ -145,21 +142,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
         return 0;
       }
 
-      // External files (studies) may hold chapters from the standard start;
-      // our own set files always carry [FEN].
-      // Decode replays every puzzle's moves with dartchess — off the UI
-      // isolate so opening Tactics mode doesn't freeze the frame.
-      final requireFen = !isExternalSet;
-      final includeVariations = isExternalSet && _externalIncludeVariations;
-      final onlyGame = isExternalSet ? _externalGameIndex : null;
-      final decoded = await Isolate.run(
-        () => decodePuzzlesFromPgn(
-          puzzleText,
-          requireFen: requireFen,
-          includeVariations: includeVariations,
-          onlyGame: onlyGame,
-        ),
-      );
+      final decoded = await _decodeOffIsolate(document.pgn);
       // A newer load (set switch, import reload) started while we decoded —
       // it now owns [positions]; drop this stale decode instead of appending
       // it onto the newer load's list.
@@ -171,26 +154,25 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       analyzedGameIds.clear();
       if (!isExternalSet && decoded.errors.isNotEmpty) {
         loadError =
-            'Some tactics records could not be read. Saving and cleanup are disabled to preserve the original file: ${decoded.errors.join('; ')}';
+            'Some tactics records could not be read. Saving and cleanup are '
+            'disabled to preserve the original file: '
+            '${decoded.errors.join('; ')}';
       }
       for (final warning in decoded.errors) {
         log.w('Set "$_activeSetName": $warning');
       }
-      for (final position in decoded.puzzles) {
-        positions.add(position);
-      }
+      positions.addAll(decoded.puzzles);
 
-      if (document.analyzed != null) {
-        analyzedGameIds
-          ..clear()
-          ..addAll(document.analyzed!);
-      }
-      // Also load the separate analyzed games list (includes games with no blunders)
+      final checkpoint = document.analyzed;
+      if (checkpoint != null) analyzedGameIds.addAll(checkpoint);
+      // Also load the separate analyzed games list (includes games with no
+      // blunders).
       await _loadAnalyzedGameIds();
       if (generation != _loadGeneration) return positions.length;
 
       log.i(
-        'Loaded ${positions.length} tactics positions from set "$_activeSetName"',
+        'Loaded ${positions.length} tactics positions from set '
+        '"$_activeSetName"',
       );
       log.i('Tracking ${analyzedGameIds.length} analyzed game IDs');
       isLoading = false;
@@ -208,69 +190,38 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  /// Convert legacy `.csv` set files (pre-PGN installs) to `.pgn`.  The CSV
-  /// is renamed to `.csv.bak` after a successful conversion; a name that
-  /// already has a `.pgn` file is left alone.
-  Future<void> _migrateCsvSetsToPgn() async {
+  Future<void> _runMigrations() async {
     final storage = StorageFactory.instance;
-    for (final legacy in await storage.listLegacyTacticsCsvSets()) {
-      try {
-        final pgnPath = await storage.tacticsSetPath(legacy.name);
-        if (await storage.fileExists(pgnPath)) continue;
-        final content = await storage.readFile(legacy.path);
-        if (content == null) continue;
-        final parsed = parseCsv(content);
-        if (parsed.warnings.isNotEmpty) {
-          throw StateError('Legacy tactics CSV needs repair before migration');
-        }
-        for (final warning in parsed.warnings) {
-          log.w('CSV set "${legacy.name}": $warning');
-        }
-        final encoded = encodePuzzlesToPgn(legacy.name, parsed.positions);
-        if (encoded.dropped != 0) {
-          throw StateError('Refusing a lossy tactics migration');
-        }
-        await storage.writeFile(pgnPath, encoded.pgn, createOnly: true);
-        await storage.renameFile(legacy.path, '${legacy.path}.bak');
-        log.i(
-          'Converted tactics set "${legacy.name}" from CSV to PGN (${parsed.positions.length} positions)',
-        );
-      } catch (e) {
-        log.e('Error converting CSV set "${legacy.name}": $e');
-        rethrow;
-      }
+    await storage.migrateLegacyTacticsCsv(defaultSetName);
+    final migrations = TacticsSetMigrations(
+      storage,
+      defaultSetName: defaultSetName,
+    );
+    await migrations.convertCsvSetsToPgn();
+    if (!_setsMigrated) {
+      _setsMigrated = true;
+      await migrations.moveNamedSetsToStudies();
     }
   }
 
-  /// One-time cleanup from the multi-set era: tactics mode now owns a single
-  /// database (the [defaultSetName] set), so any other set file is moved into
-  /// the studies directory, where it stays reachable — studies are the
-  /// curated-collection concept and can be reviewed as flashcards from
-  /// Study mode.
-  Future<void> _migrateNamedSetsToStudies() async {
-    if (_setsMigrated) return;
-    _setsMigrated = true;
-    final storage = StorageFactory.instance;
-    for (final set in await storage.listTacticsSets()) {
-      if (set.name == defaultSetName) continue;
-      try {
-        var targetName = set.name;
-        var suffix = 1;
-        while (await storage.fileExists(
-          await storage.studyFilePath(targetName),
-        )) {
-          suffix++;
-          targetName = '${set.name} (tactics${suffix > 2 ? ' $suffix' : ''})';
-        }
-        await storage.renameFile(
-          set.filePath,
-          await storage.studyFilePath(targetName),
-        );
-        log.i('Moved tactics set "${set.name}" to studies as "$targetName"');
-      } catch (e) {
-        log.e('Error moving tactics set "${set.name}" to studies: $e');
-      }
-    }
+  /// Decode [puzzleText] off the UI isolate: decoding replays every puzzle's
+  /// moves with dartchess, so opening Tactics mode must not freeze the frame.
+  ///
+  /// External files (studies) may hold chapters from the standard start; our
+  /// own set files always carry `[FEN]`.
+  Future<({List<TacticsPosition> puzzles, List<String> errors})>
+  _decodeOffIsolate(String puzzleText) {
+    final requireFen = !isExternalSet;
+    final includeVariations = isExternalSet && _externalIncludeVariations;
+    final onlyGame = isExternalSet ? _externalGameIndex : null;
+    return Isolate.run(
+      () => decodePuzzlesFromPgn(
+        puzzleText,
+        requireFen: requireFen,
+        includeVariations: includeVariations,
+        onlyGame: onlyGame,
+      ),
+    );
   }
 
   // ── External review (study flashcards) ─────────────────────────────────
@@ -291,18 +242,16 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     _activeSetPath = path;
     _externalGameIndex = gameIndex;
     _externalIncludeVariations = includeVariations;
-    _activeSetName =
-        displayName ??
-        path
-            .split('/')
-            .last
-            .replaceAll(RegExp(r'\.pgn$', caseSensitive: false), '');
-    _sessionQueue = [];
-    _sessionQueueIndex = 0;
-    _sessionMaxQueueIndex = 0;
-    currentSession = ReviewSession();
+    _activeSetName = displayName ?? _setNameForFile(path);
+    _resetSession();
     return loadPositions();
   }
+
+  /// The file's name without a `.pgn` extension (any other extension stays).
+  static String _setNameForFile(String path) =>
+      p.extension(path).toLowerCase() == '.pgn'
+      ? p.basenameWithoutExtension(path)
+      : p.basename(path);
 
   /// Leave an external review and return to the tactics database.  Waits for
   /// pending stat writes to the external file first.  No-op when no external
@@ -315,11 +264,13 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     _externalGameIndex = null;
     _externalIncludeVariations = false;
     _activeSetName = defaultSetName;
-    _sessionQueue = [];
-    _sessionQueueIndex = 0;
-    _sessionMaxQueueIndex = 0;
-    currentSession = ReviewSession();
+    _resetSession();
     await loadPositions();
+  }
+
+  void _resetSession() {
+    _sessionQueue.clear();
+    currentSession = ReviewSession();
   }
 
   /// Load analyzed game IDs from storage
@@ -337,27 +288,28 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  /// One durable commit for a completed game, including games with no puzzles.
-  Future<void> commitAnalyzedGame(String gameId, List<TacticsPosition> found) =>
-      _commitCompletedGames([gameId], List.of(found));
-
-  Future<void> _commitCompletedGames(
-    Iterable<String> ids,
-    List<TacticsPosition> found,
-  ) {
-    final completed = ids.where((id) => id.isNotEmpty).toSet();
+  /// One durable commit for a completed game, including games with no
+  /// puzzles: the puzzles join [positions] (duplicate FENs skipped), the game
+  /// joins [analyzedGameIds], and both are written in one save. A failed
+  /// save rolls the analyzed mark back so the game is looked at again.
+  ///
+  /// Commits are serialized in call order, and the whole chain waits for
+  /// [loadPositions] to finish before it reads the list.
+  Future<void> commitAnalyzedGame(String gameId, List<TacticsPosition> found) {
+    final puzzles = List.of(found);
     final next = _completedGameTail.then((_) async {
       if (isExternalSet) {
         throw StateError('Cannot mine games into an external study.');
       }
-      if (loadError != null) throw StateError(loadError!);
+      final loadError = this.loadError;
+      if (loadError != null) throw StateError(loadError);
       final previousIds = Set<String>.of(analyzedGameIds);
-      for (final position in found) {
+      for (final position in puzzles) {
         if (!positions.any((p) => p.fen == position.fen)) {
           positions.add(position);
         }
       }
-      analyzedGameIds.addAll(completed);
+      if (gameId.isNotEmpty) analyzedGameIds.add(gameId);
       notifyListeners();
       try {
         await savePositions();
@@ -374,9 +326,6 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   Future<void> markGameAnalyzed(String gameId) =>
       commitAnalyzedGame(gameId, const []);
 
-  Future<void> markGamesAnalyzed(Iterable<String> gameIds) =>
-      _commitCompletedGames(gameIds, const []);
-
   /// Check if a game has already been analyzed
   bool isGameAnalyzed(String gameId) {
     return gameId.isNotEmpty && analyzedGameIds.contains(gameId);
@@ -387,27 +336,6 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     analyzedGameIds.clear();
     notifyListeners();
     await savePositions();
-  }
-
-  /// Parse tactics-CSV [content] (with header row) into positions.
-  /// Bad rows are reported as warnings instead of failing the whole file.
-  static ({List<TacticsPosition> positions, List<String> warnings}) parseCsv(
-    String content,
-  ) {
-    final positions = <TacticsPosition>[];
-    final warnings = <String>[];
-    if (content.trim().isEmpty) {
-      return (positions: positions, warnings: warnings);
-    }
-    final rows = Csv().decode(content);
-    for (int i = 1; i < rows.length; i++) {
-      try {
-        positions.add(TacticsPosition.fromCsv(rows[i]));
-      } catch (e) {
-        warnings.add('Row $i: $e');
-      }
-    }
-    return (positions: positions, warnings: warnings);
   }
 
   /// Save positions back to the active set's PGN file.
@@ -425,51 +353,12 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     final completed = Set<String>.of(analyzedGameIds);
     await _enqueueWrite(() async {
       try {
-        if (loadError != null) throw StateError(loadError!);
-        final storage = StorageFactory.instance;
+        final loadError = this.loadError;
+        if (loadError != null) throw StateError(loadError);
         if (externalPath != null) {
-          final existing = await storage.readFile(externalPath);
-          if (existing == null) {
-            throw StateError('External set file vanished: $externalPath');
-          }
-          if (existing != _persistedContent) {
-            throw StateError(
-              'The study changed on disk. Reload before saving review statistics.',
-            );
-          }
-          final patched = await compute(_patchTacticsStats, (
-            existing,
-            snapshot,
-          ));
-          await storage.writeFile(
-            externalPath,
-            patched,
-            expectedContent: existing,
-          );
-          _persistedContent = patched;
+          await _patchExternalSet(externalPath, snapshot);
         } else {
-          // Encoding replays every stored puzzle with dartchess (lineToSan),
-          // so it is O(database) CPU — run it off the UI isolate.
-          final encoded = await compute(_encodeTactics, (setName, snapshot));
-          if (encoded.fallback > 0) {
-            log.w(
-              '${encoded.fallback} position(s) stored with raw [CorrectLine] fallback',
-            );
-          }
-          if (encoded.dropped > 0) {
-            throw StateError(
-              '${encoded.dropped} invalid tactics records; refusing a lossy save.',
-            );
-          }
-          final document = writeTacticsDocument(encoded.pgn, completed);
-          await storage.writeFile(
-            await storage.tacticsSetPath(setName),
-            document,
-            createOnly: _persistedContent == null,
-            expectedContent: _persistedContent,
-          );
-          _persistedContent = document;
-          _hasCheckpoint = true;
+          await _rewriteSet(setName, snapshot, completed);
         }
         log.i('Saved ${snapshot.length} tactics positions to set "$setName"');
       } catch (e) {
@@ -477,6 +366,56 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
         rethrow;
       }
     });
+  }
+
+  Future<void> _patchExternalSet(
+    String externalPath,
+    List<TacticsPosition> snapshot,
+  ) async {
+    final storage = StorageFactory.instance;
+    final existing = await storage.readFile(externalPath);
+    if (existing == null) {
+      throw StateError('External set file vanished: $externalPath');
+    }
+    if (existing != _persistedContent) {
+      throw StateError(
+        'The study changed on disk. Reload before saving review statistics.',
+      );
+    }
+    final patched = await compute(_patchTacticsStats, (existing, snapshot));
+    await storage.writeFile(externalPath, patched, expectedContent: existing);
+    _persistedContent = patched;
+  }
+
+  Future<void> _rewriteSet(
+    String setName,
+    List<TacticsPosition> snapshot,
+    Set<String> completed,
+  ) async {
+    final storage = StorageFactory.instance;
+    // Encoding replays every stored puzzle with dartchess (lineToSan), so it
+    // is O(database) CPU — run it off the UI isolate.
+    final encoded = await compute(_encodeTactics, (setName, snapshot));
+    if (encoded.fallback > 0) {
+      log.w(
+        '${encoded.fallback} position(s) stored with raw [CorrectLine] '
+        'fallback',
+      );
+    }
+    if (encoded.dropped > 0) {
+      throw StateError(
+        '${encoded.dropped} invalid tactics records; refusing a lossy save.',
+      );
+    }
+    final document = writeTacticsDocument(encoded.pgn, completed);
+    await storage.writeFile(
+      await storage.tacticsSetPath(setName),
+      document,
+      createOnly: _persistedContent == null,
+      expectedContent: _persistedContent,
+    );
+    _persistedContent = document;
+    _hasCheckpoint = true;
   }
 
   /// Clear all positions from database
@@ -501,9 +440,7 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   ///
   /// [indices] may arrive in any order and may repeat; they are deduplicated
   /// and applied highest-first here, so earlier removals cannot shift the
-  /// ones still to come. That used to be the caller's contract, kept only by
-  /// a doc comment on an operation whose own dialog says "cannot be undone" —
-  /// an ascending or duplicated list silently deleted the wrong puzzles.
+  /// ones still to come.
   Future<void> deletePositionsAt(List<int> indices) async {
     final ordered = indices.toSet().toList()..sort((a, b) => b.compareTo(a));
     var removed = 0;
@@ -525,58 +462,15 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     await savePositions();
   }
 
+  // ── Session queue ──────────────────────────────────────────────────────
+
   /// Start a new review session with the given [settings].
   void startSession([
     TacticsSessionSettings settings = const TacticsSessionSettings(),
   ]) {
     currentSession = ReviewSession();
     _sessionSettings = settings;
-
-    // Build filtered queue of indices into [positions].
-    _sessionQueue = <int>[];
-    for (int i = 0; i < positions.length; i++) {
-      if (settings.accepts(positions[i])) _sessionQueue.add(i);
-    }
-
-    // Sort / shuffle per ordering preference.
-    switch (settings.order) {
-      case TacticsSessionOrder.newestFirst:
-        _sessionQueue.sort(
-          (a, b) => positions[b].gameDate.compareTo(positions[a].gameDate),
-        );
-      case TacticsSessionOrder.leastReviewed:
-        _sessionQueue.sort(
-          (a, b) =>
-              positions[a].reviewCount.compareTo(positions[b].reviewCount),
-        );
-      case TacticsSessionOrder.worstSuccessRate:
-        _sessionQueue.sort(
-          (a, b) =>
-              positions[a].successRate.compareTo(positions[b].successRate),
-        );
-      case TacticsSessionOrder.random:
-        _sessionQueue.shuffle(Random());
-    }
-
-    // Keep each game's positions together, in the order they occurred. The
-    // sort above still decides which game comes first (via the game's first
-    // position in that order).
-    if (settings.groupByGame) {
-      final gameRank = <String, int>{};
-      for (final idx in _sessionQueue) {
-        gameRank.putIfAbsent(positions[idx].gameId, () => gameRank.length);
-      }
-      _sessionQueue.sort((a, b) {
-        final ra = gameRank[positions[a].gameId]!;
-        final rb = gameRank[positions[b].gameId]!;
-        if (ra != rb) return ra.compareTo(rb);
-        return positions[a].moveNumber.compareTo(positions[b].moveNumber);
-      });
-    }
-
-    _sessionQueueIndex = 0;
-    _sessionMaxQueueIndex = 0;
-    sessionPositionIndex = _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
+    _sessionQueue.start(positions, settings);
   }
 
   /// Start a session over exactly [subset], in the given order — e.g.
@@ -584,66 +478,36 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   /// against the loaded database; unknown FENs are skipped.
   void startSessionWithPositions(List<TacticsPosition> subset) {
     currentSession = ReviewSession();
-    _sessionQueue = <int>[];
-    for (final pos in subset) {
-      final idx = positions.indexWhere((p) => p.fen == pos.fen);
-      if (idx != -1 && !_sessionQueue.contains(idx)) _sessionQueue.add(idx);
-    }
-    _sessionQueueIndex = 0;
-    _sessionMaxQueueIndex = 0;
-    sessionPositionIndex = _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
+    _sessionQueue.startWith(positions, subset);
   }
+
+  /// Index into [positions] of the puzzle the session sits on.
+  int get sessionPositionIndex => _sessionQueue.currentPositionIndex;
 
   /// Number of positions in the current session queue.
   int get sessionQueueLength => _sessionQueue.length;
 
   /// Current 0-based position within the session queue.
-  int get sessionQueuePosition => _sessionQueueIndex;
+  int get sessionQueuePosition => _sessionQueue.cursor;
 
   /// True while the user has navigated back below the session head — i.e.
   /// the shown puzzle was already completed or skipped this session.
-  bool get isViewingPastSessionPuzzle =>
-      _sessionQueue.isNotEmpty && _sessionQueueIndex < _sessionMaxQueueIndex;
+  bool get isViewingPastSessionPuzzle => _sessionQueue.isViewingPast;
 
   /// Remove a position (by index into [positions]) from the live session queue.
-  void removeFromSessionQueue(int positionIndex) {
-    final queueIdx = _sessionQueue.indexOf(positionIndex);
-    if (queueIdx == -1) return;
-    _sessionQueue.removeAt(queueIdx);
-    if (queueIdx < _sessionQueueIndex) {
-      _sessionQueueIndex--;
-    } else if (_sessionQueueIndex >= _sessionQueue.length &&
-        _sessionQueue.isNotEmpty) {
-      _sessionQueueIndex = _sessionQueue.length - 1;
-    }
-    if (queueIdx < _sessionMaxQueueIndex) _sessionMaxQueueIndex--;
-    if (_sessionMaxQueueIndex < _sessionQueueIndex) {
-      _sessionMaxQueueIndex = _sessionQueueIndex;
-    }
-  }
+  void removeFromSessionQueue(int positionIndex) =>
+      _sessionQueue.remove(positionIndex);
 
   /// Advance to the next position in the session queue.  Returns the index
   /// into [positions], or `null` when the last position has been reached —
   /// the session is over (no wrap-around).
-  int? nextSessionPosition() {
-    if (_sessionQueue.isEmpty) return null;
-    if (_sessionQueueIndex >= _sessionQueue.length - 1) return null;
-    _sessionQueueIndex++;
-    if (_sessionQueueIndex > _sessionMaxQueueIndex) {
-      _sessionMaxQueueIndex = _sessionQueueIndex;
-    }
-    sessionPositionIndex = _sessionQueue[_sessionQueueIndex];
-    return sessionPositionIndex;
-  }
+  int? nextSessionPosition() => _sessionQueue.next();
 
   /// Go to the previous position in the session queue, stopping at the first
   /// position (no wrap-around).
-  int? previousSessionPosition() {
-    if (_sessionQueue.isEmpty) return null;
-    if (_sessionQueueIndex > 0) _sessionQueueIndex--;
-    sessionPositionIndex = _sessionQueue[_sessionQueueIndex];
-    return sessionPositionIndex;
-  }
+  int? previousSessionPosition() => _sessionQueue.previous();
+
+  // ── Review stats ───────────────────────────────────────────────────────
 
   /// Set the star [rating] on the position matching [fen].
   Future<void> setRating(String fen, int rating) async {
@@ -667,12 +531,11 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
     double timeTaken, {
     int hintsUsed = 0,
   }) async {
-    // Find the position in our list and update it
     final index = positions.indexWhere((p) => p.fen == position.fen);
     if (index == -1) return;
 
     // Update only the stats that changed — copyWith preserves everything else.
-    final updatedPosition = position.copyWith(
+    positions[index] = position.copyWith(
       reviewCount: position.reviewCount + 1,
       successCount:
           position.successCount + (result == TacticsResult.correct ? 1 : 0),
@@ -680,58 +543,20 @@ class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
       timeToSolve: timeTaken,
       hintsUsed: position.hintsUsed + hintsUsed,
     );
-
-    positions[index] = updatedPosition;
-
-    // Update session stats
-    currentSession.positionsAttempted++;
-    currentSession.totalTime += timeTaken;
-
-    if (result == TacticsResult.correct) {
-      currentSession.positionsCorrect++;
-    } else if (result == TacticsResult.incorrect) {
-      currentSession.positionsIncorrect++;
-    } else if (result == TacticsResult.hint) {
-      currentSession.hintsUsed++;
-    }
-
+    currentSession.record(result, timeTaken);
     notifyListeners();
-
-    // Save immediately
     await savePositions();
   }
 
   /// Add a single position (streaming import, puzzle creator).  Returns
   /// `true` when the position was added (`false` = duplicate FEN).
   Future<bool> addPosition(TacticsPosition position) async {
-    // Check for duplicates by FEN
     if (positions.any((p) => p.fen == position.fen)) return false;
     positions.add(position);
     notifyListeners();
     await savePositions();
     return true;
   }
-
-  /// Add multiple positions incrementally (for streaming/live import)
-  Future<void> addPositions(List<TacticsPosition> newPositions) async {
-    int added = 0;
-    for (final position in newPositions) {
-      // Check for duplicates by FEN
-      if (!positions.any((p) => p.fen == position.fen)) {
-        positions.add(position);
-        added++;
-      }
-    }
-    if (added > 0) {
-      notifyListeners();
-      await savePositions();
-      log.w(
-        'Added $added new positions (${newPositions.length - added} duplicates skipped)',
-      );
-    }
-  }
-
-  String? lastWriteError;
 
   Future<void> _enqueueWrite(Future<void> Function() operation) {
     final next = _pendingWrite.then((_) => operation());
@@ -771,6 +596,22 @@ class ReviewSession {
 
   double get accuracy =>
       positionsAttempted > 0 ? positionsCorrect / positionsAttempted : 0.0;
+
+  /// Count one attempt with its outcome.
+  void record(TacticsResult result, double timeTaken) {
+    positionsAttempted++;
+    totalTime += timeTaken;
+    switch (result) {
+      case TacticsResult.correct:
+        positionsCorrect++;
+      case TacticsResult.incorrect:
+        positionsIncorrect++;
+      case TacticsResult.hint:
+        hintsUsed++;
+      case TacticsResult.timeout:
+        break;
+    }
+  }
 }
 
 ({String pgn, int encoded, int fallback, int dropped}) _encodeTactics(

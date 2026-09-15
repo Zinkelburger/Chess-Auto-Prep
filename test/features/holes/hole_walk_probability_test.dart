@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/features/holes/services/hole_scoring.dart';
+import 'package:chess_auto_prep/features/audit/services/repertoire_walk.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/services/opening_tree_builder.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,31 +15,23 @@ const _games = [
   '[Result "1-0"]\n\n1. e4 c5 2. Nf3 d6 1-0',
 ];
 
-/// Walk [node] with the hunt's enqueue rule, returning cumProb per FEN.
+/// Walk [root] with the hunt's enqueue rule, returning cumProb per FEN.
 Map<String, double> propagate(OpeningTreeNode root, bool isWhiteRepertoire) {
   final out = <String, double>{};
-  void visit(OpeningTreeNode node, double cumProb) {
-    out[node.fen] = cumProb;
-    final isWhiteTurn = node.fen.contains(' w ');
-    final isOwnerTurn = isWhiteTurn == isWhiteRepertoire;
-    final parentTotal = node.children.values.fold<int>(
-      0,
-      (sum, c) => sum + c.gamesPlayed,
-    );
-    for (final child in node.children.values) {
-      visit(
-        child,
-        childProbability(
-          isOwnerTurn: isOwnerTurn,
-          childGames: child.gamesPlayed,
-          parentTotalGames: parentTotal,
-          cumProb: cumProb,
-        ),
-      );
-    }
+  void visit(RepertoireWalkEntry entry) {
+    out[entry.fen] = entry.cumulativeProbability;
+    final isOwnerTurn = entry.whiteToMove == isWhiteRepertoire;
+    entry.children(attenuate: isOwnerTurn).forEach(visit);
   }
 
-  visit(root, 1.0);
+  visit(
+    RepertoireWalkEntry(
+      node: root,
+      movePath: const [],
+      ply: 0,
+      cumulativeProbability: 1.0,
+    ),
+  );
   return out;
 }
 

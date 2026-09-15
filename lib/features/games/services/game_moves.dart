@@ -5,6 +5,10 @@
 /// tokens. Pure and top-level so batches can run through `compute`.
 library;
 
+const int _openParen = 0x28;
+const int _closeParen = 0x29;
+const Set<String> _resultTokens = {'1-0', '0-1', '1/2-1/2', '*'};
+
 /// Extract the mainline SAN tokens of a single-game PGN, in order.
 ///
 /// Strips headers, brace comments, nested variations, NAGs, move numbers and
@@ -29,9 +33,9 @@ List<String> extractMainlineSans(String pgn) {
   final sb = StringBuffer();
   var depth = 0;
   for (final rune in text.runes) {
-    if (rune == 0x28) {
+    if (rune == _openParen) {
       depth++;
-    } else if (rune == 0x29) {
+    } else if (rune == _closeParen) {
       if (depth > 0) depth--;
     } else if (depth == 0) {
       sb.writeCharCode(rune);
@@ -41,14 +45,8 @@ List<String> extractMainlineSans(String pgn) {
 
   final sans = <String>[];
   for (final token in text.split(RegExp(r'\s+'))) {
-    if (token.isEmpty) continue;
-    if (token == '1-0' ||
-        token == '0-1' ||
-        token == '1/2-1/2' ||
-        token == '*') {
-      continue;
-    }
-    if (token.startsWith(r'$')) continue;
+    if (token.isEmpty || _resultTokens.contains(token)) continue;
+    if (token.startsWith(r'$')) continue; // a NAG
     // "12." / "12..." alone, or glued to the move ("12.e4", "12...c5").
     final unglued = token.replaceFirst(RegExp(r'^\d+\.+'), '');
     if (unglued.isEmpty || RegExp(r'^\.+$').hasMatch(unglued)) continue;

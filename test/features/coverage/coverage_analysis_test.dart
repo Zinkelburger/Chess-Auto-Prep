@@ -126,7 +126,7 @@ void main() {
 
     final sicilian = result.unaccountedMoves.firstWhere((m) => m.move == 'c5');
     expect(sicilian.gameCount, 300);
-    expect(sicilian.source, 'masters');
+    expect(sicilian.source, UnaccountedSource.masters);
     expect(sicilian.probability, closeTo(0.3, 0.001));
   });
 

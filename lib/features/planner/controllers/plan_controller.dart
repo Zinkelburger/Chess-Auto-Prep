@@ -28,25 +28,26 @@
 /// so a move they never tried can still be added at any question. This is
 /// "turn my games into a repertoire", one decision at a time.
 ///
-/// Every decision is a snapshot on a stack, so "back" is exact.
+/// Every decision is a snapshot on a stack, so "back" is exact. Chapters and
+/// build points live in a [PlanChapterLedger]; what a question shows comes
+/// from a [PlanCandidateAssembler].
 library;
 
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../../utils/chess_utils.dart';
 import '../../../utils/fen_utils.dart';
-import '../../../services/generation/course/opening_namer.dart'
-    show formatMoveReference;
+import '../../../utils/movetext_builder.dart';
+import '../../../utils/safe_change_notifier.dart';
 import '../models/plan_models.dart';
 import '../models/plan_starting_line.dart';
 import '../services/plan_data_source.dart';
 import '../services/plan_knowledge.dart';
-import '../../../utils/movetext_builder.dart';
-import '../../../utils/safe_change_notifier.dart';
+import '../services/san_paths.dart';
+import 'plan_candidate_assembler.dart';
+import 'plan_chapter_ledger.dart';
 
 enum PlanPhase { start, walking, review }
 
@@ -55,8 +56,7 @@ enum PlanPhase { start, walking, review }
 /// not just its position — and forgets what the undone branch learned.
 class _Snapshot {
   final List<List<String>> frontier;
-  final List<PlanChapter> chapters;
-  final Map<String, int> chapterOf;
+  final PlanChapterLedgerState ledger;
   final PlanStep? step;
   final Map<String, List<String>> seenFen;
   final Map<String, List<String>> ourAnswerByFen;
@@ -64,8 +64,7 @@ class _Snapshot {
   final int decisionCount;
   const _Snapshot({
     required this.frontier,
-    required this.chapters,
-    required this.chapterOf,
+    required this.ledger,
     required this.step,
     required this.seenFen,
     required this.ourAnswerByFen,
@@ -86,7 +85,10 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     this.chapterMass = 0.10,
     this.tabiyaThreshold = 12,
     this.maxPly = 40,
-  });
+  }) : _ledger = PlanChapterLedger(
+         nameFor: source.nameFor,
+         chapterMass: chapterMass,
+       );
 
   final PlanDataSource source;
   final bool isWhite;
@@ -94,55 +96,42 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
   PlanBasis basis;
   int elo;
 
-  /// Walking own games: a position is a question when at least this many of
-  /// the user's games reached it. Resolved at [start] from the games at the
-  /// root — [chapterShare] of them, never fewer than [minOwnGames].
-  int get ownFloor => _ownFloorFor(_step?.moves ?? const []);
-  final Map<String, int> _ownFloors = {};
-  int _ownFloorFor(List<String> path) {
-    for (var n = path.length; n >= 0; n--) {
-      final found = _ownFloors[path.take(n).join(' ')];
-      if (found != null) return found;
-    }
-    return minOwnGames;
-  }
-
-  static const int minOwnGames = 3;
-
-  bool get _walksOwnGames => basis == PlanBasis.ownGames;
-
   /// Coverage floor: opponent replies below this share are the engine's
   /// business, not the plan's.
   double minShare;
 
   /// A reply at or above this share at a tabiya is set up as its own line.
-  double chapterShare;
+  final double chapterShare;
 
   /// A branch becomes its own *chapter* only when it carries at least this
   /// much of the games from the walk's root AND leads into a differently
   /// named opening family — the London gets a chapter, 7.Bxf6 does not.
-  double chapterMass;
+  final double chapterMass;
 
   /// Below this ECO tabiya score a position is not a fork.
-  int tabiyaThreshold;
-  int maxPly;
+  final int tabiyaThreshold;
+  final int maxPly;
+
+  /// Walking own games: a question needs at least this many games at a
+  /// position, however few there are at the root.
+  static const int minOwnGames = 3;
+
+  /// How many rows get database / engine evaluations per question.
+  int dbFillLimit = 10;
+  int engineFillLimit = 8;
+
+  final PlanChapterLedger _ledger;
 
   PlanPhase _phase = PlanPhase.start;
   PlanPhase get phase => _phase;
 
+  /// Paths still to be walked, in order.
   final List<List<String>> _frontier = [];
-  final List<PlanChapter> _chapters = [];
-
-  /// Which chapter each walked path belongs to (index into [_chapters]),
-  /// keyed by the joined path.
-  final Map<String, int> _chapterOf = {};
 
   /// Probability of reaching each path from the walk's root: 1.0 at the root,
   /// multiplied by the opponent's share at every reply we descend into (our
-  /// own moves cost nothing — we choose them). Keyed by the joined path.
+  /// own moves cost nothing — we choose them). Keyed by [sanPathKey].
   final Map<String, double> _reach = {};
-  double reachOf(List<String> path) => _reach[path.join(' ')] ?? 1.0;
-  void _setReach(List<String> path, double p) => _reach[path.join(' ')] = p;
   final List<_Snapshot> _history = [];
 
   PlanStep? _step;
@@ -156,8 +145,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
   /// the walk crosses into a new opening family, but one that never received
   /// a build point (the family changed again before any line ended there) is
   /// bookkeeping, not a chapter — it is never shown and never created.
-  List<PlanChapter> get chapters =>
-      List.unmodifiable(_chapters.where((c) => c.points.isNotEmpty));
+  List<PlanChapter> get chapters => _ledger.chapters;
   bool get canGoBack => _history.isNotEmpty;
 
   /// Log of what was decided, in order, for the "Plan so far" tree.
@@ -172,7 +160,52 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
   /// answered the same way without asking.
   final Map<String, List<String>> _ourAnswerByFen = {};
 
+  /// Line roots the user asked to keep setting up past the book's end. Every
+  /// position on or below such a root is asked as an ordinary question, with
+  /// no more leaf confirmations, until the user presses Stop there.
+  final List<List<String>> _manualRoots = [];
+
+  /// Walking own games: the question floor per starting line, keyed by
+  /// [sanPathKey] of the root — [chapterShare] of the games there, never
+  /// fewer than [minOwnGames].
+  final Map<String, int> _ownFloors = {};
+
+  /// Candidates whose on-demand engine run is in flight (SAN), for spinners.
+  final Set<String> evaluating = {};
+
+  /// Bumped by anything that invalidates in-flight work (start, reset, back,
+  /// finish); awaited work compares its own epoch before touching state.
   int _epoch = 0;
+
+  bool _patchNotifyScheduled = false;
+
+  /// Walking own games: a position is a question when at least this many of
+  /// the user's games reached it. Resolved at [start] from the games at the
+  /// root — see [_ownFloors].
+  int get ownFloor => _ownFloorFor(_step?.moves ?? const []);
+
+  int _ownFloorFor(List<String> path) {
+    for (var n = path.length; n >= 0; n--) {
+      final found = _ownFloors[sanPathKey(path.take(n).toList())];
+      if (found != null) return found;
+    }
+    return minOwnGames;
+  }
+
+  bool get _walksOwnGames => basis == PlanBasis.ownGames;
+
+  PlanCandidateAssembler get _assembler => PlanCandidateAssembler(
+    knowledge: knowledge,
+    walksOwnGames: _walksOwnGames,
+    chapterShare: chapterShare,
+  );
+
+  double reachOf(List<String> path) => _reach[sanPathKey(path)] ?? 1.0;
+  void _setReach(List<String> path, double p) => _reach[sanPathKey(path)] = p;
+
+  /// Whether [path] is inside a line the user is setting up by hand.
+  bool isManual(List<String> path) =>
+      _manualRoots.any((root) => sanPathStartsWith(path, root));
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -189,13 +222,12 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     _manualRoots.clear();
     _seenFen.clear();
     _ourAnswerByFen.clear();
-    _chapterOf.clear();
     _frontier
       ..clear()
       ..addAll(roots.map((r) => List.of(r.moves)));
     _reach.clear();
     _ownFloors.clear();
-    _chapters.clear();
+    _ledger.clear();
     _history.clear();
     decisions.clear();
     _step = null;
@@ -203,13 +235,14 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     for (final root in roots) {
       _setReach(root.moves, 1.0);
       if (_walksOwnGames) {
-        final rootGames = knowledge.ownGamesAt(_fenAfter(root.moves)!);
-        _ownFloors[root.moves.join(' ')] = math.max(
+        // Validated above: every root is playable.
+        final rootGames = knowledge.ownGamesAt(fenAfterSanPath(root.moves)!);
+        _ownFloors[sanPathKey(root.moves)] = math.max(
           minOwnGames,
           (rootGames * chapterShare).round(),
         );
       }
-      final chapter = await _chapterFor(root.moves);
+      final chapter = await _ledger.chapterFor(root.moves);
       if (epoch != _epoch) return;
       if (root.name.isNotEmpty) chapter.name = root.name;
     }
@@ -224,7 +257,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
   void reset() {
     _epoch++;
     _frontier.clear();
-    _chapters.clear();
+    _ledger.clear();
     _history.clear();
     decisions.clear();
     _step = null;
@@ -238,18 +271,18 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     _epoch++;
     final pending = [if (_step != null) _step!.moves, ..._frontier];
     for (final path in pending) {
-      await _cutChapter(path, reason: 'left to the engine from here');
+      await _ledger.cut(path, reason: 'left to the engine from here');
     }
     _frontier.clear();
     _step = null;
     _phase = PlanPhase.review;
-    _disambiguateNames();
+    final chapters = _ledger.finish();
     notifyListeners();
     return RepertoirePlan(
       isWhite: isWhite,
       elo: elo,
       minShare: minShare,
-      chapters: List.of(_chapters),
+      chapters: chapters,
     );
   }
 
@@ -263,21 +296,14 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     if (picks.isEmpty) return;
     _pushHistory();
     _ourAnswerByFen[normalizeFen(step.fen)] = picks;
-    for (final san in picks.reversed) {
-      final child = [...step.moves, san];
-      _setReach(child, reachOf(step.moves));
-      // Two of our own systems (…e6 and …c6) are two chapters; a choice
-      // that stays in the same family stays in the chapter.
-      await _assignChapter(child, parent: step.moves, ourChoice: true);
-      _frontier.insert(0, child);
-    }
+    // Two of our own systems (…e6 and …c6) are two chapters; a choice
+    // that stays in the same family stays in the chapter.
+    await _continueWithOurMoves(step.moves, picks);
     decisions.add('${_ref(step.moves.length)}: you play ${picks.join(' / ')}');
     _step = null;
     await _advance();
   }
 
-  /// Their-move tabiya: [split] get their own chapters; the rest stay with a
-  /// sidelines chapter here (if they carry enough games).
   /// Their-move step: the ticked replies are set up, and only they. A
   /// repertoire is what you chose; nothing is added for what you did not.
   Future<void> acceptCoverage(Iterable<String> split) async {
@@ -296,7 +322,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     }
     if (splitSans.isEmpty) {
       // Nothing ticked: this line ends here and the engine takes it.
-      await _cutChapter(step.moves, reason: 'generate from here');
+      await _ledger.cut(step.moves, reason: 'generate from here');
     }
     decisions.add(
       '${_ref(step.moves.length)}: set up ${splitSans.isEmpty ? 'nothing more — generate from here' : splitSans.join(', ')}',
@@ -311,12 +337,8 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     if (step == null) return;
     _pushHistory();
     // Stopping ends the manual stretch for this line only.
-    _manualRoots.removeWhere(
-      (r) =>
-          r.length <= step.moves.length &&
-          List.generate(r.length, (i) => r[i] == step.moves[i]).every((b) => b),
-    );
-    await _cutChapter(step.moves, reason: 'you stopped here');
+    _manualRoots.removeWhere((root) => sanPathStartsWith(step.moves, root));
+    await _ledger.cut(step.moves, reason: 'you stopped here');
     decisions.add('${_ref(step.moves.length)}: generate from here');
     _step = null;
     await _advance();
@@ -325,6 +347,52 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
   /// Our-move fork left to the engine — same as stopping here.
   Future<void> skipToEngine() => stopHere();
 
+  /// Transposition accepted: the earlier line covers this; nothing to cut.
+  Future<void> skipTransposition() async {
+    final step = _step;
+    if (step == null || step.kind != PlanStepKind.transposition) return;
+    _pushHistory();
+    decisions.add(
+      '${_ref(step.moves.length)}: transposes to '
+      '${_label(step.transposesTo ?? const [])} — covered there',
+    );
+    _step = null;
+    await _advance();
+  }
+
+  /// Transposition refused: treat this move order as its own line.
+  Future<void> setUpSeparately() async {
+    final step = _step;
+    if (step == null || step.kind != PlanStepKind.transposition) return;
+    _pushHistory();
+    _seenFen[normalizeFen(step.fen)] = List.of(step.moves);
+    _manualRoots.add(List.of(step.moves));
+    _step = null;
+    await _openStep(step.moves);
+  }
+
+  /// Leaf confirmed: cut the chapter here and move on.
+  Future<void> confirmLeaf() async {
+    final step = _step;
+    if (step == null || step.kind != PlanStepKind.confirmLeaf) return;
+    _pushHistory();
+    await _ledger.cut(step.moves, reason: 'you chose to generate from here');
+    decisions.add('${_ref(step.moves.length)}: generate from here');
+    _step = null;
+    await _advance();
+  }
+
+  /// Leaf refused: keep setting up from this position — ask here as a normal
+  /// question even though the book is thin.
+  Future<void> continueSetup() async {
+    final step = _step;
+    if (step == null || step.kind != PlanStepKind.confirmLeaf) return;
+    _pushHistory();
+    _manualRoots.add(List.of(step.moves));
+    _step = null;
+    await _openStep(step.moves);
+  }
+
   Future<void> back() async {
     if (_history.isEmpty) return;
     _epoch++;
@@ -332,12 +400,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     _frontier
       ..clear()
       ..addAll(snap.frontier.map(List<String>.of));
-    _chapters
-      ..clear()
-      ..addAll([for (final c in snap.chapters) c.copy()]);
-    _chapterOf
-      ..clear()
-      ..addAll(snap.chapterOf);
+    _ledger.restore(snap.ledger);
     _seenFen
       ..clear()
       ..addAll(snap.seenFen);
@@ -375,14 +438,59 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  // ── Candidates of the open question ────────────────────────────────────
+
+  /// Run the engine for one candidate that has no evaluation yet.
+  Future<void> evaluateCandidate(String san) async {
+    final step = _step;
+    if (step == null || step.loading || evaluating.contains(san)) return;
+    if (!step.candidates.any((c) => c.san == san)) return;
+    final after = fenAfterSanPath([...step.moves, san]);
+    if (after == null) return;
+    evaluating.add(san);
+    notifyListeners();
+    final result = await source.engineEval(after);
+    evaluating.remove(san);
+    if (!_isStepAt(step.moves)) {
+      notifyListeners();
+      return;
+    }
+    if (result != null) {
+      _replaceCandidate(
+        san,
+        (c) => c.copyWith(
+          evalCp: result.cp,
+          evalDepth: result.depth,
+          evalSource: 'Stockfish',
+        ),
+      );
+    }
+    notifyListeners();
+  }
+
+  /// A move the user played on the board at the current question: make it a
+  /// candidate (it may be one Maia never listed) and select nothing else —
+  /// the caller decides selection.
+  void addCandidate(String san) {
+    final step = _step;
+    if (step == null || step.loading) return;
+    if (step.candidates.any((c) => c.san == san)) return;
+    _step = step.copyWith(
+      candidates: [
+        ...step.candidates,
+        PlanCandidate(san: san),
+      ],
+    );
+    notifyListeners();
+  }
+
   // ── The walk ───────────────────────────────────────────────────────────
 
   void _pushHistory() {
     _history.add(
       _Snapshot(
         frontier: _frontier.map(List<String>.of).toList(),
-        chapters: [for (final c in _chapters) c.copy()],
-        chapterOf: Map.of(_chapterOf),
+        ledger: _ledger.snapshot(),
         step: _step,
         seenFen: Map.of(_seenFen),
         ourAnswerByFen: Map.of(_ourAnswerByFen),
@@ -407,19 +515,19 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     if (epoch != _epoch) return;
     // Nothing left to ask.
     _phase = PlanPhase.review;
-    _disambiguateNames();
+    _ledger.finish();
     notifyListeners();
   }
 
   /// Handles [path] if no question is needed. Returns true when it did.
   Future<bool> _decideWithoutAsking(List<String> path) async {
-    final fen = _fenAfter(path);
+    final fen = fenAfterSanPath(path);
     if (fen == null) {
-      await _cutChapter(path, reason: 'unplayable path');
+      await _ledger.cut(path, reason: 'unplayable path');
       return true;
     }
     if (path.length >= maxPly) {
-      await _cutChapter(path, reason: 'deep enough — engine from here');
+      await _ledger.cut(path, reason: 'deep enough — engine from here');
       return true;
     }
     final key = normalizeFen(fen);
@@ -428,17 +536,13 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     // Transposition: this position was already set up via another move
     // order. Reuse rather than ask twice.
     final earlier = _seenFen[key];
-    if (earlier != null && earlier.join(' ') != path.join(' ')) {
-      if (ourMove && _ourAnswerByFen[key] != null) {
-        for (final san in _ourAnswerByFen[key]!.reversed) {
-          final child = [...path, san];
-          _setReach(child, reachOf(path));
-          await _assignChapter(child, parent: path, ourChoice: true);
-          _frontier.insert(0, child);
-        }
+    if (earlier != null && sanPathKey(earlier) != sanPathKey(path)) {
+      final answer = ourMove ? _ourAnswerByFen[key] : null;
+      if (answer != null) {
+        await _continueWithOurMoves(path, answer);
         decisions.add(
           '${_ref(path.length)}: same position as ${_label(earlier)} — '
-          '${_ourAnswerByFen[key]!.join(' / ')} again',
+          '${answer.join(' / ')} again',
         );
         return true;
       }
@@ -458,7 +562,6 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
       }
     } else {
       final score = await source.tabiyaScore(path);
-
       if (score < tabiyaThreshold && !isManual(path)) {
         // The book does not fork here. For the opponent's move that is not
         // the last word: two replies can both be common and lead to
@@ -476,10 +579,7 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     if (ourMove) {
       final known = knowledge.chapterMovesAt(fen);
       if (known.length == 1) {
-        final child = [...path, known.first];
-        _setReach(child, reachOf(path));
-        await _assignChapter(child, parent: path, ourChoice: true);
-        _frontier.insert(0, child);
+        await _continueWithOurMoves(path, [known.first]);
         decisions.add(
           '${_ref(path.length)}: ${known.first} (already in your chapters)',
         );
@@ -500,26 +600,43 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
       ourMove: false,
       elo: elo,
     );
-    final big = candidates
-        .where((c) => (c.share ?? 0) >= chapterShare)
-        .toList();
+    final big = [
+      for (final c in candidates)
+        if ((c.share ?? 0) >= chapterShare) c,
+    ];
     if (big.length < 2) return false;
-    final codes = big.map((c) => c.eco).where((e) => e != null).toSet();
+    final codes = {
+      for (final c in big)
+        if (c.eco != null) c.eco,
+    };
     if (codes.length >= 2) return true;
     final captures = big.where((c) => c.san.contains('x')).length;
     return captures > 0 && captures < big.length;
   }
 
-  /// Line roots the user asked to keep setting up past the book's end. Every
-  /// position on or below such a root is asked as an ordinary question, with
-  /// no more leaf confirmations, until the user presses Stop there.
-  final List<List<String>> _manualRoots = [];
+  /// Our moves [sans] from [path] each continue the walk on their own path,
+  /// in order, at the front of the frontier.
+  Future<void> _continueWithOurMoves(
+    List<String> path,
+    List<String> sans,
+  ) async {
+    for (final san in sans.reversed) {
+      final child = [...path, san];
+      _setReach(child, reachOf(path));
+      await _assignChapter(child, parent: path, ourChoice: true);
+      _frontier.insert(0, child);
+    }
+  }
 
-  /// Whether [path] is inside a line the user is setting up by hand.
-  bool isManual(List<String> path) => _manualRoots.any(
-    (r) =>
-        r.length <= path.length &&
-        List.generate(r.length, (i) => r[i] == path[i]).every((b) => b),
+  Future<void> _assignChapter(
+    List<String> child, {
+    required List<String> parent,
+    required bool ourChoice,
+  }) => _ledger.assign(
+    child,
+    parent: parent,
+    ourChoice: ourChoice,
+    reach: reachOf(child),
   );
 
   Future<void> _openTransposition(
@@ -543,33 +660,6 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Transposition accepted: the earlier line covers this; nothing to cut.
-  Future<void> skipTransposition() async {
-    final step = _step;
-    if (step == null || step.kind != PlanStepKind.transposition) return;
-    _pushHistory();
-    decisions.add(
-      '${_ref(step.moves.length)}: transposes to '
-      '${_label(step.transposesTo ?? const [])} — covered there',
-    );
-    _step = null;
-    await _advance();
-  }
-
-  /// Transposition refused: treat this move order as its own line.
-  Future<void> setUpSeparately() async {
-    final step = _step;
-    if (step == null || step.kind != PlanStepKind.transposition) return;
-    _pushHistory();
-    _seenFen[normalizeFen(step.fen)] = List.of(step.moves);
-    _manualRoots.add(List.of(step.moves));
-    _step = null;
-    await _openStep(step.moves);
-  }
-
-  static String _label(List<String> moves) =>
-      buildNumberedMovetext(moves, compact: true);
-
   Future<void> _openLeafConfirm(List<String> path, String fen) async {
     final name = await source.nameFor(path);
     _step = PlanStep(
@@ -586,90 +676,15 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Leaf confirmed: cut the chapter here and move on.
-  Future<void> confirmLeaf() async {
-    final step = _step;
-    if (step == null || step.kind != PlanStepKind.confirmLeaf) return;
-    _pushHistory();
-    await _cutChapter(step.moves, reason: 'you chose to generate from here');
-    decisions.add('${_ref(step.moves.length)}: generate from here');
-    _step = null;
-    await _advance();
-  }
-
-  /// Leaf refused: keep setting up from this position — ask here as a normal
-  /// question even though the book is thin.
-  Future<void> continueSetup() async {
-    final step = _step;
-    if (step == null || step.kind != PlanStepKind.confirmLeaf) return;
-    _pushHistory();
-    _manualRoots.add(List.of(step.moves));
-    _step = null;
-    await _openStep(step.moves);
-  }
-
-  /// Candidates whose on-demand engine run is in flight (SAN), for spinners.
-  final Set<String> evaluating = {};
-
-  /// Run the engine for one candidate that has no evaluation yet.
-  Future<void> evaluateCandidate(String san) async {
-    final step = _step;
-    if (step == null || step.loading || evaluating.contains(san)) return;
-    final cand = step.candidates.where((c) => c.san == san).firstOrNull;
-    if (cand == null) return;
-    final after = _fenAfter([...step.moves, san]);
-    if (after == null) return;
-    evaluating.add(san);
-    notifyListeners();
-    final result = await source.engineEval(after);
-    evaluating.remove(san);
-    final current = _step;
-    if (current == null || current.moves != step.moves) {
-      notifyListeners();
-      return;
-    }
-    if (result != null) {
-      _step = current.copyWith(
-        candidates: [
-          for (final c in current.candidates)
-            c.san == san
-                ? c.copyWith(
-                    evalCp: result.cp,
-                    evalDepth: result.depth,
-                    evalSource: 'Stockfish',
-                  )
-                : c,
-        ],
-      );
-    }
-    notifyListeners();
-  }
-
-  /// A move the user played on the board at the current question: make it a
-  /// candidate (it may be one Maia never listed) and select nothing else —
-  /// the caller decides selection.
-  void addCandidate(String san) {
-    final step = _step;
-    if (step == null || step.loading) return;
-    if (step.candidates.any((c) => c.san == san)) return;
-    _step = step.copyWith(
-      candidates: [
-        ...step.candidates,
-        PlanCandidate(san: san),
-      ],
-    );
-    notifyListeners();
-  }
-
   Future<void> _openStep(List<String> path) async {
     final epoch = _epoch;
-    final fen = _fenAfter(path)!;
+    // Every path reaching here was played through by [_decideWithoutAsking].
+    final fen = fenAfterSanPath(path)!;
     final ourMove = _isOurMove(fen);
-    final kind = ourMove ? PlanStepKind.ourMove : PlanStepKind.theirMove;
     final name = await source.nameFor(path);
     _step = PlanStep(
       moves: path,
-      kind: kind,
+      kind: ourMove ? PlanStepKind.ourMove : PlanStepKind.theirMove,
       fen: fen,
       candidates: const [],
       loading: true,
@@ -680,61 +695,24 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     );
     notifyListeners();
 
-    var candidates = await source.candidates(
+    final sourced = await source.candidates(
       fen: fen,
       moves: path,
       ourMove: ourMove,
       elo: elo,
     );
-    if (epoch != _epoch || _step == null || _step!.moves != path) return;
+    if (epoch != _epoch || !_isStepAt(path)) return;
 
-    candidates = _overlayKnowledge(candidates, fen, ourMove);
-    if (_walksOwnGames) {
-      // What the user actually played comes first, most often on top; the
-      // moves they never tried follow in the sources' order.
-      final ownCounts = knowledge.ownCountsAt(fen);
-      final indexed = candidates.indexed.toList();
-      indexed.sort((a, b) {
-        final ca = ownCounts[a.$2.san] ?? 0;
-        final cb = ownCounts[b.$2.san] ?? 0;
-        if (ca != cb) return cb.compareTo(ca);
-        return a.$1.compareTo(b.$1);
-      });
-      candidates = [for (final e in indexed) e.$2];
-    }
-    final pre = <String>{};
-    if (ourMove) {
-      // One move at our own turn: the chapter's move if it has one, else the
-      // user's most-played move here, else nothing.
-      final inChapters = candidates.where((c) => c.inChapters);
-      if (inChapters.isNotEmpty) {
-        pre.add(inChapters.first.san);
-      } else if (_walksOwnGames) {
-        // Walking their games: the move they played most is the default.
-        final own = candidates.where((c) => (c.ownGames ?? 0) > 0);
-        if (own.isNotEmpty) pre.add(own.first.san);
-      } else {
-        // Their own most-played move, when they have played here enough.
-        final own = candidates
-            .where((c) => (c.ownGames ?? 0) >= 5 && (c.ownShare ?? 0) >= 0.4)
-            .toList();
-        if (own.isNotEmpty) pre.add(own.first.san);
-      }
-    } else if (_walksOwnGames) {
-      // Every reply met often enough to be a question of its own.
-      final ownCounts = knowledge.ownCountsAt(fen);
-      for (final c in candidates) {
-        if ((ownCounts[c.san] ?? 0) >= _ownFloorFor(path)) pre.add(c.san);
-      }
-    } else {
-      for (final c in candidates) {
-        if ((c.share ?? 0) >= chapterShare) pre.add(c.san);
-      }
-    }
+    final assembled = _assembler.assemble(
+      sourced,
+      fen: fen,
+      ourMove: ourMove,
+      ownFloor: _ownFloorFor(path),
+    );
     _step = _step!.copyWith(
-      candidates: candidates,
+      candidates: assembled.candidates,
       loading: false,
-      preselected: pre,
+      preselected: assembled.preselected,
     );
     notifyListeners();
     // The question is on screen; now the slow parts land row by row: the
@@ -742,62 +720,60 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     unawaited(_fillEvals(path, epoch));
   }
 
-  /// How many rows get database / engine evaluations per question.
-  int dbFillLimit = 10;
-  int engineFillLimit = 8;
-
   Future<void> _fillEvals(List<String> path, int epoch) async {
     final step = _step;
-    if (step == null || step.moves != path) return;
+    if (step == null || !listEquals(step.moves, path)) return;
     final targets = step.candidates.take(dbFillLimit).toList();
-    await Future.wait(
-      targets.map((c) async {
-        final after = _fenAfter([...path, c.san]);
-        if (after == null) return;
-        final hit = await source.dbEval(after);
-        if (hit == null || epoch != _epoch || isDisposed) return;
-        _patchCandidate(
-          path,
-          c.san,
-          (x) => x.copyWith(
-            evalCp: hit.cp,
-            evalDepth: hit.depth,
-            evalSource: hit.source,
-          ),
-        );
-      }),
-    );
+    await Future.wait([
+      for (final c in targets) _fillDbEval(path, c.san, epoch),
+    ]);
     if (epoch != _epoch || isDisposed) return;
-    final missing =
-        (_step?.moves == path ? _step!.candidates : const <PlanCandidate>[])
-            .where((c) => c.evalCp == null)
-            .take(engineFillLimit)
-            .map((c) => c.san)
-            .toList();
+    final missing = _candidatesAt(path)
+        .where((c) => c.evalCp == null)
+        .take(engineFillLimit)
+        .map((c) => c.san)
+        .toList();
     for (final san in missing) {
-      if (epoch != _epoch || isDisposed) return;
-      if (_step == null || _step!.moves != path) return;
+      if (epoch != _epoch || isDisposed || !_isStepAt(path)) return;
       await evaluateCandidate(san);
     }
   }
 
-  /// Replace one candidate of the current step (if still at [path]).
-  ///
-  /// Patches that land in the same event-loop turn — the database answers
-  /// for a whole question arrive together — coalesce into one notification;
-  /// a patch that arrives on its own still shows up on its own.
-  void _patchCandidate(
-    List<String> path,
+  Future<void> _fillDbEval(List<String> path, String san, int epoch) async {
+    final after = fenAfterSanPath([...path, san]);
+    if (after == null) return;
+    final hit = await source.dbEval(after);
+    if (hit == null || epoch != _epoch || isDisposed) return;
+    if (!_isStepAt(path)) return;
+    _replaceCandidate(
+      san,
+      (c) => c.copyWith(
+        evalCp: hit.cp,
+        evalDepth: hit.depth,
+        evalSource: hit.source,
+      ),
+    );
+    _notifyCoalesced();
+  }
+
+  /// Replace one candidate of the current step.
+  void _replaceCandidate(
     String san,
     PlanCandidate Function(PlanCandidate) update,
   ) {
     final current = _step;
-    if (current == null || current.moves != path) return;
+    if (current == null) return;
     _step = current.copyWith(
       candidates: [
         for (final c in current.candidates) c.san == san ? update(c) : c,
       ],
     );
+  }
+
+  /// Patches that land in the same event-loop turn — the database answers
+  /// for a whole question arrive together — coalesce into one notification;
+  /// a patch that arrives on its own still shows up on its own.
+  void _notifyCoalesced() {
     if (_patchNotifyScheduled) return;
     _patchNotifyScheduled = true;
     scheduleMicrotask(() {
@@ -806,188 +782,26 @@ class PlanController extends ChangeNotifier with SafeChangeNotifier {
     });
   }
 
-  bool _patchNotifyScheduled = false;
-
-  List<PlanCandidate> _overlayKnowledge(
-    List<PlanCandidate> candidates,
-    String fen,
-    bool ourMove,
-  ) {
-    final chapterMoves = ourMove
-        ? knowledge.chapterMovesAt(fen)
-        : const <String>{};
-    final out = <PlanCandidate>[];
-    final seen = <String>{};
-    for (final c in candidates) {
-      final own = ourMove
-          ? knowledge.ownMoveAt(fen, c.san)
-          : knowledge.ownReplyAt(fen, c.san);
-      out.add(
-        c.copyWith(
-          inChapters: chapterMoves.contains(c.san),
-          ownShare: own?.share,
-          ownGames: own?.games,
-        ),
-      );
-      seen.add(c.san);
-    }
-    // A move the user plays that the sources did not list still deserves a row.
-    for (final san in chapterMoves) {
-      if (seen.add(san)) {
-        final own = knowledge.ownMoveAt(fen, san);
-        out.add(
-          PlanCandidate(
-            san: san,
-            inChapters: true,
-            ownShare: own?.share,
-            ownGames: own?.games,
-          ),
-        );
-      }
-    }
-    // Likewise anything that actually happened in their games (an offbeat
-    // move of theirs, a reply Maia rates below its cut-off).
-    for (final san in knowledge.ownCountsAt(fen).keys) {
-      if (seen.add(san)) {
-        final own = ourMove
-            ? knowledge.ownMoveAt(fen, san)
-            : knowledge.ownReplyAt(fen, san);
-        out.add(
-          PlanCandidate(san: san, ownShare: own?.share, ownGames: own?.games),
-        );
-      }
-    }
-    return out;
-  }
-
   /// The share an opponent reply multiplies the reach by: their share of
   /// the user's own games when walking those, Maia's otherwise.
   double? _reachShare(PlanCandidate c) =>
       _walksOwnGames ? (c.ownShare ?? c.share) : c.share;
 
-  static String familyOf(String? bookName) {
-    if (bookName == null || bookName.isEmpty) return 'Repertoire';
-    final colon = bookName.indexOf(':');
-    return (colon > 0 ? bookName.substring(0, colon) : bookName).trim();
-  }
-
-  /// The chapter [path] belongs to, creating the root chapter on first use.
-  Future<PlanChapter> _chapterFor(List<String> path) async {
-    final key = path.join(' ');
-    final idx = _chapterOf[key];
-    if (idx != null) return _chapters[idx];
-    // Only the walk's root gets here without an assignment.
-    final family = familyOf(await source.nameFor(path));
-    final chapter = PlanChapter(
-      name: family,
-      family: family,
-      moves: List.of(path),
-    );
-    _chapters.add(chapter);
-    _chapterOf[key] = _chapters.length - 1;
-    return chapter;
-  }
-
-  /// Decide whether [child] starts a new chapter or stays in its parent's.
-  ///
-  /// New chapter when the book names a *different family* below the child
-  /// and — for an opponent's reply — the branch carries [chapterMass] of the
-  /// games from the root. Our own choices (…e6 vs …c6) split by family alone:
-  /// the user chose both systems.
-  Future<void> _assignChapter(
-    List<String> child, {
-    required List<String> parent,
-    required bool ourChoice,
-  }) async {
-    final parentChapter = await _chapterFor(parent);
-    final parentIdx = _chapters.indexOf(parentChapter);
-    final family = familyOf(await source.nameFor(child));
-    final differs = family != parentChapter.family;
-    final heavy = ourChoice || reachOf(child) >= chapterMass;
-    if (differs && heavy) {
-      final chapter = PlanChapter(
-        name: family,
-        family: family,
-        moves: List.of(child),
-      );
-      _chapters.add(chapter);
-      _chapterOf[child.join(' ')] = _chapters.length - 1;
-    } else {
-      _chapterOf[child.join(' ')] = parentIdx;
-    }
-  }
-
-  /// The walk stops at [path]: record a build point in its chapter.
-  Future<void> _cutChapter(
-    List<String> path, {
-    List<String> excludeReplies = const [],
-    required String reason,
-  }) async {
-    final chapter = await _chapterFor(path);
-    chapter.points.add(
-      PlanBuildPoint(
-        moves: List.of(path),
-        excludeReplies: excludeReplies,
-        reason: reason,
-      ),
-    );
-  }
-
-  /// Two chapters of the same family (rare: two of our systems inside one
-  /// name) get the move that tells them apart appended.
-  void _disambiguateNames() {
-    final byName = <String, List<PlanChapter>>{};
-    for (final c in _chapters) {
-      byName.putIfAbsent(c.name, () => []).add(c);
-    }
-    for (final group in byName.values) {
-      if (group.length < 2) continue;
-      var prefix = List.of(group.first.moves);
-      for (final c in group.skip(1)) {
-        var n = 0;
-        while (n < prefix.length &&
-            n < c.moves.length &&
-            prefix[n] == c.moves[n]) {
-          n++;
-        }
-        prefix = prefix.sublist(0, n);
-      }
-      for (final c in group) {
-        if (c.moves.length > prefix.length) {
-          final ref = formatMoveReference(
-            c.moves[prefix.length],
-            prefix.length,
-            rootWhiteToMove: true,
-          );
-          if (!c.name.contains(ref)) c.name = '${c.name} · $ref';
-        }
-      }
-    }
-    // Chapters that ended up with nothing to build (every branch moved into
-    // another chapter) are dropped, and empty names are given something.
-    _chapters.removeWhere((c) => c.points.isEmpty);
-  }
-
   // ── Helpers ────────────────────────────────────────────────────────────
 
-  bool _isOurMove(String fen) {
-    final whiteToMove = isWhiteToMove(fen);
-    return whiteToMove == isWhite;
+  /// Whether the open question is still the one at [path].
+  bool _isStepAt(List<String> path) {
+    final step = _step;
+    return step != null && listEquals(step.moves, path);
   }
 
-  static String? _fenAfter(List<String> path) {
-    try {
-      var pos = Chess.initial as Position;
-      for (final san in path) {
-        final next = playSanOrNullMove(pos, san);
-        if (next == null) return null;
-        pos = next;
-      }
-      return pos.fen;
-    } catch (_) {
-      return null;
-    }
-  }
+  List<PlanCandidate> _candidatesAt(List<String> path) =>
+      _isStepAt(path) ? _step!.candidates : const [];
+
+  bool _isOurMove(String fen) => isWhiteToMove(fen) == isWhite;
+
+  static String _label(List<String> moves) =>
+      buildNumberedMovetext(moves, compact: true);
 
   static String _ref(int ply) => 'move ${ply ~/ 2 + 1}';
 }

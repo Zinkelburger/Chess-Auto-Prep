@@ -236,12 +236,12 @@ class MasterPracticeReview {
 
   bool get isEmpty => mine.isEmpty && theirs.isEmpty && inBook.isEmpty;
 
-  int _count(List<MasterPracticeEntry> entries) =>
+  static int _gamesIn(List<MasterPracticeEntry> entries) =>
       entries.fold(0, (sum, e) => sum + e.games.length);
 
-  int get myGames => _count(mine);
-  int get theirGames => _count(theirs);
-  int get inBookGames => _count(inBook);
+  int get myGames => _gamesIn(mine);
+  int get theirGames => _gamesIn(theirs);
+  int get inBookGames => _gamesIn(inBook);
 
   /// Average full-move number at which my games left master practice, over
   /// the games where someone did. Null when nobody left.
@@ -309,19 +309,17 @@ class MasterPracticeReviewer {
     BookMove? last;
     for (var ply = 0; ply < game.sans.length; ply++) {
       final san = game.sans[ply];
-      final Move? parsed;
-      try {
-        parsed = pos.parseSan(san);
-      } catch (_) {
-        return _ended(pos, path, last);
-      }
+      final parsed = _parseSan(pos, san);
       if (parsed == null) {
-        if (ply == 0) return null;
-        return _ended(pos, path, last);
+        // A game whose first move does not parse cannot be walked at all;
+        // one that goes wrong later ended, as far as the book is concerned.
+        return ply == 0 ? null : _ended(pos, path, last);
       }
       final fen = pos.fen;
       final moves = _movesFrom(fen);
       if (moves.isEmpty) {
+        // The corpus stops here (depth, or no master game went on): nobody
+        // left, whatever was played next.
         return MasterPracticeReport(
           matchedPlies: ply,
           fen: fen,
@@ -332,13 +330,7 @@ class MasterPracticeReviewer {
           lastBookMove: last,
         );
       }
-      BookMove? hit;
-      for (final m in moves) {
-        if (m.uci == parsed.uci) {
-          hit = m;
-          break;
-        }
-      }
+      final hit = moves.where((m) => m.uci == parsed.uci).firstOrNull;
       if (hit == null) {
         return MasterPracticeReport(
           matchedPlies: ply,
@@ -357,6 +349,17 @@ class MasterPracticeReviewer {
     return _ended(pos, path, last);
   }
 
+  /// [san] as a legal move in [pos], or null when it is not one — including
+  /// tokens the parser rejects outright rather than merely fails to match.
+  static Move? _parseSan(Position pos, String san) {
+    try {
+      return pos.parseSan(san);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The game (or the book) ended at [pos] with nobody leaving.
   MasterPracticeReport _ended(
     Position pos,
     List<String> path,
@@ -375,6 +378,8 @@ class MasterPracticeReviewer {
     try {
       return lookup(fen);
     } catch (_) {
+      // A lookup that fails (a closed or corrupt database) reads as "the
+      // book has nothing here" rather than failing the whole review.
       return const [];
     }
   }
@@ -417,26 +422,30 @@ class MasterPracticeReviewer {
       }
     }
 
-    List<MasterPracticeEntry> ordered(Map<String, MasterPracticeEntry> m) {
-      final list = m.values.toList()
-        ..sort((a, b) {
-          final count = b.games.length.compareTo(a.games.length);
-          if (count != 0) return count;
-          final la = a.latest;
-          final lb = b.latest;
-          if (la != null && lb != null && la != lb) return lb.compareTo(la);
-          return b.report.matchedPlies.compareTo(a.report.matchedPlies);
-        });
-      return list;
-    }
-
     return MasterPracticeReview(
-      mine: ordered(mine),
-      theirs: ordered(theirs),
-      inBook: ordered(inBook),
+      mine: _ordered(mine),
+      theirs: _ordered(theirs),
+      inBook: _ordered(inBook),
       gamesChecked: checked,
       gamesSkipped: skipped,
     );
+  }
+
+  /// Most repeated first; then most recent; then deepest.
+  static List<MasterPracticeEntry> _ordered(
+    Map<String, MasterPracticeEntry> entries,
+  ) => entries.values.toList()..sort(_byRepetitionRecencyDepth);
+
+  static int _byRepetitionRecencyDepth(
+    MasterPracticeEntry a,
+    MasterPracticeEntry b,
+  ) {
+    final count = b.games.length.compareTo(a.games.length);
+    if (count != 0) return count;
+    final la = a.latest;
+    final lb = b.latest;
+    if (la != null && lb != null && la != lb) return lb.compareTo(la);
+    return b.report.matchedPlies.compareTo(a.report.matchedPlies);
   }
 
   /// The games to open at a branch point: for each of the masters' top moves

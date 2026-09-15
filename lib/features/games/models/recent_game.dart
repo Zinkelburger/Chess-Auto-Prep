@@ -44,6 +44,9 @@ class RecentGame {
   /// Filled in after the list loads; null until computed (or when no
   /// repertoire is designated for my color).
   DeviationReport? deviation;
+
+  /// Whether the deviation pass has visited this row, so a null [deviation]
+  /// can be told from "not checked yet".
   bool deviationComputed = false;
 
   /// Whether a repertoire was designated for my color when [deviation] was
@@ -151,8 +154,7 @@ class RecentGame {
   /// The game's web URL (chess.com `Link`, lichess `Site`), when present.
   String? get gameUrl {
     final link = record.headers['Link'] ?? record.headers['Site'];
-    if (link != null && link.contains('://')) return link.trim();
-    return null;
+    return link != null && link.contains('://') ? link.trim() : null;
   }
 
   /// ("1", "0") style per-player score pair aligned with the White/Black
@@ -179,24 +181,11 @@ class RecentGame {
   String get timeControlDisplay =>
       formatTimeControl(record.headers['TimeControl']);
 
+  /// "Sep 4, 2026", or the raw `Date` header when it did not parse.
   String get dateDisplay {
     final d = record.date;
     if (d == null) return record.headers['Date'] ?? '—';
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}, ${d.year}';
+    return '${_monthAbbreviations[d.month - 1]} ${d.day}, ${d.year}';
   }
 
   /// Year-less date for the embedded recent-games pane — everything it shows
@@ -204,23 +193,24 @@ class RecentGame {
   String get dateDisplayShort {
     final d = record.date;
     if (d == null) return record.headers['Date'] ?? '—';
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}';
+    return '${_monthAbbreviations[d.month - 1]} ${d.day}';
   }
 }
+
+const List<String> _monthAbbreviations = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 /// "180+2" → "3+2", "600" → "10+0", "30+0" → "½+0", "-" → "∞".
 String formatTimeControl(String? tc) {

@@ -1,9 +1,14 @@
 /// Walks an existing repertoire tree (BFS) and emits findings about
 /// move quality, missing opponent responses, and dead ends.
+///
+/// At each of our positions Stockfish rates the repertoire's moves against
+/// its best; at each opponent position the [MissingReplyFinder] asks every
+/// enabled source for replies the file does not answer; at each opponent
+/// leaf the same sources decide whether the line stops where the game still
+/// has choices.
 library;
 
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
@@ -12,34 +17,35 @@ import '../../../models/opening_tree.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/eval/chessdb_api_provider.dart';
 import '../../../services/eval/db_move_list.dart';
-import '../../../services/eval/eval_move_helpers.dart';
 import '../../../services/eval_cache.dart';
 import '../../../services/maia/maia_factory.dart';
 import '../../../services/opening_tree_builder.dart';
 import '../../../services/pgn_parsing_service.dart' as pgn;
-import '../../../services/probability_service.dart';
 import '../../../services/run_control.dart';
 import '../../../utils/chess_utils.dart' as chess_utils;
 import '../../../utils/fen_utils.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
 import 'audit_config.dart';
+import 'engine_position_probe.dart';
+import 'missing_reply_finder.dart';
+import 'repertoire_walk.dart';
 
 /// Progress callback emitted periodically during an audit pass.
 typedef AuditProgressCallback = void Function(AuditProgress progress);
 
 class AuditProgress {
-  final int nodesChecked;
-  final int totalNodes;
-  final int findingsCount;
-  final String? currentFen;
-
   const AuditProgress({
     required this.nodesChecked,
     required this.totalNodes,
     required this.findingsCount,
     this.currentFen,
   });
+
+  final int nodesChecked;
+  final int totalNodes;
+  final int findingsCount;
+  final String? currentFen;
 
   double get percent => totalNodes > 0 ? (nodesChecked / totalNodes) * 100 : 0;
 }
@@ -51,16 +57,19 @@ class RepertoireAuditService {
   RepertoireAuditService({
     ExternalMoveProvider? chessDbProvider,
     StockfishPool? pool,
+    EvalCache? evalCache,
   }) : _chessDbOverride = chessDbProvider,
-       _pool = pool ?? StockfishPool.instance;
+       _probe = EnginePositionProbe(pool: pool, evalCache: evalCache);
 
-  final StockfishPool _pool;
-  final ProbabilityService _probService = ProbabilityService.instance;
-  final EvalCache _evalCache = EvalCache.instance;
+  /// A dead end with at least this many continuations is a warning rather
+  /// than a note.
+  static const int _deadEndWarningContinuations = 4;
+
+  /// How deep a clash PGN is read; repertoire files rarely go further.
+  static const int _clashTreeMaxDepth = 40;
+
+  final EnginePositionProbe _probe;
   final ExternalMoveProvider? _chessDbOverride;
-
-  /// The ChessDB source for the run in progress, or null when it is off.
-  ExternalMoveProvider? _chessDb;
 
   /// Cooperative pause/cancel for the run in progress.
   final RunControl _control = RunControl();
@@ -69,6 +78,7 @@ class RepertoireAuditService {
   /// Useful for saving progress on cancellation.
   Set<String> get checkedFens => Set.unmodifiable(_checkedFens);
   final Set<String> _checkedFens = {};
+
   final Set<String> _warnings = {};
   List<String> get warnings => List.unmodifiable(_warnings);
 
@@ -96,49 +106,26 @@ class RepertoireAuditService {
     List<String> priorWarnings = const [],
   }) async {
     _control.reset();
+    _probe.stats.reset();
     _warnings
       ..clear()
       ..addAll(priorWarnings);
     if (config.useMaia && !MaiaFactory.isAvailable) {
       _warnings.add('Maia is unavailable; common-reply checks were skipped.');
     }
-    _checkedFens.clear();
-    _checkedFens.addAll(skipFens);
+    _checkedFens
+      ..clear()
+      ..addAll(skipFens);
     final stopwatch = Stopwatch()..start();
     final findings = <AuditFinding>[...priorFindings];
+    final counts = _NodeCounts();
 
-    int ourMoveNodes = 0;
-    int oppNodes = 0;
-    int leafNodes = 0;
-    int evalCacheHits = 0;
-    int evalCacheMisses = 0;
-
-    await _evalCache.init();
-
-    // Build a merged opening tree from clash PGNs (books/courses) if provided.
-    OpeningTree? clashTree;
-    if (config.clashPgnPaths.isNotEmpty) {
-      clashTree = await _buildClashTree(config, isWhiteRepertoire);
-    }
-
-    ChessDbApiProvider? liveChessDb;
-    if (config.useChessDb) {
-      final override = _chessDbOverride;
-      if (override != null) {
-        _chessDb = override;
-      } else {
-        liveChessDb = ChessDbApiProvider();
-        await liveChessDb.init();
-        _chessDb = liveChessDb;
-      }
-    } else {
-      _chessDb = null;
-    }
+    await _probe.init();
 
     final startNode = _resolveStartNode(tree, startFen);
     if (startNode == null) {
       return AuditResult(
-        findings: [],
+        findings: const [],
         nodesChecked: 0,
         ourMoveNodesChecked: 0,
         opponentNodesChecked: 0,
@@ -147,145 +134,77 @@ class RepertoireAuditService {
       );
     }
 
-    // Count total nodes for progress reporting.
-    final totalNodes = startNode.countDescendants(maxPly: config.maxPly);
-
-    // BFS traversal.
-    final queue = Queue<_AuditQueueEntry>();
-    final startPath = startNode.getMovePath();
-    queue.add(
-      _AuditQueueEntry(
-        node: startNode,
-        movePath: startPath,
-        ply: 0,
-        cumProb: 1.0,
-      ),
+    final liveChessDb = config.useChessDb && _chessDbOverride == null
+        ? ChessDbApiProvider()
+        : null;
+    await liveChessDb?.init();
+    final replyFinder = MissingReplyFinder(
+      config: config,
+      tree: tree,
+      probe: _probe,
+      warn: _warnings.add,
+      chessDb: _chessDbOverride ?? liveChessDb,
+      clashTree: config.clashPgnPaths.isEmpty
+          ? null
+          : await _buildClashTree(config, isWhiteRepertoire),
     );
 
-    int checked = 0;
+    final walk = RepertoireWalk(
+      start: startNode,
+      maxPly: config.maxPly,
+      attenuatingSideIsWhite: !isWhiteRepertoire,
+      control: _control,
+    );
 
-    while (queue.isNotEmpty) {
-      if (!await _control.checkpoint()) break;
-
-      final entry = queue.removeFirst();
-      final node = entry.node;
-      final ply = entry.ply;
-
-      if (ply > config.maxPly) continue;
-
-      checked++;
-
-      // Determine whose turn it is at this node.
-      final isWhiteTurn = _isWhiteTurnAtNode(node);
-      final isOurTurn =
-          (isWhiteRepertoire && isWhiteTurn) ||
-          (!isWhiteRepertoire && !isWhiteTurn);
-
-      // Report progress periodically.
-      if (checked % 5 == 0 || checked == totalNodes) {
-        onProgress?.call(
-          AuditProgress(
-            nodesChecked: checked,
-            totalNodes: totalNodes,
-            findingsCount: findings.length,
-            currentFen: node.fen,
-          ),
-        );
-      }
-
-      final isLeaf = node.children.isEmpty;
-      final alreadyChecked = skipFens.contains(node.fen);
-
-      if (isOurTurn && !isLeaf) ourMoveNodes++;
-      if (!isOurTurn && !isLeaf) oppNodes++;
-      if (alreadyChecked) {
-        // Still enqueue children so we reach unchecked nodes.
-      } else if (isOurTurn && !isLeaf) {
-        if (config.useStockfish) {
-          final (newFindings, hits, misses) = await _checkOurMoves(
-            node: node,
-            movePath: entry.movePath,
-            isWhiteRepertoire: isWhiteRepertoire,
-            config: config,
-            cumulativeProbability: entry.cumProb,
-          );
-          evalCacheHits += hits;
-          evalCacheMisses += misses;
-          for (final f in newFindings) {
-            findings.add(f);
-            onFinding?.call(f);
-          }
-        }
-      } else if (!isOurTurn && !isLeaf) {
-        final newFindings = await _checkOpponentCoverage(
-          node: node,
-          tree: tree,
-          movePath: entry.movePath,
-          isWhiteRepertoire: isWhiteRepertoire,
-          config: config,
-          cumulativeProbability: entry.cumProb,
-          clashTree: clashTree,
-        );
-        for (final f in newFindings) {
-          findings.add(f);
-          onFinding?.call(f);
-        }
-      }
-
-      if (isLeaf) {
-        leafNodes++;
-        if (!isOurTurn && !alreadyChecked) {
-          final deadEndFindings = await _checkDeadEnd(
-            node: node,
-            movePath: entry.movePath,
-            config: config,
-            cumulativeProbability: entry.cumProb,
-          );
-          for (final f in deadEndFindings) {
-            findings.add(f);
-            onFinding?.call(f);
-          }
-        }
-      }
-
-      // Only now is the position checked. The session controller snapshots
-      // [checkedFens] together with the findings it has been handed at the
-      // moment of a cancel or app close; marking the node before its engine
-      // calls returned put it in the skip set with its findings still in
-      // flight, so a resumed audit never looked at it again.
-      if (!alreadyChecked) _checkedFens.add(node.fen);
-
-      // Enqueue children with updated cumulative probability.
-      // Opponent moves attenuate probability; our moves don't (we always play them).
-      final parentTotal = node.children.values.fold<int>(
-        0,
-        (sum, c) => sum + c.gamesPlayed,
-      );
-      for (final childEntry in node.children.entries) {
-        final child = childEntry.value;
-        double childProb = entry.cumProb;
-        if (!isOurTurn && parentTotal > 0) {
-          childProb *= child.gamesPlayed / parentTotal;
-        }
-        queue.add(
-          _AuditQueueEntry(
-            node: child,
-            movePath: [...entry.movePath, childEntry.key],
-            ply: ply + 1,
-            cumProb: childProb,
-          ),
-        );
+    void emit(Iterable<AuditFinding> found) {
+      for (final finding in found) {
+        findings.add(finding);
+        onFinding?.call(finding);
       }
     }
+
+    await walk.run(
+      onProgress: (entry) => onProgress?.call(
+        AuditProgress(
+          nodesChecked: walk.visited,
+          totalNodes: walk.totalNodes,
+          findingsCount: findings.length,
+          currentFen: entry.fen,
+        ),
+      ),
+      visit: (entry) async {
+        final isOurTurn = entry.whiteToMove == isWhiteRepertoire;
+        final alreadyChecked = skipFens.contains(entry.fen);
+        counts.tally(isOurTurn: isOurTurn, isLeaf: entry.isLeaf);
+
+        if (!alreadyChecked) {
+          if (entry.isLeaf) {
+            if (!isOurTurn) emit(await _checkDeadEnd(entry, replyFinder));
+          } else if (isOurTurn) {
+            if (config.useStockfish) {
+              emit(await _checkOurMoves(entry, isWhiteRepertoire, config));
+            }
+          } else {
+            emit(await replyFinder.missingReplies(entry));
+          }
+          // Only now is the position checked. The session controller
+          // snapshots [checkedFens] together with the findings it has been
+          // handed at the moment of a cancel or app close; marking the node
+          // before its engine calls returned put it in the skip set with its
+          // findings still in flight, so a resumed audit never looked at it
+          // again.
+          _checkedFens.add(entry.fen);
+        }
+      },
+    );
 
     stopwatch.stop();
     await liveChessDb?.flushQuota();
 
-    // Final progress.
     onProgress?.call(
       AuditProgress(
-        nodesChecked: checked,
-        totalNodes: totalNodes,
+        nodesChecked: walk.visited,
+        totalNodes: walk.totalNodes,
         findingsCount: findings.length,
       ),
     );
@@ -293,142 +212,96 @@ class RepertoireAuditService {
     return AuditResult(
       findings: findings,
       warnings: warnings,
-      nodesChecked: checked,
-      ourMoveNodesChecked: ourMoveNodes,
-      opponentNodesChecked: oppNodes,
-      leafNodesChecked: leafNodes,
-      evalCacheHits: evalCacheHits,
-      evalCacheMisses: evalCacheMisses,
+      nodesChecked: walk.visited,
+      ourMoveNodesChecked: counts.ourMoveNodes,
+      opponentNodesChecked: counts.opponentNodes,
+      leafNodesChecked: counts.leafNodes,
+      evalCacheHits: _probe.stats.hits,
+      evalCacheMisses: _probe.stats.misses,
       elapsed: stopwatch.elapsed,
     );
   }
 
   // ── Our-move quality check ───────────────────────────────────────────────
 
-  /// Returns (findings, cacheHits, cacheMisses).
-  Future<(List<AuditFinding>, int, int)> _checkOurMoves({
-    required OpeningTreeNode node,
-    required List<String> movePath,
-    required bool isWhiteRepertoire,
-    required AuditConfig config,
-    required double cumulativeProbability,
-  }) async {
+  /// Rate every repertoire move at [entry] against Stockfish's best.
+  Future<List<AuditFinding>> _checkOurMoves(
+    RepertoireWalkEntry entry,
+    bool isWhiteRepertoire,
+    AuditConfig config,
+  ) async {
     final findings = <AuditFinding>[];
-    int cacheHits = 0;
-    int cacheMisses = 0;
-    if (node.children.isEmpty) return (findings, cacheHits, cacheMisses);
-
-    final isWhiteTurn = _isWhiteTurnAtNode(node);
-
+    final node = entry.node;
     try {
-      final discovery = await _pool.discoverMoves(
-        fen: node.fen,
+      final lines = await _probe.discover(
+        node.fen,
         depth: config.evalDepth,
         multiPv: config.multiPv,
-        isWhiteToMove: isWhiteTurn,
+        countAsLookup: true,
       );
-      cacheMisses++;
-
-      if (discovery.lines.isEmpty) {
+      if (lines.isEmpty) {
         _warnings.add('Stockfish returned no evaluation for some positions.');
-        return (findings, cacheHits, cacheMisses);
+        return findings;
       }
+      final best = lines.first;
 
-      // Best move from Stockfish (white-normalized cp).
-      final bestLine = discovery.lines.first;
-      final bestCp = bestLine.effectiveCp;
-      final bestMoveSan = _uciToSan(node.fen, bestLine.moveUci);
-
-      // Cache the position eval from the best line.
-      _evalCache.putEvalCpWhiteSoon(node.fen, bestCp, config.evalDepth);
-
-      // Check each repertoire move at this position.
-      for (final repMoveEntry in node.children.entries) {
-        final repMoveSan = repMoveEntry.key;
-        final repMoveUci = _sanToUci(node.fen, repMoveSan);
+      for (final MapEntry(key: repMoveSan, value: child)
+          in node.children.entries) {
+        final repMoveUci = chess_utils.sanToUci(node.fen, repMoveSan);
         if (repMoveUci == null) continue;
 
-        // Find this move in the discovery lines.
-        int? repCp;
-        for (final line in discovery.lines) {
-          if (line.moveUci == repMoveUci) {
-            repCp = line.effectiveCp;
-            break;
-          }
-        }
-
-        // If the move wasn't in MultiPV, try the cache, then evaluate.
-        if (repCp == null) {
-          final (cp, hit, miss) = await _evalAfterMove(
-            node.fen,
-            repMoveUci,
-            config.evalDepth,
-          );
-          repCp = cp;
-          cacheHits += hit;
-          cacheMisses += miss;
-        }
-
-        // Cache the resulting position's eval for generation reuse.
-        if (repCp != null) {
-          final childFen = repMoveEntry.value.fen;
-          _evalCache.putEvalCpWhiteSoon(childFen, repCp, config.evalDepth);
-        }
-
+        final repCp = await _probe.evalAfterMove(
+          node.fen,
+          repMoveUci,
+          lines: lines,
+          depth: config.evalDepth,
+        );
         if (repCp == null) {
           _warnings.add('Stockfish could not evaluate some repertoire moves.');
           continue;
         }
+        // Cache the resulting position's eval for generation reuse.
+        _probe.remember(child.fen, repCp, config.evalDepth);
 
-        // Compute eval loss from our perspective.
+        final movePath = [...entry.movePath, repMoveSan];
         // Positive = our move is worse than best.
         final evalLoss = isWhiteRepertoire
-            ? (bestCp - repCp)
-            : (repCp - bestCp);
-
-        if (evalLoss >= config.mistakeThresholdCp) {
+            ? best.whiteCp - repCp
+            : repCp - best.whiteCp;
+        final lossType = evalLoss >= config.mistakeThresholdCp
+            ? AuditFindingType.mistake
+            : evalLoss >= config.inaccuracyThresholdCp
+            ? AuditFindingType.inaccuracy
+            : null;
+        if (lossType != null) {
           findings.add(
             AuditFinding(
-              type: AuditFindingType.mistake,
-              severity: AuditSeverity.critical,
-              movePath: [...movePath, repMoveSan],
+              type: lossType,
+              severity: lossType == AuditFindingType.mistake
+                  ? AuditSeverity.critical
+                  : AuditSeverity.warning,
+              movePath: movePath,
               fen: node.fen,
               ourMove: repMoveSan,
-              bestMove: bestMoveSan,
+              bestMove: best.san,
               evalLossCp: evalLoss,
               positionEvalCp: repCp,
-              bestMoveEvalCp: bestCp,
-              cumulativeProbability: cumulativeProbability,
-            ),
-          );
-        } else if (evalLoss >= config.inaccuracyThresholdCp) {
-          findings.add(
-            AuditFinding(
-              type: AuditFindingType.inaccuracy,
-              severity: AuditSeverity.warning,
-              movePath: [...movePath, repMoveSan],
-              fen: node.fen,
-              ourMove: repMoveSan,
-              bestMove: bestMoveSan,
-              evalLossCp: evalLoss,
-              positionEvalCp: repCp,
-              bestMoveEvalCp: bestCp,
-              cumulativeProbability: cumulativeProbability,
+              bestMoveEvalCp: best.whiteCp,
+              cumulativeProbability: entry.cumulativeProbability,
             ),
           );
         }
 
-        // Check for weak resulting position.
         final ourPerspectiveCp = isWhiteRepertoire ? repCp : -repCp;
         if (ourPerspectiveCp < config.weakPositionThresholdCp) {
           findings.add(
             AuditFinding(
               type: AuditFindingType.weakPosition,
               severity: AuditSeverity.warning,
-              movePath: [...movePath, repMoveSan],
-              fen: repMoveEntry.value.fen,
+              movePath: movePath,
+              fen: child.fen,
               positionEvalCp: repCp,
-              cumulativeProbability: cumulativeProbability,
+              cumulativeProbability: entry.cumulativeProbability,
             ),
           );
         }
@@ -437,294 +310,37 @@ class RepertoireAuditService {
       _warnings.add('Stockfish could not check some positions.');
       if (kDebugMode) debugPrint('[Audit] Stockfish error at ${node.fen}: $e');
     }
-
-    return (findings, cacheHits, cacheMisses);
-  }
-
-  // ── Opponent coverage check ──────────────────────────────────────────────
-
-  Future<List<AuditFinding>> _checkOpponentCoverage({
-    required OpeningTreeNode node,
-    required OpeningTree tree,
-    required List<String> movePath,
-    required bool isWhiteRepertoire,
-    required AuditConfig config,
-    required double cumulativeProbability,
-    OpeningTree? clashTree,
-  }) async {
-    final findings = <AuditFinding>[];
-    final coveredMoves = node.children.keys.toSet();
-
-    // Lichess Explorer check.
-    if (config.useLichessDb) {
-      try {
-        final response = await _probService.getProbabilitiesForFen(
-          node.fen,
-          speeds: config.explorerSpeeds,
-          ratings: config.explorerRatings,
-        );
-        if (response != null) {
-          for (final move in response.moves) {
-            if (move.total < config.minGames) continue;
-            if (coveredMoves.contains(move.san)) continue;
-
-            findings.add(
-              AuditFinding(
-                type: AuditFindingType.missingResponse,
-                severity: move.total >= config.minGames * 3
-                    ? AuditSeverity.critical
-                    : AuditSeverity.warning,
-                movePath: movePath,
-                fen: node.fen,
-                missingMove: move.san,
-                gameCount: move.total,
-                probability: move.playFraction,
-                source: MissingResponseSource.lichess,
-                cumulativeProbability:
-                    cumulativeProbability * move.playFraction,
-                transposesIntoRepertoire: _doesMoveTranspose(
-                  node.fen,
-                  move.san,
-                  tree,
-                ),
-              ),
-            );
-          }
-        }
-      } catch (e) {
-        _warnings.add('Lichess could not check some positions.');
-        if (kDebugMode) {
-          debugPrint('[Audit] Lichess Explorer error at ${node.fen}: $e');
-        }
-      }
-    }
-
-    // Maia check.
-    if (config.useMaia && MaiaFactory.isAvailable) {
-      try {
-        final maia = MaiaFactory.instance!;
-        final result = await maia.evaluate(node.fen, config.maiaElo);
-
-        for (final entry in result.policy.entries) {
-          if (entry.value < config.minMaiaProb) continue;
-          final san = _uciToSan(node.fen, entry.key);
-          if (san == null) continue;
-          if (coveredMoves.contains(san)) continue;
-
-          // Skip if already reported by Lichess.
-          final alreadyReported = findings.any(
-            (f) =>
-                f.type == AuditFindingType.missingResponse &&
-                f.missingMove == san,
-          );
-          if (alreadyReported) continue;
-
-          findings.add(
-            AuditFinding(
-              type: AuditFindingType.missingResponse,
-              severity: entry.value >= 0.20
-                  ? AuditSeverity.critical
-                  : AuditSeverity.info,
-              movePath: movePath,
-              fen: node.fen,
-              missingMove: san,
-              probability: entry.value,
-              source: MissingResponseSource.maia,
-              cumulativeProbability: cumulativeProbability * entry.value,
-              transposesIntoRepertoire: _doesMoveTranspose(node.fen, san, tree),
-            ),
-          );
-        }
-      } catch (e) {
-        _warnings.add('Maia could not check some positions.');
-        if (kDebugMode) {
-          debugPrint('[Audit] Maia error at ${node.fen}: $e');
-        }
-      }
-    }
-
-    // ChessDB check: replies the database scores close to the opponent's
-    // best, whether or not anyone plays them. This is the only source here
-    // that can flag a move nobody has played yet.
-    final db = _chessDb;
-    if (config.useChessDb && db != null) {
-      try {
-        final list = await db.lookupMoves(node.fen);
-        if (list.isEmpty) {
-          _warnings.add(
-            'ChessDB had no scored replies for some positions (unknown or unavailable).',
-          );
-        }
-        final best = list.bestStmCp;
-        if (best != null) {
-          final isWhiteTurn = _isWhiteTurnAtNode(node);
-          final good = list.withinCp(config.strongReplyWindowCp);
-          for (final m in good) {
-            final san = _uciToSan(node.fen, m.uci) ?? m.san;
-            if (san.isEmpty) continue;
-            if (coveredMoves.contains(san)) continue;
-            final alreadyReported = findings.any(
-              (f) =>
-                  f.type == AuditFindingType.missingResponse &&
-                  f.missingMove == san,
-            );
-            if (alreadyReported) continue;
-
-            // DbMove.stmCp is the opponent's view of the move; the finding
-            // stores White-POV like every other eval on it.
-            final gap = best - m.stmCp;
-            // A level move matters most where the opponent has few of them.
-            // In a quiet position ChessDB scores a dozen moves 0 and an
-            // uncovered one says little; where only two moves hold, the
-            // second is half the theory.
-            final sharp = good.length <= 4;
-            findings.add(
-              AuditFinding(
-                type: AuditFindingType.missingResponse,
-                severity: gap <= 10 && sharp
-                    ? AuditSeverity.critical
-                    : AuditSeverity.warning,
-                movePath: movePath,
-                fen: node.fen,
-                missingMove: san,
-                evalLossCp: gap,
-                continuationCount: good.length,
-                positionEvalCp: isWhiteTurn ? m.stmCp : -m.stmCp,
-                bestMoveEvalCp: isWhiteTurn ? best : -best,
-                source: MissingResponseSource.chessDb,
-                cumulativeProbability: cumulativeProbability,
-                transposesIntoRepertoire: _doesMoveTranspose(
-                  node.fen,
-                  san,
-                  tree,
-                ),
-              ),
-            );
-          }
-        }
-      } catch (e) {
-        _warnings.add('ChessDB could not check some positions.');
-        if (kDebugMode) {
-          debugPrint('[Audit] ChessDB error at ${node.fen}: $e');
-        }
-      }
-    }
-
-    // Engine check: the MultiPV lines Stockfish rates close to the
-    // opponent's best. Narrower than ChessDB (it sees multiPv moves, not
-    // every move) but it knows every position, including the ones the
-    // database has never seen.
-    if (config.useStockfish) {
-      try {
-        final isWhiteTurn = _isWhiteTurnAtNode(node);
-        final discovery = await _pool.discoverMoves(
-          fen: node.fen,
-          depth: config.evalDepth,
-          multiPv: config.multiPv,
-          isWhiteToMove: isWhiteTurn,
-        );
-        if (discovery.lines.isNotEmpty) {
-          final bestWhite = discovery.lines.first.effectiveCp;
-          _evalCache.putEvalCpWhiteSoon(node.fen, bestWhite, config.evalDepth);
-          int toOpp(int whiteCp) => isWhiteTurn ? whiteCp : -whiteCp;
-          final bestOpp = toOpp(bestWhite);
-          for (final line in discovery.lines) {
-            final san = _uciToSan(node.fen, line.moveUci);
-            if (san == null) continue;
-            if (coveredMoves.contains(san)) continue;
-            final gap = bestOpp - toOpp(line.effectiveCp);
-            if (gap > config.strongReplyWindowCp) continue;
-            final alreadyReported = findings.any(
-              (f) =>
-                  f.type == AuditFindingType.missingResponse &&
-                  f.missingMove == san,
-            );
-            if (alreadyReported) continue;
-
-            findings.add(
-              AuditFinding(
-                type: AuditFindingType.missingResponse,
-                severity: gap <= 10
-                    ? AuditSeverity.critical
-                    : AuditSeverity.warning,
-                movePath: movePath,
-                fen: node.fen,
-                missingMove: san,
-                evalLossCp: gap,
-                positionEvalCp: line.effectiveCp,
-                bestMoveEvalCp: bestWhite,
-                source: MissingResponseSource.engine,
-                cumulativeProbability: cumulativeProbability,
-                transposesIntoRepertoire: _doesMoveTranspose(
-                  node.fen,
-                  san,
-                  tree,
-                ),
-              ),
-            );
-          }
-        }
-      } catch (e) {
-        _warnings.add('Stockfish could not check some opponent replies.');
-        if (kDebugMode) {
-          debugPrint('[Audit] Stockfish reply check error at ${node.fen}: $e');
-        }
-      }
-    }
-
-    // Repertoire clashes check (books/courses).
-    if (clashTree != null) {
-      final key = normalizeFen(node.fen);
-      final clashNodes = clashTree.fenToNodes[key];
-      if (clashNodes != null) {
-        for (final clashNode in clashNodes) {
-          final totalAtParent = clashNode.children.values.fold<int>(
-            0,
-            (sum, c) => sum + c.gamesPlayed,
-          );
-
-          for (final entry in clashNode.children.entries) {
-            final san = entry.key;
-            if (coveredMoves.contains(san)) continue;
-
-            final alreadyReported = findings.any(
-              (f) =>
-                  f.type == AuditFindingType.missingResponse &&
-                  f.missingMove == san,
-            );
-            if (alreadyReported) continue;
-
-            final prob = totalAtParent > 0
-                ? entry.value.gamesPlayed / totalAtParent
-                : 0.0;
-
-            findings.add(
-              AuditFinding(
-                type: AuditFindingType.missingResponse,
-                severity: prob >= 0.20
-                    ? AuditSeverity.critical
-                    : AuditSeverity.info,
-                movePath: movePath,
-                fen: node.fen,
-                missingMove: san,
-                gameCount: entry.value.gamesPlayed,
-                probability: prob,
-                source: MissingResponseSource.clash,
-                cumulativeProbability: cumulativeProbability * prob,
-                transposesIntoRepertoire: _doesMoveTranspose(
-                  node.fen,
-                  san,
-                  tree,
-                ),
-              ),
-            );
-          }
-        }
-      }
-    }
-
     return findings;
   }
+
+  // ── Dead-end check ───────────────────────────────────────────────────────
+
+  /// An opponent leaf where the sources still know continuations is a line
+  /// the file stops too early.
+  Future<List<AuditFinding>> _checkDeadEnd(
+    RepertoireWalkEntry entry,
+    MissingReplyFinder replyFinder,
+  ) async {
+    final continuations = await replyFinder.continuationsAt(entry);
+    if (continuations.length < replyFinder.config.deadEndMinContinuations) {
+      return const [];
+    }
+    return [
+      AuditFinding(
+        type: AuditFindingType.deadEnd,
+        severity: continuations.length >= _deadEndWarningContinuations
+            ? AuditSeverity.warning
+            : AuditSeverity.info,
+        movePath: entry.movePath,
+        fen: entry.fen,
+        continuationCount: continuations.length,
+        uncoveredMoves: continuations.toList()..sort(),
+        cumulativeProbability: entry.cumulativeProbability,
+      ),
+    ];
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
   /// Build a merged [OpeningTree] from the configured clash PGN paths.
   ///
@@ -737,9 +353,8 @@ class RepertoireAuditService {
     AuditConfig config,
     bool isWhiteRepertoire,
   ) async {
-    final paths = config.clashPgnPaths;
     final allGames = <String>[];
-    for (final path in paths) {
+    for (final path in config.clashPgnPaths) {
       try {
         final content = await io.File(path).readAsString();
         allGames.addAll(pgn.splitPgnIntoGames(content));
@@ -757,102 +372,9 @@ class RepertoireAuditService {
       username: config.clashUsername,
       userIsWhite: config.clashUserIsWhite ?? isWhiteRepertoire,
       strictPlayerMatching: config.clashUsername.isNotEmpty,
-      maxDepth: 40,
+      maxDepth: _clashTreeMaxDepth,
     );
   }
-
-  /// Check if playing [san] from [fen] transposes into a position already
-  /// covered in [tree] (the FEN after the move exists as a tree node).
-  bool _doesMoveTranspose(String fen, String san, OpeningTree tree) =>
-      tree.doesMoveTranspose(fen, san);
-
-  // ── Dead-end check ───────────────────────────────────────────────────────
-
-  Future<List<AuditFinding>> _checkDeadEnd({
-    required OpeningTreeNode node,
-    required List<String> movePath,
-    required AuditConfig config,
-    required double cumulativeProbability,
-  }) async {
-    final moveSet = <String>{};
-
-    if (config.useLichessDb) {
-      try {
-        final response = await _probService.getProbabilitiesForFen(
-          node.fen,
-          speeds: config.explorerSpeeds,
-          ratings: config.explorerRatings,
-        );
-        if (response != null) {
-          for (final m in response.moves) {
-            if (m.total >= config.minGames) moveSet.add(m.san);
-          }
-        }
-      } catch (_) {
-        _warnings.add('Lichess could not check some line endings.');
-      }
-    }
-
-    if (moveSet.length < config.deadEndMinContinuations) {
-      if (config.useMaia && MaiaFactory.isAvailable) {
-        try {
-          final result = await MaiaFactory.instance!.evaluate(
-            node.fen,
-            config.maiaElo,
-          );
-          for (final entry in result.policy.entries) {
-            if (entry.value >= config.minMaiaProb) {
-              final san = _uciToSan(node.fen, entry.key);
-              if (san != null) moveSet.add(san);
-            }
-          }
-        } catch (_) {
-          _warnings.add('Maia could not check some line endings.');
-        }
-      }
-    }
-
-    final db = _chessDb;
-    if (moveSet.length < config.deadEndMinContinuations &&
-        config.useChessDb &&
-        db != null) {
-      try {
-        final list = await db.lookupMoves(node.fen);
-        if (list.isEmpty) {
-          _warnings.add(
-            'ChessDB had no scored replies for some positions (unknown or unavailable).',
-          );
-        }
-        for (final m in list.withinCp(config.strongReplyWindowCp)) {
-          final san = _uciToSan(node.fen, m.uci) ?? m.san;
-          if (san.isNotEmpty) moveSet.add(san);
-        }
-      } catch (_) {
-        _warnings.add('ChessDB could not check some line endings.');
-      }
-    }
-
-    if (moveSet.length >= config.deadEndMinContinuations) {
-      final sortedMoves = moveSet.toList()..sort();
-      return [
-        AuditFinding(
-          type: AuditFindingType.deadEnd,
-          severity: moveSet.length >= 4
-              ? AuditSeverity.warning
-              : AuditSeverity.info,
-          movePath: movePath,
-          fen: node.fen,
-          continuationCount: moveSet.length,
-          uncoveredMoves: sortedMoves,
-          cumulativeProbability: cumulativeProbability,
-        ),
-      ];
-    }
-
-    return [];
-  }
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
 
   OpeningTreeNode? _resolveStartNode(OpeningTree tree, String? startFen) {
     if (startFen == null) return tree.root;
@@ -862,36 +384,21 @@ class RepertoireAuditService {
     if (normalizeFen(tree.root.fen) == key) return tree.root;
     return null;
   }
-
-  bool _isWhiteTurnAtNode(OpeningTreeNode node) {
-    return isWhiteToMove(node.fen);
-  }
-
-  /// Strict conversion: the result is compared against repertoire SAN, so a
-  /// failed conversion must be null rather than an echoed UCI string.
-  String? _uciToSan(String fen, String uci) =>
-      chess_utils.uciToSanOrNull(fen, uci);
-
-  String? _sanToUci(String fen, String san) => chess_utils.sanToUci(fen, san);
-
-  /// Returns (whiteCp, cacheHits, cacheMisses).
-  Future<(int?, int, int)> _evalAfterMove(
-    String fen,
-    String moveUci,
-    int depth,
-  ) => evalAfterMoveCached(_pool, _evalCache, fen, moveUci, depth);
 }
 
-class _AuditQueueEntry {
-  final OpeningTreeNode node;
-  final List<String> movePath;
-  final int ply;
-  final double cumProb;
+/// How many positions of each kind a run visited.
+class _NodeCounts {
+  int ourMoveNodes = 0;
+  int opponentNodes = 0;
+  int leafNodes = 0;
 
-  const _AuditQueueEntry({
-    required this.node,
-    required this.movePath,
-    required this.ply,
-    required this.cumProb,
-  });
+  void tally({required bool isOurTurn, required bool isLeaf}) {
+    if (isLeaf) {
+      leafNodes++;
+    } else if (isOurTurn) {
+      ourMoveNodes++;
+    } else {
+      opponentNodes++;
+    }
+  }
 }

@@ -1,126 +1,52 @@
-part of 'tactics_import_service.dart';
+/// The engine pass over one of my games: which of my moves lost enough
+/// winning chances to become a puzzle, how messy the game was, and the
+/// per-ply score series the pass produced on the way.
+library;
 
-/// Lichess winning chances (from scalachess): [-1, +1] where -1 = losing,
-/// 0 = equal, +1 = winning. [TacticsNote] inverts the same multiplier to
-/// recover evals from legacy percentage notes.
-double _winningChances(int centipawns) {
-  final capped = centipawns.clamp(-1000, 1000);
-  return 2 / (1 + math.exp(lichessWinChanceMultiplier * capped)) - 1;
-}
+import 'dart:async';
 
-/// Cross-game memo of opening evaluations, keyed by FEN.
-///
-/// The same player repeats the same first moves across most of their games,
-/// so positions up to fullmove [maxFullmove] are searched once per import run
-/// and reused. Futures (not results) are stored so two workers reaching the
-/// same position concurrently coalesce into one search.
-class _OpeningEvalCache {
-  _OpeningEvalCache({required this.depth});
+import 'package:dartchess/dartchess.dart';
 
-  /// Search depth of every cached entry — one cache is only valid for one
-  /// depth, which holds because depth is fixed for a whole import run.
-  final int depth;
+import '../../../constants/engine_defaults.dart';
+import '../../../services/engine/stockfish_pool.dart';
+import '../../../services/eval_cache.dart';
+import '../../../services/games_library/game_filter.dart'
+    show dedupKeyForHeaders;
+import '../../../services/maia/maia_factory.dart';
+import '../../../utils/clock_utils.dart' show moveTimeSeconds;
+import '../../../utils/chess_utils.dart' show playUciFrom, uciPvToSan, uciToSan;
+import '../../../utils/ease_utils.dart' show winningChanceFromCp;
+import '../models/tactics_note.dart';
+import '../models/tactics_position.dart';
+import 'eval_series_annotator.dart';
+import 'flaw_tagger.dart';
+import 'opening_eval_cache.dart';
+import 'parsed_user_game.dart';
+import 'tactics_engine.dart';
 
-  final Map<String, Future<EvalResult>> _byFen = {};
+/// How much winning chance (user perspective, [-1, 1] scale) one of my moves
+/// lost, graded the way the puzzle's mistake mark records it.
+enum MistakeSeverity {
+  inaccuracy('?!', 0.1),
+  mistake('?', 0.2),
+  blunder('??', 0.3);
 
-  static const int maxFullmove = 10;
+  const MistakeSeverity(this.mark, this.minWcDelta);
 
-  static bool _isOpeningFen(String fen) {
-    final fields = fen.split(' ');
-    if (fields.length < 6) return false;
-    final fullmove = int.tryParse(fields[5]);
-    return fullmove != null && fullmove <= maxFullmove;
-  }
+  /// The mark stored as [TacticsPosition.mistakeType].
+  final String mark;
 
-  /// Evaluate [fen] on [worker], serving repeats from the cache.
-  Future<EvalResult> evaluate(EvalWorker worker, String fen) async {
-    if (!_isOpeningFen(fen)) return worker.evaluateFen(fen, depth);
-    final cached = _byFen[fen];
-    if (cached != null) return cached;
-    final search = worker.evaluateFen(fen, depth);
-    _byFen[fen] = search;
-    try {
-      return await search;
-    } catch (_) {
-      // Don't let a failed search (engine hiccup, cancellation) poison the
-      // position for every later game in the run.
-      _byFen.remove(fen); // ignore: unawaited_futures
-      rethrow;
+  /// Smallest winning-chance drop that earns this grade (inclusive).
+  final double minWcDelta;
+
+  /// The grade for a winning-chance drop of [wcDelta], or null when the move
+  /// lost too little to count.
+  static MistakeSeverity? ofDelta(double wcDelta) {
+    for (final severity in values.reversed) {
+      if (wcDelta >= severity.minWcDelta) return severity;
     }
+    return null;
   }
-}
-
-/// One decision point — a move the user actually played — collected during a
-/// cheap synchronous replay of the game, so that the engine work can then be
-/// fanned out across the whole worker pool instead of running move by move.
-class _UserMoveSite {
-  _UserMoveSite({
-    required this.plyIndex,
-    required this.moveNumber,
-    required this.fenBefore,
-    required this.san,
-    required this.fenAfter,
-    required this.endsGame,
-  });
-
-  final int plyIndex;
-  final int moveNumber;
-  final String fenBefore;
-  final String san;
-  final String fenAfter;
-
-  /// The user's move ended the game — nothing to punish, only [wcBefore]
-  /// feeds the flaw-tag series.
-  final bool endsGame;
-}
-
-/// Outcome of evaluating one [_UserMoveSite]. [wcAfter] is null when the
-/// game ended on the move; [mined] is set when the move lost enough winning
-/// chances to become a tactic.
-class _SiteResult {
-  _SiteResult({
-    required this.wcBefore,
-    this.wcAfter,
-    this.mined,
-    this.isBlunder = false,
-  });
-
-  final double wcBefore;
-  final double? wcAfter;
-  final TacticsPosition? mined;
-  final bool isBlunder;
-}
-
-int? _negateScore(int? v) => v == null ? null : -v;
-
-/// A side-to-move [EvalResult] as a White-normalized [PlyEval] — the sign
-/// convention `[%eval]` comments use, whoever was to move.
-PlyEval _whiteNormalizedEval(
-  EvalResult result, {
-  required bool sideToMoveIsWhite,
-}) => PlyEval(
-  cp: sideToMoveIsWhite ? result.scoreCp : _negateScore(result.scoreCp),
-  mate: sideToMoveIsWhite ? result.scoreMate : _negateScore(result.scoreMate),
-  depth: result.depth,
-);
-
-/// Persist a side-to-move [EvalResult] into the shared White-normalized
-/// [EvalCache] (the same store tree generation and audit read). Mate scores
-/// are skipped — the cache is centipawns-only and its consumers assume cp
-/// semantics.
-Future<void> _putSharedEval(
-  String fen,
-  EvalResult result, {
-  required bool sideToMoveIsWhite,
-  required int depth,
-}) async {
-  final cp = result.scoreCp;
-  if (cp == null || result.scoreMate != null) return;
-  await EvalCache.instance.putEvalCpWhite(
-    fen,
-    sideToMoveIsWhite ? cp : -cp,
-    depth,
-  );
 }
 
 /// What one game's engine pass produced: the puzzles worth training, and the
@@ -130,8 +56,8 @@ Future<void> _putSharedEval(
 /// numbers that decide whether a move becomes a puzzle (the winning-chance
 /// swing of each of my moves), which is why the review no longer runs a
 /// separate full-game analysis to obtain them.
-class _GameMineOutcome {
-  _GameMineOutcome({
+class GameMineOutcome {
+  const GameMineOutcome({
     required this.positions,
     required this.dedupKey,
     required this.inaccuracies,
@@ -158,464 +84,541 @@ class _GameMineOutcome {
   final String? annotatedMovetext;
 }
 
-/// Position after playing [uci] from [fen], or null when it doesn't apply.
-///
-/// FEN identity is how the user's played move is compared against the
-/// engine's best move: comparing UCI strings directly would misjudge
-/// castling, where dartchess emits king→rook (e1h1) and Stockfish
-/// king→destination (e1g1). dartchess accepts either encoding in
-/// [Position.makeSan] and produces the same resulting position.
-String? _fenAfterUci(String fen, String uci) {
-  final pos = Chess.fromSetup(Setup.parseFen(fen));
-  final (san, newPos) = _makeUciMoveAndGetSan(pos, uci);
-  return san == null ? null : newPos.fen;
+/// One decision point — a move the user actually played — collected during a
+/// cheap synchronous replay of the game, so that the engine work can then be
+/// fanned out across the whole worker pool instead of running move by move.
+class _UserMoveSite {
+  const _UserMoveSite({
+    required this.plyIndex,
+    required this.fenBefore,
+    required this.san,
+    required this.fenAfter,
+    required this.endsGame,
+  });
+
+  final int plyIndex;
+  final String fenBefore;
+  final String san;
+  final String fenAfter;
+
+  /// The user's move ended the game — nothing to punish, only [wcBefore]
+  /// feeds the flaw-tag series.
+  final bool endsGame;
 }
 
-/// Analyze a single game: puzzles in game order, plus my mistake counts.
-///
-/// Null when there is nothing to say about the game — it isn't one of mine
-/// (neither header matches [username]), or the run was cancelled partway, in
-/// which case the game is discarded whole and re-analyzed on resume.
-///
-/// The replay is synchronous; every engine evaluation is distributed across
-/// the whole [pool], so even a single game keeps all workers busy — the
-/// common incremental import fetches only one or two new games, which used
-/// to run on a single worker while the rest idled.
+/// Outcome of evaluating one [_UserMoveSite]. [wcAfter] is null when the
+/// game ended on the move; [mined] is set when the move lost enough winning
+/// chances to become a tactic.
+class _SiteResult {
+  const _SiteResult({
+    required this.wcBefore,
+    this.wcAfter,
+    this.mined,
+    this.isBlunder = false,
+  });
+
+  final double wcBefore;
+  final double? wcAfter;
+  final TacticsPosition? mined;
+  final bool isBlunder;
+}
+
+/// Analyzes single games for a tactics import run: puzzles in game order
+/// plus my mistake counts, with every engine search distributed across the
+/// whole [pool].
 ///
 /// Per user move the position before it is always searched (best move +
 /// solution line). The position after it is searched only when the played
 /// move differs from the engine's best — playing the engine's own choice
 /// cannot have lost winning chances at this depth, so the confirming search
 /// is skipped and `wcAfter := wcBefore`.
-Future<_GameMineOutcome?> _analyzeGameParallel({
-  required StockfishPool pool,
-  required String gameText,
-  required String username,
-  required int depth,
-  required String gameId,
-  MaiaEvaluator? maia,
-  int maiaElo = 2200,
-  _OpeningEvalCache? evalCache,
+class TacticsGameAnalyzer {
+  TacticsGameAnalyzer({
+    required this.pool,
+    required this.depth,
+    this.maia,
+    this.maiaElo = kDefaultMaiaElo,
+    this.evalCache,
+    this.shouldAbort,
+  });
+
+  final StockfishPool pool;
+  final int depth;
+  final MaiaEvaluator? maia;
+  final int maiaElo;
+  final OpeningEvalCache? evalCache;
 
   /// Polled between engine calls so a cancelled import stops launching new
   /// searches mid-game instead of only between games.
-  bool Function()? shouldAbort,
+  final bool Function()? shouldAbort;
 
-  /// Reports evaluated site counts for progress display.
-  void Function(int done, int total)? onSiteProgress,
-}) async {
-  final game = PgnGame.parsePgn(gameText);
+  bool get _aborted => shouldAbort?.call() ?? false;
 
-  final white = (game.headers['White'] ?? '').toLowerCase();
-  final black = (game.headers['Black'] ?? '').toLowerCase();
+  /// Analyze one game. Null when there is nothing to say about it — it isn't
+  /// one of mine (neither header matches [username]), or the run was
+  /// cancelled partway, in which case the game is discarded whole and
+  /// re-analyzed on resume.
+  ///
+  /// Even a single game keeps all workers busy — the common incremental
+  /// import fetches only one or two new games, which used to run on a single
+  /// worker while the rest idled.
+  ///
+  /// [onSiteProgress] reports evaluated site counts for progress display.
+  Future<GameMineOutcome?> analyze({
+    required String gameText,
+    required String username,
+    required String gameId,
+    void Function(int done, int total)? onSiteProgress,
+  }) async {
+    final parsed = ParsedUserGame.parse(gameText, username);
+    if (parsed == null) return null;
+    final pass = _GamePass(
+      analyzer: this,
+      game: parsed,
+      gameId: gameId,
+      onSiteProgress: onSiteProgress,
+    );
 
-  // Exact (case-insensitive) match only. A substring fallback can
-  // misattribute the user's side when an opponent's name is a superstring
-  // of the username (e.g. user "tal" vs opponent "talinda").
-  Side? userColor;
-  if (white == username) {
-    userColor = Side.white;
-  } else if (black == username) {
-    userColor = Side.black;
+    // One site per task. Batching consecutive sites onto one worker (for
+    // transposition-table locality) was benchmarked and lost: the serial
+    // batch tail at each game's end left the rest of the pool idle and cost
+    // more than the warmer hash saved.
+    await pool.forEachParallel<int>(
+      [for (var i = 0; i < pass.sites.length; i++) i],
+      pass.evaluateSite,
+      stopWhen: shouldAbort,
+    );
+
+    // A cancelled game is discarded whole (and re-analyzed on resume), so the
+    // partially-filled results are not worth assembling.
+    if (_aborted) return null;
+    return pass.assemble();
   }
-  if (userColor == null) return null;
+}
 
-  final moves = <String>[];
-  final moveNodes = <PgnNodeData>[];
-  final clocks = <double?>[];
-  var node = game.moves;
-  while (node.children.isNotEmpty) {
-    final child = node.children.first;
-    moves.add(child.data.san);
-    moveNodes.add(child.data);
-    clocks.add(clockSecondsFromComments(child.data.comments));
-    node = child;
+/// The mutable state of one game's pass: the sites to evaluate, and the
+/// per-site and per-ply results the concurrent fan-out fills in.
+class _GamePass {
+  _GamePass({
+    required this.analyzer,
+    required this.game,
+    required this.gameId,
+    required this.onSiteProgress,
+  }) {
+    _collectSites();
+    results = List<_SiteResult?>.filled(sites.length, null);
+    plyEvals = List<PlyEval?>.filled(game.moves.length, null);
+    plyPvs = List<List<String>?>.filled(game.moves.length, null);
   }
 
-  // Flaw-tag context: base time / increment for tempo tags, final result
-  // for the end-of-game lucky rule.
-  final (baseTime, increment) = parseTimeControl(game.headers['TimeControl']);
-  final gameResult = game.headers['Result'] ?? '*';
-  final userLost =
-      (gameResult == '1-0' && userColor == Side.black) ||
-      (gameResult == '0-1' && userColor == Side.white);
+  final TacticsGameAnalyzer analyzer;
+  final ParsedUserGame game;
+  final String gameId;
+  final void Function(int done, int total)? onSiteProgress;
 
-  final setupFlag = game.headers['SetUp'] ?? game.headers['Setup'] ?? '';
-  final fenHeader = game.headers['FEN'] ?? '';
-  final startsFromStandard = !(setupFlag == '1' && fenHeader.isNotEmpty);
-  Position pos;
-  if (startsFromStandard) {
-    pos = Chess.initial;
-  } else {
-    pos = Chess.fromSetup(Setup.parseFen(fenHeader));
-  }
-  // Capture the whole game once so every tactic mined from it can show the
-  // full game in the analysis tab without re-fetching. Only for standard
-  // starts — a numbered movetext replayed from move 1 would be illegal for a
-  // game that began from a custom position (rare; those fall back to
-  // solution-only display).
-  final sourceMovetext = startsFromStandard
-      ? buildNumberedMovetext(moves, startMoveNumber: 1, whiteToMoveFirst: true)
-      : '';
-
-  // ── Phase 1: replay the game, collecting the user's decision points ──
+  /// The user's decision points, in game order.
   final sites = <_UserMoveSite>[];
-  var moveNumber = 1;
-  // Only the final ply can be checkmate, and only when the replay actually
-  // reached it — an unparseable move partway leaves [pos] mid-game, where
-  // `isCheckmate` would be about the wrong position.
-  var replayComplete = true;
-  for (var plyIndex = 0; plyIndex < moves.length; plyIndex++) {
-    final san = moves[plyIndex];
-    final isUserTurn = pos.turn == userColor;
-    final fenBefore = pos.fen;
-    final move = pos.parseSan(san);
-    if (move == null) {
-      replayComplete = false;
-      break;
+
+  /// Only the final ply can be checkmate, and only when the replay actually
+  /// reached it — an unparseable move partway leaves the replay mid-game,
+  /// where `isCheckmate` would be about the wrong position.
+  bool lastPlyIsCheckmate = false;
+
+  /// `results[i]` pairs with `sites[i]`.
+  late final List<_SiteResult?> results;
+
+  /// Scores by 0-based ply, filled in as sites complete. Site `p` writes ply
+  /// `p - 1` (its before-position is what the opponent's last move reached)
+  /// and ply `p` (its after-position), so no two sites write the same index
+  /// and the concurrent fan-out needs no coordination.
+  late final List<PlyEval?> plyEvals;
+
+  /// The line the engine would play from the position *before* each ply, in
+  /// SAN — the other half of what a search returns. Site `p` searched both
+  /// of the positions that produce these, so it writes ply `p` (from its
+  /// before-position) and ply `p + 1` (from its after-position): the same
+  /// disjoint pattern as [plyEvals], one index later.
+  late final List<List<String>?> plyPvs;
+
+  int _sitesDone = 0;
+
+  int get _depth => analyzer.depth;
+
+  /// Replay the game synchronously, collecting the user's decision points.
+  void _collectSites() {
+    var pos = game.startPosition;
+    var replayComplete = true;
+    for (var plyIndex = 0; plyIndex < game.moves.length; plyIndex++) {
+      final san = game.moves[plyIndex];
+      final isUserTurn = pos.turn == game.userColor;
+      final fenBefore = pos.fen;
+      final move = pos.parseSan(san);
+      if (move == null) {
+        replayComplete = false;
+        break;
+      }
+      pos = pos.play(move);
+      if (isUserTurn) {
+        sites.add(
+          _UserMoveSite(
+            plyIndex: plyIndex,
+            fenBefore: fenBefore,
+            san: san,
+            fenAfter: pos.fen,
+            endsGame: pos.isGameOver,
+          ),
+        );
+      }
     }
-    pos = pos.play(move);
-    if (isUserTurn) {
-      sites.add(
-        _UserMoveSite(
-          plyIndex: plyIndex,
-          moveNumber: moveNumber,
-          fenBefore: fenBefore,
-          san: san,
-          fenAfter: pos.fen,
-          endsGame: pos.isGameOver,
-        ),
-      );
-    }
-    if (pos.turn == Side.white) moveNumber++;
+    lastPlyIsCheckmate = replayComplete && pos.isCheckmate;
   }
-  final lastPlyIsCheckmate = replayComplete && pos.isCheckmate;
 
-  // ── Phase 2: evaluate all sites across the pool ──
-  final results = List<_SiteResult?>.filled(sites.length, null);
-  // Scores by 0-based ply, filled in as sites complete. Site `p` writes ply
-  // `p - 1` (its before-position is what the opponent's last move reached)
-  // and ply `p` (its after-position), so no two sites write the same index
-  // and the concurrent fan-out below needs no coordination.
-  final plyEvals = List<PlyEval?>.filled(moves.length, null);
-  // The line the engine would play from the position *before* each ply, in
-  // SAN — the other half of what a search returns, which this pass used to
-  // discard. Site `p` searched both of the positions that produce these, so
-  // it writes ply `p` (from its before-position) and ply `p + 1` (from its
-  // after-position): the same disjoint pattern as [plyEvals], one index later.
-  final plyPvs = List<List<String>?>.filled(moves.length, null);
-  var sitesDone = 0;
+  Future<EvalResult> _evaluate(EvalWorker worker, String fen) =>
+      analyzer.evalCache?.evaluate(worker, fen) ??
+      worker.evaluateFen(fen, _depth);
 
+  void _finishSite(int i, _SiteResult result) {
+    results[i] = result;
+    _sitesDone++;
+    onSiteProgress?.call(_sitesDone, sites.length);
+  }
+
+  /// Record the line the engine would play from the position before
+  /// [plyIndex], when that ply exists.
+  void _recordPv(int plyIndex, String fen, List<String> uciPv) {
+    if (plyIndex < plyPvs.length) plyPvs[plyIndex] = uciPvToSan(fen, uciPv);
+  }
+
+  /// Evaluate site [i] on [worker]. Leaves `results[i]` null when the run is
+  /// aborted partway.
   Future<void> evaluateSite(EvalWorker worker, int i) async {
     final site = sites[i];
-    Future<EvalResult> evaluate(String fen) =>
-        evalCache?.evaluate(worker, fen) ?? worker.evaluateFen(fen, depth);
+    if (analyzer._aborted) return;
 
-    void reportDone() {
-      sitesDone++;
-      onSiteProgress?.call(sitesDone, sites.length);
-    }
-
-    if (shouldAbort?.call() ?? false) return;
-    final evalA = await evaluate(site.fenBefore);
+    final evalBefore = await _evaluate(worker, site.fenBefore);
     unawaited(
       _putSharedEval(
         site.fenBefore,
-        evalA,
-        sideToMoveIsWhite: userColor == Side.white,
-        depth: depth,
+        evalBefore,
+        sideToMoveIsWhite: game.userIsWhite,
       ),
     );
-
     if (site.plyIndex > 0) {
       plyEvals[site.plyIndex - 1] = _whiteNormalizedEval(
-        evalA,
-        sideToMoveIsWhite: userColor == Side.white,
+        evalBefore,
+        sideToMoveIsWhite: game.userIsWhite,
       );
     }
-    plyPvs[site.plyIndex] = uciPvToSan(site.fenBefore, evalA.pv);
+    _recordPv(site.plyIndex, site.fenBefore, evalBefore.pv);
 
-    // evalA is the user's turn → already the user's perspective.
-    final wcBefore = _winningChances(evalA.effectiveCp);
+    // evalBefore is the user's turn → already the user's perspective.
+    final wcBefore = winningChanceFromCp(evalBefore.effectiveCp);
 
     if (site.endsGame) {
       // No after-position score: the game is over there. When it ended in
       // mate the reader derives the result from the board, and a stalemate
       // or resignation leaves one ply unscored — inside the budget
       // [annotateMovetextWithEvals] enforces.
-      results[i] = _SiteResult(wcBefore: wcBefore);
-      reportDone();
+      _finishSite(i, _SiteResult(wcBefore: wcBefore));
       return;
     }
 
-    // Best-move skip: when the played move reaches the exact position the
-    // engine's first PV move does, the user played the engine's own choice.
-    final bestFenAfter = evalA.pv.isEmpty
-        ? null
-        : _fenAfterUci(site.fenBefore, evalA.pv.first);
-    if (bestFenAfter != null && bestFenAfter == site.fenAfter) {
-      // The score of a position is the score of the line the engine would
-      // play from it, so evalA already *is* the after-position's score — no
-      // second search needed to write it down. A mate-in-N for me before
-      // the move is a mate-in-(N-1) after it (one of my N moves is now on
-      // the board); a mate against me keeps its distance (the opponent still
-      // needs every one of theirs). Written as a mate, not as the collapsed
-      // centipawn value: that packs to 10000-N, which the viewer unpacks as
-      // mate-in-N again — the off-by-one this arithmetic exists to avoid.
-      final mateBefore = evalA.scoreMate;
-      final mateAfter = mateBefore == null
-          ? null
-          : mateBefore > 1
-          ? mateBefore - 1
-          : mateBefore;
-      plyEvals[site.plyIndex] = _whiteNormalizedEval(
-        EvalResult(
-          scoreCp: evalA.scoreCp,
-          scoreMate: mateAfter,
-          depth: evalA.depth,
-        ),
-        sideToMoveIsWhite: userColor == Side.white,
-      );
-      // Its first move is the one that was played, so the rest of the same
-      // line is what the engine plays on from here — no second search to get
-      // the next ply's best line either.
-      if (site.plyIndex + 1 < plyPvs.length) {
-        plyPvs[site.plyIndex + 1] = uciPvToSan(
-          site.fenAfter,
-          evalA.pv.skip(1).toList(),
-        );
-      }
-      results[i] = _SiteResult(wcBefore: wcBefore, wcAfter: wcBefore);
-      reportDone();
+    if (_playedEngineChoice(site, evalBefore)) {
+      _recordBestMoveSkip(site, evalBefore);
+      _finishSite(i, _SiteResult(wcBefore: wcBefore, wcAfter: wcBefore));
       return;
     }
 
-    // Shared-cache screen-out: a full-game analysis pass (this game reviewed
-    // in the viewer, or the background auto-analysis job) has usually
-    // already scored this exact position at ≥ this depth. When that score
-    // says the move lost nothing, the confirming search is skipped — only
-    // suspected mistakes go to the engine, because a mined card needs the
-    // search's PV and exact eval, which the cp-only cache cannot provide.
-    final cachedCpWhite = await EvalCache.instance.getEvalCpWhite(
-      site.fenAfter,
-      minDepth: depth,
-    );
-    if (cachedCpWhite != null) {
-      final cachedCpUser = userColor == Side.white
-          ? cachedCpWhite
-          : -cachedCpWhite;
-      final wcAfterCached = _winningChances(cachedCpUser);
-      if (wcBefore - wcAfterCached < 0.1) {
-        plyEvals[site.plyIndex] = PlyEval(cp: cachedCpWhite, depth: depth);
-        results[i] = _SiteResult(wcBefore: wcBefore, wcAfter: wcAfterCached);
-        reportDone();
-        return;
-      }
+    final wcAfterCached = await _cachedWcAfter(site, wcBefore);
+    if (wcAfterCached != null) {
+      _finishSite(i, _SiteResult(wcBefore: wcBefore, wcAfter: wcAfterCached));
+      return;
     }
 
-    if (shouldAbort?.call() ?? false) return;
-    final evalB = await evaluate(site.fenAfter);
+    if (analyzer._aborted) return;
+    final evalAfter = await _evaluate(worker, site.fenAfter);
     unawaited(
       _putSharedEval(
         site.fenAfter,
-        evalB,
-        sideToMoveIsWhite: userColor != Side.white,
-        depth: depth,
+        evalAfter,
+        sideToMoveIsWhite: !game.userIsWhite,
       ),
     );
-
     plyEvals[site.plyIndex] = _whiteNormalizedEval(
-      evalB,
-      sideToMoveIsWhite: userColor != Side.white,
+      evalAfter,
+      sideToMoveIsWhite: !game.userIsWhite,
     );
-    if (site.plyIndex + 1 < plyPvs.length) {
-      plyPvs[site.plyIndex + 1] = uciPvToSan(site.fenAfter, evalB.pv);
-    }
+    _recordPv(site.plyIndex + 1, site.fenAfter, evalAfter.pv);
 
-    // evalB is the opponent's turn → negate for the user's perspective.
-    final cpB = -evalB.effectiveCp;
-    final wcAfter = _winningChances(cpB);
-    final delta = wcBefore - wcAfter;
-
-    final isBlunder = delta >= 0.3;
-    final isMistake = delta >= 0.2 && delta < 0.3;
-    final isInaccuracy = delta >= 0.1 && delta < 0.2;
+    // evalAfter is the opponent's turn → negate for the user's perspective.
+    final wcAfter = winningChanceFromCp(-evalAfter.effectiveCp);
+    final severity = MistakeSeverity.ofDelta(wcBefore - wcAfter);
 
     TacticsPosition? mined;
-    if ((isBlunder || isMistake || isInaccuracy) && evalA.pv.isNotEmpty) {
+    if (severity != null && evalBefore.pv.isNotEmpty) {
       // Cancelled games are discarded and re-analyzed on resume, so bail
       // before buildTrainableLine burns more Maia/Stockfish calls.
-      if (shouldAbort?.call() ?? false) return;
-      final bestMoveUci = evalA.pv.first;
-
-      final allPvSan = <String>[];
-      Position tempPos = Chess.fromSetup(Setup.parseFen(site.fenBefore));
-      for (final uci in evalA.pv) {
-        final (sanMove, newPos) = _makeUciMoveAndGetSan(tempPos, uci);
-        if (sanMove == null) break;
-        allPvSan.add(sanMove);
-        tempPos = newPos;
-      }
-
-      // Keep every legal ply Stockfish returned. The shorter line below is
-      // deliberately the only one constrained by what makes a good training
-      // prompt; revealing the answer should still show the engine's full PV.
-      final solutionPv = List<String>.of(allPvSan);
-      final correctLine = await TacticsEngine.buildTrainableLine(
-        allPvSan,
-        maia: maia,
-        worker: worker,
-        maiaElo: maiaElo,
-        startFen: site.fenBefore,
-      );
-
-      final bestMoveSan = _formatUciToSan(site.fenBefore, bestMoveUci);
-      final opponentResponse = evalB.pv.isNotEmpty
-          ? _formatUciToSan(site.fenAfter, evalB.pv.first)
-          : '';
-
-      final mistakeType = isBlunder
-          ? '??'
-          : isMistake
-          ? '?'
-          : '?!';
-      // The flashcard back (see [TacticsNote]): the played move with its
-      // eval arc, then the best move. Evals are from the user's perspective
-      // and mate-aware, hence the negate on the post-move score.
-      final analysis = TacticsNote.compose(
-        playedSan: site.san,
-        evalBefore: TacticsNote.formatEval(
-          scoreCp: evalA.scoreCp,
-          scoreMate: evalA.scoreMate,
-        ),
-        evalAfter: TacticsNote.formatEval(
-          scoreCp: evalB.scoreCp,
-          scoreMate: evalB.scoreMate,
-          negate: true,
-        ),
-        bestSan: bestMoveSan,
-      );
-
-      mined = TacticsPosition(
-        fen: site.fenBefore,
-        userMove: site.san,
-        correctLine: correctLine,
-        solutionPv: solutionPv,
-        mistakeType: mistakeType,
-        mistakeAnalysis: analysis,
-        opponentBestResponse: opponentResponse,
-        gameWhite: game.headers['White'] ?? '',
-        gameBlack: game.headers['Black'] ?? '',
-        gameResult: gameResult,
-        gameDate: game.headers['Date'] ?? '',
-        gameId: gameId,
-        sourceMovetext: sourceMovetext,
+      if (analyzer._aborted) return;
+      mined = await _minePosition(
+        worker,
+        site,
+        severity: severity,
+        evalBefore: evalBefore,
+        evalAfter: evalAfter,
       );
     }
-
-    results[i] = _SiteResult(
-      wcBefore: wcBefore,
-      wcAfter: wcAfter,
-      mined: mined,
-      isBlunder: isBlunder,
+    _finishSite(
+      i,
+      _SiteResult(
+        wcBefore: wcBefore,
+        wcAfter: wcAfter,
+        mined: mined,
+        isBlunder: severity == MistakeSeverity.blunder,
+      ),
     );
-    reportDone();
   }
 
-  // One site per task. Batching consecutive sites onto one worker (for
-  // transposition-table locality) was benchmarked and lost: the serial
-  // batch tail at each game's end left the rest of the pool idle and cost
-  // more than the warmer hash saved.
-  await pool.forEachParallel<int>(
-    [for (var i = 0; i < sites.length; i++) i],
-    evaluateSite,
-    stopWhen: shouldAbort,
-  );
+  /// Best-move skip: the played move reaches the exact position the
+  /// engine's first PV move does, so the user played the engine's own
+  /// choice.
+  ///
+  /// FEN identity is how the user's played move is compared against the
+  /// engine's best move: comparing UCI strings directly would misjudge
+  /// castling, where dartchess emits king→rook (e1h1) and Stockfish
+  /// king→destination (e1g1). dartchess accepts either encoding in
+  /// [Position.makeSan] and produces the same resulting position.
+  bool _playedEngineChoice(_UserMoveSite site, EvalResult evalBefore) {
+    if (evalBefore.pv.isEmpty) return false;
+    final pos = Chess.fromSetup(Setup.parseFen(site.fenBefore));
+    return playUciFrom(pos, evalBefore.pv.first)?.after.fen == site.fenAfter;
+  }
 
-  // A cancelled game is discarded whole (and re-analyzed on resume), so the
-  // partially-filled results are not worth assembling.
-  if (shouldAbort?.call() ?? false) return null;
+  /// Write the after-position's score and line without a second search.
+  ///
+  /// The score of a position is the score of the line the engine would play
+  /// from it, so [evalBefore] already *is* the after-position's score. A
+  /// mate-in-N for me before the move is a mate-in-(N-1) after it (one of my
+  /// N moves is now on the board); a mate against me keeps its distance (the
+  /// opponent still needs every one of theirs). Written as a mate, not as
+  /// the collapsed centipawn value: that packs to 10000-N, which the viewer
+  /// unpacks as mate-in-N again — the off-by-one this arithmetic exists to
+  /// avoid.
+  void _recordBestMoveSkip(_UserMoveSite site, EvalResult evalBefore) {
+    final mateBefore = evalBefore.scoreMate;
+    final mateAfter = mateBefore == null
+        ? null
+        : mateBefore > 1
+        ? mateBefore - 1
+        : mateBefore;
+    plyEvals[site.plyIndex] = _whiteNormalizedEval(
+      EvalResult(
+        scoreCp: evalBefore.scoreCp,
+        scoreMate: mateAfter,
+        depth: evalBefore.depth,
+      ),
+      sideToMoveIsWhite: game.userIsWhite,
+    );
+    // Its first move is the one that was played, so the rest of the same
+    // line is what the engine plays on from here — no second search to get
+    // the next ply's best line either.
+    _recordPv(site.plyIndex + 1, site.fenAfter, evalBefore.pv.skip(1).toList());
+  }
 
-  // ── Phase 3: assemble in game order + tag pass ──
-  // Tags need the full user-move eval series (miss looks back one user
-  // move, lucky looks ahead one), so they are assigned after all sites
-  // completed. results[i] pairs with sites[i]; both are in game order.
-  final positions = <TacticsPosition>[];
-  var inaccuracies = 0, mistakes = 0, blunders = 0;
-  for (var i = 0; i < results.length; i++) {
-    final result = results[i];
-    final wcAfterAny = result?.wcAfter;
-    // Count every one of my moves that lost winning chances, whether or not it
-    // became a puzzle: a move can be a mistake and still be untrainable (no PV
-    // to build a solution from), and the counts must not silently drop those.
-    // Moves that ended the game have no post-eval and cannot be mistakes.
-    if (result != null && wcAfterAny != null) {
-      switch (result.wcBefore - wcAfterAny) {
-        case >= 0.30:
+  /// Shared-cache screen-out: a full-game analysis pass (this game reviewed
+  /// in the viewer, or the background auto-analysis job) has usually already
+  /// scored this exact position at ≥ this depth. When that score says the
+  /// move lost nothing, the confirming search is skipped and its winning
+  /// chance returned — only suspected mistakes go to the engine, because a
+  /// mined card needs the search's PV and exact eval, which the cp-only
+  /// cache cannot provide.
+  Future<double?> _cachedWcAfter(_UserMoveSite site, double wcBefore) async {
+    final cachedCpWhite = await EvalCache.instance.getEvalCpWhite(
+      site.fenAfter,
+      minDepth: _depth,
+    );
+    if (cachedCpWhite == null) return null;
+    final cachedCpUser = game.userIsWhite ? cachedCpWhite : -cachedCpWhite;
+    final wcAfterCached = winningChanceFromCp(cachedCpUser);
+    if (wcBefore - wcAfterCached >= MistakeSeverity.inaccuracy.minWcDelta) {
+      return null;
+    }
+    plyEvals[site.plyIndex] = PlyEval(cp: cachedCpWhite, depth: _depth);
+    return wcAfterCached;
+  }
+
+  /// Build the puzzle for a move that lost winning chances.
+  Future<TacticsPosition> _minePosition(
+    EvalWorker worker,
+    _UserMoveSite site, {
+    required MistakeSeverity severity,
+    required EvalResult evalBefore,
+    required EvalResult evalAfter,
+  }) async {
+    // Keep every legal ply Stockfish returned. The trainable line below is
+    // deliberately the only one constrained by what makes a good training
+    // prompt; revealing the answer should still show the engine's full PV.
+    final solutionPv = _pvToSan(site.fenBefore, evalBefore.pv);
+    final correctLine = await TacticsEngine.buildTrainableLine(
+      solutionPv,
+      maia: analyzer.maia,
+      worker: worker,
+      maiaElo: analyzer.maiaElo,
+      startFen: site.fenBefore,
+    );
+
+    final bestMoveSan = uciToSan(site.fenBefore, evalBefore.pv.first);
+    final opponentResponse = evalAfter.pv.isNotEmpty
+        ? uciToSan(site.fenAfter, evalAfter.pv.first)
+        : '';
+
+    // The flashcard back (see [TacticsNote]): the played move with its eval
+    // arc, then the best move. Evals are from the user's perspective and
+    // mate-aware, hence the negate on the post-move score.
+    final analysis = TacticsNote.compose(
+      playedSan: site.san,
+      evalBefore: TacticsNote.formatEval(
+        scoreCp: evalBefore.scoreCp,
+        scoreMate: evalBefore.scoreMate,
+      ),
+      evalAfter: TacticsNote.formatEval(
+        scoreCp: evalAfter.scoreCp,
+        scoreMate: evalAfter.scoreMate,
+        negate: true,
+      ),
+      bestSan: bestMoveSan,
+    );
+
+    final headers = game.game.headers;
+    return TacticsPosition(
+      fen: site.fenBefore,
+      userMove: site.san,
+      correctLine: correctLine,
+      solutionPv: solutionPv,
+      mistakeType: severity.mark,
+      mistakeAnalysis: analysis,
+      opponentBestResponse: opponentResponse,
+      gameWhite: headers['White'] ?? '',
+      gameBlack: headers['Black'] ?? '',
+      gameResult: game.result,
+      gameDate: headers['Date'] ?? '',
+      gameId: gameId,
+      sourceMovetext: game.sourceMovetext,
+    );
+  }
+
+  /// Assemble the outcome in game order and run the tag pass.
+  ///
+  /// Tags need the full user-move eval series (miss looks back one user
+  /// move, lucky looks ahead one), so they are assigned after all sites
+  /// completed.
+  GameMineOutcome assemble() {
+    final positions = <TacticsPosition>[];
+    var inaccuracies = 0, mistakes = 0, blunders = 0;
+    for (var i = 0; i < results.length; i++) {
+      final result = results[i];
+      if (result == null) continue;
+      final wcAfter = result.wcAfter;
+      // Moves that ended the game have no post-eval and cannot be mistakes.
+      if (wcAfter == null) continue;
+      // Count every one of my moves that lost winning chances, whether or
+      // not it became a puzzle: a move can be a mistake and still be
+      // untrainable (no PV to build a solution from), and the counts must
+      // not silently drop those.
+      switch (MistakeSeverity.ofDelta(result.wcBefore - wcAfter)) {
+        case MistakeSeverity.blunder:
           blunders++;
-        case >= 0.20:
+        case MistakeSeverity.mistake:
           mistakes++;
-        case >= 0.10:
+        case MistakeSeverity.inaccuracy:
           inaccuracies++;
-        default:
+        case null:
           break;
       }
+      final mined = result.mined;
+      if (mined == null) continue;
+      final site = sites[i];
+      final prev = i > 0 ? results[i - 1] : null;
+      final next = i + 1 < results.length ? results[i + 1] : null;
+      final tags = buildFlawTags(
+        isBlunder: result.isBlunder,
+        wcBefore: result.wcBefore,
+        wcAfter: wcAfter,
+        wcAfterPrevUserMove: prev?.wcAfter,
+        wcBeforeNextUserMove: next?.wcBefore,
+        userLost: game.userLost,
+        fenBefore: site.fenBefore,
+        clockAfterSeconds: site.plyIndex < game.clocks.length
+            ? game.clocks[site.plyIndex]
+            : null,
+        moveTimeSeconds: moveTimeSeconds(
+          game.clocks,
+          site.plyIndex,
+          game.incrementSeconds ?? 0.0,
+        ),
+        baseTimeSeconds: game.baseTimeSeconds,
+      );
+      positions.add(mined.copyWith(flawTags: tags));
     }
-    final mined = result?.mined;
-    if (result == null || mined == null) continue;
-    final wcAfter = result.wcAfter;
-    if (wcAfter == null) continue; // mined moves always have a post-eval
-    final site = sites[i];
-    final prev = i > 0 ? results[i - 1] : null;
-    final next = i + 1 < results.length ? results[i + 1] : null;
-    final tags = buildFlawTags(
-      isBlunder: result.isBlunder,
-      wcBefore: result.wcBefore,
-      wcAfter: wcAfter,
-      wcAfterPrevUserMove: prev?.wcAfter,
-      wcBeforeNextUserMove: next?.wcBefore,
-      userLost: userLost,
-      fenBefore: site.fenBefore,
-      clockAfterSeconds: site.plyIndex < clocks.length
-          ? clocks[site.plyIndex]
-          : null,
-      moveTimeSeconds: moveTimeSeconds(clocks, site.plyIndex, increment ?? 0),
-      baseTimeSeconds: baseTime,
+
+    return GameMineOutcome(
+      positions: positions,
+      dedupKey: dedupKeyForHeaders(game.game.headers, pgn: game.gameText),
+      inaccuracies: inaccuracies,
+      mistakes: mistakes,
+      blunders: blunders,
+      // The scores are written onto the parsed tree's own nodes, and the
+      // text that comes back replaces this game in the games cache.
+      annotatedMovetext: annotateMovetextWithEvals(
+        game: game.game,
+        plyEvals: plyEvals,
+        plyPvs: plyPvs,
+        lastPlyIsCheckmate: lastPlyIsCheckmate,
+      ),
     );
-    positions.add(mined.copyWith(flawTags: tags));
   }
 
-  return _GameMineOutcome(
-    positions: positions,
-    dedupKey: dedupKeyForHeaders(game.headers, pgn: gameText),
-    inaccuracies: inaccuracies,
-    mistakes: mistakes,
-    blunders: blunders,
-    // The parsed game, not `moveNodes`: the scores are written onto the
-    // tree's own nodes (`moveNodes` holds those same objects), and the text
-    // that comes back replaces this game in the games cache.
-    annotatedMovetext: annotateMovetextWithEvals(
-      game: game,
-      plyEvals: plyEvals,
-      plyPvs: plyPvs,
-      lastPlyIsCheckmate: lastPlyIsCheckmate,
-    ),
-  );
-}
-
-(String? san, Position newPos) _makeUciMoveAndGetSan(Position pos, String uci) {
-  final move = Move.parse(uci);
-  if (move == null) return (null, pos);
-  try {
-    final (newPos, san) = pos.makeSan(move);
-    return (san, newPos);
-  } catch (_) {
-    return (null, pos);
+  /// Persist a side-to-move [EvalResult] into the shared White-normalized
+  /// [EvalCache] (the same store tree generation and audit read). Mate
+  /// scores are skipped — the cache is centipawns-only and its consumers
+  /// assume cp semantics.
+  Future<void> _putSharedEval(
+    String fen,
+    EvalResult result, {
+    required bool sideToMoveIsWhite,
+  }) async {
+    final cp = result.scoreCp;
+    if (cp == null || result.scoreMate != null) return;
+    await EvalCache.instance.putEvalCpWhite(
+      fen,
+      sideToMoveIsWhite ? cp : -cp,
+      _depth,
+    );
   }
 }
 
-String _formatUciToSan(String fen, String uci) {
-  final pos = Chess.fromSetup(Setup.parseFen(fen));
-  final (san, _) = _makeUciMoveAndGetSan(pos, uci);
-  return san ?? uci;
+int? _negateScore(int? v) => v == null ? null : -v;
+
+/// A side-to-move [EvalResult] as a White-normalized [PlyEval] — the sign
+/// convention `[%eval]` comments use, whoever was to move.
+PlyEval _whiteNormalizedEval(
+  EvalResult result, {
+  required bool sideToMoveIsWhite,
+}) => PlyEval(
+  cp: sideToMoveIsWhite ? result.scoreCp : _negateScore(result.scoreCp),
+  mate: sideToMoveIsWhite ? result.scoreMate : _negateScore(result.scoreMate),
+  depth: result.depth,
+);
+
+/// Every legal ply of [uciPv] from [fen] in SAN, stopping at the first that
+/// does not apply. Unlike [uciPvToSan] this keeps the whole line.
+List<String> _pvToSan(String fen, List<String> uciPv) {
+  final san = <String>[];
+  Position pos = Chess.fromSetup(Setup.parseFen(fen));
+  for (final uci in uciPv) {
+    final played = playUciFrom(pos, uci);
+    if (played == null) break;
+    san.add(played.san);
+    pos = played.after;
+  }
+  return san;
 }

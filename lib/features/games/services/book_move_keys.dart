@@ -17,6 +17,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
+import '../../../services/eval/eval_canonicalize.dart' show canonicalizeFen4;
 import '../../../utils/chess_utils.dart' show moveToStandardUci;
 
 /// The key for [san] played in [position], or null when it is not a legal
@@ -30,41 +31,36 @@ String? moveKey(Position position, String san) {
 /// Keys for [sans] played in order from [start]. Stops at the first move that
 /// does not parse, so the result can be shorter than the input: the plies
 /// before it are still comparable, the ones after it are not.
-List<String> moveKeysFromStart(List<String> sans, {Position? start}) {
-  var pos = start ?? Chess.initial;
-  final keys = <String>[];
-  for (final san in sans) {
-    final move = pos.parseSan(san);
-    if (move == null) break;
-    keys.add(moveToStandardUci(pos, move));
-    pos = pos.play(move);
-  }
-  return keys;
-}
+List<String> moveKeysFromStart(List<String> sans, {Position? start}) => [
+  for (final (before, move, _) in _playThrough(sans, start))
+    moveToStandardUci(before, move),
+];
 
 /// A position as the book keys it: the FEN without its move counters, so
 /// the same position reached by two orders is one key.
-String positionKey(Position position) {
-  final fen = position.fen;
-  var cut = fen.length;
-  for (var fields = 0; fields < 2 && cut > 0; fields++) {
-    cut = fen.lastIndexOf(' ', cut - 1);
-  }
-  return cut > 0 ? fen.substring(0, cut) : fen;
-}
+String positionKey(Position position) => canonicalizeFen4(position.fen);
 
 /// Position keys after each of [sans] played in order from [start]. Stops at
 /// the first move that does not parse, like [moveKeysFromStart].
-List<String> positionKeysFromStart(List<String> sans, {Position? start}) {
+List<String> positionKeysFromStart(List<String> sans, {Position? start}) => [
+  for (final (_, _, after) in _playThrough(sans, start)) positionKey(after),
+];
+
+/// [sans] played in order from [start], one record per ply: the position it
+/// was played in, the move, and the position after it. Ends at the first
+/// SAN that is not a legal move.
+Iterable<(Position before, Move move, Position after)> _playThrough(
+  List<String> sans,
+  Position? start,
+) sync* {
   var pos = start ?? Chess.initial;
-  final keys = <String>[];
   for (final san in sans) {
     final move = pos.parseSan(san);
-    if (move == null) break;
-    pos = pos.play(move);
-    keys.add(positionKey(pos));
+    if (move == null) return;
+    final after = pos.play(move);
+    yield (pos, move, after);
+    pos = after;
   }
-  return keys;
 }
 
 /// Whether some root-to-leaf path of [root] — the mainline or any variation —

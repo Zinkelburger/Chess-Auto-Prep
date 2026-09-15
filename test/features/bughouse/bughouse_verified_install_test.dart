@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_bundle.dart';
-import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
+import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine_report.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -108,7 +108,7 @@ void main() {
       await BughouseBundle.ensureInstalled();
       fail('expected verification failure');
     } on BughouseBundleBroken catch (e) {
-      final report = BughouseEngine.unavailableReport(e);
+      final report = BughouseEngineReport.unavailable(e);
       expect(report, contains('Missing size/SHA-256 for $name'));
       expect(report, contains(root.path));
       expect(report, endsWith('END BUGHOUSE DIAGNOSTICS'));

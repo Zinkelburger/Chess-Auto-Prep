@@ -1,5 +1,6 @@
 import 'package:chess_auto_prep/features/bughouse/controllers/bughouse_controller.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
+import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine_report.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_bundle.dart';
 import 'package:chess_auto_prep/features/bughouse/widgets/bughouse_analysis_panel.dart';
 import 'package:flutter/material.dart';
@@ -15,8 +16,8 @@ import 'fake_bughouse_engine.dart';
 /// without understanding or retyping any of it. That is one button, and these
 /// are the tests that it is wired to the report rather than to the sentence.
 void main() {
-  final report = BughouseEngine.formatReport(
-    headline: BughouseEngine.describeExit(-1073741701),
+  final report = BughouseEngineReport.format(
+    headline: BughouseEngineReport.describeExit(-1073741701),
     executablePath: r'C:\support\bughouse\hivemind-windows.exe',
     argv: ['--model', 'hivemind.onnx'],
     workingDirectory: r'C:\support\bughouse',

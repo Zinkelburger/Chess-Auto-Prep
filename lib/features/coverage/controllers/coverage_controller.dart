@@ -10,9 +10,9 @@ import '../../../models/opening_tree.dart';
 import '../../../services/jobs/notify_throttle.dart';
 import '../../../services/jobs/repertoire_job.dart';
 import '../../../services/master_games/master_games_service.dart';
-import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../../utils/safe_change_notifier.dart';
+import '../models/coverage_config.dart';
+import '../services/coverage_service.dart';
 
 class CoverageController extends ChangeNotifier with SafeChangeNotifier {
   /// The master-games service, injectable for tests.

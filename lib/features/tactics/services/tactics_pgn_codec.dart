@@ -170,6 +170,16 @@ bool _sameLine(List<String> a, List<String> b) {
   return true;
 }
 
+final _whitespaceRe = RegExp(r'\s+');
+
+/// A space-separated header value (`SolutionPv`, `FlawTags`) as tokens.
+List<String> _spaceSeparated(String? value) =>
+    (value ?? '').split(_whitespaceRe).where((s) => s.isNotEmpty).toList();
+
+/// A `|`-separated header value (`CorrectLine`) as tokens.
+List<String> _pipeSeparated(String? value) =>
+    (value ?? '').split('|').where((s) => s.isNotEmpty).toList();
+
 /// A whole set as a multi-game PGN.  Puzzles whose solution cannot be
 /// converted to SAN are written with a `[CorrectLine]` header instead of
 /// movetext (counted in `fallback`); puzzles whose FEN cannot be parsed at
@@ -278,13 +288,9 @@ bool _sameLine(List<String> a, List<String> b) {
       }
 
       // Raw-token fallback written by the encoder for unconvertible lines.
-      var correctLine = sanLine;
-      if (correctLine.isEmpty) {
-        correctLine = (headers['CorrectLine'] ?? '')
-            .split('|')
-            .where((s) => s.isNotEmpty)
-            .toList();
-      }
+      final correctLine = sanLine.isEmpty
+          ? _pipeSeparated(headers['CorrectLine'])
+          : sanLine;
       if (correctLine.isEmpty) {
         errors.add('Game ${i + 1}: no moves — skipped');
         continue;
@@ -295,10 +301,7 @@ bool _sameLine(List<String> a, List<String> b) {
           fen: fen,
           userMove: headers['UserMove'] ?? '',
           correctLine: correctLine,
-          solutionPv: (headers['SolutionPv'] ?? '')
-              .split(RegExp(r'\s+'))
-              .where((s) => s.isNotEmpty)
-              .toList(),
+          solutionPv: _spaceSeparated(headers['SolutionPv']),
           mistakeType:
               headers['MistakeType'] ??
               TacticsSessionSettings.customMistakeType,
@@ -315,16 +318,11 @@ bool _sameLine(List<String> a, List<String> b) {
           opponentBestResponse: headers['OpponentBestResponse'] ?? '',
           reviewCount: int.tryParse(headers['ReviewCount'] ?? '') ?? 0,
           successCount: int.tryParse(headers['SuccessCount'] ?? '') ?? 0,
-          lastReviewed: headers['LastReviewed'] != null
-              ? DateTime.tryParse(headers['LastReviewed']!)
-              : null,
+          lastReviewed: _parseDate(headers['LastReviewed']),
           timeToSolve: double.tryParse(headers['TimeToSolve'] ?? '') ?? 0.0,
           hintsUsed: int.tryParse(headers['HintsUsed'] ?? '') ?? 0,
           rating: int.tryParse(headers['StarRating'] ?? '') ?? 0,
-          flawTags: (headers['FlawTags'] ?? '')
-              .split(RegExp(r'\s+'))
-              .where((s) => s.isNotEmpty)
-              .toList(),
+          flawTags: _spaceSeparated(headers['FlawTags']),
         ),
       );
       seenFens.add(fen);
@@ -461,6 +459,9 @@ String _cleanName(String? name) {
   if (name == null || name == '?') return '';
   return name;
 }
+
+DateTime? _parseDate(String? value) =>
+    value == null ? null : DateTime.tryParse(value);
 
 /// The stat headers owned by the trainer (rewritten by [patchStatsInPgn]).
 const _statTags = [

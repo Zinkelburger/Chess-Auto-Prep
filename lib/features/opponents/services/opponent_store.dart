@@ -19,15 +19,20 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../services/storage/app_paths.dart';
 import '../../../models/analysis_player_info.dart';
+import '../../../services/storage/app_paths.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../utils/atomic_file.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../models/person_record.dart';
 import '../models/tournament.dart';
 
+/// The format tag written into `people.json`.
 const kPeopleFormat = 'chess-auto-prep/people@1';
+
+const _peopleFileName = 'people.json';
+const _tournamentsDirectoryName = 'tournaments';
+const _jsonExtension = '.json';
 
 /// Where the store reads and writes. The file backend is the real one; the
 /// memory backend lets widget tests run without `dart:io`.
@@ -61,13 +66,18 @@ class FileOpponentStorage implements OpponentStorage {
   final Future<void> Function(String path) _deleter;
 
   Future<File> _peopleFile() async =>
-      File(p.join((await _root()).path, 'people.json'));
+      File(p.join((await _root()).path, _peopleFileName));
 
   Future<Directory> _tournamentsDir() async {
-    final dir = Directory(p.join((await _root()).path, 'tournaments'));
+    final dir = Directory(
+      p.join((await _root()).path, _tournamentsDirectoryName),
+    );
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
   }
+
+  Future<String> _tournamentPath(String id) async =>
+      p.join((await _tournamentsDir()).path, '$id$_jsonExtension');
 
   @override
   Future<String?> get location async => (await _root()).path;
@@ -88,7 +98,8 @@ class FileOpponentStorage implements OpponentStorage {
     final dir = await _tournamentsDir();
     final out = <String, String>{};
     await for (final entity in dir.list()) {
-      if (entity is! File || !entity.path.toLowerCase().endsWith('.json')) {
+      if (entity is! File ||
+          p.extension(entity.path).toLowerCase() != _jsonExtension) {
         continue;
       }
       out[p.basenameWithoutExtension(entity.path)] = await entity
@@ -99,14 +110,11 @@ class FileOpponentStorage implements OpponentStorage {
 
   @override
   Future<void> writeTournament(String id, String json) async =>
-      _writer.writeText(
-        File(p.join((await _tournamentsDir()).path, '$id.json')),
-        json,
-      );
+      _writer.writeText(File(await _tournamentPath(id)), json);
 
   @override
   Future<void> deleteTournament(String id) async =>
-      _deleter(p.join((await _tournamentsDir()).path, '$id.json'));
+      _deleter(await _tournamentPath(id));
 }
 
 class MemoryOpponentStorage implements OpponentStorage {
@@ -133,6 +141,12 @@ class MemoryOpponentStorage implements OpponentStorage {
   Future<void> deleteTournament(String id) async => tournaments.remove(id);
 }
 
+/// In-memory directory and tournaments, written through to [OpponentStorage].
+///
+/// Reads are synchronous once [ensureLoaded] completes. Writes are serialized
+/// in call order so a quick succession of edits lands on disk in the order
+/// they were made, and each write snapshots the state at the moment it was
+/// requested.
 class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
   OpponentStore(this._storage);
 
@@ -142,30 +156,23 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
   static OpponentStore get instance =>
       _instance ??= OpponentStore(FileOpponentStorage());
 
+  static const _encoder = JsonEncoder.withIndent('  ');
+
   final OpponentStorage _storage;
   final Map<String, PersonRecord> _people = {};
   final Map<String, Tournament> _tournaments = {};
   Future<void>? _loading;
   bool _loaded = false;
-  bool savedAccountsImported = false;
-  Future<void>? _writes;
+  bool _savedAccountsImported = false;
 
-  Future<void> _persist(Future<void> Function() write) {
-    final result = _writes == null ? write() : _writes!.then((_) => write());
-    late final Future<void> tail;
-    void finished() {
-      if (identical(_writes, tail)) _writes = null;
-    }
-
-    tail = result.then<void>(
-      (_) => finished(),
-      onError: (Object _, StackTrace _) => finished(),
-    );
-    _writes = tail;
-    return result;
-  }
+  /// The tail of the write chain; every write waits for the one before it.
+  Future<void>? _pendingWrites;
 
   bool get isLoaded => _loaded;
+
+  /// Whether the one-time import of the app's saved accounts has run, so
+  /// deleting a record is not undone on next opening.
+  bool get savedAccountsImported => _savedAccountsImported;
 
   Future<String?> get location => _storage.location;
 
@@ -178,47 +185,78 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> _load() async {
-    final raw = await _storage.readPeople();
-    if (raw != null && raw.trim().isNotEmpty) {
-      try {
-        final decoded = jsonDecode(raw);
-        savedAccountsImported =
-            decoded is Map && decoded['saved_accounts_imported'] == true;
-        final rows = decoded is Map ? decoded['people'] : decoded;
-        for (final row in (rows as List?) ?? const []) {
-          if (row is Map) {
-            final person = PersonRecord.fromJson(row.cast<String, dynamic>());
-            _people[person.id] = person;
-          }
-        }
-      } catch (e) {
-        debugPrint('people.json unreadable, starting empty: $e');
-      }
-    }
-    for (final entry in (await _storage.readTournaments()).entries) {
-      try {
-        final t = Tournament.fromJson(
-          (jsonDecode(entry.value) as Map).cast<String, dynamic>(),
-          fallbackId: entry.key,
-        );
-        _tournaments[entry.key] = t;
-      } catch (e) {
-        debugPrint('tournament ${entry.key} unreadable, skipped: $e');
-      }
-    }
+    _loadPeople(await _storage.readPeople());
+    _loadTournaments(await _storage.readTournaments());
     if (isDisposed) return;
     _loaded = true;
     notifyListeners();
   }
 
+  /// Accepts both the enveloped form this app writes and a bare list of
+  /// people. An unreadable file starts the directory empty rather than
+  /// blocking the whole feature.
+  void _loadPeople(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      _savedAccountsImported =
+          decoded is Map && decoded['saved_accounts_imported'] == true;
+      final rows = decoded is Map ? decoded['people'] : decoded;
+      for (final row in (rows as List?) ?? const []) {
+        if (row is Map) {
+          final person = PersonRecord.fromJson(row.cast<String, dynamic>());
+          _people[person.id] = person;
+        }
+      }
+    } catch (e) {
+      debugPrint('$_peopleFileName unreadable, starting empty: $e');
+    }
+  }
+
+  void _loadTournaments(Map<String, String> files) {
+    for (final MapEntry(key: id, value: json) in files.entries) {
+      try {
+        _tournaments[id] = Tournament.fromJson(
+          (jsonDecode(json) as Map).cast<String, dynamic>(),
+          fallbackId: id,
+        );
+      } catch (e) {
+        debugPrint('tournament $id unreadable, skipped: $e');
+      }
+    }
+  }
+
+  /// Queues [write] behind every earlier write. A failed write rejects its
+  /// own future but does not block the ones queued after it.
+  ///
+  /// The chain is dropped once it drains so the next write starts
+  /// synchronously in its caller's zone: a future created in another zone
+  /// (a widget test's real-async `setUp`) is never driven by a fake-async
+  /// test body, and chaining onto it would hang the test.
+  Future<void> _persist(Future<void> Function() write) {
+    final result = switch (_pendingWrites) {
+      null => write(),
+      final pending => pending.then((_) => write()),
+    };
+    late final Future<void> tail;
+    void drained() {
+      if (identical(_pendingWrites, tail)) _pendingWrites = null;
+    }
+
+    tail = result.then<void>(
+      (_) => drained(),
+      onError: (Object _, StackTrace _) => drained(),
+    );
+    _pendingWrites = tail;
+    return result;
+  }
+
   // ── People ──────────────────────────────────────────────────────
 
   /// Everyone, by name.
-  List<PersonRecord> get people {
-    final out = _people.values.toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    return out;
-  }
+  List<PersonRecord> get people =>
+      _people.values.toList()
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   PersonRecord? person(String id) => _people[id];
 
@@ -228,13 +266,13 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
       ..removeWhere((w) => w.isEmpty);
     if (words.isEmpty) return people;
     return people.where((person) {
-      final hay = [
+      final haystack = [
         person.name,
         person.uscfId ?? '',
         person.chesscom ?? '',
         person.lichess ?? '',
       ].join(' ').toLowerCase();
-      return words.every(hay.contains);
+      return words.every(haystack.contains);
     }).toList();
   }
 
@@ -247,49 +285,56 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
     String? lichess,
     String? name,
   }) {
-    String? norm(String? s) {
-      final t = s?.trim().toLowerCase();
-      return (t == null || t.isEmpty) ? null : t;
-    }
-
-    final id = norm(uscfId);
-    final cc = norm(chesscom);
-    final li = norm(lichess);
-    final nm = norm(name);
-    for (final person in _people.values) {
-      if (id != null && norm(person.uscfId) == id) return person;
-    }
-    for (final person in _people.values) {
-      if (cc != null &&
-          person.accounts.any(
-            (a) =>
-                a.platform == 'chesscom' &&
-                accountNames(
-                  cc,
-                ).any((n) => n.toLowerCase() == a.username.toLowerCase()),
-          )) {
-        return person;
+    final id = _normalizedKey(uscfId);
+    final chesscomHandles = _handleSet(chesscom);
+    final lichessHandles = _handleSet(lichess);
+    final personName = _normalizedKey(name);
+    final candidates = _people.values;
+    if (id != null) {
+      for (final person in candidates) {
+        if (_normalizedKey(person.uscfId) == id) return person;
       }
-      if (li != null &&
-          person.accounts.any(
-            (a) =>
-                a.platform == 'lichess' &&
-                accountNames(
-                  li,
-                ).any((n) => n.toLowerCase() == a.username.toLowerCase()),
-          )) {
+    }
+    for (final person in candidates) {
+      if (_hasHandle(person, 'chesscom', chesscomHandles) ||
+          _hasHandle(person, 'lichess', lichessHandles)) {
         return person;
       }
     }
-    for (final person in _people.values) {
-      if (nm != null &&
-          norm(person.name) == nm &&
-          (id == null || person.uscfId == null || norm(person.uscfId) == id)) {
-        return person;
+    if (personName != null) {
+      for (final person in candidates) {
+        // A namesake on record under a different USCF ID is someone else.
+        if (_normalizedKey(person.name) == personName &&
+            (id == null || person.uscfId == null)) {
+          return person;
+        }
       }
     }
     return null;
   }
+
+  static String? _normalizedKey(String? value) {
+    final key = value?.trim().toLowerCase();
+    return (key == null || key.isEmpty) ? null : key;
+  }
+
+  /// The lower-cased handles in a user-entered account cell, or empty.
+  static Set<String> _handleSet(String? cell) => {
+    if (_normalizedKey(cell) != null)
+      for (final handle in accountNames(cell)) handle.toLowerCase(),
+  };
+
+  static bool _hasHandle(
+    PersonRecord person,
+    String platform,
+    Set<String> handles,
+  ) =>
+      handles.isNotEmpty &&
+      person.accounts.any(
+        (a) =>
+            a.platform == platform &&
+            handles.contains(a.username.toLowerCase()),
+      );
 
   /// The person whose game-set is stored under [playerName] (see
   /// [PersonRecord.playerName]).
@@ -301,36 +346,35 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
     return null;
   }
 
+  /// The directory person whose games [player] holds: an explicit link
+  /// first, then an imported game-set stored under their name, then any
+  /// shared online handle.
   PersonRecord? personForPlayer(AnalysisPlayerInfo player) {
     for (final person in people) {
       if (person.gameSetKeys.contains(player.playerKey)) return person;
     }
-    return (player.platform == 'import'
-            ? personForPlayerName(player.username)
-            : null) ??
-        matchPerson(
-          chesscom: player.platform == 'chesscom'
-              ? player.username
-              : player.accounts
-                    .where((a) => a.platform == 'chesscom')
-                    .map((a) => a.username)
-                    .join(', '),
-          lichess: player.platform == 'lichess'
-              ? player.username
-              : player.accounts
-                    .where((a) => a.platform == 'lichess')
-                    .map((a) => a.username)
-                    .join(', '),
-        );
+    if (player.isImported) {
+      final byName = personForPlayerName(player.username);
+      if (byName != null) return byName;
+    }
+    return matchPerson(
+      chesscom: _handlesOf(player, 'chesscom'),
+      lichess: _handlesOf(player, 'lichess'),
+    );
   }
+
+  /// The player's handles on [platform] as one account cell.
+  static String _handlesOf(AnalysisPlayerInfo player, String platform) =>
+      player.platform == platform
+      ? player.username
+      : player.accounts
+            .where((a) => a.platform == platform)
+            .map((a) => a.username)
+            .join(', ');
 
   /// How many tournaments list this person.
   int tournamentCountFor(String personId) =>
       _tournaments.values.where((t) => t.contains(personId)).length;
-
-  /// Tournaments listing this person, newest first.
-  List<Tournament> tournamentsFor(String personId) =>
-      tournaments.where((t) => t.contains(personId)).toList();
 
   /// Insert or replace. Returns the stored record (with a fresh
   /// `updatedAt`).
@@ -354,20 +398,20 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
 
   /// Remember onboarding so deleting a record is not undone on next opening.
   Future<void> markSavedAccountsImported() async {
-    savedAccountsImported = true;
+    _savedAccountsImported = true;
     try {
       await _writePeople();
     } catch (_) {
-      savedAccountsImported = false;
+      _savedAccountsImported = false;
       rethrow;
     }
   }
 
   Future<void> _writePeople() {
-    final json = const JsonEncoder.withIndent('  ').convert({
+    final json = _encoder.convert({
       'format': kPeopleFormat,
-      'saved_accounts_imported': savedAccountsImported,
-      'people': [for (final p in people) p.toJson()],
+      'saved_accounts_imported': _savedAccountsImported,
+      'people': [for (final person in people) person.toJson()],
     });
     return _persist(() => _storage.writePeople(json));
   }
@@ -375,15 +419,16 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
   // ── Tournaments ────────────────────────────────────────────────
 
   /// Newest first: by date when both have one, else by last change.
-  List<Tournament> get tournaments {
-    final out = _tournaments.values.toList()
-      ..sort((a, b) {
-        if (a.date != null && b.date != null && a.date != b.date) {
-          return b.date!.compareTo(a.date!);
-        }
-        return b.updatedAt.compareTo(a.updatedAt);
-      });
-    return out;
+  List<Tournament> get tournaments =>
+      _tournaments.values.toList()..sort(_newestFirst);
+
+  static int _newestFirst(Tournament a, Tournament b) {
+    if (a.date case final aDate?) {
+      if (b.date case final bDate? when aDate != bDate) {
+        return bDate.compareTo(aDate);
+      }
+    }
+    return b.updatedAt.compareTo(a.updatedAt);
   }
 
   Tournament? tournament(String id) => _tournaments[id];
@@ -401,32 +446,36 @@ class OpponentStore extends ChangeNotifier with SafeChangeNotifier {
     String? date,
     int? rounds,
   }) async {
-    var id = newTournamentId(name);
-    var suffix = 2;
-    while (_tournaments.containsKey(id)) {
-      id = '${newTournamentId(name)}-${suffix++}';
-    }
     final now = DateTime.now();
-    final t = Tournament(
-      id: id,
-      name: name.trim(),
-      date: (date?.trim().isEmpty ?? true) ? null : date!.trim(),
-      rounds: rounds,
-      createdAt: now,
-      updatedAt: now,
+    final trimmedDate = date?.trim();
+    return saveTournament(
+      Tournament(
+        id: _unusedTournamentId(name),
+        name: name.trim(),
+        date: (trimmedDate == null || trimmedDate.isEmpty) ? null : trimmedDate,
+        rounds: rounds,
+        createdAt: now,
+        updatedAt: now,
+      ),
     );
-    return saveTournament(t);
+  }
+
+  /// The slug for [name], suffixed `-2`, `-3`, … while a tournament already
+  /// owns it.
+  String _unusedTournamentId(String name) {
+    final base = newTournamentId(name);
+    var id = base;
+    for (var suffix = 2; _tournaments.containsKey(id); suffix++) {
+      id = '$base-$suffix';
+    }
+    return id;
   }
 
   Future<Tournament> saveTournament(Tournament tournament) async {
     final stored = tournament.copyWith(updatedAt: DateTime.now());
     _tournaments[stored.id] = stored;
-    await _persist(
-      () => _storage.writeTournament(
-        stored.id,
-        const JsonEncoder.withIndent('  ').convert(stored.toJson()),
-      ),
-    );
+    final json = _encoder.convert(stored.toJson());
+    await _persist(() => _storage.writeTournament(stored.id, json));
     notifyListeners();
     return stored;
   }

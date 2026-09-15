@@ -1,6 +1,6 @@
 import 'package:dartchess/dartchess.dart';
-import '../../../models/build_tree_node.dart';
 
+import '../../../models/build_tree_node.dart';
 import '../../../services/eval/db_move_list.dart';
 import '../../../services/generation/fen_map.dart';
 import '../../../utils/chess_utils.dart';
@@ -24,8 +24,23 @@ class PositionMove {
   final int? expectedCp;
   final DbMove? chessDb;
   final List<String> pvSan;
+
+  /// The stored score for the row, White's perspective: expectimax when the
+  /// position has one, else the engine eval.
+  int? get storedCp => expectedCp ?? evalCp;
 }
 
+/// Promotion pieces in the order the rows list them.
+const List<Role> _promotionRoles = [
+  Role.queen,
+  Role.rook,
+  Role.bishop,
+  Role.knight,
+];
+
+/// Every legal move in [fen] joined with what the tree ([database] and/or
+/// [liveNodeAt]) and [chessDb] know about the position it leads to, sorted
+/// best first for the side to move (rows without a score last, then by SAN).
 List<PositionMove> positionMoves(
   String fen, {
   FenMap? database,
@@ -38,16 +53,14 @@ List<PositionMove> positionMoves(
   if (position == null) return const [];
   final parent = liveNodeAt?.call(fen) ?? database?.getCanonical(fen);
   final rows = <PositionMove>[];
-  for (final entry in position.legalMoves.entries) {
-    for (final to in entry.value.squares) {
+  for (final MapEntry(key: from, value: targets)
+      in position.legalMoves.entries) {
+    for (final to in targets.squares) {
       final promotion =
-          position.board.pieceAt(entry.key)?.role == Role.pawn &&
-          (to ~/ 8 == 0 || to ~/ 8 == 7);
-      for (final role
-          in promotion
-              ? <Role?>[Role.queen, Role.rook, Role.bishop, Role.knight]
-              : <Role?>[null]) {
-        final move = NormalMove(from: entry.key, to: to, promotion: role);
+          position.board.pieceAt(from)?.role == Role.pawn &&
+          (to.rank == Rank.first || to.rank == Rank.eighth);
+      for (final role in promotion ? _promotionRoles : const <Role?>[null]) {
+        final move = NormalMove(from: from, to: to, promotion: role);
         final (after, san) = position.makeSan(move);
         final uci = moveToStandardUci(position, move);
         final child = parent?.children
@@ -81,17 +94,22 @@ List<PositionMove> positionMoves(
       }
     }
   }
+  // Side-to-move perspective, so "higher is better" holds for both colours.
+  final moverSign = position.turn == Side.white ? 1 : -1;
   int? score(PositionMove row) => sortByChessDb
       ? row.chessDb?.stmCp
-      : (row.expectedCp ?? row.evalCp) == null
-      ? null
-      : (row.expectedCp ?? row.evalCp)! *
-            (position.turn == Side.white ? 1 : -1);
+      : switch (row.storedCp) {
+          final cp? => cp * moverSign,
+          null => null,
+        };
   rows.sort((a, b) {
     final x = score(a), y = score(b);
-    if (x == null && y != null) return 1;
-    if (y == null && x != null) return -1;
-    final order = x != null && y != null ? y.compareTo(x) : 0;
+    final order = switch ((x, y)) {
+      (null, null) => 0,
+      (null, _) => 1,
+      (_, null) => -1,
+      (final x?, final y?) => y.compareTo(x),
+    };
     return order != 0 ? order : a.san.compareTo(b.san);
   });
   return rows;

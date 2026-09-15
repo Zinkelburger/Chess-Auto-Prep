@@ -111,6 +111,7 @@ class BughouseEngineSettings {
 
   // ----------------------------------------------------------- persistence
 
+  static const String _coresKey = 'bughouse.engine.cores';
   static const String _hashKey = 'bughouse.engine.hash_mb';
   static const String _batchKey = 'bughouse.engine.batch_size';
   static const String _linesKey = 'bughouse.engine.lines';
@@ -122,7 +123,7 @@ class BughouseEngineSettings {
     try {
       final prefs = await SharedPreferences.getInstance();
       return BughouseEngineSettings.clamped(
-        cores: prefs.getInt('bughouse.engine.cores'),
+        cores: prefs.getInt(_coresKey),
         hashMb: prefs.getInt(_hashKey),
         batchSize: prefs.getInt(_batchKey),
         lines: prefs.getInt(_linesKey),
@@ -137,7 +138,7 @@ class BughouseEngineSettings {
   Future<void> save() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('bughouse.engine.cores', cores);
+      await prefs.setInt(_coresKey, cores);
       await prefs.setInt(_hashKey, hashMb);
       await prefs.setInt(_batchKey, batchSize);
       await prefs.setInt(_linesKey, lines);

@@ -46,15 +46,17 @@ class TournamentImport {
 
   final OpponentStore store;
 
+  static const _defaultTournamentName = 'Imported field';
+
   /// Parse [text] and merge it into [tournament] (created when null, named
   /// after the list's event).
   Future<TournamentImportResult> importText(
     String text, {
     Tournament? tournament,
-  }) async {
-    final list = OpponentList.parse(text, keepAccountless: true);
-    return importList(list, tournament: tournament);
-  }
+  }) => importList(
+    OpponentList.parse(text, keepAccountless: true),
+    tournament: tournament,
+  );
 
   Future<TournamentImportResult> importList(
     OpponentList list, {
@@ -63,35 +65,36 @@ class TournamentImport {
     await store.ensureLoaded();
     var target =
         tournament ??
-        await store.createTournament(list.event ?? 'Imported field');
+        await store.createTournament(list.event ?? _defaultTournamentName);
 
     var added = 0;
-    var already = 0;
+    var alreadyListed = 0;
     var newPeople = 0;
     for (final row in list.opponents) {
-      final before = store.people.length;
-      final person = await importPerson(row);
-      if (store.people.length > before) newPeople++;
-      final existing = target.indexOf(person.id);
-      final entry = TournamentEntry(
-        personId: person.id,
-        rating: row.rating ?? person.rating,
-        pairingProb: row.pairingProb,
-        likelyRound: row.mostLikelyRound,
-        prepared: existing >= 0 && target.entries[existing].prepared,
-      );
-      if (existing >= 0) {
-        already++;
+      final (:person, :created) = await _mergePerson(row);
+      if (created) newPeople++;
+      final existingIndex = target.indexOf(person.id);
+      if (existingIndex >= 0) {
+        alreadyListed++;
       } else {
         added++;
       }
-      target = target.withEntry(entry);
+      target = target.withEntry(
+        TournamentEntry(
+          personId: person.id,
+          rating: row.rating ?? person.rating,
+          pairingProb: row.pairingProb,
+          likelyRound: row.mostLikelyRound,
+          prepared:
+              existingIndex >= 0 && target.entries[existingIndex].prepared,
+        ),
+      );
     }
     target = await store.saveTournament(target);
     return TournamentImportResult(
       tournament: target,
       added: added,
-      alreadyListed: already,
+      alreadyListed: alreadyListed,
       newPeople: newPeople,
       warnings: list.warnings,
     );
@@ -101,14 +104,21 @@ class TournamentImport {
   /// Existing user-entered values win; imports only fill missing fields.
   Future<PersonRecord> importPerson(OpponentEntry row) async {
     await store.ensureLoaded();
-    var person = store.matchPerson(
+    return (await _mergePerson(row)).person;
+  }
+
+  /// The directory person for [row], created when nobody matches.
+  Future<({PersonRecord person, bool created})> _mergePerson(
+    OpponentEntry row,
+  ) async {
+    final match = store.matchPerson(
       uscfId: row.uscfId,
       chesscom: row.chesscom,
       lichess: row.lichess,
       name: row.name,
     );
-    if (person == null) {
-      person = await store.savePerson(
+    if (match == null) {
+      final person = await store.savePerson(
         PersonRecord.create(
           name: row.name,
           uscfId: row.uscfId,
@@ -119,24 +129,25 @@ class TournamentImport {
           notes: row.note ?? '',
         ),
       );
-    } else {
-      // Fill blanks only: the directory is the user's, the list is advice.
-      final filled = person.copyWith(
-        uscfId: person.uscfId ?? row.uscfId,
-        chesscom: person.chesscom ?? row.chesscom,
-        lichess: person.lichess ?? row.lichess,
-        rating: person.rating ?? row.rating,
-        title: person.title ?? row.title,
-      );
-      if (filled.uscfId != person.uscfId ||
-          filled.chesscom != person.chesscom ||
-          filled.lichess != person.lichess ||
-          filled.rating != person.rating ||
-          filled.title != person.title) {
-        person = await store.savePerson(filled);
-      }
+      return (person: person, created: true);
     }
-
-    return person;
+    // Fill blanks only: the directory is the user's, the list is advice.
+    final fillsBlank =
+        (match.uscfId == null && row.uscfId != null) ||
+        (match.chesscom == null && row.chesscom != null) ||
+        (match.lichess == null && row.lichess != null) ||
+        (match.rating == null && row.rating != null) ||
+        (match.title == null && row.title != null);
+    if (!fillsBlank) return (person: match, created: false);
+    final filled = await store.savePerson(
+      match.copyWith(
+        uscfId: match.uscfId ?? row.uscfId,
+        chesscom: match.chesscom ?? row.chesscom,
+        lichess: match.lichess ?? row.lichess,
+        rating: match.rating ?? row.rating,
+        title: match.title ?? row.title,
+      ),
+    );
+    return (person: filled, created: false);
   }
 }

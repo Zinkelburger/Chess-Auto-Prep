@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/app_version.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_bundle.dart';
 import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine.dart';
+import 'package:chess_auto_prep/features/bughouse/services/bughouse_engine_report.dart';
 import 'package:chess_auto_prep/features/bughouse/services/windows_loader_check.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,7 +27,7 @@ void main() {
       List<String> stderr = const [],
       String? loaderPath,
       ContentVerification? integrity,
-    }) => BughouseEngine.formatReport(
+    }) => BughouseEngineReport.format(
       headline: headline,
       integrity: integrity,
       executablePath: r'C:\support\bughouse\hivemind-windows.exe',
@@ -187,7 +188,7 @@ void main() {
       () async {
         final payload = File(p.join(directory.path, 'engine.bin'));
         await payload.writeAsBytes([1, 2, 3]);
-        final report = await BughouseEngine.collectReport(
+        final report = await BughouseEngineReport.collect(
           headline: 'original startup error',
           executablePath: payload.path,
           argv: ['--model', 'model with spaces.onnx'],
@@ -215,7 +216,7 @@ void main() {
     test('file evidence is captured before repair removes the file', () async {
       final payload = File(p.join(directory.path, 'damaged.dll'));
       await payload.writeAsBytes([1, 2, 3]);
-      final report = await BughouseEngine.collectReport(
+      final report = await BughouseEngineReport.collect(
         headline: 'startup error',
         executablePath: payload.path,
         argv: [],

@@ -36,16 +36,12 @@ import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
-import 'package:dartchess/dartchess.dart'
-    show Chess, PgnNode, PgnNodeData, Position, Side;
-
-import '../../../models/repertoire_line.dart';
-import '../../../services/pgn_parsing_service.dart' as pgn;
-import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
 import 'book_move_keys.dart';
 import 'my_repertoire_settings.dart';
+import 'repertoire_book_tree.dart';
 
+/// Where one game last left one book, and what the book wanted there.
 class DeviationReport {
   const DeviationReport({
     required this.matchedPlies,
@@ -124,55 +120,21 @@ class DeviationReport {
   int get moveNumber => matchedPlies ~/ 2 + 1;
 }
 
-/// One position of a book, keyed by move (see [moveKey]). Shared by every
-/// path that reaches the position, whatever their move order.
-class _BookNode {
-  _BookNode(this.path);
-
-  /// The first move order the book used to reach this position.
-  final List<String> path;
-
-  final Map<String, _BookNode> children = {};
-
-  /// Move key → the book's own SAN for it, for displaying expected moves.
-  final Map<String, String> display = {};
-
-  /// Our-side moves the book mentions here without recommending them.
-  final Map<String, String> alternatives = {};
-
-  /// A line through this position, by title.
-  String? lineName;
-}
-
-class _BookTree {
-  _BookTree(this.root, this.byPosition);
-
-  final _BookNode root;
-
-  /// Position key (see [positionKey]) → node.
-  final Map<String, _BookNode> byPosition;
-}
-
 class _CachedChapter {
-  _CachedChapter(this.mtimeMs, this.tree);
+  const _CachedChapter(this.mtimeMs, this.tree);
 
   final int mtimeMs;
-  final _BookTree tree;
+  final BookTree tree;
 }
 
-/// Chapter titles that are not lines of the repertoire even though they hold
-/// moves: a course's introduction, its quick-start digest, its model games.
-/// Used only to prefer a better *name* for a position; their moves are read
-/// like anyone else's, since they never say anything the chapters do not.
-final RegExp _nonRepertoireTitle = RegExp(
-  r'introduction|quick\s*start|model\s*game',
-  caseSensitive: false,
-);
-
-/// Chapters larger than this are parsed on a worker isolate. Below it the
-/// parse is a few milliseconds and the tests that drive it pump fake time,
-/// under which an isolate's answer never arrives.
-const int _offThreadBytes = 512 * 1024;
+/// How far one chapter followed a game, and the node it was at when the
+/// game last stood in its book.
+typedef _ChapterMatch = ({
+  String chapter,
+  BookNode node,
+  int matchedPlies,
+  int firstOutPly,
+});
 
 class GameDeviationService {
   GameDeviationService({MyRepertoireSettings? settings})
@@ -210,16 +172,16 @@ class GameDeviationService {
     );
     DeviationReport? best;
     for (final report in all.values) {
-      if (best == null ||
-          report.matchedPlies > best.matchedPlies ||
-          (report.matchedPlies == best.matchedPlies &&
-              best.bookEnded &&
-              !report.bookEnded)) {
-        best = report;
-      }
+      if (best == null || _outranks(report, best)) best = report;
     }
     return best;
   }
+
+  static bool _outranks(DeviationReport report, DeviationReport best) =>
+      report.matchedPlies > best.matchedPlies ||
+      (report.matchedPlies == best.matchedPlies &&
+          best.bookEnded &&
+          !report.bookEnded);
 
   /// The same walk, but reported **per designated repertoire folder** instead
   /// of collapsed to the single deepest match.
@@ -269,43 +231,69 @@ class GameDeviationService {
     List<String> gamePositions,
     bool meWhite,
   ) async {
-    var bestDepth = -1;
-    var bestFirstOut = -1;
-    final atBest = <(String chapter, _BookNode node)>[];
+    final deepest = <_ChapterMatch>[];
     for (final chapter in await _chapterPathsIn(folder)) {
       final tree = await _treeFor(chapter, ourSideWhite: meWhite);
-      if (tree == null || tree.root.children.isEmpty) continue;
-
-      // In book at a ply when its position is one the book reaches. The
-      // match runs to the last such ply; a departure the game transposed
-      // back from is not the deviation.
-      var node = tree.root;
-      var matched = 0;
-      var firstOut = -1;
-      for (var i = 0; i < gamePositions.length; i++) {
-        final hit = tree.byPosition[gamePositions[i]];
-        if (hit != null) {
-          node = hit;
-          matched = i + 1;
-        } else if (firstOut < 0) {
-          firstOut = i;
-        }
+      if (tree == null || tree.isEmpty) continue;
+      final match = _matchGame(chapter, tree, gamePositions);
+      if (deepest.isNotEmpty &&
+          match.matchedPlies > deepest.first.matchedPlies) {
+        deepest.clear();
       }
-      if (matched > bestDepth) {
-        bestDepth = matched;
-        bestFirstOut = firstOut;
-        atBest.clear();
+      if (deepest.isEmpty || match.matchedPlies == deepest.first.matchedPlies) {
+        deepest.add(match);
       }
-      if (matched == bestDepth) atBest.add((chapter, node));
     }
-    if (atBest.isEmpty) return null;
+    if (deepest.isEmpty) return null;
+    return _reportFor(deepest, gameSans, gameKeys, meWhite);
+  }
 
-    final matched = bestDepth;
+  /// How far [tree] follows the game: in book at a ply when its position is
+  /// one the book reaches. The match runs to the last such ply; a departure
+  /// the game transposed back from is not the deviation.
+  static _ChapterMatch _matchGame(
+    String chapter,
+    BookTree tree,
+    List<String> gamePositions,
+  ) {
+    var node = tree.root;
+    var matched = 0;
+    var firstOut = -1;
+    for (var i = 0; i < gamePositions.length; i++) {
+      final hit = tree.nodeAt(gamePositions[i]);
+      if (hit != null) {
+        node = hit;
+        matched = i + 1;
+      } else if (firstOut < 0) {
+        firstOut = i;
+      }
+    }
+    return (
+      chapter: chapter,
+      node: node,
+      matchedPlies: matched,
+      firstOutPly: firstOut,
+    );
+  }
+
+  /// The report for the chapters in [atBest], which all matched the game to
+  /// the same depth.
+  static DeviationReport _reportFor(
+    List<_ChapterMatch> atBest,
+    List<String> gameSans,
+    List<String> gameKeys,
+    bool meWhite,
+  ) {
+    final matched = atBest.first.matchedPlies;
     final diverged = matched < gameSans.length;
+    final playedKey = diverged && matched < gameKeys.length
+        ? gameKeys[matched]
+        : null;
     final expected = <String, String>{};
     String? lineName;
     var mentioned = false;
-    for (final (_, node) in atBest) {
+    for (final match in atBest) {
+      final node = match.node;
       for (final entry in node.display.entries) {
         expected.putIfAbsent(entry.key, () => entry.value);
       }
@@ -315,26 +303,26 @@ class GameDeviationService {
       final candidate = node.lineName;
       if (candidate != null &&
           (lineName == null ||
-              (_nonRepertoireTitle.hasMatch(lineName) &&
-                  !_nonRepertoireTitle.hasMatch(candidate)))) {
+              (isNonRepertoireTitle(lineName) &&
+                  !isNonRepertoireTitle(candidate)))) {
         lineName = candidate;
       }
-      if (diverged &&
-          matched < gameKeys.length &&
-          node.alternatives.containsKey(gameKeys[matched])) {
+      if (playedKey != null && node.alternatives.containsKey(playedKey)) {
         mentioned = true;
       }
     }
-    final (chapter, node) = atBest.firstWhere(
-      (c) => c.$2.children.isNotEmpty,
+    final named = atBest.firstWhere(
+      (m) => m.node.hasMoves,
       orElse: () => atBest.first,
     );
-    final transposed = bestFirstOut >= 0 && bestFirstOut < matched;
+    // Measured on the chapter that set the depth, like the depth itself.
+    final firstOut = atBest.first.firstOutPly;
+    final transposed = firstOut >= 0 && firstOut < matched;
     return DeviationReport(
       matchedPlies: matched,
-      chapterPath: chapter,
-      chapterName: _chapterDisplayName(chapter),
-      pathSans: node.path,
+      chapterPath: named.chapter,
+      chapterName: _chapterDisplayName(named.chapter),
+      pathSans: named.node.path,
       gamePathSans: transposed ? gameSans.sublist(0, matched) : null,
       playedSan: diverged ? gameSans[matched] : null,
       byMe: diverged ? (matched.isEven == meWhite) : null,
@@ -348,35 +336,36 @@ class GameDeviationService {
   /// Drop cached chapter tries (e.g. after the designations change).
   void invalidateCache() => _chapterCache.clear();
 
+  /// The chapter files of [folder]; empty when it cannot be listed.
   Future<List<String>> _chapterPathsIn(String folder) async {
     try {
       final chapters = await StorageFactory.instance.listChapters(folder);
       return [for (final c in chapters) c.filePath];
     } catch (_) {
+      // A designation that no longer points at a book (deleted, unreadable)
+      // is not a reason to fail the check of every game.
       return const [];
     }
   }
 
-  Future<_BookTree?> _treeFor(
+  /// The cached tree for [chapterPath], rebuilt when the file changed. Null
+  /// when the file is gone or unreadable, which also drops its cache entry.
+  Future<BookTree?> _treeFor(
     String chapterPath, {
     required bool ourSideWhite,
   }) async {
     final cacheKey = '${ourSideWhite ? 'w' : 'b'}:$chapterPath';
     final file = File(chapterPath);
     final int mtimeMs;
-    try {
-      mtimeMs = (await file.lastModified()).millisecondsSinceEpoch;
-    } catch (_) {
-      _chapterCache.remove(cacheKey);
-      return null;
-    }
-    final cached = _chapterCache[cacheKey];
-    if (cached != null && cached.mtimeMs == mtimeMs) return cached.tree;
-
     final String content;
     try {
+      mtimeMs = (await file.lastModified()).millisecondsSinceEpoch;
+      final cached = _chapterCache[cacheKey];
+      if (cached != null && cached.mtimeMs == mtimeMs) return cached.tree;
       content = await file.readAsString();
     } catch (_) {
+      // Gone, unreadable or undecodable: the chapter simply contributes no
+      // book, and a stale tree must not stand in for it.
       _chapterCache.remove(cacheKey);
       return null;
     }
@@ -384,145 +373,16 @@ class GameDeviationService {
     // out as lines; parsing that on the UI isolate froze the app for seconds
     // on every start.
     final chapterName = _chapterDisplayName(chapterPath);
-    final tree = content.length > _offThreadBytes
-        ? await Isolate.run(
-            () => _buildBookTree(content, ourSideWhite, chapterName),
-          )
-        : _buildBookTree(content, ourSideWhite, chapterName);
+    BookTree build() => BookTree.fromChapter(
+      content,
+      ourSideWhite: ourSideWhite,
+      chapterName: chapterName,
+    );
+    final tree = content.length > kOffThreadChapterBytes
+        ? await Isolate.run(build)
+        : build();
     _chapterCache[cacheKey] = _CachedChapter(mtimeMs, tree);
     return tree;
-  }
-
-  /// The book one chapter file describes, as positions reached from the
-  /// initial one, read for the side [ourSideWhite].
-  static _BookTree _buildBookTree(
-    String chapterContent,
-    bool ourSideWhite,
-    String chapterName,
-  ) {
-    final service = RepertoireService();
-    final text = pgn.stripBom(chapterContent);
-    final parsed = service.parseGames(pgn.splitPgnIntoGames(text));
-    // The same lines the trainer and the builder see, so the model-game and
-    // custom-start rules are applied exactly once, in one place.
-    final lines = service.linesFromParsedGames(
-      parsed,
-      declaredColor: pgn.extractRepertoireColor(text),
-      courseChapter: pgn.extractCourseChapter(text),
-    );
-    final treeByIndex = {for (final p in parsed) p.index: p.game.moves};
-    return _buildTree(lines, treeByIndex, ourSideWhite, chapterName);
-  }
-
-  /// What to call a line: its course chapter and title when the file still
-  /// groups by title, else the chapter *file* and the title — an imported
-  /// course is split into one file per chapter, and "Main Line #3" on its
-  /// own does not say which opening. A hand-built "Main" chapter adds
-  /// nothing and is left off.
-  static String _lineNameFor(RepertoireLine line, String chapterName) {
-    if (line.chapter != null) return line.qualifiedName;
-    if (chapterName == 'Main' ||
-        line.name.toLowerCase().startsWith(chapterName.toLowerCase())) {
-      return line.name;
-    }
-    return '$chapterName › ${line.name}';
-  }
-
-  static _BookTree _buildTree(
-    List<RepertoireLine> lines,
-    Map<int, PgnNode<PgnNodeData>> treeByIndex,
-    bool ourSideWhite,
-    String chapterName,
-  ) {
-    final root = _BookNode(const []);
-    final tree = _BookTree(root, {positionKey(Chess.initial): root});
-    for (final line in lines) {
-      // Someone else's game illustrating the repertoire is not the
-      // repertoire: its moves would extend the book far past where your own
-      // preparation actually ends, and hide the deviation.
-      if (line.isModelGame) continue;
-      // Lines from a custom root can't be matched by a from-move-1 walk.
-      if (line.startPosition.fen != Chess.initial.fen) continue;
-      final pgnTree = treeByIndex[line.gameIndex];
-      if (pgnTree == null) continue;
-      _addTree(
-        tree,
-        root,
-        pgnTree,
-        Chess.initial,
-        ply: 0,
-        ourSideWhite: ourSideWhite,
-        commentaryFrom: line.firstBranchOnSide(white: ourSideWhite),
-        lineName: _lineNameFor(line, chapterName),
-      );
-    }
-    return tree;
-  }
-
-  /// Every path of [pgnNode] into the book under [node]. A move that is
-  /// illegal where it stands ends its branch: nothing after it can be
-  /// compared with a real game anyway.
-  ///
-  /// Two things are read as commentary rather than book: at a position where
-  /// it is our move, every child after the first (the author's alternatives
-  /// in brackets), and — for a line already written out one path per game —
-  /// the move at [commentaryFrom], the ply where its path took such a
-  /// bracket. Both are recorded as the node's [_BookNode.alternatives] and
-  /// not followed.
-  static void _addTree(
-    _BookTree tree,
-    _BookNode node,
-    PgnNode<PgnNodeData> pgnNode,
-    Position pos, {
-    required int ply,
-    required bool ourSideWhite,
-    required int? commentaryFrom,
-    required String lineName,
-  }) {
-    _nameNode(node, lineName);
-    final ourMove = (pos.turn == Side.white) == ourSideWhite;
-    for (var i = 0; i < pgnNode.children.length; i++) {
-      final child = pgnNode.children[i];
-      final san = child.data.san;
-      final move = pos.parseSan(san);
-      if (move == null) continue;
-      final key = moveKey(pos, san)!;
-      if ((ourMove && i > 0) || ply == commentaryFrom) {
-        node.alternatives.putIfAbsent(key, () => san);
-        continue;
-      }
-      node.display.putIfAbsent(key, () => san);
-      final nextPos = pos.play(move);
-      final next = node.children.putIfAbsent(
-        key,
-        () => tree.byPosition.putIfAbsent(
-          positionKey(nextPos),
-          () => _BookNode([...node.path, san]),
-        ),
-      );
-      _addTree(
-        tree,
-        next,
-        child,
-        nextPos,
-        ply: ply + 1,
-        ourSideWhite: ourSideWhite,
-        commentaryFrom: commentaryFrom,
-        lineName: lineName,
-      );
-    }
-  }
-
-  /// The first line through a position names it, unless that line is a
-  /// course's introduction or digest and a real chapter comes along later.
-  static void _nameNode(_BookNode node, String lineName) {
-    final current = node.lineName;
-    if (current == null) {
-      node.lineName = lineName;
-    } else if (_nonRepertoireTitle.hasMatch(current) &&
-        !_nonRepertoireTitle.hasMatch(lineName)) {
-      node.lineName = lineName;
-    }
   }
 
   static String _chapterDisplayName(String path) =>

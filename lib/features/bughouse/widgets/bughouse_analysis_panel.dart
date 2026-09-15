@@ -12,6 +12,7 @@ import '../../../widgets/copy_button.dart';
 import '../controllers/bughouse_controller.dart';
 import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_eval.dart';
+import '../models/bughouse_notation.dart';
 import '../models/bughouse_state.dart';
 import '../../../widgets/common/number_stepper.dart';
 import 'bughouse_book_panel.dart';

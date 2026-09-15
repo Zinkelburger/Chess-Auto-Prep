@@ -112,11 +112,12 @@ void main() {
 
       final moves = await service.getMovesWithCounts(_start);
       expect(moves, hasLength(1));
-      expect(moves.single['san'], 'e4');
-      expect(moves.single['uci'], 'e2e4');
-      expect(moves.single['white'], 200);
-      expect(moves.single['draws'], 300);
-      expect(moves.single['black'], 100);
+      expect(moves.single.san, 'e4');
+      expect(moves.single.uci, 'e2e4');
+      expect(moves.single.whiteWins, 200);
+      expect(moves.single.draws, 300);
+      expect(moves.single.blackWins, 100);
+      expect(moves.single.games, 600);
     });
 
     test('most-played order is preserved', () async {
@@ -129,7 +130,7 @@ void main() {
       });
 
       final moves = await service.getMovesWithCounts(_start);
-      expect(moves.map((m) => m['san']), ['e4', 'd4', 'Nf3']);
+      expect(moves.map((m) => m.san), ['e4', 'd4', 'Nf3']);
     });
 
     /// A move that cannot be rendered as SAN here would never match a
@@ -147,7 +148,7 @@ void main() {
         });
 
         final moves = await service.getMovesWithCounts(_start);
-        expect(moves.map((m) => m['san']), ['e4']);
+        expect(moves.map((m) => m.san), ['e4']);
       },
     );
 

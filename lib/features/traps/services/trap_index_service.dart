@@ -5,27 +5,25 @@ library;
 
 import 'dart:math' show max;
 
-import 'package:chess_auto_prep/models/trap_line_info.dart';
-import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
+import '../../../models/trap_line_info.dart';
+import '../../../services/eval/eval_canonicalize.dart';
 
 class TrapIndexService {
+  TrapIndexService(List<TrapLineInfo> traps)
+    : _traps = traps,
+      _fenIndex = _buildFenIndex(traps),
+      metrics = _computeMetrics(traps);
+
   final List<TrapLineInfo> _traps;
-
-  late final Map<String, TrapLineInfo> _fenIndex;
-  late final TrapRepertoireMetrics metrics;
-
-  TrapIndexService(this._traps) {
-    _buildFenIndex();
-    _computeMetrics();
-  }
+  final Map<String, TrapLineInfo> _fenIndex;
+  final TrapRepertoireMetrics metrics;
 
   /// All traps in load order (unmodifiable).
   List<TrapLineInfo> get allTraps => List.unmodifiable(_traps);
 
   /// Look up a trap by position. Keyed on the canonical 4-field FEN so a
   /// transposed arrival (same position, different move counters) resolves to
-  /// the same trap — matching how [TrapExtractor] dedups. See
-  /// `docs/REFACTOR_PLAN.md` §1.3 (one definition of position identity).
+  /// the same trap — matching how [TrapExtractor] dedups.
   TrapLineInfo? trapAtFen(String fen) => _fenIndex[canonicalizeFen4(fen)];
 
   List<TrapLineInfo> trapsInLine(List<String> lineMoves) {
@@ -52,30 +50,27 @@ class TrapIndexService {
     );
   }
 
-  void _buildFenIndex() {
-    _fenIndex = {};
-    for (final trap in _traps) {
-      if (trap.fen != null) {
-        _fenIndex.putIfAbsent(canonicalizeFen4(trap.fen!), () => trap);
-      }
+  static Map<String, TrapLineInfo> _buildFenIndex(List<TrapLineInfo> traps) {
+    final index = <String, TrapLineInfo>{};
+    for (final trap in traps) {
+      final fen = trap.fen;
+      if (fen != null) index.putIfAbsent(canonicalizeFen4(fen), () => trap);
     }
+    return index;
   }
 
-  void _computeMetrics() {
-    if (_traps.isEmpty) {
-      metrics = TrapRepertoireMetrics.empty;
-      return;
-    }
-    metrics = TrapRepertoireMetrics(
-      totalTraps: _traps.length,
-      highQualityCount: _traps.where((t) => t.trickSurplus > 0.10).length,
+  static TrapRepertoireMetrics _computeMetrics(List<TrapLineInfo> traps) {
+    if (traps.isEmpty) return TrapRepertoireMetrics.empty;
+    return TrapRepertoireMetrics(
+      totalTraps: traps.length,
+      highQualityCount: traps.where((t) => t.trickSurplus > 0.10).length,
       avgReach:
-          _traps.map((t) => t.cumulativeProb).reduce((a, b) => a + b) /
-          _traps.length,
+          traps.map((t) => t.cumulativeProb).reduce((a, b) => a + b) /
+          traps.length,
       avgEvalGain:
-          _traps.map((t) => t.evalDiffCp.toDouble()).reduce((a, b) => a + b) /
-          _traps.length,
-      expectedTrapValue: _traps
+          traps.map((t) => t.evalDiffCp.toDouble()).reduce((a, b) => a + b) /
+          traps.length,
+      expectedTrapValue: traps
           .map((t) => t.cumulativeProb * t.popularProb * t.evalDiffCp)
           .reduce((a, b) => a + b),
     );

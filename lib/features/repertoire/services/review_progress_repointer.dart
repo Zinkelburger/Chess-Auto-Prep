@@ -14,6 +14,7 @@ import '../../../models/repertoire_move_progress.dart';
 import '../../../models/repertoire_review_entry.dart';
 import '../../../services/repertoire_line_ids.dart';
 import '../../../services/repertoire_review_service.dart';
+import 'pgn_game_headers.dart';
 
 class ReviewProgressRepointer {
   ReviewProgressRepointer({RepertoireReviewService? review})
@@ -27,19 +28,13 @@ class ReviewProgressRepointer {
     caseSensitive: false,
   );
 
-  static final _eventHeader = RegExp(r'^\[Event .*\]$', multiLine: true);
-
   /// [gameText] with `[LineID "id"]` written in, unless it already carries an
   /// id header of its own. The fallback id encodes the game's position in
   /// its file, so a move would rename the line and orphan its progress;
   /// once the id is a header it travels with the game.
   static String pinLineId(String gameText, String id) {
     if (_idHeader.hasMatch(gameText)) return gameText;
-    final header = '[LineID "$id"]';
-    final event = _eventHeader.firstMatch(gameText);
-    return event == null
-        ? '$header\n$gameText'
-        : gameText.replaceRange(event.end, event.end, '\n$header');
+    return insertHeadersAfterEvent(gameText, '[LineID "$id"]');
   }
 
   /// Re-points the review schedule and per-move progress of every line id in
@@ -54,11 +49,19 @@ class ReviewProgressRepointer {
     };
     if (newPathById.isEmpty) return;
 
+    /// The chapter a record keyed by [repertoireId] and [lineId] moves to,
+    /// or null when it is not one of the moved lines.
+    String? destinationOf(String repertoireId, String lineId) =>
+        repertoireId == from ? newPathById[lineId] : null;
+
+    // TODO(audit): RepertoireReviewEntry.copyWith and
+    // RepertoireMoveProgress.copyWith (shared models) cannot change
+    // repertoireId, hence the field-by-field copies below.
     final entries = await _review.loadAll();
     var changed = false;
     final rewritten = <RepertoireReviewEntry>[];
     for (final e in entries) {
-      final to = e.repertoireId == from ? newPathById[e.lineId] : null;
+      final to = destinationOf(e.repertoireId, e.lineId);
       if (to == null) {
         rewritten.add(e);
         continue;
@@ -86,7 +89,7 @@ class ReviewProgressRepointer {
     var progressChanged = false;
     final movedProgress = <RepertoireMoveProgress>[];
     for (final mp in progress) {
-      final to = mp.repertoireId == from ? newPathById[mp.lineId] : null;
+      final to = destinationOf(mp.repertoireId, mp.lineId);
       if (to == null) {
         movedProgress.add(mp);
         continue;

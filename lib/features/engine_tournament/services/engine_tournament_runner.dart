@@ -16,8 +16,10 @@ import '../models/stored_tournament.dart';
 import '../models/tournament_config.dart';
 import '../models/tournament_game.dart';
 import 'engine_game_runner.dart';
+import 'game_pgn_writer.dart';
 import 'tournament_store.dart';
 import 'uci_engine.dart';
+import 'uci_protocol.dart';
 
 /// One slot in the schedule, before it is played.
 class ScheduledGame {
@@ -59,6 +61,13 @@ List<ScheduledGame> buildSchedule(TournamentConfig config) {
 /// Resolves an [EngineSpec] to a binary on disk. The bundled entry has no
 /// stored path — the app extracts it at runtime — so this is injected.
 typedef ExecutableResolver = Future<String> Function(EngineSpec spec);
+
+/// A game that has been played, waiting to be written in schedule order.
+typedef _CompletedGame = ({
+  ScheduledGame slot,
+  PlayedGame game,
+  DateTime startedAt,
+});
 
 class EngineTournamentRunner {
   EngineTournamentRunner({
@@ -106,8 +115,7 @@ class EngineTournamentRunner {
     await store.save(state);
     onUpdate?.call(state);
 
-    final completed =
-        <int, ({ScheduledGame slot, PlayedGame game, DateTime startedAt})>{};
+    final completed = <int, _CompletedGame>{};
     final slots = <_EngineSlot>[];
     var next = 0;
     String? fatal;
@@ -121,8 +129,8 @@ class EngineTournamentRunner {
         final EngineParticipant white;
         final EngineParticipant black;
         try {
-          white = await slot.participant(game.whiteIndex, config, this);
-          black = await slot.participant(game.blackIndex, config, this);
+          white = await slot.participant(game.whiteIndex, config);
+          black = await slot.participant(game.blackIndex, config);
         } on UciFailure catch (e) {
           fatal ??= e.message;
           return;
@@ -174,7 +182,7 @@ class EngineTournamentRunner {
 
     try {
       final lanes = config.concurrency.clamp(1, schedule.length);
-      slots.addAll(List.generate(lanes, (_) => _EngineSlot()));
+      slots.addAll(List.generate(lanes, (_) => _EngineSlot(resolveExecutable)));
       await Future.wait(slots.map(worker));
     } finally {
       for (final slot in slots) {
@@ -201,18 +209,17 @@ class EngineTournamentRunner {
     return state;
   }
 
+  /// Write every finished game so far, in schedule order, to both files.
   Future<StoredTournament> _persist(
     StoredTournament state,
-    Map<int, ({ScheduledGame slot, PlayedGame game, DateTime startedAt})>
-    completed,
+    Map<int, _CompletedGame> completed,
   ) async {
-    final ordered = completed.keys.toList()..sort();
+    final ordered = (completed.keys.toList()..sort())
+        .map((index) => completed[index]!)
+        .toList();
     final config = state.config;
-    final records = <TournamentGameRecord>[];
-    final pgns = <String>[];
-    for (var i = 0; i < ordered.length; i++) {
-      final entry = completed[ordered[i]]!;
-      records.add(
+    final records = [
+      for (final (i, entry) in ordered.indexed)
         TournamentGameRecord(
           gameIndex: i,
           round: entry.slot.round,
@@ -227,9 +234,8 @@ class EngineTournamentRunner {
           startedAt: entry.startedAt,
           durationMs: entry.game.duration.inMilliseconds,
         ),
-      );
-      pgns.add(entry.game.pgn);
-    }
+    ];
+    final pgns = [for (final entry in ordered) entry.game.pgn];
     final updated = state.copyWith(games: records);
     await store.writeGamesPgn(state.id, pgns);
     await store.save(updated);
@@ -255,43 +261,34 @@ class EngineTournamentRunner {
 /// Keyed by participant index rather than engine id: an engine playing itself
 /// is two processes, and they must not be the same one.
 class _EngineSlot {
+  _EngineSlot(this._resolveExecutable);
+
+  final ExecutableResolver _resolveExecutable;
   final Map<int, EngineParticipant> _participants = {};
 
+  /// The live participant for [index], launching and configuring a fresh
+  /// process when there is none or the last one died.
   Future<EngineParticipant> participant(
     int index,
     TournamentConfig config,
-    EngineTournamentRunner runner,
   ) async {
     final existing = _participants[index];
     if (existing != null && existing.engine.isAlive) return existing;
     _participants.remove(index);
 
     final spec = config.engines[index];
-    final path = await runner.resolveExecutable(spec);
+    final path = await _resolveExecutable(spec);
     final engine = await UciEngine.launch(
       executablePath: path,
       arguments: spec.arguments,
     );
     try {
-      final identity = await engine.initialize();
-      if (identity.supportsOption('Hash')) {
-        await engine.setOption('Hash', '${spec.hashMb}');
-      }
-      if (identity.supportsOption('Threads')) {
-        await engine.setOption('Threads', '${spec.threads}');
-      }
-      if (identity.supportsOption('Ponder')) {
-        await engine.setOption('Ponder', spec.ponder ? 'true' : 'false');
-      }
-      for (final option in spec.options.entries) {
-        await engine.setOption(option.key, option.value);
-      }
-      await engine.isReady();
-    } catch (e) {
+      await _configure(engine, spec);
+    } on UciFailure catch (e) {
       await engine.quit();
-      if (e is UciFailure) {
-        throw UciFailure('${spec.name}: ${e.message}');
-      }
+      throw UciFailure('${spec.name}: ${e.message}');
+    } catch (_) {
+      await engine.quit();
       rethrow;
     }
 
@@ -302,6 +299,25 @@ class _EngineSlot {
     );
     _participants[index] = participant;
     return participant;
+  }
+
+  /// Handshake, then the spec's settings, fenced by `isready` so every
+  /// option has been applied before the first move is asked for.
+  static Future<void> _configure(UciEngine engine, EngineSpec spec) async {
+    final identity = await engine.initialize();
+    if (identity.supportsOption('Hash')) {
+      await engine.setOption('Hash', '${spec.hashMb}');
+    }
+    if (identity.supportsOption('Threads')) {
+      await engine.setOption('Threads', '${spec.threads}');
+    }
+    if (identity.supportsOption('Ponder')) {
+      await engine.setOption('Ponder', spec.ponder ? 'true' : 'false');
+    }
+    for (final option in spec.options.entries) {
+      await engine.setOption(option.key, option.value);
+    }
+    await engine.isReady();
   }
 
   void dropDeadEngines() {

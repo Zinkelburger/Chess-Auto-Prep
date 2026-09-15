@@ -8,6 +8,21 @@ import 'package:flutter_test/flutter_test.dart';
 /// The directory and the tournaments are the user's own sheet, so what is
 /// saved must come back exactly, people must be found by any key they were
 /// entered under, and deleting a person must not leave a dangling row.
+class _CountingStorage extends MemoryOpponentStorage {
+  int writes = 0;
+  bool failNext = false;
+
+  @override
+  Future<void> writePeople(String json) async {
+    writes++;
+    if (failNext) {
+      failNext = false;
+      throw StateError('disk full');
+    }
+    await super.writePeople(json);
+  }
+}
+
 void main() {
   group('OpponentStore (memory)', () {
     late OpponentStore store;
@@ -35,6 +50,17 @@ void main() {
       expect(store.matchPerson(name: 'Someone Else'), isNull);
       expect(store.personForPlayerName('Jane Doe; JaneD; jd_li')?.id, jane.id);
     });
+
+    test(
+      'a namesake on record under another USCF ID is someone else',
+      () async {
+        final jane = await store.savePerson(
+          PersonRecord.create(name: 'Jane Doe', uscfId: '11111111'),
+        );
+        expect(store.matchPerson(name: 'Jane Doe')?.id, jane.id);
+        expect(store.matchPerson(name: 'Jane Doe', uscfId: '22222222'), isNull);
+      },
+    );
 
     test('search matches every word across name, id and handles', () async {
       await store.savePerson(
@@ -73,6 +99,20 @@ void main() {
       expect(store.tournamentNamed('club championship')?.id, a.id);
     });
 
+    test('study links compare by value', () {
+      const link = PlayerStudyLink(path: '/studies/a.pgn', chapter: 'One');
+      expect(
+        link,
+        const PlayerStudyLink(path: '/studies/a.pgn', chapter: 'One'),
+      );
+      expect(link, isNot(const PlayerStudyLink(path: '/studies/a.pgn')));
+      expect(
+        PlayerStudyLink.fromJson(link.toJson()),
+        link,
+        reason: 'the on-disk form round-trips',
+      );
+    });
+
     test('withEntry replaces an existing row and keeps the tick', () async {
       final jane = await store.savePerson(PersonRecord.create(name: 'Jane'));
       var t = await store.createTournament('Open');
@@ -82,6 +122,32 @@ void main() {
       t = t.withEntry(t.entries.single.copyWith(rating: 1900));
       expect(t.entries.single.rating, 1900);
       expect(t.entries.single.prepared, isTrue);
+    });
+  });
+
+  group('OpponentStore write queue', () {
+    test('a drained queue lets the next write start synchronously', () async {
+      // A widget test's fake-async body must not be left chained onto a
+      // future the real-async setUp created, so the queue resets once idle.
+      final disk = _CountingStorage();
+      final store = OpponentStore(disk);
+      await store.ensureLoaded();
+      await store.savePerson(PersonRecord.create(name: 'Jane'));
+      expect(disk.writes, 1);
+      final pending = store.savePerson(PersonRecord.create(name: 'Bob'));
+      expect(disk.writes, 2, reason: 'started before any microtask ran');
+      await pending;
+    });
+
+    test('a failed write does not block the ones queued after it', () async {
+      final disk = _CountingStorage()..failNext = true;
+      final store = OpponentStore(disk);
+      await store.ensureLoaded();
+      final failed = store.savePerson(PersonRecord.create(name: 'Jane'));
+      final next = store.savePerson(PersonRecord.create(name: 'Bob'));
+      await expectLater(failed, throwsStateError);
+      await next;
+      expect(disk.people, contains('Bob'));
     });
   });
 

@@ -1,42 +1,34 @@
+/// Fetches my games from Lichess / Chess.com (or takes them already fetched),
+/// keeps them in the tactics game store, and runs the engine pass that mines
+/// puzzles from them — see [TacticsGameAnalyzer] for the pass itself.
+library;
+
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math' as math;
-import 'package:http/http.dart' as http;
-import 'package:dartchess/dartchess.dart';
+
 import 'package:flutter/foundation.dart';
+
 import '../../../constants/engine_defaults.dart';
-import '../models/tactics_note.dart';
-import '../models/tactics_position.dart';
-import 'tactics_engine.dart';
-import '../../../services/game_store/game_store.dart';
-import '../../../services/game_identity.dart' show platformGameUrl;
-import '../../../services/game_store/game_store_service.dart';
 import '../../../models/engine_settings.dart';
 import '../../../services/engine/stockfish_pool.dart';
+import '../../../services/game_store/game_store.dart';
+import '../../../services/game_store/game_store_service.dart';
 import '../../../services/games_library/game_filter.dart'
     show dedupKeyForHeaders;
 import '../../../services/games_library/game_review_store.dart';
-import '../../../services/chess_api_urls.dart';
-import '../../../services/lichess_api_client.dart';
 import '../../../services/maia/maia_factory.dart';
-import '../../../services/eval_cache.dart';
-import 'tactics_database.dart';
 import '../../../services/pgn_parsing_service.dart';
-import '../../../services/storage/storage_factory.dart';
-import '../../../utils/chess_utils.dart' show uciPvToSan;
 import '../../../utils/chesscom_lichess_elo.dart';
-import '../../../utils/clock_utils.dart';
 import '../../../utils/log.dart';
-import '../../../utils/movetext_builder.dart';
-import '../../../utils/pgn_comment_utils.dart';
-import 'eval_series_annotator.dart';
-import 'flaw_tagger.dart';
+import '../models/tactics_position.dart';
+import 'opening_eval_cache.dart';
+import 'tactics_database.dart';
+import 'tactics_game_fetcher.dart';
+import 'tactics_game_pruner.dart';
+import 'tactics_import_analysis.dart';
+import 'tactics_import_pgn_helpers.dart';
 import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart'
     as parallel;
-
-part 'tactics_import_analysis.dart';
-part 'tactics_import_pgn_helpers.dart';
 
 /// Callback for when a new tactics position is found during import.
 /// Returns a Future so callers can await persistence before proceeding.
@@ -75,6 +67,32 @@ typedef ImportResult = ({
   int gamesSkipped,
 });
 
+const ImportResult _emptyResult = (
+  positions: <TacticsPosition>[],
+  gamesAnalyzed: 0,
+  gamesSkipped: 0,
+);
+
+/// Everything a run reports back to whoever started it.
+class _RunListeners {
+  const _RunListeners({
+    this.progress,
+    this.onPositionFound,
+    this.onGameProgress,
+    this.onGameReviewed,
+    this.onGameAnnotated,
+  });
+
+  final ProgressCallback? progress;
+  final OnPositionFoundCallback? onPositionFound;
+  final GameProgressCallback? onGameProgress;
+  final GameReviewedCallback? onGameReviewed;
+  final GameAnnotatedCallback? onGameAnnotated;
+}
+
+/// One game queued for the engine pass.
+typedef _GameTask = ({String gameText, String gameId});
+
 class TacticsImportService {
   TacticsImportService({TacticsDatabase? database})
     : _database = database ?? TacticsDatabase();
@@ -83,11 +101,14 @@ class TacticsImportService {
 
   /// The engine pool this run evaluates on — the app-wide singleton in
   /// production, a scripted fake in tests. Injectable because everything
-  /// [_analyzeGameParallel] decides (which swings become puzzles, which
+  /// [TacticsGameAnalyzer] decides (which swings become puzzles, which
   /// searches are skipped, what the annotated movetext says) is otherwise
   /// only reachable by starting real Stockfish processes.
   @visibleForTesting
   StockfishPool pool = StockfishPool.instance;
+
+  /// Downloads games for [importGamesFromLichess] / [importGamesFromChessCom].
+  final TacticsGameFetcher fetcher = const TacticsGameFetcher();
 
   /// Whether to skip games that have already been analyzed
   bool skipAnalyzedGames = true;
@@ -127,75 +148,19 @@ class TacticsImportService {
   /// Whether the last import/resume run was cancelled via [cancel].
   bool get wasCancelled => _cancelled;
 
-  /// Check if engine-based analysis is available on this platform
-  bool get isAnalysisAvailable =>
-      pool.workerCount > 0 || parallel.isParallelAnalysisAvailable;
-
-  /// Whether parallel multi-core analysis is available (desktop only).
-  static bool get isParallelAvailable => parallel.isParallelAnalysisAvailable;
-
   /// Number of logical CPU cores on this machine.
   static int get availableCores => parallel.availableProcessors;
 
-  /// GameIds referenced by a saved tactic in any tactics set on disk. The
-  /// stored-PGN archive doubles as the source-game store for the tactics
-  /// PGN tab (full game fast-forwarded to the tactic), so these games must
-  /// survive pruning even after analysis.
-  Future<Set<String>> _tacticReferencedGameIds() async {
-    final ids = <String>{};
-    final storage = StorageFactory.instance;
-    final gameIdRe = RegExp(r'\[GameId "([^"]+)"\]');
-    for (final path in [
-      for (final set in await storage.listTacticsSets()) set.filePath,
-      for (final study in await storage.listStudyFiles()) study.filePath,
-    ]) {
-      final content = await storage.readFile(path);
-      if (content == null) {
-        throw StateError('Tactics reference file disappeared: $path');
-      }
-      for (final match in gameIdRe.allMatches(content)) {
-        ids.add(match.group(1)!);
-      }
-    }
-    return ids;
-  }
-
-  /// Remove stored PGNs that no longer serve the resume queue: games
-  /// already analyzed, and games played before [since] (expired). Games a
-  /// saved tactic references are always kept — the tactics PGN tab shows
-  /// them as the full source game. Returns how many games were removed.
-  ///
-  /// The analyzed-IDs list is intentionally kept — it's a few bytes per
-  /// game and is what prevents re-analysis when an overlapping date range
-  /// is fetched again later.
-  Future<int> pruneStoredPgns({DateTime? since}) async {
-    if (_database.loadError != null) throw StateError(_database.loadError!);
-    final store = await GameStoreService.instance.open();
-    final games = store.summaries(GameCollections.tactics);
-    if (games.isEmpty) return 0;
-
-    final referenced = await _tacticReferencedGameIds();
-    final remove = <String>[];
-    for (final summary in games) {
-      final game = summary.headerBlock;
-      final gameId = _extractGameId(game);
-      if (gameId.isNotEmpty && referenced.contains(gameId)) continue;
-      if (gameId.isNotEmpty && _isGameAnalyzed(gameId)) {
-        remove.add(summary.key);
-        continue;
-      }
-      if (since != null && _isGameBefore(game, since)) remove.add(summary.key);
-    }
-    if (remove.isEmpty) return 0;
-
-    final removed = store.deleteKeys(GameCollections.tactics, remove);
-    if (kDebugMode) {
-      log.i(
-        'Pruned $removed stored PGNs '
-        '(${games.length - removed} kept)',
-      );
-    }
-    return removed;
+  /// Remove stored PGNs that no longer serve the resume queue — see
+  /// [TacticsGamePruner.prune]. Refuses while the database could not be read,
+  /// since "analyzed" is then unknown.
+  Future<int> pruneStoredPgns({DateTime? since}) {
+    final loadError = _database.loadError;
+    if (loadError != null) throw StateError(loadError);
+    return const TacticsGamePruner().prune(
+      isAnalyzed: _isGameAnalyzed,
+      since: since,
+    );
   }
 
   /// Resume analysis of stored PGN games that haven't been analyzed yet.
@@ -220,83 +185,71 @@ class TacticsImportService {
     beginRun();
     final store = await GameStoreService.instance.open();
     final stored = store.list(GameCollections.tactics);
-    if (stored.isEmpty) {
-      return (
-        positions: <TacticsPosition>[],
-        gamesAnalyzed: 0,
-        gamesSkipped: 0,
-      );
-    }
+    if (stored.isEmpty) return _emptyResult;
 
-    final games = [for (final g in stored) g.pgn];
     final lichessGames = <String>[];
     final chessComGames = <String>[];
-    int preFilterSkipped = 0;
-
-    for (final game in games) {
-      final gameId = _extractGameId(game);
+    var preFilterSkipped = 0;
+    for (final game in stored.map((g) => g.pgn)) {
+      final gameId = extractGameId(game);
       if (_isGameAnalyzed(gameId)) {
         preFilterSkipped++;
         continue;
       }
-      if (since != null && _isGameBefore(game, since)) continue;
-
-      if (gameId.startsWith('lichess_')) {
+      if (since != null && isGameBefore(game, since)) continue;
+      if (gameId.startsWith(lichessGameIdPrefix)) {
         lichessGames.add(game);
-      } else if (gameId.startsWith('chesscom_')) {
+      } else if (gameId.startsWith(chesscomGameIdPrefix)) {
         chessComGames.add(game);
       }
     }
 
-    final allPositions = <TacticsPosition>[];
-    int totalAnalyzed = 0;
-    int totalSkipped = preFilterSkipped;
+    final listeners = _RunListeners(
+      progress: progressCallback,
+      onPositionFound: onPositionFound,
+      onGameProgress: onGameProgress,
+      onGameReviewed: onGameReviewed,
+      onGameAnnotated: onGameAnnotated,
+    );
+    final positions = <TacticsPosition>[];
+    var analyzed = 0;
+    var skipped = preFilterSkipped;
 
-    if (lichessGames.isNotEmpty &&
-        lichessUsername != null &&
-        lichessUsername.isNotEmpty) {
+    Future<void> processBatch(
+      List<String> games,
+      String? username, {
+      required bool mapChessComEloForMaia,
+    }) async {
+      if (games.isEmpty || username == null || username.isEmpty) return;
       final result = await _processGames(
-        lichessGames.join('\n\n'),
-        lichessUsername,
+        games.join('\n\n'),
+        username,
         depth,
-        progressCallback,
-        onPositionFound,
+        listeners,
         maxCores: maxCores,
-        mapChessComEloForMaia: false,
-        onGameProgress: onGameProgress,
-        onGameReviewed: onGameReviewed,
-        onGameAnnotated: onGameAnnotated,
+        mapChessComEloForMaia: mapChessComEloForMaia,
       );
-      allPositions.addAll(result.positions);
-      totalAnalyzed += result.gamesAnalyzed;
-      totalSkipped += result.gamesSkipped;
+      positions.addAll(result.positions);
+      analyzed += result.gamesAnalyzed;
+      skipped += result.gamesSkipped;
     }
 
-    if (!_cancelled &&
-        chessComGames.isNotEmpty &&
-        chesscomUsername != null &&
-        chesscomUsername.isNotEmpty) {
-      final result = await _processGames(
-        chessComGames.join('\n\n'),
+    await processBatch(
+      lichessGames,
+      lichessUsername,
+      mapChessComEloForMaia: false,
+    );
+    if (!_cancelled) {
+      await processBatch(
+        chessComGames,
         chesscomUsername,
-        depth,
-        progressCallback,
-        onPositionFound,
-        maxCores: maxCores,
         mapChessComEloForMaia: true,
-        onGameProgress: onGameProgress,
-        onGameReviewed: onGameReviewed,
-        onGameAnnotated: onGameAnnotated,
       );
-      allPositions.addAll(result.positions);
-      totalAnalyzed += result.gamesAnalyzed;
-      totalSkipped += result.gamesSkipped;
     }
-
     return (
-      positions: allPositions,
-      gamesAnalyzed: totalAnalyzed,
-      gamesSkipped: totalSkipped,
+      positions: positions,
+      gamesAnalyzed: analyzed,
+      gamesSkipped: skipped,
     );
   }
 
@@ -333,14 +286,16 @@ class TacticsImportService {
       pgnContent,
       username,
       depth,
-      progressCallback,
-      onPositionFound,
+      _RunListeners(
+        progress: progressCallback,
+        onPositionFound: onPositionFound,
+        onGameProgress: onGameProgress,
+        onGameReviewed: onGameReviewed,
+        onGameAnnotated: onGameAnnotated,
+      ),
       maxCores: maxCores,
       mapChessComEloForMaia: mapChessComEloForMaia,
       forceDedupKeys: forceDedupKeys,
-      onGameProgress: onGameProgress,
-      onGameReviewed: onGameReviewed,
-      onGameAnnotated: onGameAnnotated,
     );
   }
 
@@ -358,70 +313,34 @@ class TacticsImportService {
     DateTime? since,
     int depth = 15,
     int? maxCores,
-    Function(String)? progressCallback,
+    ProgressCallback? progressCallback,
     OnPositionFoundCallback? onPositionFound,
     GameProgressCallback? onGameProgress,
     GameReviewedCallback? onGameReviewed,
     GameAnnotatedCallback? onGameAnnotated,
   }) async {
     beginRun();
-    final params = <String, String>{
-      'evals': 'false',
-      // Clocks feed the tempo flaw tags (low-clock/hasty/unrushed).
-      'clocks': 'true',
-      'opening': 'false',
-      'moves': 'true',
-    };
-    if (since != null) {
-      params['since'] = '${since.millisecondsSinceEpoch}';
-      // No 'max' when the caller gave none: the since window is the limit,
-      // and capping it would silently drop games the user asked for.
-      if (maxGames != null) params['max'] = '$maxGames';
-    } else {
-      params['max'] = '${maxGames ?? 20}';
-    }
-    final url = lichessUserGamesUrl(username, params);
-
-    progressCallback?.call('Downloading games from Lichess...');
-    final response = await LichessApiClient.instance.get(
-      url,
-      extraHeaders: {'Accept': 'application/x-chess-pgn'},
+    final pgn = await fetcher.fetchLichessPgn(
+      username,
+      maxGames: maxGames,
+      since: since,
+      progress: progressCallback,
     );
-
-    if (response == null) {
-      throw Exception('Failed to fetch games from Lichess (request failed)');
-    }
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to fetch games from Lichess: ${response.statusCode}',
-      );
-    }
-
-    await _savePgns(response.body);
+    await _savePgns(pgn);
     return _processGames(
-      response.body,
+      pgn,
       username,
       depth,
-      progressCallback,
-      onPositionFound,
+      _RunListeners(
+        progress: progressCallback,
+        onPositionFound: onPositionFound,
+        onGameProgress: onGameProgress,
+        onGameReviewed: onGameReviewed,
+        onGameAnnotated: onGameAnnotated,
+      ),
       maxCores: maxCores,
       mapChessComEloForMaia: false,
-      onGameProgress: onGameProgress,
-      onGameReviewed: onGameReviewed,
-      onGameAnnotated: onGameAnnotated,
     );
-  }
-
-  /// Fetch the list of monthly archive URLs from Chess.com.
-  ///
-  /// Returns the URLs in chronological order (oldest first), or an empty
-  /// list if the player has no archives.
-  Future<List<String>> _fetchChesscomArchives(String username) async {
-    final url = chesscomArchivesUrl(username);
-    final response = await http.get(url);
-    if (response.statusCode != 200) return [];
-    final data = json.decode(response.body) as Map<String, dynamic>;
-    return List<String>.from(data['archives'] as List);
   }
 
   Future<ImportResult> importGamesFromChessCom(
@@ -430,112 +349,37 @@ class TacticsImportService {
     DateTime? since,
     int depth = 15,
     int? maxCores,
-    Function(String)? progressCallback,
+    ProgressCallback? progressCallback,
     OnPositionFoundCallback? onPositionFound,
     GameProgressCallback? onGameProgress,
     GameReviewedCallback? onGameReviewed,
     GameAnnotatedCallback? onGameAnnotated,
   }) async {
     beginRun();
-    // null = no game-count limit: the since window is the only limit. Only
-    // the countless "latest N games" mode falls back to a default.
-    final int? targetGames = maxGames ?? (since != null ? null : 10);
-    List<String> allGames = [];
-
-    progressCallback?.call('Fetching Chess.com game archives for $username…');
-
-    // Use the archives endpoint to discover which months actually have
-    // games, rather than blindly checking the last N months (which fails
-    // for inactive players).
-    final archives = await _fetchChesscomArchives(username);
-
-    if (archives.isEmpty) {
-      throw Exception('No game archives found for $username on Chess.com');
-    }
-
-    // When fetching since a date, skip archive months before that date.
-    // Archive URLs are like https://api.chess.com/pub/player/.../games/2024/06
-    int startArchiveIndex = 0;
-    if (since != null) {
-      final sinceYear = since.year;
-      final sinceMonth = since.month;
-      for (int i = 0; i < archives.length; i++) {
-        final parts = archives[i].split('/');
-        if (parts.length >= 2) {
-          final year = int.tryParse(parts[parts.length - 2]);
-          final month = int.tryParse(parts[parts.length - 1]);
-          if (year != null && month != null) {
-            if (year > sinceYear ||
-                (year == sinceYear && month >= sinceMonth)) {
-              startArchiveIndex = i;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    // Walk backwards from the most recent archive.
-    for (
-      int i = archives.length - 1;
-      i >= startArchiveIndex &&
-          (targetGames == null || allGames.length < targetGames) &&
-          !_cancelled;
-      i--
-    ) {
-      progressCallback?.call(
-        targetGames == null
-            ? 'Downloading Chess.com games (${allGames.length})…'
-            : 'Downloading Chess.com games (${allGames.length}/$targetGames)…',
-      );
-
-      try {
-        final response = await http.get(Uri.parse('${archives[i]}/pgn'));
-        if (response.statusCode == 200 && response.body.isNotEmpty) {
-          final games = splitPgnIntoGames(response.body);
-          allGames.addAll(games);
-        }
-      } catch (e) {
-        if (kDebugMode) log.e('Error fetching Chess.com games: $e');
-      }
-    }
-
-    if (allGames.isEmpty) {
-      if (_cancelled) {
-        return (
-          positions: <TacticsPosition>[],
-          gamesAnalyzed: 0,
-          gamesSkipped: 0,
-        );
-      }
-      throw Exception('No games found for $username on Chess.com');
-    }
-
-    // Filter out games older than the since date by parsing PGN Date header.
-    if (since != null) {
-      allGames = allGames.where((g) => !_isGameBefore(g, since)).toList();
-    }
-
-    // Limit to target games (no limit when the since window governs).
-    final gamesToProcess =
-        (targetGames == null ? allGames : allGames.take(targetGames)).join(
-          '\n\n',
-        );
-
-    // Save the raw PGNs first
+    final games = await fetcher.fetchChesscomGames(
+      username,
+      maxGames: maxGames,
+      since: since,
+      progress: progressCallback,
+      isCancelled: () => _cancelled,
+    );
+    // Empty only when the download was cancelled before any game arrived.
+    if (games.isEmpty) return _emptyResult;
+    final gamesToProcess = games.join('\n\n');
     await _savePgns(gamesToProcess);
-
     return _processGames(
       gamesToProcess,
       username,
       depth,
-      progressCallback,
-      onPositionFound,
+      _RunListeners(
+        progress: progressCallback,
+        onPositionFound: onPositionFound,
+        onGameProgress: onGameProgress,
+        onGameReviewed: onGameReviewed,
+        onGameAnnotated: onGameAnnotated,
+      ),
       maxCores: maxCores,
       mapChessComEloForMaia: true,
-      onGameProgress: onGameProgress,
-      onGameReviewed: onGameReviewed,
-      onGameAnnotated: onGameAnnotated,
     );
   }
 
@@ -546,7 +390,7 @@ class TacticsImportService {
   Future<void> _savePgns(String pgnContent) async {
     try {
       final games = splitPgnIntoGames(pgnContent);
-      final processedGames = games.map(_injectGameIdHeader).toList();
+      final processedGames = games.map(injectGameIdHeader).toList();
       final store = await GameStoreService.instance.open();
       final result = store.importChunks(
         processedGames,
@@ -567,9 +411,7 @@ class TacticsImportService {
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        log.e('Error saving PGNs: $e');
-      }
+      if (kDebugMode) log.e('Error saving PGNs: $e');
       rethrow;
     }
   }
@@ -579,122 +421,66 @@ class TacticsImportService {
   /// the `lichess_` prefix.
   bool _isGameAnalyzed(String gameId) {
     if (_database.isGameAnalyzed(gameId)) return true;
-    const prefix = 'lichess_';
-    return gameId.startsWith(prefix) &&
-        _database.isGameAnalyzed(gameId.substring(prefix.length));
+    return gameId.startsWith(lichessGameIdPrefix) &&
+        _database.isGameAnalyzed(gameId.substring(lichessGameIdPrefix.length));
   }
 
-  Future<ImportResult> _processGames(
+  /// Split [pgnContent] into the games still to analyze and count the ones
+  /// skipped as already analyzed.
+  ({List<_GameTask> tasks, int skipped}) _selectGamesToAnalyze(
     String pgnContent,
-    String username,
-    int depth,
-    Function(String)? progressCallback,
-    OnPositionFoundCallback? onPositionFound, {
-    int? maxCores,
-
-    /// When true, PGN [WhiteElo]/[BlackElo] are Chess.com blitz and converted
-    /// via [chessComBlitzToLichessBlitz] before Maia line extension.
-    bool mapChessComEloForMaia = false,
-
-    /// Games — by [dedupKeyForHeaders] identity — that must be analyzed even
-    /// if the database already has them marked analyzed.
-    ///
-    /// "Analyzed" only ever meant "its puzzles were mined". A game mined by an
-    /// older build, or through the tactics import panel, was never asked for
-    /// the mistake counts the recent-games list shows, and the pre-filter below
-    /// then skipped it forever: the list said "12 games to analyse", the run
-    /// said "you're all caught up", and the number never moved. Naming those
-    /// games here is what gets them looked at.
-    Set<String> forceDedupKeys = const {},
-    GameProgressCallback? onGameProgress,
-    GameReviewedCallback? onGameReviewed,
-    GameAnnotatedCallback? onGameAnnotated,
-  }) async {
-    // A cancel during the fetch/download phase must stick — resetting
-    // `_cancelled` here used to silently un-cancel the run once analysis
-    // started. The flag is reset by the public run entry points instead.
-    if (_cancelled) {
-      return (
-        positions: <TacticsPosition>[],
-        gamesAnalyzed: 0,
-        gamesSkipped: 0,
-      );
-    }
-    final games = splitPgnIntoGames(pgnContent);
-    final usernameLower = username.toLowerCase();
-
-    // ── Pre-filter: skip already-analyzed games ──────────────
-    final gameTasks = <Map<String, dynamic>>[];
-    int skippedCount = 0;
-
-    for (int i = 0; i < games.length; i++) {
-      final gameId = _extractGameId(games[i]);
+    Set<String> forceDedupKeys,
+  ) {
+    final tasks = <_GameTask>[];
+    var skipped = 0;
+    for (final gameText in splitPgnIntoGames(pgnContent)) {
+      final gameId = extractGameId(gameText);
       final forced =
           forceDedupKeys.isNotEmpty &&
           forceDedupKeys.contains(
-            dedupKeyForHeaders(extractHeaders(games[i]), pgn: games[i]),
+            dedupKeyForHeaders(extractHeaders(gameText), pgn: gameText),
           );
       if (skipAnalyzedGames && !forced && _isGameAnalyzed(gameId)) {
-        skippedCount++;
+        skipped++;
         if (kDebugMode) log.w('Skipping already-analyzed game: $gameId');
         continue;
       }
-      gameTasks.add({
-        'gameText': games[i],
-        'globalIndex': i + 1,
-        'gameId': gameId,
-      });
+      tasks.add((gameText: gameText, gameId: gameId));
     }
+    return (tasks: tasks, skipped: skipped);
+  }
 
-    if (gameTasks.isNotEmpty) {
-      final n = gameTasks.length;
-      progressCallback?.call(
-        '$n new game${n == 1 ? '' : 's'} found, analyzing…',
-      );
+  /// Maia for line extension (desktop only), tuned to the user's rating as
+  /// read off [firstGame]; null when Maia is unavailable or failed to start.
+  Future<({MaiaEvaluator? maia, int elo})> _prepareMaia(
+    String firstGame,
+    String username, {
+    required bool mapChessComEloForMaia,
+  }) async {
+    if (!MaiaFactory.isAvailable) return (maia: null, elo: kDefaultMaiaElo);
+    final maia = MaiaFactory.instance;
+    if (maia == null) return (maia: null, elo: kDefaultMaiaElo);
+    try {
+      await maia.initialize();
+    } catch (e) {
+      if (kDebugMode) log.e('Maia init failed, falling back: $e');
+      return (maia: null, elo: kDefaultMaiaElo);
     }
-
-    if (gameTasks.isEmpty) {
-      progressCallback?.call(
-        'No new games to analyze — you\'re all caught up!',
-      );
-      return (
-        positions: <TacticsPosition>[],
-        gamesAnalyzed: 0,
-        gamesSkipped: skippedCount,
-      );
+    var elo = kDefaultMaiaElo;
+    final userElo = extractUserElo(firstGame, username);
+    if (userElo != null) {
+      final lichessElo = mapChessComEloForMaia
+          ? chessComBlitzToLichessBlitz(userElo)
+          : userElo;
+      elo = lichessElo.clamp(kMinMaiaElo, kMaxMaiaElo);
     }
+    if (kDebugMode) log.d('Maia line extension enabled (Elo=$elo)');
+    return (maia: maia, elo: elo);
+  }
 
-    // ── Initialize Maia for line extension (desktop only) ────
-    MaiaEvaluator? maia;
-    int maiaElo = kDefaultMaiaElo;
-    if (MaiaFactory.isAvailable) {
-      maia = MaiaFactory.instance;
-      if (maia != null) {
-        try {
-          await maia.initialize();
-        } catch (e) {
-          if (kDebugMode) log.e('Maia init failed, falling back: $e');
-          maia = null;
-        }
-      }
-      if (maia != null) {
-        final firstGame = gameTasks.first['gameText'] as String;
-        final userElo = _extractUserElo(firstGame, usernameLower);
-        if (userElo != null) {
-          final lichessElo = mapChessComEloForMaia
-              ? chessComBlitzToLichessBlitz(userElo)
-              : userElo;
-          maiaElo = lichessElo.clamp(kMinMaiaElo, kMaxMaiaElo);
-        }
-        if (kDebugMode) log.d('Maia line extension enabled (Elo=$maiaElo)');
-      }
-    }
-
-    // ── Ensure the shared pool has enough workers ─────────────
-    final pool = this.pool;
-    final targetWorkers = maxCores ?? EngineSettings.instance.cores;
-    await pool.ensureWorkers(targetWorkers);
-
+  /// Bring the shared pool up to [maxCores] single-threaded workers.
+  Future<void> _preparePool(int? maxCores) async {
+    await pool.ensureWorkers(maxCores ?? EngineSettings.instance.cores);
     if (pool.workerCount == 0) {
       throw Exception(
         'Tactics analysis requires Stockfish, which is not available '
@@ -705,130 +491,136 @@ class TacticsImportService {
         '• Practice existing tactics positions',
       );
     }
-
     // The pool is a shared singleton; other features (e.g. tree generation)
     // may have left workers configured with multiple UCI threads each.
-    // Tactics analysis wants throughput across many independent positions, so
-    // force one thread per worker: N single-threaded workers beat N/T
+    // Tactics analysis wants throughput across many independent positions,
+    // so force one thread per worker: N single-threaded workers beat N/T
     // multi-threaded ones and avoid CPU oversubscription.
     await pool.reconfigureAllWorkers(1);
+  }
 
-    progressCallback?.call(
-      'Starting analysis: ${gameTasks.length} games '
+  /// Run the engine pass over the games in [pgnContent] that still need it.
+  ///
+  /// [mapChessComEloForMaia]: when true, PGN `WhiteElo`/`BlackElo` are
+  /// Chess.com blitz and converted via [chessComBlitzToLichessBlitz] before
+  /// Maia line extension.
+  ///
+  /// [forceDedupKeys]: games — by [dedupKeyForHeaders] identity — that must
+  /// be analyzed even if the database already has them marked analyzed.
+  /// "Analyzed" only ever meant "its puzzles were mined". A game mined by an
+  /// older build, or through the tactics import panel, was never asked for
+  /// the mistake counts the recent-games list shows, and the pre-filter then
+  /// skipped it forever: the list said "12 games to analyse", the run said
+  /// "you're all caught up", and the number never moved. Naming those games
+  /// here is what gets them looked at.
+  Future<ImportResult> _processGames(
+    String pgnContent,
+    String username,
+    int depth,
+    _RunListeners listeners, {
+    int? maxCores,
+    bool mapChessComEloForMaia = false,
+    Set<String> forceDedupKeys = const {},
+  }) async {
+    // A cancel during the fetch/download phase must stick — resetting
+    // `_cancelled` here used to silently un-cancel the run once analysis
+    // started. The flag is reset by the public run entry points instead.
+    if (_cancelled) return _emptyResult;
+
+    final selection = _selectGamesToAnalyze(pgnContent, forceDedupKeys);
+    final tasks = selection.tasks;
+    if (tasks.isEmpty) {
+      listeners.progress?.call(
+        'No new games to analyze — you\'re all caught up!',
+      );
+      return (
+        positions: <TacticsPosition>[],
+        gamesAnalyzed: 0,
+        gamesSkipped: selection.skipped,
+      );
+    }
+    listeners.progress?.call(
+      '${tasks.length} new game${tasks.length == 1 ? '' : 's'} found, '
+      'analyzing…',
+    );
+
+    final usernameLower = username.toLowerCase();
+    final maia = await _prepareMaia(
+      tasks.first.gameText,
+      usernameLower,
+      mapChessComEloForMaia: mapChessComEloForMaia,
+    );
+    await _preparePool(maxCores);
+    listeners.progress?.call(
+      'Starting analysis: ${tasks.length} games '
       'across ${pool.workerCount} workers...',
     );
 
-    // ── Process games one at a time, evaluations pool-wide ───
-    // Each game's positions fan out across every worker (see
-    // _analyzeGameParallel), so a single new game — the common incremental
-    // import — already saturates the pool; running games concurrently on
-    // top of that would only interleave their work. Sequential games also
-    // keep today's cancel/resume granularity: a game is marked analyzed
-    // only once its tactics are persisted, in original order.
-    final evalCache = _OpeningEvalCache(depth: depth);
+    // Games run one at a time, evaluations pool-wide: each game's positions
+    // fan out across every worker, so a single new game — the common
+    // incremental import — already saturates the pool; running games
+    // concurrently on top of that would only interleave their work.
+    // Sequential games also keep today's cancel/resume granularity: a game
+    // is marked analyzed only once its tactics are persisted, in original
+    // order.
+    final analyzer = TacticsGameAnalyzer(
+      pool: pool,
+      depth: depth,
+      maia: maia.maia,
+      maiaElo: maia.elo,
+      evalCache: OpeningEvalCache(depth: depth),
+      shouldAbort: () => _cancelled,
+    );
     final positions = <TacticsPosition>[];
-    int completedGames = 0;
-    int totalPositionsFound = 0;
+    var completedGames = 0;
 
-    onGameProgress?.call(0, 0, gameTasks.length);
-    for (final task in gameTasks) {
+    listeners.onGameProgress?.call(0, 0, tasks.length);
+    for (final task in tasks) {
       if (_cancelled) break;
-      final gameText = task['gameText'] as String;
-      final gameId = task['gameId'] as String;
-
       try {
-        final outcome = await _analyzeGameParallel(
-          pool: pool,
-          gameText: gameText,
+        final outcome = await analyzer.analyze(
+          gameText: task.gameText,
           username: usernameLower,
-          depth: depth,
-          gameId: gameId,
-          maia: maia,
-          maiaElo: maiaElo,
-          evalCache: evalCache,
-          shouldAbort: () => _cancelled,
+          gameId: task.gameId,
           onSiteProgress: (done, total) {
-            progressCallback?.call(
-              'Analyzing game ${completedGames + 1}/${gameTasks.length} '
-              '(move $done/$total, $totalPositionsFound tactics found)...',
+            listeners.progress?.call(
+              'Analyzing game ${completedGames + 1}/${tasks.length} '
+              '(move $done/$total, ${positions.length} tactics found)...',
             );
-            onGameProgress?.call(
-              (completedGames + done / total) / gameTasks.length,
+            listeners.onGameProgress?.call(
+              (completedGames + done / total) / tasks.length,
               completedGames,
-              gameTasks.length,
+              tasks.length,
             );
           },
         );
         if (_cancelled) break;
         if (outcome == null) continue;
-        final gamePositions = outcome.positions;
-        positions.addAll(gamePositions);
-        totalPositionsFound += gamePositions.length;
-
-        await _database.commitAnalyzedGame(gameId, gamePositions);
-
-        // Puzzles and completion markers are already durable. A
-        // mid-analysis app close doesn't permanently skip this game.
-        if (gamePositions.isNotEmpty && onPositionFound != null) {
-          for (final pos in gamePositions) {
-            await onPositionFound(pos);
-          }
-        }
-        // The same pass that found the puzzles also knows how messy the game
-        // was; report it so the games list never needs a second engine pass.
-        {
-          onGameReviewed?.call(
-            outcome.dedupKey,
-            ReviewCounts(
-              inaccuracies: outcome.inaccuracies,
-              mistakes: outcome.mistakes,
-              blunders: outcome.blunders,
-            ),
-          );
-          // The same pass scored every position on the way to those counts;
-          // hand the series over so the games cache can carry it.
-          final annotated = outcome.annotatedMovetext;
-          if (annotated != null) {
-            onGameAnnotated?.call(outcome.dedupKey, annotated);
-          }
-          // Inside the null check on purpose. A null outcome is *not* a
-          // reviewed game: [_analyzeGameParallel] returns null when neither
-          // PGN header matches [username] — the game is not mine — and when
-          // the run was cancelled partway. Marking either analyzed is
-          // permanent and only `clearAnalyzedGames` undoes it, so one import
-          // run under a typo'd or since-changed username used to write off
-          // the whole library: correcting the username afterwards never
-          // looked at those games again.
-          //
-          // A game that *is* mine but yielded no puzzle still returns an
-          // outcome (with an empty [positions]), so "reviewed, nothing wrong"
-          // is still recorded and is never analyzed twice.
-          await _database.markGameAnalyzed(gameId);
-        }
+        positions.addAll(outcome.positions);
+        await _commitOutcome(task.gameId, outcome, listeners);
       } catch (e) {
         if (_cancelled) break;
         if (_database.lastWriteError != null) rethrow;
-        if (kDebugMode) log.e('Error analyzing game $gameId: $e');
+        if (kDebugMode) log.e('Error analyzing game ${task.gameId}: $e');
       }
 
       completedGames++;
-      progressCallback?.call(
-        'Analyzed $completedGames/${gameTasks.length} games '
-        '($totalPositionsFound tactics found)...',
+      listeners.progress?.call(
+        'Analyzed $completedGames/${tasks.length} games '
+        '(${positions.length} tactics found)...',
       );
-      onGameProgress?.call(
-        completedGames / gameTasks.length,
+      listeners.onGameProgress?.call(
+        completedGames / tasks.length,
         completedGames,
-        gameTasks.length,
+        tasks.length,
       );
     }
 
-    if (_cancelled) {
-      // UI clears itself on cancel — no message needed.
-    } else {
-      progressCallback?.call(
-        'Done! Analyzed ${gameTasks.length} games'
-        '${skippedCount > 0 ? ', skipped $skippedCount' : ''}. '
+    // On cancel the UI clears itself — no message needed.
+    if (!_cancelled) {
+      listeners.progress?.call(
+        'Done! Analyzed ${tasks.length} games'
+        '${selection.skipped > 0 ? ', skipped ${selection.skipped}' : ''}. '
         'Found ${positions.length} tactics positions.',
       );
     }
@@ -839,7 +631,52 @@ class TacticsImportService {
       // either. [resumeStoredPgns] sums these across two batches, and the
       // caller uses the total to decide whether anything was looked at.
       gamesAnalyzed: completedGames,
-      gamesSkipped: skippedCount,
+      gamesSkipped: selection.skipped,
     );
+  }
+
+  /// Persist one reviewed game and tell the listeners about it.
+  ///
+  /// Only a non-null outcome reaches here on purpose. [TacticsGameAnalyzer]
+  /// returns null when neither PGN header matches the username — the game is
+  /// not mine — and when the run was cancelled partway. Marking either
+  /// analyzed is permanent and only `clearAnalyzedGames` undoes it, so one
+  /// import run under a typo'd or since-changed username used to write off
+  /// the whole library: correcting the username afterwards never looked at
+  /// those games again. A game that *is* mine but yielded no puzzle still
+  /// returns an outcome (with empty positions), so "reviewed, nothing wrong"
+  /// is still recorded and is never analyzed twice.
+  Future<void> _commitOutcome(
+    String gameId,
+    GameMineOutcome outcome,
+    _RunListeners listeners,
+  ) async {
+    await _database.commitAnalyzedGame(gameId, outcome.positions);
+
+    // Puzzles and completion markers are already durable. A mid-analysis
+    // app close doesn't permanently skip this game.
+    final onPositionFound = listeners.onPositionFound;
+    if (onPositionFound != null) {
+      for (final position in outcome.positions) {
+        await onPositionFound(position);
+      }
+    }
+    // The same pass that found the puzzles also knows how messy the game
+    // was; report it so the games list never needs a second engine pass.
+    listeners.onGameReviewed?.call(
+      outcome.dedupKey,
+      ReviewCounts(
+        inaccuracies: outcome.inaccuracies,
+        mistakes: outcome.mistakes,
+        blunders: outcome.blunders,
+      ),
+    );
+    // The same pass scored every position on the way to those counts; hand
+    // the series over so the games cache can carry it.
+    final annotated = outcome.annotatedMovetext;
+    if (annotated != null) {
+      listeners.onGameAnnotated?.call(outcome.dedupKey, annotated);
+    }
+    await _database.markGameAnalyzed(gameId);
   }
 }

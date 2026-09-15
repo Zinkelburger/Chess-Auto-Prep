@@ -4,7 +4,8 @@ import 'package:chess_auto_prep/features/engine_tournament/models/adjudication_r
 import 'package:chess_auto_prep/features/engine_tournament/models/engine_spec.dart';
 import 'package:chess_auto_prep/features/engine_tournament/models/time_control.dart';
 import 'package:chess_auto_prep/features/engine_tournament/services/engine_game_runner.dart';
-import 'package:chess_auto_prep/features/engine_tournament/services/uci_engine.dart';
+import 'package:chess_auto_prep/features/engine_tournament/services/game_pgn_writer.dart';
+import 'package:chess_auto_prep/features/engine_tournament/services/uci_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// An engine that plays from a fixed list of moves and reports a fixed score.

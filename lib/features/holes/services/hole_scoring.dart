@@ -1,10 +1,12 @@
-/// Pure walk and selection helpers for the hole hunt: how reach probability
-/// flows down the tree, which attacker positions and candidate moves get
-/// engine time, and the sign conventions behind a trick's numbers. Kept free
-/// of engine and widget dependencies so they are unit-testable.
+/// Pure selection helpers for the hole hunt: which attacker positions and
+/// candidate moves get engine time, and the sign conventions behind a
+/// trick's numbers. Kept free of engine and widget dependencies so they are
+/// unit-testable.
 ///
-/// Finding-level ranking is `features/audit/services/exploit_ranking.dart`,
-/// shared with the report panel.
+/// Reach propagation down the tree is the shared
+/// `features/audit/services/repertoire_walk.dart`; finding-level ranking is
+/// `features/audit/services/exploit_ranking.dart`, shared with the report
+/// panel.
 ///
 /// Sign conventions: engine discovery scores are White-normalized; every
 /// attacker-perspective number in this file goes through
@@ -12,22 +14,7 @@
 library;
 
 import '../../../models/opening_tree.dart';
-
-/// Reach-probability propagation for the hole hunt.
-///
-/// Deliberate inversion of the audit's rule: the ATTACKER steers the game
-/// (their branches keep the parent's probability), while the repertoire
-/// OWNER chooses among their own alternatives — so only owner-to-move
-/// branching attenuates, by the child's share of games at the parent.
-double childProbability({
-  required bool isOwnerTurn,
-  required int childGames,
-  required int parentTotalGames,
-  required double cumProb,
-}) {
-  if (!isOwnerTurn || parentTotalGames <= 0) return cumProb;
-  return cumProb * (childGames / parentTotalGames);
-}
+import '../../audit/services/engine_position_probe.dart';
 
 /// An attacker-to-move position collected during the walk, candidate for
 /// trick discovery. [reach] is the summed probability of reaching this
@@ -56,21 +43,6 @@ List<TrickTarget> selectTopTargets(List<TrickTarget> targets, int k) {
     return c != 0 ? c : a.key.compareTo(b.key);
   });
   return indexed.take(k).map((e) => e.value).toList();
-}
-
-/// One MultiPV line at a trick target, SAN-resolved by the caller. Lists of
-/// these must keep engine order: best line for the side to move first —
-/// and the side to move at a trick target is the attacker.
-class DiscoveredCandidate {
-  final String uci;
-  final String san;
-  final int whiteCp;
-
-  const DiscoveredCandidate({
-    required this.uci,
-    required this.san,
-    required this.whiteCp,
-  });
 }
 
 /// Attacker-perspective evals for one candidate — the sign-flip choke

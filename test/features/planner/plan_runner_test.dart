@@ -87,7 +87,7 @@ class _FakeOutline implements RepertoireOutlineService {
     final left = collisions[name] ?? 0;
     if (left > 0) {
       collisions[name] = left - 1;
-      throw const OutlineEditException(
+      throw const OutlineNameTakenException(
         'A chapter with that name already exists.',
       );
     }

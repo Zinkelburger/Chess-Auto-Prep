@@ -138,15 +138,23 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   List<RecentGame> get games => _games;
   GamesListFilters get filters => _filters;
 
-  bool get hasAnyUsername =>
-      (_chesscomUsername()?.trim().isNotEmpty ?? false) ||
-      (_lichessUsername()?.trim().isNotEmpty ?? false);
+  bool get hasAnyUsername => _sources().isNotEmpty;
 
   /// The accounts this list is loading. The header names the user even before
   /// the first game has arrived, so it cannot rely on the loaded games.
   List<String> get usernames => [
     for (final name in [_lichessUsername(), _chesscomUsername()])
       if (name != null && name.trim().isNotEmpty) name.trim(),
+  ];
+
+  /// The configured accounts, Chess.com first, with trimmed usernames.
+  List<(GamesPlatform, String)> _sources() => [
+    for (final (platform, supplier) in [
+      (GamesPlatform.chesscom, _chesscomUsername),
+      (GamesPlatform.lichess, _lichessUsername),
+    ])
+      if (supplier()?.trim() case final username? when username.isNotEmpty)
+        (platform, username),
   ];
 
   /// The shared window this list is showing.
@@ -223,34 +231,34 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   /// [GamesWindow.bookCheckGames] per site, whatever mode the list is in.
   /// A superset of [games] whenever the check window is the larger.
   List<RecentGame> get bookCheckGames {
-    final cap = window.bookCheckGames;
-    final taken = <GamesPlatform, int>{};
     final listed = _games.toSet();
-    return [
-      for (final g in _allGames)
-        if ((taken[g.platform] = (taken[g.platform] ?? 0) + 1) <= cap ||
-            listed.contains(g))
-          g,
-    ];
+    return _newestPerSite(window.bookCheckGames, alwaysKeep: listed);
   }
 
   /// The active window's slice of [_allGames]. Mirrors [applySelection]'s
   /// semantics: the game cap counts per site, the day cutoff drops undated
   /// games, and order is preserved — [_allGames] is already newest-first.
   List<RecentGame> _sliceForWindow(GamesWindow window) {
-    if (window.isGameCount) {
-      final taken = <GamesPlatform, int>{};
-      return [
-        for (final g in _allGames)
-          if ((taken[g.platform] = (taken[g.platform] ?? 0) + 1) <=
-              window.games)
-            g,
-      ];
-    }
+    if (window.isGameCount) return _newestPerSite(window.games);
     final cutoff = window.cutoffFrom(_now())!;
     return [
       for (final g in _allGames)
-        if (g.record.date != null && !g.record.date!.isBefore(cutoff)) g,
+        if (g.record.date case final date? when !date.isBefore(cutoff)) g,
+    ];
+  }
+
+  /// The first [cap] rows of [_allGames] from each site, in order, plus any
+  /// in [alwaysKeep] beyond that.
+  List<RecentGame> _newestPerSite(
+    int cap, {
+    Set<RecentGame> alwaysKeep = const {},
+  }) {
+    final taken = <GamesPlatform, int>{};
+    return [
+      for (final g in _allGames)
+        if ((taken[g.platform] = (taken[g.platform] ?? 0) + 1) <= cap ||
+            alwaysKeep.contains(g))
+          g,
     ];
   }
 
@@ -296,77 +304,25 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
 
       final collected = <RecentGame>[];
       final errors = <String>[];
-      final sources = <(GamesPlatform, String)>[
-        if (_chesscomUsername()?.trim().isNotEmpty ?? false)
-          (GamesPlatform.chesscom, _chesscomUsername()!.trim()),
-        if (_lichessUsername()?.trim().isNotEmpty ?? false)
-          (GamesPlatform.lichess, _lichessUsername()!.trim()),
-      ];
-
-      for (final (platform, username) in sources) {
+      for (final (platform, username) in _sources()) {
         try {
-          final records = await _library.getGames(
-            platform: platform,
-            username: username,
-            selection: selection,
-            unionWith: [otherSelection],
-            forceRefresh: force,
-            onProgress: (message) {
-              if (epoch != _refreshEpoch) return;
-              _statusMessage = message;
-              notifyListeners();
-            },
-            onFetched: (at) => _onFetched?.call(platform, at),
+          collected.addAll(
+            await _loadSite(
+              platform,
+              username,
+              selection: selection,
+              otherSelection: otherSelection,
+              force: force,
+              epoch: epoch,
+            ),
           );
-          final cachePath = await _library.cacheFilePath(platform, username);
-          final sansBatch = await compute(extractMainlineSansBatch, [
-            for (final r in records) r.pgn,
-          ]);
-          final summaries = await compute(computeReviewSummariesBatch, [
-            for (final r in records) (r.pgn, _sideFor(r, username)),
-          ]);
-          // Final positions for the row previews: a replay per game, off the
-          // UI isolate like the other two passes.
-          final finalFens = await compute(finalFensBatch, sansBatch);
-          for (var i = 0; i < records.length; i++) {
-            final record = records[i];
-            collected.add(
-              RecentGame(
-                  record: record,
-                  platform: platform,
-                  cachePath: cachePath,
-                  myUsername: username,
-                  meWhite: _sideFor(record, username),
-                  sans: sansBatch[i],
-                  finalFen: finalFens[i],
-                  // The review's own verdict wins over one derived from `[%eval]`
-                  // comments: it is the pass that classified these moves, and it
-                  // survives the evals being pruned from the cache.
-                )
-                ..summary = _mergeSummary(
-                  _storedSummary(record.dedupKey),
-                  summaries[i],
-                )
-                // Kept even when the stored counts win above: this is the
-                // "is there a graph on disk" answer, and the counts cannot
-                // give it.
-                ..hasStoredEvals = summaries[i] != null,
-            );
-          }
         } catch (e) {
           errors.add('${platform.name}: $e');
         }
       }
       if (epoch != _refreshEpoch) return;
 
-      collected.sort((a, b) {
-        final da = a.record.date, db = b.record.date;
-        if (da == null && db == null) return 0;
-        if (da == null) return 1;
-        if (db == null) return -1;
-        return db.compareTo(da);
-      });
-
+      collected.sort(_newestFirst);
       _allGames = collected;
       _builtWindow = buildWindow;
       _games = _sliceForWindow(buildWindow);
@@ -402,6 +358,74 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
       return _refresh();
     }
   }
+
+  /// One site's rows: its games for both slices, each with its mainline,
+  /// final position and review summary, built off the UI isolate.
+  Future<List<RecentGame>> _loadSite(
+    GamesPlatform platform,
+    String username, {
+    required GameSelection selection,
+    required GameSelection otherSelection,
+    required bool force,
+    required int epoch,
+  }) async {
+    final records = await _library.getGames(
+      platform: platform,
+      username: username,
+      selection: selection,
+      unionWith: [otherSelection],
+      forceRefresh: force,
+      onProgress: (message) {
+        if (epoch != _refreshEpoch) return;
+        _statusMessage = message;
+        notifyListeners();
+      },
+      onFetched: (at) => _onFetched?.call(platform, at),
+    );
+    final cachePath = await _library.cacheFilePath(platform, username);
+    final sides = [for (final r in records) _sideFor(r, username)];
+    final sansBatch = await compute(extractMainlineSansBatch, [
+      for (final r in records) r.pgn,
+    ]);
+    final summaries = await compute(computeReviewSummariesBatch, [
+      for (var i = 0; i < records.length; i++) (records[i].pgn, sides[i]),
+    ]);
+    // Final positions for the row previews: a replay per game, off the
+    // UI isolate like the other two passes.
+    final finalFens = await compute(finalFensBatch, sansBatch);
+    return [
+      for (var i = 0; i < records.length; i++)
+        RecentGame(
+            record: records[i],
+            platform: platform,
+            cachePath: cachePath,
+            myUsername: username,
+            meWhite: sides[i],
+            sans: sansBatch[i],
+            finalFen: finalFens[i],
+          )
+          // The review's own verdict wins over one derived from `[%eval]`
+          // comments: it is the pass that classified these moves, and it
+          // survives the evals being pruned from the cache.
+          ..summary = _mergeSummary(
+            _storedSummary(records[i].dedupKey),
+            summaries[i],
+          )
+          // Kept even when the stored counts win above: this is the
+          // "is there a graph on disk" answer, and the counts cannot
+          // give it.
+          ..hasStoredEvals = summaries[i] != null,
+    ];
+  }
+
+  /// Newest first; undated games last.
+  static int _newestFirst(RecentGame a, RecentGame b) =>
+      switch ((a.record.date, b.record.date)) {
+        (null, null) => 0,
+        (null, _) => 1,
+        (_, null) => -1,
+        (final da?, final db?) => db.compareTo(da),
+      };
 
   /// Re-run only the deviation pass (designations or repertoire files
   /// changed; the game list itself is still valid).
@@ -505,14 +529,9 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     GameReviewSummary? parsed,
   ) {
     if (stored == null) return parsed;
-    if (parsed == null || !_sameCounts(stored, parsed)) return stored;
+    if (parsed == null || !stored.sameCountsAs(parsed)) return stored;
     return parsed;
   }
-
-  static bool _sameCounts(GameReviewSummary a, GameReviewSummary b) =>
-      a.blunders == b.blunders &&
-      a.mistakes == b.mistakes &&
-      a.inaccuracies == b.inaccuracies;
 
   /// A game finished its engine pass: adopt the counts for whichever loaded
   /// rows they belong to.
@@ -522,7 +541,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
       final stored = _storedSummary(game.record.dedupKey);
       if (stored == null) continue;
       final current = game.summary;
-      if (current != null && _sameCounts(current, stored)) continue;
+      if (current != null && current.sameCountsAs(stored)) continue;
       game.summary = stored;
       changed = true;
     }
@@ -536,16 +555,13 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
   /// or present — the parse takes either). A series that does not parse, or a
   /// game not in the list, changes nothing.
   Future<void> applyAnnotatedMovetext(String dedupKey, String movetext) async {
-    RecentGame? game;
-    for (final g in _allGames) {
-      if (g.record.dedupKey == dedupKey) {
-        game = g;
-        break;
-      }
-    }
-    if (game == null || game.meWhite == null) return;
+    final game = _allGames
+        .where((g) => g.record.dedupKey == dedupKey)
+        .firstOrNull;
+    final meWhite = game?.meWhite;
+    if (game == null || meWhite == null) return;
     final parsed = (await compute(computeReviewSummariesBatch, [
-      (movetext, game.meWhite),
+      (movetext, meWhite),
     ])).first;
     if (parsed == null) return;
     // The list may have reloaded meanwhile; only touch the row we looked up.

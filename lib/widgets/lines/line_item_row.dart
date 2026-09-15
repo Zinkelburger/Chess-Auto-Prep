@@ -517,7 +517,7 @@ class _UnaccountedAnnotation extends StatelessWidget {
                     ...displayMoves.map((m) {
                       final label = m.gameCount > 0
                           ? '${m.move} (${formatCoveragePercent(m.probability)})'
-                          : '${m.move} (${formatCoveragePercent(m.probability)}, ${m.source})';
+                          : '${m.move} (${formatCoveragePercent(m.probability)}, ${m.source.name})';
 
                       if (onNavigateToPosition != null) {
                         return GestureDetector(

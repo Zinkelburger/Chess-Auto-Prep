@@ -3,6 +3,9 @@
 /// in the directory plus the facts that belong to this event only.
 library;
 
+/// The format tag written into every `tournaments/<id>.json`.
+const kTournamentFormat = 'chess-auto-prep/tournament@1';
+
 /// One opponent in one tournament's field.
 class TournamentEntry {
   final String personId;
@@ -27,21 +30,6 @@ class TournamentEntry {
     this.prepared = false,
   });
 
-  /// Rating, odds and round as one short line; empty when none are known.
-  String get summary => [
-    if (rating != null) '$rating',
-    if (pairingProb != null) '${(pairingProb! * 100).round()}% to face',
-    if (likelyRound != null) 'likely round $likelyRound',
-  ].join(' · ');
-
-  Map<String, dynamic> toJson() => {
-    'person': personId,
-    if (rating != null) 'rating': rating,
-    if (pairingProb != null) 'pairing_prob': pairingProb,
-    if (likelyRound != null) 'likely_round': likelyRound,
-    if (prepared) 'prepared': true,
-  };
-
   factory TournamentEntry.fromJson(Map<String, dynamic> json) =>
       TournamentEntry(
         personId: json['person'] as String? ?? '',
@@ -50,6 +38,14 @@ class TournamentEntry {
         likelyRound: (json['likely_round'] as num?)?.toInt(),
         prepared: json['prepared'] == true,
       );
+
+  Map<String, dynamic> toJson() => {
+    'person': personId,
+    if (rating != null) 'rating': rating,
+    if (pairingProb != null) 'pairing_prob': pairingProb,
+    if (likelyRound != null) 'likely_round': likelyRound,
+    if (prepared) 'prepared': true,
+  };
 
   TournamentEntry copyWith({
     int? rating,
@@ -65,6 +61,8 @@ class TournamentEntry {
   );
 }
 
+/// One event and its field. Immutable; [withEntry] and [withoutPerson]
+/// return edited copies for the store to save.
 class Tournament {
   /// File name stem, minted from the name at creation and never changed by a
   /// rename, so nothing that points at a tournament has to move with it.
@@ -75,6 +73,8 @@ class Tournament {
   final String? date;
   final int? rounds;
   final List<TournamentEntry> entries;
+
+  /// The group's own editable study, once one has been created.
   final String? studyPath;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -90,32 +90,9 @@ class Tournament {
     required this.updatedAt,
   });
 
-  int get preparedCount => entries.where((e) => e.prepared).length;
-
-  /// Index of the entry for [personId], or -1.
-  int indexOf(String personId) =>
-      entries.indexWhere((e) => e.personId == personId);
-
-  bool contains(String personId) => indexOf(personId) >= 0;
-
-  /// The date as `2026-04-12` and the round count as one line, or ''.
-  String get whenLine => [
-    ?date,
-    if (rounds != null) '$rounds round${rounds == 1 ? '' : 's'}',
-  ].join(' · ');
-
-  Map<String, dynamic> toJson() => {
-    'format': kTournamentFormat,
-    'id': id,
-    'name': name,
-    'date': ?date,
-    'rounds': ?rounds,
-    'created_at': createdAt.toIso8601String(),
-    'updated_at': updatedAt.toIso8601String(),
-    'entries': [for (final e in entries) e.toJson()],
-    if (studyPath != null) 'study': studyPath,
-  };
-
+  /// Decodes one tournament file. [fallbackId] is the file stem, used when
+  /// the document carries no id of its own. Throws [FormatException] for a
+  /// format tag this version does not know.
   factory Tournament.fromJson(Map<String, dynamic> json, {String? fallbackId}) {
     final now = DateTime.now();
     final format = json['format'];
@@ -136,6 +113,26 @@ class Tournament {
       ],
     );
   }
+
+  int get preparedCount => entries.where((e) => e.prepared).length;
+
+  /// Index of the entry for [personId], or -1.
+  int indexOf(String personId) =>
+      entries.indexWhere((e) => e.personId == personId);
+
+  bool contains(String personId) => indexOf(personId) >= 0;
+
+  Map<String, dynamic> toJson() => {
+    'format': kTournamentFormat,
+    'id': id,
+    'name': name,
+    'date': ?date,
+    'rounds': ?rounds,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt.toIso8601String(),
+    'entries': [for (final e in entries) e.toJson()],
+    if (studyPath != null) 'study': studyPath,
+  };
 
   Tournament copyWith({
     String? name,
@@ -180,8 +177,6 @@ class Tournament {
   @override
   String toString() => 'Tournament($id, $name, ${entries.length} entries)';
 }
-
-const kTournamentFormat = 'chess-auto-prep/tournament@1';
 
 /// A file-name-safe id from a tournament name: `Spring Open 2026` →
 /// `spring-open-2026`. Empty names get a timestamp so the file still has a

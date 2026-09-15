@@ -6,14 +6,15 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../utils/chess_utils.dart' show playUciFrom;
+import '../../../utils/fen_utils.dart';
 import '../../../utils/keyboard_shortcut_utils.dart' show KeyBinding;
+import '../../../utils/safe_change_notifier.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
-import '../../../utils/fen_utils.dart';
 import '../services/alternative_move_judge.dart';
 import '../services/tactics_database.dart';
 import '../services/tactics_engine.dart';
-import '../../../utils/safe_change_notifier.dart';
 
 /// Board updates the UI must apply after session logic runs.
 class TacticsBoardUpdate {
@@ -288,19 +289,23 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Reset all per-puzzle state and put [position] on the board.
   TacticsPositionSetup _loadPosition(TacticsPosition position) {
     currentPosition = position;
-    positionSolved = false;
     attemptRecorded = false;
-    _startTime = DateTime.now();
+    return _restartPuzzle(position);
+  }
+
+  /// Back to the start of [position]'s line, keeping whether an attempt was
+  /// already recorded. Notifies and returns the board setup.
+  TacticsPositionSetup _restartPuzzle(TacticsPosition position) {
+    positionSolved = false;
     feedback = '';
     showSolution = false;
+    _startTime = DateTime.now();
     currentMoveIndex = 0;
     currentTacticFen = position.fen;
     waitingForOpponent = false;
     checkingAlternative = false;
     _judgeToken++;
-
     notifyListeners();
-
     return TacticsPositionSetup(
       fen: position.fen,
       flipBoard: !position.whiteToPlay,
@@ -362,8 +367,9 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Set the star [rating] on the current position.
   Future<void> setRating(int rating) async {
-    if (currentPosition == null) return;
-    await database.setRating(currentPosition!.fen, rating);
+    final position = currentPosition;
+    if (position == null) return;
+    await database.setRating(position.fen, rating);
     refreshCurrentPosition();
   }
 
@@ -412,21 +418,9 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Reset puzzle state for the current tactic (analysis reset / retry).
   TacticsPositionSetup? resetPuzzleState() {
-    if (currentPosition == null) return null;
-    positionSolved = false;
-    feedback = '';
-    showSolution = false;
-    _startTime = DateTime.now();
-    currentMoveIndex = 0;
-    currentTacticFen = currentPosition!.fen;
-    waitingForOpponent = false;
-    checkingAlternative = false;
-    _judgeToken++;
-    notifyListeners();
-    return TacticsPositionSetup(
-      fen: currentPosition!.fen,
-      flipBoard: !currentPosition!.whiteToPlay,
-    );
+    final position = currentPosition;
+    if (position == null) return null;
+    return _restartPuzzle(position);
   }
 
   void endSession() {
@@ -438,10 +432,9 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void refreshCurrentPosition() {
-    if (currentPosition == null) return;
-    final index = database.positions.indexWhere(
-      (p) => p.fen == currentPosition!.fen,
-    );
+    final position = currentPosition;
+    if (position == null) return;
+    final index = database.positions.indexWhere((p) => p.fen == position.fen);
     if (index != -1) {
       currentPosition = database.positions[index];
       notifyListeners();
@@ -482,21 +475,20 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
     required TacticsSchedule schedule,
     required TacticsIsMounted isMounted,
   }) {
-    if (currentPosition == null) return null;
+    final position = currentPosition;
+    if (position == null) return null;
     if (positionSolved || inputLocked) return null;
 
-    final fen = currentTacticFen ?? currentPosition!.fen;
+    final fen = currentTacticFen ?? position.fen;
     if (normalizeFen(boardFen) != normalizeFen(fen)) return null;
 
     final result = engine.checkMoveAtIndex(
-      currentPosition!,
+      position,
       moveUci,
       fen,
       currentMoveIndex,
     );
-    final timeTaken = _startTime != null
-        ? DateTime.now().difference(_startTime!).inMilliseconds / 1000.0
-        : 0.0;
+    final timeTaken = _secondsSinceStart();
 
     if (result == TacticsResult.correct) {
       _handleCorrectMove(
@@ -511,13 +503,13 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
     final judge = alternativeJudge;
     if (judge != null &&
         sessionSettings.acceptAlternatives &&
-        currentMoveIndex < currentPosition!.correctLine.length) {
+        currentMoveIndex < position.correctLine.length) {
       _judgeAlternative(
         judge,
         AlternativeMoveQuery(
           fen: fen,
           playedUci: moveUci,
-          bestToken: currentPosition!.correctLine[currentMoveIndex],
+          bestToken: position.correctLine[currentMoveIndex],
         ),
         timeTaken: timeTaken,
         schedule: schedule,
@@ -526,12 +518,7 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
       return TacticsBoardUpdate(applyMoveUci: moveUci);
     }
 
-    _handleIncorrectMove(
-      timeTaken,
-      moveUci: moveUci,
-      schedule: schedule,
-      isMounted: isMounted,
-    );
+    _handleIncorrectMove(timeTaken, schedule: schedule, isMounted: isMounted);
     return TacticsBoardUpdate(applyMoveUci: moveUci);
   }
 
@@ -559,28 +546,17 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
       if (!accepted) {
         _handleIncorrectMove(
           timeTaken,
-          moveUci: query.playedUci,
           schedule: schedule,
           isMounted: isMounted,
         );
         return;
       }
-      String? playedSan;
-      try {
-        final pos = Chess.fromSetup(Setup.parseFen(query.fen));
-        final move = Move.parse(query.playedUci);
-        if (move != null) {
-          final (after, san) = pos.makeSan(move);
-          currentTacticFen = after.fen;
-          playedSan = san;
-        }
-      } catch (e) {
-        debugPrint('[TacticsSession] FEN advance after alternative failed: $e');
-      }
+      final played = _playUci(query.fen, query.playedUci);
+      if (played != null) currentTacticFen = played.after.fen;
       currentMoveIndex = currentPosition!.correctLine.length;
       _completeTactic(timeTaken, schedule: schedule, isMounted: isMounted);
-      if (playedSan != null) {
-        feedback = 'Correct! $playedSan is just as good';
+      if (played != null) {
+        feedback = 'Correct! ${played.san} is just as good';
         notifyListeners();
       }
     }
@@ -598,32 +574,23 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   void _handleCorrectMove(
     double timeTaken, {
-    String? moveUci,
+    required String moveUci,
     required TacticsSchedule schedule,
     required TacticsIsMounted isMounted,
   }) {
+    final position = currentPosition!;
     // Advance currentTacticFen to include the user's just-played move so the
-    // opponent callback (and the next FEN-validation check) see the right state.
-    if (moveUci != null) {
-      try {
-        final pos = Chess.fromSetup(
-          Setup.parseFen(currentTacticFen ?? currentPosition!.fen),
-        );
-        final move = Move.parse(moveUci);
-        if (move != null) {
-          currentTacticFen = pos.play(move).fen;
-        }
-      } catch (e) {
-        debugPrint('[TacticsSession] FEN advance after user move failed: $e');
-      }
-    }
+    // opponent callback (and the next FEN-validation check) see the right
+    // state.
+    final played = _playUci(currentTacticFen ?? position.fen, moveUci);
+    if (played != null) currentTacticFen = played.after.fen;
 
     currentMoveIndex++;
 
-    final totalUserMoves = engine.userMoveCount(currentPosition!);
+    final totalUserMoves = engine.userMoveCount(position);
     final completedUserMoves = (currentMoveIndex + 1) ~/ 2;
 
-    if (currentMoveIndex < currentPosition!.correctLine.length &&
+    if (currentMoveIndex < position.correctLine.length &&
         currentMoveIndex % 2 == 1) {
       waitingForOpponent = true;
       feedback = totalUserMoves > 1
@@ -631,31 +598,14 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
           : 'Correct!';
       notifyListeners();
 
-      // Long enough to register the move as correct before the reply lands;
-      // at 500ms the two moves read as one blur.
-      schedule(const Duration(milliseconds: 1000), () {
-        if (!isMounted() || currentPosition == null) return;
+      schedule(_opponentReplyDelay, () {
+        final position = currentPosition;
+        if (!isMounted() || position == null) return;
 
-        final opponentToken = currentPosition!.correctLine[currentMoveIndex];
-        try {
-          final pos = Chess.fromSetup(
-            Setup.parseFen(currentTacticFen ?? currentPosition!.fen),
-          );
-          final opponentMove = pos.parseSan(opponentToken);
-          if (opponentMove != null) {
-            final (newPos, canonicalSan) = pos.makeSan(opponentMove);
-            currentTacticFen = newPos.fen;
-            _panel?.applyBoardUpdate?.call(
-              TacticsBoardUpdate(setFen: newPos.fen, san: canonicalSan),
-            );
-          }
-        } catch (e) {
-          debugPrint('[TacticsSession] Opponent move failed: $e');
-        }
-
+        _playOpponentReply(position.correctLine[currentMoveIndex]);
         currentMoveIndex++;
 
-        if (currentMoveIndex >= currentPosition!.correctLine.length) {
+        if (currentMoveIndex >= position.correctLine.length) {
           _completeTactic(timeTaken, schedule: schedule, isMounted: isMounted);
           notifyListeners();
           return;
@@ -680,28 +630,12 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
     waitingForOpponent = false;
     feedback = 'Correct!';
     notifyListeners();
-
-    if (!attemptRecorded) {
-      attemptRecorded = true;
-      _recordOutcome(SessionPuzzleOutcome.correct);
-      unawaited(
-        database
-            .recordAttempt(currentPosition!, TacticsResult.correct, timeTaken)
-            .then((_) {
-              if (isMounted()) refreshCurrentPosition();
-            })
-            .catchError((Object error) {
-              if (!isMounted()) return;
-              feedback = 'Result is unsaved: $error';
-              notifyListeners();
-            }),
-      );
-    }
+    _recordFirstAttempt(TacticsResult.correct, timeTaken, isMounted);
 
     if (autoAdvance) {
       // The full solution is on screen from this point; give it time to be
       // read before the next puzzle replaces it.
-      schedule(const Duration(milliseconds: 3000), () {
+      schedule(_autoAdvanceDelay, () {
         if (!isMounted() || !positionSolved) return;
         final setup = skipPosition();
         if (setup != null) {
@@ -715,34 +649,17 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   void _handleIncorrectMove(
     double timeTaken, {
-    String? moveUci,
     required TacticsSchedule schedule,
     required TacticsIsMounted isMounted,
   }) {
     feedback = 'Incorrect';
     notifyListeners();
-
-    if (!attemptRecorded && currentPosition != null) {
-      attemptRecorded = true;
-      _recordOutcome(SessionPuzzleOutcome.incorrect);
-      unawaited(
-        database
-            .recordAttempt(currentPosition!, TacticsResult.incorrect, timeTaken)
-            .then((_) {
-              if (isMounted()) refreshCurrentPosition();
-            })
-            .catchError((Object error) {
-              if (!isMounted()) return;
-              feedback = 'Result is unsaved: $error';
-              notifyListeners();
-            }),
-      );
-    }
+    _recordFirstAttempt(TacticsResult.incorrect, timeTaken, isMounted);
 
     // Dwell on the wrong position long enough to actually see what was
     // played and why it fails — at 600ms the piece read as teleporting there
     // and back with a subliminal red flash.
-    schedule(const Duration(milliseconds: 1200), () {
+    schedule(_incorrectDwell, () {
       if (!isMounted() || currentPosition == null) return;
       final resetFen = fenAfterIncorrect();
       if (resetFen != null) {
@@ -756,4 +673,86 @@ class TacticsSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   /// FEN to restore after a wrong answer (may differ from initial on multi-move).
   String? fenAfterIncorrect() => currentTacticFen ?? currentPosition?.fen;
+
+  /// Record the puzzle's first attempt — later moves on the same puzzle
+  /// don't change the result — and persist it. A failed save is shown in
+  /// [feedback] rather than lost silently.
+  void _recordFirstAttempt(
+    TacticsResult result,
+    double timeTaken,
+    TacticsIsMounted isMounted,
+  ) {
+    final position = currentPosition;
+    if (attemptRecorded || position == null) return;
+    attemptRecorded = true;
+    _recordOutcome(
+      result == TacticsResult.correct
+          ? SessionPuzzleOutcome.correct
+          : SessionPuzzleOutcome.incorrect,
+    );
+    unawaited(
+      database
+          .recordAttempt(position, result, timeTaken)
+          .then((_) {
+            if (isMounted()) refreshCurrentPosition();
+          })
+          .catchError((Object error) {
+            if (!isMounted()) return;
+            feedback = 'Result is unsaved: $error';
+            notifyListeners();
+          }),
+    );
+  }
+
+  /// Play the stored opponent reply [san] on the tactic board and push it to
+  /// the panel. An unplayable token is logged and skipped: the line then
+  /// continues from the position as it stands.
+  void _playOpponentReply(String san) {
+    final position = currentPosition;
+    if (position == null) return;
+    try {
+      final pos = Chess.fromSetup(
+        Setup.parseFen(currentTacticFen ?? position.fen),
+      );
+      final move = pos.parseSan(san);
+      if (move == null) return;
+      final (after, canonicalSan) = pos.makeSan(move);
+      currentTacticFen = after.fen;
+      _panel?.applyBoardUpdate?.call(
+        TacticsBoardUpdate(setFen: after.fen, san: canonicalSan),
+      );
+    } catch (e) {
+      debugPrint('[TacticsSession] Opponent move failed: $e');
+    }
+  }
+
+  double _secondsSinceStart() {
+    final start = _startTime;
+    if (start == null) return 0.0;
+    return DateTime.now().difference(start).inMilliseconds / 1000.0;
+  }
+}
+
+/// Long enough to register the move as correct before the reply lands; at
+/// 500ms the two moves read as one blur.
+const _opponentReplyDelay = Duration(milliseconds: 1000);
+
+/// Time the full solution stays on screen before the next puzzle replaces it.
+const _autoAdvanceDelay = Duration(milliseconds: 3000);
+
+/// How long a wrong move stays on the board before it is taken back.
+const _incorrectDwell = Duration(milliseconds: 1200);
+
+/// [uci] played from [fen]: the SAN and the resulting position, or null when
+/// it does not parse or is illegal (logged, since the token came from a
+/// stored line or the board and should always apply).
+({String san, Position after})? _playUci(String fen, String uci) {
+  try {
+    final played = playUciFrom(Chess.fromSetup(Setup.parseFen(fen)), uci);
+    if (played == null) return null;
+    return (san: played.san, after: played.after);
+  } catch (e) {
+    debugPrint('[TacticsSession] Could not play $uci on $fen: $e');
+    return null;
+  }
 }

@@ -11,6 +11,7 @@ import '../../../widgets/board/board_coordinates.dart';
 import '../../../widgets/board_editor/editable_board.dart';
 import '../../../widgets/common/piece_image.dart';
 import '../controllers/bughouse_controller.dart';
+import '../models/bughouse_analysis.dart';
 import '../models/bughouse_state.dart';
 import 'bughouse_move_list.dart';
 

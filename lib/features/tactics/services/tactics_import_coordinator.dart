@@ -22,6 +22,7 @@ enum TacticsImportSource { lichess, chessCom }
 
 enum TacticsImportMode { recent, sinceDate }
 
+/// What one import run was asked to do.
 class TacticsImportParams {
   const TacticsImportParams({
     required this.username,
@@ -43,6 +44,9 @@ class TacticsImportParams {
   final int cores;
 }
 
+/// Owns one tactics import at a time: publishes it as an app-wide job,
+/// relays its progress to the panel, files each game's review counts, and
+/// prunes the game store once it is over.
 class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   TacticsImportCoordinator({
     TacticsDatabase? database,
@@ -233,26 +237,10 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
     DateTime? since,
   }) async {
     if (isImporting) return;
-
-    final importService = activeImport = importFactory(database);
-
-    // Open the run before the first `await`. From the next line the job is
-    // published and the Pause button is live, and this method then awaits
-    // `initialize()` before the service reaches its own entry point — a
-    // cancel raised in that gap has to be the run's cancel, not one the
-    // entry point clears. See [TacticsImportService.beginRun].
-    importService.beginRun();
-
-    importStatus = 'Resuming analysis…';
-    isImporting = true;
-    newPositionsFound = 0;
-    gamesReviewed = 0;
-    _beginJob('Analyze stored games');
-    notifyListeners();
-
-    try {
-      await importService.initialize();
-      final result = await importService.resumeStoredPgns(
+    await _run(
+      label: 'Analyze stored games',
+      initialStatus: 'Resuming analysis…',
+      (service) => service.resumeStoredPgns(
         lichessUsername: lichessUsername,
         chesscomUsername: chesscomUsername,
         depth: depth,
@@ -263,11 +251,48 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
         onGameProgress: _onGameProgress,
         onGameReviewed: _recordReview,
         onGameAnnotated: onGameAnnotated,
-      );
+      ),
+    );
+  }
 
+  /// Drive one import service through a whole run: publish the job, run
+  /// [body], reload the database, and wind everything down whatever
+  /// happened. Returns `true` when the run completed, `false` when it was
+  /// cancelled partway (status cleared instead of claiming success).
+  Future<bool> _run(
+    Future<ImportResult> Function(TacticsImportService service) body, {
+    required String label,
+    required String initialStatus,
+  }) async {
+    final importService = activeImport = importFactory(database);
+
+    // Open the run before the first `await`. From the next line the job is
+    // published and the Pause button is live, and this method then awaits
+    // `initialize()` before the service reaches its own entry point — a
+    // cancel raised in that gap has to be the run's cancel, not one the
+    // entry point clears. See [TacticsImportService.beginRun].
+    importService.beginRun();
+
+    importStatus = initialStatus;
+    isImporting = true;
+    newPositionsFound = 0;
+    gamesReviewed = 0;
+    _beginJob(label);
+    notifyListeners();
+
+    try {
+      await importService.initialize();
+      final result = await body(importService);
       await database.loadPositions();
-      // Cancelled: clear the "Pausing…" note instead of claiming success.
-      importStatus = importService.wasCancelled ? null : _statusMessage(result);
+      // A cancelled run must not look like a completed one: no success
+      // banner, and `false` so callers (auto-fetch, manual import) don't
+      // advance their last-fetch timestamp past unanalyzed games.
+      if (importService.wasCancelled) {
+        importStatus = null;
+        return false;
+      }
+      importStatus = _statusMessage(result);
+      return true;
     } catch (e) {
       _job?.fail('$e');
       rethrow;
@@ -307,93 +332,59 @@ class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
       throw const TacticsImportUsernameRequired();
     }
 
-    final importService = activeImport = importFactory(database);
     final depth = params.depth.clamp(kMinDepth, kMaxDepth);
     final cores = params.cores.clamp(1, TacticsImportService.availableCores);
+    final since = params.mode == TacticsImportMode.sinceDate
+        ? params.since
+        : null;
 
-    // Open the run before the first `await` — see [resumeAnalysis].
-    importService.beginRun();
-
-    importStatus = 'Initializing...';
-    isImporting = true;
-    newPositionsFound = 0;
-    gamesReviewed = 0;
-    _beginJob('Review games — ${params.username}');
-    notifyListeners();
-
-    try {
-      await importService.initialize();
-
-      final since = params.mode == TacticsImportMode.sinceDate
-          ? params.since
-          : null;
-
-      final ImportResult result;
-      if (pgnContent != null && pgnContent.trim().isNotEmpty) {
-        result = await importService.reviewFetchedGames(
-          pgnContent: pgnContent,
-          username: params.username,
-          depth: depth,
-          maxCores: cores,
-          mapChessComEloForMaia: source == TacticsImportSource.chessCom,
-          forceDedupKeys: forceDedupKeys,
-          progressCallback: _onProgress,
-          onPositionFound: _onPositionFound,
-          onGameProgress: _onGameProgress,
-          onGameReviewed: _recordReview,
-          onGameAnnotated: onGameAnnotated,
-        );
-      } else if (source == TacticsImportSource.lichess) {
-        result = await importService.importGamesFromLichess(
-          params.username,
-          maxGames: params.maxGames,
-          since: since,
-          depth: depth,
-          maxCores: cores,
-          progressCallback: _onProgress,
-          onPositionFound: _onPositionFound,
-          onGameProgress: _onGameProgress,
-          onGameReviewed: _recordReview,
-          onGameAnnotated: onGameAnnotated,
-        );
-      } else {
-        result = await importService.importGamesFromChessCom(
-          params.username,
-          maxGames: params.maxGames,
-          since: since,
-          depth: depth,
-          maxCores: cores,
-          progressCallback: _onProgress,
-          onPositionFound: _onPositionFound,
-          onGameProgress: _onGameProgress,
-          onGameReviewed: _recordReview,
-          onGameAnnotated: onGameAnnotated,
-        );
-      }
-
-      await database.loadPositions();
-      // A cancelled run must not look like a completed one: no success
-      // banner, and `false` so callers (auto-fetch, manual import) don't
-      // advance their last-fetch timestamp past unanalyzed games.
-      if (importService.wasCancelled) {
-        importStatus = null;
-        return false;
-      }
-      importStatus = _statusMessage(result);
-      return true;
-    } catch (e) {
-      _job?.fail('$e');
-      rethrow;
-    } finally {
-      _endJob(cancelled: importService.wasCancelled);
-      // On an abnormal exit the try block never flushed — persist what the
-      // cancelled/failed run found so far.
-      activeImport = null;
-      isImporting = false;
-      isCancelling = false;
-      notifyListeners();
-      await pruneStoredGames();
-    }
+    return _run(
+      label: 'Review games — ${params.username}',
+      initialStatus: 'Initializing...',
+      (service) {
+        if (pgnContent != null && pgnContent.trim().isNotEmpty) {
+          return service.reviewFetchedGames(
+            pgnContent: pgnContent,
+            username: params.username,
+            depth: depth,
+            maxCores: cores,
+            mapChessComEloForMaia: source == TacticsImportSource.chessCom,
+            forceDedupKeys: forceDedupKeys,
+            progressCallback: _onProgress,
+            onPositionFound: _onPositionFound,
+            onGameProgress: _onGameProgress,
+            onGameReviewed: _recordReview,
+            onGameAnnotated: onGameAnnotated,
+          );
+        }
+        return switch (source) {
+          TacticsImportSource.lichess => service.importGamesFromLichess(
+            params.username,
+            maxGames: params.maxGames,
+            since: since,
+            depth: depth,
+            maxCores: cores,
+            progressCallback: _onProgress,
+            onPositionFound: _onPositionFound,
+            onGameProgress: _onGameProgress,
+            onGameReviewed: _recordReview,
+            onGameAnnotated: onGameAnnotated,
+          ),
+          TacticsImportSource.chessCom => service.importGamesFromChessCom(
+            params.username,
+            maxGames: params.maxGames,
+            since: since,
+            depth: depth,
+            maxCores: cores,
+            progressCallback: _onProgress,
+            onPositionFound: _onPositionFound,
+            onGameProgress: _onGameProgress,
+            onGameReviewed: _recordReview,
+            onGameAnnotated: onGameAnnotated,
+          ),
+        };
+      },
+    );
   }
 
   /// Ask the running import to stop. `isImporting` stays true until the run

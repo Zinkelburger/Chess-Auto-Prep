@@ -1,4 +1,7 @@
-/// Aggregate result of a repertoire audit pass.
+/// Aggregate result of a repertoire audit pass or a hole hunt.
+///
+/// [toJson]/[fromJson] are the persisted report format (schema `version` 1);
+/// keys are append-only so older reports keep loading.
 library;
 
 import 'dart:convert';
@@ -6,19 +9,6 @@ import 'dart:convert';
 import 'audit_finding.dart';
 
 class AuditResult {
-  final List<AuditFinding> findings;
-  final int nodesChecked;
-  final int ourMoveNodesChecked;
-  final int opponentNodesChecked;
-  final int leafNodesChecked;
-  final int evalCacheHits;
-  final int evalCacheMisses;
-  final Duration elapsed;
-  final DateTime? timestamp;
-
-  /// Enabled sources that could not check all requested positions.
-  final List<String> warnings;
-
   AuditResult({
     required this.findings,
     required this.nodesChecked,
@@ -32,14 +22,27 @@ class AuditResult {
     this.warnings = const [],
   }) : timestamp = timestamp ?? DateTime.now();
 
+  final List<AuditFinding> findings;
+  final int nodesChecked;
+  final int ourMoveNodesChecked;
+  final int opponentNodesChecked;
+  final int leafNodesChecked;
+  final int evalCacheHits;
+  final int evalCacheMisses;
+  final Duration elapsed;
+
+  /// When the run finished, or when a stored report was written.
+  final DateTime timestamp;
+
+  /// Enabled sources that could not check all requested positions.
+  final List<String> warnings;
+
   static final empty = AuditResult(
-    findings: [],
+    findings: const [],
     nodesChecked: 0,
     ourMoveNodesChecked: 0,
     opponentNodesChecked: 0,
     leafNodesChecked: 0,
-    evalCacheHits: 0,
-    evalCacheMisses: 0,
     elapsed: Duration.zero,
   );
 
@@ -48,41 +51,41 @@ class AuditResult {
   double get evalCacheHitPercent =>
       totalEvalLookups > 0 ? (evalCacheHits / totalEvalLookups) * 100 : 0;
 
-  int get mistakeCount =>
-      findings.where((f) => f.type == AuditFindingType.mistake).length;
+  List<AuditFinding> _ofType(AuditFindingType type) =>
+      findings.where((f) => f.type == type).toList();
 
-  int get inaccuracyCount =>
-      findings.where((f) => f.type == AuditFindingType.inaccuracy).length;
+  int _countType(AuditFindingType type) =>
+      findings.where((f) => f.type == type).length;
 
-  int get missingResponseCount =>
-      findings.where((f) => f.type == AuditFindingType.missingResponse).length;
+  int _countSeverity(AuditSeverity severity) =>
+      findings.where((f) => f.severity == severity).length;
 
-  int get weakPositionCount =>
-      findings.where((f) => f.type == AuditFindingType.weakPosition).length;
+  int get mistakeCount => _countType(AuditFindingType.mistake);
+  int get inaccuracyCount => _countType(AuditFindingType.inaccuracy);
+  int get missingResponseCount => _countType(AuditFindingType.missingResponse);
+  int get weakPositionCount => _countType(AuditFindingType.weakPosition);
+  int get deadEndCount => _countType(AuditFindingType.deadEnd);
 
-  int get deadEndCount =>
-      findings.where((f) => f.type == AuditFindingType.deadEnd).length;
-
-  int get criticalCount =>
-      findings.where((f) => f.severity == AuditSeverity.critical).length;
-
-  int get warningCount =>
-      findings.where((f) => f.severity == AuditSeverity.warning).length;
-
-  int get infoCount =>
-      findings.where((f) => f.severity == AuditSeverity.info).length;
+  int get criticalCount => _countSeverity(AuditSeverity.critical);
+  int get warningCount => _countSeverity(AuditSeverity.warning);
+  int get infoCount => _countSeverity(AuditSeverity.info);
 
   int get activeFindingCount => findings.where((f) => !f.dismissed).length;
 
+  /// Share of our-move positions with no mistake, inaccuracy or weak
+  /// position among their moves.
   double get soundnessPercent {
     if (ourMoveNodesChecked == 0) return 100.0;
     final affectedPositions = findings
         .where(
-          (f) =>
-              f.type == AuditFindingType.mistake ||
-              f.type == AuditFindingType.inaccuracy ||
-              f.type == AuditFindingType.weakPosition,
+          (f) => switch (f.type) {
+            AuditFindingType.mistake ||
+            AuditFindingType.inaccuracy ||
+            AuditFindingType.weakPosition => true,
+            _ => false,
+          },
         )
+        // The finding's path ends with our move; its parent is the position.
         .map(
           (f) => f.movePath
               .take(f.movePath.isEmpty ? 0 : f.movePath.length - 1)
@@ -90,12 +93,11 @@ class AuditResult {
         )
         .toSet()
         .length;
-    return ((ourMoveNodesChecked - affectedPositions).clamp(
-              0,
-              ourMoveNodesChecked,
-            ) /
-            ourMoveNodesChecked) *
-        100;
+    final sound = (ourMoveNodesChecked - affectedPositions).clamp(
+      0,
+      ourMoveNodesChecked,
+    );
+    return sound / ourMoveNodesChecked * 100;
   }
 
   /// Fraction of opponent-turn nodes where every common reply is covered.
@@ -103,31 +105,21 @@ class AuditResult {
   /// [leafNodesChecked], not [opponentNodesChecked].
   double get coveragePercent {
     if (opponentNodesChecked == 0) return 100.0;
-    final nodesWithGaps = findings
-        .where((f) => f.type == AuditFindingType.missingResponse)
-        .map((f) => f.fen)
-        .toSet()
-        .length;
-    final covered = opponentNodesChecked - nodesWithGaps;
-    return (covered.clamp(0, opponentNodesChecked) / opponentNodesChecked) *
-        100;
+    final nodesWithGaps = missingResponses.map((f) => f.fen).toSet().length;
+    final covered = (opponentNodesChecked - nodesWithGaps).clamp(
+      0,
+      opponentNodesChecked,
+    );
+    return covered / opponentNodesChecked * 100;
   }
 
-  List<AuditFinding> get mistakes =>
-      findings.where((f) => f.type == AuditFindingType.mistake).toList();
-
-  List<AuditFinding> get inaccuracies =>
-      findings.where((f) => f.type == AuditFindingType.inaccuracy).toList();
-
-  List<AuditFinding> get missingResponses => findings
-      .where((f) => f.type == AuditFindingType.missingResponse)
-      .toList();
-
+  List<AuditFinding> get mistakes => _ofType(AuditFindingType.mistake);
+  List<AuditFinding> get inaccuracies => _ofType(AuditFindingType.inaccuracy);
+  List<AuditFinding> get missingResponses =>
+      _ofType(AuditFindingType.missingResponse);
   List<AuditFinding> get weakPositions =>
-      findings.where((f) => f.type == AuditFindingType.weakPosition).toList();
-
-  List<AuditFinding> get deadEnds =>
-      findings.where((f) => f.type == AuditFindingType.deadEnd).toList();
+      _ofType(AuditFindingType.weakPosition);
+  List<AuditFinding> get deadEnds => _ofType(AuditFindingType.deadEnd);
 
   // ── JSON serialization ────────────────────────────────────────────────
 
@@ -135,7 +127,7 @@ class AuditResult {
 
   Map<String, dynamic> toJson() => {
     'version': 1,
-    'timestamp': timestamp?.toIso8601String(),
+    'timestamp': timestamp.toIso8601String(),
     'nodesChecked': nodesChecked,
     'ourMoveNodesChecked': ourMoveNodesChecked,
     'opponentNodesChecked': opponentNodesChecked,

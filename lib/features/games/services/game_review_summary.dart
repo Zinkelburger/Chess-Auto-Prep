@@ -75,6 +75,13 @@ class GameReviewSummary {
 
   bool get clean => blunders == 0 && mistakes == 0 && inaccuracies == 0;
 
+  /// Whether [other] is the same verdict by the numbers, whatever moments
+  /// either carries.
+  bool sameCountsAs(GameReviewSummary other) =>
+      blunders == other.blunders &&
+      mistakes == other.mistakes &&
+      inaccuracies == other.inaccuracies;
+
   /// Tooltip text for the counts cell. The cell itself shows the three numbers
   /// (see `MistakeCounts`) — it used to show only the worst category, which
   /// named one number and silently dropped the other two.
@@ -140,14 +147,14 @@ GameReviewSummary summaryFromEvals(
 /// analyzed (see [parseCachedEvals] — at most 2 plies may lack an eval).
 GameReviewSummary? summarizeGameReview(String pgn, {required bool? meWhite}) {
   if (meWhite == null) return null;
-  ({List<MoveEval> evals, double startWinChance, int totalMoves})? parsed;
+  final List<MoveEval>? evals;
   try {
-    parsed = parseCachedEvals(pgn);
+    evals = parseCachedEvals(pgn)?.evals;
   } catch (_) {
     return null; // malformed PGN — treat as unanalyzed
   }
-  if (parsed == null) return null;
-  return summaryFromEvals(parsed.evals, meWhite: meWhite);
+  if (evals == null) return null;
+  return summaryFromEvals(evals, meWhite: meWhite);
 }
 
 /// Batch form for `compute`: one summary (or null) per (pgn, meWhite) pair.

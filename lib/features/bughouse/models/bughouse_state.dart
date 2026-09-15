@@ -147,10 +147,12 @@ class BughouseInfo {
   /// their Q differs by; subtracting one raw score from another does not say
   /// the same thing, because the tangent is far steeper away from zero than
   /// at it.
-  static const double _tangentScale = 180.0;
-  static const double _tangentRate = 1.56;
+  double get q => math.atan(scoreCp / tangentScale) / tangentRate;
 
-  double get q => math.atan(scoreCp / _tangentScale) / _tangentRate;
+  /// The two constants of Hivemind's `180·tan(1.56·Q)` score, shared with
+  /// `BughouseEval`, which puts the tangent back.
+  static const double tangentScale = 180.0;
+  static const double tangentRate = 1.56;
 }
 
 /// Where a team stands on the clock, which in bughouse is a rule input rather

@@ -1,3 +1,8 @@
+/// An immutable, flat view of a built tree for the eval-tree viewer: every
+/// node by id with its parent and children ids, so the layout engine and the
+/// explorer look nodes up in O(1) and never walk the whole tree per frame.
+library;
+
 import 'dart:collection';
 
 enum EvalTreePruneKind { none, evalTooHigh, evalTooLow }
@@ -89,49 +94,46 @@ class EvalTreeSnapshot {
 
   bool containsNode(int id) => nodesById.containsKey(id);
 
-  List<EvalTreeNodeSnapshot> childrenOf(int id) {
-    final node = this.node(id);
-    return [
-      for (final childId in node.childIds)
-        if (nodesById.containsKey(childId)) nodesById[childId]!,
-    ];
-  }
+  List<EvalTreeNodeSnapshot> childrenOf(int id) => [
+    for (final childId in node(id).childIds) ?nodesById[childId],
+  ];
 
   EvalTreeNodeSnapshot? parentOf(int id) {
     final parentId = node(id).parentId;
-    if (parentId == null) return null;
-    return nodesById[parentId];
+    return parentId == null ? null : nodesById[parentId];
   }
 
+  /// Whether it is our side to move in the position at [id].
+  bool isOurTurnAt(int id) => node(id).sideToMoveIsWhite == playAsWhite;
+
+  /// Whether the move that reached [id] was ours (false at the root).
+  bool isOurMove(int id) {
+    final parent = parentOf(id);
+    return parent != null && parent.sideToMoveIsWhite == playAsWhite;
+  }
+
+  /// Node ids from the root down to [id] (empty when [id] is unknown).
   List<int> pathToRootIds(int id) {
     final path = <int>[];
-    EvalTreeNodeSnapshot? current = tryNode(id);
-    while (current != null) {
-      path.insert(0, current.id);
-      current = current.parentId == null ? null : nodesById[current.parentId];
+    for (var current = tryNode(id); current != null;) {
+      path.add(current.id);
+      final parentId = current.parentId;
+      current = parentId == null ? null : nodesById[parentId];
     }
-    return path;
+    return path.reversed.toList();
   }
 
-  List<String> movePathSan(int id) {
-    final path = <String>[];
-    for (final nodeId in pathToRootIds(id)) {
-      final current = node(nodeId);
-      if (current.moveSan.isNotEmpty) {
-        path.add(current.moveSan);
-      }
-    }
-    return path;
-  }
+  List<String> movePathSan(int id) => [
+    for (final nodeId in pathToRootIds(id))
+      if (node(nodeId).moveSan case final san when san.isNotEmpty) san,
+  ];
 
   List<String> fullMovePathSan(int id) => [
     ...startMovesSan,
     ...movePathSan(id),
   ];
 
-  int? preferredChildId(int id) {
-    final node = this.node(id);
-    if (node.childIds.isEmpty) return null;
-    return node.childIds.first;
-  }
+  /// The child to step into by default: children are pre-sorted with the
+  /// repertoire move first, then by probability.
+  int? preferredChildId(int id) => node(id).childIds.firstOrNull;
 }

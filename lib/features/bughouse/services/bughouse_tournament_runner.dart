@@ -33,6 +33,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../../../models/game_outcome.dart';
 import '../models/bughouse_history.dart';
+import '../models/bughouse_notation.dart';
 import '../models/bughouse_rules.dart';
 import '../models/bughouse_state.dart';
 import '../models/bughouse_tournament.dart';
@@ -301,22 +302,7 @@ class BughouseTournamentRunner {
 
     var played = 0;
     for (final entry in resolved.entries) {
-      final before = line.current;
-      final board = before.board(entry.key);
-      if (!board.isLegal(entry.value)) continue;
-      final san = board.makeSan(entry.value).$2;
-      final after = before.playMove(entry.key, entry.value);
-      if (after == null) continue;
-      line.push(
-        BughousePly(
-          board: entry.key,
-          move: entry.value,
-          san: san,
-          before: before,
-          after: after,
-        ),
-      );
-      played++;
+      if (line.play(entry.key, entry.value) != null) played++;
     }
     return played;
   }
@@ -341,24 +327,6 @@ class BughouseTournamentRunner {
   }
 }
 
-/// Parses the engine's UCI on one board, including `P@e5` drops.
-///
-/// The same reading the analysis controller uses — a bare `e7e8` becomes a
-/// queen promotion — kept here so a replayed game and a live one agree about
-/// what a move string meant.
-Move? parseEngineUci(Crazyhouse position, String uci) {
-  final move = Move.parse(uci);
-  if (move == null) return null;
-  if (move is NormalMove && move.promotion == null) {
-    final piece = position.board.pieceAt(move.from);
-    final lastRank = piece?.color == Side.white ? 7 : 0;
-    if (piece?.role == Role.pawn && move.to.rank == lastRank) {
-      return NormalMove(from: move.from, to: move.to, promotion: Role.queen);
-    }
-  }
-  return move;
-}
-
 /// Rebuilds a stored game into a line the lab's boards can walk.
 ///
 /// A game is stored as its board-prefixed half-moves and nothing else, so this
@@ -372,21 +340,11 @@ BughouseHistory replayBughouseGame(BughouseState start, List<String> moves) {
   for (final prefixed in moves) {
     if (prefixed.length < 2) break;
     final which = prefixed[0] == '2' ? BughouseBoard.b : BughouseBoard.a;
-    final before = line.current;
-    final board = before.board(which);
-    final move = parseEngineUci(board, prefixed.substring(1));
-    if (move == null || !board.isLegal(move)) break;
-    final after = before.playMove(which, move);
-    if (after == null) break;
-    line.push(
-      BughousePly(
-        board: which,
-        move: move,
-        san: board.makeSan(move).$2,
-        before: before,
-        after: after,
-      ),
+    final move = parseEngineUci(
+      line.current.board(which),
+      prefixed.substring(1),
     );
+    if (move == null || line.play(which, move) == null) break;
   }
   line.toStart();
   return line;

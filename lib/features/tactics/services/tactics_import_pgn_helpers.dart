@@ -1,12 +1,30 @@
-part of 'tactics_import_service.dart';
+/// Header-level PGN helpers for the tactics import: game identity, date
+/// filtering and the player's rating. Pure text functions, no engine.
+library;
+
+import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart';
+
+import '../../../services/game_identity.dart' show platformGameUrl;
+import '../../../services/pgn_parsing_service.dart' show extractHeaders;
+import '../../../utils/log.dart';
+
+/// GameId prefix for games fetched from Lichess.
+const String lichessGameIdPrefix = 'lichess_';
+
+/// GameId prefix for games fetched from Chess.com.
+const String chesscomGameIdPrefix = 'chesscom_';
+
+final _dateHeaderRe = RegExp(
+  r'\[(?:Date|UTCDate) "(\d{4})\.(\d{2})\.(\d{2})"\]',
+);
+final _gameIdHeaderRe = RegExp(r'\[GameId "([^"]+)"\]');
 
 /// Whether the game's `Date`/`UTCDate` header is before [cutoff] (day
 /// granularity). Games without a parseable date pass the filter — better
 /// to analyze one game too many than silently drop it.
-bool _isGameBefore(String gameText, DateTime cutoff) {
-  final match = RegExp(
-    r'\[(?:Date|UTCDate) "(\d{4})\.(\d{2})\.(\d{2})"\]',
-  ).firstMatch(gameText);
+bool isGameBefore(String gameText, DateTime cutoff) {
+  final match = _dateHeaderRe.firstMatch(gameText);
   if (match == null) return false;
   final gameDate = DateTime(
     int.parse(match.group(1)!),
@@ -16,27 +34,28 @@ bool _isGameBefore(String gameText, DateTime cutoff) {
   return gameDate.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day));
 }
 
-/// Extract game ID from PGN headers.
+/// Whether [gameId] carries one of the platform prefixes this import writes.
+bool hasPlatformGameIdPrefix(String gameId) =>
+    gameId.startsWith(lichessGameIdPrefix) ||
+    gameId.startsWith(chesscomGameIdPrefix);
+
+/// The game's identity from its PGN headers, or an empty string when none
+/// can be determined — such a game is analyzed every time (safe fallback).
 ///
-/// Lichess provides the game URL in the [Site] header, Chess.com in [Link].
-/// Both APIs always include one of these, so we only handle those two
-/// sources (plus our own injected [GameId] header). Returns empty string
-/// if no ID can be determined, which causes the game to be analyzed every
-/// time (safe fallback).
+/// Lichess provides the game URL in the `Site` header, Chess.com in `Link`.
+/// Both APIs always include one of these, so only those two sources are
+/// handled (plus our own injected `GameId` header).
 ///
-/// Always returns a platform-prefixed ID (`lichess_` / `chesscom_`) —
-/// [resumeStoredPgns] routes games to the right username by that prefix,
-/// so an unprefixed ID would make a game unresumable.
-String _extractGameId(String gameText) {
-  // 1. A GameId header — ours from a previous import, or Lichess's own:
-  //    their PGN exports natively carry the bare game ID in [GameId].
-  //    Only trust it as-is when it already has a platform prefix.
-  final rawHeaderId = RegExp(
-    r'\[GameId "([^"]+)"\]',
-  ).firstMatch(gameText)?.group(1);
-  if (rawHeaderId != null &&
-      (rawHeaderId.startsWith('lichess_') ||
-          rawHeaderId.startsWith('chesscom_'))) {
+/// Always returns a platform-prefixed ID ([lichessGameIdPrefix] /
+/// [chesscomGameIdPrefix]) — the resume path routes games to the right
+/// username by that prefix, so an unprefixed ID would make a game
+/// unresumable.
+String extractGameId(String gameText) {
+  // A GameId header — ours from a previous import, or Lichess's own: their
+  // PGN exports natively carry the bare game ID in [GameId]. Only trust it
+  // as-is when it already has a platform prefix.
+  final rawHeaderId = _gameIdHeaderRe.firstMatch(gameText)?.group(1);
+  if (rawHeaderId != null && hasPlatformGameIdPrefix(rawHeaderId)) {
     return rawHeaderId;
   }
 
@@ -48,83 +67,75 @@ String _extractGameId(String gameText) {
   if (url != null) {
     final uri = Uri.parse(url);
     return uri.host == 'lichess.org'
-        ? 'lichess_${uri.pathSegments.first}'
-        : 'chesscom_${uri.pathSegments.last}';
+        ? '$lichessGameIdPrefix${uri.pathSegments.first}'
+        : '$chesscomGameIdPrefix${uri.pathSegments.last}';
   }
 
-  // 4. A bare GameId header with no Site/Link to attribute it — only
-  //    Lichess emits a native GameId header, so prefix accordingly.
+  // A bare GameId header with no Site/Link to attribute it — only Lichess
+  // emits a native GameId header, so prefix accordingly.
   if (rawHeaderId != null && rawHeaderId.isNotEmpty) {
-    return 'lichess_$rawHeaderId';
+    return '$lichessGameIdPrefix$rawHeaderId';
   }
 
-  // No recognizable game ID found
   if (kDebugMode) {
     log.w('Warning: could not extract game ID from PGN headers');
   }
   return '';
 }
 
-/// Inject GameId header into PGN if not present
-String _injectGameIdHeader(String gameText) {
-  // Check if GameId already exists
-  if (gameText.contains('[GameId ')) {
-    return gameText;
-  }
-
-  final gameId = _extractGameId(gameText);
+/// [gameText] with a `[GameId]` header added when it has none and one can
+/// be derived (see [extractGameId]); otherwise the text unchanged.
+///
+/// The header goes right after the last header line when the movetext
+/// follows it directly, else just before the first movetext line.
+String injectGameIdHeader(String gameText) {
+  if (gameText.contains('[GameId ')) return gameText;
+  final gameId = extractGameId(gameText);
   if (gameId.isEmpty) return gameText;
 
-  // Find where to insert (after last header, before moves)
   final lines = gameText.split('\n');
-  final result = <String>[];
-  bool addedGameId = false;
-
-  for (final line in lines) {
-    result.add(line);
-    final trimmed = line.trim();
-    if (!addedGameId && trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      final nextIndex = lines.indexOf(line) + 1;
-      if (nextIndex < lines.length) {
-        final nextLine = lines[nextIndex].trim();
-        if (!nextLine.startsWith('[') && nextLine.isNotEmpty) {
-          result.add('[GameId "$gameId"]');
-          addedGameId = true;
-        }
-      }
-    }
-  }
-
-  // If we didn't add it yet (edge case), add before moves
-  if (!addedGameId) {
-    // Find first non-header line
-    for (int i = 0; i < result.length; i++) {
-      if (!result[i].trim().startsWith('[') && result[i].trim().isNotEmpty) {
-        result.insert(i, '[GameId "$gameId"]');
-        break;
-      }
-    }
-  }
-
-  return result.join('\n');
+  final insertAt = _gameIdInsertionIndex(lines);
+  if (insertAt == null) return gameText;
+  lines.insert(insertAt, '[GameId "$gameId"]');
+  return lines.join('\n');
 }
 
-/// Extract the user's Elo from the first game in the batch.
-///
-/// Parses PGN headers to find `WhiteElo` / `BlackElo` for the side matching
-/// [username]. Returns `null` if the header is missing or unparseable.
-int? _extractUserElo(String gameText, String username) {
+bool _isHeaderLine(String line) {
+  final trimmed = line.trim();
+  return trimmed.startsWith('[') && trimmed.endsWith(']');
+}
+
+bool _isMovetextLine(String line) {
+  final trimmed = line.trim();
+  return trimmed.isNotEmpty && !trimmed.startsWith('[');
+}
+
+/// Index at which to insert the GameId header, or null when [lines] hold no
+/// movetext at all.
+int? _gameIdInsertionIndex(List<String> lines) {
+  for (var i = 0; i + 1 < lines.length; i++) {
+    if (_isHeaderLine(lines[i]) && _isMovetextLine(lines[i + 1])) {
+      return i + 1;
+    }
+  }
+  final firstMovetext = lines.indexWhere(_isMovetextLine);
+  return firstMovetext == -1 ? null : firstMovetext;
+}
+
+/// The Elo of the side whose name matches [username] (case-insensitive),
+/// from the game's `WhiteElo` / `BlackElo` header. Null when the user is not
+/// a player in the game or the header is missing or unparseable.
+int? extractUserElo(String gameText, String username) {
   final game = PgnGame.parsePgn(gameText);
   final white = (game.headers['White'] ?? '').toLowerCase();
   final black = (game.headers['Black'] ?? '').toLowerCase();
-  final uLower = username.toLowerCase();
+  final wanted = username.toLowerCase();
 
-  String? eloHeader;
-  if (white == uLower) {
-    eloHeader = game.headers['WhiteElo'];
-  } else if (black == uLower) {
-    eloHeader = game.headers['BlackElo'];
-  }
+  final eloHeader = white == wanted
+      ? game.headers['WhiteElo']
+      : black == wanted
+      ? game.headers['BlackElo']
+      : null;
   if (eloHeader == null) return null;
   return int.tryParse(eloHeader.replaceAll('?', ''));
 }

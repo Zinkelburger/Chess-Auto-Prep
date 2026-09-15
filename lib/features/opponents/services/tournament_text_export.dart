@@ -1,6 +1,9 @@
 /// A tournament's prep as one readable text file: the field as a table, then
 /// each opponent's notes and the lines in their prep file. Markdown, because
 /// it reads fine raw and renders anywhere.
+///
+/// The output is what the user keeps after the event; its shape is pinned
+/// by `test/features/opponents/tournament_text_export_test.dart`.
 library;
 
 import '../models/person_record.dart';
@@ -28,7 +31,14 @@ class TournamentTextRow {
 
   /// Downloaded games on this machine, or null when there is no game-set.
   final int? gameCount;
+
+  /// The rating for this event, falling back to the directory's.
+  int? get rating => entry.rating ?? person.rating;
 }
+
+const _tableHeader =
+    '| # | Name | Rating | USCF ID | Chess.com | Lichess | Odds | Prepared |\n'
+    '|---|------|-------:|---------|-----------|---------|-----:|:--------:|';
 
 String renderTournamentText(
   Tournament tournament,
@@ -39,75 +49,79 @@ String renderTournamentText(
   final b = StringBuffer();
   b.writeln('# ${tournament.name}');
   b.writeln();
-  final facts = [
-    if (tournament.date != null) tournament.date!,
-    if (tournament.rounds != null)
-      '${tournament.rounds} round${tournament.rounds == 1 ? '' : 's'}',
-    '${rows.length} opponent${rows.length == 1 ? '' : 's'}',
-    '${tournament.preparedCount} prepared',
-  ];
-  b.writeln(facts.join(' · '));
+  b.writeln(_factsLine(tournament, rows.length));
   b.writeln();
   b.writeln('Exported $when by Chess Auto Prep.');
   b.writeln();
-
-  b.writeln(
-    '| # | Name | Rating | USCF ID | Chess.com | Lichess | Odds | Prepared |',
-  );
-  b.writeln(
-    '|---|------|-------:|---------|-----------|---------|-----:|:--------:|',
-  );
-  for (var i = 0; i < rows.length; i++) {
-    final r = rows[i];
-    final p = r.person;
-    b.writeln(
-      '| ${i + 1} '
-      '| ${_cell(p.name)} '
-      '| ${r.entry.rating ?? p.rating ?? ''} '
-      '| ${_cell(p.uscfId ?? '')} '
-      '| ${_cell(p.chesscom ?? '')} '
-      '| ${_cell(p.lichess ?? '')} '
-      '| ${r.entry.pairingProb == null ? '' : '${(r.entry.pairingProb! * 100).round()}%'} '
-      '| ${r.entry.prepared ? 'yes' : ''} |',
-    );
+  b.writeln(_tableHeader);
+  for (final (i, row) in rows.indexed) {
+    b.writeln(_tableRow(i + 1, row));
   }
-
-  for (final r in rows) {
-    final p = r.person;
+  for (final row in rows) {
     b.writeln();
-    b.writeln('## ${p.name}');
-    b.writeln();
-    final line = [
-      if (p.title != null) p.title!,
-      if (r.entry.rating != null || p.rating != null)
-        '${r.entry.rating ?? p.rating}',
-      if (p.uscfId != null) 'USCF ${p.uscfId}',
-      if (p.chesscom != null) 'chess.com ${p.chesscom}',
-      if (p.lichess != null) 'lichess ${p.lichess}',
-      if (r.entry.likelyRound != null) 'likely round ${r.entry.likelyRound}',
-      if (r.entry.pairingProb != null)
-        '${(r.entry.pairingProb! * 100).round()}% to face',
-      if (r.gameCount != null) '${r.gameCount} games downloaded',
-      if (r.entry.prepared) 'prepared',
-    ];
-    if (line.isNotEmpty) {
-      b.writeln(line.join(' · '));
-      b.writeln();
-    }
-    if (p.notes.trim().isNotEmpty) {
-      b.writeln(p.notes.trim());
-      b.writeln();
-    }
-    for (final c in r.chapters) {
-      b.writeln('### ${c.name}');
-      b.writeln();
-      b.writeln(
-        c.movetext.trim().isEmpty ? '(no moves yet)' : c.movetext.trim(),
-      );
-      b.writeln();
-    }
+    _writeSection(b, row);
   }
   return b.toString();
 }
 
+String _factsLine(Tournament tournament, int opponents) => [
+  ?tournament.date,
+  if (tournament.rounds case final rounds?) _plural(rounds, 'round'),
+  _plural(opponents, 'opponent'),
+  '${tournament.preparedCount} prepared',
+].join(' · ');
+
+String _tableRow(int number, TournamentTextRow row) {
+  final person = row.person;
+  final entry = row.entry;
+  return '| $number '
+      '| ${_cell(person.name)} '
+      '| ${row.rating ?? ''} '
+      '| ${_cell(person.uscfId ?? '')} '
+      '| ${_cell(person.chesscom ?? '')} '
+      '| ${_cell(person.lichess ?? '')} '
+      '| ${entry.pairingProb == null ? '' : _percent(entry.pairingProb!)} '
+      '| ${entry.prepared ? 'yes' : ''} |';
+}
+
+void _writeSection(StringBuffer b, TournamentTextRow row) {
+  final person = row.person;
+  final entry = row.entry;
+  b.writeln('## ${person.name}');
+  b.writeln();
+  final facts = [
+    ?person.title,
+    if (row.rating case final rating?) '$rating',
+    if (person.uscfId != null) 'USCF ${person.uscfId}',
+    if (person.chesscom != null) 'chess.com ${person.chesscom}',
+    if (person.lichess != null) 'lichess ${person.lichess}',
+    if (entry.likelyRound != null) 'likely round ${entry.likelyRound}',
+    if (entry.pairingProb case final prob?) '${_percent(prob)} to face',
+    if (row.gameCount != null) '${row.gameCount} games downloaded',
+    if (entry.prepared) 'prepared',
+  ];
+  if (facts.isNotEmpty) {
+    b.writeln(facts.join(' · '));
+    b.writeln();
+  }
+  final notes = person.notes.trim();
+  if (notes.isNotEmpty) {
+    b.writeln(notes);
+    b.writeln();
+  }
+  for (final chapter in row.chapters) {
+    final movetext = chapter.movetext.trim();
+    b.writeln('### ${chapter.name}');
+    b.writeln();
+    b.writeln(movetext.isEmpty ? '(no moves yet)' : movetext);
+    b.writeln();
+  }
+}
+
+String _plural(int count, String noun) =>
+    '$count $noun${count == 1 ? '' : 's'}';
+
+String _percent(double fraction) => '${(fraction * 100).round()}%';
+
+/// A table cell: pipes escaped, line breaks flattened.
 String _cell(String s) => s.replaceAll('|', r'\|').replaceAll('\n', ' ');

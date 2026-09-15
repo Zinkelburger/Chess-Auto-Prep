@@ -13,17 +13,31 @@ import '../../../models/repertoire_metadata.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
 
+/// Why [ChapterStore.create] made no chapter.
+enum ChapterCreationFailure {
+  nameTaken('That chapter already exists.'),
+  writeFailed('Could not create chapter.');
+
+  const ChapterCreationFailure(this.message);
+
+  /// User-facing message.
+  final String message;
+}
+
 /// Outcome of [ChapterStore.create]: the new chapter, or why there isn't one.
 class ChapterCreationResult {
-  const ChapterCreationResult.created(this.chapter) : error = null;
-  const ChapterCreationResult.failed(this.error) : chapter = null;
+  const ChapterCreationResult.created(RepertoireMetadata this.chapter)
+    : failure = null;
+  const ChapterCreationResult.failed(ChapterCreationFailure this.failure)
+    : chapter = null;
 
   final RepertoireMetadata? chapter;
-
-  /// User-facing message. Null when [chapter] is set.
-  final String? error;
+  final ChapterCreationFailure? failure;
 
   bool get succeeded => chapter != null;
+
+  /// User-facing message. Null when [chapter] is set.
+  String? get error => failure?.message;
 }
 
 class ChapterStore {
@@ -53,27 +67,29 @@ class ChapterStore {
   }) async {
     final path = _storage.chapterFilePath(folderPath, name);
     if (await _storage.fileExists(path)) {
-      return const ChapterCreationResult.failed('That chapter already exists.');
+      return const ChapterCreationResult.failed(
+        ChapterCreationFailure.nameTaken,
+      );
     }
+    final createdAt = now ?? DateTime.now();
     try {
       await _storage.writeFile(
         path,
-        chapterHeader(
-          name: name,
-          isWhite: isWhite,
-          createdAt: now ?? DateTime.now(),
-        ),
+        chapterHeader(name: name, isWhite: isWhite, createdAt: createdAt),
         createOnly: true,
       );
-    } catch (e) {
-      return const ChapterCreationResult.failed('Could not create chapter.');
+    } catch (_) {
+      // Whatever the storage said, the user can only act on "it failed".
+      return const ChapterCreationResult.failed(
+        ChapterCreationFailure.writeFailed,
+      );
     }
     return ChapterCreationResult.created(
       RepertoireMetadata(
         filePath: path,
         name: name,
         gameCount: 0,
-        lastModified: now ?? DateTime.now(),
+        lastModified: createdAt,
       ),
     );
   }

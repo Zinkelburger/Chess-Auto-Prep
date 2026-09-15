@@ -190,6 +190,21 @@ void main() {
     });
   });
 
+  group('value equality', () {
+    test('equal settings compare equal, whatever set instance they hold', () {
+      const a = TacticsSessionSettings(mistakeTypes: {'??', '?'});
+      const b = TacticsSessionSettings(mistakeTypes: {'?', '??'});
+      expect(a, b);
+      expect(a.hashCode, b.hashCode);
+      expect(a, isNot(a.copyWith(acceptAlternatives: true)));
+      expect(a, isNot(a.copyWith(clearMaxAgeDays: true)));
+      expect(
+        const TacticsSessionSettings(),
+        a.copyWith(mistakeTypes: const {'??', '?', 'custom'}),
+      );
+    });
+  });
+
   group('TacticsPosition.gameDateTime', () {
     TacticsPosition withDate(String date) => _pos(fen: 'x', gameDate: date);
 
