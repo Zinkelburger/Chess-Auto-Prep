@@ -55,7 +55,7 @@ class EngineNotInstalled(Exception):
 
     def __init__(self, detail: str) -> None:
         super().__init__(
-            f"{detail}\nRun `python3 tools/fetch_bughouse.py` to download "
+            f"{detail}\nRun `python3 tools/fetch_assets.py --only bughouse` to download "
             "the bundle (add `--hivemind <checkout>` to package a local engine "
             "build instead), or set HIVEMIND_BIN and HIVEMIND_MODEL to point "
             "at a build."

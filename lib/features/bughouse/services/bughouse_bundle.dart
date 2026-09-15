@@ -17,7 +17,7 @@ import 'bughouse_windows_runtime.dart';
 ///
 /// Hivemind is Copyright (c) 2026 aminwoo, MIT licensed. Its full notice is
 /// bundled at `assets/licenses/HIVEMIND_LICENSE.txt`; source and portable-build
-/// provenance are recorded there and in `tools/bughouse.lock.json`.
+/// provenance are recorded there and in `tools/assets.lock.json`.
 ///
 /// Why three files rather than one static binary: the upstream engine links
 /// TensorRT, which is ~2 GB of NVIDIA redistributables and NVIDIA-only. Built
@@ -67,7 +67,7 @@ class BughouseBundle {
   /// Whether this build actually carries an engine for this platform.
   ///
   /// Worth asking, rather than assuming from [Platform]: `assets/bughouse/` is
-  /// declared in pubspec.yaml but filled in by `tools/fetch_bughouse.py` at
+  /// declared in pubspec.yaml but filled in by `tools/fetch_assets.py` at
   /// release time rather than tracked in git, and Flutter treats a *missing*
   /// asset directory as a printed warning, not a build failure. So "compiled
   /// in, but with no engine behind it" is an ordinary state — every developer
@@ -138,7 +138,7 @@ class BughouseBundle {
   /// Extracts everything into the support directory if it is not already
   /// there, and returns the engine path. Throws [BughouseBundleMissing] when
   /// the app was built without the bughouse assets, which is the normal state
-  /// of a checkout that has not run `tools/fetch_bughouse.py`.
+  /// of a checkout that has not run `tools/fetch_assets.py`.
   static Future<String> ensureInstalled() {
     final cached = _cached;
     if (cached != null && _installDirectory == null) {

@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bughouse_windows
-import fetch_bughouse
+import fetch_assets
 from test_bughouse_engine import pe_imports
 
 
@@ -23,9 +23,9 @@ class WindowsOrtBundleTest(unittest.TestCase):
         self.assertNotIn("onnxruntime.dll", imports)
         self.assertNotIn("hivemind_ort.dll", imports)
         self.assertEqual(hashlib.sha256(engine).hexdigest(),
-                         fetch_bughouse.load_lock()["bughouse-windows:engine"]["payload_sha256"])
+                         fetch_assets.load_lock()["bughouse-windows:engine"]["payload_sha256"])
         self.assertIn(hashlib.sha256(engine).hexdigest(),
-                      (fetch_bughouse.REPO_ROOT / "tools/diagnose_bughouse_windows.ps1").read_text())
+                      (fetch_assets.REPO_ROOT / "tools/diagnose_bughouse_windows.ps1").read_text())
 
     def test_editing_loader_requires_rebuilding_binary(self):
         with tempfile.TemporaryDirectory() as td:
@@ -52,18 +52,18 @@ class WindowsOrtBundleTest(unittest.TestCase):
                 "bughouse-windows:engine": {"payload_sha256": hashlib.sha256(old).hexdigest()},
                 "bughouse-windows:runtime": {},
             }
-            fetch_bughouse.write_gz(old, assets / "hivemind-windows.exe.gz")
-            fetch_bughouse.write_gz(runtime, assets / "hivemind_ort.dll.gz")
+            fetch_assets.write_gz(old, assets / "hivemind-windows.exe.gz")
+            fetch_assets.write_gz(runtime, assets / "hivemind_ort.dll.gz")
 
-            def download(url, target):
+            def download(url, target, release_page):
                 import zipfile
                 with zipfile.ZipFile(target, "w") as archive:
                     archive.writestr("hivemind.exe", old)
                     archive.writestr("onnxruntime.dll", runtime)
 
-            with patch.multiple(fetch_bughouse, REPO_ROOT=root, ASSETS=assets,
-                                MANIFEST=assets / "manifest.json"), patch.object(fetch_bughouse, "download", download):
-                fetch_bughouse.fetch("bughouse-windows", lock, False)
+            with patch.multiple(fetch_assets, REPO_ROOT=root, BUGHOUSE_ASSETS=assets,
+                                BUGHOUSE_MANIFEST=assets / "manifest.json"), patch.object(fetch_assets, "download", download):
+                fetch_assets.fetch_bughouse("bughouse-windows", lock, False)
             installed = gzip.decompress((assets / "hivemind-windows.exe.gz").read_bytes())
             self.assertEqual(installed, bughouse_windows.verified_engine())
             manifest = json.loads((assets / "manifest.json").read_text())

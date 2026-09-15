@@ -26,7 +26,7 @@ def main():
     for name, expected in build["bridge_sha256"].items():
         if digest((Path(__file__).parent / name).read_bytes()) != expected:
             raise SystemExit(f"The compiled engine is stale after changes to {name}. Rebuild it first.")
-    lock = json.loads((ROOT / "tools/bughouse.lock.json").read_text())["network"]
+    lock = json.loads((ROOT / "tools/assets.lock.json").read_text())["bughouse-network"]
     asset = ROOT / "assets/bughouse/hivemind.onnx.gz"
     data = asset.read_bytes() if asset.exists() else b""
     if digest(data) != lock["source_sha256"]:

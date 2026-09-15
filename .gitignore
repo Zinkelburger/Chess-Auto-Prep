@@ -145,8 +145,8 @@ tools/experiments/benko_master/LATEST*
 .claude/RESUME.md
 
 # Bughouse engine bundle: the Hivemind CPU build (engine + ONNX Runtime +
-# FP32 network, ~43 MB gzipped). Downloaded by tools/fetch_bughouse.py, the
-# same way Stockfish is fetched rather than tracked.
+# FP32 network, ~43 MB gzipped). Downloaded by tools/fetch_assets.py alongside
+# Stockfish rather than tracked.
 #
 # .gitkeep is tracked on purpose, exactly as it is under assets/executables.
 # pubspec.yaml declares this whole directory as an asset, and a *missing*

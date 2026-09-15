@@ -63,7 +63,7 @@ final List<AppMode> kAppModeMenuOrder = [
 /// Modes that are compiled in but that *this build* cannot run.
 ///
 /// Bughouse is the only member today, and the reason the concept exists: its
-/// engine is a ~43 MB download that `tools/fetch_bughouse.py` puts into
+/// engine is a ~43 MB download that `tools/fetch_assets.py` puts into
 /// `assets/bughouse/` at release time rather than something tracked in git,
 /// and a build made without it must not offer a mode whose only possible
 /// outcome is an error. Populated once at startup by the composition root —

@@ -70,15 +70,15 @@ jobs:
         uses: actions/cache@v6
         with:
           path: assets/bughouse
-          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-linux
+          key: bughouse-${{ hashFiles('tools/assets.lock.json') }}-linux
 
       # --check is not belt-and-braces here: a *missing* asset directory is
       # only a warning to `flutter build`, so a failed fetch would otherwise
       # sail through and ship an installer whose Bughouse Lab is simply absent.
       - name: Fetch bughouse engine (Linux)
         run: |
-          python3 tools/fetch_bughouse.py --only bughouse-linux
-          python3 tools/fetch_bughouse.py --check --only bughouse-linux
+          python3 tools/fetch_assets.py --only bughouse-linux
+          python3 tools/fetch_assets.py --check --only bughouse-linux
 
       # A release must not ship an engine that cannot start. The audit reads
       # the binaries' imports and insists every one is either part of the OS
@@ -216,13 +216,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: assets/bughouse
-          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-windows
+          key: bughouse-${{ hashFiles('tools/assets.lock.json') }}-windows
 
       - name: Fetch bughouse engine (Windows)
         run: |
-          python tools/fetch_bughouse.py --only bughouse-windows
+          python tools/fetch_assets.py --only bughouse-windows
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tools/fetch_bughouse.py --check --only bughouse-windows
+          python tools/fetch_assets.py --check --only bughouse-windows
 
       # A release must not ship an engine that cannot start. The audit reads
       # the binaries' imports and insists every one is either part of the OS
@@ -428,12 +428,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: assets/bughouse
-          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-${{ matrix.arch }}
+          key: bughouse-${{ hashFiles('tools/assets.lock.json') }}-${{ matrix.arch }}
 
       - name: Fetch bughouse engine (${{ matrix.arch }})
         run: |
-          python3 tools/fetch_bughouse.py --only bughouse-macos-${{ matrix.arch }}
-          python3 tools/fetch_bughouse.py --check --only bughouse-macos-${{ matrix.arch }}
+          python3 tools/fetch_assets.py --only bughouse-macos-${{ matrix.arch }}
+          python3 tools/fetch_assets.py --check --only bughouse-macos-${{ matrix.arch }}
 
       # A release must not ship an engine that cannot start. The audit reads
       # the binaries' imports and insists every one is either part of the OS

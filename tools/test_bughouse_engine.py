@@ -47,7 +47,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ASSETS = REPO_ROOT / "assets" / "bughouse"
 
 sys.path.insert(0, str(REPO_ROOT / "tools"))
-from fetch_bughouse import TARGETS, host_target, manifest_key  # noqa: E402
+from fetch_assets import BUGHOUSE_TARGETS as TARGETS, bughouse_host_target as host_target, manifest_key  # noqa: E402
 
 NETWORK = "hivemind.onnx"
 
@@ -372,7 +372,7 @@ def install_like_the_app(target: Path) -> tuple[Path, Path]:
     for dest in sources:
         gz = REPO_ROOT / dest
         if not gz.exists():
-            fail(f"{dest} is missing — run: python3 tools/fetch_bughouse.py")
+            fail(f"{dest} is missing — run: python3 tools/fetch_assets.py")
         out = target / manifest_key(dest)
         payload = gzip.decompress(gz.read_bytes())
         out.write_bytes(payload)
