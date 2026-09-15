@@ -1,14 +1,17 @@
 import '../utils/training_csv.dart';
 
+/// One row of the training log: how a line was rated in one session.
 class RepertoireReviewHistoryEntry {
   final String repertoireId;
   final String lineId;
   final DateTime timestampUtc;
   final String rating;
   final bool hadMistake;
-  final String sessionType; // e.g., "trainer"
 
-  RepertoireReviewHistoryEntry({
+  /// Which kind of session produced the rating, e.g. `trainer`.
+  final String sessionType;
+
+  const RepertoireReviewHistoryEntry({
     required this.repertoireId,
     required this.lineId,
     required this.timestampUtc,
@@ -28,7 +31,7 @@ class RepertoireReviewHistoryEntry {
     ]);
   }
 
-  static RepertoireReviewHistoryEntry fromCsvRow(String row) {
+  factory RepertoireReviewHistoryEntry.fromCsvRow(String row) {
     final cells = decodeTrainingRow(row, 6);
     if (cells.length != 6) {
       throw FormatException('Invalid review history row: $row');

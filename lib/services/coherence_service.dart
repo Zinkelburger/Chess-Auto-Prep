@@ -11,8 +11,12 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/repertoire_line.dart';
-import 'fp_growth.dart';
 import '../utils/safe_change_notifier.dart';
+import 'fp_growth.dart';
+
+/// Reach probability assumed for a line that carries no importance — an
+/// imported course, say — so it still counts, just barely.
+const double _defaultLineProbability = 0.01;
 
 /// Serializable input for FP-Growth mining in a background isolate.
 class FpGrowthInput {
@@ -40,6 +44,10 @@ class CoherenceCandidateHint {
   const CoherenceCandidateHint({required this.score, this.clusterName});
 }
 
+/// A candidate below this coherence that extends no itemset and completes no
+/// cluster is not worth a hint.
+const double _hintScoreFloor = 0.35;
+
 /// Returns a hint when [candidateSan] extends a frequent itemset or cluster.
 CoherenceCandidateHint? coherenceHintForCandidateMove({
   required List<String> currentMoves,
@@ -49,12 +57,11 @@ CoherenceCandidateHint? coherenceHintForCandidateMove({
 }) {
   if (result.maximalItemsets.isEmpty) return null;
 
-  final moves = [...currentMoves, candidateSan];
   final itemset = extractItemset(
     RepertoireLine(
       id: '_candidate',
       name: '_candidate',
-      moves: moves,
+      moves: [...currentMoves, candidateSan],
       color: playAsWhite ? 'white' : 'black',
       startPosition: Chess.initial,
       fullPgn: '',
@@ -66,9 +73,9 @@ CoherenceCandidateHint? coherenceHintForCandidateMove({
 
   String? clusterName;
   for (final cluster in result.clusters) {
-    if (cluster.id == 'unclustered') continue;
-    final sig = cluster.signature.items;
-    if (sig.isNotEmpty && sig.every(itemset.contains)) {
+    if (cluster.isUnclustered) continue;
+    final signature = cluster.signature.items;
+    if (signature.isNotEmpty && signature.every(itemset.contains)) {
       clusterName = cluster.autoName;
       break;
     }
@@ -77,7 +84,7 @@ CoherenceCandidateHint? coherenceHintForCandidateMove({
   final extendsItemset = result.maximalItemsets.any(
     (mfi) => mfi.items.every(itemset.contains),
   );
-  if (!extendsItemset && clusterName == null && score < 0.35) {
+  if (!extendsItemset && clusterName == null && score < _hintScoreFloor) {
     return null;
   }
 
@@ -85,59 +92,65 @@ CoherenceCandidateHint? coherenceHintForCandidateMove({
 }
 
 /// Extract the set of our moves from a line.
-Set<String> extractItemset(RepertoireLine line, bool playAsWhite) {
-  final items = <String>{};
-  for (var i = 0; i < line.moves.length; i++) {
-    final isOurMove = playAsWhite ? (i % 2 == 0) : (i % 2 == 1);
-    if (isOurMove) {
-      items.add(line.moves[i]);
-    }
-  }
-  return items;
-}
+Set<String> extractItemset(RepertoireLine line, bool playAsWhite) => {
+  for (var i = playAsWhite ? 0 : 1; i < line.moves.length; i += 2)
+    line.moves[i],
+};
 
-/// Compute how coherent a single line is with the repertoire's patterns.
+/// Compute how coherent a single line is with the repertoire's patterns:
+/// the support of every maximal itemset the line contains, as a share of
+/// all the support there is.
 double lineCoherence(
   Set<String> lineItemset,
   List<FrequentItemset> maximalItemsets,
 ) {
   if (maximalItemsets.isEmpty) return 0.0;
-  double score = 0;
+  var score = 0.0;
+  var maxPossible = 0.0;
   for (final mfi in maximalItemsets) {
-    if (mfi.items.every((item) => lineItemset.contains(item))) {
-      score += mfi.support;
-    }
+    maxPossible += mfi.support;
+    if (mfi.items.every(lineItemset.contains)) score += mfi.support;
   }
-  final maxPossible = maximalItemsets
-      .map((m) => m.support)
-      .reduce((a, b) => a + b);
   return maxPossible > 0 ? (score / maxPossible).clamp(0.0, 1.0) : 0.0;
 }
 
-/// Risk-weighted coherence penalizes incoherent rare lines.
+/// Risk-weighted coherence penalizes incoherent rare lines: each line's
+/// coherence is weighted by its probability raised to [alpha], so a rare
+/// line still counts more than its bare probability would give it.
 double computeRiskWeightedCoherence(
   Map<String, double> lineCoherences,
   Map<String, double> lineProbabilities, {
   double alpha = 0.5,
-  double beta = 1.5,
+}) => _weightedMean(lineCoherences, lineProbabilities, exponent: alpha);
+
+/// Mean of [scores] weighted by `probability ^ exponent`; a line with no
+/// probability weighs [_defaultLineProbability].
+double _weightedMean(
+  Map<String, double> scores,
+  Map<String, double> probabilities, {
+  required double exponent,
 }) {
-  double numerator = 0;
-  double denominator = 0;
-  for (final id in lineCoherences.keys) {
-    final p = lineProbabilities[id] ?? 0.01;
-    final c = lineCoherences[id] ?? 0;
-    final weight = pow(p, alpha).toDouble();
-    numerator += weight * c;
+  var numerator = 0.0;
+  var denominator = 0.0;
+  for (final entry in scores.entries) {
+    final probability = probabilities[entry.key] ?? _defaultLineProbability;
+    final weight = pow(probability, exponent).toDouble();
+    numerator += weight * entry.value;
     denominator += weight;
   }
   return denominator > 0 ? numerator / denominator : 0;
 }
 
+/// Lines grouped by the maximal itemset they all contain.
 class CoherenceCluster {
+  static const String unclusteredId = 'unclustered';
+
   final String id;
   final FrequentItemset signature;
   final String autoName;
   final List<String> lineIds;
+
+  /// Total importance of the member lines.
   final double probabilityMass;
 
   const CoherenceCluster({
@@ -147,14 +160,21 @@ class CoherenceCluster {
     required this.lineIds,
     required this.probabilityMass,
   });
+
+  /// The catch-all cluster of lines that matched no itemset.
+  bool get isUnclustered => id == unclusteredId;
 }
 
+/// One [CoherenceService.compute] outcome.
 class CoherenceResult {
   final double globalCoherence;
   final double riskWeightedCoherence;
   final List<CoherenceCluster> clusters;
   final Map<String, double> lineCoherenceById;
   final List<FrequentItemset> maximalItemsets;
+
+  /// Probability mass of the largest few clusters (see
+  /// [CoherenceService.topClusterCount]).
   final double topNCoverage;
 
   const CoherenceResult({
@@ -167,63 +187,86 @@ class CoherenceResult {
   });
 }
 
+/// Mines a repertoire's lines for shared move patterns and publishes the
+/// latest [CoherenceResult].
 class CoherenceService extends ChangeNotifier with SafeChangeNotifier {
+  /// Fewer lines than this have no patterns worth mining.
+  static const int minLines = 5;
+
+  /// How many clusters [CoherenceResult.topNCoverage] sums.
+  static const int topClusterCount = 3;
+
+  /// Runs the FP-Growth mining; the default hands it to a background
+  /// isolate. Injectable so tests can script a failure.
+  final Future<List<FrequentItemset>> Function(FpGrowthInput input) _mine;
+
+  CoherenceService({
+    Future<List<FrequentItemset>> Function(FpGrowthInput input)? mine,
+  }) : _mine = mine ?? _mineInIsolate;
+
+  static Future<List<FrequentItemset>> _mineInIsolate(FpGrowthInput input) =>
+      Isolate.run(() => runFpGrowthMining(input));
+
   CoherenceResult? _result;
   CoherenceResult? get result => _result;
   bool _computing = false;
 
+  /// Mine [lines] and publish the result. A call that overlaps a running
+  /// computation, or has fewer than [minLines] lines, does nothing.
   Future<void> compute({
     required List<RepertoireLine> lines,
     required bool playAsWhite,
     double minSupport = 0.05,
   }) async {
-    if (_computing || lines.length < 5) return;
+    if (_computing || lines.length < minLines) return;
     _computing = true;
+    try {
+      _result = await _compute(lines, playAsWhite, minSupport);
+    } finally {
+      _computing = false;
+    }
+    notifyListeners();
+  }
 
-    final transactions = lines
-        .map((l) => extractItemset(l, playAsWhite))
-        .toList();
+  Future<CoherenceResult> _compute(
+    List<RepertoireLine> lines,
+    bool playAsWhite,
+    double minSupport,
+  ) async {
+    final transactions = [
+      for (final line in lines) extractItemset(line, playAsWhite),
+    ];
 
-    final maximal = await Isolate.run(
-      () => runFpGrowthMining(
-        FpGrowthInput(transactions: transactions, minSupport: minSupport),
+    final maximal = await _mine(
+      FpGrowthInput(transactions: transactions, minSupport: minSupport),
+    );
+
+    final lineScores = {
+      for (var i = 0; i < lines.length; i++)
+        lines[i].id: lineCoherence(transactions[i], maximal),
+    };
+    final lineProbabilities = {
+      for (final line in lines) line.id: _probabilityOf(line),
+    };
+    final clusters = _buildClusters(lines, maximal, transactions);
+
+    return CoherenceResult(
+      globalCoherence: _weightedMean(
+        lineScores,
+        lineProbabilities,
+        exponent: 1,
       ),
-    );
-
-    final lineScores = <String, double>{};
-    for (var i = 0; i < lines.length; i++) {
-      lineScores[lines[i].id] = lineCoherence(transactions[i], maximal);
-    }
-
-    final clusters = _buildClusters(lines, maximal, transactions, playAsWhite);
-
-    final lineProbabilities = <String, double>{};
-    for (final l in lines) {
-      lineProbabilities[l.id] = l.importance ?? 0.01;
-    }
-
-    final global = _weightedAverage(lineScores, lineProbabilities);
-    final riskWeighted = computeRiskWeightedCoherence(
-      lineScores,
-      lineProbabilities,
-    );
-    final topN = clusters.length >= 3
-        ? clusters.take(3).map((c) => c.probabilityMass).reduce((a, b) => a + b)
-        : clusters.isNotEmpty
-        ? clusters.map((c) => c.probabilityMass).reduce((a, b) => a + b)
-        : 0.0;
-
-    _result = CoherenceResult(
-      globalCoherence: global,
-      riskWeightedCoherence: riskWeighted,
+      riskWeightedCoherence: computeRiskWeightedCoherence(
+        lineScores,
+        lineProbabilities,
+      ),
       clusters: clusters,
       lineCoherenceById: lineScores,
       maximalItemsets: maximal,
-      topNCoverage: topN,
+      topNCoverage: clusters
+          .take(topClusterCount)
+          .fold(0.0, (sum, cluster) => sum + cluster.probabilityMass),
     );
-
-    _computing = false;
-    notifyListeners();
   }
 
   void invalidate() {
@@ -231,11 +274,12 @@ class CoherenceService extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  List<CoherenceCluster> _buildClusters(
+  /// Assign each line to the first cluster (largest support × size first)
+  /// whose signature it contains; the rest go to the unclustered group.
+  static List<CoherenceCluster> _buildClusters(
     List<RepertoireLine> lines,
     List<FrequentItemset> maximal,
     List<Set<String>> transactions,
-    bool playAsWhite,
   ) {
     final ranked = maximal.toList()
       ..sort(
@@ -245,46 +289,40 @@ class CoherenceService extends ChangeNotifier with SafeChangeNotifier {
 
     final assigned = <String>{};
     final clusters = <CoherenceCluster>[];
-    int clusterId = 0;
 
     for (final mfi in ranked) {
-      final members = <RepertoireLine>[];
-      for (var i = 0; i < lines.length; i++) {
-        if (assigned.contains(lines[i].id)) continue;
-        if (mfi.items.every((item) => transactions[i].contains(item))) {
-          members.add(lines[i]);
-        }
-      }
+      final members = [
+        for (var i = 0; i < lines.length; i++)
+          if (!assigned.contains(lines[i].id) &&
+              mfi.items.every(transactions[i].contains))
+            lines[i],
+      ];
       if (members.isEmpty) continue;
 
-      for (final m in members) {
-        assigned.add(m.id);
-      }
-
+      assigned.addAll(members.map((line) => line.id));
       clusters.add(
         CoherenceCluster(
-          id: 'cluster_${clusterId++}',
+          id: 'cluster_${clusters.length}',
           signature: mfi,
           autoName: _generateClusterName(mfi),
-          lineIds: members.map((l) => l.id).toList(),
-          probabilityMass: members
-              .map((l) => l.importance ?? 0.01)
-              .fold(0.0, (a, b) => a + b),
+          lineIds: [for (final line in members) line.id],
+          probabilityMass: _probabilityMass(members),
         ),
       );
     }
 
-    final unclustered = lines.where((l) => !assigned.contains(l.id)).toList();
+    final unclustered = [
+      for (final line in lines)
+        if (!assigned.contains(line.id)) line,
+    ];
     if (unclustered.isNotEmpty) {
       clusters.add(
         CoherenceCluster(
-          id: 'unclustered',
+          id: CoherenceCluster.unclusteredId,
           signature: const FrequentItemset(items: {}, support: 0, count: 0),
           autoName: 'Unclustered',
-          lineIds: unclustered.map((l) => l.id).toList(),
-          probabilityMass: unclustered
-              .map((l) => l.importance ?? 0.01)
-              .fold(0.0, (a, b) => a + b),
+          lineIds: [for (final line in unclustered) line.id],
+          probabilityMass: _probabilityMass(unclustered),
         ),
       );
     }
@@ -292,24 +330,16 @@ class CoherenceService extends ChangeNotifier with SafeChangeNotifier {
     return clusters;
   }
 
-  static double _weightedAverage(
-    Map<String, double> scores,
-    Map<String, double> weights,
-  ) {
-    double num = 0;
-    double den = 0;
-    for (final id in scores.keys) {
-      final w = weights[id] ?? 0.01;
-      num += w * scores[id]!;
-      den += w;
-    }
-    return den > 0 ? num / den : 0;
-  }
+  static double _probabilityOf(RepertoireLine line) =>
+      line.importance ?? _defaultLineProbability;
+
+  static double _probabilityMass(List<RepertoireLine> lines) =>
+      lines.fold(0.0, (sum, line) => sum + _probabilityOf(line));
 
   static String _generateClusterName(FrequentItemset mfi) {
     final items = mfi.items.toList();
-    final structural = items.where(_isStructural).toList();
-    final development = items.where(_isDevelopment).toList();
+    final structural = items.where(_isPawnMove).toList();
+    final development = items.where(_isMinorPieceMove).toList();
 
     if (structural.contains('g3') && development.contains('Bg2')) {
       return 'Fianchetto setup';
@@ -328,15 +358,14 @@ class CoherenceService extends ChangeNotifier with SafeChangeNotifier {
     return '${topMoves.take(3).join(" + ")} setup';
   }
 
-  static bool _isStructural(String san) {
+  /// A pawn move: SAN starting with a file letter (captures like `exd5`
+  /// included, since the first character is still the file).
+  static bool _isPawnMove(String san) {
     if (san.length < 2) return false;
     final first = san[0];
     return first == first.toLowerCase() && first != 'x';
   }
 
-  static bool _isDevelopment(String san) {
-    if (san.length < 2) return false;
-    final first = san[0];
-    return first == 'N' || first == 'B';
-  }
+  static bool _isMinorPieceMove(String san) =>
+      san.length >= 2 && (san[0] == 'N' || san[0] == 'B');
 }

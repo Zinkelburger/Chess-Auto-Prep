@@ -9,13 +9,14 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../../models/build_tree_node.dart';
-import '../eval/eval_canonicalize.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
-import 'package:chess_auto_prep/models/trap_reply.dart';
-import '../../utils/ease_utils.dart' show winProbability;
-import '../../utils/eval_constants.dart';
+import '../../models/trap_line_info.dart';
+import '../../models/trap_reply.dart';
 import '../../utils/atomic_file.dart';
+import '../../utils/ease_utils.dart' show winProbability;
+import '../eval/eval_canonicalize.dart';
 import 'trap_score.dart';
 
 class TrapExtractor {
@@ -103,10 +104,7 @@ class TrapExtractor {
 
     // Only opponent-move nodes with at least 2 children
     // (analyzeTrapScore returns null for fewer than 2 children).
-    final isOpponentMove = playAsWhite
-        ? !node.isWhiteToMove
-        : node.isWhiteToMove;
-    if (!isOpponentMove) return;
+    if (node.isWhiteToMove == playAsWhite) return;
     if (_rejectedByStoredScore(node)) return;
 
     final analysis = analyzeTrapScore(node, findabilityPRef: findabilityPRef);
@@ -139,7 +137,9 @@ class TrapExtractor {
     final bestEvalUs = -bestEval;
     final evalDiffUs = popularEvalUs - bestEvalUs;
 
-    final refutation = _findRefutation(mostPopular);
+    // Our reply after the blunder: the repertoire move when selection has
+    // run, else the best-scoring one — the analysis already picked it.
+    final refutation = analysis.refutation;
 
     candidates.add(
       _TrapCandidate(
@@ -157,37 +157,10 @@ class TrapExtractor {
         openingName: node.openingName,
         positionEvalCp: evalUs,
         allReplies: _buildAllReplies(node, bestEvalUs),
-        refutationMove: refutation?.$1,
-        refutationEvalCp: refutation?.$2,
+        refutationMove: refutation?.moveSan,
+        refutationEvalCp: refutation?.evalForUs(playAsWhite),
       ),
     );
-  }
-
-  /// Find our best reply after the opponent's popular blunder.
-  ///
-  /// Prefers the repertoire move; falls back to the highest-eval child.
-  /// Returns (SAN, evalCp from our perspective) or null if no children.
-  (String, int)? _findRefutation(BuildTreeNode afterBlunder) {
-    if (afterBlunder.children.isEmpty) return null;
-
-    BuildTreeNode? repMove;
-    BuildTreeNode? bestEvalChild;
-    int bestEval = kWorstEvalCp;
-
-    for (final child in afterBlunder.children) {
-      if (child.isRepertoireMove) repMove ??= child;
-      if (child.hasEngineEval) {
-        final evalUs = child.evalForUs(playAsWhite);
-        if (evalUs > bestEval) {
-          bestEval = evalUs;
-          bestEvalChild = child;
-        }
-      }
-    }
-
-    final pick = repMove ?? bestEvalChild;
-    if (pick == null) return null;
-    return (pick.moveSan, pick.evalForUs(playAsWhite));
   }
 
   /// Builds classified opponent replies at a trap position, sorted by probability.
@@ -211,14 +184,19 @@ class TrapExtractor {
     return replies;
   }
 
+  /// `<repertoire>_traps.json` beside the repertoire's `.pgn`.
+  static String trapFilePath(String repertoireFilePath) {
+    final base = p.extension(repertoireFilePath) == '.pgn'
+        ? p.withoutExtension(repertoireFilePath)
+        : repertoireFilePath;
+    return '${base}_traps.json';
+  }
+
   /// Save trap lines to a JSON file alongside the repertoire.
   static Future<void> saveToFile(
     List<TrapLineInfo> traps,
     String repertoireFilePath,
   ) async {
-    final base = repertoireFilePath.replaceAll(RegExp(r'\.pgn$'), '');
-    final trapPath = '${base}_traps.json';
-
     final data = {
       'generated_at': DateTime.now().toIso8601String(),
       'count': traps.length,
@@ -226,7 +204,7 @@ class TrapExtractor {
     };
 
     await writeTextFileAtomically(
-      File(trapPath),
+      File(trapFilePath(repertoireFilePath)),
       const JsonEncoder.withIndent('  ').convert(data),
     );
   }
@@ -236,20 +214,19 @@ class TrapExtractor {
   static Future<List<TrapLineInfo>?> loadFromFile(
     String repertoireFilePath,
   ) async {
-    final base = repertoireFilePath.replaceAll(RegExp(r'\.pgn$'), '');
-    final trapPath = '${base}_traps.json';
-
-    final file = File(trapPath);
+    final file = File(trapFilePath(repertoireFilePath));
     if (!await file.exists()) return null;
 
     try {
       final content = await file.readAsString();
       final data = jsonDecode(content) as Map<String, dynamic>;
-      final traps = (data['traps'] as List)
-          .map((j) => TrapLineInfo.fromJson(j as Map<String, dynamic>))
-          .toList();
-      return traps;
+      return [
+        for (final entry in data['traps'] as List)
+          TrapLineInfo.fromJson(entry as Map<String, dynamic>),
+      ];
     } catch (_) {
+      // An unreadable or malformed file is treated as absent: the caller
+      // regenerates traps from the tree rather than trusting a partial list.
       return null;
     }
   }

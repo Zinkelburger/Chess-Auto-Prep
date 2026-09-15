@@ -1,3 +1,6 @@
+/// Phase 1 progress events: throttled emission, per-depth counts and ETAs.
+library;
+
 import 'dart:collection';
 import 'dart:math' as math;
 
@@ -28,6 +31,12 @@ class TreeBuildProgressTracker {
   /// Log-scale floor used when minProbability is 0 (the mapping needs a
   /// finite endpoint).
   static const double _fallbackFloor = 1e-6;
+
+  /// Elapsed time before a nodes-per-minute rate is trusted at all.
+  static const int _minRateSampleMs = 500;
+
+  /// ETAs are capped at a week; beyond that the number is noise.
+  static const int _maxEtaSeconds = 86400 * 7;
 
   int _lastEmitMs = -_emitIntervalMs;
   int _buildStartTotalNodes = 0;
@@ -94,7 +103,7 @@ class TreeBuildProgressTracker {
     double? nodesPerMinute;
     final elapsedMin = elapsedMs / 60000.0;
     final deltaNodes = tree.totalNodes - _buildStartTotalNodes;
-    if (elapsedMs >= 500 && elapsedMin > 0 && deltaNodes >= 1) {
+    if (elapsedMs >= _minRateSampleMs && elapsedMin > 0 && deltaNodes >= 1) {
       nodesPerMinute = deltaNodes / elapsedMin;
     }
 
@@ -122,7 +131,7 @@ class TreeBuildProgressTracker {
           unexploredAtDepth > 0) {
         etaDepthSeconds = (unexploredAtDepth * 60.0 / nodesPerMinute)
             .round()
-            .clamp(1, 86400 * 7);
+            .clamp(1, _maxEtaSeconds);
       }
     }
 
@@ -171,7 +180,7 @@ class TreeBuildProgressTracker {
     final deltaProgress = progress - first.$2;
     if (deltaMs < 1000 || deltaProgress <= 0) return null;
     final remainingMs = (1.0 - progress) * deltaMs / deltaProgress;
-    return (remainingMs / 1000).round().clamp(1, 86400 * 7);
+    return (remainingMs / 1000).round().clamp(1, _maxEtaSeconds);
   }
 
   /// Per-ply total and explored node counts, index = ply.

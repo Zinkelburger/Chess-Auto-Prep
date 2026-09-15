@@ -97,6 +97,17 @@ void main() {
     },
   );
 
+  test('a manual install needs no asset, only a newer stable tag', () {
+    final release = UpdateRelease.parse(
+      metadata()..remove('assets'),
+      '1.16.1',
+      InstallKind.manual,
+    );
+    expect(release, isNotNull);
+    expect(release!.url, releasesPage);
+    expect(release.assetName, isEmpty);
+  });
+
   test('missing digest, wrong platform and untrusted URL fail closed', () {
     expect(
       () => UpdateRelease.parse(

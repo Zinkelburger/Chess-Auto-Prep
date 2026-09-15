@@ -244,6 +244,7 @@ enum ShortcutScope {
 }
 
 /// A row in Settings. Labels are derived from the actual binding.
+@immutable
 class ShortcutReference {
   const ShortcutReference(this.group, this.description, this.shortcut);
   final String group;

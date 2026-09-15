@@ -8,30 +8,94 @@ library;
 import 'dart:math' as math;
 
 import '../models/crosstable.dart';
-import '../models/game_outcome.dart';
 
 /// 95% two-sided normal quantile, the interval every engine tester quotes.
 const double _z95 = 1.959963985;
 
+/// Score fractions are clamped just inside (0, 1) before the Elo transform,
+/// whose logit is infinite at either end.
+const double _scoreEpsilon = 1e-9;
+
 /// [names] are the participants in seeding order; a game's `whiteIndex` and
-/// `blackIndex` index into it.
+/// `blackIndex` index into it. Games naming a participant outside [names]
+/// are ignored.
 Crosstable buildCrosstable(List<String> names, List<CrosstableGame> games) {
   final count = names.length;
   if (count == 0) {
     return const Crosstable(standings: [], grid: {}, totalGames: 0);
   }
 
-  final points = List<double>.filled(count, 0);
-  final played = List<int>.filled(count, 0);
-  final wins = List<int>.filled(count, 0);
-  final draws = List<int>.filled(count, 0);
-  final losses = List<int>.filled(count, 0);
+  final tally = _Tally(count);
+  final valid = [
+    for (final game in games)
+      if (tally.covers(game.whiteIndex) && tally.covers(game.blackIndex)) game,
+  ];
+  for (final game in valid) {
+    tally.record(game);
+  }
+  // Sonneborn-Berger needs everyone's final totals, so it runs in a second
+  // pass over the same games.
+  for (final game in valid) {
+    tally.recordTiebreak(game);
+  }
 
-  // rowEngine -> columnEngine -> results in play order, row's perspective.
-  final cellResults = <int, Map<int, List<String>>>{};
-  final cellPoints = <int, Map<int, double>>{};
+  return Crosstable(
+    standings: tally.standings(names),
+    grid: tally.grid(),
+    totalGames: games.length,
+  );
+}
 
-  void note(int self, int opponent, double score, String letter) {
+/// Per-participant totals and per-pairing results, accumulated game by game.
+class _Tally {
+  _Tally(this.count)
+    : points = List.filled(count, 0),
+      played = List.filled(count, 0),
+      wins = List.filled(count, 0),
+      draws = List.filled(count, 0),
+      losses = List.filled(count, 0),
+      sonnebornBerger = List.filled(count, 0);
+
+  final int count;
+  final List<double> points;
+  final List<int> played;
+  final List<int> wins;
+  final List<int> draws;
+  final List<int> losses;
+  final List<double> sonnebornBerger;
+
+  /// rowEngine -> columnEngine -> results in play order, row's perspective.
+  final Map<int, Map<int, List<String>>> _cellResults = {};
+  final Map<int, Map<int, double>> _cellPoints = {};
+
+  bool covers(int index) => index >= 0 && index < count;
+
+  void record(CrosstableGame game) {
+    final whiteScore = game.result.whitePoints;
+    _note(
+      game.whiteIndex,
+      game.blackIndex,
+      whiteScore,
+      Crosstable.letterFor(game.result, asWhite: true),
+    );
+    _note(
+      game.blackIndex,
+      game.whiteIndex,
+      1 - whiteScore,
+      Crosstable.letterFor(game.result, asWhite: false),
+    );
+  }
+
+  /// Sonneborn-Berger: full score of everyone you beat plus half the score
+  /// of everyone you drew. Call only after every game is [record]ed.
+  void recordTiebreak(CrosstableGame game) {
+    final whiteScore = game.result.whitePoints;
+    sonnebornBerger[game.whiteIndex] += whiteScore * points[game.blackIndex];
+    sonnebornBerger[game.blackIndex] +=
+        (1 - whiteScore) * points[game.whiteIndex];
+  }
+
+  void _note(int self, int opponent, double score, String letter) {
     points[self] += score;
     played[self] += 1;
     if (score == 1) {
@@ -41,104 +105,62 @@ Crosstable buildCrosstable(List<String> names, List<CrosstableGame> games) {
     } else {
       draws[self] += 1;
     }
-    (cellResults[self] ??= {}).putIfAbsent(opponent, () => []).add(letter);
-    final row = cellPoints[self] ??= {};
+    (_cellResults[self] ??= {}).putIfAbsent(opponent, () => []).add(letter);
+    final row = _cellPoints[self] ??= {};
     row[opponent] = (row[opponent] ?? 0) + score;
   }
 
-  for (final game in games) {
-    final w = game.whiteIndex;
-    final b = game.blackIndex;
-    if (w < 0 || w >= count || b < 0 || b >= count) continue;
-    final whiteScore = game.result.whitePoints;
-    note(w, b, whiteScore, Crosstable.letterFor(game.result, asWhite: true));
-    note(
-      b,
-      w,
-      1 - whiteScore,
-      Crosstable.letterFor(game.result, asWhite: false),
-    );
+  /// Rows ranked best first: points, then Sonneborn-Berger, then wins, then
+  /// seeding order.
+  List<StandingsRow> standings(List<String> names) {
+    final order = List.generate(count, (i) => i)
+      ..sort((a, b) {
+        final byPoints = points[b].compareTo(points[a]);
+        if (byPoints != 0) return byPoints;
+        final bySb = sonnebornBerger[b].compareTo(sonnebornBerger[a]);
+        if (bySb != 0) return bySb;
+        final byWins = wins[b].compareTo(wins[a]);
+        if (byWins != 0) return byWins;
+        return a.compareTo(b);
+      });
+    return [
+      for (var rank = 1; rank <= order.length; rank++)
+        _row(order[rank - 1], rank: rank, name: names[order[rank - 1]]),
+    ];
   }
 
-  // Sonneborn-Berger needs everyone's final totals, so it runs in a second
-  // pass over the same games.
-  final sb = List<double>.filled(count, 0);
-  for (final game in games) {
-    final w = game.whiteIndex;
-    final b = game.blackIndex;
-    if (w < 0 || w >= count || b < 0 || b >= count) continue;
-    final whiteScore = game.result.whitePoints;
-    sb[w] += whiteScore * points[b];
-    sb[b] += (1 - whiteScore) * points[w];
-  }
-
-  final rows = <StandingsRow>[];
-  for (var i = 0; i < count; i++) {
+  StandingsRow _row(int i, {required int rank, required String name}) {
     final n = played[i];
-    final fraction = n == 0 ? 0.0 : points[i] / n;
-    final elo = _eloFromScore(fraction);
-    rows.add(
-      StandingsRow(
-        rank: 0,
-        engineIndex: i,
-        name: names[i],
-        points: points[i],
-        played: n,
-        wins: wins[i],
-        draws: draws[i],
-        losses: losses[i],
-        sonnebornBerger: sb[i],
-        eloDiff: elo,
-        eloMargin: _eloMargin(wins[i], draws[i], losses[i]),
-        likelihoodOfSuperiority: likelihoodOfSuperiority(wins[i], losses[i]),
-      ),
+    return StandingsRow(
+      rank: rank,
+      engineIndex: i,
+      name: name,
+      points: points[i],
+      played: n,
+      wins: wins[i],
+      draws: draws[i],
+      losses: losses[i],
+      sonnebornBerger: sonnebornBerger[i],
+      eloDiff: _eloFromScore(n == 0 ? 0.0 : points[i] / n),
+      eloMargin: _eloMargin(wins[i], draws[i], losses[i]),
+      likelihoodOfSuperiority: likelihoodOfSuperiority(wins[i], losses[i]),
     );
   }
 
-  rows.sort((a, b) {
-    final byPoints = b.points.compareTo(a.points);
-    if (byPoints != 0) return byPoints;
-    final bySb = b.sonnebornBerger.compareTo(a.sonnebornBerger);
-    if (bySb != 0) return bySb;
-    final byWins = b.wins.compareTo(a.wins);
-    if (byWins != 0) return byWins;
-    return a.engineIndex.compareTo(b.engineIndex);
-  });
-
-  final ranked = [
-    for (var i = 0; i < rows.length; i++)
-      StandingsRow(
-        rank: i + 1,
-        engineIndex: rows[i].engineIndex,
-        name: rows[i].name,
-        points: rows[i].points,
-        played: rows[i].played,
-        wins: rows[i].wins,
-        draws: rows[i].draws,
-        losses: rows[i].losses,
-        sonnebornBerger: rows[i].sonnebornBerger,
-        eloDiff: rows[i].eloDiff,
-        eloMargin: rows[i].eloMargin,
-        likelihoodOfSuperiority: rows[i].likelihoodOfSuperiority,
-      ),
-  ];
-
-  final grid = <int, Map<int, CrosstableCell>>{};
-  for (var i = 0; i < count; i++) {
-    final row = <int, CrosstableCell>{};
-    for (var j = 0; j < count; j++) {
-      if (i == j) continue;
-      final results = cellResults[i]?[j];
-      if (results == null || results.isEmpty) continue;
-      row[j] = CrosstableCell(
-        results: List.unmodifiable(results),
-        points: cellPoints[i]?[j] ?? 0,
-      );
-    }
-    grid[i] = row;
-  }
-
-  return Crosstable(standings: ranked, grid: grid, totalGames: games.length);
+  /// `grid[row][column]` for every pairing that played at least one game;
+  /// every row is present, the diagonal never is.
+  Map<int, Map<int, CrosstableCell>> grid() => {
+    for (var i = 0; i < count; i++)
+      i: {
+        for (var j = 0; j < count; j++)
+          if (i != j)
+            if (_cellResults[i]?[j] case final results? when results.isNotEmpty)
+              j: CrosstableCell(
+                results: List.unmodifiable(results),
+                points: _cellPoints[i]?[j] ?? 0,
+              ),
+      },
+  };
 }
 
 /// Rating difference implied by a score fraction. Null at 0% and 100%, where
@@ -186,10 +208,10 @@ double? _eloMargin(int wins, int draws, int losses) {
       draws * math.pow(0.5 - fraction, 2);
   final standardError = math.sqrt(variance / n) / math.sqrt(n);
   final low = _eloFromScore(
-    (fraction - _z95 * standardError).clamp(1e-9, 1 - 1e-9),
+    (fraction - _z95 * standardError).clamp(_scoreEpsilon, 1 - _scoreEpsilon),
   );
   final high = _eloFromScore(
-    (fraction + _z95 * standardError).clamp(1e-9, 1 - 1e-9),
+    (fraction + _z95 * standardError).clamp(_scoreEpsilon, 1 - _scoreEpsilon),
   );
   if (low == null || high == null) return null;
   return (high - low) / 2;

@@ -11,12 +11,18 @@ import 'package:flutter/foundation.dart';
 import '../engine/stockfish_pool.dart';
 import '../eval_cache.dart';
 
+/// The eval after a move plus the cache accounting that produced it.
+///
+/// [whiteCp] is null when the position or move could not be played, or the
+/// search threw. [hits] and [misses] are 1/0, 0/1 or 0/0, so a caller adds
+/// them straight onto its running counters.
+typedef EvalAfterMove = ({int? whiteCp, int hits, int misses});
+
+const EvalAfterMove _unresolved = (whiteCp: null, hits: 0, misses: 0);
+
 /// Evaluate the position after playing [moveUci] from [fen], consulting
 /// [cache] first (white-normalized cp at [depth]) and writing back on miss.
-///
-/// Returns `(whiteCp, cacheHits, cacheMisses)`. `whiteCp` is null when the
-/// position or move is unparsable.
-Future<(int?, int, int)> evalAfterMoveCached(
+Future<EvalAfterMove> evalAfterMoveCached(
   StockfishPool pool,
   EvalCache cache,
   String fen,
@@ -26,12 +32,12 @@ Future<(int?, int, int)> evalAfterMoveCached(
   try {
     final pos = Chess.fromSetup(Setup.parseFen(fen));
     final move = Move.parse(moveUci);
-    if (move == null) return (null, 0, 0);
+    if (move == null) return _unresolved;
     final newPos = pos.play(move);
     final newFen = newPos.fen;
 
     final cached = await cache.getEvalCpWhite(newFen, minDepth: depth);
-    if (cached != null) return (cached, 1, 0);
+    if (cached != null) return (whiteCp: cached, hits: 1, misses: 0);
 
     final result = await pool.evaluateFen(newFen, depth);
     final isWhiteAfter = newPos.turn == Side.white;
@@ -45,9 +51,9 @@ Future<(int?, int, int)> evalAfterMoveCached(
 
     cache.putEvalCpWhiteSoon(newFen, whiteCp, depth);
 
-    return (whiteCp, 0, 1);
+    return (whiteCp: whiteCp, hits: 0, misses: 1);
   } catch (e) {
     if (kDebugMode) debugPrint('[EvalMoveHelpers] Eval after move failed: $e');
-    return (null, 0, 0);
+    return _unresolved;
   }
 }

@@ -78,7 +78,7 @@ class RepertoireWriter {
 
       String? updatedPgn;
       if (filePath != null && filePath.isNotEmpty) {
-        final result = await _service.appendMoveAtPath(
+        final result = await _service.files.appendMoveAtPath(
           filePath,
           pathFromRoot,
           san,
@@ -172,7 +172,7 @@ class RepertoireWriter {
       String? updatedPgn;
       var snapshots = const <String>[];
       if (filePath != null && filePath.isNotEmpty) {
-        final result = await _service.appendMovesAtPath(
+        final result = await _service.files.appendMovesAtPath(
           filePath,
           prefix,
           newSans,

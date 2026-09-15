@@ -34,6 +34,16 @@ class OutlineEditException implements Exception {
   String toString() => message;
 }
 
+/// The edit would create a chapter or folder whose name is already taken in
+/// that folder. Callers that generate names catch this to try another.
+class OutlineNameTakenException extends OutlineEditException {
+  const OutlineNameTakenException(super.message);
+}
+
+/// A chapter's parsed lines, valid while the file's modification time —
+/// read once by the chapter listing — is unchanged.
+typedef _CachedLines = ({DateTime modified, List<OutlineLine> lines});
+
 class RepertoireOutlineService {
   RepertoireOutlineService({
     StorageService? storage,
@@ -63,35 +73,23 @@ class RepertoireOutlineService {
   final ChapterSplitter _splitter;
   final ReviewProgressRepointer _repointer;
 
-  /// Parsed lines per chapter path, keyed by the file's modification time so
-  /// an unchanged chapter is never re-parsed on rebuild.
-  final Map<String, ({DateTime modified, List<OutlineLine> lines})> _lineCache =
-      {};
+  /// Parsed lines per chapter path, so an unchanged chapter is never
+  /// re-parsed on rebuild.
+  final Map<String, _CachedLines> _lineCache = {};
 
   // ── Reading ────────────────────────────────────────────────────────────
 
   /// Builds the outline of the repertoire folder at [folderPath]. With
   /// [loadLines], every chapter's games are parsed (cached by mtime) so the
   /// outline can show lines; otherwise chapters carry only a line count.
+  ///
+  /// Sub-folders and chapters are independent, so each level reads them
+  /// concurrently rather than awaiting one stat and one parse at a time; a
+  /// refresh after every save was a chain of tens of serial syscalls.
   Future<OutlineFolder> build(
     String folderPath, {
     bool loadLines = true,
     String? trainingColor,
-  }) async {
-    return _buildFolder(
-      folderPath,
-      loadLines: loadLines,
-      trainingColor: trainingColor,
-    );
-  }
-
-  /// Sub-folders and chapters are independent, so each level reads them
-  /// concurrently rather than awaiting one stat and one parse at a time; a
-  /// refresh after every save was a chain of tens of serial syscalls.
-  Future<OutlineFolder> _buildFolder(
-    String folderPath, {
-    required bool loadLines,
-    required String? trainingColor,
   }) async {
     final (subdirs, chapters) = await (
       _storage.listSubdirectories(folderPath),
@@ -104,7 +102,7 @@ class RepertoireOutlineService {
     final (folders, chapterNodes) = await (
       Future.wait([
         for (final dir in subdirs)
-          _buildFolder(dir, loadLines: loadLines, trainingColor: trainingColor),
+          build(dir, loadLines: loadLines, trainingColor: trainingColor),
       ]),
       Future.wait([
         for (final chapter in chapters)
@@ -144,8 +142,7 @@ class RepertoireOutlineService {
   }
 
   /// Parsed lines of [chapterPath], reusing the cache while the file's
-  /// modification time — [modified], already read by the chapter listing —
-  /// is unchanged.
+  /// modification time [modified] is unchanged.
   Future<List<OutlineLine>> _linesOf(
     String chapterPath, {
     required DateTime modified,
@@ -162,6 +159,8 @@ class RepertoireOutlineService {
         trainingColor: trainingColor,
       );
     } catch (_) {
+      // An unreadable chapter is listed with no lines rather than hiding
+      // the whole repertoire.
       parsed = const [];
     }
     final lines = [
@@ -197,7 +196,12 @@ class RepertoireOutlineService {
   /// a folder, and neither can hold a path separator.
   static String? validateName(String name) => validateSafeFileName(name);
 
-  static String _clean(String name) => name.trim();
+  /// [name] trimmed, or an [OutlineEditException] saying what is wrong.
+  static String _validName(String name) {
+    final problem = validateName(name);
+    if (problem != null) throw OutlineEditException(problem);
+    return name.trim();
+  }
 
   // ── Chapters ───────────────────────────────────────────────────────────
 
@@ -207,17 +211,26 @@ class RepertoireOutlineService {
     required String name,
     required bool isWhite,
   }) async {
-    final problem = validateName(name);
-    if (problem != null) throw OutlineEditException(problem);
     final result = await _chapters.create(
       folderPath: folderPath,
-      name: _clean(name),
+      name: _validName(name),
       isWhite: isWhite,
     );
-    if (!result.succeeded) throw OutlineEditException(result.error!);
+    final chapter = result.chapter;
+    if (chapter == null) {
+      final failure = result.failure!;
+      throw switch (failure) {
+        ChapterCreationFailure.nameTaken => OutlineNameTakenException(
+          failure.message,
+        ),
+        ChapterCreationFailure.writeFailed => OutlineEditException(
+          failure.message,
+        ),
+      };
+    }
     return OutlineChapter(
-      path: result.chapter!.filePath,
-      name: result.chapter!.name,
+      path: chapter.filePath,
+      name: chapter.name,
       lines: const [],
     );
   }
@@ -225,13 +238,11 @@ class RepertoireOutlineService {
   /// Renames the chapter file, keeping it in the same folder. Returns the new
   /// path.
   Future<String> renameChapter(String chapterPath, String newName) async {
-    final problem = validateName(newName);
-    if (problem != null) throw OutlineEditException(problem);
     final folder = _storage.parentPath(chapterPath);
-    final newPath = _storage.chapterFilePath(folder, _clean(newName));
+    final newPath = _storage.chapterFilePath(folder, _validName(newName));
     if (p.equals(newPath, chapterPath)) return chapterPath;
     if (await _storage.fileExists(newPath)) {
-      throw const OutlineEditException(
+      throw const OutlineNameTakenException(
         'A chapter with that name already exists.',
       );
     }
@@ -249,7 +260,7 @@ class RepertoireOutlineService {
     final newPath = _storage.chapterFilePath(targetFolderPath, name);
     if (p.equals(newPath, chapterPath)) return chapterPath;
     if (await _storage.fileExists(newPath)) {
-      throw OutlineEditException(
+      throw OutlineNameTakenException(
         '"$name" already exists in ${p.basename(targetFolderPath)}.',
       );
     }
@@ -294,13 +305,9 @@ class RepertoireOutlineService {
     required String parentPath,
     required String name,
   }) async {
-    final problem = validateName(name);
-    if (problem != null) throw OutlineEditException(problem);
-    final path = p.join(parentPath, _clean(name));
-    if ((await _storage.listSubdirectories(
-      parentPath,
-    )).any((d) => p.equals(d, path))) {
-      throw const OutlineEditException(
+    final path = p.join(parentPath, _validName(name));
+    if (await _folderExists(path)) {
+      throw const OutlineNameTakenException(
         'A folder with that name already exists.',
       );
     }
@@ -310,14 +317,10 @@ class RepertoireOutlineService {
 
   /// Renames the folder in place. Returns the new path.
   Future<String> renameFolder(String folderPath, String newName) async {
-    final problem = validateName(newName);
-    if (problem != null) throw OutlineEditException(problem);
-    final newPath = p.join(p.dirname(folderPath), _clean(newName));
+    final newPath = p.join(p.dirname(folderPath), _validName(newName));
     if (p.equals(newPath, folderPath)) return folderPath;
-    if ((await _storage.listSubdirectories(
-      p.dirname(folderPath),
-    )).any((d) => p.equals(d, newPath))) {
-      throw const OutlineEditException(
+    if (await _folderExists(newPath)) {
+      throw const OutlineNameTakenException(
         'A folder with that name already exists.',
       );
     }
@@ -335,10 +338,8 @@ class RepertoireOutlineService {
     }
     final newPath = p.join(targetFolderPath, p.basename(folderPath));
     if (p.equals(newPath, folderPath)) return folderPath;
-    if ((await _storage.listSubdirectories(
-      targetFolderPath,
-    )).any((d) => p.equals(d, newPath))) {
-      throw OutlineEditException(
+    if (await _folderExists(newPath)) {
+      throw OutlineNameTakenException(
         '"${p.basename(folderPath)}" already exists in '
         '${p.basename(targetFolderPath)}.',
       );
@@ -353,28 +354,23 @@ class RepertoireOutlineService {
     _lineCache.removeWhere((k, _) => p.isWithin(folderPath, k));
   }
 
+  /// Whether [folderPath] is a sub-folder of its parent, as the storage
+  /// lists it.
+  Future<bool> _folderExists(String folderPath) async {
+    final siblings = await _storage.listSubdirectories(p.dirname(folderPath));
+    return siblings.any((d) => p.equals(d, folderPath));
+  }
+
+  /// Paths under a moved folder change; mtimes do not, so the cached lines
+  /// stay valid under their new keys.
   void _rekeyCache(String oldFolder, String newFolder) {
-    // Paths under a moved folder change; mtimes do not, so the entries stay
-    // valid under their new keys.
-    final moved = <String, ({DateTime modified, List<OutlineLine> lines})>{};
-    _lineCache.removeWhere((k, v) {
-      if (!p.isWithin(oldFolder, k)) return false;
-      final rel = p.relative(k, from: oldFolder);
-      final nk = p.join(newFolder, rel);
-      moved[nk] = (
-        modified: v.modified,
-        lines: [
-          for (final l in v.lines)
-            OutlineLine(
-              path: nk,
-              id: l.id,
-              gameIndex: l.gameIndex,
-              name: l.name,
-              moves: l.moves,
-              section: l.section,
-              isModelGame: l.isModelGame,
-            ),
-        ],
+    final moved = <String, _CachedLines>{};
+    _lineCache.removeWhere((key, cached) {
+      if (!p.isWithin(oldFolder, key)) return false;
+      final newKey = p.join(newFolder, p.relative(key, from: oldFolder));
+      moved[newKey] = (
+        modified: cached.modified,
+        lines: [for (final l in cached.lines) l.withPath(newKey)],
       );
       return true;
     });
@@ -417,16 +413,10 @@ class RepertoireOutlineService {
     List<int>? toIndexes,
   }) async {
     final sameFile = p.equals(fromChapterPath, toChapterPath);
-    final idByIndex = <int, String>{};
-    if (!sameFile) {
-      final parsed = await _repertoire.parseRepertoireFile(fromChapterPath);
-      for (final line in parsed) {
-        if (gameIndexes.contains(line.gameIndex)) {
-          idByIndex[line.gameIndex] = line.id;
-        }
-      }
-    }
-    final landed = await _repertoire.moveGamesTo(
+    final idByIndex = sameFile
+        ? const <int, String>{}
+        : await _lineIdsAt(fromChapterPath, gameIndexes);
+    final landed = await _repertoire.files.moveGamesTo(
       fromPath: fromChapterPath,
       gameIndexes: gameIndexes,
       toPath: toChapterPath,
@@ -443,7 +433,7 @@ class RepertoireOutlineService {
     );
     _lineCache.remove(fromChapterPath);
     _lineCache.remove(toChapterPath);
-    if (landed.isNotEmpty && !sameFile && idByIndex.isNotEmpty) {
+    if (landed.isNotEmpty && idByIndex.isNotEmpty) {
       await _repointer.repoint(
         from: fromChapterPath,
         movedIdsByPath: {toChapterPath: idByIndex.values.toSet()},
@@ -452,15 +442,30 @@ class RepertoireOutlineService {
     return landed;
   }
 
+  /// The line ids at [gameIndexes] of [chapterPath], by index.
+  Future<Map<int, String>> _lineIdsAt(
+    String chapterPath,
+    Set<int> gameIndexes,
+  ) async {
+    final parsed = await _repertoire.parseRepertoireFile(chapterPath);
+    return {
+      for (final line in parsed)
+        if (gameIndexes.contains(line.gameIndex)) line.gameIndex: line.id,
+    };
+  }
+
   /// Deletes the lines at [gameIndexes] and returns what went, as the
   /// `(index, text)` pairs [restoreLines] puts back.
   Future<List<({int index, String text})>> deleteLines(
     String chapterPath,
     Set<int> gameIndexes,
   ) async {
-    final removed = await _repertoire.readGameTextsAt(chapterPath, gameIndexes);
+    final removed = await _repertoire.files.readGameTextsAt(
+      chapterPath,
+      gameIndexes,
+    );
     if (removed == null || removed.isEmpty) return const [];
-    await _repertoire.deleteLinesAt(chapterPath, gameIndexes);
+    await _repertoire.files.deleteLinesAt(chapterPath, gameIndexes);
     _lineCache.remove(chapterPath);
     return removed;
   }
@@ -470,7 +475,7 @@ class RepertoireOutlineService {
     String chapterPath,
     List<({int index, String text})> lines,
   ) async {
-    await _repertoire.insertGameTextsAt(chapterPath, lines);
+    await _repertoire.files.insertGameTextsAt(chapterPath, lines);
     _lineCache.remove(chapterPath);
   }
 
@@ -479,17 +484,11 @@ class RepertoireOutlineService {
     int gameIndex,
     String newName,
   ) async {
-    final ok = await _repertoire.updateGameTitleAt(
+    final ok = await _repertoire.files.updateGameTitleAt(
       chapterPath,
       gameIndex,
       newName,
     );
-    _lineCache.remove(chapterPath);
-    return ok;
-  }
-
-  Future<bool> deleteLine(String chapterPath, int gameIndex) async {
-    final ok = await _repertoire.deleteGameAt(chapterPath, gameIndex);
     _lineCache.remove(chapterPath);
     return ok;
   }

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/audit/services/engine_position_probe.dart';
 import 'package:chess_auto_prep/features/holes/services/hole_scoring.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -1,14 +1,29 @@
 import '../../../utils/fen_utils.dart';
 import 'tactics_note.dart';
 
-/// TacticsPosition model - fully compatible with Python's TacticsPosition
+/// One puzzle: a position, the move that was played there, and the line the
+/// solver has to find — plus where it came from and how reviews have gone.
+///
+/// Immutable; every stat update goes through [copyWith]. Puzzles are
+/// identified by [fen] throughout the trainer.
 class TacticsPosition {
   final String fen;
-  final String userMove; // The move the user actually played (mistake)
-  final List<String> correctLine; // Trainable line (tactical plies only)
-  final List<String> solutionPv; // Longer engine PV for display (Show Solution)
-  final String mistakeType; // "?" or "??" or "?!"
-  final String mistakeAnalysis; // Full analysis from Lichess
+
+  /// The move the user actually played (the mistake). Empty for custom and
+  /// study puzzles.
+  final String userMove;
+
+  /// Trainable line (tactical plies only), SAN or UCI tokens.
+  final List<String> correctLine;
+
+  /// Longer engine PV for display (Show Solution).
+  final List<String> solutionPv;
+
+  /// `??`, `?`, `?!`, or `custom` for hand-made and study puzzles.
+  final String mistakeType;
+
+  /// The mistake note (see [TacticsNote]).
+  final String mistakeAnalysis;
 
   /// Which study variation this card was cut from ("Variation 3"), for
   /// puzzles decoded out of a study PGN. Empty for mined and custom puzzles.
@@ -27,13 +42,18 @@ class TacticsPosition {
   /// mined before this was captured, and for custom / variation puzzles.
   final String sourceMovetext;
   final DateTime? lastReviewed;
-  final int reviewCount; // Number of times reviewed
-  final int successCount; // Number of times solved correctly
-  final double timeToSolve; // Time taken to solve (seconds)
-  final int hintsUsed; // Number of hints used
-  final String
-  opponentBestResponse; // Opponent's best reply after user's bad move
-  final int rating; // 0 = unrated, 1–5 star quality rating
+  final int reviewCount;
+  final int successCount;
+
+  /// Time taken on the last solve, in seconds.
+  final double timeToSolve;
+  final int hintsUsed;
+
+  /// The opponent's best reply after the user's bad move.
+  final String opponentBestResponse;
+
+  /// 0 = unrated, 1–5 star quality rating.
+  final int rating;
 
   /// Flaw attribution tags computed at mine time (see FlawTagger): at most
   /// one each of impact (reversed/squandered), opportunity (miss/lucky),
@@ -121,7 +141,6 @@ class TacticsPosition {
     );
   }
 
-  /// Calculate success rate for this position - matches Python property
   double get successRate => reviewCount > 0 ? successCount / reviewCount : 0.0;
 
   /// [gameDate] (PGN `YYYY.MM.DD`) parsed as a date, or `null` when absent
@@ -137,18 +156,6 @@ class TacticsPosition {
     if (month < 1 || month > 12 || day < 1 || day > 31) return null;
     return DateTime(year, month, day);
   }
-
-  /// Get the best move (first move in correct line) - for backward compatibility
-  String get bestMove => correctLine.isNotEmpty ? correctLine.first : 'unknown';
-
-  // Legacy getters for backward compatibility
-  String get description => switch (mistakeType) {
-    '??' => 'Fix the blunder - find the best move',
-    '?!' => 'Correct the inaccuracy - find the best move',
-    'custom' => 'Find the best move',
-    _ => 'Improve on the mistake - find the best move',
-  };
-  String get gameSource => '$gameWhite vs $gameBlack';
 
   /// The severity of a mined mistake in words. `??` / `?` / `?!` are notation
   /// a reader has to decode; the word is the same information without the
@@ -190,10 +197,8 @@ class TacticsPosition {
     return parts.join(' · ');
   }
 
-  /// CSV column count.  Old files may have 17–21; current format has 22.
-  static const int csvColumnCount = 22;
-
-  /// Create from CSV row (18 columns; tolerates legacy 17-column rows).
+  /// Create from a legacy CSV row (22 columns; tolerates 17–21-column rows
+  /// from older files). Only the CSV → PGN migration reads this format.
   factory TacticsPosition.fromCsv(List<dynamic> row) {
     if (row.length < 17) {
       throw ArgumentError(
@@ -243,7 +248,7 @@ class TacticsPosition {
     );
   }
 
-  /// Convert to CSV row - matches Python's CSV format
+  /// The legacy CSV row for this puzzle (the inverse of [fromCsv]).
   List<dynamic> toCsvRow() {
     return [
       fen,

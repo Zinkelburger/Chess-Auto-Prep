@@ -86,6 +86,23 @@ void main() {
     expect(await client.search('a'), isEmpty);
   });
 
+  test('ratings: the first entry per system wins, a bare system is null', () {
+    final m = UscfMember.fromJson({
+      'id': '1',
+      'firstName': 'A',
+      'lastName': 'B',
+      'ratings': [
+        {'rating': 1500, 'ratingSystem': 'R'},
+        {'rating': 1600, 'ratingSystem': 'R'},
+        {'ratingSystem': 'Q'},
+      ],
+    });
+    expect(m.regular, 1500);
+    expect(m.quick, isNull);
+    expect(m.blitz, isNull);
+    expect(m.summary, '1500');
+  });
+
   test('titleCaseName keeps capitals after apostrophes and hyphens', () {
     expect(titleCaseName('JOHN MCDONALD'), 'John Mcdonald');
     expect(titleCaseName("o'brien"), "O'Brien");

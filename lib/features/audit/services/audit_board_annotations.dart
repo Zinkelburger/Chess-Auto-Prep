@@ -3,11 +3,11 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../../utils/log.dart';
 import '../../../models/board_annotation.dart';
+import '../../../utils/fen_utils.dart';
+import '../../../utils/log.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
-import '../../../utils/fen_utils.dart';
 
 /// Build board annotations from audit findings matching [currentFen].
 ///
@@ -32,7 +32,7 @@ List<BoardAnnotation> buildAuditBoardAnnotations({
   final annotations = <BoardAnnotation>[];
   const maxAnnotations = 6;
 
-  Position? pos;
+  final Position pos;
   try {
     pos = Chess.fromSetup(Setup.parseFen(currentFen));
   } catch (e) {
@@ -73,17 +73,9 @@ List<BoardAnnotation> buildAuditBoardAnnotations({
 (String, String)? _sanToSquares(Position pos, String san) {
   try {
     final move = pos.parseSan(san);
-    if (move is NormalMove) {
-      return (_squareName(move.from), _squareName(move.to));
-    }
+    if (move is NormalMove) return (move.from.name, move.to.name);
   } catch (e) {
     log.d('Failed to parse SAN "$san": $e', name: 'AuditAnnotations');
   }
   return null;
-}
-
-String _squareName(int sq) {
-  final file = String.fromCharCode(97 + (sq % 8));
-  final rank = (sq ~/ 8) + 1;
-  return '$file$rank';
 }

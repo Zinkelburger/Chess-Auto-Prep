@@ -6,12 +6,11 @@
 /// and delegates here, so existing call-sites are unchanged.
 library;
 
-import '../../utils/isolate_task.dart';
-
 import 'package:flutter/foundation.dart';
 
-import '../../services/pgn_parsing_service.dart' as pgn;
+import '../../services/pgn_position_replay.dart' as pgn;
 import '../../services/storage/storage_factory.dart';
+import '../../utils/isolate_task.dart';
 
 class PgnFenIndex {
   PgnFenIndex({required this.isActive, required this.onChanged});
@@ -63,9 +62,10 @@ class PgnFenIndex {
     required String? filePath,
     required int gameTotal,
   }) {
-    if (!_stale || _value == null || filePath == null) return Future.value();
+    final index = _value;
+    if (!_stale || index == null || filePath == null) return Future.value();
     _stale = false;
-    return _persistIndex(_value!, filePath: filePath, gameTotal: gameTotal);
+    return _persistIndex(index, filePath: filePath, gameTotal: gameTotal);
   }
 
   /// Try to load a persisted `<pgn>.fenidx` companion file, validating it
@@ -98,7 +98,8 @@ class PgnFenIndex {
       if (!isActive() || task.isCancelled || generation != _generation) return;
       _value = index;
     } catch (_) {
-      // Corrupt or unreadable — fall through to building from scratch.
+      // A corrupt or unreadable companion file is not an error: the index is
+      // a cache, and the caller builds it from scratch when [value] is null.
     }
   }
 

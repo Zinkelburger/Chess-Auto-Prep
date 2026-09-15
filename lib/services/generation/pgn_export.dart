@@ -5,12 +5,12 @@
 /// mid-run snapshot export where no opening book is available.
 library;
 
-import 'engine_tail.dart';
 import 'dart:io';
 
 import '../../constants/chess_constants.dart';
 import '../../utils/atomic_file.dart';
 import '../../utils/fen_utils.dart';
+import 'engine_tail.dart';
 import 'export/move_annotation.dart';
 import 'export/pgn_game_writer.dart';
 import 'line_extractor.dart';

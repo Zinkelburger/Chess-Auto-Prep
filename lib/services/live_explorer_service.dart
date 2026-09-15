@@ -32,8 +32,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../features/coverage/services/coverage_service.dart'
-    show LichessDatabase;
 import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show uciToSan;
 import '../utils/fen_utils.dart';
@@ -219,8 +217,9 @@ class LiveExplorerService {
     }
 
     final now = DateTime.now();
+    final lastRequestAt = _lastRequestAt;
     final wasQuiet =
-        _lastRequestAt == null || now.difference(_lastRequestAt!) >= debounce;
+        lastRequestAt == null || now.difference(lastRequestAt) >= debounce;
     _lastRequestAt = now;
 
     final cached = _cache.peek(fen, query.source);
@@ -235,9 +234,7 @@ class LiveExplorerService {
     if (_beyondReach(fen, movePath)) {
       _requestSeq++;
       // No games that deep — reported without a request.
-      state.value = ExplorerState.data(
-        ExplorerResponse(fen: fen, moves: const [], totalGames: 0),
-      );
+      state.value = ExplorerState.data(_emptyResponse(fen));
       return;
     }
 
@@ -304,13 +301,13 @@ class LiveExplorerService {
   /// offers TWIC when there is one.
   ExplorerResponse _localResponse(String fen, {required bool classicalOnly}) {
     final db = _localDb();
-    if (db == null) {
-      return ExplorerResponse(fen: fen, moves: const [], totalGames: 0);
-    }
+    if (db == null) return _emptyResponse(fen);
     List<BookMove> rows;
     try {
       rows = db.bookMoves(fen);
     } catch (_) {
+      // A book that cannot answer (closed mid-request, unreadable index)
+      // shows as an empty position, like a missing database does.
       rows = const [];
     }
     if (classicalOnly) {
@@ -358,6 +355,10 @@ class LiveExplorerService {
     );
   }
 
+  /// What the explorer says about a position it has no games for.
+  static ExplorerResponse _emptyResponse(String fen) =>
+      ExplorerResponse(fen: fen, moves: const [], totalGames: 0);
+
   static ExplorerGame _localGame(MasterGame g, String san) {
     final parts = g.date.split('.');
     return ExplorerGame(
@@ -404,9 +405,7 @@ class LiveExplorerService {
     if (response.moves.isNotEmpty ||
         ply <= _emptyStreakPly ||
         !_continuesStreakLine(path)) {
-      _emptyStreak = 0;
-      _emptyStreakPly = -1;
-      _emptyStreakPath = const [];
+      _resetEmptyStreak();
     }
     if (response.moves.isEmpty) {
       // The first empty answer fixes the line the run is about; later ones
@@ -417,14 +416,18 @@ class LiveExplorerService {
     }
   }
 
+  void _resetEmptyStreak() {
+    _emptyStreak = 0;
+    _emptyStreakPly = -1;
+    _emptyStreakPath = const [];
+  }
+
   /// Clear the panel back to idle (e.g. when the explorer is hidden).
   void reset() {
     _debounceTimer?.cancel();
     _lastRequestAt = null;
     _requestSeq++;
-    _emptyStreak = 0;
-    _emptyStreakPly = -1;
-    _emptyStreakPath = const [];
+    _resetEmptyStreak();
     state.value = const ExplorerState.idle();
   }
 

@@ -159,7 +159,9 @@ class ViewerSolitaireSession {
 
   Future<void> loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    controller.revealDelaySec = prefs.getInt(_revealDelayKey) ?? 60;
+    controller.revealDelaySec =
+        prefs.getInt(_revealDelayKey) ??
+        SolitaireController.defaultRevealDelaySec;
     _includeVariations = prefs.getBool(_includeVariationsKey) ?? false;
     final trophies = await SolitaireTrophyService.instance.loadAll();
     totalTrophyCount = trophies.length;

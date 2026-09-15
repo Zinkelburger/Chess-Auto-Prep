@@ -1,9 +1,5 @@
-/// Typed replacement for the `Map<String, dynamic>` used to pass repertoire
-/// metadata between screens, controllers, and services.
-///
-/// Previously every consumer cast `['filePath'] as String`, `['name'] as String`,
-/// etc. from an untyped map.  This class makes the shape explicit, immutable,
-/// and refactor-safe.
+/// What the repertoire picker and storage know about a repertoire file
+/// without opening it.  Identity is the [filePath].
 library;
 
 class RepertoireMetadata {
@@ -18,25 +14,6 @@ class RepertoireMetadata {
     this.gameCount = 0,
     required this.lastModified,
   });
-
-  /// Convert to the legacy `Map<String, dynamic>` shape for backward compat
-  /// during incremental migration.
-  Map<String, dynamic> toMap() => {
-    'filePath': filePath,
-    'name': name,
-    'gameCount': gameCount,
-    'lastModified': lastModified,
-  };
-
-  /// Create from the legacy `Map<String, dynamic>` shape.
-  factory RepertoireMetadata.fromMap(Map<String, dynamic> map) {
-    return RepertoireMetadata(
-      filePath: map['filePath'] as String,
-      name: map['name'] as String,
-      gameCount: map['gameCount'] as int? ?? 0,
-      lastModified: map['lastModified'] as DateTime? ?? DateTime.now(),
-    );
-  }
 
   RepertoireMetadata copyWith({
     String? filePath,

@@ -1,7 +1,10 @@
+/// Per-line quality, trap and coherence metrics for the lines list.
+library;
+
+import '../features/traps/services/trap_index_service.dart';
 import '../models/build_tree_node.dart' show BuildTreeNode;
 import '../models/repertoire_line.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
-import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
+import '../models/trap_line_info.dart';
 import 'coherence_service.dart';
 import 'generation/tree_my_ease.dart';
 
@@ -38,53 +41,42 @@ Map<String, LineQualityInfo> computeLineMetricsMap({
   CoherenceResult? coherenceResult,
 }) {
   final trapIndex = traps.isNotEmpty ? TrapIndexService(traps) : null;
-  final map = <String, LineQualityInfo>{};
+  return {
+    for (final line in lines)
+      line.id: _metricsForLine(
+        line,
+        treeRoot: treeRoot,
+        isWhiteRepertoire: isWhiteRepertoire,
+        trapIndex: trapIndex,
+        coherenceResult: coherenceResult,
+      ),
+  };
+}
 
-  for (final line in lines) {
-    double? quality;
-    int? bottleneckPly;
-    double? bottleneckQuality;
-    var trapCount = 0;
-    int? bestTrapEvalDiff;
-    double? coherence;
-
-    bool bottleneckIsOurMove = true;
-
-    if (treeRoot != null) {
-      final linePath = walkTreeForLine(treeRoot, line.moves);
-      if (linePath.isNotEmpty) {
-        final lp = computeLinePlayability(linePath, isWhiteRepertoire);
-        quality = lp.playability;
-        bottleneckPly = lp.bottleneckPly;
-        bottleneckQuality = lp.bottleneckQuality;
-        bottleneckIsOurMove = lp.bottleneckIsOurMove;
-      }
-    }
-
-    if (trapIndex != null) {
-      final trapMetrics = trapIndex.metricsForLine(line.moves);
-      trapCount = trapMetrics.count;
-      if (trapMetrics.count > 0) {
-        bestTrapEvalDiff = trapMetrics.bestEvalDiff;
-      }
-    }
-
-    if (coherenceResult != null) {
-      coherence = coherenceResult.lineCoherenceById[line.id];
-    }
-
-    map[line.id] = LineQualityInfo(
-      quality: quality,
-      bottleneckPly: bottleneckPly,
-      bottleneckQuality: bottleneckQuality,
-      bottleneckIsOurMove: bottleneckIsOurMove,
-      trapCount: trapCount,
-      bestTrapEvalDiff: bestTrapEvalDiff,
-      coherence: coherence,
-    );
-  }
-
-  return map;
+LineQualityInfo _metricsForLine(
+  RepertoireLine line, {
+  required BuildTreeNode? treeRoot,
+  required bool isWhiteRepertoire,
+  required TrapIndexService? trapIndex,
+  required CoherenceResult? coherenceResult,
+}) {
+  final linePath = treeRoot == null
+      ? const <BuildTreeNode>[]
+      : walkTreeForLine(treeRoot, line.moves);
+  final playability = linePath.isEmpty
+      ? null
+      : computeLinePlayability(linePath, isWhiteRepertoire);
+  final trapMetrics = trapIndex?.metricsForLine(line.moves);
+  final trapCount = trapMetrics?.count ?? 0;
+  return LineQualityInfo(
+    quality: playability?.playability,
+    bottleneckPly: playability?.bottleneckPly,
+    bottleneckQuality: playability?.bottleneckQuality,
+    bottleneckIsOurMove: playability?.bottleneckIsOurMove ?? true,
+    trapCount: trapCount,
+    bestTrapEvalDiff: trapCount > 0 ? trapMetrics?.bestEvalDiff : null,
+    coherence: coherenceResult?.lineCoherenceById[line.id],
+  );
 }
 
 /// [computeLineMetricsMap] made incremental, on the same rule
@@ -134,14 +126,14 @@ Map<String, LineQualityInfo> buildLineMetricsIndex({
         line,
   ]);
 
-  final index = <String, LineQualityInfo>{};
-  for (final line in lines) {
-    final info = computed[line.id] ?? previous[line.id];
-    if (info != null) index[line.id] = info;
-  }
-  return index;
+  return {
+    for (final line in lines)
+      line.id: ?(computed[line.id] ?? previous[line.id]),
+  };
 }
 
+/// The nodes of [root]'s tree along [moves], root first, stopping at the
+/// first move the tree does not hold.
 List<BuildTreeNode> walkTreeForLine(BuildTreeNode root, List<String> moves) {
   final path = <BuildTreeNode>[root];
   var current = root;

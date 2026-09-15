@@ -18,6 +18,7 @@ import 'package:path/path.dart' as p;
 
 import '../../models/build_tree_node.dart';
 import 'build_run.dart' show findMaxNodeId;
+import 'build_subtree.dart' show copyNodeAnalysis;
 import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
@@ -29,8 +30,8 @@ import 'tree_serialization.dart';
 /// [node] belongs to none of them.
 BuildTree? treeOwning(BuildTreeNode node, Iterable<BuildTree> trees) {
   var top = node;
-  while (top.parent != null) {
-    top = top.parent!;
+  for (var parent = top.parent; parent != null; parent = top.parent) {
+    top = parent;
   }
   for (final tree in trees) {
     if (identical(tree.root, top)) return tree;
@@ -81,7 +82,8 @@ int graftProbe({
       moveProbability: old.moveProbability,
       cumulativeProbability: cumP,
     );
-    _copyScalars(node, old);
+    copyNodeAnalysis(node, from: old);
+    node.enginePv = List.of(old.enginePv);
     added++;
     for (final child in old.children) {
       node.children.add(clone(child, node));
@@ -144,29 +146,6 @@ void _completeFrom(BuildTreeNode into, BuildTreeNode from) {
   into.openingName ??= from.openingName;
   into.openingEco ??= from.openingEco;
   into.pvContinuationMove ??= from.pvContinuationMove;
-}
-
-void _copyScalars(BuildTreeNode node, BuildTreeNode old) {
-  node
-    ..engineEvalCp = old.engineEvalCp
-    ..enginePv = List.of(old.enginePv)
-    ..explored = old.explored
-    ..pruneReason = old.pruneReason
-    ..pruneEvalCp = old.pruneEvalCp
-    ..openingName = old.openingName
-    ..openingEco = old.openingEco
-    ..maiaFrequency = old.maiaFrequency
-    ..pvContinuationMove = old.pvContinuationMove
-    ..engineInjected = old.engineInjected
-    ..extEvalMode = old.extEvalMode
-    ..ease = old.ease
-    ..localCpl = old.localCpl
-    ..expectimaxValue = old.expectimaxValue
-    ..hasExpectimax = old.hasExpectimax
-    ..opponentEase = old.opponentEase
-    ..trapScore = old.trapScore
-    ..myEase = old.myEase;
-  node.setLichessStats(old.whiteWins, old.blackWins, old.draws);
 }
 
 /// Re-run the phase-2 scoring a full build does — ease, expectimax, trap

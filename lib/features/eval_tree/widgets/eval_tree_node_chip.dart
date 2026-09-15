@@ -39,8 +39,8 @@ class EvalTreeNodeChip extends StatelessWidget {
       metricDisplayMode,
     );
     final fillColor = graphNodeColor(snapshot: snapshot, node: node);
-    final textColor = nodeTextColor(fillColor);
-    final secondaryTextColor = nodeSecondaryTextColor(fillColor);
+    const textColor = kNodeTextColor;
+    final secondaryTextColor = kNodeSecondaryTextColor;
     final textOutline = nodeTextOutline(fillColor);
     final borderColor = layoutNode.isSelected
         ? nodeSelectionColor(fillColor)

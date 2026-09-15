@@ -57,6 +57,8 @@ class GenerationPresetStore {
             e.key: e.value as Map<String, dynamic>,
       };
     } catch (_) {
+      // Unreadable preferences (corrupt JSON or an old shape) mean the user
+      // has no usable profiles; there is nothing to repair from here.
       return {};
     }
   }

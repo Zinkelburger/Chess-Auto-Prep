@@ -54,6 +54,8 @@ class ViewerSession {
         ),
       );
     } catch (_) {
+      // A malformed or pre-format entry only means there is no session to
+      // restore; the reader opens at the start as if none had been saved.
       return null;
     }
   }

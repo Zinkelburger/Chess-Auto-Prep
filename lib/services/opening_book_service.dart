@@ -6,15 +6,13 @@
 /// with it regardless of move order.
 library;
 
-import 'dart:convert';
-
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
 
 import '../utils/fen_utils.dart';
 import '../utils/chess_utils.dart' show playSanOrNullMove;
 import '../utils/san_token_utils.dart';
+import 'opening_tsv.dart';
 
 class OpeningBookEntry {
   final String eco;
@@ -46,39 +44,32 @@ Map<String, OpeningBookEntry> buildOpeningBookFromTsv(
   List<String> tsvContents,
 ) {
   final map = <String, OpeningBookEntry>{};
-  for (final content in tsvContents) {
-    for (final line in const LineSplitter().convert(content)) {
-      if (line.isEmpty || line.startsWith('eco\t')) continue;
-      final parts = line.split('\t');
-      if (parts.length < 3) continue;
-      final tokens = cleanSanTokens(parts[2]);
-      if (tokens.isEmpty) continue;
+  for (final row in parseOpeningTsvRows(tsvContents)) {
+    final tokens = cleanSanTokens(row.movetext);
+    if (tokens.isEmpty) continue;
+    final end = _replayLine(tokens);
+    if (end == null) continue;
 
-      Position pos = Chess.initial;
-      var ok = true;
-      for (final san in tokens) {
-        final next = playSanOrNullMove(pos, san);
-        if (next == null) {
-          ok = false;
-          break;
-        }
-        pos = next;
-      }
-      if (!ok) continue;
-
-      // Distinct lines reaching the same position are duplicates by
-      // definition — keep the first (TSV order).
-      map.putIfAbsent(
-        normalizeFen(pos.fen),
-        () => OpeningBookEntry(
-          eco: parts[0].trim(),
-          name: parts[1].trim(),
-          ply: tokens.length,
-        ),
-      );
-    }
+    // Distinct lines reaching the same position are duplicates by
+    // definition — keep the first (TSV order).
+    map.putIfAbsent(
+      normalizeFen(end.fen),
+      () => OpeningBookEntry(eco: row.eco, name: row.name, ply: tokens.length),
+    );
   }
   return map;
+}
+
+/// The position after [sans] from the initial position, or null when any
+/// token is not a legal move there.
+Position? _replayLine(List<String> sans) {
+  Position pos = Chess.initial;
+  for (final san in sans) {
+    final next = playSanOrNullMove(pos, san);
+    if (next == null) return null;
+    pos = next;
+  }
+  return pos;
 }
 
 /// Classify every game using a prebuilt FEN → game-indices index: for each
@@ -112,14 +103,7 @@ class OpeningBookService {
 
   Future<OpeningBook> load() => _loading ??= _load();
 
-  Future<OpeningBook> _load() async {
-    final contents = <String>[];
-    for (final volume in const ['a', 'b', 'c', 'd', 'e']) {
-      contents.add(
-        await rootBundle.loadString('assets/data/openings/$volume.tsv'),
-      );
-    }
-    final map = await compute(buildOpeningBookFromTsv, contents);
-    return OpeningBook(map);
-  }
+  Future<OpeningBook> _load() async => OpeningBook(
+    await compute(buildOpeningBookFromTsv, await loadOpeningTsvVolumes()),
+  );
 }

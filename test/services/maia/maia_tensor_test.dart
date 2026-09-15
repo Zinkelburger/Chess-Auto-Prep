@@ -186,11 +186,11 @@ void main() {
   group('preprocess', () {
     test('White to move: no flip, mask is exactly the legal moves', () {
       final out = MaiaTensor.preprocess(kInitialFEN, 1500, 1900);
-      expect(out['isBlack'], isFalse);
-      expect(out['eloSelf'], 1500.0);
-      expect(out['eloOppo'], 1900.0);
-      expect(out['boardInput'], MaiaTensor.boardToMaia3Tokens(kInitialFEN));
-      final mask = out['legalMoves'] as List<double>;
+      expect(out.isBlack, isFalse);
+      expect(out.eloSelf, 1500.0);
+      expect(out.eloOppo, 1900.0);
+      expect(out.boardInput, MaiaTensor.boardToMaia3Tokens(kInitialFEN));
+      final mask = out.legalMoves;
       expect(mask, hasLength(_vocabSize));
       expect(_setMoves(mask), _legalStandardUcis(kInitialFEN));
       expect(_setMoves(mask), hasLength(20));
@@ -199,12 +199,12 @@ void main() {
     test('Black to move: board and mask are the mirrored position', () {
       const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
       final out = MaiaTensor.preprocess(fen, 1500, 1500);
-      expect(out['isBlack'], isTrue);
+      expect(out.isBlack, isTrue);
       expect(
-        out['boardInput'],
+        out.boardInput,
         MaiaTensor.boardToMaia3Tokens(MaiaTensor.mirrorFEN(fen)),
       );
-      final set = _setMoves(out['legalMoves'] as List<double>);
+      final set = _setMoves(out.legalMoves);
       expect(
         set,
         contains('e2e4'),
@@ -216,16 +216,14 @@ void main() {
 
     test('castling is masked king-to-destination, not king-onto-rook', () {
       const fen = 'r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1';
-      final set = _setMoves(
-        MaiaTensor.preprocess(fen, 1500, 1500)['legalMoves'] as List<double>,
-      );
+      final set = _setMoves(MaiaTensor.preprocess(fen, 1500, 1500).legalMoves);
       expect(set, containsAll(['e1g1', 'e1c1']));
       expect(set, isNot(contains('e1h1')));
       expect(set, isNot(contains('e1a1')));
       // The same for Black after the flip.
       const black = 'r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1';
       final flipped = _setMoves(
-        MaiaTensor.preprocess(black, 1500, 1500)['legalMoves'] as List<double>,
+        MaiaTensor.preprocess(black, 1500, 1500).legalMoves,
       );
       expect(flipped, containsAll(['e1g1', 'e1c1']));
       expect(flipped.map(MaiaTensor.mirrorMove), containsAll(['e8g8', 'e8c8']));
@@ -235,9 +233,7 @@ void main() {
       // White may still castle short; Black may not. After the flip the
       // mover (now "White") must have no castling and the opponent short.
       const fen = 'r3k2r/8/8/8/8/8/8/R3K2R b K - 0 1';
-      final set = _setMoves(
-        MaiaTensor.preprocess(fen, 1500, 1500)['legalMoves'] as List<double>,
-      );
+      final set = _setMoves(MaiaTensor.preprocess(fen, 1500, 1500).legalMoves);
       expect(set, isNot(contains('e1g1')));
       expect(set, isNot(contains('e1c1')));
       expect(set.map(MaiaTensor.mirrorMove).toSet(), _legalStandardUcis(fen));
@@ -245,9 +241,7 @@ void main() {
 
     test('promotions: all four pieces set, the bare push not', () {
       const fen = '4k3/P7/8/8/8/8/8/4K3 w - - 0 1';
-      final set = _setMoves(
-        MaiaTensor.preprocess(fen, 1500, 1500)['legalMoves'] as List<double>,
-      );
+      final set = _setMoves(MaiaTensor.preprocess(fen, 1500, 1500).legalMoves);
       expect(set, containsAll(['a7a8q', 'a7a8r', 'a7a8b', 'a7a8n']));
       expect(set, isNot(contains('a7a8')));
       expect(set, _legalStandardUcis(fen));
@@ -255,9 +249,7 @@ void main() {
 
     test('Black promotions reach the vocabulary through the mirror', () {
       const fen = '4k3/8/8/8/8/8/p7/4K3 b - - 0 1';
-      final set = _setMoves(
-        MaiaTensor.preprocess(fen, 1500, 1500)['legalMoves'] as List<double>,
-      );
+      final set = _setMoves(MaiaTensor.preprocess(fen, 1500, 1500).legalMoves);
       expect(set, containsAll(['a7a8q', 'a7a8n']));
       expect(set.map(MaiaTensor.mirrorMove).toSet(), _legalStandardUcis(fen));
     });
@@ -265,9 +257,7 @@ void main() {
     test('capturing promotion is masked too', () {
       // b8 is blocked by the knight; a8 and c8 are captures.
       const fen = 'rnb1k3/1P6/8/8/8/8/8/4K3 w - - 0 1';
-      final set = _setMoves(
-        MaiaTensor.preprocess(fen, 1500, 1500)['legalMoves'] as List<double>,
-      );
+      final set = _setMoves(MaiaTensor.preprocess(fen, 1500, 1500).legalMoves);
       expect(set, containsAll(['b7a8q', 'b7c8n', 'b7c8q']));
       expect(set, isNot(contains('b7b8q')));
       expect(set, _legalStandardUcis(fen));
@@ -277,16 +267,13 @@ void main() {
       const white =
           'rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3';
       expect(
-        _setMoves(
-          MaiaTensor.preprocess(white, 1500, 1500)['legalMoves']
-              as List<double>,
-        ),
+        _setMoves(MaiaTensor.preprocess(white, 1500, 1500).legalMoves),
         contains('e5d6'),
       );
       const black =
           'rnbqkbnr/pppp1ppp/8/8/3Pp3/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 3';
       final set = _setMoves(
-        MaiaTensor.preprocess(black, 1500, 1500)['legalMoves'] as List<double>,
+        MaiaTensor.preprocess(black, 1500, 1500).legalMoves,
       );
       expect(set, contains('e5d6'), reason: 'e4xd3 e.p. mirrored');
       expect(set.map(MaiaTensor.mirrorMove).toSet(), _legalStandardUcis(black));
@@ -302,8 +289,8 @@ void main() {
       ];
       for (final fen in fens) {
         final out = MaiaTensor.preprocess(fen, 1500, 1500);
-        var set = _setMoves(out['legalMoves'] as List<double>);
-        if (out['isBlack'] as bool) {
+        var set = _setMoves(out.legalMoves);
+        if (out.isBlack) {
           set = set.map(MaiaTensor.mirrorMove).toSet();
         }
         expect(set, _legalStandardUcis(fen), reason: fen);

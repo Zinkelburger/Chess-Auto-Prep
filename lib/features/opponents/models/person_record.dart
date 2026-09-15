@@ -13,12 +13,23 @@ import '../../../models/analysis_player_info.dart';
 import '../../../services/opponent_list.dart';
 
 /// A short, sortable, collision-safe id for a new record.
-String newRecordId() {
-  final t = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
-  final r = Random().nextInt(1 << 20).toRadixString(36).padLeft(4, '0');
-  return '$t$r';
+String _newRecordId() {
+  final stamp = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+  final salt = Random().nextInt(1 << 20).toRadixString(36).padLeft(4, '0');
+  return '$stamp$salt';
 }
 
+/// [value] trimmed, or null when it is null or blank.
+String? _blankToNull(String? value) {
+  final trimmed = value?.trim();
+  return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+}
+
+/// A directory entry. Immutable; every edit goes through [copyWith] and the
+/// store stamps `updatedAt` on save.
+///
+/// Serialized as one row of `people.json`; [toJson] and [fromJson] are the
+/// on-disk format and must stay backwards compatible.
 class PersonRecord {
   final String id;
   final String name;
@@ -73,22 +84,42 @@ class PersonRecord {
   }) {
     final now = DateTime.now();
     return PersonRecord(
-      id: newRecordId(),
+      id: _newRecordId(),
       name: name.trim(),
-      uscfId: _clean(uscfId),
-      chesscom: _clean(chesscom),
-      lichess: _clean(lichess),
+      uscfId: _blankToNull(uscfId),
+      chesscom: _blankToNull(chesscom),
+      lichess: _blankToNull(lichess),
       rating: rating,
-      title: _clean(title),
+      title: _blankToNull(title),
       notes: notes,
       createdAt: now,
       updatedAt: now,
     );
   }
 
-  static String? _clean(String? s) {
-    final t = s?.trim();
-    return (t == null || t.isEmpty) ? null : t;
+  factory PersonRecord.fromJson(Map<String, dynamic> json) {
+    final now = DateTime.now();
+    return PersonRecord(
+      id: json['id'] as String? ?? _newRecordId(),
+      name: (json['name'] as String? ?? '').trim(),
+      uscfId: _blankToNull(json['uscf_id']?.toString()),
+      chesscom: _blankToNull(json['chesscom'] as String?),
+      lichess: _blankToNull(json['lichess'] as String?),
+      rating: (json['rating'] as num?)?.toInt(),
+      title: _blankToNull(json['title'] as String?),
+      notes: json['notes'] as String? ?? '',
+      prepFilePath: _blankToNull(json['prep_file'] as String?),
+      gameSetKeys: (json['game_sets'] as List? ?? const [])
+          .whereType<String>()
+          .toList(),
+      studyLinks: [
+        for (final link in json['studies'] as List? ?? const [])
+          if (link is Map)
+            PlayerStudyLink.fromJson(link.cast<String, dynamic>()),
+      ],
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? now,
+      updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? '') ?? now,
+    );
   }
 
   /// The same entry the opponent-list importer builds, so a person's game-set
@@ -138,31 +169,9 @@ class PersonRecord {
     'updated_at': updatedAt.toIso8601String(),
   };
 
-  factory PersonRecord.fromJson(Map<String, dynamic> json) {
-    final now = DateTime.now();
-    return PersonRecord(
-      id: json['id'] as String? ?? newRecordId(),
-      name: (json['name'] as String? ?? '').trim(),
-      uscfId: _clean(json['uscf_id']?.toString()),
-      chesscom: _clean(json['chesscom'] as String?),
-      lichess: _clean(json['lichess'] as String?),
-      rating: (json['rating'] as num?)?.toInt(),
-      title: _clean(json['title'] as String?),
-      notes: json['notes'] as String? ?? '',
-      prepFilePath: _clean(json['prep_file'] as String?),
-      gameSetKeys: (json['game_sets'] as List? ?? [])
-          .whereType<String>()
-          .toList(),
-      studyLinks: [
-        for (final link in json['studies'] as List? ?? [])
-          if (link is Map)
-            PlayerStudyLink.fromJson(link.cast<String, dynamic>()),
-      ],
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? now,
-      updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? '') ?? now,
-    );
-  }
-
+  /// A copy with the given fields replaced. Blank strings count as "not
+  /// given" and keep the current value; use the `clear…` flags to blank a
+  /// field on purpose.
   PersonRecord copyWith({
     String? name,
     String? uscfId,
@@ -184,15 +193,15 @@ class PersonRecord {
   }) => PersonRecord(
     id: id,
     name: name?.trim() ?? this.name,
-    uscfId: clearUscfId ? null : (_clean(uscfId) ?? this.uscfId),
-    chesscom: clearChesscom ? null : (_clean(chesscom) ?? this.chesscom),
-    lichess: clearLichess ? null : (_clean(lichess) ?? this.lichess),
+    uscfId: clearUscfId ? null : (_blankToNull(uscfId) ?? this.uscfId),
+    chesscom: clearChesscom ? null : (_blankToNull(chesscom) ?? this.chesscom),
+    lichess: clearLichess ? null : (_blankToNull(lichess) ?? this.lichess),
     rating: clearRating ? null : (rating ?? this.rating),
-    title: clearTitle ? null : (_clean(title) ?? this.title),
+    title: clearTitle ? null : (_blankToNull(title) ?? this.title),
     notes: notes ?? this.notes,
     prepFilePath: clearPrepFilePath
         ? null
-        : (_clean(prepFilePath) ?? this.prepFilePath),
+        : (_blankToNull(prepFilePath) ?? this.prepFilePath),
     gameSetKeys: gameSetKeys ?? this.gameSetKeys,
     studyLinks: studyLinks ?? this.studyLinks,
     createdAt: createdAt,
@@ -206,15 +215,27 @@ class PersonRecord {
 /// A whole PGN/study or a named chapter, opened directly from the player row.
 class PlayerStudyLink {
   const PlayerStudyLink({required this.path, this.chapter});
+
   final String path;
   final String? chapter;
-  Map<String, dynamic> toJson() => {
-    'path': path,
-    if (chapter != null) 'chapter': chapter,
-  };
+
   factory PlayerStudyLink.fromJson(Map<String, dynamic> json) =>
       PlayerStudyLink(
         path: json['path'] as String,
         chapter: json['chapter'] as String?,
       );
+
+  Map<String, dynamic> toJson() => {
+    'path': path,
+    if (chapter != null) 'chapter': chapter,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlayerStudyLink &&
+      other.path == path &&
+      other.chapter == chapter;
+
+  @override
+  int get hashCode => Object.hash(path, chapter);
 }

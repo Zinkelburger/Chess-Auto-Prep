@@ -6,12 +6,13 @@ import 'package:dartchess/dartchess.dart' hide File;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../app_version.dart';
 import '../../../utils/log.dart';
 import '../models/bughouse_engine_settings.dart';
 import '../models/bughouse_state.dart';
 import 'bughouse_bundle.dart';
 import 'bughouse_cpu_limit.dart';
+import 'bughouse_engine_protocol.dart';
+import 'bughouse_engine_report.dart';
 import 'windows_loader_check.dart';
 
 /// Thrown when the engine cannot be started or does not answer in time.
@@ -99,13 +100,8 @@ abstract class BughouseAnalysisEngine {
 
 /// A client for Hivemind, the neural-network bughouse engine.
 ///
-/// It speaks UCI, but not the UCI a chess GUI expects: bughouse needs two
-/// boards, so the dialect differs in three ways that this class hides.
-///
-///   * `position fen <boardA>|<boardB>` — two crazyhouse FENs, pipe-separated.
-///   * Moves carry a board digit: `1e2e4` is e2e4 on board A, `2d7d5` on B.
-///   * `bestmove (d2d4,pass)` — a *joint* action, one half per board, where
-///     `pass` (deliberately not moving) is a legal and often correct choice.
+/// It speaks a two-board dialect of UCI — see [BughouseEngineProtocol] for
+/// the lines it prints — which this class hides behind ordinary calls.
 ///
 /// `go` is asynchronous and the engine keeps thinking in a permanent-brain
 /// loop afterwards, so callers must wait for `bestmove` rather than firing
@@ -125,10 +121,9 @@ class BughouseEngine implements BughouseAnalysisEngine {
         .transform(const LineSplitter())
         .listen((line) {
           _spoke = true;
-          // The first handful only, and only for a failure report: the banner
-          // and the backend line say what the engine thought it was doing, and
-          // after that it is search output nobody wants pasted into an issue.
-          if (_stdoutLines.length < 24) _stdoutLines.add(line.trimRight());
+          if (_stdoutLines.length < _reportedStdoutLines) {
+            _stdoutLines.add(line.trimRight());
+          }
           _onLine(line);
         });
     _stderrSub = _process.stderr
@@ -142,7 +137,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
       _process.exitCode.then((code) {
         _exited = true;
         _exitStatus = code;
-        if (!_disposed) _failPending(describeExit(code));
+        if (!_disposed) _failPending(BughouseEngineReport.describeExit(code));
       }),
     );
   }
@@ -180,7 +175,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
 
   Completer<void>? _readyCompleter;
   Completer<void>? _uciOkCompleter;
-  Completer<_SearchResult>? _searchCompleter;
+  Completer<BughouseBestMove>? _searchCompleter;
 
   /// Where `info` lines land while a search is running. Null between searches.
   List<BughouseInfo>? _searchInfos;
@@ -188,6 +183,11 @@ class BughouseEngine implements BughouseAnalysisEngine {
   /// How many `info` lines one search keeps. Generous — a 30-second pass emits
   /// a couple of dozen — but bounded, because nothing else bounds it.
   static const int _maxInfos = 512;
+
+  /// How many stdout lines a failure report quotes: the banner and the backend
+  /// line say what the engine thought it was doing, and after that it is
+  /// search output nobody wants pasted into an issue.
+  static const int _reportedStdoutLines = 24;
 
   bool _disposed = false;
   bool _exited = false;
@@ -357,7 +357,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
       final message = 'Engine launch failed: $e';
       throw BughouseEngineFailure(
         message,
-        report: await collectReport(
+        report: await BughouseEngineReport.collect(
           headline: message,
           executablePath: executable,
           argv: argv,
@@ -498,7 +498,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
         'Engine is not running.${_stderrLines.isEmpty ? '' : '\n${_stderrLines.take(8).join('\n')}'}',
       );
     }
-    _searchCompleter = Completer<_SearchResult>();
+    _searchCompleter = Completer<BughouseBestMove>();
     // Collected as the lines are read, not through [infoStream]: a broadcast
     // stream delivers asynchronously, so the engine's final MultiPV block —
     // printed immediately before `bestmove` — loses the race with the
@@ -572,7 +572,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
     return completer.future.timeout(
       timeout,
       onTimeout: () => throw BughouseEngineFailure(
-        stalledMessage(
+        BughouseEngineReport.stalledMessage(
           what: what,
           timeout: timeout,
           spoke: _spoke,
@@ -581,59 +581,6 @@ class BughouseEngine implements BughouseAnalysisEngine {
         ),
       ),
     );
-  }
-
-  /// Reports the timeout and received output without inferring its cause.
-  @visibleForTesting
-  static String stalledMessage({
-    required String what,
-    required Duration timeout,
-    required bool spoke,
-    required List<String> stderr,
-    required bool isWindows,
-  }) {
-    final buffer = StringBuffer(
-      'Engine did not answer "$what" within ${timeout.inSeconds}s.',
-    );
-    if (!spoke) buffer.write(' No stdout received.');
-    if (stderr.isNotEmpty) buffer.write('\n${stderr.take(8).join('\n')}');
-    return buffer.toString();
-  }
-
-  /// Preserves the raw exit code and names known NTSTATUS/signal values.
-  @visibleForTesting
-  static String describeExit(int code, {bool? isWindows}) {
-    final windows = isWindows ?? Platform.isWindows;
-    // A process killed by a signal reaches Dart as the negated signal number,
-    // and signals stop at 64; anything more negative is a Windows NTSTATUS
-    // that arrived through a signed path, which is why the two readings can
-    // share one function without a platform flag at every call site.
-    if (!windows && code < 0 && -code <= 64) {
-      final signal = switch (-code) {
-        4 => 'SIGILL',
-        6 => 'SIGABRT',
-        9 => 'SIGKILL',
-        11 => 'SIGSEGV',
-        _ => 'signal ${-code}',
-      };
-      return 'Engine exited ($code; $signal)';
-    }
-    final status = code & 0xffffffff;
-    final name = switch (status) {
-      0xC0000135 => 'STATUS_DLL_NOT_FOUND',
-      0xC0000139 => 'STATUS_ENTRYPOINT_NOT_FOUND',
-      0xC0000142 => 'STATUS_DLL_INIT_FAILED',
-      0xC000007B => 'STATUS_INVALID_IMAGE_FORMAT',
-      0xC000001D => 'STATUS_ILLEGAL_INSTRUCTION',
-      0xC0000005 => 'STATUS_ACCESS_VIOLATION',
-      0xC0000409 => 'STATUS_STACK_BUFFER_OVERRUN',
-      _ => null,
-    };
-    if (windows || name != null) {
-      final hex = status.toRadixString(16).padLeft(8, '0').toUpperCase();
-      return 'Engine exited ($code; 0x$hex${name == null ? '' : '; $name'})';
-    }
-    return 'Engine exited ($code)';
   }
 
   /// The redistributable download to put in front of the user, or null when
@@ -675,7 +622,7 @@ class BughouseEngine implements BughouseAnalysisEngine {
   Future<String> buildReport({
     required String headline,
     bool verifyAndRepair = false,
-  }) => collectReport(
+  }) => BughouseEngineReport.collect(
     headline: headline,
     executablePath: executablePath,
     argv: _argv,
@@ -687,235 +634,6 @@ class BughouseEngine implements BughouseAnalysisEngine {
     stderr: _stderrLines,
     verifyIntegrity: verifyAndRepair ? BughouseBundle.verifyAndRepair : null,
   );
-
-  /// Collect each section independently, preserving the launch evidence if a
-  /// file cannot be inspected. Inspect paths before repair removes any files.
-  @visibleForTesting
-  static Future<String> collectReport({
-    required String headline,
-    required String executablePath,
-    required List<String> argv,
-    required String workingDirectory,
-    required Map<String, String> environment,
-    required int? exitCode,
-    required bool spoke,
-    required List<String> stdout,
-    required List<String> stderr,
-    bool processStarted = true,
-    Future<ContentVerification> Function()? verifyIntegrity,
-  }) async {
-    final errors = <String>[];
-    List<String> directory = const [];
-    List<DllResolution>? libraries;
-    ContentVerification? integrity;
-    try {
-      directory = await describeDirectory(
-        workingDirectory,
-        BughouseBundle.expectedSizes,
-      );
-    } catch (e) {
-      errors.add('File inspection failed: $e');
-    }
-    if (Platform.isWindows) {
-      try {
-        libraries = await WindowsLoaderCheck.resolveAll(
-          engineDir: workingDirectory,
-          environment: environment,
-        );
-      } catch (e) {
-        errors.add('DLL inspection failed: $e');
-      }
-    }
-    if (verifyIntegrity != null) {
-      try {
-        integrity = await verifyIntegrity();
-      } catch (e) {
-        errors.add('Integrity check failed: $e');
-      }
-    }
-    final loaderVariable = Platform.isWindows
-        ? 'PATH'
-        : Platform.isMacOS
-        ? 'DYLD_LIBRARY_PATH'
-        : 'LD_LIBRARY_PATH';
-    final loaderValue = environment.entries
-        .where((e) => e.key.toUpperCase() == loaderVariable)
-        .map((e) => e.value)
-        .firstOrNull;
-    return formatReport(
-      headline: headline,
-      executablePath: executablePath,
-      argv: argv,
-      workingDirectory: workingDirectory,
-      exitCode: exitCode,
-      spoke: spoke,
-      directory: directory,
-      libraries: libraries,
-      integrity: integrity,
-      stdout: stdout,
-      stderr: stderr,
-      processStarted: processStarted,
-      collectionErrors: errors,
-      loaderPath: '$loaderVariable=${loaderValue ?? '(not set)'}',
-    );
-  }
-
-  /// Minimal copyable evidence when installation failed before engine launch.
-  static String unavailableReport(Object error) =>
-      'BEGIN BUGHOUSE DIAGNOSTICS\n'
-      'Chess Auto Prep $kAppVersion — bughouse engine diagnostics\n'
-      'Error       : $error\n'
-      'OS          : ${Platform.operatingSystemVersion}\n'
-      'Dart        : ${Platform.version}\n'
-      'App         : ${Platform.resolvedExecutable}\n'
-      '${error is BughouseBundleBroken ? error.diagnostics.join('\n') : 'Engine diagnostics: unavailable for this failure'}\n'
-      'END BUGHOUSE DIAGNOSTICS';
-
-  /// The report itself, with every fact already gathered.
-  ///
-  /// Pure and static so the exact text a user will paste can be asserted in a
-  /// test on any platform, rather than only being seen when something breaks.
-  @visibleForTesting
-  static String formatReport({
-    required String headline,
-    required String executablePath,
-    ContentVerification? integrity,
-    required List<String> argv,
-    required String workingDirectory,
-    required int? exitCode,
-    required bool spoke,
-    required List<String> directory,
-    required List<DllResolution>? libraries,
-    required List<String> stdout,
-    required List<String> stderr,
-    String? loaderPath,
-    bool processStarted = true,
-    List<String> collectionErrors = const [],
-  }) {
-    final out = StringBuffer()
-      ..writeln('BEGIN BUGHOUSE DIAGNOSTICS')
-      ..writeln('Chess Auto Prep $kAppVersion — bughouse engine diagnostics')
-      ..writeln('Problem     : $headline')
-      ..writeln(
-        'Exit        : ${!processStarted
-            ? 'not started'
-            : exitCode == null
-            ? 'not observed'
-            : describeExit(exitCode)}',
-      )
-      ..writeln(
-        'Spoke       : ${spoke ? 'stdout received' : 'no stdout received'}',
-      )
-      ..writeln('OS          : ${Platform.operatingSystemVersion}')
-      ..writeln('Dart        : ${Platform.version}')
-      ..writeln('App         : ${Platform.resolvedExecutable}')
-      ..writeln('Engine      : $executablePath')
-      ..writeln('Arguments   : ${jsonEncode(argv)}')
-      ..writeln('Working dir : $workingDirectory');
-    if (loaderPath != null) out.writeln('Library path: $loaderPath');
-    if (BughouseBundle.installationDiagnostics.isNotEmpty) {
-      out
-        ..writeln('Dependency verification before launch')
-        ..writeln(BughouseBundle.installationDiagnostics.join('\n'));
-    }
-
-    out
-      ..writeln()
-      ..writeln('Files beside the engine');
-    out.writeln(
-      directory.isEmpty ? '  (no files recorded)' : directory.join('\n'),
-    );
-    if (collectionErrors.isNotEmpty) {
-      out.writeln(collectionErrors.join('\n'));
-    }
-
-    if (libraries != null) {
-      out
-        ..writeln()
-        ..writeln(
-          'DLL candidates (filesystem search; not a Windows loader trace)',
-        )
-        ..writeln(WindowsLoaderCheck.report(libraries));
-      final problem = WindowsLoaderCheck.describe(libraries);
-      if (problem != null) {
-        out
-          ..writeln()
-          ..writeln('!! $problem');
-      }
-    }
-
-    // Last, because it is the answer when everything above it looks right —
-    // and on the machines this report was written for, everything above it
-    // does look right.
-    if (integrity != null && !integrity.isEmpty) {
-      out
-        ..writeln()
-        ..writeln('File integrity and repair')
-        ..writeln(integrity.lines.join('\n'));
-      final repaired = integrity.repairedMessage;
-      if (repaired != null) {
-        out
-          ..writeln()
-          ..writeln('!! $repaired');
-      }
-    }
-
-    if (integrity == null || integrity.isEmpty) {
-      out.writeln('File integrity: no results available');
-    }
-
-    out
-      ..writeln()
-      ..writeln('Engine stderr')
-      ..writeln(
-        stderr.isEmpty ? '  (empty)' : stderr.map((l) => '  $l').join('\n'),
-      )
-      ..writeln()
-      ..writeln('Engine stdout (first 24 lines)')
-      ..writeln(
-        stdout.isEmpty ? '  (empty)' : stdout.map((l) => '  $l').join('\n'),
-      )
-      ..writeln('END BUGHOUSE DIAGNOSTICS');
-    return out.toString().trimRight();
-  }
-
-  /// One line per file in [directory]: its size, the size it should be, and on
-  /// Windows the architecture of its image.
-  ///
-  /// A wrong size is what an interrupted extraction looks like, and Windows
-  /// rejects a truncated DLL with the same status it uses for a 32-bit one —
-  /// so having both readings side by side is what tells those two apart.
-  @visibleForTesting
-  static Future<List<String>> describeDirectory(
-    String directory,
-    Map<String, int> expected,
-  ) async {
-    final dir = Directory(directory);
-    if (!await dir.exists()) return ['  (the directory does not exist)'];
-    final lines = <String>[];
-    await for (final entry in dir.list(followLinks: false)) {
-      if (entry is! File) continue;
-      final name = p.basename(entry.path);
-      final size = await entry.length();
-      final want = expected[name];
-      final buffer = StringBuffer(
-        '  ${name.padRight(28)}${size.toString().padLeft(12)} bytes',
-      );
-      if (want != null) {
-        buffer.write(size == want ? '  (size ok)' : '  SHOULD BE $want');
-      }
-      if (Platform.isWindows &&
-          (name.toLowerCase().endsWith('.dll') ||
-              name.toLowerCase().endsWith('.exe'))) {
-        buffer.write(
-          '  [${WindowsLoaderCheck.describeMachine(await WindowsLoaderCheck.machineOfFile(entry))}]',
-        );
-      }
-      lines.add(buffer.toString());
-    }
-    lines.sort();
-    return lines;
-  }
 
   void _failPending(String message) {
     for (final c in [_readyCompleter, _uciOkCompleter]) {
@@ -945,21 +663,23 @@ class BughouseEngine implements BughouseAnalysisEngine {
       _name = text.substring('id name '.length).trim();
       return;
     }
-    if (text.startsWith('info string backend ')) {
-      // "info string backend ONNX Runtime (CPU) model hivemind.onnx batch 8
-      //  workers 4 intra-op threads 5"
-      final rest = text.substring('info string backend '.length);
-      final modelAt = rest.indexOf(' model ');
-      _backend = modelAt > 0 ? rest.substring(0, modelAt) : rest;
-      _backendDetail = _summariseBackend(rest);
+    if (text.startsWith(BughouseEngineProtocol.backendPrefix)) {
+      final parsed = BughouseEngineProtocol.parseBackend(
+        text.substring(BughouseEngineProtocol.backendPrefix.length),
+      );
+      _backend = parsed.backend;
+      _backendDetail = parsed.detail;
       return;
     }
     if (text.startsWith('bestmove')) {
       _onBestMove(text);
       return;
     }
-    if (text.startsWith('info ') && text.contains(' depth ')) {
-      final info = _parseInfo(text);
+    if (BughouseEngineProtocol.isSearchInfo(text)) {
+      final info = BughouseEngineProtocol.parseInfo(
+        text,
+        hadTimeAdvantage: _timeAdvantage,
+      );
       if (info == null) return;
       final collected = _searchInfos;
       if (collected != null) {
@@ -982,109 +702,8 @@ class BughouseEngine implements BughouseAnalysisEngine {
   void _onBestMove(String text) {
     final completer = _searchCompleter;
     if (completer == null || completer.isCompleted) return;
-
-    // bestmove (d2d4,pass) ponder (d7d5,d2d4)
-    final ponderAt = text.indexOf(' ponder ');
-    final bestPart = ponderAt >= 0
-        ? text.substring('bestmove '.length, ponderAt)
-        : text.substring('bestmove '.length);
-    final ponderPart = ponderAt >= 0
-        ? text.substring(ponderAt + ' ponder '.length)
-        : null;
-
-    completer.complete(
-      _SearchResult(
-        BughouseJointMove.tryParse(bestPart),
-        ponderPart == null ? null : BughouseJointMove.tryParse(ponderPart),
-      ),
-    );
+    completer.complete(BughouseEngineProtocol.parseBestMove(text));
   }
-
-  BughouseInfo? _parseInfo(String text) {
-    final tokens = text.split(RegExp(r'\s+'));
-    int depth = 0, nodes = 0, nps = 0, timeMs = 0, scoreCp = 0, multipv = 1;
-    int? mateIn;
-    final pv = <BughouseJointMove>[];
-
-    for (var i = 0; i < tokens.length; i++) {
-      switch (tokens[i]) {
-        case 'depth':
-          depth = int.tryParse(_at(tokens, i + 1)) ?? depth;
-        case 'multipv':
-          multipv = int.tryParse(_at(tokens, i + 1)) ?? multipv;
-        case 'nodes':
-          nodes = int.tryParse(_at(tokens, i + 1)) ?? nodes;
-        case 'nps':
-          nps = int.tryParse(_at(tokens, i + 1)) ?? nps;
-        case 'time':
-          timeMs = int.tryParse(_at(tokens, i + 1)) ?? timeMs;
-        case 'score':
-          // "score cp -230" or "score mate 3"
-          switch (_at(tokens, i + 1)) {
-            case 'cp':
-              scoreCp = int.tryParse(_at(tokens, i + 2)) ?? scoreCp;
-            case 'mate':
-              mateIn = int.tryParse(_at(tokens, i + 2));
-          }
-        case 'pv':
-          for (final token in tokens.sublist(i + 1)) {
-            final move = BughouseJointMove.tryParse(token);
-            if (move != null) pv.add(move);
-          }
-          i = tokens.length;
-      }
-    }
-    if (depth == 0 && pv.isEmpty) return null;
-    // The root's unvisited MCTS prior, Q = -1, which the engine prints as
-    // `180*tan(-1.56)` = -16671 on the first line of every single search
-    // before any node has been evaluated. Folded into the live eval it made
-    // the headline number flash -164.41 and empty the bar at the start of
-    // every pass. A node count, not the magic value, is what says "nothing has
-    // actually been looked at yet".
-    if (nodes <= 1) return null;
-    return BughouseInfo(
-      depth: depth,
-      scoreCp: scoreCp,
-      nodes: nodes,
-      nps: nps,
-      timeMs: timeMs,
-      multipv: multipv,
-      mateIn: mateIn,
-      hadTimeAdvantage: _timeAdvantage,
-      pv: pv,
-    );
-  }
-
-  static String _at(List<String> tokens, int index) =>
-      index >= 0 && index < tokens.length ? tokens[index] : '';
-
-  /// `4 workers · 5 threads · batch 8` out of the engine's own backend line.
-  ///
-  /// Each part is optional: a build that stops reporting one of them should
-  /// shorten the readout, not print a zero.
-  static String _summariseBackend(String rest) {
-    final parts = <String>[
-      if (_numberAfter(rest, 'workers ') case final n?) '$n workers',
-      if (_numberAfter(rest, 'intra-op threads ') case final n?) '$n threads',
-      if (_numberAfter(rest, 'batch ') case final n?) 'batch $n',
-    ];
-    return parts.join(' · ');
-  }
-
-  static final _leadingDigits = RegExp(r'^\d+');
-
-  static int? _numberAfter(String text, String key) {
-    final at = text.indexOf(key);
-    if (at < 0) return null;
-    final match = _leadingDigits.firstMatch(text.substring(at + key.length));
-    return match == null ? null : int.tryParse(match[0]!);
-  }
-}
-
-class _SearchResult {
-  _SearchResult(this.best, this.ponder);
-  final BughouseJointMove? best;
-  final BughouseJointMove? ponder;
 }
 
 /// What one completed search produced.

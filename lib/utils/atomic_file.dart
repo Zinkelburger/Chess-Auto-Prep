@@ -16,6 +16,7 @@ import 'file_operation_lock.dart';
 import 'file_text_reader.dart';
 import 'pgn_compression.dart';
 
+/// The points a write passes through, in order, for failure-injection tests.
 enum AtomicWriteStep {
   tempFlushed,
   beforePrimaryReplace,
@@ -29,6 +30,8 @@ enum AtomicWriteStep {
 
 typedef AtomicWriteHook = Future<void> Function(AtomicWriteStep step);
 
+/// A backup-and-swap that failed *and* could not be rolled back. The original
+/// content survives at [recoveryPath] and the next recovery pass restores it.
 class AtomicWriteException implements IOException {
   const AtomicWriteException(this.message, {this.recoveryPath});
 
@@ -41,6 +44,8 @@ class AtomicWriteException implements IOException {
       : 'AtomicWriteException: $message (recoverable at $recoveryPath)';
 }
 
+/// Thrown by a compare-and-swap write whose `expectedContent` no longer
+/// matches the file: someone else wrote it since the caller read it.
 class AtomicWriteConflict implements IOException {
   const AtomicWriteConflict(this.path);
 
@@ -52,6 +57,10 @@ class AtomicWriteConflict implements IOException {
       'overwrite the newer content.';
 }
 
+/// Prefix of the journal a backup-and-swap leaves beside its target.
+const _journalPrefix = '.cap-safe-write-';
+const _journalSuffix = '.json';
+
 /// Injectable only for deterministic failure tests. Production callers use
 /// [writeTextFileAtomically].
 class AtomicFileWriter {
@@ -60,6 +69,10 @@ class AtomicFileWriter {
   final AtomicWriteHook? testHook;
   final bool forceBackupSwapForTesting;
 
+  /// Writes [content], keeping the file gzipped if it already was.
+  ///
+  /// With [expectedContent], the write only lands if the file still decodes
+  /// to exactly that text; otherwise [AtomicWriteConflict] is thrown.
   Future<void> writeText(
     File target,
     String content, {
@@ -75,10 +88,9 @@ class AtomicFileWriter {
           : decodeTextBytes(maybeGunzip(existing));
       if (current != expectedContent) throw AtomicWriteConflict(target.path);
     }
-    final bytes = utf8.encode(content);
     await _writeBytesLocked(
       target,
-      existing != null && looksGzipped(existing) ? gzipBytes(bytes) : bytes,
+      _encodeLike(existing, utf8.encode(content)),
       createOnly: createOnly,
     );
   });
@@ -93,10 +105,9 @@ class AtomicFileWriter {
     final raw = await target.exists() ? await target.readAsBytes() : null;
     final current = raw == null ? null : decodeTextBytes(maybeGunzip(raw));
     final content = await update(current);
-    final bytes = utf8.encode(content);
     await _writeBytesLocked(
       target,
-      raw != null && looksGzipped(raw) ? gzipBytes(bytes) : bytes,
+      _encodeLike(raw, utf8.encode(content)),
       createOnly: false,
     );
     return content;
@@ -117,25 +128,31 @@ class AtomicFileWriter {
   Future<void> appendText(File target, String content) =>
       withFileOperationLock(target.parent.path, () async {
         await _recoverAtomicWritesLocked(target.parent);
-        var existing = <int>[];
-        var compressed = false;
-        if (await target.exists()) {
-          final raw = await target.readAsBytes();
-          compressed = looksGzipped(raw);
-          existing = maybeGunzip(raw);
-        }
-        final combined = <int>[...existing, ...utf8.encode(content)];
+        List<int>? raw;
+        if (await target.exists()) raw = await target.readAsBytes();
+        final combined = <int>[
+          if (raw != null) ...maybeGunzip(raw),
+          ...utf8.encode(content),
+        ];
         await _writeBytesLocked(
           target,
-          compressed ? gzipBytes(combined) : combined,
+          _encodeLike(raw, combined),
           createOnly: false,
         );
       });
+
+  /// [plain] gzipped when [existing] (the file's current bytes) was gzipped,
+  /// so a compacted file stays compacted through every rewrite.
+  static List<int> _encodeLike(List<int>? existing, List<int> plain) =>
+      existing != null && looksGzipped(existing) ? gzipBytes(plain) : plain;
 
   Future<void> _step(AtomicWriteStep step) async {
     await testHook?.call(step);
   }
 
+  /// Flushes [bytes] to a temporary file beside [target] and installs it,
+  /// by rename where the platform allows and by journaled backup-and-swap
+  /// otherwise. The caller holds the directory lock.
   Future<void> _writeBytesLocked(
     File target,
     List<int> bytes, {
@@ -146,8 +163,6 @@ class AtomicFileWriter {
     final token = _transactionToken();
     final base = p.basename(target.path);
     final tmp = File(p.join(parent.path, '.$base.$token.tmp'));
-    final backup = File(p.join(parent.path, '.$base.$token.backup'));
-    final journal = File(p.join(parent.path, '.cap-safe-write-$token.json'));
 
     await tmp.writeAsBytes(bytes, flush: true);
     await _step(AtomicWriteStep.tempFlushed);
@@ -161,27 +176,27 @@ class AtomicFileWriter {
             target.path,
           );
         }
-        await tmp.rename(target.path);
-        await _step(AtomicWriteStep.replacementInstalled);
+        await _installByRename(tmp, target);
         return;
       }
       if (!forceBackupSwapForTesting) {
         await _step(AtomicWriteStep.beforePrimaryReplace);
         try {
-          await tmp.rename(target.path);
-          await _step(AtomicWriteStep.replacementInstalled);
+          await _installByRename(tmp, target);
           return;
         } on FileSystemException {
           if (!await target.exists()) rethrow;
         }
       }
-
       if (!await target.exists()) {
-        await tmp.rename(target.path);
-        await _step(AtomicWriteStep.replacementInstalled);
+        await _installByRename(tmp, target);
         return;
       }
 
+      final backup = File(p.join(parent.path, '.$base.$token.backup'));
+      final journal = File(
+        p.join(parent.path, '$_journalPrefix$token$_journalSuffix'),
+      );
       await journal.writeAsString(
         jsonEncode({
           'target': base,
@@ -190,42 +205,76 @@ class AtomicFileWriter {
         }),
         flush: true,
       );
+      // From here the journal names every artifact, so a crash leaves them
+      // for [recoverAtomicWritesInDirectory] rather than deleting evidence.
       keepArtifactsForRecovery = true;
-      await _step(AtomicWriteStep.beforeBackup);
-      await target.rename(backup.path);
-      await _step(AtomicWriteStep.backupInstalled);
-
-      try {
-        await _step(AtomicWriteStep.beforeReplacementInstall);
-        await tmp.rename(target.path);
-      } catch (installError) {
-        await _step(AtomicWriteStep.beforeRollback);
-        try {
-          if (!await target.exists() && await backup.exists()) {
-            await backup.rename(target.path);
-          }
-          await _step(AtomicWriteStep.rollbackFinished);
-          keepArtifactsForRecovery = false;
-          if (await journal.exists()) await journal.delete();
-        } catch (rollbackError) {
-          throw AtomicWriteException(
-            'Replacement failed ($installError) and rollback failed '
-            '($rollbackError). The original remains in the backup.',
-            recoveryPath: backup.path,
-          );
-        }
-        rethrow;
-      }
-
-      await _step(AtomicWriteStep.replacementInstalled);
-      if (await backup.exists()) await backup.delete();
-      if (await journal.exists()) await journal.delete();
+      final installFailure = await _swapThroughBackup(
+        tmp,
+        target,
+        backup: backup,
+        journal: journal,
+      );
       keepArtifactsForRecovery = false;
+      if (installFailure != null) {
+        Error.throwWithStackTrace(
+          installFailure.error,
+          installFailure.stackTrace,
+        );
+      }
     } finally {
       if (!keepArtifactsForRecovery && await tmp.exists()) {
         await tmp.delete();
       }
     }
+  }
+
+  Future<void> _installByRename(File tmp, File target) async {
+    await tmp.rename(target.path);
+    await _step(AtomicWriteStep.replacementInstalled);
+  }
+
+  /// Moves [target] aside to [backup], renames [tmp] into place, then removes
+  /// [backup] and [journal].
+  ///
+  /// When the install fails but the rollback restores [target], the install
+  /// error is *returned* so the caller can discard the artifacts before
+  /// rethrowing it. Anything thrown from here — the backup rename, or a
+  /// rollback that failed too — leaves the artifacts in place for recovery.
+  Future<({Object error, StackTrace stackTrace})?> _swapThroughBackup(
+    File tmp,
+    File target, {
+    required File backup,
+    required File journal,
+  }) async {
+    await _step(AtomicWriteStep.beforeBackup);
+    await target.rename(backup.path);
+    await _step(AtomicWriteStep.backupInstalled);
+
+    try {
+      await _step(AtomicWriteStep.beforeReplacementInstall);
+      await tmp.rename(target.path);
+    } catch (installError, installStack) {
+      await _step(AtomicWriteStep.beforeRollback);
+      try {
+        if (!await target.exists() && await backup.exists()) {
+          await backup.rename(target.path);
+        }
+        await _step(AtomicWriteStep.rollbackFinished);
+        if (await journal.exists()) await journal.delete();
+      } catch (rollbackError) {
+        throw AtomicWriteException(
+          'Replacement failed ($installError) and rollback failed '
+          '($rollbackError). The original remains in the backup.',
+          recoveryPath: backup.path,
+        );
+      }
+      return (error: installError, stackTrace: installStack);
+    }
+
+    await _step(AtomicWriteStep.replacementInstalled);
+    if (await backup.exists()) await backup.delete();
+    if (await journal.exists()) await journal.delete();
+    return null;
   }
 }
 
@@ -243,18 +292,16 @@ Future<void> writeTextFileAtomically(
   String content, {
   bool createOnly = false,
   String? expectedContent,
-}) async {
-  await _defaultWriter.writeText(
-    target,
-    content,
-    createOnly: createOnly,
-    expectedContent: expectedContent,
-  );
-}
+}) => _defaultWriter.writeText(
+  target,
+  content,
+  createOnly: createOnly,
+  expectedContent: expectedContent,
+);
 
-Future<void> appendTextFileAtomically(File target, String content) async {
-  await _defaultWriter.appendText(target, content);
-}
+/// See [AtomicFileWriter.appendText].
+Future<void> appendTextFileAtomically(File target, String content) =>
+    _defaultWriter.appendText(target, content);
 
 /// Replace [target] with a gzipped copy of its own contents.
 ///
@@ -320,46 +367,61 @@ Future<T> withTextFileSnapshot<T>(
   return action(text);
 });
 
+/// Whether [file] exists once any interrupted write beside it is repaired.
 Future<bool> textFileExistsSafely(File file) =>
     withFileOperationLock(file.parent.path, () async {
       await _recoverAtomicWritesLocked(file.parent);
       return file.exists();
     });
 
+/// See [AtomicFileWriter.updateText].
 Future<String> updateTextFileAtomically(
   File file,
   FutureOr<String> Function(String? current) update,
 ) => _defaultWriter.updateText(file, update);
+
+/// The three files a backup-and-swap journal names, all basenames inside the
+/// journal's own directory.
+typedef _SwapJournal = ({String target, String temporary, String backup});
+
+/// Decodes [journalFile], or null when its content is not a journal this
+/// writer produced for the token in its own filename.
+Future<_SwapJournal?> _readSwapJournal(File journalFile) async {
+  final name = p.basename(journalFile.path);
+  final token = name.substring(
+    _journalPrefix.length,
+    name.length - _journalSuffix.length,
+  );
+  final decoded = jsonDecode(await journalFile.readAsString());
+  if (decoded is! Map<String, dynamic>) return null;
+  final target = decoded['target'];
+  final temporary = decoded['temporary'];
+  final backup = decoded['backup'];
+  if (target is! String ||
+      temporary is! String ||
+      backup is! String ||
+      p.basename(target) != target ||
+      temporary != '.$target.$token.tmp' ||
+      backup != '.$target.$token.backup') {
+    return null;
+  }
+  return (target: target, temporary: temporary, backup: backup);
+}
 
 Future<void> _recoverAtomicWritesLocked(Directory directory) async {
   if (!await directory.exists()) return;
   await for (final entity in directory.list(followLinks: false)) {
     if (entity is! File) continue;
     final name = p.basename(entity.path);
-    if (!name.startsWith('.cap-safe-write-') || !name.endsWith('.json')) {
+    if (!name.startsWith(_journalPrefix) || !name.endsWith(_journalSuffix)) {
       continue;
     }
     try {
-      final decoded = jsonDecode(await entity.readAsString());
-      if (decoded is! Map<String, dynamic>) continue;
-      final targetName = decoded['target'];
-      final temporaryName = decoded['temporary'];
-      final backupName = decoded['backup'];
-      final token = name.substring(
-        '.cap-safe-write-'.length,
-        name.length - '.json'.length,
-      );
-      if (targetName is! String ||
-          temporaryName is! String ||
-          backupName is! String ||
-          p.basename(targetName) != targetName ||
-          temporaryName != '.$targetName.$token.tmp' ||
-          backupName != '.$targetName.$token.backup') {
-        continue;
-      }
-      final target = File(p.join(directory.path, targetName));
-      final temporary = File(p.join(directory.path, temporaryName));
-      final backup = File(p.join(directory.path, backupName));
+      final journal = await _readSwapJournal(entity);
+      if (journal == null) continue;
+      final target = File(p.join(directory.path, journal.target));
+      final temporary = File(p.join(directory.path, journal.temporary));
+      final backup = File(p.join(directory.path, journal.backup));
       if (!await target.exists() && await backup.exists()) {
         await backup.rename(target.path);
       }

@@ -62,6 +62,11 @@ class EraserTool extends EditorTool {
 }
 
 class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
+  static final _placementField = RegExp(r'^[prnbqkPRNBQK1-8/]+$');
+  static final _castlingField = RegExp(r'^[KQkq]+$');
+  static final _epField = RegExp(r'^[a-h][36]$');
+  static final _counterField = RegExp(r'^\d+$');
+
   BoardEditorController({String? initialFen}) {
     if (initialFen == null || !loadFen(initialFen)) {
       setStartPosition();
@@ -221,12 +226,17 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void _afterBoardChange() {
-    // Clamp en passant: the candidate list is derived from the board, so a
-    // placement change can invalidate the current choice.
+    _clampEpSquare();
+    notifyListeners();
+  }
+
+  /// Drop the en-passant choice when the board or the turn no longer allow
+  /// it: the candidate list is derived from both, so either change can
+  /// invalidate the current choice.
+  void _clampEpSquare() {
     if (_epSquare != null && !epCandidates.contains(_epSquare)) {
       _epSquare = null;
     }
-    notifyListeners();
   }
 
   // ── Side to move ─────────────────────────────────────────────────────
@@ -234,10 +244,7 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
   void setTurn(Side side) {
     if (side == _turn) return;
     _turn = side;
-    // En passant candidates depend on whose move it is.
-    if (_epSquare != null && !epCandidates.contains(_epSquare)) {
-      _epSquare = null;
-    }
+    _clampEpSquare();
     notifyListeners();
   }
 
@@ -329,7 +336,7 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
 
   // ── FEN in/out ───────────────────────────────────────────────────────
 
-  String get _castlingField {
+  String get _castlingRights {
     final buf = StringBuffer();
     if (whiteKingside) buf.write('K');
     if (whiteQueenside) buf.write('Q');
@@ -342,7 +349,7 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
   String get fen {
     final turnField = _turn == Side.white ? 'w' : 'b';
     final epField = _epSquare?.name ?? '-';
-    return '${_board.fen} $turnField $_castlingField $epField '
+    return '${_board.fen} $turnField $_castlingRights $epField '
         '$_halfmoves $_fullmoves';
   }
 
@@ -383,7 +390,7 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
     final fields = input.trim().split(RegExp(r'\s+'));
     if (fields.length < 4 || fields.length > 6) return false;
     try {
-      if (!RegExp(r'^[prnbqkPRNBQK1-8/]+$').hasMatch(fields[0])) return false;
+      if (!_placementField.hasMatch(fields[0])) return false;
       final board = Board.parseFen(fields[0]);
       final turn = switch (fields[1]) {
         'w' => Side.white,
@@ -392,20 +399,20 @@ class BoardEditorController extends ChangeNotifier with SafeChangeNotifier {
       };
       final castling = fields[2];
       if (castling != '-' &&
-          (!RegExp(r'^[KQkq]+$').hasMatch(castling) ||
+          (!_castlingField.hasMatch(castling) ||
               castling.split('').toSet().length != castling.length)) {
         return false;
       }
       Square? ep;
       if (fields[3] != '-') {
-        if (!RegExp(r'^[a-h][36]$').hasMatch(fields[3])) return false;
+        if (!_epField.hasMatch(fields[3])) return false;
         ep = Square.parse(fields[3]);
         if (ep == null) throw const FenException(IllegalFenCause.enPassant);
       }
       final halfmoves = fields.length > 4 ? int.tryParse(fields[4]) : 0;
       final fullmoves = fields.length > 5 ? int.tryParse(fields[5]) : 1;
-      if ((fields.length > 4 && !RegExp(r'^\d+$').hasMatch(fields[4])) ||
-          (fields.length > 5 && !RegExp(r'^\d+$').hasMatch(fields[5])) ||
+      if ((fields.length > 4 && !_counterField.hasMatch(fields[4])) ||
+          (fields.length > 5 && !_counterField.hasMatch(fields[5])) ||
           halfmoves == null ||
           halfmoves < 0 ||
           fullmoves == null ||

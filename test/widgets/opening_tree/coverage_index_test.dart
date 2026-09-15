@@ -63,12 +63,12 @@ void main() {
       tooShallowLeaves: const [],
       tooDeepLeaves: const [],
       unaccountedMoves: [
-        UnaccountedMove(
-          parentMoves: const ['e4', 'e5'],
+        const UnaccountedMove(
+          parentMoves: ['e4', 'e5'],
           move: 'Bc4',
           gameCount: 3,
           probability: 0.3,
-          source: 'lichess',
+          source: UnaccountedSource.masters,
         ),
       ],
       totalCoveredGames: 0,

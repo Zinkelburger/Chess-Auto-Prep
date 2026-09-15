@@ -7,7 +7,7 @@ import 'package:chess_auto_prep/core/app_state.dart';
 /// than tracked in git, and `flutter build` treats a missing asset directory
 /// as a printed warning rather than an error — so "compiled in, no engine
 /// behind it" is an ordinary build, and every developer checkout is one until
-/// `tools/fetch_bughouse.py` has run.
+/// `tools/fetch_assets.py` has run.
 void main() {
   tearDown(unavailableModes.clear);
 

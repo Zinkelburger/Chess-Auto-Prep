@@ -200,7 +200,9 @@ class BughouseEval {
   /// infinity at ±1 — past about ±10 the distinction is "winning" either way,
   /// and a mate prints as a mate.
   double get score =>
-      _tangentScale * math.tan(_tangentRate * advantage.clamp(-0.9, 0.9)) / 100;
+      BughouseInfo.tangentScale *
+      math.tan(BughouseInfo.tangentRate * advantage.clamp(-0.9, 0.9)) /
+      100;
 
   /// Recentered engine estimate as a percentage, not a calibrated probability.
   ///
@@ -217,7 +219,4 @@ class BughouseEval {
 
   /// [winPercent] as a person reads it — `58%`.
   String get winLabel => '${winPercent.round()}%';
-
-  static const double _tangentScale = 180.0;
-  static const double _tangentRate = 1.56;
 }

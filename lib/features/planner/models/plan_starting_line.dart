@@ -2,9 +2,12 @@ import 'package:dartchess/dartchess.dart';
 
 import '../../../utils/fen_utils.dart';
 import '../../../utils/movetext_builder.dart';
+import '../services/san_paths.dart';
 
 /// A named, legal move path from the initial position to a build root.
 class PlanStartingLine {
+  static const _resultTokens = {'*', '1-0', '0-1', '1/2-1/2'};
+
   PlanStartingLine({this.name = '', required List<String> moves})
     : moves = List.unmodifiable(moves);
 
@@ -31,8 +34,7 @@ class PlanStartingLine {
           .split(RegExp(r'\s+'))
           .where((t) => t.isNotEmpty)
           .toList();
-      if (tokens.isNotEmpty &&
-          {'*', '1-0', '0-1', '1/2-1/2'}.contains(tokens.last)) {
+      if (tokens.isNotEmpty && _resultTokens.contains(tokens.last)) {
         tokens.removeLast();
       }
       Position position = Chess.initial;
@@ -76,13 +78,10 @@ class PlanStartingLine {
       positions[key] = i;
       for (var j = 0; j < i; j++) {
         final other = lines[j].moves;
-        final length = other.length < line.moves.length
-            ? other.length
-            : line.moves.length;
-        if (List.generate(
-          length,
-          (k) => other[k] == line.moves[k],
-        ).every((same) => same)) {
+        final overlaps = other.length <= line.moves.length
+            ? sanPathStartsWith(line.moves, other)
+            : sanPathStartsWith(other, line.moves);
+        if (overlaps) {
           throw FormatException(
             'Lines ${j + 1} and ${i + 1} overlap. Keep the earlier start or use separate branches.',
           );

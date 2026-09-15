@@ -43,7 +43,7 @@ void main() {
 
     final lines = service.parseRepertoirePgn(pgn, trainingColor: 'black');
     final target = lines[1]; // "B" — would have collided with "A"
-    expect(await service.deleteLine(file.path, target.id), isTrue);
+    expect(await service.files.deleteLine(file.path, target.id), isTrue);
 
     final after = service.parseRepertoirePgn(
       file.readAsStringSync(),
@@ -58,7 +58,7 @@ void main() {
     final file = File('${tmp.path}/ch.pgn')..writeAsStringSync(pgn);
     final lines = service.parseRepertoirePgn(pgn, trainingColor: 'black');
     expect(
-      await service.updateLineTitle(file.path, lines[2].id, 'Nh6!'),
+      await service.files.updateLineTitle(file.path, lines[2].id, 'Nh6!'),
       isTrue,
     );
     final after = service.parseRepertoirePgn(

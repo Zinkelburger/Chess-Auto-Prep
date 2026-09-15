@@ -1,17 +1,59 @@
-import 'dart:convert';
-import 'dart:typed_data';
-import 'package:dartchess/dartchess.dart';
-import 'package:flutter/services.dart';
-
-import '../../utils/fen_utils.dart';
-import '../../utils/chess_utils.dart' show toStandardUci;
-import 'package:chess_auto_prep/utils/log.dart';
-
 /// Maia-3 tensor preprocessing.
 ///
 /// Board encoding: (64, 12) per-square one-hot piece channels.
 /// Elo: continuous float (not categorical).
 /// Move vocabulary: 4352 (64×64 grid + 256 promotions).
+library;
+
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:dartchess/dartchess.dart';
+import 'package:flutter/services.dart';
+
+import '../../utils/chess_utils.dart' show toStandardUci;
+import '../../utils/fen_utils.dart';
+import '../../utils/log.dart';
+
+/// Piece letters in channel order: indices 0-11 of a square's one-hot vector.
+const String _kPieceChannels = 'PNBRQKpnbrqk';
+
+const int _kSquares = 64;
+const int _kChannels = 12;
+
+/// Thrown when a position cannot be encoded for the network.
+class MaiaInputException implements Exception {
+  const MaiaInputException(this.message);
+  final String message;
+
+  @override
+  String toString() => 'MaiaInputException: $message';
+}
+
+/// What the network is fed for one position.
+///
+/// Maia-3 only ever sees White to move: for Black the position is mirrored
+/// ([MaiaTensor.mirrorFEN]) and [isBlack] tells the caller to mirror the
+/// policy back.
+class MaiaInput {
+  const MaiaInput({
+    required this.boardInput,
+    required this.eloSelf,
+    required this.eloOppo,
+    required this.legalMoves,
+    required this.isBlack,
+  });
+
+  /// `(64, 12)` one-hot board, flattened.
+  final Float32List boardInput;
+  final double eloSelf;
+  final double eloOppo;
+
+  /// 1.0 at the vocabulary index of every legal move, in standard UCI.
+  final Float32List legalMoves;
+  final bool isBlack;
+}
+
 class MaiaTensor {
   static Map<String, int> _allMoves = {};
   static Map<int, String> _allMovesReversed = {};
@@ -28,12 +70,10 @@ class MaiaTensor {
         'assets/data/all_moves_maia3_reversed.json',
       );
 
-      final Map<String, dynamic> movesMap =
-          json.decode(movesJson) as Map<String, dynamic>;
+      final movesMap = json.decode(movesJson) as Map<String, dynamic>;
       _allMoves = movesMap.map((key, value) => MapEntry(key, value as int));
 
-      final Map<String, dynamic> movesRevMap =
-          json.decode(movesRevJson) as Map<String, dynamic>;
+      final movesRevMap = json.decode(movesRevJson) as Map<String, dynamic>;
       _allMovesReversed = movesRevMap.map(
         (key, value) => MapEntry(int.parse(key), value as String),
       );
@@ -48,133 +88,116 @@ class MaiaTensor {
   /// Each square gets a 12-element one-hot vector for the piece on it.
   /// Piece order: P,N,B,R,Q,K,p,n,b,r,q,k (indices 0-11).
   static Float32List boardToMaia3Tokens(String fen) {
-    final piecePlacement = fen.split(' ')[0];
-    const pieceTypes = [
-      'P',
-      'N',
-      'B',
-      'R',
-      'Q',
-      'K',
-      'p',
-      'n',
-      'b',
-      'r',
-      'q',
-      'k',
-    ];
+    final tensor = Float32List(_kSquares * _kChannels);
+    final rows = fen.split(' ')[0].split('/');
 
-    final tensor = Float32List(64 * 12);
-    final rows = piecePlacement.split('/');
-
-    for (int rank = 0; rank < 8; rank++) {
+    for (var rank = 0; rank < 8; rank++) {
       final row = 7 - rank;
-      int file = 0;
-      for (int i = 0; i < rows[rank].length; i++) {
-        final char = rows[rank][i];
+      var file = 0;
+      for (final char in rows[rank].split('')) {
         final digit = int.tryParse(char);
         if (digit != null) {
           file += digit;
-        } else {
-          final pieceIdx = pieceTypes.indexOf(char);
-          if (pieceIdx >= 0) {
-            final square = row * 8 + file;
-            tensor[square * 12 + pieceIdx] = 1.0;
-          }
-          file++;
+          continue;
         }
+        final channel = _kPieceChannels.indexOf(char);
+        if (channel >= 0) {
+          tensor[(row * 8 + file) * _kChannels + channel] = 1.0;
+        }
+        file++;
       }
     }
 
     return tensor;
   }
 
-  static Map<String, dynamic> preprocess(String fen, int eloSelf, int eloOppo) {
-    if (!_initialized) throw Exception('MaiaTensor not initialized');
+  /// Encode [fen] for the network, mirrored when Black is to move.
+  ///
+  /// Throws [StateError] before [init] and [MaiaInputException] for a FEN
+  /// dartchess rejects.
+  static MaiaInput preprocess(String fen, int eloSelf, int eloOppo) {
+    if (!_initialized) throw StateError('MaiaTensor not initialized');
 
-    Position position;
+    // Parsed before mirroring: a malformed FEN fails here with a clear
+    // message rather than inside the mirror's field indexing.
+    var position = _parsePosition(fen, isMirrored: false);
+    final isBlack = !isWhiteToMove(fen);
+    final processedFen = isBlack ? mirrorFEN(fen) : fen;
+    if (isBlack) position = _parsePosition(processedFen, isMirrored: true);
+
+    return MaiaInput(
+      boardInput: boardToMaia3Tokens(processedFen),
+      eloSelf: eloSelf.toDouble(),
+      eloOppo: eloOppo.toDouble(),
+      legalMoves: _legalMoveMask(position),
+      isBlack: isBlack,
+    );
+  }
+
+  static Position _parsePosition(String fen, {required bool isMirrored}) {
     try {
-      position = Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      throw Exception('Invalid FEN: $fen');
+      return Chess.fromSetup(Setup.parseFen(fen));
+    } on Exception {
+      final label = isMirrored ? 'Invalid mirrored FEN' : 'Invalid FEN';
+      throw MaiaInputException('$label: $fen');
     }
-    bool isBlack = !isWhiteToMove(fen);
+  }
 
-    String processedFen = fen;
-    if (isBlack) {
-      processedFen = mirrorFEN(fen);
-      try {
-        position = Chess.fromSetup(Setup.parseFen(processedFen));
-      } catch (_) {
-        throw Exception('Invalid mirrored FEN: $processedFen');
-      }
+  /// 1.0 at the vocabulary index of every legal move of [position].
+  ///
+  /// dartchess encodes castling as king→own-rook (e1h1), but the Maia move
+  /// vocabulary uses the standard king→destination encoding (e1g1). We set
+  /// the mask at the standard index so the model's trained castling logit is
+  /// read, and the returned policy keys also use standard UCI so callers
+  /// (tree builder, engine pane, audit) can look them up directly with the
+  /// Stockfish/Lichess convention most of the app uses.
+  static Float32List _legalMoveMask(Position position) {
+    final mask = Float32List(_allMoves.length);
+    void mark(String uci) {
+      final index = _allMoves[uci];
+      if (index != null) mask[index] = 1.0;
     }
 
-    final boardInput = boardToMaia3Tokens(processedFen);
-
-    final legalMoves = Float32List(_allMoves.length);
-
-    // dartchess encodes castling as king→own-rook (e1h1), but the Maia move
-    // vocabulary uses the standard king→destination encoding (e1g1). We set
-    // the mask at the standard index so the model's trained castling logit is
-    // read, and the returned policy keys also use standard UCI so callers
-    // (tree builder, engine pane, audit) can look them up directly with the
-    // Stockfish/Lichess convention most of the app uses.
     for (final entry in position.legalMoves.entries) {
-      final fromSq = entry.key;
-      final targets = entry.value;
-      final piece = position.board.pieceAt(fromSq);
-      final fromStr = fromSq.name;
-
-      for (final toSq in targets.squares) {
-        final isPromotion =
-            piece?.role == Role.pawn &&
-            ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
-                (piece.color == Side.black && toSq ~/ 8 == 0));
-
-        if (isPromotion) {
-          final toStr = toSq.name;
-          for (final role in [
-            Role.queen,
-            Role.rook,
-            Role.bishop,
-            Role.knight,
-          ]) {
-            final promoChar = _roleToUciChar(role);
-            final uci = '$fromStr$toStr$promoChar';
-            if (_allMoves.containsKey(uci)) {
-              legalMoves[_allMoves[uci]!] = 1.0;
-            }
+      final from = entry.key;
+      final piece = position.board.pieceAt(from);
+      for (final to in entry.value.squares) {
+        if (piece != null && _isPromotion(piece, to)) {
+          for (final role in _promotionRoles) {
+            mark('${from.name}${to.name}${_roleToUciChar(role)}');
           }
         } else {
-          final standardUci = toStandardUci(position, fromSq, toSq);
-          final index = _allMoves[standardUci];
-          if (index != null) {
-            legalMoves[index] = 1.0;
-          }
+          mark(toStandardUci(position, from, to));
         }
       }
     }
-
-    return {
-      'boardInput': boardInput,
-      'eloSelf': eloSelf.toDouble(),
-      'eloOppo': eloOppo.toDouble(),
-      'legalMoves': legalMoves,
-      'isBlack': isBlack,
-    };
+    return mask;
   }
+
+  static const _promotionRoles = [
+    Role.queen,
+    Role.rook,
+    Role.bishop,
+    Role.knight,
+  ];
+
+  static bool _isPromotion(Piece piece, Square to) =>
+      piece.role == Role.pawn &&
+      ((piece.color == Side.white && to ~/ 8 == 7) ||
+          (piece.color == Side.black && to ~/ 8 == 0));
 
   static String _roleToUciChar(Role role) => switch (role) {
     Role.queen => 'q',
     Role.rook => 'r',
     Role.bishop => 'b',
     Role.knight => 'n',
-    _ => '',
+    Role.pawn || Role.king => '',
   };
 
   // --- Mirroring Logic ---
 
+  /// The same position with the colours swapped and the board flipped, so
+  /// the side to move becomes White.
   static String mirrorFEN(String fen) {
     final tokens = fen.split(' ');
     final position = tokens[0];
@@ -184,54 +207,43 @@ class MaiaTensor {
     final halfmove = tokens.length > 4 ? tokens[4] : '0';
     final fullmove = tokens.length > 5 ? tokens[5] : '1';
 
-    final ranks = position.split('/');
-    final mirroredRanks = ranks.reversed
-        .map((rank) => _swapColorsInRank(rank))
-        .toList();
-    final mirroredPosition = mirroredRanks.join('/');
-
+    final mirroredPosition = position
+        .split('/')
+        .reversed
+        .map(_swapColorsInRank)
+        .join('/');
     final mirroredActiveColor = activeColor == 'w' ? 'b' : 'w';
     final mirroredCastling = _swapCastlingRights(castling);
     final mirroredEnPassant = enPassant != '-' ? _mirrorSquare(enPassant) : '-';
 
-    return '$mirroredPosition $mirroredActiveColor $mirroredCastling $mirroredEnPassant $halfmove $fullmove';
+    return '$mirroredPosition $mirroredActiveColor $mirroredCastling '
+        '$mirroredEnPassant $halfmove $fullmove';
   }
 
   static String _swapColorsInRank(String rank) {
     final buffer = StringBuffer();
-    for (int i = 0; i < rank.length; i++) {
-      final char = rank[i];
-      if (char.toUpperCase() != char.toLowerCase()) {
-        if (char == char.toUpperCase()) {
-          buffer.write(char.toLowerCase());
-        } else {
-          buffer.write(char.toUpperCase());
-        }
-      } else {
+    for (final char in rank.split('')) {
+      final upper = char.toUpperCase();
+      final lower = char.toLowerCase();
+      if (upper == lower) {
         buffer.write(char);
+      } else {
+        buffer.write(char == upper ? lower : upper);
       }
     }
     return buffer.toString();
   }
 
+  /// `KQkq` order is preserved after swapping each side's rights.
   static String _swapCastlingRights(String castling) {
     if (castling == '-') return '-';
-
-    final rights = castling.split('').toSet();
-    final swapped = <String>{};
-
-    if (rights.contains('K')) swapped.add('k');
-    if (rights.contains('Q')) swapped.add('q');
-    if (rights.contains('k')) swapped.add('K');
-    if (rights.contains('q')) swapped.add('Q');
-
-    final buffer = StringBuffer();
-    if (swapped.contains('K')) buffer.write('K');
-    if (swapped.contains('Q')) buffer.write('Q');
-    if (swapped.contains('k')) buffer.write('k');
-    if (swapped.contains('q')) buffer.write('q');
-
-    return buffer.isNotEmpty ? buffer.toString() : '-';
+    final swapped = [
+      if (castling.contains('k')) 'K',
+      if (castling.contains('q')) 'Q',
+      if (castling.contains('K')) 'k',
+      if (castling.contains('Q')) 'q',
+    ].join();
+    return swapped.isEmpty ? '-' : swapped;
   }
 
   static String _mirrorSquare(String square) {
@@ -240,6 +252,7 @@ class MaiaTensor {
     return '$file${9 - rank}';
   }
 
+  /// The move [moveUci] as played on the mirrored board.
   static String mirrorMove(String moveUci) {
     final startSquare = moveUci.substring(0, 2);
     final endSquare = moveUci.substring(2, 4);
@@ -248,7 +261,6 @@ class MaiaTensor {
     return '${_mirrorSquare(startSquare)}${_mirrorSquare(endSquare)}$promotion';
   }
 
-  static String getMoveFromIndex(int index) {
-    return _allMovesReversed[index] ?? '';
-  }
+  /// The vocabulary move at [index], or '' when out of range.
+  static String getMoveFromIndex(int index) => _allMovesReversed[index] ?? '';
 }

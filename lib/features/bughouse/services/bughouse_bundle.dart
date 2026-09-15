@@ -17,7 +17,7 @@ import 'bughouse_windows_runtime.dart';
 ///
 /// Hivemind is Copyright (c) 2026 aminwoo, MIT licensed. Its full notice is
 /// bundled at `assets/licenses/HIVEMIND_LICENSE.txt`; source and portable-build
-/// provenance are recorded there and in `tools/bughouse.lock.json`.
+/// provenance are recorded there and in `tools/assets.lock.json`.
 ///
 /// Why three files rather than one static binary: the upstream engine links
 /// TensorRT, which is ~2 GB of NVIDIA redistributables and NVIDIA-only. Built
@@ -67,7 +67,7 @@ class BughouseBundle {
   /// Whether this build actually carries an engine for this platform.
   ///
   /// Worth asking, rather than assuming from [Platform]: `assets/bughouse/` is
-  /// declared in pubspec.yaml but filled in by `tools/fetch_bughouse.py` at
+  /// declared in pubspec.yaml but filled in by `tools/fetch_assets.py` at
   /// release time rather than tracked in git, and Flutter treats a *missing*
   /// asset directory as a printed warning, not a build failure. So "compiled
   /// in, but with no engine behind it" is an ordinary state — every developer
@@ -138,7 +138,7 @@ class BughouseBundle {
   /// Extracts everything into the support directory if it is not already
   /// there, and returns the engine path. Throws [BughouseBundleMissing] when
   /// the app was built without the bughouse assets, which is the normal state
-  /// of a checkout that has not run `tools/fetch_bughouse.py`.
+  /// of a checkout that has not run `tools/fetch_assets.py`.
   static Future<String> ensureInstalled() {
     final cached = _cached;
     if (cached != null && _installDirectory == null) {
@@ -181,7 +181,7 @@ class BughouseBundle {
       for (final entry in manifest.entries) entry.key: entry.value.bytes,
     };
     _hashes = {
-      for (final entry in manifest.entries) entry.key: ?entry.value.sha256,
+      for (final entry in manifest.entries) entry.key: entry.value.sha256,
     };
     final executable = p.join(target.path, _binaryName());
     final model = p.join(target.path, 'hivemind.onnx');
@@ -192,14 +192,16 @@ class BughouseBundle {
     // fetch ran last.
     for (final file in [executable, runtime, model]) {
       final name = p.basename(file);
+      // Present for every installed file, or [_loadManifest] would have thrown.
+      final integrity = manifest[name]!;
       await _installAsset(
         asset: 'assets/bughouse/$name.gz',
         target: file,
-        expectedSize: manifest[name]?.bytes,
-        expectedSha256: manifest[name]?.sha256,
+        expectedSize: integrity.bytes,
+        expectedSha256: integrity.sha256,
       );
       _installationDiagnostics.add(
-        '$name: verified SHA-256 ${manifest[name]!.sha256}',
+        '$name: verified SHA-256 ${integrity.sha256}',
       );
     }
 
@@ -516,11 +518,14 @@ class BughouseBundle {
   }
 }
 
+/// What the shipped manifest promises about one extracted file.
 class _AssetIntegrity {
-  const _AssetIntegrity({required this.bytes, this.sha256});
+  const _AssetIntegrity({required this.bytes, required this.sha256});
 
   final int bytes;
-  final String? sha256;
+
+  /// Lower-case hex, as [_loadManifest] validates it.
+  final String sha256;
 }
 
 void _extractVerifiedAsset({

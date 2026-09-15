@@ -1,3 +1,9 @@
+/// Checks GitHub for a newer release, downloads and verifies the asset for
+/// this install, and hands it to [UpdateInstaller] to swap in after the app
+/// closes. The widget layer only reads [phase], [release], [progress] and
+/// [error] and calls the verbs.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -25,6 +31,25 @@ enum UpdatePhase {
   failed,
 }
 
+/// Preference keys. `updates.downloadAutomatically` is also seeded by tests.
+abstract final class _Prefs {
+  static const checkAutomatically = 'updates.checkAutomatically';
+  static const downloadAutomatically = 'updates.downloadAutomatically';
+  static const lastAttempt = 'updates.lastAttempt';
+  static const cachedPayload = 'updates.cachedPayload';
+}
+
+/// Written by the helper script when an install fails after the app closed.
+const _lastErrorFileName = 'last-error.txt';
+
+const _backgroundCheckInterval = Duration(hours: 1);
+const _automaticCheckSpacing = Duration(hours: 24);
+const _releaseCheckTimeout = Duration(seconds: 20);
+const _downloadConnectTimeout = Duration(seconds: 30);
+const _downloadStallTimeout = Duration(seconds: 45);
+const _cancelPoll = Duration(milliseconds: 100);
+const _cancelPolls = 40;
+
 class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
   AppUpdateService({
     http.Client? client,
@@ -36,27 +61,59 @@ class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
        _directory = directory ?? _updateDirectory,
        _version =
            version ?? (() async => (await PackageInfo.fromPlatform()).version);
+
   static final instance = AppUpdateService();
+
   final http.Client _client;
   final UpdateInstaller _installer;
   final Future<Directory> Function() _directory;
   final Future<String> Function() _version;
   Timer? _timer;
   Future<void>? _initializing;
-  SharedPreferences? _prefs;
+  late final SharedPreferences _prefs;
+
+  /// The verified asset on disk, once downloaded.
   File? _payload;
+
+  /// The armed marker while an install is scheduled.
   File? _armed;
-  bool automaticChecks = true;
-  bool automaticDownload = true;
-  String currentVersion = '';
-  InstallKind kind = InstallKind.manual;
-  UpdatePhase phase = UpdatePhase.idle;
-  UpdateRelease? release;
-  String? error;
-  String? downloadDirectory;
-  double progress = 0;
-  bool hasChecked = false;
-  String? previousInstallError;
+
+  bool _automaticChecks = true;
+  bool _automaticDownload = true;
+  String _currentVersion = '';
+  InstallKind _kind = InstallKind.manual;
+  UpdatePhase _phase = UpdatePhase.idle;
+  UpdateRelease? _release;
+  String? _error;
+  String? _downloadDirectory;
+  double _progress = 0;
+  bool _hasChecked = false;
+  String? _previousInstallError;
+
+  bool get automaticChecks => _automaticChecks;
+  bool get automaticDownload => _automaticDownload;
+  String get currentVersion => _currentVersion;
+  InstallKind get kind => _kind;
+  UpdatePhase get phase => _phase;
+
+  /// The newer release found by the last check, or null.
+  UpdateRelease? get release => _release;
+
+  /// What went wrong, while [phase] is [UpdatePhase.failed].
+  String? get error => _error;
+
+  /// Where the payload and helper logs live, once a download has started.
+  String? get downloadDirectory => _downloadDirectory;
+
+  /// Download progress, 0–1.
+  double get progress => _progress;
+
+  /// Whether a check has completed since start-up.
+  bool get hasChecked => _hasChecked;
+
+  /// The helper's report from a failed install on a previous run.
+  String? get previousInstallError => _previousInstallError;
+
   bool get canCancelInstall => _armed != null;
   bool get busy =>
       phase == UpdatePhase.checking || phase == UpdatePhase.downloading;
@@ -66,22 +123,24 @@ class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
       Directory(p.join((await AppPaths.cacheDirectory()).path, 'updates'));
 
   Future<void> initialize() => _initializing ??= _initialize();
+
   Future<void> _initialize() async {
     _prefs = await SharedPreferences.getInstance();
-    automaticChecks = _prefs!.getBool('updates.checkAutomatically') ?? true;
-    automaticDownload =
-        _prefs!.getBool('updates.downloadAutomatically') ?? true;
-    currentVersion = await _version();
-    kind = await _installer.detect();
+    _automaticChecks = _prefs.getBool(_Prefs.checkAutomatically) ?? true;
+    _automaticDownload = _prefs.getBool(_Prefs.downloadAutomatically) ?? true;
+    _currentVersion = await _version();
+    _kind = await _installer.detect();
     final previousError = File(
-      p.join((await _directory()).path, 'last-error.txt'),
+      p.join((await _directory()).path, _lastErrorFileName),
     );
     if (await previousError.exists()) {
-      previousInstallError = await previousError.readAsString();
+      _previousInstallError = await previousError.readAsString();
     }
     notifyListeners();
   }
 
+  /// Initializes and, in release builds on the desktop platforms that can
+  /// self-update, checks now and then hourly in the background.
   Future<void> start() async {
     try {
       await initialize();
@@ -89,7 +148,7 @@ class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
       // Development builds never contact GitHub in the background.
       if (kReleaseMode && (Platform.isLinux || Platform.isWindows)) {
         _timer ??= Timer.periodic(
-          const Duration(hours: 1),
+          _backgroundCheckInterval,
           (_) => unawaited(check(automatic: true)),
         );
         await check(automatic: true);
@@ -101,66 +160,38 @@ class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
 
   Future<void> setAutomaticChecks(bool value) async {
     await initialize();
-    await _prefs!.setBool('updates.checkAutomatically', value);
-    automaticChecks = value;
+    await _prefs.setBool(_Prefs.checkAutomatically, value);
+    _automaticChecks = value;
     notifyListeners();
   }
 
   Future<void> setAutomaticDownload(bool value) async {
     await initialize();
-    await _prefs!.setBool('updates.downloadAutomatically', value);
-    automaticDownload = value;
+    await _prefs.setBool(_Prefs.downloadAutomatically, value);
+    _automaticDownload = value;
     notifyListeners();
   }
 
+  /// Asks GitHub for the latest release. An [automatic] check is skipped when
+  /// the user turned them off or one ran in the last day. A newer release is
+  /// downloaded straight away when automatic download is on.
   Future<void> check({bool automatic = false}) async {
-    if (busy || phase == UpdatePhase.scheduled || isDisposed) return;
+    if (!_canStartWork) return;
     try {
       await initialize();
-      if (busy || phase == UpdatePhase.scheduled || isDisposed) return;
+      if (!_canStartWork) return;
       final now = DateTime.now();
-      if (automatic) {
-        if (!automaticChecks) return;
-        final last = _prefs!.getInt('updates.lastAttempt') ?? 0;
-        final age = now.millisecondsSinceEpoch - last;
-        if (age >= 0 && age < const Duration(hours: 24).inMilliseconds) return;
-      }
-      phase = UpdatePhase.checking;
-      error = null;
+      if (automatic && !_automaticCheckDue(now)) return;
+      _phase = UpdatePhase.checking;
+      _error = null;
       notifyListeners();
-      await _prefs!.setInt('updates.lastAttempt', now.millisecondsSinceEpoch);
-      final response = await _client
-          .get(
-            Uri.https(
-              'api.github.com',
-              '/repos/$updateRepository/releases/latest',
-            ),
-            headers: {
-              'Accept': 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'User-Agent': 'Chess-Auto-Prep/$currentVersion',
-            },
-          )
-          .timeout(const Duration(seconds: 20));
-      if (response.statusCode == 404) {
-        release = null;
-      } else {
-        if (response.statusCode != 200) {
-          throw HttpException(
-            'GitHub update check returned ${response.statusCode}. Try again later.',
-          );
-        }
-        release = UpdateRelease.parse(
-          jsonDecode(response.body) as Map<String, dynamic>,
-          currentVersion,
-          kind,
-        );
-      }
+      await _prefs.setInt(_Prefs.lastAttempt, now.millisecondsSinceEpoch);
+      _release = await _fetchLatestRelease();
       _payload = null;
-      hasChecked = true;
-      phase = release == null ? UpdatePhase.idle : UpdatePhase.available;
+      _hasChecked = true;
+      _phase = _release == null ? UpdatePhase.idle : UpdatePhase.available;
       notifyListeners();
-      if (release != null && automaticDownload && canInstall && !isDisposed) {
+      if (_release != null && automaticDownload && canInstall && !isDisposed) {
         await download();
       }
     } catch (e) {
@@ -168,83 +199,72 @@ class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  /// Not already checking, downloading or armed, and still alive.
+  bool get _canStartWork =>
+      !busy && phase != UpdatePhase.scheduled && !isDisposed;
+
+  bool _automaticCheckDue(DateTime now) {
+    if (!automaticChecks) return false;
+    final last = _prefs.getInt(_Prefs.lastAttempt) ?? 0;
+    final age = now.millisecondsSinceEpoch - last;
+    return age < 0 || age >= _automaticCheckSpacing.inMilliseconds;
+  }
+
+  /// The newest release that is newer than this build, or null when there
+  /// is none (or the repository has no releases at all).
+  Future<UpdateRelease?> _fetchLatestRelease() async {
+    final response = await _client
+        .get(
+          Uri.https(
+            'api.github.com',
+            '/repos/$updateRepository/releases/latest',
+          ),
+          headers: {
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'User-Agent': 'Chess-Auto-Prep/$currentVersion',
+          },
+        )
+        .timeout(_releaseCheckTimeout);
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) {
+      throw HttpException(
+        'GitHub update check returned ${response.statusCode}. Try again later.',
+      );
+    }
+    return UpdateRelease.parse(
+      jsonDecode(response.body) as Map<String, dynamic>,
+      currentVersion,
+      kind,
+    );
+  }
+
+  /// Downloads the release asset into a fresh attempt directory and verifies
+  /// its size and SHA-256 before it counts as ready. A payload verified on an
+  /// earlier run is reused without another transfer.
   Future<void> download() async {
     final target = release;
-    if (target == null ||
-        !canInstall ||
-        busy ||
-        phase == UpdatePhase.scheduled ||
-        isDisposed) {
-      return;
-    }
+    if (target == null || !canInstall || !_canStartWork) return;
     File? partial;
-    IOSink? sink;
     try {
-      phase = UpdatePhase.downloading;
-      progress = 0;
-      error = null;
+      _phase = UpdatePhase.downloading;
+      _progress = 0;
+      _error = null;
       notifyListeners();
       final root = await _directory();
       await root.create(recursive: true);
-      final cachedPath = _prefs?.getString('updates.cachedPayload');
-      if (cachedPath != null &&
-          p.isWithin(root.path, cachedPath) &&
-          p.basename(cachedPath) == target.assetName) {
-        final cached = File(cachedPath);
-        if (await cached.exists() &&
-            await cached.length() == target.size &&
-            (await sha256.bind(cached.openRead()).first).toString() ==
-                target.sha256) {
-          _payload = cached;
-          downloadDirectory = cached.parent.path;
-          phase = UpdatePhase.ready;
-          notifyListeners();
-          return;
-        }
+      final cached = await _cachedPayload(root, target);
+      if (cached != null) {
+        _becomeReady(cached);
+        return;
       }
       // A private attempt directory avoids stale payloads, helper signals, or
       // two running app instances sharing a file being written.
       final dir = await root.createTemp('${target.tag}-');
-      downloadDirectory = dir.path;
+      _downloadDirectory = dir.path;
       partial = File(p.join(dir.path, '${target.assetName}.part'));
-      final response = await _client
-          .send(http.Request('GET', target.url))
-          .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200) {
-        throw HttpException('Update download returned ${response.statusCode}.');
-      }
-      if (response.contentLength != null &&
-          response.contentLength != target.size) {
-        throw const FormatException(
-          'Update download size does not match the release.',
-        );
-      }
-      var received = 0;
-      var lastPercent = -1;
-      sink = partial.openWrite();
-      await sink.addStream(
-        response.stream.timeout(const Duration(seconds: 45)).map((bytes) {
-          received += bytes.length;
-          if (received > target.size) {
-            throw const FormatException(
-              'Update download exceeds the expected size.',
-            );
-          }
-          progress = received / target.size;
-          final percent = (progress * 100).floor();
-          if (percent != lastPercent) {
-            lastPercent = percent;
-            notifyListeners();
-          }
-          return bytes;
-        }),
-      );
-      await sink.flush();
-      await sink.close();
-      sink = null;
-      if (received != target.size ||
-          (await sha256.bind(partial.openRead()).first).toString() !=
-              target.sha256) {
+      await _fetchPayload(target, partial);
+      if (!await _matchesRelease(partial, target)) {
         throw const FormatException(
           'Update checksum verification failed. The download was discarded.',
         );
@@ -255,15 +275,12 @@ class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
         verified,
         allowedRoot: dir,
       );
-      _payload = verified;
-      await _prefs?.setString('updates.cachedPayload', verified.path);
       partial = null;
-      phase = UpdatePhase.ready;
-      notifyListeners();
+      await _prefs.setString(_Prefs.cachedPayload, verified.path);
+      _becomeReady(verified);
     } catch (e) {
       _fail(e);
     } finally {
-      await sink?.close();
       if (partial != null) {
         await FileMutationService.instance.deleteDisposableFile(
           partial,
@@ -273,21 +290,92 @@ class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  /// The payload remembered from an earlier run, if it is still inside
+  /// [root], is the asset of [target], and still verifies.
+  Future<File?> _cachedPayload(Directory root, UpdateRelease target) async {
+    final cachedPath = _prefs.getString(_Prefs.cachedPayload);
+    if (cachedPath == null ||
+        !p.isWithin(root.path, cachedPath) ||
+        p.basename(cachedPath) != target.assetName) {
+      return null;
+    }
+    final cached = File(cachedPath);
+    if (!await cached.exists()) return null;
+    return await _matchesRelease(cached, target) ? cached : null;
+  }
+
+  /// Streams the asset into [partial], refusing a transfer whose announced
+  /// or actual size disagrees with the release.
+  Future<void> _fetchPayload(UpdateRelease target, File partial) async {
+    final response = await _client
+        .send(http.Request('GET', target.url))
+        .timeout(_downloadConnectTimeout);
+    if (response.statusCode != 200) {
+      throw HttpException('Update download returned ${response.statusCode}.');
+    }
+    if (response.contentLength != null &&
+        response.contentLength != target.size) {
+      throw const FormatException(
+        'Update download size does not match the release.',
+      );
+    }
+    var received = 0;
+    var lastPercent = -1;
+    final sink = partial.openWrite();
+    try {
+      await sink.addStream(
+        response.stream.timeout(_downloadStallTimeout).map((bytes) {
+          received += bytes.length;
+          if (received > target.size) {
+            throw const FormatException(
+              'Update download exceeds the expected size.',
+            );
+          }
+          _progress = received / target.size;
+          final percent = (_progress * 100).floor();
+          if (percent != lastPercent) {
+            lastPercent = percent;
+            notifyListeners();
+          }
+          return bytes;
+        }),
+      );
+      await sink.flush();
+    } finally {
+      await sink.close();
+    }
+  }
+
+  static Future<bool> _matchesRelease(File file, UpdateRelease target) async =>
+      await file.length() == target.size &&
+      (await sha256.bind(file.openRead()).first).toString() == target.sha256;
+
+  void _becomeReady(File payload) {
+    _payload = payload;
+    _downloadDirectory = payload.parent.path;
+    _phase = UpdatePhase.ready;
+    notifyListeners();
+  }
+
+  /// Arms the installer with the verified payload. A second press while the
+  /// helper is still acknowledging start-up does nothing.
   Future<void> scheduleInstall() async {
-    if (phase != UpdatePhase.ready || _payload == null || release == null) {
+    final payload = _payload;
+    final target = release;
+    if (phase != UpdatePhase.ready || payload == null || target == null) {
       return;
     }
-    // Block duplicate button presses while the helper acknowledges startup.
-    phase = UpdatePhase.scheduled;
+    _phase = UpdatePhase.scheduled;
     notifyListeners();
     try {
-      _armed = await _installer.schedule(_payload!, release!, kind);
+      _armed = await _installer.schedule(payload, target, kind);
       notifyListeners();
     } catch (e) {
       _fail(e);
     }
   }
 
+  /// Disarms a scheduled install and waits for the helper to notice.
   Future<void> cancelInstall() async {
     final armed = _armed;
     if (armed == null) return;
@@ -296,9 +384,11 @@ class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
       allowedRoot: armed.parent,
     );
     // Do not allow re-arming until the old helper has observed cancellation.
-    final ready = File(p.join(armed.parent.path, 'helper-ready'));
-    for (var i = 0; i < 40 && await ready.exists(); i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+    final ready = File(
+      p.join(armed.parent.path, UpdateInstaller.helperReadyFileName),
+    );
+    for (var i = 0; i < _cancelPolls && await ready.exists(); i++) {
+      await Future<void>.delayed(_cancelPoll);
     }
     if (await ready.exists()) {
       _fail(
@@ -309,13 +399,13 @@ class AppUpdateService extends ChangeNotifier with SafeChangeNotifier {
       return;
     }
     _armed = null;
-    phase = UpdatePhase.ready;
+    _phase = UpdatePhase.ready;
     notifyListeners();
   }
 
   void _fail(Object e) {
-    error = e.toString();
-    phase = UpdatePhase.failed;
+    _error = e.toString();
+    _phase = UpdatePhase.failed;
     notifyListeners();
   }
 

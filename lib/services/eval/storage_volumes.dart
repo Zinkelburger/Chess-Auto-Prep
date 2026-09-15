@@ -189,14 +189,33 @@ Future<String?> resolveBlockDeviceName(String device) async {
   return stripPartitionSuffix(name);
 }
 
-/// `nvme0n1p3` → `nvme0n1`; `sda1` → `sda`; `mmcblk0p1` → `mmcblk0`.
+/// Whole-disk names that end in a digit, so a trailing number is part of the
+/// device, not a partition: `md0`, `loop0`, `zram0`, `sr0`.
+const Set<String> _digitNamedDisks = {
+  'drbd',
+  'fd',
+  'loop',
+  'md',
+  'mtdblock',
+  'nbd',
+  'ram',
+  'rbd',
+  'sr',
+  'zram',
+};
+
+/// `nvme0n1p3` → `nvme0n1`; `sda1` → `sda`; `mmcblk0p1` → `mmcblk0`;
+/// `md127p1` → `md127`, while `md0` is already a whole disk.
+///
+/// The kernel partitions a disk whose name ends in a digit as `<disk>p<n>`
+/// and every other disk as `<disk><n>`.
 String stripPartitionSuffix(String name) {
-  final nvme = RegExp(r'^(nvme\d+n\d+)p\d+$').firstMatch(name);
-  if (nvme != null) return nvme.group(1)!;
-  final mmc = RegExp(r'^(mmcblk\d+)p\d+$').firstMatch(name);
-  if (mmc != null) return mmc.group(1)!;
-  final sd = RegExp(r'^([a-z]+)\d+$').firstMatch(name);
-  if (sd != null) return sd.group(1)!;
+  final numbered = RegExp(r'^(.*\d)p\d+$').firstMatch(name);
+  if (numbered != null) return numbered.group(1)!;
+  final lettered = RegExp(r'^([a-z]+)\d+$').firstMatch(name);
+  if (lettered != null && !_digitNamedDisks.contains(lettered.group(1))) {
+    return lettered.group(1)!;
+  }
   return name;
 }
 
@@ -305,15 +324,27 @@ Future<String?> _nearestExistingDirectory(String path) async {
 }
 
 /// Human-readable byte size: `1.19 TB`, `997 GB`, `4.3 GB`.
+///
+/// Three significant digits: [decimals] places below 100, none above. The
+/// unit is chosen after rounding, so 999,999 bytes is `1.0 MB`, not
+/// `1000 kB`.
 String formatBytes(int bytes, {int decimals = 1}) {
   if (bytes < 1000) return '$bytes B';
   const units = ['kB', 'MB', 'GB', 'TB', 'PB'];
   var value = bytes / 1000;
   var unit = 0;
-  while (value >= 1000 && unit < units.length - 1) {
+  var text = _roundedForDisplay(value, decimals);
+  while (double.parse(text) >= 1000 && unit < units.length - 1) {
     value /= 1000;
     unit++;
+    text = _roundedForDisplay(value, decimals);
   }
-  final places = value >= 100 ? 0 : decimals;
-  return '${value.toStringAsFixed(places)} ${units[unit]}';
+  return '$text ${units[unit]}';
+}
+
+/// [value] with [decimals] places, or none once the rounded value reaches
+/// three digits.
+String _roundedForDisplay(double value, int decimals) {
+  final fine = value.toStringAsFixed(decimals);
+  return double.parse(fine) >= 100 ? value.toStringAsFixed(0) : fine;
 }

@@ -59,10 +59,10 @@ hdr "Bundled assets"
 # The Stockfish binaries are gitignored and fetched; pubspec.yaml bundles them,
 # so a missing one fails `flutter build` late and confusingly.
 if [[ -f tools/fetch_assets.py ]]; then
-  if out=$(python3 tools/fetch_assets.py --check 2>&1); then
-    ok "fetched assets present ($(grep -c '^\[ok' <<<"$out") of $(grep -c '^\[' <<<"$out"))"
+  if out=$(python3 tools/fetch_assets.py --check --only stockfish 2>&1); then
+    ok "Stockfish present ($(grep -c '^\[ok' <<<"$out") of $(grep -c '^\[' <<<"$out"))"
   else
-    bad "fetched assets missing or stale — run: python3 tools/fetch_assets.py"
+    bad "Stockfish missing or stale — run: python3 tools/fetch_assets.py"
     [[ $QUIET -eq 1 ]] || sed 's/^/        /' <<<"$out" | grep -v '\[ok' | head -5
   fi
 fi
@@ -77,8 +77,8 @@ fi
 # losing .gitkeep means a release silently ships with no engine.
 if [[ ! -f assets/bughouse/.gitkeep ]]; then
   bad "assets/bughouse/.gitkeep is missing — restore it from git, or a release will build green with no bughouse engine"
-elif [[ -f tools/fetch_bughouse.py ]]; then
-  if out=$(python3 tools/fetch_bughouse.py --check 2>&1); then
+elif [[ -f tools/fetch_assets.py ]]; then
+  if out=$(python3 tools/fetch_assets.py --check --only bughouse 2>&1); then
     ok "bughouse engine present ($(grep -c '^\[ok' <<<"$out") files)"
     # Cheap and static: reads the fetched binaries' own import tables. It is
     # what says a Windows bundle needs a DLL nobody ships, which is invisible
@@ -90,7 +90,7 @@ elif [[ -f tools/fetch_bughouse.py ]]; then
       sed 's/^/    /' <<<"$deps" | tail -3
     fi
   else
-    note "bughouse engine not fetched — Bughouse Lab stays hidden. To enable: python3 tools/fetch_bughouse.py"
+    note "bughouse engine not fetched — Bughouse Lab stays hidden. To enable: python3 tools/fetch_assets.py"
   fi
 fi
 

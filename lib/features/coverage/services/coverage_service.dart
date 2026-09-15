@@ -6,37 +6,22 @@
 library;
 
 import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
+
 import '../../../models/opening_tree.dart';
+import '../../../services/maia/maia_factory.dart';
 import '../../../services/master_games/master_games_db.dart'
     show BookLookup, BookMove;
-import '../../../utils/fen_utils.dart';
 import '../../../utils/chess_utils.dart';
-import '../../../services/maia/maia_factory.dart';
+import '../../../utils/fen_utils.dart';
 
-/// Which database an opening explorer asks.
-///
-/// Three are Lichess's ([lichess], [masters], [player]); [twic] is the
-/// master-games database on this machine, which only the live explorer
-/// panel offers — the generation pipeline reads it through its own
-/// `BookLookup`.
-enum LichessDatabase { lichess, masters, player, twic }
-
-/// Leaf classification for coverage analysis
+/// Leaf classification for coverage analysis.
 enum LeafCategory { covered, tooShallow, tooDeep }
 
-/// Represents a leaf node in the repertoire analysis
+/// A leaf of the repertoire with the master-game count that reaches it.
 class LeafNode {
-  final String fen;
-  final List<String> moves;
-  final int gameCount;
-  final LeafCategory category;
-  final String reason;
-
-  /// For tooDeep leaves: how many ply past the threshold point
-  final int excessPly;
-
-  LeafNode({
+  const LeafNode({
     required this.fen,
     required this.moves,
     required this.gameCount,
@@ -45,48 +30,56 @@ class LeafNode {
     this.excessPly = 0,
   });
 
+  final String fen;
+
+  /// SAN moves from the coverage root to the leaf.
+  final List<String> moves;
+  final int gameCount;
+  final LeafCategory category;
+
+  /// Human-readable classification, e.g. "Covered (1.2K ≤ 2.0K target)".
+  final String reason;
+
+  /// For tooDeep leaves: how many ply past the threshold point.
+  final int excessPly;
+
   bool get isCovered => category == LeafCategory.covered;
 
   String get moveString => moves.isEmpty ? '(root)' : moves.join(' ');
 }
 
-/// An opponent move not covered by the repertoire
+/// Which source named an [UnaccountedMove].
+enum UnaccountedSource {
+  /// The local TWIC master book.
+  masters,
+
+  /// The Maia policy net, asked only where the book has never seen the
+  /// position.
+  maia,
+}
+
+/// An opponent move not covered by the repertoire.
 class UnaccountedMove {
-  final List<String> parentMoves;
-  final String move;
-  final int gameCount;
-  final double probability;
-
-  /// Which database named this move: `masters` (the local TWIC book) or
-  /// `maia` (the policy net, when the book has never seen the position).
-  final String source;
-
-  UnaccountedMove({
+  const UnaccountedMove({
     required this.parentMoves,
     required this.move,
     required this.gameCount,
     required this.probability,
     required this.source,
   });
+
+  final List<String> parentMoves;
+  final String move;
+
+  /// Master games with this move; zero for a Maia-sourced move.
+  final int gameCount;
+  final double probability;
+  final UnaccountedSource source;
 }
 
-/// Results from coverage analysis
+/// Results from coverage analysis.
 class CoverageResult {
-  final String rootFen;
-  final List<String> rootMoves;
-  final int rootGameCount;
-  final double targetPercent;
-  final int targetGameCount;
-  final List<LeafNode> coveredLeaves;
-  final List<LeafNode> tooShallowLeaves;
-  final List<LeafNode> tooDeepLeaves;
-  final List<UnaccountedMove> unaccountedMoves;
-  final int totalCoveredGames;
-  final int totalShallowGames;
-  final int totalDeepGames;
-  final int totalUnaccountedGames;
-
-  CoverageResult({
+  const CoverageResult({
     required this.rootFen,
     required this.rootMoves,
     required this.rootGameCount,
@@ -102,32 +95,32 @@ class CoverageResult {
     required this.totalUnaccountedGames,
   });
 
-  String get rootDescription {
-    if (rootMoves.isEmpty) return 'Starting position';
-    return rootMoves.join(' ');
-  }
+  final String rootFen;
+  final List<String> rootMoves;
+  final int rootGameCount;
+  final double targetPercent;
+  final int targetGameCount;
+  final List<LeafNode> coveredLeaves;
+  final List<LeafNode> tooShallowLeaves;
+  final List<LeafNode> tooDeepLeaves;
+  final List<UnaccountedMove> unaccountedMoves;
+  final int totalCoveredGames;
+  final int totalShallowGames;
+  final int totalDeepGames;
+  final int totalUnaccountedGames;
 
-  double get coveragePercent {
-    if (rootGameCount == 0) return 0.0;
-    return (totalCoveredGames / rootGameCount) * 100;
-  }
+  String get rootDescription =>
+      rootMoves.isEmpty ? 'Starting position' : rootMoves.join(' ');
 
-  double get shallowPercent {
-    if (rootGameCount == 0) return 0.0;
-    return (totalShallowGames / rootGameCount) * 100;
-  }
+  double get coveragePercent => _percentOfRoot(totalCoveredGames);
+  double get shallowPercent => _percentOfRoot(totalShallowGames);
+  double get deepPercent => _percentOfRoot(totalDeepGames);
+  double get unaccountedPercent => _percentOfRoot(totalUnaccountedGames);
 
-  double get deepPercent {
-    if (rootGameCount == 0) return 0.0;
-    return (totalDeepGames / rootGameCount) * 100;
-  }
+  double _percentOfRoot(int games) =>
+      rootGameCount == 0 ? 0.0 : games / rootGameCount * 100;
 
-  double get unaccountedPercent {
-    if (rootGameCount == 0) return 0.0;
-    return (totalUnaccountedGames / rootGameCount) * 100;
-  }
-
-  /// All leaves regardless of category
+  /// All leaves regardless of category.
   List<LeafNode> get allLeaves => [
     ...coveredLeaves,
     ...tooShallowLeaves,
@@ -136,29 +129,18 @@ class CoverageResult {
 
   /// All "gap" items: too-shallow leaves and unaccounted moves, sorted by
   /// move-path length (tree order). Returns move sequences.
-  List<List<String>> get _allGaps {
-    final gaps = <List<String>>[];
-    for (final leaf in tooShallowLeaves) {
-      gaps.add(leaf.moves);
-    }
-    for (final um in unaccountedMoves) {
-      gaps.add([...um.parentMoves, um.move]);
-    }
-    gaps.sort((a, b) => a.length.compareTo(b.length));
-    return gaps;
-  }
+  List<List<String>> get _allGaps => [
+    for (final leaf in tooShallowLeaves) leaf.moves,
+    for (final um in unaccountedMoves) [...um.parentMoves, um.move],
+  ]..sort((a, b) => a.length.compareTo(b.length));
 
   /// First gap in tree order (shortest move path).
-  List<String>? findNextGap() {
-    final gaps = _allGaps;
-    return gaps.isNotEmpty ? gaps.first : null;
-  }
+  List<String>? findNextGap() => _allGaps.firstOrNull;
 
   /// Gap with the highest game count (most impactful to address).
   List<String>? findBiggestGap() {
     List<String>? best;
     int bestCount = -1;
-
     for (final leaf in tooShallowLeaves) {
       if (leaf.gameCount > bestCount) {
         bestCount = leaf.gameCount;
@@ -175,15 +157,41 @@ class CoverageResult {
   }
 }
 
-/// Progress callback for coverage analysis
+/// A master-book move at a position, SAN-resolved, with its result counts.
+class MasterMoveCount {
+  const MasterMoveCount({
+    required this.san,
+    required this.uci,
+    required this.whiteWins,
+    required this.draws,
+    required this.blackWins,
+  });
+
+  final String san;
+  final String uci;
+  final int whiteWins;
+  final int draws;
+  final int blackWins;
+
+  /// Games with a decided result, which is what the unaccounted counts and
+  /// probabilities are measured in.
+  int get games => whiteWins + draws + blackWins;
+}
+
+/// Progress callback for coverage analysis.
 typedef CoverageProgressCallback =
     void Function(String message, double progress);
 
-/// Coverage Calculator Service
+/// Coverage Calculator Service.
 class CoverageService {
+  CoverageService({this.useMaia = false, this.maiaElo = 2200, this.masterBook});
+
   /// Leaves extending this many ply past the first sub-threshold node
   /// are classified as "too deep".
   static const tooDeepThresholdPly = 4;
+
+  /// Maia replies below this probability are not worth an unaccounted entry.
+  static const double _minMaiaReplyProbability = 0.02;
 
   /// Fall back to the Maia policy net for opponent replies at positions the
   /// book has never seen — the only source left once the book runs out.
@@ -208,8 +216,6 @@ class CoverageService {
   /// than reporting zeros.
   final BookLookup? masterBook;
 
-  CoverageService({this.useMaia = false, this.maiaElo = 2200, this.masterBook});
-
   /// Whether this service has a position-statistics source at all.
   ///
   /// Coverage is defined entirely by game counts — what fraction of the games
@@ -230,59 +236,33 @@ class CoverageService {
   ///
   /// Still here because [CandidateService] calls it for *Explorer-shaped*
   /// stats in the browse panels, where a master-book answer would be
-  /// mislabelled. Coverage no longer goes through it — it reads
-  /// [masterBook] directly.
-  Future<Map<String, dynamic>?> getPositionData(String fen) async {
-    // Mothballed: no Lichess Explorer API calls.
-    return null;
-  }
+  /// mislabelled. Coverage does not go through it — it reads [masterBook].
+  Future<Map<String, dynamic>?> getPositionData(String fen) async => null;
 
   /// Master games that reached [fen], as the sum over the moves played from
   /// it. A position no master ever left — the last position of every game
   /// that ended there — contributes nothing, which is the same convention the
   /// book itself is built on and is immaterial at opening depth.
-  Future<int> getGameCount(String fen) async {
-    final moves = bookMovesAt(fen);
-    if (moves.isNotEmpty) {
-      return moves.fold<int>(0, (sum, m) => sum + m.games);
-    }
-    // Legacy Explorer shape, for a future in which that path comes back.
-    final data = await getPositionData(fen);
-    if (data == null) return 0;
-    return (data['white'] as int? ?? 0) +
-        (data['black'] as int? ?? 0) +
-        (data['draws'] as int? ?? 0);
-  }
+  Future<int> getGameCount(String fen) async =>
+      bookMovesAt(fen).fold<int>(0, (sum, m) => sum + m.games);
 
-  /// Moves played from [fen] with their W/D/L counts, in the Explorer's shape
-  /// so the callers below stay source-agnostic.
+  /// Moves played from [fen] with their result counts, most-played first.
   ///
   /// The book stores UCI; a move whose SAN cannot be derived (an unparsable
   /// FEN, a move illegal in it — a corrupt row) is dropped rather than
   /// reported under a raw `e2e4`, which would never match a repertoire SAN
   /// and so would show up as a permanent phantom gap.
-  Future<List<Map<String, dynamic>>> getMovesWithCounts(String fen) async {
-    final book = bookMovesAt(fen);
-    if (book.isNotEmpty) {
-      final out = <Map<String, dynamic>>[];
-      for (final m in book) {
-        final san = uciToSanOrNull(fen, m.uci);
-        if (san == null) continue;
-        out.add({
-          'san': san,
-          'uci': m.uci,
-          'white': m.whiteWins,
-          'draws': m.draws,
-          'black': m.blackWins,
-        });
-      }
-      return out;
-    }
-    final data = await getPositionData(fen);
-    if (data == null) return [];
-    final moves = data['moves'] as List<dynamic>? ?? [];
-    return moves.cast<Map<String, dynamic>>();
-  }
+  Future<List<MasterMoveCount>> getMovesWithCounts(String fen) async => [
+    for (final m in bookMovesAt(fen))
+      if (uciToSanOrNull(fen, m.uci) case final san?)
+        MasterMoveCount(
+          san: san,
+          uci: m.uci,
+          whiteWins: m.whiteWins,
+          draws: m.draws,
+          blackWins: m.blackWins,
+        ),
+  ];
 
   /// Where the measurement starts: the forced opening sequence the file
   /// commits to, and the node it lands on.
@@ -339,95 +319,70 @@ class CoverageService {
 
     final root = findRepertoireRoot(tree, isWhiteRepertoire: isWhiteRepertoire);
     final rootMoves = root.moves;
-    final effectiveRootFen = root.fen;
 
     onProgress?.call(
       'Root: ${rootMoves.isEmpty ? "Starting position" : rootMoves.join(" ")}',
       0.02,
     );
 
-    final rootGameCount = await getGameCount(effectiveRootFen);
+    final rootGameCount = await getGameCount(root.fen);
     final targetGameCount = (rootGameCount * targetPercent / 100).round();
 
     onProgress?.call(
-      'Root: ${_formatNumber(rootGameCount)} games → Target: ${_formatNumber(targetGameCount)} (${targetPercent.toStringAsFixed(1)}%)',
+      'Root: ${_formatNumber(rootGameCount)} games → Target: '
+      '${_formatNumber(targetGameCount)} (${targetPercent.toStringAsFixed(1)}%)',
       0.05,
     );
 
-    final startingMoves = rootMoves;
-    final leaves = <LeafNode>[];
-    final allPositions = <String, List<String>>{};
-
     // The walk starts at the ROOT NODE, not at `tree.root`: every position
-    // below is derived as `startingMoves + currentMoves`, so a walk that
-    // began at the true root would re-apply the prefix on top of a path that
-    // already contains it and compute a nonsense (usually illegal, therefore
-    // silently unchanged) FEN for every node in the tree.
-    await _traverseTree(
-      root.node,
-      [],
-      leaves,
-      allPositions,
-      targetGameCount,
-      isWhiteRepertoire,
-      startingMoves,
-      onProgress,
-      null, // firstBelowThresholdPly — not yet below threshold at root
+    // below is derived as `rootMoves + currentMoves`, so a walk that began at
+    // the true root would re-apply the prefix on top of a path that already
+    // contains it and compute a nonsense (usually illegal, therefore silently
+    // unchanged) FEN for every node in the tree.
+    final leaves = _LeafCollector(
+      service: this,
+      rootMoves: rootMoves,
+      targetGameCount: targetGameCount,
     );
+    await leaves.collect(root.node);
 
-    onProgress?.call('Found ${leaves.length} leaf positions', 0.6);
+    onProgress?.call('Found ${leaves.leaves.length} leaf positions', 0.6);
 
-    final coveredLeaves = leaves
-        .where((l) => l.category == LeafCategory.covered)
-        .toList();
-    final tooShallowLeaves = leaves
-        .where((l) => l.category == LeafCategory.tooShallow)
-        .toList();
-    final tooDeepLeaves = leaves
-        .where((l) => l.category == LeafCategory.tooDeep)
-        .toList();
-
-    final totalCoveredGames = coveredLeaves.fold(
-      0,
-      (sum, l) => sum + l.gameCount,
-    );
-    final totalShallowGames = tooShallowLeaves.fold(
-      0,
-      (sum, l) => sum + l.gameCount,
-    );
-    final totalDeepGames = tooDeepLeaves.fold(0, (sum, l) => sum + l.gameCount);
+    final byCategory = <LeafCategory, List<LeafNode>>{
+      for (final category in LeafCategory.values)
+        category: leaves.leaves.where((l) => l.category == category).toList(),
+    };
+    int gamesIn(LeafCategory category) =>
+        byCategory[category]!.fold(0, (sum, l) => sum + l.gameCount);
 
     onProgress?.call('Calculating unaccounted moves...', 0.7);
     final unaccountedMoves = await _calculateUnaccounted(
       tree,
-      allPositions,
-      isWhiteRepertoire,
-      startingMoves,
-      rootGameCount,
-      onProgress,
-    );
-
-    final totalUnaccountedGames = unaccountedMoves.fold(
-      0,
-      (sum, m) => sum + m.gameCount,
+      leaves.positions,
+      isWhiteRepertoire: isWhiteRepertoire,
+      rootMoves: rootMoves,
+      onProgress: onProgress,
     );
 
     onProgress?.call('Analysis complete!', 1.0);
 
     return CoverageResult(
-      rootFen: effectiveRootFen,
-      rootMoves: startingMoves,
+      rootFen: root.fen,
+      rootMoves: rootMoves,
       rootGameCount: rootGameCount,
       targetPercent: targetPercent,
       targetGameCount: targetGameCount,
-      coveredLeaves: coveredLeaves,
-      tooShallowLeaves: tooShallowLeaves,
-      tooDeepLeaves: tooDeepLeaves,
+      coveredLeaves: byCategory[LeafCategory.covered]!,
+      tooShallowLeaves: byCategory[LeafCategory.tooShallow]!,
+      tooDeepLeaves: byCategory[LeafCategory.tooDeep]!,
       unaccountedMoves: unaccountedMoves,
-      totalCoveredGames: totalCoveredGames,
-      totalShallowGames: totalShallowGames,
-      totalDeepGames: totalDeepGames,
-      totalUnaccountedGames: totalUnaccountedGames,
+      totalCoveredGames: gamesIn(LeafCategory.covered),
+      totalShallowGames: gamesIn(LeafCategory.tooShallow),
+      totalDeepGames: gamesIn(LeafCategory.tooDeep),
+      totalUnaccountedGames: unaccountedMoves.fold(
+        0,
+        (sum, m) => sum + m.gameCount,
+      ),
     );
   }
 
@@ -439,7 +394,7 @@ class CoverageService {
   /// the path it claims to be, and every count taken at it is then a count
   /// for some other position. Returning null lets the caller drop the node
   /// instead of reporting a confident wrong number.
-  Chess? _positionAfter(List<String> prefix, List<String> rest) {
+  static Chess? _positionAfter(List<String> prefix, List<String> rest) {
     try {
       Chess position = Chess.initial;
       for (final move in [...prefix, ...rest]) {
@@ -453,116 +408,21 @@ class CoverageService {
     }
   }
 
-  /// Traverse the opening tree and collect leaf nodes.
-  ///
-  /// [firstBelowThresholdPly] tracks the ply at which game count first
-  /// dropped below the target.  If a leaf is 4+ ply deeper, it's "too deep".
-  Future<void> _traverseTree(
-    OpeningTreeNode node,
-    List<String> currentMoves,
-    List<LeafNode> leaves,
-    Map<String, List<String>> allPositions,
-    int targetGameCount,
-    bool isWhiteRepertoire,
-    List<String> startingMoves,
-    CoverageProgressCallback? onProgress,
-    int? firstBelowThresholdPly,
-  ) async {
-    final position = _positionAfter(startingMoves, currentMoves);
-    if (position == null) return;
-
-    final fen = position.fen;
-    allPositions[normalizeFen(fen)] = List.from(currentMoves);
-
-    final currentPly = currentMoves.length;
-
-    if (node.children.isEmpty) {
-      final gameCount = await getGameCount(fen);
-      final isGameOver = position.isGameOver;
-      final belowThreshold = gameCount <= targetGameCount || isGameOver;
-
-      final effectiveFirstBelow =
-          firstBelowThresholdPly ?? (belowThreshold ? currentPly : null);
-
-      LeafCategory category;
-      String reason;
-
-      if (isGameOver) {
-        category = LeafCategory.covered;
-        if (position.isCheckmate) {
-          reason = 'Checkmate';
-        } else if (position.isStalemate) {
-          reason = 'Stalemate';
-        } else {
-          reason = 'Game over';
-        }
-      } else if (!belowThreshold) {
-        category = LeafCategory.tooShallow;
-        reason =
-            'Too shallow (${_formatNumber(gameCount)} > ${_formatNumber(targetGameCount)} target)';
-      } else if (effectiveFirstBelow != null &&
-          currentPly - effectiveFirstBelow >= tooDeepThresholdPly) {
-        category = LeafCategory.tooDeep;
-        reason = '${currentPly - effectiveFirstBelow} ply past threshold';
-      } else {
-        category = LeafCategory.covered;
-        reason =
-            'Covered (${_formatNumber(gameCount)} ≤ ${_formatNumber(targetGameCount)} target)';
-      }
-
-      leaves.add(
-        LeafNode(
-          fen: fen,
-          moves: currentMoves,
-          gameCount: gameCount,
-          category: category,
-          reason: reason,
-          excessPly: effectiveFirstBelow != null
-              ? currentPly - effectiveFirstBelow
-              : 0,
-        ),
-      );
-    } else {
-      // Check game count at this intermediate node to track threshold crossing
-      int? updatedFirstBelow = firstBelowThresholdPly;
-      if (updatedFirstBelow == null) {
-        final gameCount = await getGameCount(fen);
-        if (gameCount <= targetGameCount) {
-          updatedFirstBelow = currentPly;
-        }
-      }
-
-      for (final child in node.children.values) {
-        await _traverseTree(
-          child,
-          [...currentMoves, child.move],
-          leaves,
-          allPositions,
-          targetGameCount,
-          isWhiteRepertoire,
-          startingMoves,
-          onProgress,
-          updatedFirstBelow,
-        );
-      }
-    }
-  }
-
-  /// Calculate unaccounted moves (opponent moves not in repertoire).
-  /// Returns structured list with move details and source.
+  /// Opponent moves the master book (or, failing that, Maia) sees at the
+  /// repertoire's opponent-to-move positions and the file does not answer.
   Future<List<UnaccountedMove>> _calculateUnaccounted(
     OpeningTree tree,
-    Map<String, List<String>> allPositions,
-    bool isWhiteRepertoire,
-    List<String> startingMoves,
-    int rootGameCount,
+    Map<String, List<String>> positions, {
+    required bool isWhiteRepertoire,
+    required List<String> rootMoves,
     CoverageProgressCallback? onProgress,
-  ) async {
+  }) async {
     final result = <UnaccountedMove>[];
     int checked = 0;
-    final total = allPositions.length;
+    final total = positions.length;
 
-    for (final entry in allPositions.entries) {
+    for (final MapEntry(key: normalizedFen, value: pathMoves)
+        in positions.entries) {
       checked++;
       if (checked % 10 == 0) {
         onProgress?.call(
@@ -571,78 +431,55 @@ class CoverageService {
         );
       }
 
-      final position = _positionAfter(startingMoves, entry.value);
+      final position = _positionAfter(rootMoves, pathMoves);
       if (position == null) continue;
-
-      final isWhiteTurn = position.turn == Side.white;
-      final isMyTurn =
-          (isWhiteRepertoire && isWhiteTurn) ||
-          (!isWhiteRepertoire && !isWhiteTurn);
+      final isMyTurn = (position.turn == Side.white) == isWhiteRepertoire;
       if (isMyTurn) continue;
 
-      final node = _findNodeByFen(tree, entry.key);
+      final node = tree.fenToNodes[normalizedFen]?.firstOrNull;
       if (node == null || node.children.isEmpty) continue;
 
       final repertoireMoves = node.children.keys.toSet();
       final fen = position.fen;
+      final bookMoves = await getMovesWithCounts(fen);
 
-      // Try Lichess DB first
-      final apiMoves = await getMovesWithCounts(fen);
-
-      if (apiMoves.isNotEmpty) {
-        final totalGames = apiMoves.fold<int>(
-          0,
-          (s, m) =>
-              s +
-              (m['white'] as int? ?? 0) +
-              (m['black'] as int? ?? 0) +
-              (m['draws'] as int? ?? 0),
-        );
-
-        for (final moveData in apiMoves) {
-          final moveSan = moveData['san'] as String?;
-          if (moveSan != null && !repertoireMoves.contains(moveSan)) {
-            final moveGames =
-                (moveData['white'] as int? ?? 0) +
-                (moveData['black'] as int? ?? 0) +
-                (moveData['draws'] as int? ?? 0);
-            final prob = totalGames > 0 ? moveGames / totalGames : 0.0;
+      if (bookMoves.isNotEmpty) {
+        final totalGames = bookMoves.fold<int>(0, (s, m) => s + m.games);
+        for (final bookMove in bookMoves) {
+          if (repertoireMoves.contains(bookMove.san)) continue;
+          result.add(
+            UnaccountedMove(
+              parentMoves: List<String>.from(pathMoves),
+              move: bookMove.san,
+              gameCount: bookMove.games,
+              probability: totalGames > 0 ? bookMove.games / totalGames : 0.0,
+              source: UnaccountedSource.masters,
+            ),
+          );
+        }
+      } else if (useMaia && MaiaFactory.isAvailable) {
+        final maia = MaiaFactory.instance;
+        if (maia == null) continue;
+        try {
+          final maiaResult = await maia.evaluate(fen, maiaElo);
+          for (final MapEntry(key: uci, value: probability)
+              in maiaResult.policy.entries) {
+            if (probability < _minMaiaReplyProbability) continue;
+            final san = uciToSan(fen, uci);
+            if (repertoireMoves.contains(san)) continue;
             result.add(
               UnaccountedMove(
-                parentMoves: List<String>.from(entry.value),
-                move: moveSan,
-                gameCount: moveGames,
-                probability: prob,
-                source: 'masters',
+                parentMoves: List<String>.from(pathMoves),
+                move: san,
+                gameCount: 0,
+                probability: probability,
+                source: UnaccountedSource.maia,
               ),
             );
           }
-        }
-      } else if (useMaia &&
-          MaiaFactory.isAvailable &&
-          MaiaFactory.instance != null) {
-        // Maia fallback when Lichess DB has no data
-        try {
-          final maiaResult = await MaiaFactory.instance!.evaluate(fen, maiaElo);
-          for (final moveEntry in maiaResult.policy.entries) {
-            final uci = moveEntry.key;
-            final prob = moveEntry.value;
-            if (prob < 0.02) continue;
-            final san = uciToSan(fen, uci);
-            if (!repertoireMoves.contains(san)) {
-              result.add(
-                UnaccountedMove(
-                  parentMoves: List<String>.from(entry.value),
-                  move: san,
-                  gameCount: 0,
-                  probability: prob,
-                  source: 'maia',
-                ),
-              );
-            }
-          }
         } catch (_) {
-          // Maia eval failed — skip this position
+          // Maia could not evaluate this position; the book had nothing
+          // either, so there is no source left to ask — skip it.
         }
       }
     }
@@ -650,22 +487,122 @@ class CoverageService {
     return result;
   }
 
-  OpeningTreeNode? _findNodeByFen(OpeningTree tree, String normalizedFen) {
-    if (tree.fenToNodes.containsKey(normalizedFen)) {
-      final nodes = tree.fenToNodes[normalizedFen];
-      if (nodes != null && nodes.isNotEmpty) {
-        return nodes.first;
-      }
-    }
-    return null;
-  }
-
-  String _formatNumber(int number) {
+  static String _formatNumber(int number) {
     if (number >= 1000000) {
       return '${(number / 1000000).toStringAsFixed(1)}M';
     } else if (number >= 1000) {
       return '${(number / 1000).toStringAsFixed(1)}K';
     }
     return number.toString();
+  }
+}
+
+/// Depth-first collection of the repertoire's leaves below the coverage
+/// root, each classified against the target game count, plus every position
+/// visited on the way (normalised FEN → moves from the root).
+class _LeafCollector {
+  _LeafCollector({
+    required this.service,
+    required this.rootMoves,
+    required this.targetGameCount,
+  });
+
+  final CoverageService service;
+  final List<String> rootMoves;
+  final int targetGameCount;
+
+  final List<LeafNode> leaves = [];
+  final Map<String, List<String>> positions = {};
+
+  Future<void> collect(OpeningTreeNode root) =>
+      _visit(root, const [], firstBelowThresholdPly: null);
+
+  /// [firstBelowThresholdPly] is the ply at which the game count first
+  /// dropped below the target on this path; a leaf
+  /// [CoverageService.tooDeepThresholdPly] or more beyond it is "too deep".
+  Future<void> _visit(
+    OpeningTreeNode node,
+    List<String> currentMoves, {
+    required int? firstBelowThresholdPly,
+  }) async {
+    final position = CoverageService._positionAfter(rootMoves, currentMoves);
+    if (position == null) return;
+
+    final fen = position.fen;
+    positions[normalizeFen(fen)] = List.from(currentMoves);
+    final currentPly = currentMoves.length;
+
+    if (node.children.isEmpty) {
+      leaves.add(
+        await _classifyLeaf(
+          position,
+          currentMoves,
+          firstBelowThresholdPly: firstBelowThresholdPly,
+        ),
+      );
+      return;
+    }
+
+    // Track the threshold crossing at intermediate nodes too.
+    var firstBelow = firstBelowThresholdPly;
+    if (firstBelow == null) {
+      final gameCount = await service.getGameCount(fen);
+      if (gameCount <= targetGameCount) firstBelow = currentPly;
+    }
+    for (final child in node.children.values) {
+      await _visit(child, [
+        ...currentMoves,
+        child.move,
+      ], firstBelowThresholdPly: firstBelow);
+    }
+  }
+
+  Future<LeafNode> _classifyLeaf(
+    Chess position,
+    List<String> moves, {
+    required int? firstBelowThresholdPly,
+  }) async {
+    final fen = position.fen;
+    final currentPly = moves.length;
+    final gameCount = await service.getGameCount(fen);
+    final isGameOver = position.isGameOver;
+    final belowThreshold = gameCount <= targetGameCount || isGameOver;
+    final firstBelow =
+        firstBelowThresholdPly ?? (belowThreshold ? currentPly : null);
+    final excessPly = firstBelow != null ? currentPly - firstBelow : 0;
+
+    final LeafCategory category;
+    final String reason;
+    if (isGameOver) {
+      category = LeafCategory.covered;
+      reason = position.isCheckmate
+          ? 'Checkmate'
+          : position.isStalemate
+          ? 'Stalemate'
+          : 'Game over';
+    } else if (!belowThreshold) {
+      category = LeafCategory.tooShallow;
+      reason =
+          'Too shallow (${CoverageService._formatNumber(gameCount)} > '
+          '${CoverageService._formatNumber(targetGameCount)} target)';
+    } else if (firstBelow != null &&
+        excessPly >= CoverageService.tooDeepThresholdPly) {
+      category = LeafCategory.tooDeep;
+      reason = '$excessPly ply past threshold';
+    } else {
+      category = LeafCategory.covered;
+      reason =
+          'Covered (${CoverageService._formatNumber(gameCount)} ≤ '
+          '${CoverageService._formatNumber(targetGameCount)} target)';
+    }
+
+    return LeafNode(
+      fen: fen,
+      moves: moves,
+      gameCount: gameCount,
+      category: category,
+      reason: reason,
+      excessPly: excessPly,
+    );
   }
 }

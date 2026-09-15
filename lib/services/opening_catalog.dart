@@ -1,10 +1,12 @@
-import 'dart:convert';
+/// The bundled opening book as a flat list of named lines, for pickers and
+/// labels that want every entry rather than a position lookup.
+library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import '../utils/movetext_builder.dart';
+import 'opening_tsv.dart';
 
 /// One named line, not one code: several distinct tabiyas can share an ECO.
 class CatalogOpening {
@@ -16,9 +18,16 @@ class CatalogOpening {
 
   final String eco;
   final String name;
+
+  /// SAN moves from the initial position, each legal after the previous.
   final List<String> moves;
+
   String get movetext => buildNumberedMovetext(moves, compact: true);
 
+  /// SAN moves of a numbered movetext (`1. e4 c5 2. Nf3`), each replayed and
+  /// re-serialized so the stored spelling is dartchess's own.
+  ///
+  /// Throws a [FormatException] on the first illegal or unparseable token.
   static List<String> parseMoves(String text) {
     final tokens = text
         .replaceAll(RegExp(r'\d+\.(?:\.\.)?'), ' ')
@@ -35,6 +44,7 @@ class CatalogOpening {
     return moves;
   }
 
+  /// The position after [moves], replayed on each call.
   Position get position {
     Position pos = Chess.initial;
     for (final san in moves) {
@@ -44,27 +54,23 @@ class CatalogOpening {
   }
 }
 
+/// Every line in the TSV [contents], in file order.
+///
+/// Isolate-safe: no instance state captured.
 List<CatalogOpening> parseOpeningCatalog(List<String> contents) => [
-  for (final content in contents)
-    for (final row in const LineSplitter().convert(content))
-      if (row.isNotEmpty && !row.startsWith('eco\t'))
-        if (row.split('\t') case [final eco, final name, final moves, ...])
-          CatalogOpening(
-            eco: eco,
-            name: name,
-            moves: CatalogOpening.parseMoves(moves),
-          ),
+  for (final row in parseOpeningTsvRows(contents))
+    CatalogOpening(
+      eco: row.eco,
+      name: row.name,
+      moves: CatalogOpening.parseMoves(row.movetext),
+    ),
 ];
 
-class OpeningCatalog {
+/// Lazily loads and caches the bundled catalog, parsed off the main isolate.
+abstract final class OpeningCatalog {
   static Future<List<CatalogOpening>>? _loaded;
   static Future<List<CatalogOpening>> load() => _loaded ??= _load();
 
-  static Future<List<CatalogOpening>> _load() async {
-    final contents = await Future.wait([
-      for (final volume in ['a', 'b', 'c', 'd', 'e'])
-        rootBundle.loadString('assets/data/openings/$volume.tsv'),
-    ]);
-    return compute(parseOpeningCatalog, contents);
-  }
+  static Future<List<CatalogOpening>> _load() async =>
+      compute(parseOpeningCatalog, await loadOpeningTsvVolumes());
 }

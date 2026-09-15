@@ -2,8 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../../services/game_analysis_controller.dart'
-    show MoveClassification;
+import '../../../services/move_eval.dart' show MoveClassification;
 import '../../../services/games_library/game_filter.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';

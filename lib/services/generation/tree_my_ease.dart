@@ -102,7 +102,7 @@ bool _isOnlyReasonableMove(BuildTreeNode child, BuildTreeNode parent) {
 bool _isEngineBest(BuildTreeNode child, BuildTreeNode parent) {
   if (!child.hasEngineEval) return false;
   for (final sibling in parent.children) {
-    if (sibling == child) continue;
+    if (identical(sibling, child)) continue;
     if (!sibling.hasEngineEval) continue;
     if (sibling.engineEvalCp! > child.engineEvalCp!) return false;
   }

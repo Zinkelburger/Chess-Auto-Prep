@@ -22,6 +22,25 @@ library;
 
 import '../models/move_tree.dart';
 
+/// Resolving a SAN sequence to a [TreePath].
+extension MoveTreeSanPaths on MoveTree {
+  /// The deepest path whose moves match [sans] from the root: the first
+  /// sibling with each SAN is followed, and the walk stops at the first move
+  /// the tree does not have. Stable under sibling reordering, which is why
+  /// a cursor is re-anchored by SAN after a promotion.
+  TreePath pathForSans(Iterable<String> sans) {
+    var path = TreePath.empty;
+    var siblings = roots;
+    for (final san in sans) {
+      final index = siblings.indexWhere((node) => node.san == san);
+      if (index == -1) break;
+      path = path.child(index);
+      siblings = siblings[index].children;
+    }
+    return path;
+  }
+}
+
 mixin MoveNavigation {
   /// The move tree being navigated.
   MoveTree get tree;

@@ -3,8 +3,6 @@
 /// Orchestrates: discovery (MultiPV) -> candidate filtering -> per-move
 /// eval. Uses one shared [BoardEngine] with the selected threads and exposes
 /// [ValueNotifier]s for the UI to subscribe to.
-///
-/// Replaces the old [MoveAnalysisPool] for the interactive analysis use case.
 library;
 
 import 'dart:async';
@@ -13,12 +11,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-import '../models/engine_settings.dart';
 import '../models/analysis/discovery_result.dart';
-import 'engine/board_engine.dart';
 import '../models/analysis/move_analysis_result.dart';
+import '../models/engine_settings.dart';
 import '../utils/chess_utils.dart' show playUciMove;
 import '../utils/fen_utils.dart';
+import 'engine/board_engine.dart';
+import 'engine/eval_worker.dart' show EvalResult;
 
 export '../models/analysis/discovery_result.dart';
 export '../models/analysis/move_analysis_result.dart';
@@ -34,6 +33,8 @@ class AnalysisService {
   final BoardEngineSession _session;
   bool _disposed = false;
 
+  /// Bumped by every new request and by [cancel]; work started under an
+  /// older generation publishes nothing.
   int _generation = 0;
 
   String? _currentBaseFen;
@@ -41,7 +42,8 @@ class AnalysisService {
   int _nextMoveIndex = 0;
   int _evalDepth = 20;
 
-  final Map<int, String> _workerCurrentMoves = {};
+  /// The candidate the evaluation loop is on right now, if any.
+  String? _evaluatingUci;
 
   // ── Public notifiers ──────────────────────────────────────────────────
   final ValueNotifier<DiscoveryResult> discoveryResult = ValueNotifier(
@@ -72,6 +74,28 @@ class AnalysisService {
     }
   }
 
+  /// A [PoolStatus] for [phase] carrying the engine's current worker count
+  /// and hash size.
+  PoolStatus _status(
+    PoolPhase phase, {
+    List<String> evaluatingUcis = const [],
+    int totalMoves = 0,
+    int completedMoves = 0,
+    int discoveryDepth = 0,
+    int discoveryNodes = 0,
+    int discoveryNps = 0,
+  }) => PoolStatus(
+    phase: phase,
+    evaluatingUcis: evaluatingUcis,
+    totalMoves: totalMoves,
+    completedMoves: completedMoves,
+    activeWorkers: _engine.workerCount,
+    hashPerWorkerMb: EngineSettings.instance.hashMb,
+    discoveryDepth: discoveryDepth,
+    discoveryNodes: discoveryNodes,
+    discoveryNps: discoveryNps,
+  );
+
   Future<void> prepare() => _session.prepare();
 
   void detach() {
@@ -86,25 +110,15 @@ class AnalysisService {
     required int depth,
     required int multiPv,
   }) async {
-    _generation++;
-    final myGen = _generation;
+    final myGen = ++_generation;
 
     _session.pause();
-    _workerCurrentMoves.clear();
+    _evaluatingUci = null;
     _currentBaseFen = null;
     _publishUi(() {
       results.value = {};
       discoveryResult.value = const DiscoveryResult();
-    });
-
-    final whiteToMove = isWhiteToMove(fen);
-
-    _publishUi(() {
-      poolStatus.value = PoolStatus(
-        phase: 'discovering',
-        activeWorkers: _engine.workerCount,
-        hashPerWorkerMb: EngineSettings.instance.hashMb,
-      );
+      poolStatus.value = _status(PoolPhase.discovering);
     });
 
     if (kDebugMode) {
@@ -122,18 +136,16 @@ class AnalysisService {
         fen: fen,
         depth: depth,
         multiPv: multiPv,
-        whiteToMove: whiteToMove,
+        whiteToMove: isWhiteToMove(fen),
         onProgress: (intermediate) {
           if (_generation != myGen) return;
           _publishUi(() {
             discoveryResult.value = intermediate;
-            poolStatus.value = PoolStatus(
-              phase: 'discovering',
+            poolStatus.value = _status(
+              PoolPhase.discovering,
               discoveryDepth: intermediate.depth,
               discoveryNodes: intermediate.nodes,
               discoveryNps: intermediate.nps,
-              activeWorkers: _engine.workerCount,
-              hashPerWorkerMb: EngineSettings.instance.hashMb,
             );
           });
           if (kDebugMode &&
@@ -162,8 +174,9 @@ class AnalysisService {
       }
       return result;
     } catch (e) {
-      if (_generation != myGen) return const DiscoveryResult();
-      if (kDebugMode) debugPrint('[Analysis] Discovery FAILED: $e');
+      if (kDebugMode && _generation == myGen) {
+        debugPrint('[Analysis] Discovery FAILED: $e');
+      }
       return const DiscoveryResult();
     }
   }
@@ -175,36 +188,29 @@ class AnalysisService {
     required List<String> moveUcis,
     required int evalDepth,
   }) async {
-    _generation++;
-    final myGen = _generation;
+    final myGen = ++_generation;
 
     _session.pause();
 
     _currentBaseFen = baseFen;
-    _moveQueue = List.from(moveUcis);
+    _moveQueue = List.of(moveUcis);
     _nextMoveIndex = 0;
-    _workerCurrentMoves.clear();
+    _evaluatingUci = null;
     _publishUi(() => results.value = {});
 
     if (moveUcis.isEmpty) {
-      _publishUi(() {
-        poolStatus.value = const PoolStatus(
-          phase: 'complete',
-          totalMoves: 0,
-          completedMoves: 0,
-        );
-      });
+      _publishUi(
+        () => poolStatus.value = const PoolStatus(phase: PoolPhase.complete),
+      );
       return;
     }
 
     _evalDepth = evalDepth;
 
     _publishUi(() {
-      poolStatus.value = PoolStatus(
-        phase: 'evaluating',
+      poolStatus.value = _status(
+        PoolPhase.evaluating,
         totalMoves: moveUcis.length,
-        activeWorkers: _engine.workerCount,
-        hashPerWorkerMb: EngineSettings.instance.hashMb,
       );
     });
 
@@ -215,12 +221,12 @@ class AnalysisService {
       );
     }
 
-    _startWorkerLoops(myGen);
+    unawaited(_runEvaluationQueue(myGen));
   }
 
   void cancel() {
     _generation++;
-    _workerCurrentMoves.clear();
+    _evaluatingUci = null;
     _currentBaseFen = null;
     _moveQueue = [];
     _nextMoveIndex = 0;
@@ -232,93 +238,59 @@ class AnalysisService {
     });
   }
 
-  // ── Worker loop ───────────────────────────────────────────────────────
+  // ── Evaluation loop ───────────────────────────────────────────────────
 
-  String? _getNextMove() {
+  String? _takeNextMove() {
     if (_nextMoveIndex >= _moveQueue.length) return null;
     return _moveQueue[_nextMoveIndex++];
   }
 
-  void _emitPoolStatus() {
+  void _emitEvaluatingStatus() {
     _publishUi(() {
-      poolStatus.value = PoolStatus(
-        phase: 'evaluating',
-        evaluatingUcis: _workerCurrentMoves.values.toList(),
+      poolStatus.value = _status(
+        PoolPhase.evaluating,
+        evaluatingUcis: [?_evaluatingUci],
         totalMoves: _moveQueue.length,
         completedMoves: results.value.length,
-        activeWorkers: _engine.workerCount,
-        hashPerWorkerMb: EngineSettings.instance.hashMb,
       );
     });
   }
 
-  void _startWorkerLoops(int generation) {
-    unawaited(
-      _workerLoop(0, generation).then((_) {
-        if (_generation == generation) {
-          _workerCurrentMoves.clear();
-          _publishUi(() {
-            poolStatus.value = PoolStatus(
-              phase: 'complete',
-              totalMoves: _moveQueue.length,
-              completedMoves: results.value.length,
-              activeWorkers: _engine.workerCount,
-              hashPerWorkerMb: EngineSettings.instance.hashMb,
-            );
-          });
-        }
-      }),
-    );
+  Future<void> _runEvaluationQueue(int generation) async {
+    await _evaluateQueuedMoves(generation);
+    if (_generation != generation) return;
+    _evaluatingUci = null;
+    _publishUi(() {
+      poolStatus.value = _status(
+        PoolPhase.complete,
+        totalMoves: _moveQueue.length,
+        completedMoves: results.value.length,
+      );
+    });
   }
 
-  Future<void> _workerLoop(int workerIndex, int generation) async {
+  Future<void> _evaluateQueuedMoves(int generation) async {
     final baseFen = _currentBaseFen;
     if (baseFen == null) return;
 
     final whiteToMove = isWhiteToMove(baseFen);
 
     while (_generation == generation) {
-      final uci = _getNextMove();
+      final uci = _takeNextMove();
       if (uci == null) break;
 
-      _workerCurrentMoves[workerIndex] = uci;
-      _emitPoolStatus();
+      _evaluatingUci = uci;
+      _emitEvaluatingStatus();
 
       try {
-        if (_generation != generation) return;
-
         final resultingFen = playUciMove(baseFen, uci);
         if (resultingFen == null) continue;
 
-        // ── Eval ──
         final eval = await _session.evaluate(resultingFen, _evalDepth);
         if (_generation != generation || eval == null) return;
 
-        final whiteCp = eval.scoreCp != null
-            ? (whiteToMove ? -eval.scoreCp! : eval.scoreCp!)
-            : null;
-        // `mate 0` is the engine's answer for a checkmated root: the side to
-        // move after [uci] is mated, so [uci] delivered it. The distance has
-        // no sign to flip, so take it from who moved and count it from the
-        // root, mate in 1, the way discovery reports the same move.
-        final rawMate = eval.scoreMate;
-        final whiteMate = rawMate == null
-            ? null
-            : rawMate == 0
-            ? (whiteToMove ? 1 : -1)
-            : (whiteToMove ? -rawMate : rawMate);
-        final fullPv = [uci, ...eval.pv];
-
-        _emitResult(
-          uci,
-          MoveAnalysisResult(
-            scoreCp: whiteCp,
-            scoreMate: whiteMate,
-            pv: fullPv,
-            depth: eval.depth,
-          ),
-        );
-        _emitPoolStatus();
+        _emitResult(uci, _whiteRelativeResult(uci, eval, whiteToMove));
+        _emitEvaluatingStatus();
       } catch (e) {
         if (_generation != generation) return;
         if (kDebugMode) {
@@ -326,21 +298,44 @@ class AnalysisService {
         }
       } finally {
         // A cancel or a newer request has already published its own status
-        // and may have re-used this worker index; a stale loop unwinding must
-        // not remove the new entry or overwrite that status.
-        if (_workerCurrentMoves[workerIndex] == uci) {
-          _workerCurrentMoves.remove(workerIndex);
-        }
-        if (_generation == generation) _emitPoolStatus();
+        // and may have started its own loop; a stale loop unwinding must
+        // not clear the new entry or overwrite that status.
+        if (_evaluatingUci == uci) _evaluatingUci = null;
+        if (_generation == generation) _emitEvaluatingStatus();
       }
     }
   }
 
+  /// [eval] scores the position *after* [uci] from that side's point of
+  /// view; the result is keyed by [uci] and expressed for White.
+  static MoveAnalysisResult _whiteRelativeResult(
+    String uci,
+    EvalResult eval,
+    bool whiteToMove,
+  ) {
+    final cp = eval.scoreCp;
+    final whiteCp = cp == null ? null : (whiteToMove ? -cp : cp);
+    // `mate 0` is the engine's answer for a checkmated root: the side to
+    // move after [uci] is mated, so [uci] delivered it. The distance has
+    // no sign to flip, so take it from who moved and count it from the
+    // root, mate in 1, the way discovery reports the same move.
+    final rawMate = eval.scoreMate;
+    final whiteMate = rawMate == null
+        ? null
+        : rawMate == 0
+        ? (whiteToMove ? 1 : -1)
+        : (whiteToMove ? -rawMate : rawMate);
+    return MoveAnalysisResult(
+      scoreCp: whiteCp,
+      scoreMate: whiteMate,
+      pv: [uci, ...eval.pv],
+      depth: eval.depth,
+    );
+  }
+
   void _emitResult(String uci, MoveAnalysisResult result) {
     _publishUi(() {
-      final updated = Map<String, MoveAnalysisResult>.from(results.value);
-      updated[uci] = result;
-      results.value = updated;
+      results.value = {...results.value, uci: result};
     });
   }
 

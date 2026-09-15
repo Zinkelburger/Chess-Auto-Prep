@@ -11,17 +11,17 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:chess_auto_prep/utils/chess_utils.dart';
 
+import '../../../models/crosstable.dart';
+import '../../../services/crosstable_builder.dart';
 import '../../../services/engine/stockfish_bundle.dart';
 import '../../../services/storage/app_paths.dart';
+import '../../../utils/chess_utils.dart';
 import '../../../utils/log.dart';
 import '../../../utils/safe_change_notifier.dart';
-import '../../../models/crosstable.dart';
 import '../models/engine_spec.dart';
 import '../models/stored_tournament.dart';
 import '../models/tournament_config.dart';
-import '../../../services/crosstable_builder.dart';
 import '../services/engine_game_runner.dart';
 import '../services/engine_registry.dart';
 import '../services/engine_tournament_runner.dart';

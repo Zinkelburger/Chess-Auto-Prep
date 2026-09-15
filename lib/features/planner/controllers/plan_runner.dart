@@ -10,26 +10,43 @@ library;
 
 import 'dart:async';
 
-import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../constants/chess_constants.dart';
 import '../../../core/generation_session_controller.dart';
+import '../../../core/generation_session_types.dart';
 import '../../../services/generation/generation_config.dart';
-import '../../../utils/chess_utils.dart';
+import '../../../utils/safe_change_notifier.dart';
+import '../../repertoire/services/chapter_splitter.dart';
 import '../../repertoire/services/repertoire_outline_service.dart';
 import '../models/plan_models.dart';
-import '../../../utils/safe_change_notifier.dart';
+import '../services/san_paths.dart';
 
-enum PlanChapterStatus { pending, creating, building, done, skipped, failed }
+enum PlanChapterStatus {
+  pending('queued'),
+  creating('creating…'),
+  building('building…'),
+  done(null),
+  skipped('skipped'),
+  failed('failed');
 
+  const PlanChapterStatus(this.label);
+
+  /// What the outline badges the chapter with; nothing once it is done.
+  final String? label;
+}
+
+/// Where one planned chapter is in the run. Mutable: the runner advances it
+/// in place and notifies.
 class PlanChapterProgress {
   final PlanChapter chapter;
-  PlanChapterStatus status;
+  PlanChapterStatus status = PlanChapterStatus.pending;
+
+  /// The chapter file, once created.
   String? path;
   String? error;
-  PlanChapterProgress(this.chapter) : status = PlanChapterStatus.pending;
+  PlanChapterProgress(this.chapter);
 }
 
 class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
@@ -38,6 +55,9 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
 
   final GenerationSessionController generation;
   final RepertoireOutlineService _outline;
+
+  /// How many numbered suffixes to try before giving up on a taken name.
+  static const int _maxNameAttempts = 20;
 
   final List<PlanChapterProgress> _items = [];
   List<PlanChapterProgress> get items => List.unmodifiable(_items);
@@ -74,7 +94,7 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
     // chapter answers 2.Bf4 the way the QGD chapter answered 2.c4 unless the
     // engine has a strong reason not to. Anything the user typed into the
     // form's own skeleton card is kept.
-    config = config.copyWith(
+    final buildConfig = config.copyWith(
       skeletonPlan: withPlanLines(config.skeletonPlan, plan),
     );
     _items
@@ -84,53 +104,9 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
 
     try {
-      // Phase 1: files.
-      for (final item in _items) {
-        if (_cancelled) break;
-        item.status = PlanChapterStatus.creating;
-        notifyListeners();
-        try {
-          item.path = await _createChapter(
-            folderPath,
-            item.chapter,
-            plan.isWhite,
-          );
-          item.status = generate
-              ? PlanChapterStatus.pending
-              : PlanChapterStatus.done;
-          onChapterChanged?.call(item.path!);
-        } catch (e) {
-          item.status = PlanChapterStatus.failed;
-          item.error = '$e';
-        }
-        notifyListeners();
-      }
+      await _createChapterFiles(plan, folderPath, generate: generate);
       if (!generate) return;
-
-      // Phase 2: builds, in order.
-      for (var i = 0; i < _items.length; i++) {
-        if (_cancelled) break;
-        final item = _items[i];
-        if (item.path == null || item.status == PlanChapterStatus.failed) {
-          continue;
-        }
-        _current = i;
-        item.status = PlanChapterStatus.building;
-        notifyListeners();
-        try {
-          await _build(item, plan.isWhite, config);
-          if (item.status == PlanChapterStatus.building) {
-            item.status = _cancelled
-                ? PlanChapterStatus.skipped
-                : PlanChapterStatus.done;
-          }
-        } catch (e) {
-          item.status = PlanChapterStatus.failed;
-          item.error = '$e';
-        }
-        onChapterChanged?.call(item.path!);
-        notifyListeners();
-      }
+      await _buildChapters(plan, buildConfig);
     } finally {
       _running = false;
       _current = -1;
@@ -153,12 +129,73 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
+  /// Phase 1: files. A chapter that cannot be created fails on its own; the
+  /// rest are still made.
+  Future<void> _createChapterFiles(
+    RepertoirePlan plan,
+    String folderPath, {
+    required bool generate,
+  }) async {
+    for (final item in _items) {
+      if (_cancelled) break;
+      item.status = PlanChapterStatus.creating;
+      notifyListeners();
+      try {
+        final path = await _createChapter(
+          folderPath,
+          item.chapter,
+          plan.isWhite,
+        );
+        item.path = path;
+        item.status = generate
+            ? PlanChapterStatus.pending
+            : PlanChapterStatus.done;
+        onChapterChanged?.call(path);
+      } catch (e) {
+        item.status = PlanChapterStatus.failed;
+        item.error = '$e';
+      }
+      notifyListeners();
+    }
+  }
+
+  /// Phase 2: builds, in order, skipping chapters without a file.
+  Future<void> _buildChapters(
+    RepertoirePlan plan,
+    TreeBuildConfig config,
+  ) async {
+    for (var i = 0; i < _items.length; i++) {
+      if (_cancelled) break;
+      final item = _items[i];
+      final path = item.path;
+      if (path == null || item.status == PlanChapterStatus.failed) continue;
+      _current = i;
+      item.status = PlanChapterStatus.building;
+      notifyListeners();
+      try {
+        await _build(item, path, plan.isWhite, config);
+        if (item.status == PlanChapterStatus.building) {
+          item.status = _cancelled
+              ? PlanChapterStatus.skipped
+              : PlanChapterStatus.done;
+        }
+      } catch (e) {
+        item.status = PlanChapterStatus.failed;
+        item.error = '$e';
+      }
+      onChapterChanged?.call(path);
+      notifyListeners();
+    }
+  }
+
+  /// Creates the chapter file, numbering the name past any it collides with.
   Future<String> _createChapter(
     String folderPath,
     PlanChapter chapter,
     bool isWhite,
   ) async {
-    var name = _safeName(chapter.name);
+    final base = ChapterSplitter.fileNameFor(chapter.name);
+    var name = base;
     var attempt = 1;
     while (true) {
       try {
@@ -168,31 +205,24 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
           isWhite: isWhite,
         );
         return created.path;
-      } on OutlineEditException catch (e) {
-        if (!e.message.contains('already exists') || attempt > 20) rethrow;
+      } on OutlineNameTakenException {
+        if (attempt > _maxNameAttempts) rethrow;
         attempt++;
-        name = '${_safeName(chapter.name)} ($attempt)';
+        name = '$base ($attempt)';
       }
     }
-  }
-
-  static String _safeName(String name) {
-    final cleaned = name
-        .replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    return cleaned.isEmpty ? 'Chapter' : cleaned;
   }
 
   /// One engine build per build point, all into the chapter's file.
   Future<void> _build(
     PlanChapterProgress item,
+    String chapterPath,
     bool isWhite,
     TreeBuildConfig config,
   ) async {
     for (final point in item.chapter.points) {
       if (_cancelled || item.status != PlanChapterStatus.building) return;
-      final fen = _fenAfter(point.moves);
+      final fen = fenAfterSanPath(point.moves);
       if (fen == null) {
         throw StateError('Path is not playable: ${point.moves}');
       }
@@ -202,7 +232,7 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
           playAsWhite: isWhite,
           rootReplyExclude: point.excludeReplies,
         ),
-        repertoireFilePath: item.path!,
+        repertoireFilePath: chapterPath,
         buildRootFen: fen,
         lineMovePrefix: List.unmodifiable(point.moves),
         repertoireStartFen: kStandardStartFen,
@@ -227,26 +257,12 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  static String? _fenAfter(List<String> moves) {
-    try {
-      Position pos = Chess.initial;
-      for (final san in moves) {
-        final next = playSanOrNullMove(pos, san);
-        if (next == null) return null;
-        pos = next;
-      }
-      return pos.fen;
-    } catch (_) {
-      return null;
-    }
-  }
-
   /// The form's skeleton plus one line per planned chapter (its move path).
   static SkeletonPlan withPlanLines(SkeletonPlan base, RepertoirePlan plan) {
     final lines = [
       for (final c in plan.chapters)
         for (final path in c.buildPaths)
-          if (path.isNotEmpty) path.join(' '),
+          if (path.isNotEmpty) sanPathKey(path),
     ];
     if (lines.isEmpty) return base;
     final added = SkeletonPlan.fromLines(lines, playAsWhite: plan.isWhite);
@@ -266,15 +282,9 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
   /// Chapter path → display name, for the outline to badge progress.
   String? statusLabelFor(String chapterPath) {
     for (final item in _items) {
-      if (item.path != null && p.equals(item.path!, chapterPath)) {
-        return switch (item.status) {
-          PlanChapterStatus.pending => 'queued',
-          PlanChapterStatus.creating => 'creating…',
-          PlanChapterStatus.building => 'building…',
-          PlanChapterStatus.done => null,
-          PlanChapterStatus.skipped => 'skipped',
-          PlanChapterStatus.failed => 'failed',
-        };
+      final path = item.path;
+      if (path != null && p.equals(path, chapterPath)) {
+        return item.status.label;
       }
     }
     return null;

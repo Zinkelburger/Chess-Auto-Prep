@@ -230,8 +230,9 @@ mixin _MetadataOps on ChangeNotifier {
     final task = _metadataWrites.then((_) async {
       final edits = <String, String>{
         for (final g in games)
-          if (originals[g] != null && originals[g]!.trim() != output[g]!.trim())
-            originals[g]!: output[g]!,
+          if (originals[g] case final original?
+              when original.trim() != output[g]!.trim())
+            original: output[g]!,
       };
       if (edits.isEmpty) return;
       try {

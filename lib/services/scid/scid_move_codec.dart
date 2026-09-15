@@ -109,25 +109,15 @@ int encodeBishopCode(int from, int to) {
 /// [promoIndex] is 0 for no promotion, else 1=queen, 2=rook, 3=bishop,
 /// 4=knight — matching Scid's `QUEEN..KNIGHT` ordering.
 int encodePawnCode(int from, int to, int promoIndex) {
-  var diff = to - from;
-  if (diff < 0) diff = -diff;
+  final diff = (to - from).abs();
   if (diff == 16) return 15; // double push, never a promotion
-  int val;
-  switch (diff) {
-    case 7:
-      val = 0;
-      break;
-    case 8:
-      val = 1;
-      break;
-    case 9:
-      val = 2;
-      break;
-    default:
-      throw ArgumentError('pawn move $from->$to is not encodable');
-  }
-  if (promoIndex != 0) val += 3 * promoIndex;
-  return val;
+  final val = switch (diff) {
+    7 => 0,
+    8 => 1,
+    9 => 2,
+    _ => throw ArgumentError('pawn move $from->$to is not encodable'),
+  };
+  return promoIndex == 0 ? val : val + 3 * promoIndex;
 }
 
 /// Queen: rook-like moves exactly as a rook, in one byte. A diagonal needs

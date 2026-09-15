@@ -12,7 +12,7 @@ import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-import '../services/game_analysis_controller.dart';
+import '../services/move_eval.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/movetext_builder.dart';

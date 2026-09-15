@@ -28,6 +28,9 @@ enum AuditSeverity { critical, warning, info }
 /// it.
 enum MissingResponseSource { lichess, maia, clash, chessDb, engine }
 
+/// One thing the audit or the hunt found. Immutable apart from [dismissed],
+/// which the report panel toggles in place; [toJson]/[fromJson] are the
+/// persisted form, so keys are append-only.
 class AuditFinding {
   final AuditFindingType type;
   final AuditSeverity severity;
@@ -151,78 +154,71 @@ class AuditFinding {
 
   /// Cumulative probability formatted as a percentage string, or null.
   String? get reachProbLabel {
-    if (cumulativeProbability == null) return null;
-    final pct = cumulativeProbability! * 100;
+    final probability = cumulativeProbability;
+    if (probability == null) return null;
+    final pct = probability * 100;
     if (pct >= 10) return '${pct.toStringAsFixed(0)}%';
     if (pct >= 1) return '${pct.toStringAsFixed(1)}%';
     if (pct >= 0.1) return '${pct.toStringAsFixed(2)}%';
     return '${pct.toStringAsFixed(3)}%';
   }
 
-  /// Format a SAN with its move number, e.g. "3. Nf3" or "3...Nd2".
-  String _sanWithMoveNumber(String san, int plyIndex) =>
-      formatMoveAtPly(plyIndex, san);
+  /// Our move at this finding with its move number, e.g. "3. Nf3": the last
+  /// move of [movePath], which is the move under review.
+  String get _numberedOurMove {
+    final move = ourMove ?? '?';
+    if (movePath.isEmpty) return move;
+    return formatMoveAtPly(movePath.length - 1, move);
+  }
 
-  String get summary {
-    switch (type) {
-      case AuditFindingType.mistake:
-        final move = ourMove ?? '?';
-        final numbered = movePath.isNotEmpty
-            ? _sanWithMoveNumber(move, movePath.length - 1)
-            : move;
-        return 'Mistake: $numbered loses ${evalLossCp}cp '
-            '(best: ${bestMove ?? "?"})';
-      case AuditFindingType.inaccuracy:
-        final move = ourMove ?? '?';
-        final numbered = movePath.isNotEmpty
-            ? _sanWithMoveNumber(move, movePath.length - 1)
-            : move;
-        return 'Inaccuracy: $numbered loses ${evalLossCp}cp '
-            '(best: ${bestMove ?? "?"})';
-      case AuditFindingType.missingResponse:
-        final move = missingMove ?? '?';
-        final numbered = _sanWithMoveNumber(move, movePath.length);
-        final probLabel = _missingMoveLocalProbLabel;
-        final transTag = transposesIntoRepertoire ? ' · transposes' : '';
-        final prefix = switch (source) {
-          MissingResponseSource.clash => 'Clash',
-          MissingResponseSource.chessDb ||
-          MissingResponseSource.engine => 'Strong reply',
-          _ => 'Missing',
-        };
-        return '$prefix: $numbered ($probLabel$transTag)';
-      case AuditFindingType.weakPosition:
-        return 'Weak position: eval ${positionEvalCp}cp';
-      case AuditFindingType.deadEnd:
-        final count = continuationCount ?? 0;
-        final moves = uncoveredMoves;
-        if (moves != null && moves.isNotEmpty) {
-          return 'Dead end: $count uncovered (${moves.join(", ")})';
-        }
-        return 'Dead end: $count opponent continuations uncovered';
-      case AuditFindingType.uncoveredStrongMove:
-        final move = missingMove ?? '?';
-        final numbered = _sanWithMoveNumber(move, movePath.length);
-        final transTag = transposesIntoRepertoire ? ' · transposes' : '';
-        return 'Uncovered: $numbered is engine-strong, no reply in file'
-            '$transTag';
-      case AuditFindingType.refutation:
-        final move = ourMove ?? '?';
-        final numbered = movePath.isNotEmpty
-            ? _sanWithMoveNumber(move, movePath.length - 1)
-            : move;
-        final line = exploitLine;
-        final lineTag = line != null && line.isNotEmpty
-            ? ' — ${line.join(" ")}'
-            : '';
-        return 'Refuted: $numbered loses ${evalLossCp}cp$lineTag';
-      case AuditFindingType.trickyMove:
-        final move = ourMove ?? '?';
-        final numbered = _sanWithMoveNumber(move, movePath.length);
-        final noveltyTag = isNovelty == true ? ' · novelty' : '';
-        return 'Trick: $numbered nets +${netGainCp}cp over best in practice'
-            '$noveltyTag';
+  /// The move this finding names *from* the position at the end of
+  /// [movePath], with its move number, e.g. "3...Nd2".
+  String _numberedReply(String? san) =>
+      formatMoveAtPly(movePath.length, san ?? '?');
+
+  String get summary => switch (type) {
+    AuditFindingType.mistake =>
+      'Mistake: $_numberedOurMove loses ${evalLossCp}cp '
+          '(best: ${bestMove ?? "?"})',
+    AuditFindingType.inaccuracy =>
+      'Inaccuracy: $_numberedOurMove loses ${evalLossCp}cp '
+          '(best: ${bestMove ?? "?"})',
+    AuditFindingType.missingResponse =>
+      '$_missingPrefix: ${_numberedReply(missingMove)} '
+          '($_missingMoveLocalProbLabel$_transposesTag)',
+    AuditFindingType.weakPosition => 'Weak position: eval ${positionEvalCp}cp',
+    AuditFindingType.deadEnd => _deadEndSummary,
+    AuditFindingType.uncoveredStrongMove =>
+      'Uncovered: ${_numberedReply(missingMove)} is engine-strong, '
+          'no reply in file$_transposesTag',
+    AuditFindingType.refutation =>
+      'Refuted: $_numberedOurMove loses ${evalLossCp}cp$_exploitLineTag',
+    AuditFindingType.trickyMove =>
+      'Trick: ${_numberedReply(ourMove)} nets +${netGainCp}cp over best '
+          'in practice${isNovelty == true ? ' · novelty' : ''}',
+  };
+
+  String get _missingPrefix => switch (source) {
+    MissingResponseSource.clash => 'Clash',
+    MissingResponseSource.chessDb ||
+    MissingResponseSource.engine => 'Strong reply',
+    _ => 'Missing',
+  };
+
+  String get _transposesTag => transposesIntoRepertoire ? ' · transposes' : '';
+
+  String get _exploitLineTag {
+    final line = exploitLine;
+    return line != null && line.isNotEmpty ? ' — ${line.join(" ")}' : '';
+  }
+
+  String get _deadEndSummary {
+    final count = continuationCount ?? 0;
+    final moves = uncoveredMoves;
+    if (moves != null && moves.isNotEmpty) {
+      return 'Dead end: $count uncovered (${moves.join(", ")})';
     }
+    return 'Dead end: $count opponent continuations uncovered';
   }
 
   String get _missingMoveLocalProbLabel {

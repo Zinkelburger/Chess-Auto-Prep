@@ -7,7 +7,8 @@ import '../../../services/maia/maia_factory.dart';
 import '../../../services/maia/maia_service.dart';
 import 'tactics_database.dart';
 
-/// Engine for checking tactical solutions - Flutter port of Python's TacticsEngine
+/// Checks moves against a puzzle's stored line, converts stored lines to SAN
+/// for display, and builds the trainable line when a puzzle is mined.
 class TacticsEngine {
   /// Max user moves in a trainable tactic line.
   static const int maxTrainableUserMoves = 5;
@@ -29,6 +30,12 @@ class TacticsEngine {
   static bool isTacticalSan(String san) {
     return san.contains('x') || san.contains('+') || san.contains('#');
   }
+
+  static final _uciMoveRe = RegExp(r'^[a-h][1-8][a-h][1-8][qrbnQRBN]?$');
+
+  /// Whether a stored line token is a UCI move (`e2e4`, `e7e8q`) rather
+  /// than SAN.
+  static bool looksLikeUci(String move) => _uciMoveRe.hasMatch(move.trim());
 
   /// True when [uci] is a capture on the given [pos] (target square occupied
   /// or en-passant).
@@ -206,84 +213,44 @@ class TacticsEngine {
     return correctLine;
   }
 
-  /// Check if a move (in UCI format) is correct for the given position.
+  /// Whether [moveUci] matches [position]'s stored line at [moveIndex],
+  /// played from the board state [fen] (which has advanced past the puzzle's
+  /// own FEN on a multi-move line).
   ///
-  /// Legacy single-move check — delegates to [checkMoveAtIndex] with index 0.
-  TacticsResult checkMove(TacticsPosition position, String moveUci) {
-    return checkMoveAtIndex(position, moveUci, position.fen, 0);
-  }
-
-  /// Check if a move (in UCI format) matches [correctLine] at [moveIndex],
-  /// starting from the board state represented by [fen].
-  ///
-  /// Used for multi-move tactical sequences where the board has advanced
-  /// past the original position FEN.
+  /// A stored UCI token is compared as UCI; a stored SAN token is compared
+  /// against the played move's SAN with suffixes (`+ # ? !`) ignored. An
+  /// illegal or unparseable move, or a bad [fen], is simply incorrect.
   TacticsResult checkMoveAtIndex(
     TacticsPosition position,
     String moveUci,
     String fen,
     int moveIndex,
   ) {
+    if (moveUci.length < 4 || moveIndex >= position.correctLine.length) {
+      return TacticsResult.incorrect;
+    }
+    final String playedSan;
     try {
-      if (moveUci.length < 4 || moveIndex >= position.correctLine.length) {
-        return TacticsResult.incorrect;
-      }
-
-      // Build position from the *current* board state
       final pos = Chess.fromSetup(Setup.parseFen(fen));
-
-      // Parse the played move and verify it's legal
       final move = Move.parse(moveUci);
       if (move == null) return TacticsResult.incorrect;
-
-      String playedSan;
-      try {
-        final (_, san) = pos.makeSan(move);
-        playedSan = san;
-      } catch (e) {
-        debugPrint('[TacticsEngine] Illegal move in checkMoveAtIndex: $e');
-        return TacticsResult.incorrect; // illegal move
-      }
-
-      final playedUci = moveUci;
-
-      // Expected move at this index
-      final bestMove = position.correctLine[moveIndex];
-      final bestIsUci = _looksLikeUci(bestMove);
-
-      if (bestIsUci) {
-        final normBestUci = bestMove.toLowerCase();
-        if (playedUci.toLowerCase() == normBestUci) {
-          return TacticsResult.correct;
-        }
-      } else {
-        final normPlayedSan = _normalizeSan(playedSan);
-        final normBestSan = _normalizeSan(bestMove);
-        if (normPlayedSan == normBestSan) {
-          return TacticsResult.correct;
-        }
-      }
-
-      return TacticsResult.incorrect;
+      final (_, san) = pos.makeSan(move);
+      playedSan = san;
     } catch (e) {
+      debugPrint('[TacticsEngine] Illegal move in checkMoveAtIndex: $e');
       return TacticsResult.incorrect;
     }
+
+    final expected = position.correctLine[moveIndex];
+    final matches = looksLikeUci(expected)
+        ? moveUci.toLowerCase() == expected.toLowerCase()
+        : _normalizeSan(playedSan) == _normalizeSan(expected);
+    return matches ? TacticsResult.correct : TacticsResult.incorrect;
   }
 
-  bool _looksLikeUci(String move) =>
-      RegExp(r'^[a-h][1-8][a-h][1-8][qrbnQRBN]?$').hasMatch(move.trim());
+  static final _sanSuffixRe = RegExp(r'[+#?!]+');
 
-  String _normalizeSan(String san) =>
-      san.replaceAll(RegExp(r'[+#?!]+'), '').trim();
-
-  /// Get a hint for the position at the given move index.
-  String? getHint(TacticsPosition position, {int moveIndex = 0}) {
-    if (moveIndex >= position.correctLine.length) {
-      return null;
-    }
-
-    return 'Try: ${position.correctLine[moveIndex]}';
-  }
+  String _normalizeSan(String san) => san.replaceAll(_sanSuffixRe, '').trim();
 
   /// Total number of user moves in the tactic (odd-indexed moves are opponent).
   int userMoveCount(TacticsPosition position) =>
@@ -310,12 +277,9 @@ class TacticsEngine {
         final token = raw.trim();
         if (token.isEmpty) continue;
 
-        final Move? move;
-        if (_looksLikeUci(token)) {
-          move = Move.parse(token);
-        } else {
-          move = pos.parseSan(token);
-        }
+        final move = looksLikeUci(token)
+            ? Move.parse(token)
+            : pos.parseSan(token);
         if (move == null) break;
 
         try {

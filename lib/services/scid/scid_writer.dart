@@ -92,14 +92,11 @@ class ScidWriter {
     final idx = io.File(p.join(directory, '$safe.si5'));
     final gme = io.File(p.join(directory, '$safe.sg5'));
     final nam = io.File(p.join(directory, '$safe.sn5'));
-    for (final file in <io.File>[idx, gme, nam]) {
-      if (await file.exists()) {
-        throw io.FileSystemException(
-          'A Scid database with this name already exists; refusing to overwrite',
-          file.path,
-        );
-      }
-    }
+    final destinations = <io.File>[idx, gme, nam];
+    await _requireAbsent(
+      destinations,
+      'A Scid database with this name already exists; refusing to overwrite',
+    );
 
     final idxTmp = io.File(p.join(directory, '$safe.si5$tmpSuffix'));
     final gmeTmp = io.File(p.join(directory, '$safe.sg5$tmpSuffix'));
@@ -139,16 +136,11 @@ class ScidWriter {
       // existing database. If installation fails, remove only files created
       // by this attempt; there was no older destination to lose.
       await withFileOperationLock(directory, () async {
-        final destinations = <io.File>[idx, gme, nam];
-        for (final file in destinations) {
-          if (await file.exists()) {
-            throw io.FileSystemException(
-              'A Scid database with this name appeared during export; '
-              'refusing to overwrite it',
-              file.path,
-            );
-          }
-        }
+        await _requireAbsent(
+          destinations,
+          'A Scid database with this name appeared during export; '
+          'refusing to overwrite it',
+        );
         final installed = <io.File>[];
         try {
           await idxTmp.rename(idx.path);
@@ -195,6 +187,8 @@ class ScidWriter {
       _skipped.add(_label(game, e.message));
       return;
     } catch (e) {
+      // dartchess throws its own errors on malformed SAN or FEN; one bad
+      // game is skipped and reported, not the whole export.
       _skipped.add(_label(game, '$e'));
       return;
     }
@@ -218,7 +212,7 @@ class ScidWriter {
       blackElo: _elo(h['BlackElo']),
       date: scidDate(h['Date']),
       eventDate: scidDate(h['EventDate']),
-      plyCount: encoded.plyCount > 1023 ? 1023 : encoded.plyCount,
+      plyCount: encoded.plyCount.clamp(0, maxPlyCount),
       dataLength: encoded.data.length,
       dataOffset: _offset,
       finalMaterial: encoded.finalMaterial,
@@ -242,9 +236,25 @@ class ScidWriter {
     _games++;
   }
 
-  static int _elo(String? raw) {
-    final v = int.tryParse(raw?.trim() ?? '') ?? 0;
-    return v < 0 ? 0 : (v > 4000 ? 4000 : v);
+  /// The index holds a 12-bit rating; anything unparsable is 0.
+  static int _elo(String? raw) =>
+      (int.tryParse(raw?.trim() ?? '') ?? 0).clamp(0, maxElo);
+
+  /// Highest rating the index record stores.
+  static const int maxElo = 4000;
+
+  /// Highest ply count the index record stores (10 bits).
+  static const int maxPlyCount = 1023;
+
+  static Future<void> _requireAbsent(
+    List<io.File> files,
+    String message,
+  ) async {
+    for (final file in files) {
+      if (await file.exists()) {
+        throw io.FileSystemException(message, file.path);
+      }
+    }
   }
 
   static String _label(PgnGame<PgnNodeData> game, String why) {

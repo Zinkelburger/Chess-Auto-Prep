@@ -17,12 +17,14 @@ from pathlib import Path
 import select
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
 import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
+RUNTIME_ROOT = Path(f'/run/user/{os.getuid()}')
 STATE = Path(f'/tmp/chess-prep-jobs-{os.getuid()}')
 LEGACY_LOCK = Path('/tmp/chess-auto-prep-flutter.lock')
 SLICE = 'chessprep.slice'
@@ -136,7 +138,7 @@ def setup() -> None:
 def profile_env(checkout: Path) -> dict[str, str]:
     env = dict(os.environ)
     profile = driver_dir(checkout) / 'profile'
-    for suffix in ['config', 'data', 'cache', 'state', 'Documents', 'Downloads', 'runtime']:
+    for suffix in ['config', 'data', 'cache', 'state', 'Documents', 'Downloads']:
         (profile / suffix).mkdir(parents=True, exist_ok=True, mode=0o700)
     for var, suffix in [('XDG_CONFIG_HOME', 'config'), ('XDG_DATA_HOME', 'data'),
                         ('XDG_CACHE_HOME', 'cache'), ('XDG_STATE_HOME', 'state')]:
@@ -151,6 +153,31 @@ def profile_env(checkout: Path) -> dict[str, str]:
     env['OPENBLAS_NUM_THREADS'] = '1'
     env['CMAKE_BUILD_PARALLEL_LEVEL'] = '2'
     return env
+
+
+def headless_env(env: dict[str, str]) -> dict[str, str]:
+    """Pair the private session bus with a private, service-owned runtime.
+
+    A second document portal on the desktop's runtime can unmount its doc
+    filesystem. RuntimeDirectory lives until systemd has stopped every child,
+    including activated portals, and is fresh for each job (not each checkout).
+    """
+    unit = Path(current_cgroup()).name
+    if not unit.startswith('chess-prep-job-') or not unit.endswith('.service'):
+        raise RuntimeError('Headless runtime requires a bounded systemd service')
+    runtime = RUNTIME_ROOT / unit.removesuffix('.service')
+    try:
+        info = runtime.lstat()
+    except OSError as error:
+        raise RuntimeError('Private headless runtime is missing; refusing to use the desktop runtime') from error
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid()
+            or stat.S_IMODE(info.st_mode) != 0o700):
+        raise RuntimeError('Private headless runtime must be an owned directory with mode 0700')
+    isolated = dict(env, XDG_RUNTIME_DIR=str(runtime))
+    for name in ('DBUS_SESSION_BUS_ADDRESS', 'DBUS_SESSION_BUS_PID',
+                 'DBUS_STARTER_ADDRESS', 'DBUS_STARTER_BUS_TYPE', 'SESSION_MANAGER'):
+        isolated.pop(name, None)
+    return isolated
 
 
 def xvfb_binary() -> str:
@@ -255,6 +282,8 @@ def worker(args) -> int:
         active = wait_for(slots)
         print(f'agent-job: {active.path.stem}, 2 CPUs, 8 GiB maximum', file=sys.stderr, flush=True)
         env = profile_env(Path.cwd())
+        if args.headless:
+            env = headless_env(env)
         with display(env, args.headless) as child_env:
             command = args.command
             if args.headless:
@@ -276,6 +305,10 @@ def run(args) -> int:
                '-p', 'CPUQuota=200%', '-p', 'MemoryHigh=6G', '-p', 'MemoryMax=8G',
                '-p', 'MemorySwapMax=0', '-p', 'KillMode=control-group',
                '-p', 'TimeoutStopSec=5s', '-p', 'OOMPolicy=stop', '-p', 'OOMScoreAdjust=800']
+    if args.headless:
+        # systemd removes this only after the service's entire cgroup stops,
+        # including on cancellation/failure. Never reuse the desktop runtime.
+        command += ['-p', f'RuntimeDirectory={unit}', '-p', 'RuntimeDirectoryMode=0700']
     for name in os.environ:
         if name not in {'INVOCATION_ID', 'JOURNAL_STREAM', 'NOTIFY_SOCKET'}:
             command.append('--setenv=' + name)

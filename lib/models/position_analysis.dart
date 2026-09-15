@@ -1,10 +1,56 @@
-/// Position analysis models - Flutter port of Python's core/models.py
-/// Provides data structures for positions, games, and analysis results
+/// Per-position results of a player's games: how often each position came
+/// up, how it went, which games reached it, and the engine's view of it.
 library;
 
+import '../services/pgn_parsing_service.dart' show extractHeaders;
 import '../utils/chess_utils.dart' show formatEvalDisplay;
 import '../utils/fen_utils.dart';
 
+/// Orderings for [PositionAnalysis.getSortedPositions].
+///
+/// The `eval*` orders only include positions that have an engine eval.
+enum PositionSort {
+  /// Worst eval for White first (most negative `evalCp`).
+  evalBadWhite,
+
+  /// Worst eval for Black first (most positive `evalCp`).
+  evalBadBlack,
+
+  /// Best eval for White first (most positive `evalCp`).
+  evalGoodWhite,
+
+  /// Best eval for Black first (most negative `evalCp`).
+  evalGoodBlack,
+
+  /// Lowest win rate first.
+  winRate,
+
+  /// Highest win rate first.
+  winRateDesc,
+  games,
+  wins,
+  losses;
+
+  bool get needsEval => switch (this) {
+    evalBadWhite || evalBadBlack || evalGoodWhite || evalGoodBlack => true,
+    _ => false,
+  };
+
+  int Function(PositionStats, PositionStats) get _comparator => switch (this) {
+    evalBadWhite ||
+    evalGoodBlack => (a, b) => (a.evalCp ?? 0).compareTo(b.evalCp ?? 0),
+    evalBadBlack ||
+    evalGoodWhite => (a, b) => (b.evalCp ?? 0).compareTo(a.evalCp ?? 0),
+    winRate => (a, b) => a.winRate.compareTo(b.winRate),
+    winRateDesc => (a, b) => b.winRate.compareTo(a.winRate),
+    games => (a, b) => b.games.compareTo(a.games),
+    wins => (a, b) => b.wins.compareTo(a.wins),
+    losses => (a, b) => b.losses.compareTo(a.losses),
+  };
+}
+
+/// One position's tally across the analysed games, plus its engine eval
+/// once a review has produced one.
 class PositionStats {
   final String fen;
   int games;
@@ -99,6 +145,8 @@ class PositionStats {
   }
 }
 
+/// The headers of one analysed game, with its text when it was loaded from
+/// PGN.
 class GameInfo {
   final String? pgnText;
   final String white;
@@ -111,7 +159,7 @@ class GameInfo {
   final String blackElo;
   final String link;
 
-  GameInfo({
+  const GameInfo({
     this.pgnText,
     this.white = '',
     this.black = '',
@@ -164,63 +212,24 @@ class GameInfo {
 
   /// Parse game info from PGN text
   factory GameInfo.fromPgn(String pgnText) {
-    String white = '';
-    String black = '';
-    String result = '';
-    String date = '';
-    String site = '';
-    String event = '';
-    String whiteElo = '';
-    String blackElo = '';
-    String link = '';
-
-    final lines = pgnText.split('\n');
-    for (final line in lines) {
-      if (line.startsWith('[White "')) {
-        white = _extractHeader(line);
-      } else if (line.startsWith('[Black "')) {
-        black = _extractHeader(line);
-      } else if (line.startsWith('[Result "')) {
-        result = _extractHeader(line);
-      } else if (line.startsWith('[Date "')) {
-        date = _extractHeader(line);
-      } else if (line.startsWith('[Site "')) {
-        site = _extractHeader(line);
-      } else if (line.startsWith('[Event "')) {
-        event = _extractHeader(line);
-      } else if (line.startsWith('[WhiteElo "')) {
-        whiteElo = _extractHeader(line);
-      } else if (line.startsWith('[BlackElo "')) {
-        blackElo = _extractHeader(line);
-      } else if (line.startsWith('[Link "')) {
-        link = _extractHeader(line);
-      }
-    }
-
+    final headers = extractHeaders(pgnText);
     return GameInfo(
       pgnText: pgnText,
-      white: white,
-      black: black,
-      result: result,
-      date: date,
-      site: site,
-      event: event,
-      whiteElo: whiteElo,
-      blackElo: blackElo,
-      link: link,
+      white: headers['White'] ?? '',
+      black: headers['Black'] ?? '',
+      result: headers['Result'] ?? '',
+      date: headers['Date'] ?? '',
+      site: headers['Site'] ?? '',
+      event: headers['Event'] ?? '',
+      whiteElo: headers['WhiteElo'] ?? '',
+      blackElo: headers['BlackElo'] ?? '',
+      link: headers['Link'] ?? '',
     );
-  }
-
-  static String _extractHeader(String line) {
-    final start = line.indexOf('"') + 1;
-    final end = line.lastIndexOf('"');
-    if (start > 0 && end > start) {
-      return line.substring(start, end);
-    }
-    return '';
   }
 }
 
+/// Everything a player-analysis run learned: per-position stats keyed by
+/// FEN, the games, and which games reached which position.
 class PositionAnalysis {
   final Map<String, PositionStats> positionStats;
   final List<GameInfo> games;
@@ -268,39 +277,15 @@ class PositionAnalysis {
     return indices.where((i) => i < games.length).map((i) => games[i]).toList();
   }
 
-  /// Get positions sorted by various criteria.
-  ///
-  /// `eval_bad_white` — worst eval for White first (most negative evalCp).
-  /// `eval_bad_black` — worst eval for Black first (most positive evalCp).
-  /// `eval_good_white` — best eval for White first (most positive evalCp).
-  /// `eval_good_black` — best eval for Black first (most negative evalCp).
-  /// All `eval_*` sorts only include positions that have engine eval.
+  /// Positions seen in at least [minGames] games, ordered by [sortBy].
   List<PositionStats> getSortedPositions({
     int minGames = 3,
-    String sortBy = 'win_rate',
+    PositionSort sortBy = PositionSort.winRate,
   }) {
-    var filtered = positionStats.values
+    return positionStats.values
         .where((stats) => stats.games >= minGames)
-        .toList();
-
-    if (sortBy == 'eval_bad_white' || sortBy == 'eval_good_black') {
-      filtered = filtered.where((s) => s.hasEval).toList();
-      filtered.sort((a, b) => (a.evalCp ?? 0).compareTo(b.evalCp ?? 0));
-    } else if (sortBy == 'eval_bad_black' || sortBy == 'eval_good_white') {
-      filtered = filtered.where((s) => s.hasEval).toList();
-      filtered.sort((a, b) => (b.evalCp ?? 0).compareTo(a.evalCp ?? 0));
-    } else if (sortBy == 'win_rate') {
-      filtered.sort((a, b) => a.winRate.compareTo(b.winRate));
-    } else if (sortBy == 'win_rate_desc') {
-      filtered.sort((a, b) => b.winRate.compareTo(a.winRate));
-    } else if (sortBy == 'games') {
-      filtered.sort((a, b) => b.games.compareTo(a.games));
-    } else if (sortBy == 'wins') {
-      filtered.sort((a, b) => b.wins.compareTo(a.wins));
-    } else if (sortBy == 'losses') {
-      filtered.sort((a, b) => b.losses.compareTo(a.losses));
-    }
-
-    return filtered;
+        .where((stats) => !sortBy.needsEval || stats.hasEval)
+        .toList()
+      ..sort(sortBy._comparator);
   }
 }

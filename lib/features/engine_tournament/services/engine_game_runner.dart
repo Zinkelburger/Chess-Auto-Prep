@@ -1,35 +1,21 @@
 /// Plays one game between two UCI engines and writes it out as PGN.
 ///
 /// The rules layer is dartchess, so the arbiter here only has to do what
-/// dartchess does not: run the clocks, decide when a game that will never
-/// finish on its own should be stopped, and treat a broken engine as a loss
-/// rather than a crash.
-///
-/// Move comments are opt-in (`GamePgnContext.annotateMoves`). When they are
-/// on, the scores follow the cutechess convention — the value the engine
-/// reported, from *its own* side's point of view — so `{+0.31/24 2.0s}` after
-/// a Black move means Black thinks Black is better.
+/// dartchess does not: run the clocks ([GameClock]), decide when a game that
+/// will never finish on its own should be stopped ([ScoreAdjudicator]), and
+/// treat a broken engine as a loss rather than a crash.
 library;
-
-import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../../constants/chess_constants.dart';
 import '../../../models/game_outcome.dart';
-import '../../../services/generation/export/pgn_game_writer.dart'
-    show escapePgnHeaderValue;
-import '../../../utils/movetext_builder.dart';
 import '../models/adjudication_rules.dart';
 import '../models/engine_spec.dart';
-import '../models/time_control.dart';
-import 'uci_engine.dart';
-
-/// Slack allowed on a clock before the flag falls, covering pipe latency and
-/// process scheduling rather than the engine's own thinking. cutechess calls
-/// the same knob `-timemargin`; a desktop running several games at once
-/// needs more of it than a dedicated test box.
-const int kTimeMarginMs = 500;
+import 'game_clock.dart';
+import 'game_ending.dart';
+import 'game_pgn_writer.dart';
+import 'score_adjudicator.dart';
+import 'uci_protocol.dart';
 
 /// A competitor, bound to a live process for the duration of a game.
 class EngineParticipant {
@@ -104,33 +90,6 @@ class PlayedGame {
   int get plies => sanMoves.length;
 }
 
-/// Header material that comes from the tournament rather than the game.
-class GamePgnContext {
-  const GamePgnContext({
-    required this.event,
-    required this.site,
-    required this.round,
-    required this.startFen,
-    required this.timeControl,
-    this.openingLabel = '',
-    this.annotateMoves = false,
-  });
-
-  final String event;
-  final String site;
-  final int round;
-  final String startFen;
-  final TimeControl timeControl;
-  final String openingLabel;
-
-  /// Write the engine's score/depth/time after every move.
-  ///
-  /// Off by default: a comment on every ply is what engine-testing tools want
-  /// and what makes the game unreadable for anyone opening it in the PGN
-  /// viewer, which is where these games are usually opened.
-  final bool annotateMoves;
-}
-
 class EngineGameRunner {
   const EngineGameRunner();
 
@@ -151,494 +110,310 @@ class EngineGameRunner {
   }) async {
     final began = startedAt ?? DateTime.now();
     final stopwatch = Stopwatch()..start();
-    final tc = context.timeControl;
 
-    Position position;
+    final Position start;
     try {
-      position = Chess.fromSetup(Setup.parseFen(context.startFen));
+      start = Chess.fromSetup(Setup.parseFen(context.startFen));
     } catch (e) {
-      return _finish(
+      return _played(
         white: white,
         black: black,
         context: context,
         began: began,
-        stopwatch: stopwatch,
+        duration: stopwatch.elapsed,
+        startPosition: null,
         sanMoves: const [],
         comments: const [],
-        startPosition: null,
-        result: GameResult.unfinished,
-        termination: TerminationReason.aborted,
-        detail: 'unplayable start position: $e',
+        ending: GameEnding(
+          GameResult.unfinished,
+          TerminationReason.aborted,
+          'unplayable start position: $e',
+        ),
       );
     }
 
-    final startPosition = position;
-    final sanMoves = <String>[];
-    final comments = <String>[];
-    final wireMoves = <String>[];
-    final repetitions = <String, int>{_repetitionKey(position): 1};
+    final game = _GameInProgress(
+      white: white,
+      black: black,
+      context: context,
+      adjudication: adjudication,
+      began: began,
+      stopwatch: stopwatch,
+      start: start,
+    );
 
-    var whiteClockMs = tc.baseMs;
-    var blackClockMs = tc.baseMs;
-    var whiteMovesThisSession = 0;
-    var blackMovesThisSession = 0;
-
-    var drawStreakPlies = 0;
-    final losingStreak = {Side.white: 0, Side.black: 0};
-    final winningStreak = {Side.white: 0, Side.black: 0};
-
-    for (final participant in [white, black]) {
+    for (final (side, participant) in [
+      (Side.white, white),
+      (Side.black, black),
+    ]) {
       try {
         await participant.engine.newGame();
       } on UciFailure catch (e) {
-        return _finish(
-          white: white,
-          black: black,
-          context: context,
-          began: began,
-          stopwatch: stopwatch,
-          sanMoves: sanMoves,
-          comments: comments,
-          startPosition: startPosition,
-          result: participant.index == white.index
-              ? GameResult.blackWins
-              : GameResult.whiteWins,
-          termination: TerminationReason.engineFailure,
-          detail: '${participant.name}: ${e.message}',
+        return game.finish(
+          GameEnding.lossFor(
+            side,
+            TerminationReason.engineFailure,
+            '${participant.name}: ${e.message}',
+          ),
         );
       }
     }
 
     while (true) {
       if (isCancelled?.call() ?? false) {
-        return _finish(
-          white: white,
-          black: black,
-          context: context,
-          began: began,
-          stopwatch: stopwatch,
-          sanMoves: sanMoves,
-          comments: comments,
-          startPosition: startPosition,
-          result: GameResult.unfinished,
-          termination: TerminationReason.aborted,
-          detail: 'cancelled',
+        return game.finish(
+          const GameEnding(
+            GameResult.unfinished,
+            TerminationReason.aborted,
+            'cancelled',
+          ),
         );
       }
 
-      final natural = _naturalEnd(position, repetitions, adjudication);
-      if (natural != null) {
-        return _finish(
-          white: white,
-          black: black,
-          context: context,
-          began: began,
-          stopwatch: stopwatch,
-          sanMoves: sanMoves,
-          comments: comments,
-          startPosition: startPosition,
-          result: natural.result,
-          termination: natural.termination,
-          detail: '',
-        );
-      }
-
-      if (position.fullmoves > adjudication.maxMoves) {
-        return _finish(
-          white: white,
-          black: black,
-          context: context,
-          began: began,
-          stopwatch: stopwatch,
-          sanMoves: sanMoves,
-          comments: comments,
-          startPosition: startPosition,
-          result: GameResult.draw,
-          termination: TerminationReason.maxMoves,
-          detail: 'reached ${adjudication.maxMoves} moves',
-        );
-      }
-
-      final toMove = position.turn;
-      final mover = toMove == Side.white ? white : black;
-      final remainingMs = toMove == Side.white ? whiteClockMs : blackClockMs;
-
-      final limits = _limitsFor(
-        tc,
-        whiteClockMs: whiteClockMs,
-        blackClockMs: blackClockMs,
-        movesPlayedThisSession: toMove == Side.white
-            ? whiteMovesThisSession
-            : blackMovesThisSession,
-      );
+      final ending = game.endingBeforeMove();
+      if (ending != null) return game.finish(ending);
 
       final EngineSearch search;
       try {
-        search = await mover.engine.search(
-          startFen: context.startFen,
-          movesUci: wireMoves,
-          limits: limits,
-          hardLimit: tc.hardLimitFor(remainingMs: remainingMs),
-        );
+        search = await game.askForMove();
       } on UciFailure catch (e) {
-        return _finish(
-          white: white,
-          black: black,
-          context: context,
-          began: began,
-          stopwatch: stopwatch,
-          sanMoves: sanMoves,
-          comments: comments,
-          startPosition: startPosition,
-          result: toMove == Side.white
-              ? GameResult.blackWins
-              : GameResult.whiteWins,
-          termination: TerminationReason.engineFailure,
-          detail: '${mover.name}: ${e.message}',
+        return game.finish(
+          GameEnding.lossFor(
+            game.sideToMove,
+            TerminationReason.engineFailure,
+            '${game.mover.name}: ${e.message}',
+          ),
         );
       }
 
-      // ── Clock ──────────────────────────────────────────────────────────
-      final overspend = _updateClock(
-        tc: tc,
-        elapsedMs: search.elapsedMs,
-        remainingMs: remainingMs,
-      );
-      if (overspend.forfeit) {
-        return _finish(
-          white: white,
-          black: black,
-          context: context,
-          began: began,
-          stopwatch: stopwatch,
-          sanMoves: sanMoves,
-          comments: comments,
-          startPosition: startPosition,
-          result: toMove == Side.white
-              ? GameResult.blackWins
-              : GameResult.whiteWins,
-          termination: TerminationReason.timeForfeit,
-          detail:
-              '${mover.name} used ${(search.elapsedMs / 1000).toStringAsFixed(1)}s '
-              '${tc.isTimed ? "with ${(remainingMs / 1000).toStringAsFixed(1)}s left" : "on a ${tc.label} budget"}',
-        );
-      }
-      if (toMove == Side.white) {
-        whiteClockMs = overspend.remainingMs;
-        whiteMovesThisSession++;
-        if (tc.movesPerSession != null &&
-            whiteMovesThisSession % tc.movesPerSession! == 0) {
-          whiteClockMs += tc.baseMs;
-        }
-      } else {
-        blackClockMs = overspend.remainingMs;
-        blackMovesThisSession++;
-        if (tc.movesPerSession != null &&
-            blackMovesThisSession % tc.movesPerSession! == 0) {
-          blackClockMs += tc.baseMs;
-        }
-      }
-
-      // ── The move itself ────────────────────────────────────────────────
-      final move = search.hasMove ? Move.parse(search.bestMoveUci) : null;
-      if (move == null || !_isPlayable(position, move)) {
-        return _finish(
-          white: white,
-          black: black,
-          context: context,
-          began: began,
-          stopwatch: stopwatch,
-          sanMoves: sanMoves,
-          comments: comments,
-          startPosition: startPosition,
-          result: toMove == Side.white
-              ? GameResult.blackWins
-              : GameResult.whiteWins,
-          termination: TerminationReason.illegalMove,
-          detail:
-              '${mover.name} played "${search.bestMoveUci}" in '
-              '${position.fen}',
-        );
-      }
-
-      final wasCaptureOrPawn = _resetsDrawCounter(position, move);
-      final moveNumber = position.fullmoves;
-      final wire = wireUci(position, move);
-      final (next, san) = position.makeSan(move);
-      position = next;
-      sanMoves.add(san);
-      wireMoves.add(wire);
-      comments.add(_moveComment(search));
-
-      final key = _repetitionKey(position);
-      repetitions[key] = (repetitions[key] ?? 0) + 1;
-
-      onMove?.call(
-        GameMoveEvent(
-          ply: sanMoves.length,
-          moveNumber: moveNumber,
-          san: san,
-          fen: position.fen,
-          byWhite: toMove == Side.white,
-          depth: search.depth,
-          elapsedMs: search.elapsedMs,
-          scoreCp: search.scoreCp,
-          scoreMate: search.scoreMate,
-          whiteClockMs: tc.isTimed ? whiteClockMs : null,
-          blackClockMs: tc.isTimed ? blackClockMs : null,
-        ),
-      );
-
-      // ── Adjudication ───────────────────────────────────────────────────
-      final scoreCp = search.comparableCp;
-
-      if (adjudication.drawEnabled) {
-        if (wasCaptureOrPawn ||
-            scoreCp == null ||
-            scoreCp.abs() > adjudication.drawScoreCp) {
-          drawStreakPlies = 0;
-        } else {
-          drawStreakPlies++;
-        }
-        if (position.fullmoves >= adjudication.drawMoveNumber &&
-            drawStreakPlies >= adjudication.drawMoveCount * 2) {
-          return _finish(
-            white: white,
-            black: black,
-            context: context,
-            began: began,
-            stopwatch: stopwatch,
-            sanMoves: sanMoves,
-            comments: comments,
-            startPosition: startPosition,
-            result: GameResult.draw,
-            termination: TerminationReason.drawAdjudication,
-            detail:
-                'both engines under ${adjudication.drawScoreCp}cp for '
-                '${adjudication.drawMoveCount} moves',
-          );
-        }
-      }
-
-      if (adjudication.resignEnabled) {
-        if (scoreCp != null && scoreCp <= -adjudication.resignScoreCp) {
-          losingStreak[toMove] = losingStreak[toMove]! + 1;
-        } else {
-          losingStreak[toMove] = 0;
-        }
-        if (scoreCp != null && scoreCp >= adjudication.resignScoreCp) {
-          winningStreak[toMove] = winningStreak[toMove]! + 1;
-        } else {
-          winningStreak[toMove] = 0;
-        }
-        final opponent = toMove.opposite;
-        final resigns =
-            losingStreak[toMove]! >= adjudication.resignMoveCount &&
-            (!adjudication.twoSidedResign ||
-                winningStreak[opponent]! >= adjudication.resignMoveCount);
-        if (resigns) {
-          return _finish(
-            white: white,
-            black: black,
-            context: context,
-            began: began,
-            stopwatch: stopwatch,
-            sanMoves: sanMoves,
-            comments: comments,
-            startPosition: startPosition,
-            result: toMove == Side.white
-                ? GameResult.blackWins
-                : GameResult.whiteWins,
-            termination: TerminationReason.resignAdjudication,
-            detail:
-                '${mover.name} below -${adjudication.resignScoreCp}cp for '
-                '${adjudication.resignMoveCount} moves',
-          );
-        }
-      }
+      final afterMove = game.applyMove(search, onMove: onMove);
+      if (afterMove != null) return game.finish(afterMove);
     }
   }
+}
 
-  // ── helpers ──────────────────────────────────────────────────────────────
+/// The mutable state of one game while it is being played.
+class _GameInProgress {
+  _GameInProgress({
+    required this.white,
+    required this.black,
+    required this.context,
+    required AdjudicationRules adjudication,
+    required this.began,
+    required this.stopwatch,
+    required Position start,
+  }) : rules = adjudication,
+       startPosition = start,
+       position = start,
+       clock = GameClock(context.timeControl),
+       adjudicator = ScoreAdjudicator(adjudication),
+       repetitions = {_repetitionKey(start): 1};
 
-  ({GameResult result, TerminationReason termination})? _naturalEnd(
-    Position position,
-    Map<String, int> repetitions,
-    AdjudicationRules rules,
-  ) {
+  final EngineParticipant white;
+  final EngineParticipant black;
+  final GamePgnContext context;
+  final AdjudicationRules rules;
+  final DateTime began;
+  final Stopwatch stopwatch;
+  final Position startPosition;
+  final GameClock clock;
+  final ScoreAdjudicator adjudicator;
+
+  Position position;
+  final List<String> sanMoves = [];
+  final List<String> comments = [];
+  final List<String> wireMoves = [];
+
+  /// Occurrences of each position, for the threefold rule.
+  final Map<String, int> repetitions;
+
+  Side get sideToMove => position.turn;
+  EngineParticipant get mover => sideToMove == Side.white ? white : black;
+
+  /// Checkmate, a drawn position, or the move ceiling — anything that ends
+  /// the game without asking the engine.
+  GameEnding? endingBeforeMove() {
     if (position.isCheckmate) {
-      return (
-        result: position.turn == Side.white
-            ? GameResult.blackWins
-            : GameResult.whiteWins,
-        termination: TerminationReason.checkmate,
-      );
+      return GameEnding.lossFor(sideToMove, TerminationReason.checkmate);
     }
     if (position.isStalemate) {
-      return (
-        result: GameResult.draw,
-        termination: TerminationReason.stalemate,
-      );
+      return const GameEnding(GameResult.draw, TerminationReason.stalemate);
     }
     if (position.isInsufficientMaterial) {
-      return (
-        result: GameResult.draw,
-        termination: TerminationReason.insufficientMaterial,
+      return const GameEnding(
+        GameResult.draw,
+        TerminationReason.insufficientMaterial,
       );
     }
     if (rules.fiftyMoveRule && position.halfmoves >= 100) {
-      return (
-        result: GameResult.draw,
-        termination: TerminationReason.fiftyMoveRule,
-      );
+      return const GameEnding(GameResult.draw, TerminationReason.fiftyMoveRule);
     }
     if (rules.threefoldRepetition &&
         (repetitions[_repetitionKey(position)] ?? 0) >= 3) {
-      return (
-        result: GameResult.draw,
-        termination: TerminationReason.threefoldRepetition,
+      return const GameEnding(
+        GameResult.draw,
+        TerminationReason.threefoldRepetition,
+      );
+    }
+    if (position.fullmoves > rules.maxMoves) {
+      return GameEnding(
+        GameResult.draw,
+        TerminationReason.maxMoves,
+        'reached ${rules.maxMoves} moves',
       );
     }
     return null;
   }
 
-  GoLimits _limitsFor(
-    TimeControl tc, {
-    required int whiteClockMs,
-    required int blackClockMs,
-    required int movesPlayedThisSession,
+  Future<EngineSearch> askForMove() => mover.engine.search(
+    startFen: context.startFen,
+    movesUci: wireMoves,
+    limits: clock.limitsFor(sideToMove),
+    hardLimit: clock.hardLimitFor(sideToMove),
+  );
+
+  /// Charge the clock, play the move and adjudicate. Returns the ending if
+  /// the move finished the game one way or another.
+  GameEnding? applyMove(
+    EngineSearch search, {
+    required void Function(GameMoveEvent event)? onMove,
   }) {
-    switch (tc.kind) {
-      case TimeControlKind.movetime:
-        return GoLimits(movetimeMs: tc.movetimeMs);
-      case TimeControlKind.fixedDepth:
-        return GoLimits(depth: tc.depth);
-      case TimeControlKind.fixedNodes:
-        return GoLimits(nodes: tc.nodes);
-      case TimeControlKind.incremental:
-        final period = tc.movesPerSession;
-        return GoLimits(
-          whiteTimeMs: whiteClockMs < 1 ? 1 : whiteClockMs,
-          blackTimeMs: blackClockMs < 1 ? 1 : blackClockMs,
-          whiteIncrementMs: tc.incrementMs,
-          blackIncrementMs: tc.incrementMs,
-          movesToGo: period == null
-              ? null
-              : period - (movesPlayedThisSession % period),
-        );
+    final side = sideToMove;
+    final remainingMs = clock.remainingMs(side);
+    if (clock.charge(side, search.elapsedMs)) {
+      return GameEnding.lossFor(
+        side,
+        TerminationReason.timeForfeit,
+        _timeForfeitDetail(search.elapsedMs, remainingMs),
+      );
     }
-  }
 
-  /// Charge [elapsedMs] to the mover's clock and say whether the flag fell.
-  ///
-  /// Untimed controls cannot forfeit on the clock — a slow engine there is
-  /// caught by the hang guard in [UciEngine.search] instead — except in the
-  /// per-move case, where Scid vs. PC's 175%-of-nominal rule applies.
-  ({bool forfeit, int remainingMs}) _updateClock({
-    required TimeControl tc,
-    required int elapsedMs,
-    required int remainingMs,
-  }) {
-    switch (tc.kind) {
-      case TimeControlKind.movetime:
-        final ceiling = (tc.movetimeMs * 1.75).round() + kTimeMarginMs;
-        return (forfeit: elapsedMs > ceiling, remainingMs: remainingMs);
-      case TimeControlKind.fixedDepth:
-      case TimeControlKind.fixedNodes:
-        return (forfeit: false, remainingMs: remainingMs);
-      case TimeControlKind.incremental:
-        final left = remainingMs - elapsedMs;
-        if (left < -kTimeMarginMs) {
-          return (forfeit: true, remainingMs: 0);
-        }
-        return (
-          forfeit: false,
-          remainingMs: (left < 0 ? 0 : left) + tc.incrementMs,
-        );
+    final move = search.hasMove ? Move.parse(search.bestMoveUci) : null;
+    if (move == null || !_isPlayable(position, move)) {
+      return GameEnding.lossFor(
+        side,
+        TerminationReason.illegalMove,
+        '${mover.name} played "${search.bestMoveUci}" in ${position.fen}',
+      );
     }
-  }
 
-  /// Legal, *and* complete. dartchess accepts a pawn move to the last rank
-  /// with no promotion piece and then leaves the pawn standing there; UCI
-  /// requires the piece, so an engine that omits it has made an illegal
-  /// move, not a queen.
-  bool _isPlayable(Position position, Move move) {
-    if (!position.isLegal(move)) return false;
-    return move is! NormalMove ||
-        move.promotion != null ||
-        !position.board.pawns.has(move.from) ||
-        !SquareSet.backranks.has(move.to);
-  }
+    final resetsDrawCounter = _resetsDrawCounter(position, move);
+    final moveNumber = position.fullmoves;
+    final wire = wireUci(position, move);
+    final (next, san) = position.makeSan(move);
+    position = next;
+    sanMoves.add(san);
+    wireMoves.add(wire);
+    comments.add(formatMoveComment(search));
+    final key = _repetitionKey(position);
+    repetitions[key] = (repetitions[key] ?? 0) + 1;
 
-  bool _resetsDrawCounter(Position position, Move move) {
-    if (move is! NormalMove) return true;
-    final piece = position.board.pieceAt(move.from);
-    if (piece?.role == Role.pawn) return true;
-    return position.board.pieceAt(move.to) != null;
-  }
-
-  PlayedGame _finish({
-    required EngineParticipant white,
-    required EngineParticipant black,
-    required GamePgnContext context,
-    required DateTime began,
-    required Stopwatch stopwatch,
-    required List<String> sanMoves,
-    required List<String> comments,
-    required Position? startPosition,
-    required GameResult result,
-    required TerminationReason termination,
-    required String detail,
-  }) {
-    stopwatch.stop();
-    final duration = stopwatch.elapsed;
-    return PlayedGame(
-      result: result,
-      termination: termination,
-      detail: detail,
-      sanMoves: List.unmodifiable(sanMoves),
-      duration: duration,
-      pgn: buildGamePgn(
-        whiteName: white.name,
-        blackName: black.name,
-        context: context,
-        startPosition: startPosition,
-        sanMoves: sanMoves,
-        comments: comments,
-        result: result,
-        termination: termination,
-        detail: detail,
-        began: began,
-        duration: duration,
+    onMove?.call(
+      GameMoveEvent(
+        ply: sanMoves.length,
+        moveNumber: moveNumber,
+        san: san,
+        fen: position.fen,
+        byWhite: side == Side.white,
+        depth: search.depth,
+        elapsedMs: search.elapsedMs,
+        scoreCp: search.scoreCp,
+        scoreMate: search.scoreMate,
+        whiteClockMs: clock.displayMs(Side.white),
+        blackClockMs: clock.displayMs(Side.black),
       ),
+    );
+
+    return adjudicator.observe(
+      mover: side,
+      moverName: (side == Side.white ? white : black).name,
+      scoreCp: search.comparableCp,
+      resetsDrawCounter: resetsDrawCounter,
+      fullmoves: position.fullmoves,
+    );
+  }
+
+  String _timeForfeitDetail(int elapsedMs, int remainingMs) {
+    final tc = context.timeControl;
+    final used = (elapsedMs / 1000).toStringAsFixed(1);
+    final budget = tc.isTimed
+        ? 'with ${(remainingMs / 1000).toStringAsFixed(1)}s left'
+        : 'on a ${tc.label} budget';
+    return '${mover.name} used ${used}s $budget';
+  }
+
+  PlayedGame finish(GameEnding ending) {
+    stopwatch.stop();
+    return _played(
+      white: white,
+      black: black,
+      context: context,
+      began: began,
+      duration: stopwatch.elapsed,
+      startPosition: startPosition,
+      sanMoves: sanMoves,
+      comments: comments,
+      ending: ending,
     );
   }
 }
 
-/// `{+0.31/24 2.001s}` — cutechess's move comment, which every engine-testing
-/// tool and most GUIs already know how to read.
-String _moveComment(EngineSearch search) {
-  final buffer = StringBuffer();
-  if (search.scoreMate != null) {
-    final n = search.scoreMate!;
-    buffer.write('${n >= 0 ? '+' : '-'}M${n.abs()}');
-  } else if (search.scoreCp != null) {
-    final pawns = search.scoreCp! / 100;
-    buffer.write('${pawns >= 0 ? '+' : ''}${pawns.toStringAsFixed(2)}');
-  } else {
-    buffer.write('book');
-  }
-  if (search.depth > 0) buffer.write('/${search.depth}');
-  buffer.write(' ${(search.elapsedMs / 1000).toStringAsFixed(3)}s');
-  return buffer.toString();
+PlayedGame _played({
+  required EngineParticipant white,
+  required EngineParticipant black,
+  required GamePgnContext context,
+  required DateTime began,
+  required Duration duration,
+  required Position? startPosition,
+  required List<String> sanMoves,
+  required List<String> comments,
+  required GameEnding ending,
+}) => PlayedGame(
+  result: ending.result,
+  termination: ending.termination,
+  detail: ending.detail,
+  sanMoves: List.unmodifiable(sanMoves),
+  duration: duration,
+  pgn: buildGamePgn(
+    whiteName: white.name,
+    blackName: black.name,
+    context: context,
+    startPosition: startPosition,
+    sanMoves: sanMoves,
+    comments: comments,
+    result: ending.result,
+    termination: ending.termination,
+    detail: ending.detail,
+    began: began,
+    duration: duration,
+  ),
+);
+
+/// Legal, *and* complete. dartchess accepts a pawn move to the last rank
+/// with no promotion piece and then leaves the pawn standing there; UCI
+/// requires the piece, so an engine that omits it has made an illegal
+/// move, not a queen.
+bool _isPlayable(Position position, Move move) {
+  if (!position.isLegal(move)) return false;
+  return move is! NormalMove ||
+      move.promotion != null ||
+      !position.board.pawns.has(move.from) ||
+      !SquareSet.backranks.has(move.to);
+}
+
+/// Captures and pawn moves restart the draw-adjudication count, because the
+/// position is no longer the one that looked dead.
+bool _resetsDrawCounter(Position position, Move move) {
+  if (move is! NormalMove) return true;
+  final piece = position.board.pieceAt(move.from);
+  if (piece?.role == Role.pawn) return true;
+  return position.board.pieceAt(move.to) != null;
 }
 
 /// Repetition identity: the position without the move counters, which is what
 /// the threefold rule actually compares.
-String _repetitionKey(Position position) {
-  final parts = position.fen.split(' ');
-  return parts.take(4).join(' ');
-}
+String _repetitionKey(Position position) =>
+    position.fen.split(' ').take(4).join(' ');
 
 /// The spelling of [move] to put on the wire.
 ///
@@ -662,86 +437,3 @@ String wireUci(Position position, Move move) {
     to: kingCastlesTo(position.turn, side),
   ).uci;
 }
-
-/// Serialize a finished game. Public so the headless runner and the tests can
-/// build the same text the app writes.
-String buildGamePgn({
-  required String whiteName,
-  required String blackName,
-  required GamePgnContext context,
-  required Position? startPosition,
-  required List<String> sanMoves,
-  required List<String> comments,
-  required GameResult result,
-  required TerminationReason termination,
-  required String detail,
-  required DateTime began,
-  required Duration duration,
-}) {
-  final headers = <String, String>{
-    'Event': context.event,
-    'Site': context.site,
-    'Date': _pgnDate(began),
-    'Round': '${context.round}',
-    'White': whiteName,
-    'Black': blackName,
-    'Result': result.pgnToken,
-    if (context.openingLabel.isNotEmpty) 'Opening': context.openingLabel,
-    'TimeControl': context.timeControl.pgnTag,
-    'Termination': termination.pgnTag,
-    'PlyCount': '${sanMoves.length}',
-    'WhiteType': 'program',
-    'BlackType': 'program',
-    'GameStartTime': began.toIso8601String(),
-    'GameDuration': _hms(duration),
-  };
-
-  final buffer = StringBuffer();
-  for (final entry in headers.entries) {
-    if (entry.value.isEmpty) continue;
-    buffer.writeln('[${entry.key} "${escapePgnHeaderValue(entry.value)}"]');
-  }
-  final needsFen =
-      startPosition != null && context.startFen != kStandardStartFen;
-  if (needsFen) {
-    buffer
-      ..writeln('[FEN "${context.startFen}"]')
-      ..writeln('[SetUp "1"]');
-  }
-  buffer.writeln();
-
-  // Why the game stopped is the first thing anyone opening the PGN wants,
-  // and PGN's own Termination vocabulary is too coarse to carry it.
-  final reason = detail.isEmpty
-      ? termination.label
-      : '${termination.label}: $detail';
-  buffer.write('{${_commentSafe(reason)}} ');
-
-  final movetext = buildNumberedMovetext(
-    sanMoves,
-    startMoveNumber: startPosition?.fullmoves ?? 1,
-    whiteToMoveFirst: (startPosition?.turn ?? Side.white) == Side.white,
-    suffix: !context.annotateMoves
-        ? null
-        : (index) => index < comments.length ? ' {${comments[index]}}' : null,
-  );
-  if (movetext.isNotEmpty) buffer.write('$movetext ');
-  buffer.writeln(result.pgnToken);
-  return buffer.toString();
-}
-
-/// Braces close a PGN comment and newlines end a line of movetext, so
-/// neither can survive inside one. Engine failure details carry raw stderr,
-/// which is exactly where both turn up.
-String _commentSafe(String text) =>
-    text.replaceAll(RegExp(r'[{}]'), '').replaceAll(RegExp(r'\s+'), ' ').trim();
-
-String _pgnDate(DateTime when) =>
-    '${when.year.toString().padLeft(4, '0')}.'
-    '${when.month.toString().padLeft(2, '0')}.'
-    '${when.day.toString().padLeft(2, '0')}';
-
-String _hms(Duration d) =>
-    '${d.inHours.toString().padLeft(2, '0')}:'
-    '${(d.inMinutes % 60).toString().padLeft(2, '0')}:'
-    '${(d.inSeconds % 60).toString().padLeft(2, '0')}';

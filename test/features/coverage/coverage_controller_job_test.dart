@@ -35,24 +35,24 @@ const _config = CoverageConfig(
 );
 
 CoverageResult _result() {
-  return CoverageResult(
+  return const CoverageResult(
     rootFen: 'startpos',
-    rootMoves: const ['e4'],
+    rootMoves: ['e4'],
     rootGameCount: 1000,
     targetPercent: 80,
     targetGameCount: 800,
-    coveredLeaves: const [],
+    coveredLeaves: [],
     tooShallowLeaves: [
       LeafNode(
         fen: 'f1',
-        moves: const ['e4', 'e5'],
+        moves: ['e4', 'e5'],
         gameCount: 12,
         category: LeafCategory.tooShallow,
         reason: 'popular continuation not covered',
       ),
     ],
-    tooDeepLeaves: const [],
-    unaccountedMoves: const [],
+    tooDeepLeaves: [],
+    unaccountedMoves: [],
     totalCoveredGames: 0,
     totalShallowGames: 12,
     totalDeepGames: 0,

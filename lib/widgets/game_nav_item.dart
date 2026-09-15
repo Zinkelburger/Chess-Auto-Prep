@@ -3,7 +3,7 @@ library;
 
 import '../models/pgn_game_entry.dart';
 import '../models/repertoire_line.dart' show isModelGameHeaders;
-import '../services/repertoire_service.dart';
+import '../services/course_chapter_headers.dart';
 
 class GameNavItem {
   static final _chapterCache = Expando<_ChapterDetection>();
@@ -73,12 +73,9 @@ class _ChapterDetection {
   final chapters = Map<PgnGameEntry, String?>.identity();
 
   _ChapterDetection(List<PgnGameEntry> games) {
-    final service = RepertoireService();
     final headers = [for (final game in games) game.headers];
-    final key = service.chapterHeaderKey(headers);
-    final titles = key == null
-        ? null
-        : service.detectHeaderChapters(headers, key: key);
+    final key = chapterHeaderKey(headers);
+    final titles = key == null ? null : detectHeaderChapters(headers, key: key);
     for (var i = 0; i < games.length; i++) {
       final game = games[i];
       final tags = game.headers;

@@ -19,13 +19,12 @@
 /// `afterId`, which is also how the app runs it in chunks from an isolate.
 library;
 
-import 'package:dartchess/dartchess.dart';
+import 'package:sqlite3/sqlite3.dart';
 
-import '../generation/pgn_freq_parser.dart'
-    show isResultToken, tokenToSan, tokenizeMovetext;
+import 'book_replay.dart';
 import 'game_authority.dart';
 import 'master_games_db.dart';
-import 'position_key.dart';
+import 'movetext_codec.dart';
 
 class ClassicalCitationRebuild {
   const ClassicalCitationRebuild({
@@ -75,7 +74,8 @@ void resetClassicalCounts(MasterGamesDb db) {
 /// only ever raises a citation, never lowers one.
 ///
 /// Cheap — a pair of full-table updates over columns already in the file, no
-/// movetext replayed and nothing downloaded.
+/// movetext replayed and nothing downloaded.  Returns how many games changed
+/// tier.
 int refreshAuthorities(MasterGamesDb db) {
   final raw = db.raw;
   raw.execute('UPDATE games SET authority = $kAuthoritySqlExpression');
@@ -116,32 +116,11 @@ Future<ClassicalCitationRebuild> rebuildClassicalCitations(
   int afterId = 0,
   int? maxGames,
 }) async {
-  final raw = db.raw;
-  final codec = db.codec;
   final total = classicalCitationProgress(db).classical;
   if (afterId == 0) resetClassicalCounts(db);
 
-  final select = raw.prepare(
-    'SELECT id, movetext, white_elo, black_elo, result FROM games '
-    'WHERE authority = ? AND id > ? ORDER BY id LIMIT ?',
-  );
-  // Guarded so a weaker game never displaces a stronger one, which makes the
-  // pass idempotent and safe to resume.
-  final update = raw.prepare(
-    'UPDATE book SET top_classical_game = ?, classical_max_elo = ? '
-    'WHERE pos = ? AND move = ? '
-    'AND (top_classical_game = 0 OR classical_max_elo < ?)',
-  );
-  final count = raw.prepare(
-    'UPDATE book SET classical_games = classical_games + 1, '
-    'classical_white_wins = classical_white_wins + ?, '
-    'classical_draws = classical_draws + ?, '
-    'classical_black_wins = classical_black_wins + ? '
-    'WHERE pos = ? AND move = ?',
-  );
-
+  final walk = _ClassicalWalk(db);
   var scanned = 0;
-  var recorded = 0;
   var lastId = afterId;
   var cancelled = false;
   var done = false;
@@ -149,60 +128,24 @@ Future<ClassicalCitationRebuild> rebuildClassicalCitations(
     while (true) {
       final remaining = maxGames == null ? batch : maxGames - scanned;
       if (remaining <= 0) break;
-      final rows = select.select([
-        GameAuthority.classical.code,
-        lastId,
-        remaining < batch ? remaining : batch,
-      ]);
+      final rows = walk.nextGames(
+        afterId: lastId,
+        limit: remaining < batch ? remaining : batch,
+      );
       if (rows.isEmpty) {
         done = true;
         break;
       }
 
-      raw.execute('BEGIN');
+      db.raw.execute('BEGIN');
       try {
-        for (final r in rows) {
-          lastId = r.columnAt(0) as int;
-          final maxElo = [
-            (r.columnAt(2) as int?) ?? 0,
-            (r.columnAt(3) as int?) ?? 0,
-          ].reduce((a, b) => a > b ? a : b);
-          final result = r.columnAt(4) as String;
-          final ww = result == '1-0' ? 1 : 0;
-          final dd = result == '1/2-1/2' ? 1 : 0;
-          final bw = result == '0-1' ? 1 : 0;
-
-          final sans = <String>[];
-          for (final t in tokenizeMovetext(
-            codec.decode(r.columnAt(1) as List<int>),
-          )) {
-            if (isResultToken(t)) break;
-            final san = tokenToSan(t);
-            if (san != null) sans.add(san);
-            if (sans.length >= kBookMaxPly) break;
-          }
-
-          Position pos = Chess.initial;
-          for (final san in sans) {
-            final Move move;
-            try {
-              final parsed = pos.parseSan(san);
-              if (parsed == null) break;
-              move = parsed;
-            } catch (_) {
-              break; // corrupt movetext: keep what replayed
-            }
-            final key = positionKey(pos.fen);
-            update.execute([lastId, maxElo, key, move.uci, maxElo]);
-            if (raw.updatedRows > 0) recorded++;
-            count.execute([ww, dd, bw, key, move.uci]);
-            pos = pos.play(move);
-          }
+        for (final row in rows) {
+          lastId = walk.replay(row);
           scanned++;
         }
-        raw.execute('COMMIT');
+        db.raw.execute('COMMIT');
       } catch (_) {
-        raw.execute('ROLLBACK');
+        db.raw.execute('ROLLBACK');
         rethrow;
       }
 
@@ -216,16 +159,84 @@ Future<ClassicalCitationRebuild> rebuildClassicalCitations(
     }
     if (done && !cancelled) db.classicalCountsComplete = true;
   } finally {
-    select.close();
-    update.close();
-    count.close();
+    walk.close();
   }
 
   return ClassicalCitationRebuild(
     gamesScanned: scanned,
-    movesRecorded: recorded,
+    movesRecorded: walk.recorded,
     cancelled: cancelled,
     lastId: lastId,
     done: done,
   );
+}
+
+/// The prepared statements of one rebuild pass and the replay of one game
+/// through them.
+class _ClassicalWalk {
+  _ClassicalWalk(MasterGamesDb db)
+    : _raw = db.raw,
+      _codec = db.codec,
+      _select = db.raw.prepare(
+        'SELECT id, movetext, white_elo, black_elo, result FROM games '
+        'WHERE authority = ? AND id > ? ORDER BY id LIMIT ?',
+      ),
+      // Guarded so a weaker game never displaces a stronger one, which makes
+      // the pass idempotent and safe to resume.
+      _cite = db.raw.prepare(
+        'UPDATE book SET top_classical_game = ?, classical_max_elo = ? '
+        'WHERE pos = ? AND move = ? '
+        'AND (top_classical_game = 0 OR classical_max_elo < ?)',
+      ),
+      _count = db.raw.prepare(
+        'UPDATE book SET classical_games = classical_games + 1, '
+        'classical_white_wins = classical_white_wins + ?, '
+        'classical_draws = classical_draws + ?, '
+        'classical_black_wins = classical_black_wins + ? '
+        'WHERE pos = ? AND move = ?',
+      );
+
+  final Database _raw;
+  final MovetextCodec _codec;
+  final PreparedStatement _select;
+  final PreparedStatement _cite;
+  final PreparedStatement _count;
+
+  /// Book rows that took a replayed game as their citation so far.
+  int recorded = 0;
+
+  ResultSet nextGames({required int afterId, required int limit}) =>
+      _select.select([GameAuthority.classical.code, afterId, limit]);
+
+  /// Record [row]'s game as citation and classical count for every book
+  /// move it played; returns its id.
+  int replay(Row row) {
+    final id = row.columnAt(0) as int;
+    final movetext = _codec.decode(row.columnAt(1) as List<int>);
+    final maxElo = strongerElo(
+      row.columnAt(2) as int?,
+      row.columnAt(3) as int?,
+    );
+    final tally = resultTally(row.columnAt(4) as String);
+
+    final sans = movetextSans(movetext, maxPlies: kBookMaxPly);
+    for (final ref in replayBookMoves(sans)) {
+      _cite.execute([id, maxElo, ref.positionKey, ref.uci, maxElo]);
+      if (_raw.updatedRows > 0) recorded++;
+      _count.execute([
+        tally.whiteWins,
+        tally.draws,
+        tally.blackWins,
+        ref.positionKey,
+        ref.uci,
+      ]);
+    }
+    return id;
+  }
+
+  void close() {
+    _select.close();
+    _cite.close();
+    _count.close();
+  }
 }

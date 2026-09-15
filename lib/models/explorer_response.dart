@@ -1,8 +1,8 @@
 /// Unified model for Lichess Explorer API responses.
 ///
-/// Used across the move-generation pipeline: [ProbabilityService],
-/// [TreeBuildService], and [MoveAnalysisPool].  Centralises parsing so
-/// there is exactly one JSON → Dart conversion for Explorer data.
+/// Used across the move-generation pipeline (`ProbabilityService`,
+/// `TreeBuildService`, `AnalysisService`) so there is exactly one
+/// JSON → Dart conversion for Explorer data.
 library;
 
 class ExplorerMove {
@@ -36,11 +36,17 @@ class ExplorerMove {
     return (wins + 0.5 * draws) / total;
   }
 
-  String get formattedPlayRate => '${playRate.toStringAsFixed(1)}%';
-
   String toPgnComment() =>
       '{Move probability: ${playRate.toStringAsFixed(1)}%}';
 }
+
+/// Which database an opening explorer asks.
+///
+/// Three are Lichess's ([lichess], [masters], [player]); [twic] is the
+/// master-games database on this machine, which only the live explorer
+/// panel offers — the generation pipeline reads it through its own
+/// `BookLookup`.
+enum LichessDatabase { lichess, masters, player, twic }
 
 /// Where an explorer answer came from, which is also where one of its games
 /// can be fetched from.
@@ -193,35 +199,35 @@ class ExplorerResponse {
     required String fen,
     ExplorerGameSource? gameSource,
   }) {
-    int totalGames = 0;
-    for (final move in data['moves'] as List? ?? []) {
-      final w = move['white'] as int? ?? 0;
-      final d = move['draws'] as int? ?? 0;
-      final b = move['black'] as int? ?? 0;
-      totalGames += w + d + b;
-    }
+    final rawMoves = (data['moves'] as List? ?? const [])
+        .cast<Map<String, dynamic>>();
+    int count(Map<String, dynamic> move, String key) => move[key] as int? ?? 0;
+    final totalGames = rawMoves.fold<int>(
+      0,
+      (sum, move) =>
+          sum +
+          count(move, 'white') +
+          count(move, 'draws') +
+          count(move, 'black'),
+    );
 
-    final moves = <ExplorerMove>[];
-    for (final move in data['moves'] as List? ?? []) {
-      final w = move['white'] as int? ?? 0;
-      final d = move['draws'] as int? ?? 0;
-      final b = move['black'] as int? ?? 0;
-      final moveTotal = w + d + b;
-      final playRate = totalGames > 0 ? (moveTotal / totalGames) * 100 : 0.0;
-
-      moves.add(
+    final moves = <ExplorerMove>[
+      for (final move in rawMoves)
         ExplorerMove(
           san: move['san'] as String? ?? '',
           uci: move['uci'] as String? ?? '',
-          white: w,
-          draws: d,
-          black: b,
-          playRate: playRate,
+          white: count(move, 'white'),
+          draws: count(move, 'draws'),
+          black: count(move, 'black'),
+          playRate: totalGames > 0
+              ? (count(move, 'white') +
+                        count(move, 'draws') +
+                        count(move, 'black')) /
+                    totalGames *
+                    100
+              : 0.0,
         ),
-      );
-    }
-
-    moves.sort((a, b) => b.playRate.compareTo(a.playRate));
+    ]..sort((a, b) => b.playRate.compareTo(a.playRate));
     final opening = data['opening'] as Map<String, dynamic>?;
 
     // The API names each game's move by UCI; the row's SAN is what a reader
@@ -251,25 +257,5 @@ class ExplorerResponse {
       topGames: games('topGames'),
       recentGames: games('recentGames'),
     );
-  }
-
-  /// Find the best move for [asWhite]'s side by win rate, breaking ties
-  /// by play rate.  Only considers moves with play rate ≥ [minPlayRate].
-  ///
-  /// Returns `null` if no viable move exists.
-  ExplorerMove? bestMoveForSide({
-    required bool asWhite,
-    double minPlayRate = 1.0,
-  }) {
-    final viable = moves
-        .where((m) => m.uci.isNotEmpty && m.playRate >= minPlayRate)
-        .toList();
-    if (viable.isEmpty) return null;
-    return viable.reduce((a, b) {
-      final aWr = a.winRateFor(asWhite: asWhite);
-      final bWr = b.winRateFor(asWhite: asWhite);
-      if (aWr != bWr) return aWr > bWr ? a : b;
-      return a.playRate > b.playRate ? a : b;
-    });
   }
 }

@@ -15,6 +15,7 @@ import 'dart:typed_data';
 
 import 'package:dartchess/dartchess.dart';
 
+import 'scid_home_pawns.dart';
 import 'scid_move_codec.dart';
 import 'scid_piece_list.dart';
 
@@ -55,7 +56,16 @@ const List<String> kScidCommonTags = [
 ];
 
 const int _maxTagNameLen = 240;
+const int _maxTagValueLen = 255;
 const int _firstCommonTagCode = 241;
+
+/// Start-board flag bits (`src/game.cpp`, `Game::Encode`).
+const int _flagNonStandardStart = 0x01;
+const int _flagPromotion = 0x02;
+const int _flagUnderPromotion = 0x04;
+
+/// The SAN spellings of a null move.
+const Set<String> _nullMoveSans = {'--', 'Z0', '0000', '@@@@'};
 
 /// What encoding a game produced, beyond the bytes: the counts and flags the
 /// index record needs.
@@ -87,7 +97,8 @@ class ScidEncodedGame {
   /// 24-bit material signature of the final mainline position.
   final int finalMaterial;
 
-  /// Up to 16 half-byte entries recording which home pawns left, in order.
+  /// Nine bytes: the count, then up to 16 half-byte entries recording which
+  /// home pawns left, in order ([ScidHomePawnTracker.toBytes]).
   final Uint8List homePawnData;
   final int homePawnCount;
 
@@ -110,53 +121,22 @@ class _Writer {
   final BytesBuilder _b = BytesBuilder(copy: false);
   void byte(int v) => _b.addByte(v & 0xFF);
   void bytes(List<int> v) => _b.add(v);
-  int get length => _b.length;
   Uint8List take() => _b.takeBytes();
 }
 
 /// Encodes a parsed PGN game.
 class ScidGameEncoder {
-  /// Encode [game]. [startPosition] must be the game's initial position.
+  /// Encode [game], starting from its `FEN` tag when `SetUp` says so and
+  /// from the standard position otherwise.
   static ScidEncodedGame encode(PgnGame<PgnNodeData> game) {
     final headers = game.headers;
-    final fen = headers['FEN'];
-    final setup = headers['SetUp'] ?? headers['Setup'];
-    final hasFenStart = setup == '1' && fen != null && fen.trim().isNotEmpty;
-
-    final Position start;
-    if (hasFenStart) {
-      try {
-        start = Chess.fromSetup(Setup.parseFen(fen));
-      } catch (e) {
-        throw ScidEncodeException('unparsable FEN: $e');
-      }
-    } else {
-      start = Chess.initial;
-    }
-
-    final nonStandardStart = hasFenStart && start.fen != Chess.initial.fen;
+    final start = _startPosition(headers);
+    final nonStandardStart = start.fen != Chess.initial.fen;
 
     final w = _Writer();
 
     // ── 1. tag pairs not held by the index ──────────────────────────────
-    for (final entry in headers.entries) {
-      if (kScidIndexedTags.contains(entry.key)) continue;
-      if (entry.key.isEmpty) continue;
-      final commonIndex = kScidCommonTags.indexOf(entry.key);
-      if (commonIndex >= 0) {
-        w.byte(_firstCommonTagCode + commonIndex);
-      } else {
-        final name = utf8.encode(entry.key);
-        final len = name.length > _maxTagNameLen ? _maxTagNameLen : name.length;
-        w.byte(len);
-        w.bytes(name.sublist(0, len));
-      }
-      final value = utf8.encode(entry.value);
-      final vlen = value.length > 255 ? 255 : value.length;
-      w.byte(vlen);
-      w.bytes(value.sublist(0, vlen));
-    }
-    w.byte(0); // end of tag section
+    _writeTags(w, headers);
 
     // ── walk the move tree, collecting bytes and comments ───────────────
     final state = _EncodeState(
@@ -165,26 +145,16 @@ class ScidGameEncoder {
           : ScidPieceList.standard(),
       position: start,
     );
-    final moveBytes = _Writer();
-    final comments = <String>[];
-
-    // A pre-game comment is marked before anything else.
-    final preComment = _joinComments(game.comments);
-    if (preComment != null) {
-      moveBytes.byte(ScidToken.comment);
-      comments.add(preComment);
-    }
-
-    final walk = _MoveWalk(moveBytes, comments)
-      ..trackHomePawns = !nonStandardStart;
-    walk.walkChildren(game.moves.children, state);
-    moveBytes.byte(ScidToken.endGame);
+    final walk = _MoveWalk(
+      homePawns: ScidHomePawnTracker(enabled: !nonStandardStart),
+    );
+    walk.walkGame(game, state);
 
     // ── 2. start-board flags (+ FEN) ────────────────────────────────────
     var flags = 0;
-    if (nonStandardStart) flags |= 0x01;
-    if (walk.hasPromotion) flags |= 0x02;
-    if (walk.hasUnderPromotion) flags |= 0x04;
+    if (nonStandardStart) flags |= _flagNonStandardStart;
+    if (walk.hasPromotion) flags |= _flagPromotion;
+    if (walk.hasUnderPromotion) flags |= _flagUnderPromotion;
     w.byte(flags);
     if (nonStandardStart) {
       w.bytes(utf8.encode(start.fen));
@@ -192,27 +162,65 @@ class ScidGameEncoder {
     }
 
     // ── 3. moves, 4. comments ───────────────────────────────────────────
-    w.bytes(moveBytes.take());
-    for (final c in comments) {
+    w.bytes(walk.moveBytes);
+    for (final c in walk.comments) {
       w.bytes(utf8.encode(c));
       w.byte(0);
     }
 
-    final hp = walk.homePawnBytes();
     return ScidEncodedGame(
       data: w.take(),
       plyCount: walk.mainlinePly,
-      commentCount: comments.length,
+      commentCount: walk.comments.length,
       variationCount: walk.variationCount,
       nagCount: walk.nagCount,
       hasPromotion: walk.hasPromotion,
       hasUnderPromotion: walk.hasUnderPromotion,
       nonStandardStart: nonStandardStart,
       finalMaterial: materialSignature(walk.finalMainlinePosition ?? start),
-      homePawnData: hp,
-      homePawnCount: walk.homePawnCount,
+      homePawnData: walk.homePawns.toBytes(),
+      homePawnCount: walk.homePawns.count,
       truncatedAt: walk.truncatedAt,
     );
+  }
+
+  /// The game's initial position: its `FEN` tag when `SetUp` (or `Setup`)
+  /// is `1`, else the standard start.
+  static Position _startPosition(PgnHeaders headers) {
+    final fen = headers['FEN'];
+    final setup = headers['SetUp'] ?? headers['Setup'];
+    if (setup != '1' || fen == null || fen.trim().isEmpty) {
+      return Chess.initial;
+    }
+    try {
+      return Chess.fromSetup(Setup.parseFen(fen));
+    } catch (e) {
+      throw ScidEncodeException('unparsable FEN: $e');
+    }
+  }
+
+  /// Section 1: every tag the index does not hold, common ones as a single
+  /// code byte, the rest as a length-prefixed name; values are
+  /// length-prefixed and capped at 255 bytes.
+  static void _writeTags(_Writer w, PgnHeaders headers) {
+    for (final entry in headers.entries) {
+      if (kScidIndexedTags.contains(entry.key)) continue;
+      if (entry.key.isEmpty) continue;
+      final commonIndex = kScidCommonTags.indexOf(entry.key);
+      if (commonIndex >= 0) {
+        w.byte(_firstCommonTagCode + commonIndex);
+      } else {
+        _writeCapped(w, utf8.encode(entry.key), _maxTagNameLen);
+      }
+      _writeCapped(w, utf8.encode(entry.value), _maxTagValueLen);
+    }
+    w.byte(0); // end of tag section
+  }
+
+  static void _writeCapped(_Writer w, List<int> bytes, int cap) {
+    final len = bytes.length > cap ? cap : bytes.length;
+    w.byte(len);
+    w.bytes(bytes.sublist(0, len));
   }
 
   static String? _joinComments(List<String>? comments) {
@@ -232,11 +240,14 @@ class _EncodeState {
       _EncodeState(pieces: pieces.clone(), position: position);
 }
 
+/// Walks a game's move tree in PGN order, emitting the move-list bytes and
+/// collecting the comment texts in the order their markers were written.
 class _MoveWalk {
-  _MoveWalk(this._out, this._comments);
+  _MoveWalk({required this.homePawns});
 
-  final _Writer _out;
-  final List<String> _comments;
+  final _Writer _out = _Writer();
+  final List<String> comments = [];
+  final ScidHomePawnTracker homePawns;
 
   int variationCount = 0;
   int nagCount = 0;
@@ -246,72 +257,36 @@ class _MoveWalk {
   bool hasUnderPromotion = false;
   Position? finalMainlinePosition;
 
-  /// Home-pawn departures, in order, as Scid records them
-  /// (`mainlineInfo`, `src/game.cpp`).
-  ///
-  /// A 16-bit signature starts at [_hpAllHome] — one bit per home square,
-  /// **set while the pawn is still there** — and bits clear as pawns leave or
-  /// are captured. After each mainline move the difference `old - new` names
-  /// the square that changed, and the value stored is that difference's
-  /// highest set bit *position*, i.e. `15 - index` where index is 0-7 for
-  /// White a-h and 8-15 for Black a-h.
-  ///
-  /// Tracked for the mainline only, and only from the standard start: from a
-  /// FEN there is no "home" to leave, and Scid leaves the count at zero.
-  static const int _hpAllHome = 0xFFFF;
-  int _hpSig = _hpAllHome;
-  final List<int> _hpValues = [];
-  bool trackHomePawns = true;
+  /// The move list, once [walkGame] has run.
+  Uint8List get moveBytes => _out.take();
 
-  int get homePawnCount => _hpValues.length;
-
-  Uint8List homePawnBytes() {
-    // Nine bytes: the count, then up to sixteen nibbles. The first departure
-    // goes in the HIGH nibble of the first byte.
-    final out = Uint8List(9);
-    final n = _hpValues.length > 16 ? 16 : _hpValues.length;
-    out[0] = n;
-    for (var i = 0; i < n; i++) {
-      final v = _hpValues[i] & 0x0F;
-      out[1 + (i >> 1)] |= i.isEven ? v << 4 : v;
-    }
-    return out;
+  /// Encode the whole game: a pre-game comment marker first, then the tree,
+  /// then the end-game token.
+  void walkGame(PgnGame<PgnNodeData> game, _EncodeState state) {
+    _emitComment(ScidGameEncoder._joinComments(game.comments));
+    _walkChildren(game.moves.children, state);
+    _out.byte(ScidToken.endGame);
   }
 
-  /// The signature of [pos]: a bit set for every home square still holding
-  /// its own pawn.
-  static int _hpSigOf(Position pos) {
-    var sig = 0;
-    for (var file = 0; file < 8; file++) {
-      final w = pos.board.pieceAt(Square(8 + file));
-      if (w != null && w.role == Role.pawn && w.color == Side.white) {
-        sig |= 1 << (15 - file);
-      }
-      final b = pos.board.pieceAt(Square(48 + file));
-      if (b != null && b.role == Role.pawn && b.color == Side.black) {
-        sig |= 1 << (15 - (8 + file));
-      }
+  void _emitNags(List<int>? nags) {
+    if (nags == null) return;
+    for (final n in nags) {
+      _out.byte(ScidToken.nag);
+      _out.byte(n & 0xFF);
+      nagCount++;
     }
-    return sig;
   }
 
-  void _noteHomePawns(Position after) {
-    if (!trackHomePawns) return;
-    final now = _hpSigOf(after);
-    final changed = _hpSig - now;
-    if (changed <= 0) return;
-    _hpSig = now;
-    var idx = 0;
-    var c = changed;
-    while ((c >>= 1) != 0) {
-      idx++;
-    }
-    if (_hpValues.length < 16) _hpValues.add(idx);
+  /// Mark that a comment belongs here; the text itself goes after the moves.
+  void _emitComment(String? comment) {
+    if (comment == null) return;
+    _out.byte(ScidToken.comment);
+    comments.add(comment);
   }
 
   /// Walk a node's children in PGN order: the first child is the line, the
   /// rest are variations wrapped in start/end markers.
-  void walkChildren(
+  void _walkChildren(
     List<PgnChildNode<PgnNodeData>> children,
     _EncodeState state, {
     bool mainline = true,
@@ -332,51 +307,12 @@ class _MoveWalk {
       if (next == null) return;
 
       // NAGs and comment marker belong to the move just written.
-      final nags = first.data.nags;
-      if (nags != null) {
-        for (final n in nags) {
-          _out.byte(ScidToken.nag);
-          _out.byte(n & 0xFF);
-          nagCount++;
-        }
-      }
-      final comment = ScidGameEncoder._joinComments(first.data.comments);
-      if (comment != null) {
-        _out.byte(ScidToken.comment);
-        _comments.add(comment);
-      }
+      _emitNags(first.data.nags);
+      _emitComment(ScidGameEncoder._joinComments(first.data.comments));
 
       // Sibling variations, each a fresh branch from the pre-move state.
       for (var i = 1; i < current.length; i++) {
-        variationCount++;
-        _out.byte(ScidToken.startVariation);
-        final branch = beforeMove!.clone();
-        final varComment = ScidGameEncoder._joinComments(
-          current[i].data.comments,
-        );
-        // A comment on the variation's first move is marked right after the
-        // start marker in Scid's traversal.
-        final saved = _out.length;
-        final emitted = _emitMove(current[i].data, branch, mainline: false);
-        if (emitted != null) {
-          if (varComment != null) {
-            _out.byte(ScidToken.comment);
-            _comments.add(varComment);
-          }
-          final varNags = current[i].data.nags;
-          if (varNags != null) {
-            for (final n in varNags) {
-              _out.byte(ScidToken.nag);
-              _out.byte(n & 0xFF);
-              nagCount++;
-            }
-          }
-          walkChildren(current[i].children, branch, mainline: false);
-        } else {
-          // Unencodable variation: drop it rather than corrupt the stream.
-          assert(saved <= _out.length);
-        }
-        _out.byte(ScidToken.endVariation);
+        _walkVariation(current[i], beforeMove!.clone());
       }
 
       st = next;
@@ -386,6 +322,22 @@ class _MoveWalk {
       }
       current = first.children;
     }
+  }
+
+  /// One variation between its start/end markers.  Its first move's comment
+  /// is marked before its NAGs — the reverse of a line move — because that
+  /// is the order Scid's traversal writes them.  An unencodable first move
+  /// leaves the variation empty rather than corrupting the stream.
+  void _walkVariation(PgnChildNode<PgnNodeData> node, _EncodeState branch) {
+    variationCount++;
+    _out.byte(ScidToken.startVariation);
+    final emitted = _emitMove(node.data, branch, mainline: false);
+    if (emitted != null) {
+      _emitComment(ScidGameEncoder._joinComments(node.data.comments));
+      _emitNags(node.data.nags);
+      _walkChildren(node.children, branch, mainline: false);
+    }
+    _out.byte(ScidToken.endVariation);
   }
 
   /// Emit one move, advancing [state]. Returns the new state, or null when the
@@ -399,7 +351,7 @@ class _MoveWalk {
     final before = state.position;
 
     // Null moves are a king "move" to its own square.
-    if (san == '--' || san == 'Z0' || san == '0000' || san == '@@@@') {
+    if (_nullMoveSans.contains(san)) {
       _out.byte(scidMoveByte(0, ScidToken.nullMove));
       state.position = before.copyWith(turn: before.turn.opposite);
       return state;
@@ -455,31 +407,7 @@ class _MoveWalk {
       if (promo != Role.queen) hasUnderPromotion = true;
     }
 
-    // Write the byte(s).
-    switch (piece.role) {
-      case Role.king:
-        _out.byte(scidMoveByte(slot, encodeKingCode(from, kingTo)));
-        break;
-      case Role.queen:
-        final enc = encodeQueenMove(slot, from, to);
-        _out.byte(enc.first);
-        if (enc.second != null) _out.byte(enc.second!);
-        break;
-      case Role.rook:
-        _out.byte(scidMoveByte(slot, encodeRookCode(from, to)));
-        break;
-      case Role.bishop:
-        _out.byte(scidMoveByte(slot, encodeBishopCode(from, to)));
-        break;
-      case Role.knight:
-        _out.byte(scidMoveByte(slot, encodeKnightCode(from, to)));
-        break;
-      case Role.pawn:
-        _out.byte(
-          scidMoveByte(slot, encodePawnCode(from, to, _promoIndex(promo))),
-        );
-        break;
-    }
+    _writeMoveBytes(piece.role, slot, from, to, kingTo: kingTo, promo: promo);
 
     // Advance the position, then the piece list to match.
     final Position after;
@@ -489,38 +417,66 @@ class _MoveWalk {
       return null;
     }
 
-    int? capturedSquare;
-    if (!isCastle) {
-      if (destPiece != null && destPiece.color != piece.color) {
-        capturedSquare = to;
-      } else if (piece.role == Role.pawn &&
-          (from & 7) != (to & 7) &&
-          destPiece == null) {
-        // En passant: the captured pawn is on the mover's rank.
-        capturedSquare = (from & ~7) | (to & 7);
-      }
-    }
-
     state.pieces.applyMove(
       mover: piece.color,
       from: from,
       to: isCastle ? kingTo : to,
-      capturedSquare: capturedSquare,
+      capturedSquare: isCastle
+          ? null
+          : _capturedSquare(piece, from, to, destPiece),
       castleRookFrom: rookFrom,
       castleRookTo: rookTo,
     );
     state.position = after;
-    if (mainline) _noteHomePawns(after);
+    if (mainline) homePawns.noteMove(after);
     return state;
   }
 
+  void _writeMoveBytes(
+    Role role,
+    int slot,
+    int from,
+    int to, {
+    required int kingTo,
+    required Role? promo,
+  }) {
+    switch (role) {
+      case Role.king:
+        _out.byte(scidMoveByte(slot, encodeKingCode(from, kingTo)));
+      case Role.queen:
+        final enc = encodeQueenMove(slot, from, to);
+        _out.byte(enc.first);
+        final second = enc.second;
+        if (second != null) _out.byte(second);
+      case Role.rook:
+        _out.byte(scidMoveByte(slot, encodeRookCode(from, to)));
+      case Role.bishop:
+        _out.byte(scidMoveByte(slot, encodeBishopCode(from, to)));
+      case Role.knight:
+        _out.byte(scidMoveByte(slot, encodeKnightCode(from, to)));
+      case Role.pawn:
+        _out.byte(
+          scidMoveByte(slot, encodePawnCode(from, to, _promoIndex(promo))),
+        );
+    }
+  }
+
+  /// The square of the piece a non-castling move captures, if any.  An en
+  /// passant capture takes the pawn on the mover's own rank.
+  static int? _capturedSquare(Piece piece, int from, int to, Piece? destPiece) {
+    if (destPiece != null && destPiece.color != piece.color) return to;
+    final isDiagonalPawnMove =
+        piece.role == Role.pawn && (from & 7) != (to & 7);
+    if (isDiagonalPawnMove && destPiece == null) return (from & ~7) | (to & 7);
+    return null;
+  }
+
   static int _promoIndex(Role? promo) => switch (promo) {
-    null => 0,
     Role.queen => 1,
     Role.rook => 2,
     Role.bishop => 3,
     Role.knight => 4,
-    _ => 0,
+    Role.king || Role.pawn || null => 0,
   };
 }
 

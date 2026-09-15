@@ -170,7 +170,7 @@ void main() {
     });
 
     test('returns empty for null tree', () {
-      final service = CandidateService();
+      const service = CandidateService();
       expect(
         service.getTreeCandidates(
           fen: 'startpos',
@@ -273,7 +273,6 @@ void main() {
       final merged = CandidateService.mergeWithExplorer(
         treeCandidates: [treeMove],
         explorer: explorer,
-        fen: kStandardStartFen,
         isOurTurn: false,
         openingTree: null,
         coverage: null,
@@ -305,7 +304,6 @@ void main() {
       final merged = CandidateService.mergeWithExplorer(
         treeCandidates: [treeMove],
         explorer: explorer,
-        fen: kStandardStartFen,
         isOurTurn: false,
         openingTree: null,
         coverage: null,
@@ -330,7 +328,6 @@ void main() {
       final merged = CandidateService.mergeWithExplorer(
         treeCandidates: const [],
         explorer: explorer,
-        fen: kStandardStartFen,
         isOurTurn: false,
         openingTree: null,
         coverage: null,

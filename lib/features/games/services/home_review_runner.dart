@@ -23,13 +23,13 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../models/bulk_analysis_settings.dart';
 import '../../../models/engine_settings.dart';
 import '../../../services/games_library/games_library_service.dart'
     show GamesLibraryService, GamesPlatform;
 import '../../../utils/log.dart';
-import '../../../models/bulk_analysis_settings.dart';
-import '../../tactics/services/tactics_import_coordinator.dart';
 import '../../../utils/safe_change_notifier.dart';
+import '../../tactics/services/tactics_import_coordinator.dart';
 import '../controllers/recent_games_controller.dart';
 import 'games_window.dart';
 
@@ -125,9 +125,17 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   bool get canResume => _stage == HomeReviewStage.paused;
 
   /// Whether the review has a source to pull from at all.
-  bool get hasAnySource =>
-      (_lichessUsername()?.trim().isNotEmpty ?? false) ||
-      (_chesscomUsername()?.trim().isNotEmpty ?? false);
+  bool get hasAnySource => _sources().isNotEmpty;
+
+  /// The configured accounts, Lichess first, each with its trimmed username.
+  List<(TacticsImportSource, String)> _sources() => [
+    for (final (source, supplier) in [
+      (TacticsImportSource.lichess, _lichessUsername),
+      (TacticsImportSource.chessCom, _chesscomUsername),
+    ])
+      if (supplier()?.trim() case final username? when username.isNotEmpty)
+        (source, username),
+  ];
 
   /// How much of the machine this review is allowed to use, for the block
   /// that says so out loud.
@@ -266,9 +274,15 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
   }
 
   static GamesPlatform _platformOf(TacticsImportSource source) =>
-      source == TacticsImportSource.lichess
-      ? GamesPlatform.lichess
-      : GamesPlatform.chesscom;
+      switch (source) {
+        TacticsImportSource.lichess => GamesPlatform.lichess,
+        TacticsImportSource.chessCom => GamesPlatform.chesscom,
+      };
+
+  static String _siteLabel(TacticsImportSource source) => switch (source) {
+    TacticsImportSource.lichess => 'Lichess',
+    TacticsImportSource.chessCom => 'Chess.com',
+  };
 
   /// The loaded games for one site, as a multi-game PGN. Empty when the list
   /// has none from there.
@@ -309,18 +323,9 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
     await _windowSettings.ensureLoaded();
     await _bulk.ensureLoaded();
     final window = _windowSettings.window;
-    final sources = <(TacticsImportSource, String)>[
-      if (_lichessUsername()?.trim().isNotEmpty ?? false)
-        (TacticsImportSource.lichess, _lichessUsername()!.trim()),
-      if (_chesscomUsername()?.trim().isNotEmpty ?? false)
-        (TacticsImportSource.chessCom, _chesscomUsername()!.trim()),
-    ];
-    for (final (source, username) in sources) {
+    for (final (source, username) in _sources()) {
       if (_paused) return;
-      _to(
-        HomeReviewStage.reviewing,
-        detail: source == TacticsImportSource.lichess ? 'Lichess' : 'Chess.com',
-      );
+      _to(HomeReviewStage.reviewing, detail: _siteLabel(source));
       // The fetch stage already downloaded these games; hand them straight to
       // the engine pass rather than asking the site for them a second time.
       // Empty (a failed or filtered-out fetch) falls back to fetching, so the
@@ -378,13 +383,8 @@ class HomeReviewRunner extends ChangeNotifier with SafeChangeNotifier {
     // Only this site's games. The other site's are a different cache file and
     // are patched on their own turn, so taking the whole map here would drop
     // them on the floor.
-    final mine = {
-      for (final key in expectedPgn.keys)
-        if (_annotations.containsKey(key)) key: _annotations[key]!,
-    };
-    for (final key in mine.keys) {
-      _annotations.remove(key);
-    }
+    final mine = {for (final key in expectedPgn.keys) key: ?_annotations[key]};
+    _annotations.removeWhere((key, _) => mine.containsKey(key));
     if (mine.isEmpty) return;
     // Non-null whenever [mine] is: the rows it was built from are the ones
     // that name the file.

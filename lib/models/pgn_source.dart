@@ -33,7 +33,7 @@ class PgnSource {
   });
 
   /// Whether a slice is actively filtering (not "All Lines").
-  bool get isSliced => sliceConfig != null && !sliceConfig!.isEmpty;
+  bool get isSliced => !(sliceConfig?.isEmpty ?? true);
 
   /// Number of games that pass the slice filter (or total if no slice).
   int get effectiveGameCount =>
@@ -55,8 +55,8 @@ class PgnSource {
     if (filePath != null) 'filePath': filePath,
     'color': color.name,
     'totalGames': totalGames,
-    if (sliceConfig != null && !sliceConfig!.isEmpty)
-      'sliceConfig': sliceConfig!.toJsonString(),
+    if (sliceConfig case final slice? when !slice.isEmpty)
+      'sliceConfig': slice.toJsonString(),
     if (matchedIndices != null) 'matchedIndices': matchedIndices,
   };
 
@@ -64,10 +64,9 @@ class PgnSource {
     id: json['id'] as String? ?? generateId(),
     name: json['name'] as String? ?? 'Untitled',
     filePath: json['filePath'] as String?,
-    color: PgnSourceColor.values.firstWhere(
-      (c) => c.name == (json['color'] as String? ?? 'white'),
-      orElse: () => PgnSourceColor.white,
-    ),
+    color:
+        PgnSourceColor.values.asNameMap()[json['color'] as String?] ??
+        PgnSourceColor.white,
     totalGames: json['totalGames'] as int? ?? 0,
     sliceConfig: json['sliceConfig'] != null
         ? SliceConfig.fromJsonString(json['sliceConfig'] as String)

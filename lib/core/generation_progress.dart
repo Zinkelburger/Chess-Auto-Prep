@@ -11,8 +11,6 @@ import '../models/build_tree_node.dart';
 import '../services/jobs/generation_job_display.dart';
 import '../services/jobs/repertoire_job.dart';
 
-export '../services/jobs/generation_phase.dart' show GenerationPhase;
-
 class GenerationProgress {
   GenerationProgress({
     required this._notify,

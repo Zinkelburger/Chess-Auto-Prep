@@ -1,6 +1,8 @@
 /// Configuration for a repertoire audit pass.
 library;
 
+/// Immutable; [toMap] and [fromMap] are the persisted form, stored with each
+/// audit report and in job snapshots, so keys are append-only.
 class AuditConfig {
   /// Centipawn loss threshold to flag a move as a mistake.
   final int mistakeThresholdCp;
@@ -128,28 +130,44 @@ class AuditConfig {
     if (clashUserIsWhite != null) 'clashUserIsWhite': clashUserIsWhite,
   };
 
-  factory AuditConfig.fromMap(Map<String, dynamic> m) => AuditConfig(
-    mistakeThresholdCp: m['mistakeThresholdCp'] as int? ?? 100,
-    inaccuracyThresholdCp: m['inaccuracyThresholdCp'] as int? ?? 40,
-    minGames: m['minGames'] as int? ?? 50,
-    minMaiaProb: (m['minMaiaProb'] as num?)?.toDouble() ?? 0.10,
-    weakPositionThresholdCp: m['weakPositionThresholdCp'] as int? ?? -150,
-    deadEndMinContinuations: m['deadEndMinContinuations'] as int? ?? 2,
-    evalDepth: m['evalDepth'] as int? ?? 14,
-    maxPly: m['maxPly'] as int? ?? 30,
-    maiaElo: m['maiaElo'] as int? ?? 2200,
-    useStockfish: m['useStockfish'] as bool? ?? true,
-    useLichessDb: m['useLichessDb'] as bool? ?? false,
-    useMaia: m['useMaia'] as bool? ?? true,
-    useChessDb: m['useChessDb'] as bool? ?? true,
-    strongReplyWindowCp: m['strongReplyWindowCp'] as int? ?? 50,
-    explorerSpeeds: m['explorerSpeeds'] as String? ?? 'blitz,rapid,classical',
-    explorerRatings: m['explorerRatings'] as String? ?? '1800,2000,2200,2500',
-    multiPv: m['multiPv'] as int? ?? 3,
-    clashPgnPaths: (m['clashPgnPaths'] as List?)?.cast<String>() ?? const [],
-    clashUsername: m['clashUsername'] as String? ?? '',
-    clashUserIsWhite: m['clashUserIsWhite'] as bool?,
-  );
+  /// Missing keys take the constructor defaults, so a config saved by an
+  /// older build reads back with the fields it did not know about.
+  factory AuditConfig.fromMap(Map<String, dynamic> m) {
+    const defaults = AuditConfig();
+    return AuditConfig(
+      mistakeThresholdCp:
+          m['mistakeThresholdCp'] as int? ?? defaults.mistakeThresholdCp,
+      inaccuracyThresholdCp:
+          m['inaccuracyThresholdCp'] as int? ?? defaults.inaccuracyThresholdCp,
+      minGames: m['minGames'] as int? ?? defaults.minGames,
+      minMaiaProb:
+          (m['minMaiaProb'] as num?)?.toDouble() ?? defaults.minMaiaProb,
+      weakPositionThresholdCp:
+          m['weakPositionThresholdCp'] as int? ??
+          defaults.weakPositionThresholdCp,
+      deadEndMinContinuations:
+          m['deadEndMinContinuations'] as int? ??
+          defaults.deadEndMinContinuations,
+      evalDepth: m['evalDepth'] as int? ?? defaults.evalDepth,
+      maxPly: m['maxPly'] as int? ?? defaults.maxPly,
+      maiaElo: m['maiaElo'] as int? ?? defaults.maiaElo,
+      useStockfish: m['useStockfish'] as bool? ?? defaults.useStockfish,
+      useLichessDb: m['useLichessDb'] as bool? ?? defaults.useLichessDb,
+      useMaia: m['useMaia'] as bool? ?? defaults.useMaia,
+      useChessDb: m['useChessDb'] as bool? ?? defaults.useChessDb,
+      strongReplyWindowCp:
+          m['strongReplyWindowCp'] as int? ?? defaults.strongReplyWindowCp,
+      explorerSpeeds: m['explorerSpeeds'] as String? ?? defaults.explorerSpeeds,
+      explorerRatings:
+          m['explorerRatings'] as String? ?? defaults.explorerRatings,
+      multiPv: m['multiPv'] as int? ?? defaults.multiPv,
+      clashPgnPaths:
+          (m['clashPgnPaths'] as List?)?.cast<String>() ??
+          defaults.clashPgnPaths,
+      clashUsername: m['clashUsername'] as String? ?? defaults.clashUsername,
+      clashUserIsWhite: m['clashUserIsWhite'] as bool?,
+    );
+  }
 
   /// Compact one-line summary for display in Jobs tab.
   String get summaryLabel {

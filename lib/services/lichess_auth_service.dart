@@ -45,6 +45,13 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
   /// Note: there is no `game:read` scope in Lichess OAuth.
   static const String _scopes = 'preference:read study:read';
 
+  static const String _authorizeUrl = 'https://lichess.org/oauth';
+  static const String _tokenUrl = 'https://lichess.org/api/token';
+  static const String _accountUrl = 'https://lichess.org/api/account';
+
+  /// How long a PKCE token lives when the response does not say.
+  static const Duration _defaultTokenLifetime = Duration(days: 365);
+
   // ── SharedPreferences keys ─────────────────────────────────────────
 
   static const String _keyAccessToken = 'lichess_access_token';
@@ -112,8 +119,10 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  bool get _isTokenExpired =>
-      _tokenExpiry != null && DateTime.now().isAfter(_tokenExpiry!);
+  bool get _isTokenExpired {
+    final expiry = _tokenExpiry;
+    return expiry != null && DateTime.now().isAfter(expiry);
+  }
 
   Future<void> _saveTokens() async {
     final prefs = await SharedPreferences.getInstance();
@@ -126,8 +135,9 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
     await setOrRemove(_keyUsername, _username);
     await prefs.setBool(_keyIsPat, _isPat);
 
-    if (_tokenExpiry != null) {
-      await prefs.setInt(_keyTokenExpiry, _tokenExpiry!.millisecondsSinceEpoch);
+    final expiry = _tokenExpiry;
+    if (expiry != null) {
+      await prefs.setInt(_keyTokenExpiry, expiry.millisecondsSinceEpoch);
     } else {
       await prefs.remove(_keyTokenExpiry);
     }
@@ -155,80 +165,47 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
     // Generate PKCE code verifier (cryptographically random, 43-128 chars)
     final random = Random.secure();
     final bytes = List<int>.generate(64, (_) => random.nextInt(256));
-    _codeVerifier = base64Url.encode(bytes).replaceAll('=', '');
+    final codeVerifier = base64Url.encode(bytes).replaceAll('=', '');
+    _codeVerifier = codeVerifier;
 
     // Derive code challenge: SHA-256, base64url, no padding
-    final digest = sha256.convert(ascii.encode(_codeVerifier!));
+    final digest = sha256.convert(ascii.encode(codeVerifier));
     final codeChallenge = base64Url.encode(digest.bytes).replaceAll('=', '');
 
     // Start local callback server to receive the OAuth redirect
     await _stopCallbackServer();
-    // Bind to IPv6 loopback with v6Only=false so the OS accepts both
-    // IPv4 (127.0.0.1) and IPv6 (::1) connections — browsers may resolve
-    // `localhost` to either. Fall back to IPv4-only if IPv6 is unavailable.
-    try {
-      _callbackServer = await HttpServer.bind(
-        InternetAddress.loopbackIPv6,
-        _callbackPort,
-        v6Only: false,
-      );
-    } on SocketException {
-      try {
-        _callbackServer = await HttpServer.bind(
-          InternetAddress.loopbackIPv4,
-          _callbackPort,
-        );
-      } catch (e) {
-        if (kDebugMode) {
-          log.e(
-            '[LichessAuth] Failed to bind callback server on '
-            'port $_callbackPort: $e',
-          );
-        }
-        rethrow;
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        log.e(
-          '[LichessAuth] Failed to bind callback server on '
-          'port $_callbackPort: $e',
-        );
-      }
-      rethrow;
-    }
-    _callbackCompleter = Completer<String?>();
+    final server = await _bindCallbackServer();
+    _callbackServer = server;
+    final completer = Completer<String?>();
+    _callbackCompleter = completer;
 
     if (kDebugMode) {
-      log.i(
-        '[LichessAuth] OAuth callback server listening on '
-        'http://localhost:$_callbackPort/callback',
-      );
+      log.i('[LichessAuth] OAuth callback server listening on $_redirectUri');
     }
 
-    _callbackServer!.listen((request) {
+    server.listen((request) {
       if (kDebugMode) {
         log.i('[LichessAuth] Received ${request.method} ${request.uri}');
       }
-      if (request.uri.path == '/callback') {
-        final code = request.uri.queryParameters['code'];
-        final error = request.uri.queryParameters['error'];
+      if (request.uri.path != '/callback') return;
+      final code = request.uri.queryParameters['code'];
+      final error = request.uri.queryParameters['error'];
 
-        request.response
-          ..statusCode = 200
-          ..headers.contentType = ContentType.html
-          ..write(_callbackHtml(code != null && error == null));
-        unawaited(request.response.close());
+      request.response
+        ..statusCode = 200
+        ..headers.contentType = ContentType.html
+        ..write(_callbackHtml(code != null && error == null));
+      unawaited(request.response.close());
 
-        if (kDebugMode) {
-          log.e(
-            '[LichessAuth] Callback received — '
-            '${code != null ? 'auth code OK' : 'error: $error'}',
-          );
-        }
+      if (kDebugMode) {
+        log.i(
+          '[LichessAuth] Callback received — '
+          '${code != null ? 'auth code OK' : 'error: $error'}',
+        );
+      }
 
-        if (!_callbackCompleter!.isCompleted) {
-          _callbackCompleter!.complete(error == null ? code : null);
-        }
+      if (!completer.isCompleted) {
+        completer.complete(error == null ? code : null);
       }
     });
 
@@ -249,36 +226,69 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
         '&code_challenge=$codeChallenge'
         '&scope=${_scopes.replaceAll(' ', '+')}';
 
-    final url = 'https://lichess.org/oauth?$query';
+    final url = '$_authorizeUrl?$query';
     if (kDebugMode) log.d('[LichessAuth] Authorization URL: $url');
     return url;
+  }
+
+  /// Bind the callback server to the IPv6 loopback with `v6Only: false`, so
+  /// the OS accepts both IPv4 (127.0.0.1) and IPv6 (::1) connections —
+  /// browsers may resolve `localhost` to either — falling back to IPv4-only
+  /// when IPv6 is unavailable.
+  static Future<HttpServer> _bindCallbackServer() async {
+    try {
+      try {
+        return await HttpServer.bind(
+          InternetAddress.loopbackIPv6,
+          _callbackPort,
+          v6Only: false,
+        );
+      } on SocketException {
+        return await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          _callbackPort,
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        log.e(
+          '[LichessAuth] Failed to bind callback server on '
+          'port $_callbackPort: $e',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// Wait for the OAuth callback. Returns `true` if tokens were obtained.
   Future<bool> waitForCallback({
     Duration timeout = const Duration(minutes: 5),
   }) async {
-    if (_callbackCompleter == null) return false;
+    final completer = _callbackCompleter;
+    if (completer == null) return false;
 
     if (kDebugMode) {
-      log.w(
+      log.i(
         '[LichessAuth] Waiting for OAuth callback '
         '(timeout ${timeout.inSeconds}s)...',
       );
     }
 
     try {
-      final code = await _callbackCompleter!.future.timeout(timeout);
+      final code = await completer.future.timeout(timeout);
       if (code == null) {
         if (kDebugMode) log.w('[LichessAuth] Callback returned null (denied)');
         return false;
       }
       final ok = await _exchangeCode(code);
       if (kDebugMode) {
-        log.e(
-          '[LichessAuth] Token exchange '
-          '${ok ? 'succeeded — logged in as $_username' : 'FAILED'}',
-        );
+        if (ok) {
+          log.i(
+            '[LichessAuth] Token exchange succeeded — logged in as $_username',
+          );
+        } else {
+          log.e('[LichessAuth] Token exchange FAILED');
+        }
       }
       return ok;
     } on TimeoutException {
@@ -294,14 +304,16 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
   /// Lichess PKCE tokens are long-lived (~1 year) and there is no
   /// refresh token.
   Future<bool> _exchangeCode(String code) async {
+    final codeVerifier = _codeVerifier;
+    if (codeVerifier == null) return false;
     try {
       final response = await http.post(
-        Uri.parse('https://lichess.org/api/token'),
+        Uri.parse(_tokenUrl),
         body: {
           'grant_type': 'authorization_code',
           'code': code,
           'client_id': clientId,
-          'code_verifier': _codeVerifier!,
+          'code_verifier': codeVerifier,
           'redirect_uri': _redirectUri,
         },
       );
@@ -313,15 +325,17 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
         _refreshToken = null;
         _isPat = false;
 
-        // Lichess tokens last ~1 year; use `expires_in` if provided,
-        // otherwise default to 365 days.
-        final expiresIn = data['expires_in'] as int? ?? 31536000;
-        _tokenExpiry = DateTime.now().add(Duration(seconds: expiresIn));
+        // Lichess tokens last ~1 year; use `expires_in` if provided.
+        final expiresIn = switch (data['expires_in']) {
+          final int seconds => Duration(seconds: seconds),
+          _ => _defaultTokenLifetime,
+        };
+        _tokenExpiry = DateTime.now().add(expiresIn);
 
         if (kDebugMode) {
           log.i(
             '[LichessAuth] Token obtained — expires in '
-            '${(expiresIn / 86400).round()} days',
+            '${expiresIn.inDays} days',
           );
         }
 
@@ -390,7 +404,7 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
   Future<bool> setPersonalAccessToken(String token) async {
     try {
       final response = await http.get(
-        Uri.parse('https://lichess.org/api/account'),
+        Uri.parse(_accountUrl),
         headers: {'Authorization': 'Bearer $token'},
       );
 
@@ -419,7 +433,7 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
 
     try {
       final response = await http.get(
-        Uri.parse('https://lichess.org/api/account'),
+        Uri.parse(_accountUrl),
         headers: {'Authorization': 'Bearer $_accessToken'},
       );
 
@@ -439,11 +453,12 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
     if (_accessToken != null) {
       try {
         await http.delete(
-          Uri.parse('https://lichess.org/api/token'),
+          Uri.parse(_tokenUrl),
           headers: {'Authorization': 'Bearer $_accessToken'},
         );
       } catch (_) {
-        // Best effort — token may already be invalid
+        // Best effort — the token may already be invalid, and the local
+        // state is cleared either way.
       }
     }
 
@@ -454,9 +469,8 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
 
   /// Cancel an in-progress OAuth flow.
   Future<void> cancelOAuthFlow() async {
-    if (_callbackCompleter != null && !_callbackCompleter!.isCompleted) {
-      _callbackCompleter!.complete(null);
-    }
+    final completer = _callbackCompleter;
+    if (completer != null && !completer.isCompleted) completer.complete(null);
     await _stopCallbackServer();
   }
 
@@ -483,7 +497,7 @@ class LichessAuthService extends ChangeNotifier with SafeChangeNotifier {
 
   // ── Helpers ────────────────────────────────────────────────────────
 
-  String _callbackHtml(bool success) =>
+  static String _callbackHtml(bool success) =>
       '''<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Chess Auto Prep</title></head>

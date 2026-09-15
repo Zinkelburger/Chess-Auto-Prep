@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:math' as math;
 
 import '../../models/engine_settings.dart';
+import 'engine_interrupt.dart';
 
 /// Cancellation is control flow, not an engine failure.
-class EngineSearchCancelled extends StateError {
+class EngineSearchCancelled extends EngineInterruptError {
   EngineSearchCancelled() : super('Engine search cancelled');
 }
 
+/// A one-shot cancellation token shared by a search request and the budget
+/// queue it may be waiting in.
 class EngineSearchCancellation {
   final _cancelled = Completer<void>();
   bool get isCancelled => _cancelled.isCompleted;
@@ -16,6 +20,7 @@ class EngineSearchCancellation {
     if (!isCancelled) _cancelled.complete();
   }
 
+  /// Throws [EngineSearchCancelled] once [cancel] has been called.
   void check() {
     if (isCancelled) throw EngineSearchCancelled();
   }
@@ -31,17 +36,24 @@ class EngineSearchBudget {
     capacity: () => EngineSettings.instance.cores,
   );
   EngineSearchBudget({required this.capacity});
+
+  /// Total threads the app may spend on searches right now.
   final int Function() capacity;
   final Queue<_WaitingSearch> _waiting = Queue();
   int _used = 0;
+
+  /// Threads currently allocated to admitted searches.
   int get activeThreads => _used;
 
+  /// Queue for up to [requested] threads. Completes with an allocation once
+  /// cores are free, or with [EngineSearchCancelled] if [cancellation] fires
+  /// first.
   Future<EngineSearchAllocation> acquire(
     int requested,
     EngineSearchCancellation cancellation,
   ) {
     if (cancellation.isCancelled) return Future.error(EngineSearchCancelled());
-    final waiting = _WaitingSearch(requested < 1 ? 1 : requested, cancellation);
+    final waiting = _WaitingSearch(math.max(1, requested), cancellation);
     _waiting.add(waiting);
     unawaited(
       cancellation.whenCancelled.then((_) {
@@ -78,10 +90,13 @@ class EngineSearchBudget {
   }
 }
 
+/// Threads granted to one search; [release] exactly once when it ends.
 class EngineSearchAllocation {
   EngineSearchAllocation._(this.threads, this._onRelease);
   final int threads;
   void Function()? _onRelease;
+
+  /// Idempotent: a second call is a no-op.
   void release() {
     final release = _onRelease;
     _onRelease = null;

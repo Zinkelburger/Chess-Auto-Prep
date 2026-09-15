@@ -29,6 +29,9 @@ class QuarantineReceipt {
   final String quarantinedPath;
 }
 
+/// Every destructive move, rename or delete of managed data goes through
+/// here: each operation is locked, refuses to leave its allowed root, refuses
+/// symlinks, and never overwrites an existing entry.
 class FileMutationService {
   FileMutationService();
 
@@ -58,35 +61,32 @@ class FileMutationService {
     required Directory allowedRoot,
     required Directory quarantineRoot,
     Directory? quarantineAllowedRoot,
-  }) async {
-    if (!await target.exists()) return null;
-    return withFileOperationLock(target.parent.path, () async {
-      if (!await target.exists()) return null;
-      await _requireSafeTarget(target, allowedRoot: allowedRoot);
-      final trashRoot = quarantineAllowedRoot ?? allowedRoot;
-      await _requireSafeDirectoryTree(quarantineRoot, allowedRoot: trashRoot);
-      await quarantineRoot.create(recursive: true);
-      await _requireSafeTarget(quarantineRoot, allowedRoot: trashRoot);
-      final destination = File(
-        p.join(quarantineRoot.path, _quarantineName(p.basename(target.path))),
-      );
-      if (await _entityExists(destination.path)) {
-        throw FileSystemException(
-          'Quarantine destination already exists',
-          destination.path,
-        );
-      }
-      await target.rename(destination.path);
-      return QuarantineReceipt(
-        originalPath: target.path,
-        quarantinedPath: destination.path,
-      );
-    });
-  }
+  }) => _quarantine(
+    target,
+    allowedRoot: allowedRoot,
+    quarantineRoot: quarantineRoot,
+    quarantineAllowedRoot: quarantineAllowedRoot,
+  );
 
   /// Moves a managed directory into [quarantineRoot] without traversing it.
   Future<QuarantineReceipt?> quarantineDirectory(
     Directory target, {
+    required Directory allowedRoot,
+    required Directory quarantineRoot,
+    Directory? quarantineAllowedRoot,
+  }) => _quarantine(
+    target,
+    allowedRoot: allowedRoot,
+    quarantineRoot: quarantineRoot,
+    quarantineAllowedRoot: quarantineAllowedRoot,
+  );
+
+  /// Renames [target] to a uniquely named entry under [quarantineRoot],
+  /// which is created on demand and must itself lie under
+  /// [quarantineAllowedRoot] (default [allowedRoot]). Null when [target] does
+  /// not exist.
+  Future<QuarantineReceipt?> _quarantine(
+    FileSystemEntity target, {
     required Directory allowedRoot,
     required Directory quarantineRoot,
     Directory? quarantineAllowedRoot,
@@ -99,19 +99,20 @@ class FileMutationService {
       await _requireSafeDirectoryTree(quarantineRoot, allowedRoot: trashRoot);
       await quarantineRoot.create(recursive: true);
       await _requireSafeTarget(quarantineRoot, allowedRoot: trashRoot);
-      final destination = Directory(
-        p.join(quarantineRoot.path, _quarantineName(p.basename(target.path))),
+      final destination = p.join(
+        quarantineRoot.path,
+        _quarantineName(p.basename(target.path)),
       );
-      if (await _entityExists(destination.path)) {
+      if (await _entityExists(destination)) {
         throw FileSystemException(
           'Quarantine destination already exists',
-          destination.path,
+          destination,
         );
       }
-      await target.rename(destination.path);
+      await target.rename(destination);
       return QuarantineReceipt(
         originalPath: target.path,
-        quarantinedPath: destination.path,
+        quarantinedPath: destination,
       );
     });
   }

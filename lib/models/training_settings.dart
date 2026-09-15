@@ -7,26 +7,26 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Repertoire mode walks new lines through the learn phase before quizzing;
 /// tactics mode always quizzes cold (showing a puzzle's solution first would
 /// spoil it).
-enum TrainingMode { repertoire, tactics }
+enum TrainingMode {
+  repertoire('Repertoire'),
+  tactics('Tactics');
 
-extension TrainingModeLabel on TrainingMode {
-  String get label => switch (this) {
-    TrainingMode.repertoire => 'Repertoire',
-    TrainingMode.tactics => 'Tactics',
-  };
+  const TrainingMode(this.label);
+
+  final String label;
 }
 
 /// How completed lines are scheduled.
 ///
 /// Spaced repetition builds a due-queue with Again/Hard/Good/Easy ratings;
 /// linear runs through every line once, in order, with no scheduling.
-enum RepetitionMode { spaced, linear }
+enum RepetitionMode {
+  spaced('Spaced repetition'),
+  linear('Linear');
 
-extension RepetitionModeLabel on RepetitionMode {
-  String get label => switch (this) {
-    RepetitionMode.spaced => 'Spaced repetition',
-    RepetitionMode.linear => 'Linear',
-  };
+  const RepetitionMode(this.label);
+
+  final String label;
 }
 
 /// What a training run is working through.
@@ -34,94 +34,66 @@ extension RepetitionModeLabel on RepetitionMode {
 /// Chessable keeps "learn new material" and "review what's due" as separate
 /// sessions; auto-next stays inside the intent instead of hopping between
 /// untrained and due lines mid-run.
-enum TrainingIntent { learn, review }
+enum TrainingIntent {
+  learn('Learn'),
+  review('Review');
 
-extension TrainingIntentLabel on TrainingIntent {
-  String get label => switch (this) {
-    TrainingIntent.learn => 'Learn',
-    TrainingIntent.review => 'Review',
-  };
+  const TrainingIntent(this.label);
+
+  final String label;
 }
 
 /// How the repertoire trainer orders lines for review.
 enum ReviewOrder {
-  byImportance,
-  random,
-  weakestFirst,
-  hardestFirst,
-  sequential,
-}
+  byImportance('By cumulative probability (most likely first)'),
+  random('Random'),
+  weakestFirst('Weakest first'),
+  hardestFirst('Hardest to play first'),
+  sequential('Sequential');
 
-extension ReviewOrderLabel on ReviewOrder {
-  String get label => switch (this) {
-    ReviewOrder.byImportance => 'By cumulative probability (most likely first)',
-    ReviewOrder.random => 'Random',
-    ReviewOrder.weakestFirst => 'Weakest first',
-    ReviewOrder.hardestFirst => 'Hardest to play first',
-    ReviewOrder.sequential => 'Sequential',
-  };
+  const ReviewOrder(this.label);
 
-  static ReviewOrder fromStorage(String? value) {
-    switch (value) {
-      case 'random':
-        return ReviewOrder.random;
-      case 'weakestFirst':
-        return ReviewOrder.weakestFirst;
-      case 'hardestFirst':
-        return ReviewOrder.hardestFirst;
-      case 'sequential':
-        return ReviewOrder.sequential;
-      default:
-        return ReviewOrder.byImportance;
-    }
-  }
+  final String label;
 
-  String get storageValue => switch (this) {
-    ReviewOrder.byImportance => 'byImportance',
-    ReviewOrder.random => 'random',
-    ReviewOrder.weakestFirst => 'weakestFirst',
-    ReviewOrder.hardestFirst => 'hardestFirst',
-    ReviewOrder.sequential => 'sequential',
-  };
+  /// The order persisted as [storageValue], or [byImportance] when unset
+  /// or unknown.
+  static ReviewOrder fromStorage(String? value) =>
+      values.asNameMap()[value] ?? ReviewOrder.byImportance;
+
+  /// Key written to SharedPreferences: the enum name.
+  String get storageValue => name;
 }
 
 /// Where the trainer reads chapter names from when grouping lines.
-enum ChapterGroupingMode { auto, namePrefix, off }
+enum ChapterGroupingMode {
+  auto(
+    'Automatic (course headers)',
+    "Chapters from the file's own metadata (Chessable exports name the "
+        "chapter in every game's White header).",
+  ),
+  namePrefix(
+    'Line-name prefix',
+    'Everything in the line name before the delimiter is the chapter.',
+  ),
+  off('Off', 'No chapter grouping.');
 
-extension ChapterGroupingModeLabel on ChapterGroupingMode {
-  String get label => switch (this) {
-    ChapterGroupingMode.auto => 'Automatic (course headers)',
-    ChapterGroupingMode.namePrefix => 'Line-name prefix',
-    ChapterGroupingMode.off => 'Off',
-  };
+  const ChapterGroupingMode(this.label, this.description);
 
-  String get description => switch (this) {
-    ChapterGroupingMode.auto =>
-      'Chapters from the file\'s own metadata (Chessable exports name the '
-          'chapter in every game\'s White header).',
-    ChapterGroupingMode.namePrefix =>
-      'Everything in the line name before the delimiter is the chapter.',
-    ChapterGroupingMode.off => 'No chapter grouping.',
-  };
+  final String label;
+  final String description;
 
-  static ChapterGroupingMode fromStorage(String? value) {
-    switch (value) {
-      case 'namePrefix':
-        return ChapterGroupingMode.namePrefix;
-      case 'off':
-        return ChapterGroupingMode.off;
-      default:
-        return ChapterGroupingMode.auto;
-    }
-  }
+  /// The mode persisted as [storageValue], or [auto] when unset or unknown.
+  static ChapterGroupingMode fromStorage(String? value) =>
+      values.asNameMap()[value] ?? ChapterGroupingMode.auto;
 
-  String get storageValue => switch (this) {
-    ChapterGroupingMode.auto => 'auto',
-    ChapterGroupingMode.namePrefix => 'namePrefix',
-    ChapterGroupingMode.off => 'off',
-  };
+  /// Key written to SharedPreferences: the enum name.
+  String get storageValue => name;
 }
 
+/// The trainer's user preferences, persisted in SharedPreferences.
+///
+/// Mutable on purpose: the settings sheet edits fields in place and calls
+/// [save] (or [saveSoon]) when it closes.
 class TrainingSettings {
   int correctStreakThreshold;
   int? trainingDepth; // null = full line
@@ -228,13 +200,11 @@ class TrainingSettings {
       learnRequiresClick: prefs.getBool(_keyLearnRequiresClick) ?? true,
       learnDelaySec: prefs.getInt(_keyLearnDelaySec) ?? 3,
       showRatingButtons: prefs.getBool(_keyShowRatingButtons) ?? true,
-      reviewOrder: ReviewOrderLabel.fromStorage(
-        prefs.getString(_keyReviewOrder),
-      ),
+      reviewOrder: ReviewOrder.fromStorage(prefs.getString(_keyReviewOrder)),
       moveSpeedMs: prefs.getInt(_keyMoveSpeedMs) ?? 700,
       skipToFirstComment: prefs.getBool(_keySkipToFirstComment) ?? true,
       introSpeedMs: prefs.getInt(_keyIntroSpeedMs) ?? 600,
-      chapterGrouping: ChapterGroupingModeLabel.fromStorage(
+      chapterGrouping: ChapterGroupingMode.fromStorage(
         prefs.getString(_keyChapterGrouping),
       ),
       chapterDelimiter: prefs.getString(_keyChapterDelimiter) ?? '#',
@@ -248,8 +218,8 @@ class TrainingSettings {
   Future<void> save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyStreakThreshold, correctStreakThreshold);
-    if (trainingDepth != null) {
-      await prefs.setInt(_keyTrainingDepth, trainingDepth!);
+    if (trainingDepth case final depth?) {
+      await prefs.setInt(_keyTrainingDepth, depth);
     } else {
       await prefs.remove(_keyTrainingDepth);
     }

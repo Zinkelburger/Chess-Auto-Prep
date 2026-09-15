@@ -11,23 +11,19 @@
 /// `tools/bughouse_db/bpgn.py`.
 library;
 
-enum GameResult { whiteWins, blackWins, draw, unfinished }
+enum GameResult {
+  whiteWins('1-0', 1),
+  blackWins('0-1', 0),
+  draw('1/2-1/2', 0.5),
+  unfinished('*', 0.5);
 
-extension GameResultPgn on GameResult {
-  String get pgnToken => switch (this) {
-    GameResult.whiteWins => '1-0',
-    GameResult.blackWins => '0-1',
-    GameResult.draw => '1/2-1/2',
-    GameResult.unfinished => '*',
-  };
+  const GameResult(this.pgnToken, this.whitePoints);
+
+  /// The result as PGN writes it.
+  final String pgnToken;
 
   /// Points for White. Black's score is `1 - this` for a finished game.
-  double get whitePoints => switch (this) {
-    GameResult.whiteWins => 1,
-    GameResult.blackWins => 0,
-    GameResult.draw => 0.5,
-    GameResult.unfinished => 0.5,
-  };
+  final double whitePoints;
 }
 
 /// Why the game stopped. Kept apart from [GameResult] so "0-1" can say
@@ -53,10 +49,8 @@ enum TerminationReason {
 
   /// Both teams chose to sit, repeatedly. Bughouse only: passing is a legal
   /// move there, so a game can stop moving without either board being over.
-  mutualSitting,
-}
+  mutualSitting;
 
-extension TerminationReasonLabel on TerminationReason {
   String get label => switch (this) {
     TerminationReason.checkmate => 'Checkmate',
     TerminationReason.stalemate => 'Stalemate',

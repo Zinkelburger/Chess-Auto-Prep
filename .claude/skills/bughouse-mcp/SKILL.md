@@ -124,7 +124,7 @@ the background and do something else.
 on its first analysis); this server's own directory; and finally
 `assets/bughouse/*.gz` in the checkout, which it unpacks into
 `~/.local/share/chess-prep/bughouse/`. It never writes inside the app's
-directory. If nothing is installed, `python3 tools/fetch_bughouse.py` downloads
+directory. If nothing is installed, `python3 tools/fetch_assets.py --only bughouse` downloads
 the bundle for this platform; `--hivemind <checkout>` packages a local Hivemind
 build instead, which is what you want while working on the engine itself.
 

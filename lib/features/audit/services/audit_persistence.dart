@@ -75,6 +75,9 @@ class AuditSnapshot {
 class AuditPersistence {
   AuditPersistence._();
   static final instance = AuditPersistence._();
+
+  /// The write in flight per audit path, so a load waits for it and a later
+  /// write queues behind it instead of racing on the file.
   final Map<String, Future<void>> _writes = {};
 
   /// Derive the audit JSON path from the repertoire PGN path.
@@ -161,20 +164,12 @@ class AuditPersistence {
     final path = auditPath(repertoireFilePath);
     if (path == null) return;
 
-    AuditConfig effectiveConfig = config ?? const AuditConfig();
-    AuditSnapshot? existing;
-    try {
-      existing = await load(repertoireFilePath);
-      if (existing != null && config == null) {
-        effectiveConfig = existing.config;
-      }
-    } catch (_) {
-      // Best-effort; failure here is non-fatal and intentionally ignored.
-    }
-
+    // Best-effort: [load] answers null rather than throwing, and with no
+    // stored config the defaults are the only thing left to write.
+    final existing = await load(repertoireFilePath);
     final snapshot = AuditSnapshot(
       result: result,
-      config: effectiveConfig,
+      config: config ?? existing?.config ?? const AuditConfig(),
       isComplete: existing?.isComplete ?? true,
       checkedFens: existing?.checkedFens ?? const {},
       startFen: existing?.startFen,

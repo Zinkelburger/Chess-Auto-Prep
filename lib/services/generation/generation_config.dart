@@ -18,21 +18,33 @@ export 'export/move_annotation.dart' show MoveAnnotationDetail;
 /// different objectives, not presets: none of them rewrites another knob.
 /// Preferences on top of the objective (novelties, opponent mistakes, a
 /// natural move, a preferred setup) are weights and tolerances of their own.
-enum SelectionMode { expectimax, engineOnly, dbWinRateOnly }
+enum SelectionMode {
+  expectimax,
+  engineOnly,
+  dbWinRateOnly;
+
+  /// The mode a persisted `selection_mode` names; unknown or missing values
+  /// degrade to [expectimax] rather than failing a load.
+  static SelectionMode parse(String? name) => switch (name) {
+    'engineOnly' => SelectionMode.engineOnly,
+    'dbWinRateOnly' => SelectionMode.dbWinRateOnly,
+    _ => SelectionMode.expectimax,
+  };
+}
 
 // ── Tree build algorithm mode ───────────────────────────────────────────
 
 /// Fundamentally different tree-building algorithms (not parameter presets).
 enum BuildMode {
   /// Stockfish MultiPV + Maia/Lichess opponent moves + expectimax (default).
-  stockfishExpectimax,
+  stockfishExpectimax('Stockfish + Maia expectimax'),
 
   /// Top-N Maia moves for our side, DB evals only, stop on DB miss.
-  maiaDbExplore,
+  maiaDbExplore('Maia DB explore'),
 
   /// PGN database-seeded tree: parse game files, build frequency map,
   /// then BFS with eval enrichment — matches C `--build-mode db-explorer`.
-  dbExplorer,
+  dbExplorer('DB Explorer'),
 
   /// ChessDB mainline book: our move is whatever the database ranks best,
   /// their replies are master practice, and off master practice the line
@@ -42,7 +54,21 @@ enum BuildMode {
   /// child at every one of our nodes, so there is nothing for a valuation
   /// to choose between.  Stockfish is a fallback only, for positions no
   /// ChessDB source has ever seen.
-  chessDbBook,
+  chessDbBook('ChessDB mainline book');
+
+  const BuildMode(this.label);
+
+  /// Short human-readable name for status displays.
+  final String label;
+
+  /// The mode a persisted `build_mode` names.  `chessdb_book` is the C
+  /// builder's spelling; unknown or missing values degrade to the default.
+  static BuildMode parse(String? name) => switch (name) {
+    'maiaDbExplore' => BuildMode.maiaDbExplore,
+    'dbExplorer' => BuildMode.dbExplorer,
+    'chessdb_book' || 'chessDbBook' => BuildMode.chessDbBook,
+    _ => BuildMode.stockfishExpectimax,
+  };
 }
 
 // ── Search algorithm ───────────────────────────────────────────────────
@@ -52,13 +78,33 @@ enum BuildMode {
 /// to retired heuristics and still dispatches to Pure for Stockfish builds.
 enum SearchAlgorithm {
   /// Exhaustive finite-horizon construction with an explicit safety constraint.
-  pure,
+  pure('Pure search'),
 
   /// User-facing Fast: four-ply lookahead, then commit our next move.
-  rolling,
+  rolling('Fast (4-ply, approximate)'),
 
   /// Retired for stockfishExpectimax. Does not activate approximate search.
-  fast,
+  fast('Pure search (legacy Fast setting)');
+
+  const SearchAlgorithm(this.label);
+
+  /// Short human-readable name for the frontier/pruning algorithm.
+  final String label;
+
+  /// The algorithm a persisted `search_algorithm` names.
+  ///
+  /// Configs written before the enum existed carry only `best_first`
+  /// ([legacyBestFirst]); an unknown name falls back to that flag too, and an
+  /// absent flag means the legacy best-first build.
+  static SearchAlgorithm parse(
+    String? name, {
+    bool? legacyBestFirst,
+  }) => switch (name) {
+    'pure' => SearchAlgorithm.pure,
+    'rolling' => SearchAlgorithm.rolling,
+    'fast' => SearchAlgorithm.fast,
+    _ => legacyBestFirst == false ? SearchAlgorithm.pure : SearchAlgorithm.fast,
+  };
 }
 
 /// Default total engine thread budget; users can opt into more CPU.
@@ -583,112 +629,168 @@ class TreeBuildConfig {
     this.minAcceptableEvalDepth = 0,
   });
 
+  /// Restore a config from the flat map [toJson] wrote.
+  ///
+  /// Every key is optional and falls back to the constructor default (the
+  /// search algorithm excepted: a file with neither `search_algorithm` nor
+  /// `best_first` predates both and is the legacy best-first build), so a
+  /// tree or preset written by an older build still loads.
   factory TreeBuildConfig.fromJson(
     Map<String, dynamic> json, {
     required String startFen,
   }) {
+    const d = _constructorDefaults;
+    final j = _ConfigJson(json);
     return TreeBuildConfig(
       startFen: startFen,
-      playAsWhite: json['play_as_white'] as bool? ?? true,
-      minProbability: (json['min_probability'] as num?)?.toDouble() ?? 0.0001,
-      maxPly: (json['max_depth'] as num?)?.toInt() ?? 4,
-      maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
-      timeBudgetMinutes: (json['time_budget_minutes'] as num?)?.toInt() ?? 0,
-      searchAlgorithm: _parseSearchAlgorithm(
+      playAsWhite: j.boolOr('play_as_white', d.playAsWhite),
+      minProbability: j.doubleOr('min_probability', d.minProbability),
+      maxPly: j.intOr('max_depth', d.maxPly),
+      maxNodes: j.intOr('max_nodes', d.maxNodes),
+      timeBudgetMinutes: j.intOr('time_budget_minutes', d.timeBudgetMinutes),
+      searchAlgorithm: SearchAlgorithm.parse(
         json['search_algorithm'] as String?,
         legacyBestFirst: json['best_first'] as bool?,
       ),
-      ourAltDiscount: (json['our_alt_discount'] as num?)?.toDouble() ?? 0.25,
-      fastAltGapCp: (json['fast_alt_gap_cp'] as num?)?.toInt() ?? 30,
-      openingWidthPlies: (json['opening_width_plies'] as num?)?.toInt() ?? 3,
-      maiaPriorGames: (json['maia_prior_games'] as num?)?.toDouble() ?? 30.0,
-      coverMinProb: (json['cover_min_prob'] as num?)?.toDouble() ?? 0.05,
-      verifyFinal: json['verify_final'] as bool? ?? true,
-      verifyDepth: (json['verify_depth'] as num?)?.toInt() ?? 0,
-      setupMoves: json['setup_moves'] as String? ?? '',
-      rootReplyExclude:
-          (json['root_reply_exclude'] as List?)?.cast<String>() ?? const [],
-      setupToleranceCp: (json['setup_tolerance_cp'] as num?)?.toInt() ?? 30,
+      ourAltDiscount: j.doubleOr('our_alt_discount', d.ourAltDiscount),
+      fastAltGapCp: j.intOr('fast_alt_gap_cp', d.fastAltGapCp),
+      openingWidthPlies: j.intOr('opening_width_plies', d.openingWidthPlies),
+      maiaPriorGames: j.doubleOr('maia_prior_games', d.maiaPriorGames),
+      coverMinProb: j.doubleOr('cover_min_prob', d.coverMinProb),
+      verifyFinal: j.boolOr('verify_final', d.verifyFinal),
+      verifyDepth: j.intOr('verify_depth', d.verifyDepth),
+      setupMoves: j.stringOr('setup_moves', d.setupMoves),
+      rootReplyExclude: j.stringListOr(
+        'root_reply_exclude',
+        d.rootReplyExclude,
+      ),
+      setupToleranceCp: j.intOr('setup_tolerance_cp', d.setupToleranceCp),
       skeletonPlan: _decodeSkeleton(json['skeleton_plan']),
-      memorabilityToleranceCp:
-          (json['memorability_tolerance_cp'] as num?)?.toInt() ?? 0,
-      buildMode: _parseBuildMode(json['build_mode'] as String?),
-      evalDepth:
-          (json['eval_depth'] as num?)?.toInt() ?? kDefaultGenerationEvalDepth,
-      engineThreads: (json['engine_threads'] as num?)?.toInt() ?? 0,
-      boundedDatabase: json['bounded_database'] as bool? ?? false,
-      ourMultipv: (json['our_multipv'] as num?)?.toInt() ?? 4,
-      maxEvalLossCp: (json['max_eval_loss_cp'] as num?)?.toInt() ?? 50,
-      oppMaxChildren: (json['opp_max_children'] as num?)?.toInt() ?? 4,
-      oppMassTarget: (json['opp_mass_target'] as num?)?.toDouble() ?? 0.80,
-      minEvalCp: (json['min_eval_cp'] as num?)?.toInt() ?? 0,
-      maxEvalCp: (json['max_eval_cp'] as num?)?.toInt() ?? 200,
-      relativeEval: json['relative_eval'] as bool? ?? true,
-      maiaElo: (json['maia_elo'] as num?)?.toInt() ?? 2200,
-      maiaMinProb: (json['maia_min_prob'] as num?)?.toDouble() ?? 0.05,
-      oppPolicyTemperature:
-          (json['opp_policy_temperature'] as num?)?.toDouble() ?? 1.0,
-      engineTailPlies: (json['engine_tail_plies'] as num?)?.toInt() ?? 6,
-      engineTailDepth: (json['engine_tail_depth'] as num?)?.toInt() ?? 0,
-      trapsOnly: json['traps_only'] as bool? ?? false,
-      rankLinesByImportance: json['rank_lines_by_importance'] as bool? ?? true,
-      lineMinNewShare: (json['line_min_new_share'] as num?)?.toDouble() ?? 0.25,
-      lineMaxOverlap: (json['line_max_overlap'] as num?)?.toDouble() ?? 0.7,
-      lineMaxFoldPlies: json['line_max_fold_plies'] as int? ?? 6,
+      memorabilityToleranceCp: j.intOr(
+        'memorability_tolerance_cp',
+        d.memorabilityToleranceCp,
+      ),
+      buildMode: BuildMode.parse(json['build_mode'] as String?),
+      evalDepth: j.intOr('eval_depth', d.evalDepth),
+      engineThreads: j.intOr('engine_threads', d.engineThreads),
+      boundedDatabase: j.boolOr('bounded_database', d.boundedDatabase),
+      ourMultipv: j.intOr('our_multipv', d.ourMultipv),
+      maxEvalLossCp: j.intOr('max_eval_loss_cp', d.maxEvalLossCp),
+      oppMaxChildren: j.intOr('opp_max_children', d.oppMaxChildren),
+      oppMassTarget: j.doubleOr('opp_mass_target', d.oppMassTarget),
+      minEvalCp: j.intOr('min_eval_cp', d.minEvalCp),
+      maxEvalCp: j.intOr('max_eval_cp', d.maxEvalCp),
+      relativeEval: j.boolOr('relative_eval', d.relativeEval),
+      maiaElo: j.intOr('maia_elo', d.maiaElo),
+      maiaMinProb: j.doubleOr('maia_min_prob', d.maiaMinProb),
+      oppPolicyTemperature: j.doubleOr(
+        'opp_policy_temperature',
+        d.oppPolicyTemperature,
+      ),
+      engineTailPlies: j.intOr('engine_tail_plies', d.engineTailPlies),
+      engineTailDepth: j.intOr('engine_tail_depth', d.engineTailDepth),
+      trapsOnly: j.boolOr('traps_only', d.trapsOnly),
+      rankLinesByImportance: j.boolOr(
+        'rank_lines_by_importance',
+        d.rankLinesByImportance,
+      ),
+      lineMinNewShare: j.doubleOr('line_min_new_share', d.lineMinNewShare),
+      lineMaxOverlap: j.doubleOr('line_max_overlap', d.lineMaxOverlap),
+      lineMaxFoldPlies: j.intOr('line_max_fold_plies', d.lineMaxFoldPlies),
       annotationDetail: _parseAnnotationDetail(json),
-      organizeIntoChapters: json['organize_into_chapters'] as bool? ?? true,
-      maxLinesPerChapter:
-          (json['max_lines_per_chapter'] as num?)?.toInt() ?? 40,
-      minLinesPerChapter: (json['min_lines_per_chapter'] as num?)?.toInt() ?? 5,
-      chaptersByEco: json['chapters_by_eco'] as bool? ?? false,
-      modelGameCount: (json['model_game_count'] as num?)?.toInt() ?? 6,
-      modelGameMinElo: (json['model_game_min_elo'] as num?)?.toInt() ?? 2200,
-      refutationLines: json['refutation_lines'] as bool? ?? true,
-      alternativeLines: json['alternative_lines'] as bool? ?? true,
-      selectionMode: _parseSelectionMode(json['selection_mode'] as String?),
-      leafConfidence: (json['leaf_confidence'] as num?)?.toDouble() ?? 1.0,
-      noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
-      pgnFilePaths:
-          (json['pgn_file_paths'] as List<dynamic>?)?.cast<String>() ??
-          const [],
-      dbMinGames: (json['db_min_games'] as num?)?.toInt() ?? 5,
-      useMasterGames: json['use_master_games'] as bool? ?? true,
-      downloadMasterGamesIfMissing:
-          json['download_master_games_if_missing'] as bool? ?? true,
-      masterMinGames: (json['master_min_games'] as num?)?.toInt() ?? 3,
-      masterMinMoveGames:
-          (json['master_min_move_games'] as num?)?.toInt() ?? 10,
-      masterPriorityWeight:
-          (json['master_priority_weight'] as num?)?.toDouble() ?? 0.35,
-      masterDepthBonusPlies:
-          (json['master_depth_bonus_plies'] as num?)?.toInt() ?? 10,
-      offBookOppMaxChildren:
-          (json['off_book_opp_max_children'] as num?)?.toInt() ?? 2,
-      improvementMinGainCp:
-          (json['improvement_min_gain_cp'] as num?)?.toInt() ?? 40,
-      dbMinProb: (json['db_min_prob'] as num?)?.toDouble() ?? 0.05,
-      minElo: (json['min_elo'] as num?)?.toInt() ?? 0,
-      enableCdbDirect: json['enable_cdbdirect'] as bool? ?? false,
-      cdbDirectPath: json['cdbdirect_path'] as String? ?? '',
-      cdbDirectReadAhead: json['cdbdirect_read_ahead'] as bool? ?? false,
-      enableLocalChessDb: json['enable_local_chessdb'] as bool? ?? false,
-      enableLichessEvals: json['enable_lichess_evals'] as bool? ?? false,
-      lichessEvalsPath: json['lichess_evals_path'] as String? ?? '',
-      localChessDbPath: json['local_chessdb_path'] as String? ?? '',
-      enableChessDbApi: json['enable_chessdb_api'] as bool? ?? false,
-      chessDbApiDailyQuota:
-          (json['chessdb_api_daily_quota'] as num?)?.toInt() ?? 5000,
-      chessDbApiConcurrency:
-          (json['chessdb_api_concurrency'] as num?)?.toInt() ?? 2,
-      enableExtEvalSubtreeSkip:
-          json['enable_ext_eval_subtree_skip'] as bool? ?? true,
-      minAcceptableEvalDepth:
-          (json['min_acceptable_eval_depth'] as num?)?.toInt() ?? 0,
-      bookTailMaxPly: (json['book_tail_max_ply'] as num?)?.toInt() ?? 40,
-      bookEngineFallback: json['book_engine_fallback'] as bool? ?? false,
-      bookTieBreakWindowCp:
-          (json['book_tie_break_window_cp'] as num?)?.toInt() ?? 0,
-      replyWindowCp: (json['reply_window_cp'] as num?)?.toInt() ?? 0,
+      organizeIntoChapters: j.boolOr(
+        'organize_into_chapters',
+        d.organizeIntoChapters,
+      ),
+      maxLinesPerChapter: j.intOr(
+        'max_lines_per_chapter',
+        d.maxLinesPerChapter,
+      ),
+      minLinesPerChapter: j.intOr(
+        'min_lines_per_chapter',
+        d.minLinesPerChapter,
+      ),
+      chaptersByEco: j.boolOr('chapters_by_eco', d.chaptersByEco),
+      modelGameCount: j.intOr('model_game_count', d.modelGameCount),
+      modelGameMinElo: j.intOr('model_game_min_elo', d.modelGameMinElo),
+      refutationLines: j.boolOr('refutation_lines', d.refutationLines),
+      alternativeLines: j.boolOr('alternative_lines', d.alternativeLines),
+      selectionMode: SelectionMode.parse(json['selection_mode'] as String?),
+      leafConfidence: j.doubleOr('leaf_confidence', d.leafConfidence),
+      noveltyWeight: j.intOr('novelty_weight', d.noveltyWeight),
+      pgnFilePaths: j.stringListOr('pgn_file_paths', d.pgnFilePaths),
+      dbMinGames: j.intOr('db_min_games', d.dbMinGames),
+      useMasterGames: j.boolOr('use_master_games', d.useMasterGames),
+      downloadMasterGamesIfMissing: j.boolOr(
+        'download_master_games_if_missing',
+        d.downloadMasterGamesIfMissing,
+      ),
+      masterMinGames: j.intOr('master_min_games', d.masterMinGames),
+      masterMinMoveGames: j.intOr(
+        'master_min_move_games',
+        d.masterMinMoveGames,
+      ),
+      masterPriorityWeight: j.doubleOr(
+        'master_priority_weight',
+        d.masterPriorityWeight,
+      ),
+      masterDepthBonusPlies: j.intOr(
+        'master_depth_bonus_plies',
+        d.masterDepthBonusPlies,
+      ),
+      offBookOppMaxChildren: j.intOr(
+        'off_book_opp_max_children',
+        d.offBookOppMaxChildren,
+      ),
+      improvementMinGainCp: j.intOr(
+        'improvement_min_gain_cp',
+        d.improvementMinGainCp,
+      ),
+      dbMinProb: j.doubleOr('db_min_prob', d.dbMinProb),
+      minElo: j.intOr('min_elo', d.minElo),
+      enableCdbDirect: j.boolOr('enable_cdbdirect', d.enableCdbDirect),
+      cdbDirectPath: j.stringOr('cdbdirect_path', d.cdbDirectPath),
+      cdbDirectReadAhead: j.boolOr(
+        'cdbdirect_read_ahead',
+        d.cdbDirectReadAhead,
+      ),
+      enableLocalChessDb: j.boolOr(
+        'enable_local_chessdb',
+        d.enableLocalChessDb,
+      ),
+      enableLichessEvals: j.boolOr(
+        'enable_lichess_evals',
+        d.enableLichessEvals,
+      ),
+      lichessEvalsPath: j.stringOr('lichess_evals_path', d.lichessEvalsPath),
+      localChessDbPath: j.stringOr('local_chessdb_path', d.localChessDbPath),
+      enableChessDbApi: j.boolOr('enable_chessdb_api', d.enableChessDbApi),
+      chessDbApiDailyQuota: j.intOr(
+        'chessdb_api_daily_quota',
+        d.chessDbApiDailyQuota,
+      ),
+      chessDbApiConcurrency: j.intOr(
+        'chessdb_api_concurrency',
+        d.chessDbApiConcurrency,
+      ),
+      enableExtEvalSubtreeSkip: j.boolOr(
+        'enable_ext_eval_subtree_skip',
+        d.enableExtEvalSubtreeSkip,
+      ),
+      minAcceptableEvalDepth: j.intOr(
+        'min_acceptable_eval_depth',
+        d.minAcceptableEvalDepth,
+      ),
+      bookTailMaxPly: j.intOr('book_tail_max_ply', d.bookTailMaxPly),
+      bookEngineFallback: j.boolOr(
+        'book_engine_fallback',
+        d.bookEngineFallback,
+      ),
+      bookTieBreakWindowCp: j.intOr(
+        'book_tie_break_window_cp',
+        d.bookTieBreakWindowCp,
+      ),
+      replyWindowCp: j.intOr('reply_window_cp', d.replyWindowCp),
     );
   }
 
@@ -724,11 +826,13 @@ class TreeBuildConfig {
   bool get usesMasterGames =>
       buildMode != BuildMode.stockfishExpectimax && useMasterGames;
 
+  /// Whether the build uses the approximate Fast method (rolling lookahead).
   bool get isRollingSearch =>
       buildMode == BuildMode.stockfishExpectimax &&
       searchAlgorithm == SearchAlgorithm.rolling;
 
-  static const rollingLookaheadPlies = 4;
+  /// Plies the Fast method looks ahead before committing our next move.
+  static const int rollingLookaheadPlies = 4;
 
   /// Whether Phase 2.5 has anything to re-check.
   ///
@@ -752,12 +856,7 @@ class TreeBuildConfig {
       : defaultEngineThreads();
 
   /// Short label for the active build algorithm.
-  String get buildModeLabel => switch (buildMode) {
-    BuildMode.stockfishExpectimax => 'Stockfish + Maia expectimax',
-    BuildMode.maiaDbExplore => 'Maia DB explore',
-    BuildMode.dbExplorer => 'DB Explorer',
-    BuildMode.chessDbBook => 'ChessDB mainline book',
-  };
+  String get buildModeLabel => buildMode.label;
 
   /// Compact one-line summary for Jobs panel and status displays.
   String get summaryLabel {
@@ -895,11 +994,7 @@ class TreeBuildConfig {
   }
 
   /// Short label for the frontier/pruning algorithm.
-  String get searchAlgorithmLabel => switch (searchAlgorithm) {
-    SearchAlgorithm.pure => 'Pure search',
-    SearchAlgorithm.rolling => 'Fast (4-ply, approximate)',
-    SearchAlgorithm.fast => 'Pure search (legacy Fast setting)',
-  };
+  String get searchAlgorithmLabel => searchAlgorithm.label;
 
   /// Convert a white-perspective centipawn score to "our" perspective.
   int toOurPerspective(int whiteCp) => playAsWhite ? whiteCp : -whiteCp;
@@ -1238,18 +1333,26 @@ class TreeBuildConfig {
   }
 }
 
-SearchAlgorithm _parseSearchAlgorithm(String? value, {bool? legacyBestFirst}) {
-  switch (value) {
-    case 'pure':
-      return SearchAlgorithm.pure;
-    case 'rolling':
-      return SearchAlgorithm.rolling;
-    case 'fast':
-      return SearchAlgorithm.fast;
-  }
-  // Configs written before the algorithm enum carry only best_first.
-  if (legacyBestFirst == false) return SearchAlgorithm.pure;
-  return SearchAlgorithm.fast;
+/// The constructor defaults, which [TreeBuildConfig.fromJson] falls back to
+/// for every absent key so the two never drift apart.
+const _constructorDefaults = TreeBuildConfig(startFen: '', playAsWhite: true);
+
+/// Typed reads over the flat persisted map.  Numbers are accepted as any
+/// [num] because a JSON round trip may widen an int to a double.
+extension type _ConfigJson(Map<String, dynamic> json) {
+  int intOr(String key, int fallback) =>
+      (json[key] as num?)?.toInt() ?? fallback;
+
+  double doubleOr(String key, double fallback) =>
+      (json[key] as num?)?.toDouble() ?? fallback;
+
+  bool boolOr(String key, bool fallback) => json[key] as bool? ?? fallback;
+
+  String stringOr(String key, String fallback) =>
+      json[key] as String? ?? fallback;
+
+  List<String> stringListOr(String key, List<String> fallback) =>
+      (json[key] as List?)?.cast<String>() ?? fallback;
 }
 
 /// Read the annotation choices, falling back to the boolean the old enum
@@ -1262,31 +1365,6 @@ MoveAnnotationDetail _parseAnnotationDetail(Map<String, dynamic> json) {
     return MoveAnnotationDetail.fromLegacyFlags(annotate: legacy);
   }
   return MoveAnnotationDetail.none;
-}
-
-SelectionMode _parseSelectionMode(String? value) {
-  switch (value) {
-    case 'engineOnly':
-      return SelectionMode.engineOnly;
-    case 'dbWinRateOnly':
-      return SelectionMode.dbWinRateOnly;
-    default:
-      return SelectionMode.expectimax;
-  }
-}
-
-BuildMode _parseBuildMode(String? value) {
-  switch (value) {
-    case 'maiaDbExplore':
-      return BuildMode.maiaDbExplore;
-    case 'dbExplorer':
-      return BuildMode.dbExplorer;
-    case 'chessdb_book':
-    case 'chessDbBook':
-      return BuildMode.chessDbBook;
-    default:
-      return BuildMode.stockfishExpectimax;
-  }
 }
 
 /// Encode a [SkeletonPlan] to a compact JSON string for the flat persisted

@@ -5,7 +5,8 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
+import 'package:chess_auto_prep/models/explorer_response.dart'
+    show LichessDatabase;
 import '../theme/app_text_styles.dart';
 import 'lichess_db_info_icon.dart';
 

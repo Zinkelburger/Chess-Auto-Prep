@@ -11,6 +11,7 @@ import '../utils/isolate_task.dart';
 import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
 import '../utils/atomic_file.dart';
+import '../utils/chess_utils.dart' show tryParseFen;
 import '../utils/fen_utils.dart';
 import '../utils/file_text_reader.dart';
 import 'pgn_parsing_service.dart';
@@ -76,21 +77,19 @@ class UnifiedAnalysisBuilder {
       fold: (i) {
         final game = pgnGames[i];
 
-        bool isUserWhiteInGame;
-        if (!strictPlayerMatching) {
-          isUserWhiteInGame = isWhite;
-        } else {
-          final detected = _detectUser(game, usernameLower);
-          if (detected.white && !detected.black) {
-            isUserWhiteInGame = true;
-          } else if (detected.black && !detected.white) {
-            isUserWhiteInGame = false;
-          } else {
-            isUserWhiteInGame = isWhite;
-          }
-        }
+        // Ambiguous games (the user on both sides, or neither) count for the
+        // colour being built; games the user played as the other colour are
+        // skipped.
+        final isUserWhiteInGame = resolveUserColor(
+          whiteHeader: game.headers['White'] ?? '',
+          blackHeader: game.headers['Black'] ?? '',
+          usernameLower: usernameLower,
+          userIsWhiteFilter: isWhite,
+          strictPlayerMatching: strictPlayerMatching,
+          unattributablePolicy: UnattributableGamePolicy.assumeWhite,
+        );
 
-        if (isUserWhiteInGame == isWhite) {
+        if (isUserWhiteInGame != null) {
           _walkMainline(
             game: game,
             gameIndex: i,
@@ -255,9 +254,10 @@ class UnifiedAnalysisBuilder {
       final stat = pgnFile.statSync();
 
       final white = _decodeColorCacheFile(whiteCachePath, stat);
-      if (white == null) return null;
-      final black = _decodeColorCacheFile(blackCachePath, stat);
-      if (black == null) return null;
+      final black = white == null
+          ? null
+          : _decodeColorCacheFile(blackCachePath, stat);
+      if (white == null || black == null) return null;
 
       // The caches store only stats + tree; the shared games list is cheap
       // to rebuild from the PGN itself (headers only, no move replay).
@@ -298,17 +298,14 @@ class UnifiedAnalysisBuilder {
 
   static (PositionAnalysis, OpeningTree) _singleColorEntry(
     _SingleColorArgs args,
-  ) {
-    final result = build(
-      pgnList: args.pgnList,
-      username: args.username,
-      isWhite: args.isWhite,
-      strictPlayerMatching: args.strictPlayerMatching,
-      maxDepth: args.maxDepth,
-      onProgress: (current, total) => args.sendPort.send([current, total]),
-    );
-    return result;
-  }
+  ) => build(
+    pgnList: args.pgnList,
+    username: args.username,
+    isWhite: args.isWhite,
+    strictPlayerMatching: args.strictPlayerMatching,
+    maxDepth: args.maxDepth,
+    onProgress: (current, total) => args.sendPort.send([current, total]),
+  );
 
   static Future<AnalysisBundle> _bothColorsEntry(_BothColorsArgs args) async {
     final pgnFile = File(args.pgnFilePath);
@@ -418,18 +415,10 @@ class UnifiedAnalysisBuilder {
   static ({bool white, bool black}) _detectUser(
     PgnGame<PgnNodeData> game,
     String usernameLower,
-  ) {
-    final white = (game.headers['White'] ?? '').toLowerCase();
-    final black = (game.headers['Black'] ?? '').toLowerCase();
-    return (
-      white:
-          userNameMatchesHeader(white, usernameLower) ||
-          isRepertoirePlayer(white),
-      black:
-          userNameMatchesHeader(black, usernameLower) ||
-          isRepertoirePlayer(black),
-    );
-  }
+  ) => (
+    white: headerNamesUser(game.headers['White'] ?? '', usernameLower),
+    black: headerNamesUser(game.headers['Black'] ?? '', usernameLower),
+  );
 
   /// Game result from the user's perspective (1 win / 0.5 draw / 0 loss).
   static double _userResult(PgnGame<PgnNodeData> game, bool isUserWhite) =>
@@ -443,11 +432,7 @@ class UnifiedAnalysisBuilder {
     final fen = game.headers['FEN']?.trim();
     if (fen == null || fen.isEmpty) return null;
     if (normalizeFen(fen) == normalizeFen(kStandardStartFen)) return null;
-    try {
-      return Chess.fromSetup(Setup.parseFen(expandFen(fen)));
-    } catch (_) {
-      return null;
-    }
+    return tryParseFen(expandFen(fen));
   }
 
   /// Walk the game's mainline once, updating [acc]'s tree and FEN map.
@@ -462,6 +447,8 @@ class UnifiedAnalysisBuilder {
     required double userResult,
     required int maxDepth,
   }) {
+    // TODO(audit): a malformed `[FEN]` header throws here and aborts the
+    // whole build; [_customStartOf] already treats it as unreadable.
     final startFen = game.headers['FEN'] ?? kStandardStartFen;
 
     walkMainlineIntoTree(
@@ -502,14 +489,14 @@ class UnifiedAnalysisBuilder {
     int gameIndex,
   ) {
     final key = normalizeFen(fen);
-    final s = stats[key] ??= PositionStats(fen: key);
-    s.games++;
+    final positionStats = stats[key] ??= PositionStats(fen: key);
+    positionStats.games++;
     if (result == 1.0) {
-      s.wins++;
+      positionStats.wins++;
     } else if (result == 0.0) {
-      s.losses++;
+      positionStats.losses++;
     } else {
-      s.draws++;
+      positionStats.draws++;
     }
     _linkGameToFen(fenToGameIndices, key, gameIndex);
   }

@@ -5,16 +5,21 @@ import 'dart:io';
 import 'package:chess_auto_prep/utils/log.dart';
 
 import 'engine_connection.dart';
-import 'uci_handshake.dart';
+import 'engine_interrupt.dart';
 import 'stockfish_bundle.dart';
+import 'uci_handshake.dart';
 
+/// A Stockfish binary driven over stdin/stdout pipes (desktop platforms).
 class ProcessConnection implements EngineConnection {
   Process? _process;
   final StreamController<String> _stdoutController =
       StreamController<String>.broadcast();
-  StreamSubscription? _processSubscription;
+  StreamSubscription<String>? _processSubscription;
   bool _isDisposed = false;
   final Completer<void> _done = Completer<void>();
+
+  /// Grace period between SIGTERM and SIGKILL on POSIX.
+  static const _killGracePeriod = Duration(seconds: 2);
 
   ProcessConnection._();
 
@@ -45,9 +50,9 @@ class ProcessConnection implements EngineConnection {
       final executablePath = await resolveExecutablePath();
       log.i('Starting Stockfish from: $executablePath');
 
-      _process = await Process.start(executablePath, []);
+      final process = _process = await Process.start(executablePath, []);
 
-      _processSubscription = _process!.stdout
+      _processSubscription = process.stdout
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen((line) {
@@ -55,18 +60,14 @@ class ProcessConnection implements EngineConnection {
           }, onError: _reportError);
 
       // Drain stderr to prevent buffer fill-up that can stall the process.
-      unawaited(_process!.stderr.drain<void>().catchError(_reportError));
-      unawaited(_process!.stdin.done.then<void>((_) {}, onError: _reportError));
+      unawaited(process.stderr.drain<void>().catchError(_reportError));
+      unawaited(process.stdin.done.then<void>((_) {}, onError: _reportError));
 
       unawaited(
-        _process!.exitCode.then((code) {
+        process.exitCode.then((code) {
           if (_isDisposed) return;
           if (!_done.isCompleted) _done.complete();
-          if (!_stdoutController.isClosed) {
-            _stdoutController.addError(
-              StateError('Stockfish process exited ($code)'),
-            );
-          }
+          _reportError(EngineProcessExitedError(code));
         }),
       );
     } catch (e) {
@@ -92,8 +93,9 @@ class ProcessConnection implements EngineConnection {
 
   @override
   void sendCommand(String command) {
-    if (_process != null && !_isDisposed) {
-      _process!.stdin.writeln(command);
+    final process = _process;
+    if (process != null && !_isDisposed) {
+      process.stdin.writeln(command);
     }
   }
 
@@ -104,29 +106,31 @@ class ProcessConnection implements EngineConnection {
     if (!_done.isCompleted) _done.complete();
     unawaited(_processSubscription?.cancel());
 
-    final proc = _process;
+    final process = _process;
     _process = null;
-    if (proc != null) {
-      try {
-        proc.stdin.writeln('quit');
-      } catch (_) {
-        /* stdin may be closed */
-      }
-      proc.kill(); // SIGTERM on POSIX, TerminateProcess on Windows
-      if (!Platform.isWindows) {
-        // On POSIX, the initial kill() sends SIGTERM which the process may
-        // ignore. Schedule a SIGKILL fallback. On Windows, kill() already
-        // does a hard termination so this is unnecessary (and sigkill would
-        // throw).
-        Future.delayed(const Duration(seconds: 2), () {
-          try {
-            proc.kill(ProcessSignal.sigkill);
-          } catch (_) {
-            /* process may have already exited */
-          }
-        });
-      }
-    }
+    if (process != null) _terminate(process);
     unawaited(_stdoutController.close());
+  }
+
+  /// Ask politely, then SIGTERM; on POSIX follow up with SIGKILL, because a
+  /// busy engine may ignore SIGTERM. Windows' kill() already terminates hard
+  /// (and sigkill would throw there).
+  static void _terminate(Process process) {
+    try {
+      process.stdin.writeln('quit');
+    } catch (_) {
+      // stdin may already be closed.
+    }
+    process.kill();
+    if (Platform.isWindows) return;
+    unawaited(
+      Future.delayed(_killGracePeriod, () {
+        try {
+          process.kill(ProcessSignal.sigkill);
+        } catch (_) {
+          // The process may have already exited.
+        }
+      }),
+    );
   }
 }

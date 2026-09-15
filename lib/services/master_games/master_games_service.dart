@@ -46,6 +46,11 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
   /// probed on every launch.
   static const Duration autoSyncInterval = Duration(hours: 20);
 
+  /// Games replayed per isolate hop of [rebuildClassicalIndex].  Large enough
+  /// that reopening the database per hop is noise, small enough that
+  /// progress moves and a cancel lands within seconds.
+  static const int classicalRebuildChunk = 5000;
+
   final TwicClient Function() _clientFactory;
   final Future<String> Function() _dbPathProvider;
 
@@ -170,9 +175,10 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> _recordCheck() async {
-    _lastCheck = DateTime.now();
+    final now = DateTime.now();
+    _lastCheck = now;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyLastCheck, _lastCheck!.millisecondsSinceEpoch);
+    await prefs.setInt(_keyLastCheck, now.millisecondsSinceEpoch);
   }
 
   Future<void> setStartIssue(int issue) async {
@@ -210,12 +216,18 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
     label: 'Master games database',
   );
 
+  /// The shared connection, opening it on first use.
+  Future<(String path, MasterGamesDb db)> _ensureDb() async {
+    final path = _dbPath ??= await _dbPathProvider();
+    final db = _db ??= _openDb(path);
+    return (path, db);
+  }
+
   /// Re-read coverage from the database file (cheap: three COUNTs).
   Future<void> refreshStats() async {
     try {
-      final path = _dbPath ??= await _dbPathProvider();
-      _db ??= _openDb(path);
-      _stats = _db!.stats();
+      final (_, db) = await _ensureDb();
+      _stats = db.stats();
     } catch (e) {
       _lastError = 'Master games database unavailable: $e';
       _stats = null;
@@ -247,121 +259,10 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
     final client = _client = _clientFactory();
     var cancelled = false;
     try {
-      final path = _dbPath ??= await _dbPathProvider();
-      _db ??= _openDb(path);
-      final have = _db!.importedIssues();
-      final start = fromIssue ?? startIssue;
-      final probeFrom = have.isEmpty
-          ? twicIssueEstimateFor(DateTime.now()) - 2
-          : have.reduce((a, b) => a > b ? a : b) + 1;
-      final latest = await client.latestIssue(
-        from: probeFrom < start ? start : probeFrom,
-      );
-      if (latest == null) {
-        throw const TwicDownloadException(
-          0,
-          'could not reach theweekinchess.com — check your connection',
-        );
-      }
-      await _recordCheck();
-      final todo = [
-        for (var n = start; n <= latest; n++)
-          if (!have.contains(n)) n,
-      ];
-      if (todo.isEmpty) {
-        _status = 'Up to date (issue $latest).';
-        job.updateProgress(JobProgress(fraction: 1, message: _status));
-        return;
-      }
-
-      var done = 0;
-      var gamesAdded = 0;
-
-      // Download and import are pipelined: issue N+1 is fetched while
-      // issue N imports in its isolate, so the wall-clock is the slower of
-      // the two rather than their sum.  A failed download (a gap in the
-      // numbering, rare) is a null — skipped, never an unhandled error on a
-      // future nobody is awaiting anymore after a cancel.
-      Future<String?> fetch(int issue) async {
-        try {
-          return await client.fetchIssuePgn(issue);
-        } on TwicDownloadException catch (e) {
-          debugPrint('MasterGames: skipping $e');
-          return null;
-        } catch (e) {
-          if (_cancelRequested) return null;
-          rethrow;
-        }
-      }
-
-      var pending = fetch(todo.first);
-      for (var i = 0; i < todo.length; i++) {
-        final issue = todo[i];
-        if (_cancelRequested) {
-          cancelled = true;
-          break;
-        }
-        _status = 'TWIC $issue — downloading… (${done + 1}/${todo.length})';
-        _fraction = done / todo.length;
-        job.updateProgress(
-          JobProgress(
-            fraction: _fraction,
-            message: _status,
-            nodesProcessed: done,
-            totalNodes: todo.length,
-          ),
-        );
-        notifyListeners();
-
-        final pgn = await pending;
-        if (_cancelRequested) {
-          cancelled = true;
-          break;
-        }
-        if (i + 1 < todo.length) pending = fetch(todo[i + 1]);
-        if (pgn == null) {
-          done++;
-          continue;
-        }
-
-        _status = 'TWIC $issue — importing… (${done + 1}/${todo.length})';
-        job.updateProgress(
-          JobProgress(
-            fraction: _fraction,
-            message: _status,
-            nodesProcessed: done,
-            totalNodes: todo.length,
-          ),
-        );
-        notifyListeners();
-
-        final request = MasterGamesImportRequest(
-          dbPath: path,
-          pgnText: pgn,
-          twicIssue: issue,
-        );
-        final result = await _importInIsolate(request);
-        gamesAdded += result.gamesImported;
-        done++;
-      }
-      // A cancel may leave a prefetch in flight; let it finish (or fail)
-      // quietly before the client is closed under it.
-      unawaited(pending.catchError((_) => null));
-
-      _stats = _db!.stats();
-      _fraction = cancelled ? done / todo.length : 1;
-      _status = cancelled
-          ? 'Paused after $done of ${todo.length} issues '
-                '($gamesAdded games added).'
-          : 'Imported $done issues, $gamesAdded games.';
-      job.updateProgress(
-        JobProgress(
-          fraction: _fraction,
-          message: _status,
-          nodesProcessed: done,
-          totalNodes: todo.length,
-        ),
-      );
+      final (path, db) = await _ensureDb();
+      final todo = await _issuesToImport(client, db, fromIssue: fromIssue);
+      if (todo.isEmpty) return;
+      cancelled = await _importIssues(client, path, todo, job);
     } catch (e) {
       _lastError = 'Master games sync failed: $e';
       _status = _lastError!;
@@ -376,12 +277,146 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
       if (job.isActive) {
         job.updateStatus(cancelled ? JobStatus.cancelled : JobStatus.completed);
       }
-      // Stats may have changed even on failure (issues before the error).
+      // Stats may have changed even on failure (issues before the error);
+      // a stale count is better than a second error on top of the first.
       try {
         _stats = _db?.stats();
-      } catch (_) {}
+      } catch (_) {
+        // Deliberately ignored: see above.
+      }
       notifyListeners();
     }
+  }
+
+  /// Probe TWIC for the newest issue and list the ones still missing from
+  /// [db].  Records the check and reports "up to date" on the job when
+  /// nothing is missing.
+  Future<List<int>> _issuesToImport(
+    TwicClient client,
+    MasterGamesDb db, {
+    required int? fromIssue,
+  }) async {
+    final have = db.importedIssues();
+    final start = fromIssue ?? startIssue;
+    // A fresh database probes near today's estimate; an existing one just
+    // past its newest issue.
+    final probeFrom = have.isEmpty
+        ? twicIssueEstimateFor(DateTime.now()) - 2
+        : have.reduce((a, b) => a > b ? a : b) + 1;
+    final latest = await client.latestIssue(
+      from: probeFrom < start ? start : probeFrom,
+    );
+    if (latest == null) {
+      throw const TwicDownloadException(
+        0,
+        'could not reach theweekinchess.com — check your connection',
+      );
+    }
+    await _recordCheck();
+    final todo = [
+      for (var n = start; n <= latest; n++)
+        if (!have.contains(n)) n,
+    ];
+    if (todo.isEmpty) {
+      _status = 'Up to date (issue $latest).';
+      _job?.updateProgress(JobProgress(fraction: 1, message: _status));
+    }
+    return todo;
+  }
+
+  /// Download and import [todo] in order, pipelined: issue N+1 is fetched
+  /// while issue N imports in its isolate, so the wall-clock is the slower
+  /// of the two rather than their sum.  Returns whether a cancel cut it
+  /// short.
+  Future<bool> _importIssues(
+    TwicClient client,
+    String dbPath,
+    List<int> todo,
+    RepertoireJob job,
+  ) async {
+    var done = 0;
+    var gamesAdded = 0;
+    var cancelled = false;
+
+    // A failed download (a gap in the numbering, rare) is a null — skipped,
+    // never an unhandled error on a future nobody is awaiting anymore after
+    // a cancel.
+    Future<String?> fetch(int issue) async {
+      try {
+        return await client.fetchIssuePgn(issue);
+      } on TwicDownloadException catch (e) {
+        debugPrint('MasterGames: skipping $e');
+        return null;
+      } catch (e) {
+        if (_cancelRequested) return null;
+        rethrow;
+      }
+    }
+
+    void report(String status) {
+      _status = status;
+      _fraction = done / todo.length;
+      job.updateProgress(
+        JobProgress(
+          fraction: _fraction,
+          message: _status,
+          nodesProcessed: done,
+          totalNodes: todo.length,
+        ),
+      );
+      notifyListeners();
+    }
+
+    var pending = fetch(todo.first);
+    for (var i = 0; i < todo.length; i++) {
+      final issue = todo[i];
+      if (_cancelRequested) {
+        cancelled = true;
+        break;
+      }
+      report('TWIC $issue — downloading… (${done + 1}/${todo.length})');
+
+      final pgn = await pending;
+      if (_cancelRequested) {
+        cancelled = true;
+        break;
+      }
+      if (i + 1 < todo.length) pending = fetch(todo[i + 1]);
+      if (pgn == null) {
+        done++;
+        continue;
+      }
+
+      report('TWIC $issue — importing… (${done + 1}/${todo.length})');
+      final result = await _importInIsolate(
+        MasterGamesImportRequest(
+          dbPath: dbPath,
+          pgnText: pgn,
+          twicIssue: issue,
+        ),
+      );
+      gamesAdded += result.gamesImported;
+      done++;
+    }
+    // A cancel may leave a prefetch in flight; let it finish (or fail)
+    // quietly before the client is closed under it.
+    unawaited(pending.catchError((_) => null));
+
+    _stats = _db?.stats();
+    _status = cancelled
+        ? 'Paused after $done of ${todo.length} issues '
+              '($gamesAdded games added).'
+        : 'Imported $done issues, $gamesAdded games.';
+    _fraction = cancelled ? done / todo.length : 1;
+    job.updateProgress(
+      JobProgress(
+        fraction: _fraction,
+        message: _status,
+        nodesProcessed: done,
+        totalNodes: todo.length,
+      ),
+    );
+    return cancelled;
   }
 
   /// Kept out of [sync]'s scope on purpose: a closure created there would
@@ -390,11 +425,6 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
   static Future<MasterGamesImportResult> _importInIsolate(
     MasterGamesImportRequest request,
   ) => Isolate.run(() => importPgnIntoMasterGames(request));
-
-  /// Games replayed per isolate hop of [rebuildClassicalIndex].  Large enough
-  /// that reopening the database per hop is noise, small enough that
-  /// progress moves and a cancel lands within seconds.
-  static const int classicalRebuildChunk = 5000;
 
   /// Replay the classical games into the book's classical columns — the
   /// citations and the classical-only counts — for a database imported
@@ -434,12 +464,12 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
         afterId = chunk.lastId;
         _fraction = total == 0 ? 1 : (scanned / total).clamp(0, 1);
         _status =
-            'Indexed ${_thousands(scanned)} of ${_thousands(total)} '
+            'Indexed ${formatThousands(scanned)} of ${formatThousands(total)} '
             'classical games';
         job.updateProgress(JobProgress(fraction: _fraction, message: _status));
         notifyListeners();
         if (chunk.done) break;
-        if (_cancelRequestedForRebuild) {
+        if (_cancelRebuild) {
           cancelled = true;
           break;
         }
@@ -458,8 +488,6 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
       notifyListeners();
     }
   }
-
-  bool get _cancelRequestedForRebuild => _cancelRebuild;
 
   void cancelRebuild() {
     if (_rebuilding) _cancelRebuild = true;
@@ -480,8 +508,6 @@ class MasterGamesService extends ChangeNotifier with SafeChangeNotifier {
       db.close();
     }
   });
-
-  static String _thousands(int n) => formatThousands(n);
 
   void cancel() {
     if (!_syncing) return;

@@ -20,7 +20,7 @@ class VerificationDemotion {
   final int oldDeepCpUs;
   final int newDeepCpUs;
 
-  VerificationDemotion({
+  const VerificationDemotion({
     required this.fen,
     required this.ply,
     required this.oldSan,
@@ -35,6 +35,7 @@ class VerificationDemotion {
       '(${newDeepCpUs}cp deep)';
 }
 
+/// Outcome of one [RepertoireVerifier.verify] pass.
 class VerificationReport {
   final int movesChecked;
   final int evalsRun;
@@ -50,7 +51,7 @@ class VerificationReport {
   /// demotions occurred).
   final int selectedCount;
 
-  VerificationReport({
+  const VerificationReport({
     required this.movesChecked,
     required this.evalsRun,
     required this.passes,
@@ -127,9 +128,8 @@ class RepertoireVerifier {
       for (final node in nodes) {
         node.engineEvalCp = values[node.fen];
       }
-      ecaCalc.calculate(
-        tree,
-      ); // Always refresh, including when nothing is demoted.
+      // Always refresh, including when nothing is demoted.
+      ecaCalc.calculate(tree);
       count = RepertoireSelector(
         config: config,
         ecaCalc: ecaCalc,

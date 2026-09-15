@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
+import 'package:chess_auto_prep/services/engine/engine_interrupt.dart';
 import 'package:chess_auto_prep/services/engine/engine_worker_slot.dart';
 import 'package:chess_auto_prep/services/engine/uci_handshake.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
@@ -61,7 +62,7 @@ class _FakeConnection implements EngineConnection {
   void crash() {
     if (!_done.isCompleted) _done.complete();
     if (!_stdout.isClosed) {
-      _stdout.addError(StateError('Stockfish process exited (1)'));
+      _stdout.addError(EngineProcessExitedError(1));
     }
   }
 
@@ -108,7 +109,7 @@ void main() {
   });
 
   test(
-    'pool coalesces overlapping provisioning and does not revive after suspend',
+    'pool coalesces overlapping provisioning and does not revive after dispose',
     () async {
       final gate = Completer<void>();
       final conn = _FakeConnection()..readyGate = gate;
@@ -123,7 +124,7 @@ void main() {
       final second = pool.ensureWorkers(1);
       await Future<void>.delayed(Duration.zero);
       expect(calls, 1);
-      pool.suspend();
+      pool.dispose();
       expect(conn.disposed, isTrue);
       gate.complete();
       await Future.wait([first, second]);

@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/core/repertoire_writer.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 
 void main() {
@@ -214,13 +215,19 @@ void main() {
   });
 }
 
-/// A service that writes the file but hands back no per-ply snapshots — the
-/// shape [RepertoireService.appendMovesAtPath] returns for a repertoire with
-/// no file path behind it.
+/// A service whose editor writes the file but hands back no per-ply
+/// snapshots — the shape [RepertoireFileEditor.appendMovesAtPath] returns
+/// for a repertoire with no file path behind it.
 class _NoSnapshotService extends RepertoireService {
   @override
-  Future<({bool success, String updatedContent, List<String> snapshots})>
-  appendMovesAtPath(
+  RepertoireFileEditor get files => const _NoSnapshotEditor();
+}
+
+class _NoSnapshotEditor extends RepertoireFileEditor {
+  const _NoSnapshotEditor();
+
+  @override
+  Future<AppendMovesResult> appendMovesAtPath(
     String filePath,
     List<String> pathFromRoot,
     List<String> newSans, {

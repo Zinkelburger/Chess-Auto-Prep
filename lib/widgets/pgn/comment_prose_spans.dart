@@ -11,14 +11,10 @@ import 'package:flutter/material.dart';
 
 import '../../theme/pgn_text_styles.dart';
 import 'comment_diagram.dart';
+import '../../utils/comment_move_tokens.dart'
+    show CommentDiagram, CommentMove, CommentProse, parseCommentTokens;
 import '../../utils/pgn_comment_utils.dart'
-    show
-        filterDisplayComment,
-        parseCommentTokens,
-        stripEngineTokens,
-        CommentMove,
-        CommentDiagram,
-        CommentProse;
+    show filterDisplayComment, stripEngineTokens;
 
 /// Build flowing spans for a raw PGN comment.
 ///

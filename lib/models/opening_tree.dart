@@ -5,10 +5,14 @@ library;
 import 'dart:collection';
 
 import 'package:dartchess/dartchess.dart';
+
 import '../constants/chess_constants.dart';
-import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
+import '../utils/chess_utils.dart'
+    show isNullMoveSan, playSanOrNullMove, tryParseFen;
 import '../utils/fen_utils.dart';
 import '../utils/movetext_builder.dart';
+import 'legal_destination_cache.dart';
+import 'opening_tree_transfer.dart';
 
 /// How win/draw/loss stats should be colored when displayed.
 ///
@@ -50,6 +54,9 @@ class ReachEstimate {
   }
 }
 
+/// One position on one move-order path, with the results of the games that
+/// reached it that way.  Transpositions are separate nodes; see
+/// [PositionGroup] for the FEN-keyed view.
 class OpeningTreeNode {
   /// The move that led to this node (SAN notation, e.g. "e4", "Nf3")
   /// Empty string for root node
@@ -101,14 +108,9 @@ class OpeningTreeNode {
 
   /// Get sorted list of children by number of games played (descending).
   /// Cached and invalidated when children or stats change.
-  List<OpeningTreeNode> get sortedChildren {
-    if (_sortedChildrenCache == null) {
-      final childList = children.values.toList();
-      childList.sort((a, b) => b.gamesPlayed.compareTo(a.gamesPlayed));
-      _sortedChildrenCache = childList;
-    }
-    return _sortedChildrenCache!;
-  }
+  List<OpeningTreeNode> get sortedChildren =>
+      _sortedChildrenCache ??= children.values.toList()
+        ..sort((a, b) => b.gamesPlayed.compareTo(a.gamesPlayed));
 
   void _invalidateSortCache() => _sortedChildrenCache = null;
 
@@ -137,30 +139,12 @@ class OpeningTreeNode {
     parent?._invalidateSortCache();
   }
 
-  /// Remove the child reached by [movesan], discarding its whole subtree.
-  /// Returns true if a child was removed.
-  bool removeChild(String movesan) {
-    final removed = children.remove(movesan);
-    if (removed != null) {
-      removed.parent = null;
-      _invalidateSortCache();
-      return true;
-    }
-    return false;
-  }
-
   /// Add or get a child node for a move
-  OpeningTreeNode getOrCreateChild(String movesan, String resultingFen) {
-    if (!children.containsKey(movesan)) {
-      _sortedChildrenCache = null;
-      children[movesan] = OpeningTreeNode(
-        move: movesan,
-        fen: resultingFen,
-        parent: this,
-      );
-    }
-    return children[movesan]!;
-  }
+  OpeningTreeNode getOrCreateChild(String movesan, String resultingFen) =>
+      children.putIfAbsent(movesan, () {
+        _invalidateSortCache();
+        return OpeningTreeNode(move: movesan, fen: resultingFen, parent: this);
+      });
 
   /// Whether the move leading to this node was played by White. [fen] is the
   /// position *after* the move, so the mover is the side that is no longer to
@@ -175,16 +159,15 @@ class OpeningTreeNode {
   ReachEstimate reachEstimate({required bool protagonistIsWhite}) {
     var probability = 1.0;
     var decisionPoints = 0;
-    for (
-      OpeningTreeNode? node = this;
-      node != null && node.parent != null;
-      node = node.parent
-    ) {
-      if (node.moverWasWhite != protagonistIsWhite) continue;
-      final parentGames = node.parent!.gamesPlayed;
-      if (parentGames <= 0) continue;
-      probability *= node.gamesPlayed / parentGames;
-      if (node.gamesPlayed < parentGames) decisionPoints++;
+    var node = this;
+    while (true) {
+      final parent = node.parent;
+      if (parent == null) break;
+      if (node.moverWasWhite == protagonistIsWhite && parent.gamesPlayed > 0) {
+        probability *= node.gamesPlayed / parent.gamesPlayed;
+        if (node.gamesPlayed < parent.gamesPlayed) decisionPoints++;
+      }
+      node = parent;
     }
     return ReachEstimate(probability, decisionPoints);
   }
@@ -330,99 +313,19 @@ class PositionGroup {
   }
 }
 
-/// A legal move from a position together with the FEN it produces.
-///
-/// The SAN is not part of this record on purpose: producing it costs a second
-/// move generation in dartchess (`makeSan` runs checkmate detection on the
-/// child), and [OpeningTree.continuationsAt] only needs it for the one or two
-/// moves that actually land in the book.
-typedef _LegalDestination = ({Move move, String fen});
-
-/// Legal moves and their destination FENs for a handful of recently visited
-/// positions.  Pure in the FEN, so it never needs invalidating; bounded so an
-/// hour of browsing cannot pin every visited position's move list.
-class _LegalDestinationCache {
-  static const int _capacity = 32;
-
-  final LinkedHashMap<
-    String,
-    ({Position position, List<_LegalDestination> destinations})
-  >
-  _entries = LinkedHashMap();
-
-  ({Position position, List<_LegalDestination> destinations})? lookup(
-    String fen,
-  ) {
-    final hit = _entries.remove(fen);
-    if (hit != null) {
-      _entries[fen] = hit; // Refresh recency.
-      return hit;
-    }
-    final Position position;
-    try {
-      position = Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      return null;
-    }
-    final entry = (position: position, destinations: _destinationsOf(position));
-    _entries[fen] = entry;
-    if (_entries.length > _capacity) _entries.remove(_entries.keys.first);
-    return entry;
-  }
-
-  /// Every legal move (promotions as four entries) with the FEN after it.
-  /// Moves come from [Position.legalMoves], so [Position.playUnchecked] is
-  /// safe and skips a second legality check per move.
-  static List<_LegalDestination> _destinationsOf(Position position) {
-    final out = <_LegalDestination>[];
-    for (final entry in position.legalMoves.entries) {
-      final from = entry.key;
-      final piece = position.board.pieceAt(from);
-      final promotes =
-          piece?.role == Role.pawn &&
-          ((piece!.color == Side.white && from.rank == Rank.seventh) ||
-              (piece.color == Side.black && from.rank == Rank.second));
-      for (final to in entry.value.squares) {
-        if (promotes && (to.rank == Rank.eighth || to.rank == Rank.first)) {
-          for (final role in const [
-            Role.queen,
-            Role.knight,
-            Role.rook,
-            Role.bishop,
-          ]) {
-            final move = NormalMove(from: from, to: to, promotion: role);
-            out.add((move: move, fen: position.playUnchecked(move).fen));
-          }
-        } else {
-          final move = NormalMove(from: from, to: to);
-          out.add((move: move, fen: position.playUnchecked(move).fen));
-        }
-      }
-    }
-    return out;
-  }
-}
-
 /// Opening tree - contains the root node and provides navigation
 class OpeningTree {
-  late final OpeningTreeNode root;
-  late OpeningTreeNode currentNode;
+  final OpeningTreeNode root;
+  OpeningTreeNode currentNode;
 
   /// Collection viewers retain disconnected setup chapters as separate roots.
   /// Other consumers keep their existing single-root repertoire layout.
   final bool preserveSetupRoots;
   final List<OpeningTreeNode> setupRoots = [];
-  late OpeningTreeNode cursorRoot;
-
-  OpeningTreeNode addSetupRoot(String fen) {
-    final node = OpeningTreeNode(move: '', fen: fen);
-    setupRoots.add(node);
-    indexNode(node);
-    return node;
-  }
+  OpeningTreeNode cursorRoot;
 
   /// FEN to node mapping for quick lookup
-  final Map<String, List<OpeningTreeNode>> fenToNodes;
+  final Map<String, List<OpeningTreeNode>> fenToNodes = {};
 
   /// SAN path the cursor actually walked (click order / board history),
   /// which can differ from [currentNode.getMovePath] after a transposition.
@@ -432,17 +335,25 @@ class OpeningTree {
   /// Continuations from here are one-ply transpositions into known FENs.
   String? _offBookFen;
 
-  OpeningTree({
-    OpeningTreeNode? root,
-    this.preserveSetupRoots = false,
-    Map<String, List<OpeningTreeNode>>? fenToNodes,
-  }) : fenToNodes = fenToNodes ?? {} {
-    // Ensure root and currentNode point to the same object
-    final rootNode = root ?? OpeningTreeNode(move: '', fen: kStandardStartFen);
-    this.root = rootNode;
-    currentNode = rootNode;
-    cursorRoot = rootNode;
-    indexNode(rootNode);
+  final LegalDestinationCache _legalDestinations = LegalDestinationCache();
+
+  OpeningTree({OpeningTreeNode? root, bool preserveSetupRoots = false})
+    : this._(
+        root ?? OpeningTreeNode(move: '', fen: kStandardStartFen),
+        preserveSetupRoots,
+      );
+
+  OpeningTree._(this.root, this.preserveSetupRoots)
+    : currentNode = root,
+      cursorRoot = root {
+    indexNode(root);
+  }
+
+  OpeningTreeNode addSetupRoot(String fen) {
+    final node = OpeningTreeNode(move: '', fen: fen);
+    setupRoots.add(node);
+    indexNode(node);
+    return node;
   }
 
   /// FEN the cursor is sitting on — the off-book board when the walked
@@ -450,10 +361,7 @@ class OpeningTree {
   String get currentFen => _offBookFen ?? currentNode.fen;
 
   /// Whether [currentFen] occurs in the tree (any move order).
-  bool get inBook {
-    final nodes = fenToNodes[normalizeFen(currentFen)];
-    return nodes != null && nodes.isNotEmpty;
-  }
+  bool get inBook => _nodesAt(currentFen) != null;
 
   /// SAN path shown in the header: the walk that produced [currentFen].
   List<String> get currentMovePath => List<String>.of(_walkedSans);
@@ -465,7 +373,7 @@ class OpeningTree {
       : buildNumberedMovetext(
           _walkedSans,
           compact: true,
-          startMoveNumber: Setup.parseFen(cursorRoot.fen).fullmoves,
+          startMoveNumber: fullMoveNumber(cursorRoot.fen),
           whiteToMoveFirst: isWhiteToMove(cursorRoot.fen),
         );
 
@@ -482,10 +390,9 @@ class OpeningTree {
   /// memoised per FEN, so a widget rebuild costs one map lookup per legal
   /// move rather than a move generation per legal move.
   List<PositionGroup> continuationsAt(String fen) {
-    final key = normalizeFen(fen);
-    final nodes = fenToNodes[key];
     final bySan = <String, PositionGroup>{};
-    if (nodes != null && nodes.isNotEmpty) {
+    final nodes = _nodesAt(fen);
+    if (nodes != null) {
       for (final child in PositionGroup(nodes).children) {
         bySan[child.move] = child;
       }
@@ -493,8 +400,8 @@ class OpeningTree {
     final legal = _legalDestinations.lookup(fen);
     if (legal != null) {
       for (final dest in legal.destinations) {
-        final destNodes = fenToNodes[normalizeFen(dest.fen)];
-        if (destNodes == null || destNodes.isEmpty) continue;
+        final destNodes = _nodesAt(dest.fen);
+        if (destNodes == null) continue;
         final (_, san) = legal.position.makeSanUnchecked(dest.move);
         if (bySan.containsKey(san)) continue;
         bySan[san] = PositionGroup(
@@ -507,8 +414,6 @@ class OpeningTree {
     return bySan.values.toList()
       ..sort((a, b) => b.gamesPlayed.compareTo(a.gamesPlayed));
   }
-
-  final _LegalDestinationCache _legalDestinations = _LegalDestinationCache();
 
   /// Navigate to a child node by move.
   ///
@@ -525,19 +430,11 @@ class OpeningTree {
         return true;
       }
     }
-    return _snapToPlayedFen(currentFen, move);
-  }
-
-  bool _snapToPlayedFen(String fromFen, String san) {
-    final legal = _legalDestinations.lookup(fromFen);
-    if (legal == null) return false;
-    final next = playSanOrNullMove(legal.position, san);
-    if (next == null) return false;
-    final destNodes = fenToNodes[normalizeFen(next.fen)];
-    if (destNodes == null || destNodes.isEmpty) return false;
-    currentNode = PositionGroup(destNodes).primaryNode;
+    final target = _childByPlaying(currentFen, move);
+    if (target == null) return false;
+    currentNode = target;
     _offBookFen = null;
-    _walkedSans.add(san);
+    _walkedSans.add(move);
     return true;
   }
 
@@ -545,11 +442,10 @@ class OpeningTree {
   /// necessarily [currentNode.parent]'s book path).
   bool goBack() {
     if (_walkedSans.isEmpty) {
-      if (currentNode.parent != null) {
-        currentNode = currentNode.parent!;
-        return true;
-      }
-      return false;
+      final parent = currentNode.parent;
+      if (parent == null) return false;
+      currentNode = parent;
+      return true;
     }
     final prefix = _walkedSans.sublist(0, _walkedSans.length - 1);
     syncToMoveHistory(prefix, startFen: cursorRoot.fen);
@@ -558,10 +454,8 @@ class OpeningTree {
 
   /// Reset to the default root, or a specified chapter start position.
   void reset({String? startFen}) {
-    final starts = startFen == null ? null : fenToNodes[normalizeFen(startFen)];
-    cursorRoot = starts == null || starts.isEmpty
-        ? root
-        : PositionGroup(starts).primaryNode;
+    final starts = startFen == null ? null : _nodesAt(startFen);
+    cursorRoot = starts == null ? root : PositionGroup(starts).primaryNode;
     currentNode = cursorRoot;
     _walkedSans = [];
     _offBookFen = null;
@@ -570,39 +464,47 @@ class OpeningTree {
   /// Navigate to a position by FEN. When several paths (transpositions)
   /// reach it, the cursor lands on the most-played one.
   bool navigateToFen(String fen) {
-    final nodes = fenToNodes[normalizeFen(fen)];
-    if (nodes == null || nodes.isEmpty) return false;
+    final nodes = _nodesAt(fen);
+    if (nodes == null) return false;
     currentNode = PositionGroup(nodes).primaryNode;
     _offBookFen = null;
     _walkedSans = currentNode.getMovePath();
-    cursorRoot = currentNode;
-    while (cursorRoot.parent != null) {
-      cursorRoot = cursorRoot.parent!;
+    var top = currentNode;
+    while (true) {
+      final parent = top.parent;
+      if (parent == null) break;
+      top = parent;
     }
+    cursorRoot = top;
     return true;
   }
 
   /// Transposition-aware view of [node]'s position: the node itself plus any
   /// nodes reaching the same position via other move orders.
   PositionGroup groupFor(OpeningTreeNode node) {
-    final indexed = fenToNodes[normalizeFen(node.fen)];
-    if (indexed == null || indexed.isEmpty) return PositionGroup([node]);
+    final indexed = _nodesAt(node.fen);
+    if (indexed == null) return PositionGroup([node]);
     return PositionGroup(indexed.contains(node) ? indexed : [node, ...indexed]);
   }
 
   /// Transposition-aware view of the current position (FEN, not path).
   PositionGroup get currentGroup {
-    final indexed = fenToNodes[normalizeFen(currentFen)];
-    if (indexed != null && indexed.isNotEmpty) return PositionGroup(indexed);
+    final indexed = _nodesAt(currentFen);
+    if (indexed != null) return PositionGroup(indexed);
     return PositionGroup([OpeningTreeNode(move: '', fen: currentFen)]);
   }
 
   /// Add a FEN to node mapping (idempotent — a node is indexed once even
   /// when re-visited by later games, so [PositionGroup] sums stay correct).
   void indexNode(OpeningTreeNode node) {
-    final key = normalizeFen(node.fen);
-    final nodes = fenToNodes[key] ??= [];
+    final nodes = fenToNodes[normalizeFen(node.fen)] ??= [];
     if (!nodes.contains(node)) nodes.add(node);
+  }
+
+  /// The nodes indexed under [fen]'s position, or null when there are none.
+  List<OpeningTreeNode>? _nodesAt(String fen) {
+    final nodes = fenToNodes[normalizeFen(fen)];
+    return nodes == null || nodes.isEmpty ? null : nodes;
   }
 
   /// Get total number of games in the tree (games at root)
@@ -622,10 +524,7 @@ class OpeningTree {
         if (node.children.containsKey(san)) return true;
       }
     }
-    if (normalizeFen(root.fen) == key && root.children.containsKey(san)) {
-      return true;
-    }
-    return false;
+    return normalizeFen(root.fen) == key && root.children.containsKey(san);
   }
 
   /// Whether playing [san] from [fen] lands on a position this tree already
@@ -636,11 +535,8 @@ class OpeningTree {
   /// Returns `false` when [fen] is unparsable or [san] is illegal in it.
   bool doesMoveTranspose(String fen, String san) {
     // Best-effort; an unparsable position simply isn't a transposition.
-    final legal = _legalDestinations.lookup(fen);
-    if (legal == null) return false;
-    final next = playSanOrNullMove(legal.position, san);
-    if (next == null) return false;
-    return fenToNodes.containsKey(normalizeFen(next.fen));
+    final next = _fenAfter(fen, san);
+    return next != null && fenToNodes.containsKey(normalizeFen(next));
   }
 
   /// Whether [san] is a child along [pathFromRoot] (path-aware repertoire check).
@@ -658,7 +554,7 @@ class OpeningTree {
     var node = root;
     for (final san in sans) {
       final next =
-          _childByTransposition(node, san) ?? _childByPlaying(node, san);
+          _childByTransposition(node, san) ?? _childByPlaying(node.fen, san);
       if (next == null) return null;
       node = next;
     }
@@ -669,25 +565,29 @@ class OpeningTree {
   OpeningTreeNode? _childByTransposition(OpeningTreeNode node, String san) {
     final direct = node.children[san];
     if (direct != null) return direct;
-    for (final twin
-        in fenToNodes[normalizeFen(node.fen)] ?? const <OpeningTreeNode>[]) {
+    for (final twin in _nodesAt(node.fen) ?? const <OpeningTreeNode>[]) {
       final child = twin.children[san];
       if (child != null) return child;
     }
     return null;
   }
 
-  /// The most-played node on the position [san] lands on from [node], when
+  /// The most-played node on the position [san] lands on from [fen], when
   /// that position is in the book by another move order (a one-ply
-  /// transposition).  Null when [san] is illegal or leaves the book.
-  OpeningTreeNode? _childByPlaying(OpeningTreeNode node, String san) {
-    final legal = _legalDestinations.lookup(node.fen);
-    if (legal == null) return null;
-    final next = playSanOrNullMove(legal.position, san);
+  /// transposition).  Null when [fen] is unparsable, [san] is illegal or
+  /// the move leaves the book.
+  OpeningTreeNode? _childByPlaying(String fen, String san) {
+    final next = _fenAfter(fen, san);
     if (next == null) return null;
-    final destNodes = fenToNodes[normalizeFen(next.fen)];
-    if (destNodes == null || destNodes.isEmpty) return null;
-    return PositionGroup(destNodes).primaryNode;
+    final destNodes = _nodesAt(next);
+    return destNodes == null ? null : PositionGroup(destNodes).primaryNode;
+  }
+
+  /// FEN after playing [san] from [fen], or null when either is invalid.
+  String? _fenAfter(String fen, String san) {
+    final legal = _legalDestinations.lookup(fen);
+    if (legal == null) return null;
+    return playSanOrNullMove(legal.position, san)?.fen;
   }
 
   /// Append a single line of moves to the tree without rebuilding.
@@ -703,13 +603,11 @@ class OpeningTree {
     Position position;
     OpeningTreeNode node;
 
-    final normalizedStart = normalizeFen(startFen);
-    final nodesAtFen = fenToNodes[normalizedStart];
-
-    if (nodesAtFen != null && nodesAtFen.isNotEmpty) {
+    final nodesAtFen = _nodesAt(startFen);
+    if (nodesAtFen != null) {
       node = PositionGroup(nodesAtFen).primaryNode;
       position = Chess.fromSetup(Setup.parseFen(node.fen));
-    } else if (normalizedStart == normalizeFen(kStandardStartFen)) {
+    } else if (normalizeFen(startFen) == normalizeFen(kStandardStartFen)) {
       position = Chess.initial;
       node = root;
     } else {
@@ -767,29 +665,8 @@ class OpeningTree {
 
     var lastOnBook = root;
     for (var i = 0; i < sans.length; i++) {
-      final san = sans[i];
-      final fen = fensAfter[i];
-      _walkedSans.add(san);
-
-      final destNodes = fenToNodes[normalizeFen(fen)];
-      if (destNodes != null && destNodes.isNotEmpty) {
-        lastOnBook = PositionGroup(destNodes).primaryNode;
-        currentNode = lastOnBook;
-        _offBookFen = null;
-        continue;
-      }
-
-      // Same SAN fallback as syncToMoveHistory: hand-written FENs or a
-      // different EP convention can miss the index while the child exists.
-      final child = _childByTransposition(lastOnBook, san);
-      if (child != null) {
-        lastOnBook = child;
-        currentNode = child;
-        _offBookFen = null;
-      } else {
-        currentNode = lastOnBook;
-        _offBookFen = fen;
-      }
+      _walkedSans.add(sans[i]);
+      lastOnBook = _snapCursor(lastOnBook, sans[i], fensAfter[i]);
     }
     return inBook;
   }
@@ -807,14 +684,11 @@ class OpeningTree {
     reset(startFen: startFen);
     if (moves.isEmpty) return true;
 
-    Position position;
-    try {
-      position = Chess.fromSetup(Setup.parseFen(cursorRoot.fen));
-    } catch (_) {
-      return false;
-    }
+    final start = tryParseFen(cursorRoot.fen);
+    if (start == null) return false;
 
-    OpeningTreeNode lastOnBook = cursorRoot;
+    var position = start;
+    var lastOnBook = cursorRoot;
     for (final san in moves) {
       final next = playSanOrNullMove(position, san);
       if (next == null) {
@@ -823,149 +697,45 @@ class OpeningTree {
       }
       position = next;
       _walkedSans.add(san);
-
-      final destNodes = fenToNodes[normalizeFen(position.fen)];
-      if (destNodes != null && destNodes.isNotEmpty) {
-        lastOnBook = PositionGroup(destNodes).primaryNode;
-        currentNode = lastOnBook;
-        _offBookFen = null;
-        continue;
-      }
-
-      // SAN fallback: trees built with hand-written FENs (or a different
-      // EP-square convention) still walk by child key when the dartchess
-      // dest FEN misses the index.
-      final child = _childByTransposition(lastOnBook, san);
-      if (child != null) {
-        lastOnBook = child;
-        currentNode = child;
-        _offBookFen = null;
-      } else {
-        currentNode = lastOnBook;
-        _offBookFen = position.fen;
-      }
+      lastOnBook = _snapCursor(lastOnBook, san, position.fen);
     }
     return inBook;
   }
 
-  // ── Serialisation for isolate transfer ──────────────────────────────
-  //
-  // OpeningTreeNode has cyclic parent references which Dart's SendPort
-  // cannot transfer.  We flatten the tree into a list of maps keyed by
-  // integer IDs so it can cross the isolate boundary, then reconstruct
-  // parent/child pointers on the receiving side.
-
-  /// Serialise the entire tree into a JSON-compatible map that contains
-  /// no object references (only primitives, lists, and maps).
-  Map<String, dynamic> toTransferJson() {
-    final nodes = <Map<String, dynamic>>[];
-    final nodeToId = <OpeningTreeNode, int>{};
-
-    // BFS to assign IDs and serialise each node.
-    final queue = Queue<OpeningTreeNode>()..add(root);
-    nodeToId[root] = 0;
-    for (final setupRoot in setupRoots) {
-      nodeToId[setupRoot] = nodeToId.length;
-      queue.add(setupRoot);
+  /// One ply of a cursor sync: land on the most-played node for [fenAfter]
+  /// when the tree has it; otherwise fall back to [lastOnBook]'s child for
+  /// [san] (trees built with hand-written FENs, or a different en-passant
+  /// convention, can miss the index while the child exists); otherwise stay
+  /// on [lastOnBook] with the cursor off-book at [fenAfter].
+  ///
+  /// Returns the node the cursor is anchored to afterwards.
+  OpeningTreeNode _snapCursor(
+    OpeningTreeNode lastOnBook,
+    String san,
+    String fenAfter,
+  ) {
+    final destNodes = _nodesAt(fenAfter);
+    final onBook = destNodes != null
+        ? PositionGroup(destNodes).primaryNode
+        : _childByTransposition(lastOnBook, san);
+    if (onBook != null) {
+      currentNode = onBook;
+      _offBookFen = null;
+      return onBook;
     }
-
-    while (queue.isNotEmpty) {
-      final node = queue.removeFirst();
-      final id = nodeToId[node]!;
-
-      final childIds = <String, int>{};
-      for (final entry in node.children.entries) {
-        final childNode = entry.value;
-        final childId = nodeToId.putIfAbsent(childNode, () {
-          final nextId = nodeToId.length;
-          queue.add(childNode);
-          return nextId;
-        });
-        childIds[entry.key] = childId;
-      }
-
-      nodes.add({
-        'id': id,
-        'parentId': node.parent != null ? nodeToId[node.parent!] ?? -1 : -1,
-        'move': node.move,
-        'fen': node.fen,
-        'gamesPlayed': node.gamesPlayed,
-        'wins': node.wins,
-        'losses': node.losses,
-        'draws': node.draws,
-        'childIds': childIds,
-      });
-    }
-
-    // [fenToNodes] is derivable from the nodes — every node is indexed under
-    // its own FEN — so it is rebuilt on receipt rather than shipped: sending
-    // it doubled every FEN in the message.
-    return {'nodes': nodes, 'preserveSetupRoots': preserveSetupRoots};
+    currentNode = lastOnBook;
+    _offBookFen = fenAfter;
+    return lastOnBook;
   }
+
+  // ── Serialisation for isolate transfer ──────────────────────────────
+
+  /// The tree as a JSON-compatible map with no object references, for
+  /// sending across an isolate boundary.  See [OpeningTreeTransfer].
+  Map<String, dynamic> toTransferJson() => OpeningTreeTransfer.encode(this);
 
   /// Reconstruct an [OpeningTree] from the flat map produced by
   /// [toTransferJson].
-  factory OpeningTree.fromTransferJson(Map<String, dynamic> json) {
-    final rawNodes = json['nodes'] as List<dynamic>;
-    final builtNodes = <int, OpeningTreeNode>{};
-
-    // First pass: create all nodes without parent/child links.
-    for (final raw in rawNodes) {
-      final m = raw as Map<String, dynamic>;
-      builtNodes[m['id'] as int] = OpeningTreeNode(
-        move: m['move'] as String,
-        fen: m['fen'] as String,
-        gamesPlayed: m['gamesPlayed'] as int,
-        wins: m['wins'] as int,
-        losses: m['losses'] as int,
-        draws: m['draws'] as int,
-      );
-    }
-
-    // Second pass: wire up parent + children pointers.
-    for (final raw in rawNodes) {
-      final m = raw as Map<String, dynamic>;
-      final node = builtNodes[m['id'] as int]!;
-      final parentId = m['parentId'] as int;
-      if (parentId >= 0) {
-        node.parent = builtNodes[parentId];
-      }
-      final childIds = m['childIds'] as Map<String, dynamic>;
-      for (final entry in childIds.entries) {
-        node.children[entry.key] = builtNodes[entry.value as int]!;
-      }
-    }
-
-    // Rebuild the FEN index.  Node ids were assigned in BFS order, so
-    // indexing in id order files each FEN's nodes shallowest-first — *not*
-    // the depth-first order the builder's walk produced them in.  Both are
-    // legitimate: a FEN's node list is a set of transposing paths, and the
-    // only thing that reads its order is [PositionGroup.primaryNode], which
-    // picks the most-played path and is therefore free to break a tie either
-    // way.  A pre-existing `fenToNodes` entry (an older sender) is accepted
-    // as-is.
-    final rawFenIndex = json['fenToNodes'] as Map<String, dynamic>?;
-    if (rawFenIndex != null) {
-      final fenToNodes = <String, List<OpeningTreeNode>>{};
-      for (final entry in rawFenIndex.entries) {
-        fenToNodes[entry.key] = (entry.value as List<dynamic>)
-            .map((id) => builtNodes[id as int]!)
-            .toList();
-      }
-      return OpeningTree(root: builtNodes[0], fenToNodes: fenToNodes);
-    }
-
-    final tree = OpeningTree(
-      root: builtNodes[0],
-      preserveSetupRoots: json['preserveSetupRoots'] as bool? ?? false,
-    );
-    for (var id = 1; id < rawNodes.length; id++) {
-      final node = builtNodes[id];
-      if (node != null) {
-        tree.indexNode(node);
-        if (node.parent == null) tree.setupRoots.add(node);
-      }
-    }
-    return tree;
-  }
+  factory OpeningTree.fromTransferJson(Map<String, dynamic> json) =>
+      OpeningTreeTransfer.decode(json);
 }

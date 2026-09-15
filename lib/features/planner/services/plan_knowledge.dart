@@ -20,6 +20,13 @@ import '../../../utils/fen_utils.dart';
 /// position (normalized FEN) → SAN → count.
 typedef MoveCounts = Map<String, Map<String, int>>;
 
+/// How often the user played one move at a position: its share of their
+/// games there, and how many games that is.
+typedef OwnMoveShare = ({double share, int games});
+
+/// What counting a corpus of the user's games produced.
+typedef OwnGameCounts = ({MoveCounts moves, MoveCounts replies, int games});
+
 class PlanKnowledge {
   /// Our moves in the repertoire's existing chapters.
   final MoveCounts chapterMoves;
@@ -43,10 +50,11 @@ class PlanKnowledge {
       (chapterMoves[normalizeFen(fen)] ?? const {}).keys.toSet();
 
   /// Own-game share of [san] at [fen] and the number of games there.
-  ({double share, int games})? ownMoveAt(String fen, String san) =>
+  OwnMoveShare? ownMoveAt(String fen, String san) =>
       _shareOf(ownMoves, fen, san);
 
-  ({double share, int games})? ownReplyAt(String fen, String san) =>
+  /// The opponents' share of [san] at [fen] in the user's games.
+  OwnMoveShare? ownReplyAt(String fen, String san) =>
       _shareOf(ownReplies, fen, san);
 
   /// Number of the user's games that reached [fen], whoever is to move.
@@ -63,11 +71,7 @@ class PlanKnowledge {
 
   bool get hasOwnGames => ownMoves.isNotEmpty || ownReplies.isNotEmpty;
 
-  static ({double share, int games})? _shareOf(
-    MoveCounts counts,
-    String fen,
-    String san,
-  ) {
+  static OwnMoveShare? _shareOf(MoveCounts counts, String fen, String san) {
     final here = counts[normalizeFen(fen)];
     if (here == null || here.isEmpty) return null;
     final total = here.values.fold<int>(0, (a, b) => a + b);
@@ -98,12 +102,7 @@ class PlanKnowledge {
       Position pos = Chess.initial;
       for (var i = 0; i < moves.length && i < maxPlies; i++) {
         final san = moves[i];
-        final ours = (pos.turn == Side.white) == isWhite;
-        if (ours) {
-          final key = normalizeFen(pos.fen);
-          final here = out.putIfAbsent(key, () => {});
-          here[san] = (here[san] ?? 0) + 1;
-        }
+        if (_isOurTurn(pos, isWhite)) _tally(out, pos.fen, san);
         final next = playSanOrNullMove(pos, san);
         if (next == null) break;
         pos = next;
@@ -115,8 +114,7 @@ class PlanKnowledge {
   /// Count the user's moves and their opponents' replies in a PGN corpus.
   /// Only games where the user (matched by [heroNames], `;`-separated) held
   /// [isWhite]'s colour count. Runs off the UI isolate.
-  static Future<({MoveCounts moves, MoveCounts replies, int games})>
-  countOwnGames(
+  static Future<OwnGameCounts> countOwnGames(
     String pgnText, {
     required String heroNames,
     required bool isWhite,
@@ -133,7 +131,7 @@ class PlanKnowledge {
   }
 
   /// Same as [countOwnGames], on the calling isolate (small corpora, tests).
-  static ({MoveCounts moves, MoveCounts replies, int games}) countOwnGamesSync(
+  static OwnGameCounts countOwnGamesSync(
     String pgnText, {
     required String heroNames,
     required bool isWhite,
@@ -148,6 +146,7 @@ class PlanKnowledge {
       try {
         game = PgnGame.parsePgn(text);
       } catch (_) {
+        // An unparsable game is not the user's evidence of anything.
         continue;
       }
       final white = (game.headers['White'] ?? '').toLowerCase();
@@ -162,16 +161,20 @@ class PlanKnowledge {
       for (final node in game.moves.mainline()) {
         if (ply++ >= maxPlies) break;
         final san = node.san;
-        final ours = (pos.turn == Side.white) == isWhite;
-        final key = normalizeFen(pos.fen);
-        final target = ours ? moves : replies;
-        final here = target.putIfAbsent(key, () => {});
-        here[san] = (here[san] ?? 0) + 1;
+        _tally(_isOurTurn(pos, isWhite) ? moves : replies, pos.fen, san);
         final next = playSanOrNullMove(pos, san);
         if (next == null) break;
         pos = next;
       }
     }
     return (moves: moves, replies: replies, games: games);
+  }
+
+  static bool _isOurTurn(Position pos, bool isWhite) =>
+      (pos.turn == Side.white) == isWhite;
+
+  static void _tally(MoveCounts counts, String fen, String san) {
+    final here = counts.putIfAbsent(normalizeFen(fen), () => {});
+    here[san] = (here[san] ?? 0) + 1;
   }
 }

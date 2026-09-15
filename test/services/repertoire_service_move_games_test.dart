@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:chess_auto_prep/services/repertoire_service.dart';
+import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -10,7 +10,7 @@ import 'package:path/path.dart' as p;
 String _game(String event) =>
     '[Event "$event"]\n[Result "*"]\n\n1. e4 e6 2. d4 d5 *\n';
 
-Future<List<String>> _events(RepertoireService s, String path) async =>
+Future<List<String>> _events(RepertoireFileEditor s, String path) async =>
     (await s.readPgnDocument(path))!.games
         .map((g) => RegExp(r'\[Event "([^"]*)"\]').firstMatch(g)!.group(1)!)
         .toList();
@@ -19,7 +19,7 @@ void main() {
   late Directory tmp;
   late String a;
   late String b;
-  final service = RepertoireService();
+  const service = RepertoireFileEditor();
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('move_games_test');

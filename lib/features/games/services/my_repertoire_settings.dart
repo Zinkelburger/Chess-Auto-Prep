@@ -26,21 +26,30 @@ class MyRepertoireSettings extends ChangeNotifier with SafeChangeNotifier {
   List<String> _whitePaths = const [];
   List<String> _blackPaths = const [];
   bool _loaded = false;
+  Future<void>? _loading;
 
   List<String> get whitePaths => List.unmodifiable(_whitePaths);
   List<String> get blackPaths => List.unmodifiable(_blackPaths);
   bool get isLoaded => _loaded;
   bool get hasAny => _whitePaths.isNotEmpty || _blackPaths.isNotEmpty;
 
+  /// The designated folders for the side [white], read-only.
   List<String> pathsFor({required bool white}) =>
       white ? whitePaths : blackPaths;
 
-  Future<void> ensureLoaded() async {
-    if (_loaded) return;
+  /// Load once. Concurrent callers share the in-flight read rather than
+  /// racing two prefs reads and notifying twice.
+  Future<void> ensureLoaded() {
+    if (_loaded) return Future.value();
+    return _loading ??= _load();
+  }
+
+  Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     _whitePaths = prefs.getStringList(_whiteKey) ?? const [];
     _blackPaths = prefs.getStringList(_blackKey) ?? const [];
     _loaded = true;
+    _loading = null;
     notifyListeners();
   }
 
@@ -59,13 +68,13 @@ class MyRepertoireSettings extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> addPath({required bool white, required String path}) async {
-    final current = white ? _whitePaths : _blackPaths;
+    final current = pathsFor(white: white);
     if (current.contains(path)) return;
     await setPaths(white: white, paths: [...current, path]);
   }
 
   Future<void> removePath({required bool white, required String path}) async {
-    final current = white ? _whitePaths : _blackPaths;
+    final current = pathsFor(white: white);
     if (!current.contains(path)) return;
     await setPaths(
       white: white,

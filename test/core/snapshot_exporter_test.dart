@@ -9,6 +9,7 @@ library;
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_progress.dart';
+import 'package:chess_auto_prep/services/jobs/generation_phase.dart';
 import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/core/snapshot_exporter.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';

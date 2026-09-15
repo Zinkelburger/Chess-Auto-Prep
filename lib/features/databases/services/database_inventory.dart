@@ -118,6 +118,18 @@ abstract final class StoreLabels {
   static const chessDbDump = 'chessdb-dump';
 }
 
+/// SQLite databases kept directly in the support directory, by label.
+const _supportDatabases = {
+  StoreLabels.masterGames: 'master_games.db',
+  StoreLabels.yourGames: 'app_games.db',
+  StoreLabels.evalCache: 'eval_cache.db',
+};
+
+/// Files SQLite writes beside a database while it is open.
+const _sqliteSidecarSuffixes = ['-wal', '-shm'];
+
+const _quarantineDirectoryName = '.trash';
+
 /// Reads the sizes of everything the app keeps.
 ///
 /// [supportDirectory] is the app's own data directory; [bughouseBookPath] and
@@ -129,86 +141,78 @@ Future<DatabaseInventory> readDatabaseInventory({
   String? lichessEvalsPath,
   String? chessDbDataDirectory,
 }) async {
+  final scan = _InventoryScan();
+  scan.addDirectory(supportDirectory);
+  for (final MapEntry(key: label, value: fileName)
+      in _supportDatabases.entries) {
+    scan.addSqliteStore(label, p.join(supportDirectory, fileName));
+  }
+  if (bughouseBookPath case final path? when path.isNotEmpty) {
+    scan.addDirectory(p.dirname(path));
+    scan.addSqliteStore(StoreLabels.bughouseBook, path);
+  }
+  if (lichessEvalsPath case final path? when path.isNotEmpty) {
+    await scan.addDirectoryStore(StoreLabels.lichessEvals, path);
+  }
+  if (chessDbDataDirectory case final path? when path.isNotEmpty) {
+    await scan.addDirectoryStore(StoreLabels.chessDbDump, path);
+  }
+  return DatabaseInventory(
+    stores: scan.stores.where((s) => s.exists).toList(),
+    strays: await _straysIn(supportDirectory, scan.claimed),
+    directories: scan.directories,
+    quarantineBytes: await _directoryBytes(quarantineDirFor(supportDirectory)),
+  );
+}
+
+/// Accumulates stores and the directories they live in during one
+/// [readDatabaseInventory] pass, remembering which files a store has claimed
+/// so the stray walk can skip them.
+class _InventoryScan {
   final stores = <StoreFootprint>[];
   final directories = <String>[];
   final claimed = <String>{};
 
-  void addDirectory(String? dir) {
-    if (dir == null || dir.isEmpty) return;
-    if (directories.contains(dir)) return;
+  /// Records [dir] as somewhere the app keeps data, once, if it exists.
+  void addDirectory(String dir) {
+    if (dir.isEmpty || directories.contains(dir)) return;
     if (!Directory(dir).existsSync()) return;
     directories.add(dir);
   }
 
   /// A database and the `-wal`/`-shm` SQLite writes beside it.
-  StoreFootprint sqliteStore(String label, String path) {
+  void addSqliteStore(String label, String path) {
     final paths = <String>[];
     var bytes = 0;
-    for (final candidate in [path, '$path-wal', '$path-shm']) {
+    for (final candidate in [
+      path,
+      for (final suffix in _sqliteSidecarSuffixes) '$path$suffix',
+    ]) {
       final size = _fileBytes(candidate);
       if (size == null) continue;
       paths.add(candidate);
       bytes += size;
       claimed.add(candidate);
     }
-    return StoreFootprint(label: label, bytes: bytes, paths: paths);
+    stores.add(StoreFootprint(label: label, bytes: bytes, paths: paths));
   }
 
-  addDirectory(supportDirectory);
-  stores.add(
-    sqliteStore(
-      StoreLabels.masterGames,
-      p.join(supportDirectory, 'master_games.db'),
-    ),
-  );
-  stores.add(
-    sqliteStore(
-      StoreLabels.yourGames,
-      p.join(supportDirectory, 'app_games.db'),
-    ),
-  );
-  stores.add(
-    sqliteStore(
-      StoreLabels.evalCache,
-      p.join(supportDirectory, 'eval_cache.db'),
-    ),
-  );
-
-  if (bughouseBookPath != null && bughouseBookPath.isNotEmpty) {
-    addDirectory(p.dirname(bughouseBookPath));
-    stores.add(sqliteStore(StoreLabels.bughouseBook, bughouseBookPath));
-  }
-  if (lichessEvalsPath != null && lichessEvalsPath.isNotEmpty) {
-    addDirectory(lichessEvalsPath);
+  /// A store that is a whole directory, measured recursively.
+  Future<void> addDirectoryStore(String label, String directory) async {
+    addDirectory(directory);
     stores.add(
       StoreFootprint(
-        label: StoreLabels.lichessEvals,
-        bytes: await _directoryBytes(lichessEvalsPath),
-        paths: [lichessEvalsPath],
+        label: label,
+        bytes: await _directoryBytes(directory),
+        paths: [directory],
       ),
     );
   }
-  if (chessDbDataDirectory != null && chessDbDataDirectory.isNotEmpty) {
-    addDirectory(chessDbDataDirectory);
-    stores.add(
-      StoreFootprint(
-        label: StoreLabels.chessDbDump,
-        bytes: await _directoryBytes(chessDbDataDirectory),
-        paths: [chessDbDataDirectory],
-      ),
-    );
-  }
-
-  return DatabaseInventory(
-    stores: stores.where((s) => s.exists).toList(),
-    strays: await _straysIn(supportDirectory, claimed),
-    directories: directories,
-    quarantineBytes: await _directoryBytes(quarantineDirFor(supportDirectory)),
-  );
 }
 
 /// Where [deleteStrayFile] puts what it removes.
-String quarantineDirFor(String directory) => p.join(directory, '.trash');
+String quarantineDirFor(String directory) =>
+    p.join(directory, _quarantineDirectoryName);
 
 /// Unlinks the quarantine for real, and reports what that freed.
 ///
@@ -245,8 +249,7 @@ Future<List<StrayFile>> _straysIn(String directory, Set<String> claimed) async {
     await for (final entity in dir.list(followLinks: false)) {
       if (entity is! File) continue;
       if (claimed.contains(entity.path)) continue;
-      final name = p.basename(entity.path);
-      final reason = _strayReason(name);
+      final reason = _strayReason(p.basename(entity.path));
       if (reason == null) continue;
       final size = _fileBytes(entity.path);
       if (size == null || size == 0) continue;
@@ -261,7 +264,7 @@ Future<List<StrayFile>> _straysIn(String directory, Set<String> claimed) async {
 
 /// Why a file is offered for deletion, or null to leave it alone.
 ///
-/// Deliberately a allowlist of shapes we put there ourselves. Settings,
+/// Deliberately an allowlist of shapes we put there ourselves. Settings,
 /// preferences and anything we do not recognise are not "leftovers" just
 /// because this file has not heard of them — the page would then invite a
 /// user to delete their own configuration.
@@ -283,7 +286,7 @@ String? _strayReason(String name) {
 /// was measured minutes ago, on a page whose whole subject is multi-gigabyte
 /// databases, is worth one more look.
 Future<bool> deleteStrayFile(StrayFile stray) async {
-  if (_strayReason(p.basename(stray.path)) == null) return false;
+  if (_strayReason(stray.name) == null) return false;
   try {
     final file = File(stray.path);
     if (!file.existsSync()) return true;
@@ -291,7 +294,7 @@ Future<bool> deleteStrayFile(StrayFile stray) async {
     await FileMutationService.instance.quarantineFile(
       file,
       allowedRoot: parent,
-      quarantineRoot: Directory(p.join(parent.path, '.trash')),
+      quarantineRoot: Directory(quarantineDirFor(parent.path)),
     );
     return true;
   } on FileSystemException {

@@ -28,7 +28,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 
 import '../constants/chess_constants.dart';
 import '../services/pgn_parsing_service.dart'
-    show splitPgnIntoGames, extractHeaders, stripBom;
+    show extractHeaders, splitPgnIntoGames, stripBom;
 import '../utils/fen_utils.dart' show isWhiteToMove;
 import 'move_tree.dart';
 
@@ -96,16 +96,24 @@ class StudyChapter {
   /// One chapter, parsed from the text of one game — the single place that
   /// decides what a chapter keeps, so a caller cannot build one that quietly
   /// keeps less.
+  ///
+  /// The chapter is named [name] when given, else by [nameFromHeaders] with
+  /// [fallbackName] for a game whose headers name nothing.
   factory StudyChapter.fromGameText(
     String gameText, {
     String? name,
     String? studyName,
+    String fallbackName = 'Chapter',
   }) {
     final headers = extractHeaders(gameText);
     return StudyChapter(
       name:
           name ??
-          nameFromHeaders(headers, fallback: 'Chapter', studyName: studyName),
+          nameFromHeaders(
+            headers,
+            fallback: fallbackName,
+            studyName: studyName,
+          ),
       headers: headers,
       tree: MoveTree.fromPgn(gameText),
     );
@@ -231,23 +239,16 @@ class StudyDocument {
     required String name,
     String? filePath,
   }) {
-    final chapters = <StudyChapter>[];
     final games = splitPgnIntoGames(stripBom(content));
-    for (int i = 0; i < games.length; i++) {
-      final gameText = games[i];
-      final headers = extractHeaders(gameText);
-      // MoveTree.fromPgn reads the [FEN] header itself.
-      chapters.add(
+    // MoveTree.fromPgn reads the [FEN] header itself.
+    final chapters = <StudyChapter>[
+      for (final (i, gameText) in games.indexed)
         StudyChapter.fromGameText(
           gameText,
-          name: StudyChapter.nameFromHeaders(
-            headers,
-            fallback: 'Chapter ${i + 1}',
-            studyName: name,
-          ),
+          studyName: name,
+          fallbackName: 'Chapter ${i + 1}',
         ),
-      );
-    }
+    ];
     if (chapters.isEmpty) {
       chapters.add(StudyChapter(name: 'Chapter 1'));
     }

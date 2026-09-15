@@ -75,8 +75,12 @@ class EvalCache {
   /// was cleared does not resurrect its entry afterwards.
   int _generation = 0;
 
-  bool get _supported =>
+  static bool get _supported =>
       Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+
+  /// Cached evals in the L1 mirror — the count reported when the database
+  /// is unavailable.
+  int get _memoryCount => _mem.values.where((e) => !e.isMiss).length;
 
   /// Idempotent. Safe to call on every tree-build start.
   ///
@@ -236,6 +240,8 @@ class EvalCache {
       final dir = await AppPaths.supportDirectory();
       return dir.path;
     } catch (_) {
+      // No support directory (sandboxed or unusual install): a temp cache
+      // still saves re-evaluation within this process.
       final fallback = Directory.systemTemp.createTempSync('chess_auto_prep');
       return fallback.path;
     }
@@ -315,13 +321,14 @@ class EvalCache {
   Future<int> count() async {
     await init();
     final db = _db;
-    if (db == null) return _mem.values.where((e) => !e.isMiss).length;
+    if (db == null) return _memoryCount;
     await _writes.flush();
     try {
       final rows = await db.rawQuery('SELECT COUNT(*) AS n FROM evals');
       return (rows.first['n'] as int?) ?? 0;
     } catch (_) {
-      return _mem.values.where((e) => !e.isMiss).length;
+      // A failed query is not worth failing a settings screen over.
+      return _memoryCount;
     }
   }
 
@@ -480,6 +487,9 @@ class _WriteQueue {
 
 // ── Maia policy cache ──────────────────────────────────────────────────
 
+/// Persistent Maia policy cache, sharing [EvalCache]'s database file and
+/// write queue (hence the same library: it reads the cache's private
+/// connection directly).
 class MaiaCache {
   static final MaiaCache instance = MaiaCache._();
   MaiaCache._();
@@ -581,6 +591,8 @@ class MaiaCache {
     }
   }
 
+  /// A hand-rolled `{"uci":prob,...}` codec: the policy is flat and numeric,
+  /// and a full JSON decode per cache hit showed up in inference profiles.
   static String _encodePolicyJson(Map<String, double> policy) {
     final sb = StringBuffer('{');
     var first = true;

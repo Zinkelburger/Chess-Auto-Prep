@@ -23,8 +23,8 @@ import '../services/storage/storage_factory.dart';
 import '../services/storage/study_naming.dart';
 import '../utils/atomic_file.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
-import 'package:chess_auto_prep/utils/log.dart';
-import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
+import '../utils/log.dart';
+import '../utils/safe_change_notifier.dart';
 
 class StudyController extends ChangeNotifier
     with SafeChangeNotifier, MoveNavigation {
@@ -100,14 +100,21 @@ class StudyController extends ChangeNotifier
     final fresh = StudyDocument.fresh(name)..filePath = path;
     final content = fresh.toPgn();
     await storage.writeFile(path, content, createOnly: true);
-    _doc = fresh;
-    _persistedContent = content;
+    _adoptDocument(fresh, persistedContent: content);
+    await refreshStudyList();
+  }
+
+  /// Make [doc] the active study, its cursor at the first chapter's start.
+  /// [persistedContent] is the exact text on disk (null for a study that has
+  /// never been written), so the next autosave can detect an external edit.
+  void _adoptDocument(StudyDocument doc, {required String? persistedContent}) {
+    _doc = doc;
+    _persistedContent = persistedContent;
     saveError = null;
     _chapterIndex = 0;
     _path = TreePath.empty;
     _faceChapterOrientation();
     _dirty = false;
-    await refreshStudyList();
   }
 
   /// Write [pgn] out as a brand-new study named [name] (one chapter per game)
@@ -201,29 +208,26 @@ class StudyController extends ChangeNotifier
     if (generation != _docGeneration) return;
     // Trees crossing the isolate boundary carry foreign node ids — adopt
     // them only after re-minting via [MoveTree.copyWithFreshIds].
-    _doc = StudyDocument(
-      name: loaded.name,
-      filePath: loaded.filePath,
-      chapters: [
-        for (final c in loaded.chapters)
-          StudyChapter(
-            name: c.name,
-            headers: c.headers,
-            // The copy carries the chapter's opening note with it, so this
-            // snapshot is what the next autosave writes back intact.
-            tree: c.tree.copyWithFreshIds(),
-            // Already resolved from the file's tags, which [headers] no
-            // longer carries.
-            orientation: c.orientation,
-          ),
-      ],
+    _adoptDocument(
+      StudyDocument(
+        name: loaded.name,
+        filePath: loaded.filePath,
+        chapters: [
+          for (final c in loaded.chapters)
+            StudyChapter(
+              name: c.name,
+              headers: c.headers,
+              // The copy carries the chapter's opening note with it, so this
+              // snapshot is what the next autosave writes back intact.
+              tree: c.tree.copyWithFreshIds(),
+              // Already resolved from the file's tags, which [headers] no
+              // longer carries.
+              orientation: c.orientation,
+            ),
+        ],
+      ),
+      persistedContent: content,
     );
-    _persistedContent = content;
-    saveError = null;
-    _chapterIndex = 0;
-    _path = TreePath.empty;
-    _faceChapterOrientation();
-    _dirty = false;
     notifyListeners();
   }
 
@@ -252,13 +256,10 @@ class StudyController extends ChangeNotifier
     await StorageFactory.instance.deleteFile(path);
     if (_doc.filePath == path) {
       _docGeneration++; // supersede any in-flight openStudy of this file
-      _doc = StudyDocument.fresh('Untitled study');
-      _persistedContent = null;
-      saveError = null;
-      _chapterIndex = 0;
-      _path = TreePath.empty;
-      _faceChapterOrientation();
-      _dirty = false;
+      _adoptDocument(
+        StudyDocument.fresh('Untitled study'),
+        persistedContent: null,
+      );
     }
     await refreshStudyList();
   }
@@ -610,15 +611,7 @@ class StudyController extends ChangeNotifier
   /// After a structural change, re-locate the cursor by replaying its SAN
   /// sequence (paths shift when siblings reorder).
   void _reanchorCursor(List<String> sanLine) {
-    var path = TreePath.empty;
-    var siblings = tree.roots;
-    for (final san in sanLine) {
-      final idx = siblings.indexWhere((n) => n.san == san);
-      if (idx == -1) break;
-      path = path.child(idx);
-      siblings = siblings[idx].children;
-    }
-    _path = path;
+    _path = tree.pathForSans(sanLine);
   }
 
   @override

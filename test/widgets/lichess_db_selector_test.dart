@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart'
+import 'package:chess_auto_prep/models/explorer_response.dart'
     show LichessDatabase;
 import 'package:chess_auto_prep/widgets/lichess_db_selector.dart';
 import 'package:flutter/material.dart';

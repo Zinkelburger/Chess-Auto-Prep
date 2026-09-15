@@ -56,12 +56,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: assets/bughouse
-          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-${{ matrix.os }}
+          key: bughouse-${{ hashFiles('tools/assets.lock.json') }}-${{ matrix.os }}
 
       - name: Fetch the engine for this platform
         run: |
-          python tools/fetch_bughouse.py
-          python tools/fetch_bughouse.py --check
+          python tools/fetch_assets.py --only bughouse
+          python tools/fetch_assets.py --check --only bughouse
 
       # Static, and the only check here that a hosted runner cannot fake.
       - name: Test diagnostic on Windows PowerShell
@@ -136,12 +136,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: assets/bughouse
-          key: bughouse-${{ hashFiles('tools/bughouse.lock.json') }}-macos
+          key: bughouse-${{ hashFiles('tools/assets.lock.json') }}-macos
 
       - name: Fetch the engine for this platform
         run: |
-          python3 tools/fetch_bughouse.py
-          python3 tools/fetch_bughouse.py --check
+          python3 tools/fetch_assets.py --only bughouse
+          python3 tools/fetch_assets.py --check --only bughouse
 
       - name: Audit what the binaries need
         run: python3 tools/test_bughouse_engine.py deps

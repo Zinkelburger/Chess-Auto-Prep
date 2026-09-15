@@ -167,7 +167,12 @@ void main() {
         final p = pool(bc4Cp: 60, bb5Cp: 10);
         final improvements = await prober(p).probe([line()]);
         final composer = CourseComposer(
-          config: _config.copyWith(organizeIntoChapters: false),
+          // The note and the sideline comment are prose, written only when
+          // the export carries explanations.
+          config: _config.copyWith(
+            organizeIntoChapters: false,
+            annotationDetail: MoveAnnotationDetail.likelihood,
+          ),
           namer: CourseNamer(
             namer: OpeningNamer.unavailable(startFen: kStandardStartFen),
             rootWhiteToMove: true,

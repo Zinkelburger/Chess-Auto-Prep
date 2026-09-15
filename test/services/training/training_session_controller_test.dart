@@ -1,219 +1,32 @@
 import 'dart:io';
 
-import 'package:chess_auto_prep/models/completed_move.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
-import 'package:chess_auto_prep/models/repertoire_review_history_entry.dart';
 import 'package:chess_auto_prep/models/training_settings.dart';
-import 'package:chess_auto_prep/services/repertoire_review_service.dart';
-import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:chess_auto_prep/services/training/training_phase.dart';
 import 'package:chess_auto_prep/services/training/training_session_controller.dart';
 import 'package:dartchess/dartchess.dart' hide File;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
-import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Routes path_provider's documents directory to a per-test temp dir so any
-/// storage fallback (e.g. the tree.json playability probe) touches real files
-/// in an isolated location instead of the user's data.
-class _FakePathProvider extends PathProviderPlatform
-    with MockPlatformInterfaceMixin {
-  _FakePathProvider(this.root);
-  final String root;
-
-  @override
-  Future<String?> getApplicationDocumentsPath() async => root;
-
-  @override
-  Future<String?> getApplicationSupportPath() async => root;
-}
-
-/// In-memory [RepertoireService]: parse returns canned lines, header writes
-/// are recorded instead of touching disk.
-class _FakeRepertoireService extends RepertoireService {
-  List<RepertoireLine> lines = [];
-  Object? parseError;
-  final headerUpdates = <String>[];
-
-  @override
-  Future<List<RepertoireLine>> parseRepertoireFile(
-    String filePath, {
-    String? trainingColor,
-    bool colorFromStartingSide = false,
-    bool inferColorWhenUnknown = false,
-  }) async {
-    if (parseError != null) throw parseError!;
-    return List.of(lines);
-  }
-
-  @override
-  Future<bool> updateLineReviewHeaders(
-    String filePath,
-    String lineId, {
-    required DateTime? lastReview,
-    required double difficulty,
-    required double intervalDays,
-    required DateTime? dueDate,
-    required int passCount,
-    required int failCount,
-  }) async {
-    headerUpdates.add(lineId);
-    return true;
-  }
-
-  @override
-  Future<bool> updateManyLineReviewHeaders(
-    String filePath,
-    Map<String, RepertoireReviewEntry> entriesByLineId,
-  ) async {
-    headerUpdates.addAll(entriesByLineId.keys);
-    return true;
-  }
-}
-
-/// In-memory [RepertoireReviewService]: the pure scheduling logic
-/// (syncEntries, orderLinesForReview, applyRating) stays real; only the CSV
-/// persistence is replaced.
-class _FakeReviewService extends RepertoireReviewService {
-  List<RepertoireReviewEntry> entries = [];
-  List<RepertoireMoveProgress> progress = [];
-  final history = <RepertoireReviewHistoryEntry>[];
-  int saveAllCalls = 0;
-  Duration loadDelay = Duration.zero;
-
-  @override
-  Future<List<RepertoireReviewEntry>> loadAll() async {
-    if (loadDelay > Duration.zero) await Future<void>.delayed(loadDelay);
-    return List.of(entries);
-  }
-
-  @override
-  Future<void> saveAll(
-    List<RepertoireReviewEntry> entries, {
-    String? repertoireId,
-  }) async {
-    saveAllCalls++;
-    this.entries = [
-      if (repertoireId != null)
-        for (final e in this.entries)
-          if (e.repertoireId != repertoireId) e,
-      ...entries,
-    ];
-  }
-
-  @override
-  Future<List<RepertoireMoveProgress>> loadMoveProgress() async =>
-      List.of(progress);
-
-  @override
-  Future<void> saveMoveProgress(
-    List<RepertoireMoveProgress> entries, {
-    String? repertoireId,
-  }) async {
-    progress = List.of(entries);
-  }
-
-  @override
-  Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries) async {
-    history.addAll(entries);
-  }
-}
-
-RepertoireLine _line(
-  String id,
-  List<String> moves, {
-  double? importance,
-  Map<String, String> comments = const {},
-  String? chapter,
-}) {
-  return RepertoireLine(
-    id: id,
-    name: 'Line $id',
-    moves: moves,
-    color: 'white',
-    startPosition: Chess.initial,
-    fullPgn: '',
-    comments: comments,
-    importance: importance,
-    chapter: chapter,
-  );
-}
-
-RepertoireReviewEntry _entry(
-  String repertoireId,
-  String lineId, {
-  String lastRating = 'good',
-  DateTime? due,
-  String lineName = '',
-}) {
-  return RepertoireReviewEntry(
-    repertoireId: repertoireId,
-    lineId: lineId,
-    lineName: lineName.isEmpty ? lineId : lineName,
-    lastRating: lastRating,
-    dueDateUtc: due,
-  );
-}
-
-CompletedMove _move({String uci = '', String san = ''}) => CompletedMove(
-  from: '',
-  to: '',
-  san: san,
-  fenBefore: '',
-  fenAfter: '',
-  uci: uci,
-);
-
-/// 1 ms pacing everywhere so drill chains settle fast; learn stops at the
-/// acknowledge gate instead of running timers.
-TrainingSettings _fastSettings({
-  bool wrongMoveReplay = true,
-  bool autoNext = false,
-  ReviewOrder reviewOrder = ReviewOrder.sequential,
-  int correctStreakThreshold = 3,
-}) {
-  return TrainingSettings(
-    moveSpeedMs: 1,
-    introSpeedMs: 1,
-    skipToFirstComment: false,
-    learnRequiresClick: true,
-    wrongMoveReplay: wrongMoveReplay,
-    autoNext: autoNext,
-    reviewOrder: reviewOrder,
-    correctStreakThreshold: correctStreakThreshold,
-  );
-}
-
-Future<void> _waitFor(
-  bool Function() condition, {
-  Duration timeout = const Duration(seconds: 5),
-}) async {
-  final sw = Stopwatch()..start();
-  while (!condition()) {
-    if (sw.elapsed > timeout) {
-      fail('Timed out waiting for condition');
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 5));
-  }
-}
+import 'training_fakes.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
-  late _FakeRepertoireService repService;
-  late _FakeReviewService reviewService;
+  late FakeRepertoireService repService;
+  late FakeReviewService reviewService;
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('training_session_test');
-    PathProviderPlatform.instance = _FakePathProvider(tempDir.path);
+    PathProviderPlatform.instance = FakePathProvider(tempDir.path);
     SharedPreferences.setMockInitialValues({});
-    repService = _FakeRepertoireService();
-    reviewService = _FakeReviewService();
+    repService = FakeRepertoireService();
+    reviewService = FakeReviewService();
   });
 
   tearDown(() async {
@@ -224,7 +37,7 @@ void main() {
     return TrainingSessionController(
       repertoireService: repService,
       reviewService: reviewService,
-    )..settings = _fastSettings();
+    )..settings = fastSettings();
   }
 
   String repPath() => '${tempDir.path}/rep.pgn';
@@ -239,7 +52,7 @@ void main() {
     'reopening unchanged material does not rewrite review progress',
     () async {
       repService.lines = [
-        _line('same', ['e4', 'e5']),
+        fakeLine('same', ['e4', 'e5']),
       ];
       final controller = buildController();
       addTearDown(controller.dispose);
@@ -263,15 +76,15 @@ void main() {
       final second = File('${folder.path}/Two.pgn')
         ..writeAsStringSync('1. e4 e5 *');
       repService.lines = [
-        _line('shared', ['e4', 'e5']),
+        fakeLine('shared', ['e4', 'e5']),
       ];
       reviewService.entries = [
-        _entry(
+        fakeEntry(
           first.path,
           'shared',
           due: DateTime.now().toUtc().add(const Duration(days: 1)),
         ),
-        _entry(
+        fakeEntry(
           second.path,
           'shared',
           due: DateTime.now().toUtc().subtract(const Duration(days: 1)),
@@ -308,14 +121,14 @@ void main() {
       'happy path: lines parsed, entries synced, due queue ordered',
       () async {
         repService.lines = [
-          _line('A', ['e4', 'e5'], importance: 0.2),
-          _line('B', ['d4', 'd5'], importance: 0.9),
-          _line('C', ['c4']),
+          fakeLine('A', ['e4', 'e5'], importance: 0.2),
+          fakeLine('B', ['d4', 'd5'], importance: 0.9),
+          fakeLine('C', ['c4']),
         ];
         // A was reviewed and is not due until tomorrow; B and C are new.
         reviewService.entries = [
-          _entry('other.pgn', 'X'),
-          _entry(
+          fakeEntry('other.pgn', 'X'),
+          fakeEntry(
             repPath(),
             'A',
             due: DateTime.now().toUtc().add(const Duration(days: 1)),
@@ -340,7 +153,7 @@ void main() {
         ];
 
         final controller = buildController()
-          ..settings = _fastSettings(reviewOrder: ReviewOrder.byImportance)
+          ..settings = fastSettings(reviewOrder: ReviewOrder.byImportance)
           ..setRepertoire(meta());
         await controller.loadRepertoire();
 
@@ -377,7 +190,7 @@ void main() {
         expect(controller.hadLearnPhaseThisSession, isTrue);
 
         // The learn walkthrough halts at the acknowledge gate.
-        await _waitFor(() => controller.learnWaitingForAck);
+        await waitFor(() => controller.learnWaitingForAck);
         controller.dispose();
       },
     );
@@ -418,18 +231,18 @@ void main() {
   group('applyLearnedSelection', () {
     Future<TrainingSessionController> loadedController() async {
       repService.lines = [
-        _line('A', ['e4', 'e5']),
-        _line('B', ['d4', 'd5']),
-        _line('C', ['c4', 'c5']),
+        fakeLine('A', ['e4', 'e5']),
+        fakeLine('B', ['d4', 'd5']),
+        fakeLine('C', ['c4', 'c5']),
       ];
       // A is already learned (not due until tomorrow); B and C are new.
       reviewService.entries = [
-        _entry(
+        fakeEntry(
           repPath(),
           'A',
           due: DateTime.now().toUtc().add(const Duration(days: 1)),
         ),
-        _entry('other.pgn', 'X'),
+        fakeEntry('other.pgn', 'X'),
       ];
       final controller = buildController()..setRepertoire(meta());
       await controller.loadRepertoire();
@@ -501,9 +314,9 @@ void main() {
   group('chapter scoping', () {
     Future<TrainingSessionController> loadedController() async {
       repService.lines = [
-        _line('A', ['e4', 'e5'], chapter: 'One'),
-        _line('B', ['d4', 'd5'], chapter: 'One'),
-        _line('C', ['c4', 'c5'], chapter: 'Two'),
+        fakeLine('A', ['e4', 'e5'], chapter: 'One'),
+        fakeLine('B', ['d4', 'd5'], chapter: 'One'),
+        fakeLine('C', ['c4', 'c5'], chapter: 'Two'),
       ];
       final controller = buildController()..setRepertoire(meta());
       await controller.loadRepertoire();
@@ -580,20 +393,20 @@ void main() {
     test('correct move advances, wrong move records mistake, replay runs, '
         'rating counts the mistake', () async {
       final controller = buildController()..setRepertoire(meta());
-      final line = _line('D', ['e4', 'e5', 'Nf3', 'Nc6']);
+      final line = fakeLine('D', ['e4', 'e5', 'Nf3', 'Nc6']);
       controller.lines = [line];
       // reviewed → drilling
-      controller.reviewMap['D'] = _entry(repPath(), 'D');
+      controller.reviewMap['D'] = fakeEntry(repPath(), 'D');
 
       controller.startLine(line);
-      await _waitFor(() => controller.waitingForUser);
+      await waitFor(() => controller.waitingForUser);
 
       expect(controller.phase, TrainingPhase.drilling);
       expect(controller.hadLearnPhaseThisSession, isFalse);
       expect(controller.currentMoveIndex, 0);
 
       // Correct move: pair completes, opponent replies, next prompt lands.
-      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
+      await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
       expect(controller.currentMoveIndex, 2);
       expect(controller.waitingForUser, isTrue);
       expect(controller.currentPairOpponent!.san, 'e5');
@@ -601,7 +414,7 @@ void main() {
 
       // Wrong move: mistake recorded, correction plays out, line finishes
       // into the replay phase (wrongMoveReplay is on).
-      await controller.handleUserMove(_move(uci: 'g1h3', san: 'Nh3'));
+      await controller.handleUserMove(fakeMove(uci: 'g1h3', san: 'Nh3'));
       expect(controller.lineHadMistake, isTrue);
       expect(controller.wrongMoveIndices, [2]);
       expect(controller.phase, TrainingPhase.replaying);
@@ -613,12 +426,12 @@ void main() {
       ], reason: 'replay rewinds the board to just before the missed move');
 
       // Wrong replay attempt: stays in replay with a retry prompt.
-      await controller.handleUserMove(_move(uci: 'g1h3', san: 'Nh3'));
+      await controller.handleUserMove(fakeMove(uci: 'g1h3', san: 'Nh3'));
       expect(controller.phase, TrainingPhase.replaying);
       expect(controller.feedback, 'Play Nf3');
 
       // Correct replay: line is finished and awaits a rating.
-      await controller.handleUserMove(_move(uci: 'g1f3', san: 'Nf3'));
+      await controller.handleUserMove(fakeMove(uci: 'g1f3', san: 'Nf3'));
       expect(controller.phase, TrainingPhase.finished);
       expect(controller.waitingForUser, isFalse);
       expect(controller.feedback, 'Line complete — rate your recall.');
@@ -644,15 +457,15 @@ void main() {
       'a clean drilled line finishes without replay and rates as a pass',
       () async {
         final controller = buildController();
-        final line = _line('O', ['e4', 'e5']);
+        final line = fakeLine('O', ['e4', 'e5']);
         controller.lines = [line];
-        controller.reviewMap['O'] = _entry('', 'O');
+        controller.reviewMap['O'] = fakeEntry('', 'O');
 
         controller.startLine(line);
-        await _waitFor(() => controller.waitingForUser);
+        await waitFor(() => controller.waitingForUser);
 
-        await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
-        await _waitFor(() => controller.phase == TrainingPhase.finished);
+        await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
+        await waitFor(() => controller.phase == TrainingPhase.finished);
         expect(controller.lineHadMistake, isFalse);
         expect(controller.wrongMoveIndices, isEmpty);
         expect(controller.feedback, 'Line complete — rate your recall.');
@@ -672,7 +485,7 @@ void main() {
       'new line walks through, quizzes after acknowledge, then drills',
       () async {
         final controller = buildController();
-        final line = _line('L', ['e4', 'e5']);
+        final line = fakeLine('L', ['e4', 'e5']);
         controller.lines = [line];
         // No review entry → the line is new → learning phase.
 
@@ -680,7 +493,7 @@ void main() {
         expect(controller.phase, TrainingPhase.learning);
         expect(controller.hadLearnPhaseThisSession, isTrue);
 
-        await _waitFor(() => controller.learnWaitingForAck);
+        await waitFor(() => controller.learnWaitingForAck);
         expect(controller.currentPairUser!.san, 'e4');
         expect(controller.session.moveHistory, ['e4']);
 
@@ -696,10 +509,10 @@ void main() {
           reason: 'board rewound',
         );
 
-        await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
+        await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
         // Walkthrough completes (opponent e5 auto-plays), then the same line
         // restarts in drilling.
-        await _waitFor(
+        await waitFor(
           () =>
               controller.phase == TrainingPhase.drilling &&
               controller.waitingForUser,
@@ -712,13 +525,13 @@ void main() {
 
     test('a commented opponent move waits for acknowledgement', () async {
       final controller = buildController();
-      final line = _line('M', ['e4', 'e5'], comments: {'1': 'Classic'});
+      final line = fakeLine('M', ['e4', 'e5'], comments: {'1': 'Classic'});
       controller.lines = [line];
 
       controller.startLine(line);
-      await _waitFor(() => controller.learnWaitingForAck);
+      await waitFor(() => controller.learnWaitingForAck);
       controller.learnAcknowledged();
-      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
+      await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
 
       // The opponent reply carries prose, so the walkthrough gates on Next.
       expect(controller.opponentWaitingForAck, isTrue);
@@ -728,7 +541,7 @@ void main() {
       controller.opponentAcknowledged();
       expect(controller.opponentWaitingForAck, isFalse);
       // Acknowledging finishes the walkthrough and restarts in drilling.
-      await _waitFor(
+      await waitFor(
         () =>
             controller.phase == TrainingPhase.drilling &&
             controller.waitingForUser,
@@ -738,15 +551,15 @@ void main() {
 
     test('a second Next on your move does not rewind a second ply', () async {
       final controller = buildController();
-      final line = _line('N', ['e4', 'e5', 'Nf3']);
+      final line = fakeLine('N', ['e4', 'e5', 'Nf3']);
       controller.lines = [line];
 
       controller.startLine(line);
-      await _waitFor(() => controller.learnWaitingForAck);
+      await waitFor(() => controller.learnWaitingForAck);
       controller.learnAcknowledged();
-      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
+      await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
       // e5 auto-plays, then Nf3 is shown and waits for Next.
-      await _waitFor(
+      await waitFor(
         () => controller.learnWaitingForAck && controller.currentMoveIndex == 2,
       );
       expect(controller.session.moveHistory, ['e4', 'e5', 'Nf3']);
@@ -764,20 +577,24 @@ void main() {
 
     test('a second Next on a commented reply does not skip a move', () async {
       final controller = buildController();
-      final line = _line('O', ['e4', 'e5', 'Nf3'], comments: {'1': 'Classic'});
+      final line = fakeLine(
+        'O',
+        ['e4', 'e5', 'Nf3'],
+        comments: {'1': 'Classic'},
+      );
       controller.lines = [line];
 
       controller.startLine(line);
-      await _waitFor(() => controller.learnWaitingForAck);
+      await waitFor(() => controller.learnWaitingForAck);
       controller.learnAcknowledged();
-      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
-      await _waitFor(() => controller.opponentWaitingForAck);
+      await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
+      await waitFor(() => controller.opponentWaitingForAck);
 
       controller.opponentAcknowledged();
       controller.opponentAcknowledged();
       // Without the guard the cursor stepped past Nf3 and the walkthrough
       // ended; with it, Nf3 is the next move shown.
-      await _waitFor(() => controller.learnWaitingForAck);
+      await waitFor(() => controller.learnWaitingForAck);
       expect(controller.currentPairUser!.san, 'Nf3');
       expect(controller.session.moveHistory, ['e4', 'e5', 'Nf3']);
       controller.dispose();
@@ -785,16 +602,16 @@ void main() {
 
     test('auto-advance quizzes an unannotated move after the delay', () async {
       final controller = buildController();
-      controller.settings = _fastSettings()
+      controller.settings = fastSettings()
         ..learnRequiresClick = false
         ..learnDelaySec = 1;
-      final line = _line('R', ['e4', 'e5']);
+      final line = fakeLine('R', ['e4', 'e5']);
       controller.lines = [line];
 
       controller.startLine(line);
       // No Next gate in auto mode: the move shows, then the quiz follows on
       // its own. It used to be skipped outright when the move had no note.
-      await _waitFor(
+      await waitFor(
         () => controller.learnQuizzing,
         timeout: const Duration(seconds: 5),
       );
@@ -821,18 +638,18 @@ void main() {
         fullPgn: '',
       );
       // … and then an ordinary line from move one.
-      final line = _line('Q', ['d4', 'd5']);
+      final line = fakeLine('Q', ['d4', 'd5']);
       controller.lines = [puzzle, line];
 
       controller.startLine(puzzle);
-      await _waitFor(() => controller.learnWaitingForAck);
+      await waitFor(() => controller.learnWaitingForAck);
       expect(controller.session.fen, isNot(Chess.initial.fen));
 
       controller.startLine(line);
       // Clearing history used to keep the puzzle's starting FEN, so this
       // line's board began with 1.e4 e5 already played.
       expect(controller.session.fen, Chess.initial.fen);
-      await _waitFor(() => controller.learnWaitingForAck);
+      await waitFor(() => controller.learnWaitingForAck);
       expect(controller.currentPairUser!.san, 'd4');
       expect(controller.error, isNull);
 
@@ -846,11 +663,11 @@ void main() {
   group('session statistics', () {
     test('rateLine tracks correct/incorrect, streak and best streak', () async {
       final controller = buildController();
-      final line = _line('S', ['e4']);
+      final line = fakeLine('S', ['e4']);
       controller.lines = [line];
-      controller.reviewMap['S'] = _entry('', 'S');
+      controller.reviewMap['S'] = fakeEntry('', 'S');
       controller.startLine(line);
-      await _waitFor(() => controller.waitingForUser);
+      await waitFor(() => controller.waitingForUser);
 
       controller.lineHadMistake = false;
       await controller.rateLine(ReviewRating.good);
@@ -878,8 +695,8 @@ void main() {
   group('move progress', () {
     test('streak accumulates to learned and a miss resets it', () {
       final controller = buildController()
-        ..settings = _fastSettings(correctStreakThreshold: 2);
-      final line = _line('X', ['e4']);
+        ..settings = fastSettings(correctStreakThreshold: 2);
+      final line = fakeLine('X', ['e4']);
 
       controller.updateMoveProgress(line, 0, wasCorrect: true);
       expect(controller.moveProgressMap['X:0']!.correctStreak, 1);
@@ -900,7 +717,7 @@ void main() {
   group('training modes', () {
     test('tactics mode drills a new line cold — no learn phase', () async {
       final controller = buildController();
-      final line = _line('T', ['e4', 'e5']);
+      final line = fakeLine('T', ['e4', 'e5']);
       controller.lines = [line];
       // No review entry → the line is "new", but tactics mode must not
       // reveal the solution via the learn walkthrough.
@@ -909,22 +726,22 @@ void main() {
       controller.startLine(line);
       expect(controller.phase, TrainingPhase.drilling);
       expect(controller.hadLearnPhaseThisSession, isFalse);
-      await _waitFor(() => controller.waitingForUser);
+      await waitFor(() => controller.waitingForUser);
       expect(controller.currentMoveIndex, 0);
       controller.dispose();
     });
 
     test('tactics mode never auto-plays intro moves', () async {
       final controller = buildController()
-        ..settings = _fastSettings()
+        ..settings = fastSettings()
         ..settings.skipToFirstComment = true;
-      final line = _line(
+      final line = fakeLine(
         'T2',
         ['e4', 'e5', 'Nf3'],
         comments: {'2': 'The point.'},
       );
       controller.lines = [line];
-      controller.reviewMap['T2'] = _entry('', 'T2');
+      controller.reviewMap['T2'] = fakeEntry('', 'T2');
 
       // Repertoire mode skips ahead to the first commented move…
       controller.startLine(line);
@@ -934,26 +751,26 @@ void main() {
       controller.trainingMode = TrainingMode.tactics;
       controller.startLine(line);
       expect(controller.trainingStartIndex, 0);
-      await _waitFor(() => controller.waitingForUser);
+      await waitFor(() => controller.waitingForUser);
       expect(controller.session.moveHistory, isEmpty);
       controller.dispose();
     });
 
     test('a [%tstart] marker starts the quiz there — even in tactics mode, '
         'where unmarked lines quiz cold', () async {
-      final controller = buildController()..settings = _fastSettings();
-      final line = _line(
+      final controller = buildController()..settings = fastSettings();
+      final line = fakeLine(
         'M1',
         ['e4', 'e5', 'Nf3', 'Nc6'],
         comments: {'2': 'Find it. [%tstart]'},
       );
       controller.lines = [line];
-      controller.reviewMap['M1'] = _entry('', 'M1');
+      controller.reviewMap['M1'] = fakeEntry('', 'M1');
       controller.trainingMode = TrainingMode.tactics;
 
       controller.startLine(line);
       expect(controller.trainingStartIndex, 2);
-      await _waitFor(() => controller.waitingForUser);
+      await waitFor(() => controller.waitingForUser);
       // The prelude auto-played onto the board; the marked move is quizzed.
       expect(controller.session.moveHistory, hasLength(2));
       expect(controller.currentMoveIndex, 2);
@@ -961,14 +778,14 @@ void main() {
     });
 
     test('a [%tend] marker stops the quiz after the marked move', () {
-      final controller = buildController()..settings = _fastSettings();
-      final line = _line(
+      final controller = buildController()..settings = fastSettings();
+      final line = fakeLine(
         'M2',
         ['e4', 'e5', 'Nf3', 'Nc6'],
         comments: {'1': '[%tend]'},
       );
       controller.lines = [line];
-      controller.reviewMap['M2'] = _entry('', 'M2');
+      controller.reviewMap['M2'] = fakeEntry('', 'M2');
 
       controller.startLine(line);
       expect(controller.currentLineLength, 2);
@@ -976,15 +793,15 @@ void main() {
     });
 
     test('a marker past the training-depth clamp is ignored', () {
-      final controller = buildController()..settings = _fastSettings();
+      final controller = buildController()..settings = fastSettings();
       controller.settings.trainingDepth = 2;
-      final line = _line(
+      final line = fakeLine(
         'M3',
         ['e4', 'e5', 'Nf3', 'Nc6'],
         comments: {'3': '[%tstart]'},
       );
       controller.lines = [line];
-      controller.reviewMap['M3'] = _entry('', 'M3');
+      controller.reviewMap['M3'] = fakeEntry('', 'M3');
 
       controller.startLine(line);
       expect(controller.trainingStartIndex, 0);
@@ -1012,15 +829,15 @@ void main() {
     test('queue includes non-due lines; a completed line drops out with '
         'pass/fail recorded but no SRS scheduling', () async {
       repService.lines = [
-        _line('A', ['e4']),
-        _line('B', ['d4']),
+        fakeLine('A', ['e4']),
+        fakeLine('B', ['d4']),
       ];
       // A is scheduled far in the future — spaced mode would skip it.
       final farDue = DateTime.now().toUtc().add(const Duration(days: 30));
-      reviewService.entries = [_entry(repPath(), 'A', due: farDue)];
+      reviewService.entries = [fakeEntry(repPath(), 'A', due: farDue)];
 
       final controller = buildController()
-        ..settings = _fastSettings(autoNext: false)
+        ..settings = fastSettings(autoNext: false)
         ..setStudySource(meta());
       await controller.loadRepertoire();
       controller.pickStartingLine();
@@ -1029,15 +846,15 @@ void main() {
       expect(controller.dueQueue.map((l) => l.id), ['A', 'B']);
       expect(controller.currentLine!.id, 'A');
       expect(controller.phase, TrainingPhase.drilling);
-      await _waitFor(() => controller.waitingForUser);
+      await waitFor(() => controller.waitingForUser);
 
-      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
-      await _waitFor(() => controller.phase == TrainingPhase.finished);
+      await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
+      await waitFor(() => controller.phase == TrainingPhase.finished);
       expect(controller.feedback, 'Puzzle solved!');
 
       // The finished line left the queue; stats recorded, no scheduling.
       expect(controller.dueQueue.map((l) => l.id), ['B']);
-      await _waitFor(() => reviewService.history.length == 1);
+      await waitFor(() => reviewService.history.length == 1);
       expect(reviewService.history.single.sessionType, 'linear');
       expect(reviewService.history.single.hadMistake, isFalse);
       expect(controller.reviewMap['A']!.passCount, 1);
@@ -1060,10 +877,10 @@ void main() {
 
       // Next line, solve it too → the set is complete.
       controller.nextLine();
-      await _waitFor(() => controller.waitingForUser);
+      await waitFor(() => controller.waitingForUser);
       expect(controller.currentLine!.id, 'B');
-      await controller.handleUserMove(_move(uci: 'd2d4', san: 'd4'));
-      await _waitFor(() => controller.phase == TrainingPhase.finished);
+      await controller.handleUserMove(fakeMove(uci: 'd2d4', san: 'd4'));
+      await waitFor(() => controller.phase == TrainingPhase.finished);
       expect(controller.dueQueue, isEmpty);
 
       controller.nextLine();
@@ -1073,19 +890,19 @@ void main() {
 
     test('a mistake in linear mode counts as a fail', () async {
       repService.lines = [
-        _line('A', ['e4']),
+        fakeLine('A', ['e4']),
       ];
       final controller = buildController()
-        ..settings = _fastSettings(wrongMoveReplay: false, autoNext: false)
+        ..settings = fastSettings(wrongMoveReplay: false, autoNext: false)
         ..setStudySource(meta());
       await controller.loadRepertoire();
       controller.pickStartingLine();
-      await _waitFor(() => controller.waitingForUser);
+      await waitFor(() => controller.waitingForUser);
 
-      await controller.handleUserMove(_move(uci: 'd2d4', san: 'd4'));
-      await _waitFor(() => controller.phase == TrainingPhase.finished);
+      await controller.handleUserMove(fakeMove(uci: 'd2d4', san: 'd4'));
+      await waitFor(() => controller.phase == TrainingPhase.finished);
       expect(controller.feedback, 'Solved — with mistakes.');
-      await _waitFor(() => reviewService.history.length == 1);
+      await waitFor(() => reviewService.history.length == 1);
       expect(controller.reviewMap['A']!.failCount, 1);
       expect(controller.sessionIncorrect, 1);
       controller.dispose();
@@ -1093,18 +910,18 @@ void main() {
 
     test('rateLine in linear mode only advances — no scheduling', () async {
       repService.lines = [
-        _line('A', ['e4']),
-        _line('B', ['d4']),
+        fakeLine('A', ['e4']),
+        fakeLine('B', ['d4']),
       ];
       final controller = buildController()
-        ..settings = _fastSettings(autoNext: false)
+        ..settings = fastSettings(autoNext: false)
         ..setStudySource(meta());
       await controller.loadRepertoire();
       controller.pickStartingLine();
-      await _waitFor(() => controller.waitingForUser);
+      await waitFor(() => controller.waitingForUser);
 
-      await controller.handleUserMove(_move(uci: 'e2e4', san: 'e4'));
-      await _waitFor(() => controller.phase == TrainingPhase.finished);
+      await controller.handleUserMove(fakeMove(uci: 'e2e4', san: 'e4'));
+      await waitFor(() => controller.phase == TrainingPhase.finished);
 
       await controller.rateLine(ReviewRating.good);
       expect(controller.currentLine!.id, 'B');
@@ -1115,10 +932,10 @@ void main() {
 
     test('switching repetition mode rebuilds the queue', () async {
       repService.lines = [
-        _line('A', ['e4']),
+        fakeLine('A', ['e4']),
       ];
       reviewService.entries = [
-        _entry(
+        fakeEntry(
           repPath(),
           'A',
           due: DateTime.now().toUtc().add(const Duration(days: 30)),
@@ -1143,12 +960,12 @@ void main() {
     /// A is learned but due; B and C have never been trained.
     Future<TrainingSessionController> loadedController() async {
       repService.lines = [
-        _line('A', ['e4', 'e5']),
-        _line('B', ['d4', 'd5']),
-        _line('C', ['c4', 'c5']),
+        fakeLine('A', ['e4', 'e5']),
+        fakeLine('B', ['d4', 'd5']),
+        fakeLine('C', ['c4', 'c5']),
       ];
       reviewService.entries = [
-        _entry(
+        fakeEntry(
           repPath(),
           'A',
           due: DateTime.now().toUtc().subtract(const Duration(days: 1)),
@@ -1179,7 +996,7 @@ void main() {
       expect(controller.currentLine!.id, 'B');
 
       // B is now known; the run must skip the due line A and go to C.
-      controller.reviewMap['B'] = _entry(
+      controller.reviewMap['B'] = fakeEntry(
         repPath(),
         'B',
         due: DateTime.now().toUtc().add(const Duration(days: 1)),
@@ -1195,8 +1012,8 @@ void main() {
       final controller = await loadedController();
       controller.startLearnSession();
       final later = DateTime.now().toUtc().add(const Duration(days: 1));
-      controller.reviewMap['B'] = _entry(repPath(), 'B', due: later);
-      controller.reviewMap['C'] = _entry(repPath(), 'C', due: later);
+      controller.reviewMap['B'] = fakeEntry(repPath(), 'B', due: later);
+      controller.reviewMap['C'] = fakeEntry(repPath(), 'C', due: later);
 
       controller.rebuildQueueAndAdvance();
 
@@ -1210,7 +1027,7 @@ void main() {
       'Review on an empty due list reports it instead of throwing',
       () async {
         repService.lines = [
-          _line('A', ['e4']),
+          fakeLine('A', ['e4']),
         ];
         final controller = buildController()..setRepertoire(meta());
         await controller.loadRepertoire();
@@ -1241,10 +1058,10 @@ void main() {
 
     test('runs stay inside the active chapter', () async {
       repService.lines = [
-        _line('A', ['e4'], chapter: 'One'),
-        _line('B', ['d4'], chapter: 'One'),
-        _line('C', ['c4'], chapter: 'Two'),
-        _line('D', ['b3'], chapter: 'Two'),
+        fakeLine('A', ['e4'], chapter: 'One'),
+        fakeLine('B', ['d4'], chapter: 'One'),
+        fakeLine('C', ['c4'], chapter: 'Two'),
+        fakeLine('D', ['b3'], chapter: 'Two'),
       ];
       final controller = buildController()..setRepertoire(meta());
       await controller.loadRepertoire();
@@ -1253,7 +1070,7 @@ void main() {
       controller.startLearnSession();
       expect(controller.currentLine!.id, 'C');
 
-      controller.reviewMap['C'] = _entry(
+      controller.reviewMap['C'] = fakeEntry(
         repPath(),
         'C',
         due: DateTime.now().toUtc().add(const Duration(days: 1)),
@@ -1261,7 +1078,7 @@ void main() {
       controller.rebuildQueueAndAdvance();
       expect(controller.currentLine!.id, 'D');
 
-      controller.reviewMap['D'] = _entry(
+      controller.reviewMap['D'] = fakeEntry(
         repPath(),
         'D',
         due: DateTime.now().toUtc().add(const Duration(days: 1)),
@@ -1283,10 +1100,10 @@ void main() {
     }) async {
       repService.lines = [
         for (final id in ['A', 'B', 'C', 'D', 'E', 'F'])
-          _line(id, ['e4', 'e5']),
+          fakeLine(id, ['e4', 'e5']),
       ];
       final controller = buildController()
-        ..settings = (_fastSettings()..newLinesPerSession = newPerSession)
+        ..settings = (fastSettings()..newLinesPerSession = newPerSession)
         ..setRepertoire(meta());
       await controller.loadRepertoire();
       return controller;
@@ -1300,7 +1117,7 @@ void main() {
 
       // Learn A, then B; the third advance must end the run rather than
       // reaching into the other four untrained lines.
-      controller.reviewMap['A'] = _entry(
+      controller.reviewMap['A'] = fakeEntry(
         repPath(),
         'A',
         due: DateTime.now().toUtc().add(const Duration(days: 1)),
@@ -1308,7 +1125,7 @@ void main() {
       controller.rebuildQueueAndAdvance();
       expect(controller.currentLine!.id, 'B');
 
-      controller.reviewMap['B'] = _entry(
+      controller.reviewMap['B'] = fakeEntry(
         repPath(),
         'B',
         due: DateTime.now().toUtc().add(const Duration(days: 1)),
@@ -1333,7 +1150,7 @@ void main() {
         controller.rebuildQueueAndAdvance();
         expect(controller.currentLine!.id, 'B');
 
-        controller.reviewMap['B'] = _entry(
+        controller.reviewMap['B'] = fakeEntry(
           repPath(),
           'B',
           due: DateTime.now().toUtc().add(const Duration(days: 1)),
@@ -1351,7 +1168,7 @@ void main() {
       controller.startLine(controller.lines.firstWhere((l) => l.id == 'A'));
 
       for (final id in ['A', 'B', 'C', 'D', 'E']) {
-        controller.reviewMap[id] = _entry(
+        controller.reviewMap[id] = fakeEntry(
           repPath(),
           id,
           due: DateTime.now().toUtc().add(const Duration(days: 1)),
@@ -1375,10 +1192,10 @@ void main() {
   group('chapter layout prompt', () {
     Future<TrainingSessionController> loadedController() async {
       repService.lines = [
-        _line('A', ['e4'], chapter: 'One'),
-        _line('B', ['d4'], chapter: 'One'),
-        _line('C', ['c4'], chapter: 'Two'),
-        _line('D', ['b3'], chapter: 'Two'),
+        fakeLine('A', ['e4'], chapter: 'One'),
+        fakeLine('B', ['d4'], chapter: 'One'),
+        fakeLine('C', ['c4'], chapter: 'Two'),
+        fakeLine('D', ['b3'], chapter: 'Two'),
       ];
       final controller = buildController()..setRepertoire(meta());
       await controller.loadRepertoire();
@@ -1431,10 +1248,10 @@ void main() {
 
     test('a flat file never asks', () async {
       repService.lines = [
-        _line('A', ['e4']),
-        _line('B', ['d4']),
-        _line('C', ['c4']),
-        _line('D', ['b3']),
+        fakeLine('A', ['e4']),
+        fakeLine('B', ['d4']),
+        fakeLine('C', ['c4']),
+        fakeLine('D', ['b3']),
       ];
       final controller = buildController()..setRepertoire(meta());
       await controller.loadRepertoire();
@@ -1445,10 +1262,10 @@ void main() {
 
     test('studies are never re-chaptered', () async {
       repService.lines = [
-        _line('A', ['e4'], chapter: 'One'),
-        _line('B', ['d4'], chapter: 'One'),
-        _line('C', ['c4'], chapter: 'Two'),
-        _line('D', ['b3'], chapter: 'Two'),
+        fakeLine('A', ['e4'], chapter: 'One'),
+        fakeLine('B', ['d4'], chapter: 'One'),
+        fakeLine('C', ['c4'], chapter: 'Two'),
+        fakeLine('D', ['b3'], chapter: 'Two'),
       ];
       final controller = buildController()..setStudySource(meta());
       await controller.loadRepertoire();
@@ -1463,7 +1280,7 @@ void main() {
       'dispose during an in-flight load completes without throwing',
       () async {
         repService.lines = [
-          _line('A', ['e4', 'e5']),
+          fakeLine('A', ['e4', 'e5']),
         ];
         reviewService.loadDelay = const Duration(milliseconds: 30);
         final controller = buildController()..setRepertoire(meta());
@@ -1480,9 +1297,9 @@ void main() {
 
     test('dispose mid-line leaves pending pacing futures harmless', () async {
       final controller = buildController();
-      final line = _line('D', ['e4', 'e5', 'Nf3']);
+      final line = fakeLine('D', ['e4', 'e5', 'Nf3']);
       controller.lines = [line];
-      controller.reviewMap['D'] = _entry('', 'D');
+      controller.reviewMap['D'] = fakeEntry('', 'D');
 
       controller.startLine(line);
       controller.dispose();

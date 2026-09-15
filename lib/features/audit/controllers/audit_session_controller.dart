@@ -9,17 +9,17 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../models/audit_finding.dart';
-import '../models/audit_result.dart';
-import '../services/audit_config.dart';
-import '../services/audit_persistence.dart';
-import '../services/repertoire_audit_service.dart';
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/engine_lifecycle.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/jobs/notify_throttle.dart';
 import '../../../services/jobs/repertoire_job.dart';
 import '../../../utils/safe_change_notifier.dart';
+import '../models/audit_finding.dart';
+import '../models/audit_result.dart';
+import '../services/audit_config.dart';
+import '../services/audit_persistence.dart';
+import '../services/repertoire_audit_service.dart';
 
 class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   AuditSessionController({
@@ -127,11 +127,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
       _isPaused = false;
     }
     _runVersion++;
-    _result = null;
-    _liveFindings = [];
-    _nodesChecked = 0;
-    _totalNodes = 0;
-    _interruptedSnapshot = null;
+    _clearRunState();
     _activeRepertoireId = null;
     notifyListeners();
   }
@@ -220,11 +216,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     }
 
     if (snapshot == null) {
-      _result = null;
-      _liveFindings = [];
-      _nodesChecked = 0;
-      _totalNodes = 0;
-      _interruptedSnapshot = null;
+      _clearRunState();
       notifyListeners();
       return;
     }
@@ -250,23 +242,18 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void onAuditingChanged(bool auditing, JobManager jobManager, String? label) {
-    if (auditing && currentJob == null) {
+    final job = currentJob;
+    if (auditing && job == null) {
       _runVersion++;
       _error = null;
-      _interruptedSnapshot = null;
-      currentJob = jobManager.createJob(
-        type: JobType.audit,
-        label: label ?? 'Audit',
-      );
-      currentJob!.configSnapshot = _lastConfig?.toMap();
-      currentJob!.updateStatus(JobStatus.running);
-      _liveFindings = [];
-      _result = null;
-      _nodesChecked = 0;
-      _totalNodes = 0;
+      currentJob =
+          jobManager.createJob(type: JobType.audit, label: label ?? 'Audit')
+            ..configSnapshot = _lastConfig?.toMap()
+            ..updateStatus(JobStatus.running);
+      _clearRunState();
       _isPaused = false;
-    } else if (!auditing && currentJob != null) {
-      currentJob!.updateStatus(JobStatus.completed);
+    } else if (!auditing && job != null) {
+      job.updateStatus(JobStatus.completed);
       currentJob = null;
     }
     _isAuditing = auditing;
@@ -281,12 +268,12 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     if (runVersion != null && runVersion != _runVersion) return;
     _result = auditResult;
     _liveFindings = [];
-    if (_lastConfig != null) {
+    if (_lastConfig case final config?) {
       unawaited(
         AuditPersistence.instance.saveComplete(
           repertoireFilePath,
           auditResult,
-          _lastConfig!,
+          config,
           startFen: _startFen,
         ),
       );
@@ -347,11 +334,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   void startFresh() {
-    _interruptedSnapshot = null;
-    _result = null;
-    _liveFindings = [];
-    _nodesChecked = 0;
-    _totalNodes = 0;
+    _clearRunState();
     notifyListeners();
   }
 
@@ -380,6 +363,7 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
     }
     final version = _runVersion;
     final previous = _runTail;
+    // [onAuditingChanged] has just created the job for this run.
     final job = currentJob!;
     final run = _execute(
       previous: previous,
@@ -479,12 +463,18 @@ class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   void clearAll() {
     _runVersion++;
     _error = null;
+    _clearRunState();
+    _lastConfig = null;
+    notifyListeners();
+  }
+
+  /// Forget the result, live findings, progress and any interrupted
+  /// snapshot. Callers notify.
+  void _clearRunState() {
     _result = null;
     _liveFindings = [];
     _nodesChecked = 0;
     _totalNodes = 0;
-    _lastConfig = null;
     _interruptedSnapshot = null;
-    notifyListeners();
   }
 }

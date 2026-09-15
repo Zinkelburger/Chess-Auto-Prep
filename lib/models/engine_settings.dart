@@ -1,15 +1,19 @@
-/// Engine settings model for configuring analysis parameters
+/// Engine, generation and opening-explorer settings, persisted in
+/// SharedPreferences under the `engine_settings.` prefix.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../constants/engine_defaults.dart';
+import '../utils/safe_change_notifier.dart';
 import '../utils/system_info.dart';
 import 'settings_enums.dart';
-import '../utils/safe_change_notifier.dart';
 
+/// Process-wide singleton ([instance]); every setter validates, persists
+/// fire-and-forget and notifies only when the value actually changed.
 class EngineSettings with ChangeNotifier, SafeChangeNotifier {
   static const _prefix = 'engine_settings.';
 
@@ -120,13 +124,6 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     notifyListeners();
   }
 
-  void clearMutedAnalysisColumns() {
-    if (_mutedAnalysisColumns.isEmpty) return;
-    _mutedAnalysisColumns.clear();
-    _persist();
-    notifyListeners();
-  }
-
   bool _showEngineDock = kDefaultShowEngineDock;
   bool get showEngineDock => _showEngineDock;
   set showEngineDock(bool value) =>
@@ -157,10 +154,6 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
       _opponentProbabilityMode == OpponentProbabilityMode.maia ||
       _opponentProbabilityMode == OpponentProbabilityMode.maiaLichessFallback;
 
-  bool get fetchLichessForOpponent =>
-      _opponentProbabilityMode == OpponentProbabilityMode.lichess ||
-      _opponentProbabilityMode == OpponentProbabilityMode.maiaLichessFallback;
-
   /// `lichess` or `masters` (Lichess Explorer API).
   String _explorerDatabase = kDefaultExplorerDatabase;
   String get explorerDatabase => _explorerDatabase;
@@ -168,8 +161,6 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
     if (value != 'lichess' && value != 'masters') return;
     _assignIfChanged(_explorerDatabase, value, (v) => _explorerDatabase = v);
   }
-
-  bool get explorerUseMasters => _explorerDatabase == 'masters';
 
   String _explorerSpeeds = kDefaultExplorerSpeeds;
   String get explorerSpeeds => _explorerSpeeds;
@@ -183,28 +174,6 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
   set explorerRatings(String value) {
     if (value.isEmpty) return;
     _assignIfChanged(_explorerRatings, value, (v) => _explorerRatings = v);
-  }
-
-  Set<String> get explorerSpeedSet => _explorerSpeeds
-      .split(',')
-      .map((s) => s.trim())
-      .where((s) => s.isNotEmpty)
-      .toSet();
-
-  Set<String> get explorerRatingSet => _explorerRatings
-      .split(',')
-      .map((s) => s.trim())
-      .where((s) => s.isNotEmpty)
-      .toSet();
-
-  void setExplorerSpeedSet(Set<String> speeds) {
-    if (speeds.isEmpty) return;
-    explorerSpeeds = speeds.join(',');
-  }
-
-  void setExplorerRatingSet(Set<String> ratings) {
-    if (ratings.isEmpty) return;
-    explorerRatings = ratings.join(',');
   }
 
   // ── Probability settings ──────────────────────────────────────────────
@@ -306,8 +275,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
         prefs.getInt('${_prefix}workers'),
         prefs.getInt('${_prefix}inline_threads'),
       ].whereType<int>().fold<int?>(null, (a, b) => a == null || b > a ? b : a);
-      _cores = (prefs.getInt('${_prefix}cores') ?? legacyCores ?? kDefaultCores)
-          .clamp(1, systemCores);
+      _cores = loadInt('cores', legacyCores ?? kDefaultCores, 1, systemCores);
       _hashMb = loadInt('hash_mb', kDefaultHashMb, kMinHashMb, kMaxHashMb);
       _depth = loadInt('depth', kDefaultDepth, kMinDepth, kMaxDepth);
       _multiPv = loadInt('multi_pv', kDefaultMultiPv, kMinMultiPv, kMaxMultiPv);
@@ -366,6 +334,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
         );
       notifyListeners();
     } catch (e) {
+      // A broken preferences store must not stop the app: defaults stand.
       debugPrint('[EngineSettings] Failed to load prefs: $e');
     }
   }
@@ -416,6 +385,7 @@ class EngineSettings with ChangeNotifier, SafeChangeNotifier {
         _mutedAnalysisColumns.join(','),
       );
     } catch (e) {
+      // Fire-and-forget: nobody awaits this, so the failure is only logged.
       debugPrint('[EngineSettings] Failed to persist prefs: $e');
     }
   }

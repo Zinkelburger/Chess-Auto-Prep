@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'tactics_position.dart';
@@ -100,6 +101,29 @@ class TacticsSessionSettings {
 
   /// Count how many positions in [all] pass the filter.
   int countMatching(List<TacticsPosition> all) => all.where(accepts).length;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TacticsSessionSettings &&
+          order == other.order &&
+          groupByGame == other.groupByGame &&
+          includeOneStar == other.includeOneStar &&
+          skipReviewed == other.skipReviewed &&
+          setEquals(mistakeTypes, other.mistakeTypes) &&
+          maxAgeDays == other.maxAgeDays &&
+          acceptAlternatives == other.acceptAlternatives;
+
+  @override
+  int get hashCode => Object.hash(
+    order,
+    groupByGame,
+    includeOneStar,
+    skipReviewed,
+    Object.hashAllUnordered(mistakeTypes),
+    maxAgeDays,
+    acceptAlternatives,
+  );
 
   TacticsSessionSettings copyWith({
     TacticsSessionOrder? order,

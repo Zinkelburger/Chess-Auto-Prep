@@ -15,11 +15,12 @@ import 'package:dartchess/dartchess.dart' show Chess, PgnGame;
 
 import '../../../models/repertoire_line.dart';
 import '../../../services/repertoire_service.dart';
+import '../../../utils/movetext_builder.dart';
 import '../models/recent_game.dart';
 import 'book_move_keys.dart';
 import 'game_deviation_service.dart';
 import 'game_moves.dart';
-import '../../../utils/movetext_builder.dart';
+import 'repertoire_book_tree.dart' show kOffThreadChapterBytes;
 
 /// One distinct deviation point, shared by every game in [games].
 ///
@@ -131,20 +132,19 @@ class OpeningReviewData {
   /// the block then says nothing rather than promoting a one-off.
   List<OpeningReviewEntry> repeated({int limit = 3}) {
     final all = [
-      for (final e in mistakes)
+      for (final e in mistakes.followedBy(gaps).followedBy(bookEnds))
         if (e.games.length > 1) e,
-      for (final e in gaps)
-        if (e.games.length > 1) e,
-      for (final e in bookEnds)
-        if (e.games.length > 1) e,
-    ];
-    all.sort((a, b) {
-      final byCount = b.games.length.compareTo(a.games.length);
-      if (byCount != 0) return byCount;
-      return a.matchedPlies.compareTo(b.matchedPlies);
-    });
+    ]..sort(_byRepetitionThenDepth);
     return all.length > limit ? all.sublist(0, limit) : all;
   }
+}
+
+/// Most-repeated first; at the same count, earlier deviations first — a
+/// move-4 leak is cheaper to fix and costs more games than a move-14 one.
+int _byRepetitionThenDepth(OpeningReviewEntry a, OpeningReviewEntry b) {
+  final byCount = b.games.length.compareTo(a.games.length);
+  if (byCount != 0) return byCount;
+  return a.matchedPlies.compareTo(b.matchedPlies);
 }
 
 /// Collapse the games' per-game deviation reports into review entries.
@@ -176,18 +176,10 @@ OpeningReviewData aggregateOpeningReview(List<RecentGame> games) {
     bucket.putIfAbsent(key, () => OpeningReviewEntry._(report)).games.add(game);
   }
 
-  int byRepetitionThenDepth(OpeningReviewEntry a, OpeningReviewEntry b) {
-    final byCount = b.games.length.compareTo(a.games.length);
-    if (byCount != 0) return byCount;
-    // Same count: earlier deviations first — a move-4 leak is cheaper to
-    // fix and costs more games than a move-14 one.
-    return a.matchedPlies.compareTo(b.matchedPlies);
-  }
-
   return OpeningReviewData(
-    mistakes: mistakes.values.toList()..sort(byRepetitionThenDepth),
-    gaps: gaps.values.toList()..sort(byRepetitionThenDepth),
-    bookEnds: bookEnds.values.toList()..sort(byRepetitionThenDepth),
+    mistakes: mistakes.values.toList()..sort(_byRepetitionThenDepth),
+    gaps: gaps.values.toList()..sort(_byRepetitionThenDepth),
+    bookEnds: bookEnds.values.toList()..sort(_byRepetitionThenDepth),
     anyBookDesignated: anyDesignated,
   );
 }
@@ -238,6 +230,7 @@ List<RepertoireLine> matchingBookLines(
         depth,
       );
     } catch (_) {
+      // A variation the parser cannot read cannot be your book here.
       return false;
     }
   }
@@ -273,6 +266,8 @@ Future<List<RepertoireLine>> _loadBookChapter(
   try {
     content = await File(chapterPath).readAsString();
   } catch (_) {
+    // Gone, unreadable or undecodable: the detail view falls back to
+    // "open in builder" rather than failing the review.
     return const [];
   }
   List<RepertoireLine> parse() {
@@ -280,7 +275,7 @@ Future<List<RepertoireLine>> _loadBookChapter(
     return prefixSans == null ? lines : matchingBookLines(lines, prefixSans);
   }
 
-  return content.length > 512 * 1024 ? Isolate.run(parse) : parse();
+  return content.length > kOffThreadChapterBytes ? Isolate.run(parse) : parse();
 }
 
 /// SANs from the initial position as numbered movetext ("1. e4 c5 2. Nf3").

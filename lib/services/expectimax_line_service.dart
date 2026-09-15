@@ -53,36 +53,26 @@ class ExpectimaxLine {
     moveInfo: moveInfo,
   );
 
+  /// The line along [path], whose first node carries the line's value.
+  /// An empty path is a line of value 0.5 with no eval.
   factory ExpectimaxLine.fromPath(
-    BuildTreeNode start,
     List<BuildTreeNode> path,
     TreeBuildConfig config, {
     int rank = 0,
   }) {
-    final v = path.isNotEmpty ? path.first.expectimaxValue : 0.5;
+    final first = path.firstOrNull;
+    final value = first?.expectimaxValue ?? 0.5;
     return ExpectimaxLine(
       rank: rank,
-      expectimaxValue: v,
-      expectedEvalCp: expectedCpFromWinProb(v),
-      evalCp: path.isNotEmpty && path.first.hasEngineEval
-          ? path.first.evalForUs(config.playAsWhite)
+      expectimaxValue: value,
+      expectedEvalCp: expectedCpFromWinProb(value),
+      evalCp: first != null && first.hasEngineEval
+          ? first.evalForUs(config.playAsWhite)
           : null,
       depth: path.length,
-      movesSan: path.map((n) => n.moveSan).toList(),
-      movesUci: path.map((n) => n.moveUci).toList(),
-      moveInfo: path
-          .map(
-            (n) => ExpectimaxMoveInfo(
-              moveProbability: n.moveProbability,
-              isOurMove: n.isWhiteToMove != config.playAsWhite,
-              isRepertoireMove: n.isRepertoireMove,
-              evalCp: n.hasEngineEval ? n.evalForUs(config.playAsWhite) : null,
-              ease: n.ease,
-              trapScore: n.trapScore >= 0 ? n.trapScore : null,
-              expectimaxValue: n.hasExpectimax ? n.expectimaxValue : null,
-            ),
-          )
-          .toList(),
+      movesSan: [for (final n in path) n.moveSan],
+      movesUci: [for (final n in path) n.moveUci],
+      moveInfo: [for (final n in path) ExpectimaxMoveInfo.of(n, config)],
     );
   }
 }
@@ -106,6 +96,19 @@ class ExpectimaxMoveInfo {
     this.trapScore,
     this.expectimaxValue,
   });
+
+  /// The metadata of the move that reaches [node]. Values the build never
+  /// stored (no eval, no expectimax pass, a negative trap score) are null.
+  factory ExpectimaxMoveInfo.of(BuildTreeNode node, TreeBuildConfig config) =>
+      ExpectimaxMoveInfo(
+        moveProbability: node.moveProbability,
+        isOurMove: node.isWhiteToMove != config.playAsWhite,
+        isRepertoireMove: node.isRepertoireMove,
+        evalCp: node.hasEngineEval ? node.evalForUs(config.playAsWhite) : null,
+        ease: node.ease,
+        trapScore: node.trapScore >= 0 ? node.trapScore : null,
+        expectimaxValue: node.hasExpectimax ? node.expectimaxValue : null,
+      );
 }
 
 /// Follow the expectimax-optimal path from [start] for up to [maxPlies].
@@ -127,27 +130,27 @@ List<BuildTreeNode> followExpectimaxLine(
     if (resolved.children.isEmpty) break;
 
     final isOurMove = resolved.isWhiteToMove == config.playAsWhite;
-    BuildTreeNode? next;
-
-    if (isOurMove) {
-      final scored = eca.scoreOurMoveChildren(resolved);
-      next = scored?.child;
-    } else {
-      double bestProb = -1;
-      for (final child in resolved.children) {
-        if (child.moveProbability > bestProb) {
-          bestProb = child.moveProbability;
-          next = child;
-        }
-      }
-    }
-
+    final next = isOurMove
+        ? eca.scoreOurMoveChildren(resolved)?.child
+        : _mostProbableChild(resolved);
     if (next == null) break;
     path.add(next);
     node = next;
   }
 
   return path;
+}
+
+/// The child the opponent is likeliest to play. Null only when [node] has
+/// no children.
+BuildTreeNode? _mostProbableChild(BuildTreeNode node) {
+  BuildTreeNode? best;
+  for (final child in node.children) {
+    if (best == null || child.moveProbability > best.moveProbability) {
+      best = child;
+    }
+  }
+  return best;
 }
 
 /// Top-[topLines] expectimax PV rows from [start].
@@ -199,56 +202,49 @@ List<ExpectimaxLine> _linesFrom(
   required int maxPlies,
   FenMap? fenMap,
 }) {
-  if (start.children.isEmpty) return [];
-
-  final isOurMove = start.isWhiteToMove == config.playAsWhite;
-  final starters = <BuildTreeNode>[];
-
-  if (isOurMove) {
-    final scored = <ScoredChild>[];
-    for (final child in start.children) {
-      if (!child.hasExpectimax) continue;
-      scored.add(
-        ScoredChild(child: child, expectimaxValue: child.expectimaxValue),
-      );
-    }
-    scored.sort((a, b) => b.expectimaxValue.compareTo(a.expectimaxValue));
-    for (var i = 0; (limit == null || i < limit) && i < scored.length; i++) {
-      starters.add(scored[i].child);
-    }
-  } else {
-    // Same `hasExpectimax` gate as the our-move branch above.  A node the
-    // build never evaluated still carries the 0.0 default, which reads back
-    // as a lost position — on a paused or partial build every unexplored
-    // reply would otherwise be listed as a forced loss.
-    final sorted = start.children.where((c) => c.hasExpectimax).toList()
-      ..sort((a, b) => b.moveProbability.compareTo(a.moveProbability));
-    for (var i = 0; (limit == null || i < limit) && i < sorted.length; i++) {
-      starters.add(sorted[i]);
-    }
-  }
-
-  final lines = <ExpectimaxLine>[];
-  for (var i = 0; i < starters.length; i++) {
-    final firstChild = starters[i];
-    final continuation = followExpectimaxLine(
-      firstChild,
-      config,
-      eca,
-      maxPlies: maxPlies - 1,
-      fenMap: fenMap,
-    );
-    lines.add(
+  final ranked = _rankedChildren(start, config);
+  final starters = limit == null ? ranked : ranked.take(limit);
+  return [
+    for (final (i, firstChild) in starters.indexed)
       ExpectimaxLine.fromPath(
-        start,
-        [firstChild, ...continuation],
+        [
+          firstChild,
+          ...followExpectimaxLine(
+            firstChild,
+            config,
+            eca,
+            maxPlies: maxPlies - 1,
+            fenMap: fenMap,
+          ),
+        ],
         config,
         rank: i + 1,
       ),
-    );
-  }
+  ];
+}
 
-  return lines;
+/// [start]'s children in line order: by expectimax value on our move, by
+/// move probability on the opponent's.
+///
+/// Only children the build evaluated are listed.  A node the build never
+/// reached still carries the 0.0 default, which reads back as a lost
+/// position — on a paused or partial build every unexplored reply would
+/// otherwise be listed as a forced loss.
+List<BuildTreeNode> _rankedChildren(
+  BuildTreeNode start,
+  TreeBuildConfig config,
+) {
+  final evaluated = [
+    for (final child in start.children)
+      if (child.hasExpectimax) child,
+  ];
+  final isOurMove = start.isWhiteToMove == config.playAsWhite;
+  evaluated.sort(
+    isOurMove
+        ? (a, b) => b.expectimaxValue.compareTo(a.expectimaxValue)
+        : (a, b) => b.moveProbability.compareTo(a.moveProbability),
+  );
+  return evaluated;
 }
 
 /// Find a node in the tree by FEN (BFS — returns the shallowest match,

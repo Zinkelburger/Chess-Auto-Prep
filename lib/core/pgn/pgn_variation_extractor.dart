@@ -73,9 +73,10 @@ MoveNode? _convertPgnSubtree(
   ].where((c) => c.trim().isNotEmpty);
   final comment = parts.isEmpty ? null : parts.join(' ');
 
-  final nags = (pgnNode.data.nags != null && pgnNode.data.nags!.isNotEmpty)
-      ? pgnNode.data.nags!.toList()
-      : null;
+  final sourceNags = pgnNode.data.nags;
+  final nags = sourceNags == null || sourceNags.isEmpty
+      ? null
+      : sourceNags.toList();
 
   final node = MoveNode(
     san: san,
@@ -85,8 +86,8 @@ MoveNode? _convertPgnSubtree(
     nags: nags,
   );
 
-  for (int i = 0; i < pgnNode.children.length; i++) {
-    final childNode = _convertPgnSubtree(pgnNode.children[i], posAfter);
+  for (final child in pgnNode.children) {
+    final childNode = _convertPgnSubtree(child, posAfter);
     if (childNode != null) node.children.add(childNode);
   }
 

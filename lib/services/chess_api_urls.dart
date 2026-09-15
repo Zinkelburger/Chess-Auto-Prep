@@ -14,22 +14,24 @@
 /// so this is a no-op for normal input and a hard boundary for hostile input.
 library;
 
+/// [url] with [params] as its query string; no `?` at all when empty.
+Uri _withQuery(String url, Map<String, String> params) =>
+    Uri.parse(url).replace(queryParameters: params.isEmpty ? null : params);
+
 /// The Lichess "export games by user" URL with [username] safely encoded as a
 /// single path segment. [params] becomes the query string.
-Uri lichessUserGamesUrl(String username, Map<String, String> params) {
-  return Uri.parse(
-    'https://lichess.org/api/games/user/${Uri.encodeComponent(username)}',
-  ).replace(queryParameters: params.isEmpty ? null : params);
-}
+Uri lichessUserGamesUrl(String username, Map<String, String> params) =>
+    _withQuery(
+      'https://lichess.org/api/games/user/${Uri.encodeComponent(username)}',
+      params,
+    );
 
 /// The Chess.com "monthly archives list" URL for [username] (lowercased per the
 /// Chess.com convention, then encoded as a single path segment).
-Uri chesscomArchivesUrl(String username) {
-  return Uri.parse(
-    'https://api.chess.com/pub/player/'
-    '${Uri.encodeComponent(username.toLowerCase())}/games/archives',
-  );
-}
+Uri chesscomArchivesUrl(String username) => Uri.parse(
+  'https://api.chess.com/pub/player/'
+  '${Uri.encodeComponent(username.toLowerCase())}/games/archives',
+);
 
 /// The Lichess study PGN export URL — the whole study, or one [chapterId].
 ///
@@ -44,38 +46,28 @@ Uri lichessStudyPgnUrl(
   final path = chapterId == null
       ? '${Uri.encodeComponent(studyId)}.pgn'
       : '${Uri.encodeComponent(studyId)}/${Uri.encodeComponent(chapterId)}.pgn';
-  return Uri.parse(
-    'https://lichess.org/api/study/$path',
-  ).replace(queryParameters: params.isEmpty ? null : params);
+  return _withQuery('https://lichess.org/api/study/$path', params);
 }
 
 /// The "export every study by this user" PGN URL, [username] safely encoded.
-Uri lichessStudiesByUserUrl(String username, Map<String, String> params) {
-  return Uri.parse(
-    'https://lichess.org/api/study/by/'
-    '${Uri.encodeComponent(username)}/export.pgn',
-  ).replace(queryParameters: params.isEmpty ? null : params);
-}
+Uri lichessStudiesByUserUrl(String username, Map<String, String> params) =>
+    _withQuery(
+      'https://lichess.org/api/study/by/'
+      '${Uri.encodeComponent(username)}/export.pgn',
+      params,
+    );
 
 /// The chessgames.com collection page (the HTML we scrape game ids from).
-Uri chessgamesCollectionUrl(String cid) {
-  return Uri.parse(
-    'https://www.chessgames.com/perl/chesscollection',
-  ).replace(queryParameters: {'cid': cid});
-}
+Uri chessgamesCollectionUrl(String cid) =>
+    _withQuery('https://www.chessgames.com/perl/chesscollection', {'cid': cid});
 
 /// The chessgames.com single-game PGN endpoint for [gid].
-Uri chessgamesPgnUrl(String gid) {
-  return Uri.parse(
-    'https://www.chessgames.com/njs/api/game/viewPGN/'
-    '${Uri.encodeComponent(gid)}',
-  );
-}
+Uri chessgamesPgnUrl(String gid) => Uri.parse(
+  'https://www.chessgames.com/njs/api/game/viewPGN/'
+  '${Uri.encodeComponent(gid)}',
+);
 
 /// The chessgames.com human-facing game page — sent as the `Referer` for
 /// [chessgamesPgnUrl], which the API expects.
-Uri chessgamesGameUrl(String gid) {
-  return Uri.parse(
-    'https://www.chessgames.com/perl/chessgame',
-  ).replace(queryParameters: {'gid': gid});
-}
+Uri chessgamesGameUrl(String gid) =>
+    _withQuery('https://www.chessgames.com/perl/chessgame', {'gid': gid});

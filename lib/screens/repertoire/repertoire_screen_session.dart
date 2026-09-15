@@ -179,8 +179,11 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     final filePath = _controller.currentRepertoire?.filePath;
     if (filePath == null) return;
 
-    final service = RepertoireService();
-    final success = await service.updateLineTitle(filePath, line.id, newTitle);
+    final success = await const RepertoireFileEditor().updateLineTitle(
+      filePath,
+      line.id,
+      newTitle,
+    );
 
     if (success) {
       await _controller.loadRepertoire();

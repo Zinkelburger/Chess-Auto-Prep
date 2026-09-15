@@ -37,8 +37,7 @@ void main() {
 
     test('maps mate scores', () {
       final mapped = mapChessDbApiScore(29996, isWhiteToMove: true);
-      expect(mapped, isNotNull);
-      expect(mapped!.$2, 4);
+      expect(mapped.mate, 4);
     });
   });
 

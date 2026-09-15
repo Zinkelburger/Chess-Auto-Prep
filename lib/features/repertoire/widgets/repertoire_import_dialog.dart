@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../services/pgn_mainline_lexer.dart' as pgn;
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/repertoire_creation.dart';
 import '../../../theme/app_text_styles.dart';

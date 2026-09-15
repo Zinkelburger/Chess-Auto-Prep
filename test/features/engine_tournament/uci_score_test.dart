@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/features/engine_tournament/services/uci_engine.dart';
+import 'package:chess_auto_prep/features/engine_tournament/services/uci_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 EngineSearch _search({int? cp, int? mate}) => EngineSearch(

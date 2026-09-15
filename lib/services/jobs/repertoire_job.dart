@@ -1,16 +1,27 @@
 /// Background job abstraction for generation and audit tasks.
 ///
-/// Jobs report progress via streams and can be paused/resumed/cancelled.
-/// The [JobManager] tracks all active and completed jobs.
+/// Jobs report progress through [ChangeNotifier] and can be paused, resumed
+/// or cancelled. The [JobManager] tracks all active and completed jobs.
 library;
 
 import 'package:flutter/foundation.dart';
 
 import '../../utils/safe_change_notifier.dart';
 
-// ── Job status ──────────────────────────────────────────────────────
+enum JobStatus {
+  queued,
+  running,
+  paused,
+  completed,
+  cancelled,
+  failed;
 
-enum JobStatus { queued, running, paused, completed, cancelled, failed }
+  /// Whether the job has reached a final state and will not run again.
+  bool get isTerminal => switch (this) {
+    completed || cancelled || failed => true,
+    queued || running || paused => false,
+  };
+}
 
 enum JobType {
   generation,
@@ -23,8 +34,7 @@ enum JobType {
   evalDatabase,
 }
 
-// ── Progress snapshot ───────────────────────────────────────────────
-
+/// A point-in-time progress report; [fraction] is 0–1.
 class JobProgress {
   final double fraction;
   final String message;
@@ -40,8 +50,6 @@ class JobProgress {
 
   static const zero = JobProgress();
 }
-
-// ── Job definition ──────────────────────────────────────────────────
 
 class RepertoireJob extends ChangeNotifier with SafeChangeNotifier {
   final String id;
@@ -90,11 +98,7 @@ class RepertoireJob extends ChangeNotifier with SafeChangeNotifier {
   void updateStatus(JobStatus s) {
     if (_status == s) return;
     _status = s;
-    if (s == JobStatus.completed ||
-        s == JobStatus.cancelled ||
-        s == JobStatus.failed) {
-      _completedAt = DateTime.now();
-    }
+    if (s.isTerminal) _completedAt = DateTime.now();
     notifyListeners();
   }
 
@@ -109,8 +113,7 @@ class RepertoireJob extends ChangeNotifier with SafeChangeNotifier {
   }
 }
 
-// ── Job manager (singleton) ─────────────────────────────────────────
-
+/// Registry of every job the app has started this session, newest first.
 class JobManager extends ChangeNotifier with SafeChangeNotifier {
   JobManager._();
   static final instance = JobManager._();
@@ -120,33 +123,11 @@ class JobManager extends ChangeNotifier with SafeChangeNotifier {
   List<RepertoireJob> get jobs => List.unmodifiable(_jobs);
   List<RepertoireJob> get activeJobs => _jobs.where((j) => j.isActive).toList();
   List<RepertoireJob> get completedJobs =>
-      _jobs.where((j) => !j.isActive && j.status != JobStatus.queued).toList();
+      _jobs.where((j) => j.status.isTerminal).toList();
 
-  RepertoireJob? get currentGenerationJob => _jobs
-      .where((j) => j.type == JobType.generation && j.isActive)
-      .firstOrNull;
-
-  RepertoireJob? get currentAuditJob =>
-      _jobs.where((j) => j.type == JobType.audit && j.isActive).firstOrNull;
-
-  RepertoireJob? get currentCoverageJob =>
-      _jobs.where((j) => j.type == JobType.coverage && j.isActive).firstOrNull;
-
-  RepertoireJob? get currentStudyImportJob => _jobs
-      .where((j) => j.type == JobType.studyImport && j.isActive)
-      .firstOrNull;
-
-  RepertoireJob? get currentTacticsImportJob => _jobs
-      .where((j) => j.type == JobType.tacticsImport && j.isActive)
-      .firstOrNull;
-
-  RepertoireJob? get currentGameAnalysisJob => _jobs
-      .where((j) => j.type == JobType.gameAnalysis && j.isActive)
-      .firstOrNull;
-
-  RepertoireJob? get currentMasterGamesJob => _jobs
-      .where((j) => j.type == JobType.masterGames && j.isActive)
-      .firstOrNull;
+  /// The newest running or paused job of [type], if any.
+  RepertoireJob? activeJob(JobType type) =>
+      _jobs.where((j) => j.type == type && j.isActive).firstOrNull;
 
   /// Create and register a new job. Returns the job for further configuration.
   RepertoireJob createJob({
@@ -174,61 +155,12 @@ class JobManager extends ChangeNotifier with SafeChangeNotifier {
 
   void clearCompleted() {
     _jobs.removeWhere((j) {
-      if (!j.isActive && j.status != JobStatus.queued) {
-        j.removeListener(_onJobChanged);
-        return true;
-      }
-      return false;
+      if (!j.status.isTerminal) return false;
+      j.removeListener(_onJobChanged);
+      return true;
     });
     notifyListeners();
   }
 
   void _onJobChanged() => notifyListeners();
-
-  /// Summary string for the status bar (e.g. "Gen: 73%" or "Audit: running").
-  String? get statusSummary {
-    final gen = currentGenerationJob;
-    if (gen != null) {
-      final pct = (gen.progress.fraction * 100).toStringAsFixed(0);
-      return gen.status == JobStatus.paused ? 'Gen: paused' : 'Gen: $pct%';
-    }
-    final audit = currentAuditJob;
-    if (audit != null) {
-      return audit.status == JobStatus.paused ? 'Audit: paused' : 'Auditing...';
-    }
-    final coverage = currentCoverageJob;
-    if (coverage != null) {
-      final pct = (coverage.progress.fraction * 100).toStringAsFixed(0);
-      return 'Coverage: $pct%';
-    }
-    final import = currentStudyImportJob;
-    if (import != null) {
-      final p = import.progress;
-      return p.totalNodes == 0
-          ? 'Import: running'
-          : 'Import: ${p.nodesProcessed}/${p.totalNodes}';
-    }
-    final tactics = currentTacticsImportJob;
-    if (tactics != null) {
-      final p = tactics.progress;
-      return p.totalNodes == 0
-          ? 'Tactics: running'
-          : 'Tactics: ${p.nodesProcessed}/${p.totalNodes} games';
-    }
-    final gameAnalysis = currentGameAnalysisJob;
-    if (gameAnalysis != null) {
-      final p = gameAnalysis.progress;
-      return p.totalNodes == 0
-          ? 'Review: analyzing'
-          : 'Review: ${p.nodesProcessed}/${p.totalNodes} games';
-    }
-    final masters = currentMasterGamesJob;
-    if (masters != null) {
-      final p = masters.progress;
-      return p.totalNodes == 0
-          ? 'TWIC: checking'
-          : 'TWIC: ${p.nodesProcessed}/${p.totalNodes} issues';
-    }
-    return null;
-  }
 }

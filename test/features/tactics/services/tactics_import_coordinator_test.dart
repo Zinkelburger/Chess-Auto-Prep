@@ -124,7 +124,7 @@ void main() {
   }
 
   RepertoireJob runningJob() =>
-      JobManager.instance.currentTacticsImportJob ??
+      JobManager.instance.activeJob(JobType.tacticsImport) ??
       (throw StateError('no tactics import job is registered'));
 
   // ────────────────────────────────────────────────────────────────────────
@@ -154,7 +154,7 @@ void main() {
 
       expect(coordinator.isImporting, isFalse);
       expect(coordinator.activeImport, isNull);
-      expect(JobManager.instance.currentTacticsImportJob, isNull);
+      expect(JobManager.instance.activeJob(JobType.tacticsImport), isNull);
       coordinator.dispose();
     });
 
@@ -508,7 +508,7 @@ void main() {
         expect(job.status, JobStatus.completed);
         expect(coordinator.isImporting, isFalse);
         expect(coordinator.activeImport, isNull);
-        expect(JobManager.instance.currentTacticsImportJob, isNull);
+        expect(JobManager.instance.activeJob(JobType.tacticsImport), isNull);
       },
     );
 

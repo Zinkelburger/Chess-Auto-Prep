@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/pgn_mainline_lexer.dart' as pgn;
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/repertoire_creation.dart';
 import '../services/storage/storage_factory.dart';

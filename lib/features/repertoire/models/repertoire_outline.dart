@@ -15,9 +15,9 @@
 /// kept on the node; the panel reads these on every rebuild.
 library;
 
-import '../../../utils/movetext_builder.dart';
-
 import 'package:path/path.dart' as p;
+
+import '../../../utils/movetext_builder.dart';
 
 /// Anything that appears in the outline: a folder, a chapter, or a line.
 sealed class OutlineNode {
@@ -153,14 +153,6 @@ class OutlineChapter extends OutlineNode {
 
   List<OutlineLine> linesIn(String? section) =>
       linesBySection[section] ?? const [];
-
-  OutlineChapter copyWith({List<OutlineLine>? lines, int? knownLineCount}) =>
-      OutlineChapter(
-        path: path,
-        name: name,
-        lines: lines ?? this.lines,
-        knownLineCount: knownLineCount ?? this.knownLineCount,
-      );
 }
 
 /// One game in a chapter file.
@@ -195,6 +187,17 @@ class OutlineLine extends OutlineNode {
     this.section,
     this.isModelGame = false,
   });
+
+  /// The same line under its chapter's new path (the file moved).
+  OutlineLine withPath(String newPath) => OutlineLine(
+    path: newPath,
+    id: id,
+    gameIndex: gameIndex,
+    name: name,
+    moves: moves,
+    section: section,
+    isModelGame: isModelGame,
+  );
 
   /// Lowercase name and moves, what a search term is matched against.
   late final String searchText =

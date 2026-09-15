@@ -18,7 +18,6 @@ import '../../../services/storage/file_mutation_service.dart';
 import '../../../utils/atomic_file.dart';
 import '../models/stored_tournament.dart';
 import '../models/tournament_config.dart';
-import '../models/tournament_game.dart';
 
 const String kEngineTournamentsDirectoryName = 'engine_tournaments';
 const String _kMetadataFile = 'tournament.json';
@@ -149,23 +148,3 @@ String _slugify(String name) {
       .replaceAll(RegExp(r'^-+|-+$'), '');
   return slug.isEmpty ? 'tournament' : slug;
 }
-
-/// Records for the games written to `games.pgn`, numbered by their position
-/// in that file.
-List<TournamentGameRecord> renumber(List<TournamentGameRecord> games) => [
-  for (var i = 0; i < games.length; i++)
-    TournamentGameRecord(
-      gameIndex: i,
-      round: games[i].round,
-      whiteIndex: games[i].whiteIndex,
-      blackIndex: games[i].blackIndex,
-      whiteName: games[i].whiteName,
-      blackName: games[i].blackName,
-      result: games[i].result,
-      termination: games[i].termination,
-      detail: games[i].detail,
-      plies: games[i].plies,
-      startedAt: games[i].startedAt,
-      durationMs: games[i].durationMs,
-    ),
-];

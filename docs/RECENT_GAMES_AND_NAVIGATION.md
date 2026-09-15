@@ -255,8 +255,8 @@ class DeviationReport {
 
 - O(game length) tree walk, no engine, no network — cheap enough to run for
   every visible row when the games list loads.
-- Transposition tolerance (FEN-set matching via `collectFenPrefixes`) is a
-  deliberate v2 item; SAN-prefix matches how `RepertoireDiff` and the merge
+- Transposition tolerance (matching on the set of normalized FENs in the
+  repertoire's `MoveTree`) is a deliberate v2 item; SAN-prefix matches how `RepertoireDiff` and the merge
   planner already define "in repertoire", so v1 stays consistent with them.
 
 ### Surfacing it

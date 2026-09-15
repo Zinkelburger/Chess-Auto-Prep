@@ -1,3 +1,7 @@
+/// Per-subtree aggregates for the repertoire explorer: how many traps a line
+/// holds, where the opponent struggles most and how natural our moves are.
+library;
+
 import 'dart:math' as math;
 
 import '../models/eval_tree_snapshot.dart';
@@ -60,11 +64,8 @@ class EvalTreeLineMetricsCache {
   EvalTreeLineMetrics metricsFor(int nodeId) =>
       _byNodeId[nodeId] ?? EvalTreeLineMetrics.empty;
 
-  bool _isOpponentTurn(EvalTreeNodeSnapshot node) =>
-      node.sideToMoveIsWhite != snapshot.playAsWhite;
-
   bool _isTrapPosition(EvalTreeNodeSnapshot node) {
-    if (!_isOpponentTurn(node)) return false;
+    if (snapshot.isOurTurnAt(node.id)) return false;
     if (node.childIds.length < 2) return false;
     final trap = node.trapScore;
     return trap != null && trap >= kEvalTreeTrapThreshold;
@@ -77,67 +78,54 @@ class EvalTreeLineMetricsCache {
     final node = snapshot.node(nodeId);
     var trapCount = _isTrapPosition(node) ? 1 : 0;
     double? minOpponentEase;
-
-    final qualityValues = <double>[];
     double? minMyEase;
+    final qualityValues = <double>[];
 
     for (final childId in node.childIds) {
       final childMetrics = _compute(childId);
       trapCount += childMetrics.subtreeTrapCount;
-
-      final childEase = childMetrics.expectedEaseDeep;
-      if (childEase != null) {
-        minOpponentEase = minOpponentEase == null
-            ? childEase
-            : (childEase < minOpponentEase ? childEase : minOpponentEase);
-      }
-
-      if (childMetrics.linePlayability != null) {
-        qualityValues.add(childMetrics.linePlayability!);
-      }
-      final childBottleneck = childMetrics.bottleneckMyEase;
-      if (childBottleneck != null) {
-        minMyEase = minMyEase == null
-            ? childBottleneck
-            : (childBottleneck < minMyEase ? childBottleneck : minMyEase);
+      minOpponentEase = _minOf(minOpponentEase, childMetrics.expectedEaseDeep);
+      minMyEase = _minOf(minMyEase, childMetrics.bottleneckMyEase);
+      if (childMetrics.linePlayability case final playability?) {
+        qualityValues.add(playability);
       }
     }
 
-    if (_isOpponentTurn(node)) {
-      if (node.ease != null) {
-        final ease = node.ease!;
-        minOpponentEase = minOpponentEase == null
-            ? ease
-            : (ease < minOpponentEase ? ease : minOpponentEase);
-        // Opponent quality: how hard it is for them (1 - ease).
-        // Low ease = opponent struggles = high quality for us.
-        qualityValues.add(1.0 - ease);
+    if (snapshot.isOurTurnAt(nodeId)) {
+      if (node.myEase case final myEase?) {
+        qualityValues.add(myEase);
+        minMyEase = _minOf(minMyEase, myEase);
       }
-    } else {
-      if (node.myEase != null) {
-        qualityValues.add(node.myEase!);
-        minMyEase = minMyEase == null
-            ? node.myEase!
-            : (node.myEase! < minMyEase ? node.myEase! : minMyEase);
-      }
-    }
-
-    double? playability;
-    if (qualityValues.isNotEmpty) {
-      final logSum = qualityValues
-          .map((q) => math.log(q.clamp(0.01, 1.0)))
-          .reduce((a, b) => a + b);
-      playability = math.exp(logSum / qualityValues.length).clamp(0.0, 1.0);
+    } else if (node.ease case final ease?) {
+      minOpponentEase = _minOf(minOpponentEase, ease);
+      // Opponent quality: how hard it is for them (1 - ease).
+      // Low ease = opponent struggles = high quality for us.
+      qualityValues.add(1.0 - ease);
     }
 
     final metrics = EvalTreeLineMetrics(
       subtreeTrapCount: trapCount,
       expectedEaseDeep: minOpponentEase,
-      linePlayability: playability,
+      linePlayability: _geometricMean(qualityValues),
       bottleneckMyEase: minMyEase,
     );
     _byNodeId[nodeId] = metrics;
     return metrics;
+  }
+
+  static double? _minOf(double? current, double? candidate) {
+    if (candidate == null) return current;
+    return current == null ? candidate : math.min(current, candidate);
+  }
+
+  /// Geometric mean of [values] (each floored at 0.01 so one zero does not
+  /// erase the rest), or null when there are none.
+  static double? _geometricMean(List<double> values) {
+    if (values.isEmpty) return null;
+    final logSum = values
+        .map((q) => math.log(q.clamp(0.01, 1.0)))
+        .reduce((a, b) => a + b);
+    return math.exp(logSum / values.length).clamp(0.0, 1.0);
   }
 }
 
@@ -154,7 +142,10 @@ class EvalTreeCandidateRow {
   });
 }
 
-/// Builds sorted candidate rows for the current position.
+/// Builds sorted candidate rows for the current position: repertoire moves
+/// first, then — at our turn — the most natural move with the toughest line
+/// below it, or — at theirs — the reply that is easiest for them (the one
+/// they will find), and probability last.
 List<EvalTreeCandidateRow> buildCandidateRows({
   required EvalTreeSnapshot snapshot,
   required EvalTreeLineMetricsCache metricsCache,
@@ -163,9 +154,7 @@ List<EvalTreeCandidateRow> buildCandidateRows({
   final children = snapshot.childrenOf(currentNodeId);
   if (children.isEmpty) return const [];
 
-  final current = snapshot.node(currentNodeId);
-  final isOurTurn = current.sideToMoveIsWhite == snapshot.playAsWhite;
-
+  final isOurTurn = snapshot.isOurTurnAt(currentNodeId);
   final rows = [
     for (final child in children)
       EvalTreeCandidateRow(
@@ -179,50 +168,47 @@ List<EvalTreeCandidateRow> buildCandidateRows({
     if (a.node.isRepertoireMove != b.node.isRepertoireMove) {
       return a.node.isRepertoireMove ? -1 : 1;
     }
-
     if (isOurTurn) {
-      final aMyEase = a.node.myEase ?? 0.5;
-      final bMyEase = b.node.myEase ?? 0.5;
-      final myEaseCmp = bMyEase.compareTo(aMyEase);
+      final myEaseCmp = (b.node.myEase ?? 0.5).compareTo(a.node.myEase ?? 0.5);
       if (myEaseCmp != 0) return myEaseCmp;
-
-      final aEase = a.lineMetrics.expectedEaseDeep ?? a.node.ease;
-      final bEase = b.lineMetrics.expectedEaseDeep ?? b.node.ease;
-      if (aEase != null && bEase != null) {
-        final cmp = aEase.compareTo(bEase);
-        if (cmp != 0) return cmp;
-      } else if (aEase != null) {
-        return -1;
-      } else if (bEase != null) {
-        return 1;
-      }
-
+      final easeCmp = _compareKnownFirst(
+        a.lineMetrics.expectedEaseDeep ?? a.node.ease,
+        b.lineMetrics.expectedEaseDeep ?? b.node.ease,
+        ascending: true,
+      );
+      if (easeCmp != 0) return easeCmp;
       final trapCmp = b.lineMetrics.subtreeTrapCount.compareTo(
         a.lineMetrics.subtreeTrapCount,
       );
       if (trapCmp != 0) return trapCmp;
     } else {
-      final aEase = a.node.ease;
-      final bEase = b.node.ease;
-      if (aEase != null && bEase != null) {
-        final cmp = bEase.compareTo(aEase);
-        if (cmp != 0) return cmp;
-      } else if (aEase != null) {
-        return -1;
-      } else if (bEase != null) {
-        return 1;
-      }
+      final easeCmp = _compareKnownFirst(
+        a.node.ease,
+        b.node.ease,
+        ascending: false,
+      );
+      if (easeCmp != 0) return easeCmp;
     }
-
     return b.node.moveProbability.compareTo(a.node.moveProbability);
   });
 
   return [
-    for (var i = 0; i < rows.length; i++)
+    for (final (i, row) in rows.indexed)
       EvalTreeCandidateRow(
-        node: rows[i].node,
-        lineMetrics: rows[i].lineMetrics,
+        node: row.node,
+        lineMetrics: row.lineMetrics,
         rank: i + 1,
       ),
   ];
+}
+
+/// Orders two optional values with the known one first; two known values
+/// compare [ascending] or descending, two unknown ones are equal.
+int _compareKnownFirst(double? a, double? b, {required bool ascending}) {
+  if (a != null && b != null) {
+    return ascending ? a.compareTo(b) : b.compareTo(a);
+  }
+  if (a != null) return -1;
+  if (b != null) return 1;
+  return 0;
 }

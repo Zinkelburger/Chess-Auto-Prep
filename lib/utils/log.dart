@@ -17,7 +17,21 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 
-enum LogLevel { debug, info, warning, error }
+/// Severity, carrying the `dart:developer` level it is reported at.
+enum LogLevel {
+  debug(500),
+  info(800),
+  warning(900),
+  error(1000);
+
+  const LogLevel(this.developerLevel);
+
+  /// The `level` passed to `dart:developer.log`.
+  final int developerLevel;
+
+  /// Dropped in release builds; warnings and errors always surface.
+  bool get isNoise => this == debug || this == info;
+}
 
 class Log {
   const Log();
@@ -61,30 +75,14 @@ class Log {
     Object? error,
     StackTrace? stackTrace,
   }) {
-    // In release builds, drop debug/info noise but keep warnings/errors.
-    if (kReleaseMode && (level == LogLevel.debug || level == LogLevel.info)) {
-      return;
-    }
+    if (kReleaseMode && level.isNoise) return;
     developer.log(
       message,
       name: name ?? 'chess_auto_prep',
-      level: _value(level),
+      level: level.developerLevel,
       error: error,
       stackTrace: stackTrace,
     );
-  }
-
-  int _value(LogLevel level) {
-    switch (level) {
-      case LogLevel.debug:
-        return 500;
-      case LogLevel.info:
-        return 800;
-      case LogLevel.warning:
-        return 900;
-      case LogLevel.error:
-        return 1000;
-    }
   }
 }
 

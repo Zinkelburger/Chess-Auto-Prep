@@ -19,6 +19,8 @@ import '../eval_cache.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 
+/// Owns the external eval providers for one build and answers every
+/// position lookup through the shared eval chain.
 class TreeEvalResolver {
   final EvalCache evalCache = EvalCache.instance;
   SqliteEvalProvider? _localChessDb;
@@ -26,6 +28,8 @@ class TreeEvalResolver {
   CdbDirectEvalProvider? _cdbDirect;
   ChessDbApiProvider? _chessDbApi;
 
+  /// Counters for the current run. The build service installs a fresh
+  /// [BuildStats] before each build, so this is set before any lookup.
   late BuildStats stats;
 
   ChessDbApiProvider? get chessDbApiProvider => _chessDbApi;
@@ -64,11 +68,12 @@ class TreeEvalResolver {
     }
 
     if (config.enableChessDbApi) {
-      _chessDbApi = ChessDbApiProvider(
+      final api = ChessDbApiProvider(
         dailyQuota: config.chessDbApiDailyQuota,
         concurrency: config.chessDbApiConcurrency,
       );
-      await _chessDbApi!.init();
+      await api.init();
+      _chessDbApi = api;
     }
   }
 
@@ -79,10 +84,8 @@ class TreeEvalResolver {
     _cdbDirect = null;
     await _lichessEvals?.close();
     _lichessEvals = null;
-    if (_chessDbApi != null) {
-      await _chessDbApi!.flushQuota();
-      _chessDbApi = null;
-    }
+    await _chessDbApi?.flushQuota();
+    _chessDbApi = null;
   }
 
   /// ChessDB's whole ranked move list for [fen] — local dump first, then the
@@ -134,26 +137,41 @@ class TreeEvalResolver {
     String fen,
     TreeBuildConfig config,
   ) async {
-    final outcome = await resolveEvalChain(
+    final outcome = await _resolve(
       fen: fen,
       config: config,
-      cache: evalCache,
-      stats: stats,
-      localChessDb: _localChessDb,
-      cdbDirect: _cdbDirect,
-      lichessEvals: _lichessEvals,
-      chessDbApi: _chessDbApi,
       allowStockfishFallback: false,
       stockfishEval: (_, _) async => (stmCp: 0, depth: 0),
-      cacheWrite: (f, whiteCp, depth) async {
-        cacheEvalWhite(f, whiteCp, depth);
-      },
     );
-    if (outcome.whiteCp != null) {
-      return (outcome.whiteCp!, outcome.depth);
-    }
-    return null;
+    final whiteCp = outcome.whiteCp;
+    return whiteCp == null ? null : (whiteCp, outcome.depth);
   }
+
+  /// The eval chain over this resolver's providers and cache.
+  Future<EvalChainOutcome> _resolve({
+    required String fen,
+    required TreeBuildConfig config,
+    required bool allowStockfishFallback,
+    required StockfishEvalFn stockfishEval,
+    ExtEvalMode extEvalMode = ExtEvalMode.none,
+    BuildTreeNode? canonicalNode,
+  }) => resolveEvalChain(
+    fen: fen,
+    config: config,
+    cache: evalCache,
+    stats: stats,
+    localChessDb: _localChessDb,
+    cdbDirect: _cdbDirect,
+    lichessEvals: _lichessEvals,
+    chessDbApi: _chessDbApi,
+    extEvalMode: extEvalMode,
+    canonicalNode: canonicalNode,
+    allowStockfishFallback: allowStockfishFallback,
+    stockfishEval: stockfishEval,
+    cacheWrite: (f, whiteCp, depth) async {
+      cacheEvalWhite(f, whiteCp, depth);
+    },
+  );
 
   /// Persist an eval (white-normalized cp).  Fire-and-forget — the L1
   /// mirror inside [EvalCache] is updated synchronously, so subsequent
@@ -172,15 +190,9 @@ class TreeEvalResolver {
   }) async {
     if (node.hasEngineEval) return true;
 
-    final outcome = await resolveEvalChain(
+    final outcome = await _resolve(
       fen: node.fen,
       config: config,
-      cache: evalCache,
-      stats: stats,
-      localChessDb: _localChessDb,
-      cdbDirect: _cdbDirect,
-      lichessEvals: _lichessEvals,
-      chessDbApi: _chessDbApi,
       extEvalMode: node.extEvalMode,
       canonicalNode: fenMap.getCanonical(node.fen),
       allowStockfishFallback: !dbOnly,
@@ -190,20 +202,15 @@ class TreeEvalResolver {
         stats.sfSingleMs += sw.elapsedMilliseconds;
         return (stmCp: result.effectiveCp, depth: depth);
       },
-      cacheWrite: (f, whiteCp, depth) async {
-        cacheEvalWhite(f, whiteCp, depth);
-      },
     );
 
     if (outcome.extEvalMode != node.extEvalMode) {
       node.extEvalMode = outcome.extEvalMode;
     }
 
-    if (outcome.whiteCp != null) {
-      final isWhiteStm = isWhiteToMove(node.fen);
-      node.engineEvalCp = isWhiteStm ? outcome.whiteCp! : -outcome.whiteCp!;
-      return true;
-    }
-    return false;
+    final whiteCp = outcome.whiteCp;
+    if (whiteCp == null) return false;
+    node.engineEvalCp = isWhiteToMove(node.fen) ? whiteCp : -whiteCp;
+    return true;
   }
 }

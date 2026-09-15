@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
+import 'package:chess_auto_prep/services/move_eval.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

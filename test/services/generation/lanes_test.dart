@@ -92,6 +92,29 @@ void main() {
       expect(started, 3);
     });
 
+    test('pause is awaited before each item and the list is re-checked '
+        'afterwards', () async {
+      final gate = Completer<void>();
+      var pauses = 0;
+      final done = <int>[];
+      final run = runLanes(
+        [0, 1],
+        lanes: 2,
+        // Only the second lane's first pause blocks; the first lane runs
+        // straight through both items while it waits.
+        pause: () => ++pauses == 2 ? gate.future : Future<void>.value(),
+        task: (i) async => done.add(i),
+      );
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(done, [0, 1]);
+      // The parked lane wakes to a drained list and must not index past it.
+      gate.complete();
+      await run;
+      expect(done, [0, 1]);
+      expect(pauses, 3);
+    });
+
     test('empty input returns without running anything', () async {
       var ran = false;
       await runLanes(<int>[], lanes: 4, task: (_) async => ran = true);

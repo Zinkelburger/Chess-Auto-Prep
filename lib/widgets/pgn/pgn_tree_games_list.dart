@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../../models/pgn_game_entry.dart';
-import '../../services/pgn_parsing_service.dart';
+import '../../services/pgn_position_replay.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/app_shortcuts.dart';

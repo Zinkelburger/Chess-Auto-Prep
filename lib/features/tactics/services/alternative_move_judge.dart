@@ -19,6 +19,7 @@ import 'package:flutter/foundation.dart';
 import '../../../services/engine/engine_lifecycle.dart';
 import '../../../services/engine/stockfish_connection_factory.dart';
 import '../../../services/engine/stockfish_pool.dart';
+import 'tactics_engine.dart' show TacticsEngine;
 
 /// One move to judge: the position it was played in, the move, and the
 /// stored answer at that point of the line (SAN or UCI, as stored).
@@ -112,7 +113,7 @@ class EngineAlternativeJudge {
 
   static Move? _parseToken(Position pos, String token) {
     final trimmed = token.trim();
-    if (RegExp(r'^[a-h][1-8][a-h][1-8][qrbnQRBN]?$').hasMatch(trimmed)) {
+    if (TacticsEngine.looksLikeUci(trimmed)) {
       return Move.parse(trimmed.toLowerCase());
     }
     return pos.parseSan(trimmed);

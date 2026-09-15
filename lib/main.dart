@@ -98,7 +98,7 @@ Future<void> _initializeApp() async {
 /// release time rather than tracked in git, and Flutter does not fail a build
 /// whose declared asset directory is missing — so "no engine in this build" is
 /// an ordinary state, and every developer checkout is in it until
-/// `tools/fetch_bughouse.py` has run.
+/// `tools/fetch_assets.py` has run.
 Future<void> _resolveOptionalModes() async {
   if (!await BughouseBundle.probeBundled()) {
     unavailableModes.add(AppMode.bughouse);

@@ -42,7 +42,6 @@ class CdbDirectLibraryStatus {
     required this.isAvailable,
     required this.showFeatureUi,
     required this.platformName,
-    required this.usedBundledLibrary,
   });
 
   /// Native reader loaded (bundled .so or dev LD_LIBRARY_PATH / TERARKDBROOT).
@@ -51,47 +50,77 @@ class CdbDirectLibraryStatus {
   /// Whether the ChessDB dump UI should appear (Linux only).
   final bool showFeatureUi;
   final String platformName;
-  final bool usedBundledLibrary;
+}
+
+/// The four `cdbdirect_*` entry points, resolved once per loaded library.
+class _CdbDirectBindings {
+  _CdbDirectBindings(DynamicLibrary lib)
+    : initialize = lib.lookupFunction<_InitializeNative, _InitializeDart>(
+        'cdbdirect_initialize',
+      ),
+      get = lib.lookupFunction<_GetNative, _GetDart>('cdbdirect_get'),
+      size = lib.lookupFunction<_SizeNative, _SizeDart>('cdbdirect_size'),
+      finalize = lib.lookupFunction<_FinalizeNative, _FinalizeDart>(
+        'cdbdirect_finalize',
+      );
+
+  final _InitializeDart initialize;
+  final _GetDart get;
+  final _SizeDart size;
+  final _FinalizeDart finalize;
+}
+
+/// An opened dump: the bindings plus the native handle they were opened with.
+class _OpenDump {
+  const _OpenDump(this.bindings, this.handle);
+
+  final _CdbDirectBindings bindings;
+  final Pointer<Void> handle;
+
+  String? get(String fenKey) {
+    final fenPtr = fenKey.toNativeUtf8();
+    try {
+      final response = bindings.get(handle, fenPtr);
+      return response.address == 0 ? null : response.toDartString();
+    } finally {
+      malloc.free(fenPtr);
+    }
+  }
+
+  int get positionCount => bindings.size(handle);
+
+  void close() => bindings.finalize(handle);
 }
 
 class CdbDirectEvalProvider
     implements ExternalEvalProvider, ExternalMoveProvider {
   static bool? _libraryLoadable;
 
-  DynamicLibrary? _lib;
-  Pointer<Void>? _handle;
-
-  _InitializeDart? _initialize;
-  _GetDart? _get;
-  _SizeDart? _size;
-  _FinalizeDart? _finalize;
+  _OpenDump? _dump;
 
   final String path;
   final CdbDirectLookupFn? lookupOverride;
 
   CdbDirectEvalProvider({required this.path, this.lookupOverride});
 
-  /// Whether the native reader can be loaded on this machine (cached after [probeAvailability]).
+  /// Whether the native reader can be loaded on this machine (cached after
+  /// [probeAvailability]).
   static bool get isAvailable => _libraryLoadable ?? false;
 
-  /// Linux shows the ChessDB dump UI even when the native library is not built yet.
+  /// Linux shows the ChessDB dump UI even when the native library is not
+  /// built yet.
   static bool get showFeatureUi => Platform.isLinux;
 
   /// Whether this provider instance is ready to serve lookups.
-  bool get isReady => _handle != null || lookupOverride != null;
+  bool get isReady => _dump != null || lookupOverride != null;
 
-  /// Probe and cache whether libcdbdirect is loadable. Safe to call multiple times.
+  /// Probe and cache whether libcdbdirect is loadable. Safe to call multiple
+  /// times.
   static Future<bool> probeAvailability() async {
-    if (_libraryLoadable != null) return _libraryLoadable!;
-    final status = await libraryStatus();
-    _libraryLoadable = status.isAvailable;
-    return _libraryLoadable!;
+    return _libraryLoadable ??= (await libraryStatus()).isAvailable;
   }
 
-  int? get positionCount {
-    if (_handle == null || _size == null) return null;
-    return _size!(_handle!);
-  }
+  int? get positionCount => _dump?.positionCount;
 
   /// Probe whether a cdbdirect library can be loaded on this platform.
   static Future<CdbDirectLibraryStatus> libraryStatus() async {
@@ -101,31 +130,17 @@ class CdbDirectEvalProvider
         isAvailable: false,
         showFeatureUi: false,
         platformName: platformName,
-        usedBundledLibrary: false,
       );
     }
-
-    final bundled = cdb_libs.openLibrary();
-    if (bundled != null) {
-      return CdbDirectLibraryStatus(
-        isAvailable: true,
-        showFeatureUi: true,
-        platformName: platformName,
-        usedBundledLibrary: true,
-      );
-    }
-
-    final dev = await _tryLoadDevLibrary();
     return CdbDirectLibraryStatus(
-      isAvailable: dev != null,
+      isAvailable: await _tryLoadLibrary() != null,
       showFeatureUi: true,
       platformName: platformName,
-      usedBundledLibrary: false,
     );
   }
 
   /// Load bundled library first, then dev/system fallbacks.
-  static Future<DynamicLibrary?> tryLoadLibrary() async {
+  static Future<DynamicLibrary?> _tryLoadLibrary() async {
     final bundled = cdb_libs.openLibrary();
     if (bundled != null) return bundled;
     return _tryLoadDevLibrary();
@@ -135,6 +150,7 @@ class CdbDirectEvalProvider
     try {
       return DynamicLibrary.open(libPath);
     } catch (_) {
+      // Not at this path; the caller tries the next candidate.
       return null;
     }
   }
@@ -153,9 +169,9 @@ class CdbDirectEvalProvider
       yield p.join(envRoot, 'lib', 'cdbdirect.dll');
     }
 
+    final projectRoot = env['CHESS_AUTO_PREP_ROOT'];
     final projectRoots = <String>{
-      if (env['CHESS_AUTO_PREP_ROOT']?.isNotEmpty == true)
-        env['CHESS_AUTO_PREP_ROOT']!,
+      if (projectRoot != null && projectRoot.isNotEmpty) projectRoot,
       Directory.current.path,
     };
     for (final root in projectRoots) {
@@ -174,7 +190,7 @@ class CdbDirectEvalProvider
       yield p.join(exeDir, 'lib', 'libcdbdirect.so');
       yield p.join(exeDir, '..', 'lib', 'libcdbdirect.so');
     } catch (_) {
-      /* resolvedExecutable may throw on some platforms */
+      // resolvedExecutable may throw on some platforms; skip those candidates.
     }
   }
 
@@ -196,65 +212,47 @@ class CdbDirectEvalProvider
 
   Future<bool> init({DynamicLibrary? library}) async {
     if (lookupOverride != null) return path.isNotEmpty;
-    if (_handle != null) return true;
+    if (_dump != null) return true;
     if (path.isEmpty) return false;
     if (!await validateCdbDirectDataDir(path)) return false;
 
-    _lib = library ?? await tryLoadLibrary();
-    if (_lib == null) return false;
+    final lib = library ?? await _tryLoadLibrary();
+    if (lib == null) return false;
 
+    final _CdbDirectBindings bindings;
     try {
-      _initialize = _lib!.lookupFunction<_InitializeNative, _InitializeDart>(
-        'cdbdirect_initialize',
-      );
-      _get = _lib!.lookupFunction<_GetNative, _GetDart>('cdbdirect_get');
-      _size = _lib!.lookupFunction<_SizeNative, _SizeDart>('cdbdirect_size');
-      _finalize = _lib!.lookupFunction<_FinalizeNative, _FinalizeDart>(
-        'cdbdirect_finalize',
-      );
+      bindings = _CdbDirectBindings(lib);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[CdbDirectEvalProvider] symbol load failed: $e');
       }
-      _lib = null;
       return false;
     }
 
     final resolved = await resolveCdbDirectDataDir(path);
     final openPath = resolved?.path ?? path;
     final pathPtr = openPath.toNativeUtf8();
+    final Pointer<Void> handle;
     try {
-      _handle = _initialize!(pathPtr);
+      handle = bindings.initialize(pathPtr);
     } finally {
       malloc.free(pathPtr);
     }
 
-    if (_handle == null || _handle!.address == 0) {
-      _handle = null;
-      return false;
-    }
+    if (handle.address == 0) return false;
+    _dump = _OpenDump(bindings, handle);
     return true;
   }
 
   Future<void> close() async {
-    if (_handle != null && _finalize != null) {
-      _finalize!(_handle!);
-      _handle = null;
-    }
+    _dump?.close();
+    _dump = null;
   }
 
   String? _nativeLookup(String fenKey) {
-    if (lookupOverride != null) return lookupOverride!(fenKey);
-    if (_handle == null || _get == null) return null;
-
-    final fenPtr = fenKey.toNativeUtf8();
-    try {
-      final respPtr = _get!(_handle!, fenPtr);
-      if (respPtr.address == 0) return null;
-      return respPtr.toDartString();
-    } finally {
-      malloc.free(fenPtr);
-    }
+    final override = lookupOverride;
+    if (override != null) return override(fenKey);
+    return _dump?.get(fenKey);
   }
 
   /// Every move the dump knows from [fen], best first; empty on a miss.
@@ -288,14 +286,13 @@ class CdbDirectEvalProvider
     final isWhiteStm = isWhiteToMove(key);
 
     try {
-      final response = _nativeLookup(key);
-      final parsed = parseCdbDirectResponse(response);
+      final parsed = parseCdbDirectResponse(_nativeLookup(key));
       if (parsed == null) return const EvalLookupResult.hardMiss();
 
       // The dump scores like the API: side-to-move centipawns with mates
       // encoded as ±(30000 − ply).  Decode them the same way the API path
       // does, so the chain never sees a 29995-centipawn "eval" from here.
-      final decoded = mapChessDbRawScoreStm(parsed.cp);
+      final decoded = mapChessDbRawScoreStm(parsed.score);
       final whiteCp = isWhiteStm ? decoded.stmCp : -decoded.stmCp;
       if (parsed.depth < minDepth) return const EvalLookupResult.shallow();
 

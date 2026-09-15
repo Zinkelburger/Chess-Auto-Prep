@@ -441,7 +441,7 @@ void main() {
       final filePath = '${tempDir.path}/empty.pgn';
       await File(filePath).writeAsString('');
 
-      final result = await service.appendMoveAtPath(
+      final result = await service.files.appendMoveAtPath(
         filePath,
         [],
         'e4',
@@ -473,7 +473,7 @@ void main() {
 1. e4 e5
 ''');
 
-        final result = await service.appendMoveAtPath(
+        final result = await service.files.appendMoveAtPath(
           filePath,
           ['e4', 'e5'],
           'Nf3',
@@ -507,7 +507,7 @@ void main() {
 1. e4 e5
 ''');
 
-        final result = await service.appendMoveAtPath(
+        final result = await service.files.appendMoveAtPath(
           filePath,
           ['e4', 'c5'],
           'Nf3',
@@ -552,7 +552,7 @@ void main() {
 ''');
 
       // The editor writes only the standard headers, like MoveTree.toPgn.
-      final ok = await service.updateLineContent(
+      final ok = await service.files.updateLineContent(
         filePath,
         'line_abc123',
         '[Event "New Title"]\n[Date "2026.07.09"]\n[White "Me"]\n'
@@ -567,7 +567,7 @@ void main() {
       expect(disk, isNot(contains('Old Title')));
 
       // The line must still be findable by its id afterwards.
-      final renamed = await service.updateLineTitle(
+      final renamed = await service.files.updateLineTitle(
         filePath,
         'line_abc123',
         'Renamed',
@@ -671,15 +671,15 @@ void main() {
 
     test('readGameTextAt returns whole games, not header fragments', () async {
       final service = RepertoireService();
-      final second = await service.readGameTextAt(path, 1);
+      final second = await service.files.readGameTextAt(path, 1);
       expect(second, contains('[Event "Second"]'));
       expect(second, contains('1. e4 e5'));
-      expect(await service.readGameTextAt(path, 3), isNull);
+      expect(await service.files.readGameTextAt(path, 3), isNull);
     });
 
     test('deleteGameAt removes the game the index names', () async {
       final service = RepertoireService();
-      expect(await service.deleteGameAt(path, 1), isTrue);
+      expect(await service.files.deleteGameAt(path, 1), isTrue);
       final left = service.parseRepertoirePgn(await File(path).readAsString());
       expect(left.map((l) => l.moves.first), ['d4', 'c4']);
     });

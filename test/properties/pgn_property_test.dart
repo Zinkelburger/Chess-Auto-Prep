@@ -14,11 +14,13 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/services/generation/export/move_annotation.dart';
+import 'package:chess_auto_prep/services/pgn_mainline_lexer.dart';
 import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show isNullMoveSan;
 import 'package:chess_auto_prep/utils/ease_utils.dart'
     show expectedCpFromWinProb;
 import 'package:chess_auto_prep/utils/movetext_builder.dart';
+import 'package:chess_auto_prep/utils/move_metrics.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart';
 import 'package:chess_auto_prep/utils/pgn_nags.dart';
 

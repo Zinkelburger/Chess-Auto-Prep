@@ -25,36 +25,38 @@ mixin _WindowOps on ChangeNotifier {
   void orientBoardForCurrentGame() {
     if (filteredGames.isEmpty) return;
     final game = filteredGames[currentGameIndex];
-    final w = (game.headers['White'] ?? '').toLowerCase().trim();
-    final b = (game.headers['Black'] ?? '').toLowerCase().trim();
-
-    switch (perspective.mode) {
-      case PerspectiveMode.white:
-        boardFlipped = false;
-      case PerspectiveMode.black:
-        boardFlipped = true;
-      case PerspectiveMode.player:
-        final target = perspective.playerName.toLowerCase().trim();
-        // Exact match first so same-surname matchups still orient correctly.
-        if (b == target) {
-          boardFlipped = true;
-        } else if (w == target) {
-          boardFlipped = false;
-        } else {
-          // Collections mix name spellings ("Gashimov,V" / "Gashimov, Vugar"),
-          // so fall back to surname comparison, like detectFileProtagonist.
-          String surname(String s) => s.split(',').first.trim();
-          final t = surname(target);
-          final bMatch = t.isNotEmpty && surname(b) == t;
-          final wMatch = t.isNotEmpty && surname(w) == t;
-          if (bMatch && !wMatch) {
-            boardFlipped = true;
-          } else if (wMatch && !bMatch) {
-            boardFlipped = false;
-          }
-        }
-    }
+    final flipped = switch (perspective.mode) {
+      PerspectiveMode.white => false,
+      PerspectiveMode.black => true,
+      PerspectiveMode.player => _playerSitsAtBlack(
+        game,
+        perspective.playerName,
+      ),
+    };
+    if (flipped != null) boardFlipped = flipped;
     notifyListeners();
+  }
+
+  /// Whether [playerName] is this game's Black player: true/false when the
+  /// name is found on one side, null when it is on neither (or both), which
+  /// leaves the current orientation alone.
+  static bool? _playerSitsAtBlack(PgnGameEntry game, String playerName) {
+    String normalized(String? s) => (s ?? '').toLowerCase().trim();
+    final white = normalized(game.headers['White']);
+    final black = normalized(game.headers['Black']);
+    final target = normalized(playerName);
+    // Exact match first so same-surname matchups still orient correctly.
+    if (black == target) return true;
+    if (white == target) return false;
+    // Collections mix name spellings ("Gashimov,V" / "Gashimov, Vugar"),
+    // so fall back to surname comparison, like detectFileProtagonist.
+    String surname(String s) => s.split(',').first.trim();
+    final t = surname(target);
+    final blackMatch = t.isNotEmpty && surname(black) == t;
+    final whiteMatch = t.isNotEmpty && surname(white) == t;
+    if (blackMatch && !whiteMatch) return true;
+    if (whiteMatch && !blackMatch) return false;
+    return null;
   }
 
   void setPerspective(Perspective p) {
@@ -73,19 +75,7 @@ mixin _WindowOps on ChangeNotifier {
     final oldHeader = first.headers['StudyPerspective'];
     first.headers['StudyPerspective'] = value;
 
-    var pgn = first.pgnText;
-    if (pgn.contains(RegExp(r'\[StudyPerspective\s+"[^"]*"\]'))) {
-      pgn = pgn.replaceFirst(
-        RegExp(r'\[StudyPerspective\s+"[^"]*"\]'),
-        '[StudyPerspective "$value"]',
-      );
-    } else {
-      final firstNewline = pgn.indexOf('\n');
-      if (firstNewline != -1) {
-        pgn =
-            '${pgn.substring(0, firstNewline)}\n[StudyPerspective "$value"]${pgn.substring(firstNewline)}';
-      }
-    }
+    final pgn = upsertPgnHeader(first.pgnText, 'StudyPerspective', value);
     final changed = oldHeader != value || first.pgnText != pgn;
     first.pgnText = pgn;
     if (changed) {

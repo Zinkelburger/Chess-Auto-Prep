@@ -20,19 +20,20 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:dartchess/dartchess.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../games_library/game_filter.dart' show GameSpeed, classifySpeed;
-import '../generation/pgn_freq_parser.dart'
+import '../generation/pgn_lexer.dart'
     show isResultToken, tokenToSan, tokenizeMovetext;
 import '../master_games/position_key.dart';
 import '../pgn_parsing_service.dart' show extractHeaders, splitPgnIntoGames;
 import '../storage/app_paths.dart';
 import '../storage/schema_guard.dart';
 import '../game_identity.dart';
+import 'game_store_schema.dart';
 
 /// Plies indexed into `positions` per game — the opening, where position
 /// lookups are useful; deeper positions are unique to one game anyway.
@@ -167,15 +168,19 @@ class GameStore {
   factory GameStore.open(String path) {
     final db = sqlite3.open(path);
     try {
-      final version = requireSupportedSchema(db, _schemaVersion, 'Saved games');
+      final version = requireSupportedSchema(
+        db,
+        gameStoreSchemaVersion,
+        'Saved games',
+      );
       db.execute('PRAGMA busy_timeout = 10000');
-      if (version < _schemaVersion) {
-        backupBeforeSchemaUpgrade(db, path, _schemaVersion);
+      if (version < gameStoreSchemaVersion) {
+        backupBeforeSchemaUpgrade(db, path, gameStoreSchemaVersion);
       }
       db.execute('PRAGMA journal_mode = WAL');
       db.execute('PRAGMA synchronous = NORMAL');
       db.execute('PRAGMA foreign_keys = ON');
-      _migrate(db);
+      migrateGameStoreSchema(db);
       return GameStore._(db, path);
     } catch (_) {
       db.close();
@@ -186,92 +191,12 @@ class GameStore {
   /// `<support>/app_games.db`.
   static Future<String> defaultPath() async {
     final dir = await AppPaths.supportDirectory();
-    return '${dir.path}${Platform.pathSeparator}app_games.db';
+    return p.join(dir.path, 'app_games.db');
   }
 
   void close() => _db.close();
 
   Database get raw => _db;
-
-  static const int _schemaVersion = 2;
-
-  static void _migrate(Database db) {
-    final v = db.select('PRAGMA user_version').first.columnAt(0) as int;
-    if (v >= _schemaVersion) return;
-    db.execute('BEGIN IMMEDIATE');
-    try {
-      db.execute('''
-      CREATE TABLE IF NOT EXISTS games(
-        id INTEGER PRIMARY KEY,
-        collection TEXT NOT NULL,
-        game_key TEXT NOT NULL,
-        white TEXT NOT NULL DEFAULT '',
-        black TEXT NOT NULL DEFAULT '',
-        result TEXT NOT NULL DEFAULT '*',
-        date TEXT NOT NULL DEFAULT '',
-        played_at INTEGER,
-        speed TEXT NOT NULL DEFAULT 'unknown',
-        white_elo INTEGER,
-        black_elo INTEGER,
-        eco TEXT NOT NULL DEFAULT '',
-        headers_json TEXT NOT NULL,
-        pgn TEXT NOT NULL,
-        imported_at INTEGER NOT NULL,
-        UNIQUE(collection, game_key)
-      );
-      CREATE INDEX IF NOT EXISTS games_coll_date
-        ON games(collection, played_at DESC);
-      CREATE INDEX IF NOT EXISTS games_white ON games(white COLLATE NOCASE);
-      CREATE INDEX IF NOT EXISTS games_black ON games(black COLLATE NOCASE);
-
-      CREATE TABLE IF NOT EXISTS positions(
-        pos INTEGER NOT NULL,
-        game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-        ply INTEGER NOT NULL,
-        PRIMARY KEY(pos, game_id)
-      ) WITHOUT ROWID;
-      CREATE INDEX IF NOT EXISTS positions_game ON positions(game_id);
-
-      CREATE TABLE IF NOT EXISTS collections(
-        collection TEXT PRIMARY KEY,
-        updated_at INTEGER NOT NULL,
-        meta_json TEXT NOT NULL DEFAULT '{}'
-      );
-    ''');
-      db.execute(
-        'CREATE TABLE IF NOT EXISTS game_trash (collection TEXT NOT NULL, game_key TEXT NOT NULL, pgn TEXT NOT NULL, deleted_at INTEGER NOT NULL)',
-      );
-      // Rekey under one transaction without deleting any row or its positions.
-      // A temporary namespace avoids unique-key swaps during migration.
-      final rows = db.select(
-        'SELECT id, collection, headers_json, pgn FROM games',
-      );
-      for (final row in rows) {
-        db.execute('UPDATE games SET game_key = ? WHERE id = ?', [
-          'migration-v2:${row['id']}',
-          row['id'],
-        ]);
-      }
-      final used = <String>{};
-      for (final row in rows) {
-        final h = (jsonDecode(row['headers_json'] as String) as Map)
-            .cast<String, String>();
-        var key = canonicalGameKey(h, row['pgn'] as String);
-        if (!used.add('${row['collection']}|$key')) {
-          key = '$key:preserved-${row['id']}';
-        }
-        db.execute('UPDATE games SET game_key = ? WHERE id = ?', [
-          key,
-          row['id'],
-        ]);
-      }
-      db.execute('PRAGMA user_version = $_schemaVersion');
-      db.execute('COMMIT');
-    } catch (_) {
-      db.execute('ROLLBACK');
-      rethrow;
-    }
-  }
 
   // ── Writes ─────────────────────────────────────────────────────────────
 

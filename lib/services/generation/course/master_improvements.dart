@@ -21,8 +21,7 @@ import '../../master_games/master_games_db.dart';
 import '../export/move_annotation.dart';
 import '../generation_config.dart';
 import '../line_extractor.dart';
-import '../pgn_freq_parser.dart'
-    show isResultToken, tokenToSan, tokenizeMovetext;
+import '../pgn_lexer.dart' show isResultToken, tokenToSan, tokenizeMovetext;
 
 /// One departure from master practice, with the evidence for it.
 class MasterImprovement {
@@ -80,6 +79,8 @@ class MasterImprovement {
 /// Improvements keyed by [LineChoice.fenBefore].
 typedef ImprovementMap = Map<String, MasterImprovement>;
 
+/// Finds the positions where the repertoire departs from master practice and
+/// asks the engine whether the departure is an improvement.
 class MasterImprovementProber {
   MasterImprovementProber({
     required this.config,
@@ -130,19 +131,9 @@ class MasterImprovementProber {
     void Function(int done, int total)? onProgress,
   }) async {
     if (pool.workerCount == 0) return const {};
-    final ourUciAt = <String, String>{};
-    for (final line in lines) {
-      for (final choice in line.choices) {
-        if (choice.isOurMove && choice.moveIndex < line.movesUci.length) {
-          ourUciAt.putIfAbsent(
-            choice.fenBefore,
-            () => line.movesUci[choice.moveIndex],
-          );
-        }
-      }
-    }
     final targets = sites(lines);
     if (targets.isEmpty) return const {};
+    final ourUciAt = _ourMoveByPosition(lines);
 
     final out = <String, MasterImprovement>{};
     var probesLeft = maxProbes;
@@ -163,6 +154,24 @@ class MasterImprovementProber {
     return out;
   }
 
+  /// Our move at every position we play from, as UCI — what the book's
+  /// top move is compared against.  First line wins where lines share a
+  /// position; they play the same move there anyway.
+  static Map<String, String> _ourMoveByPosition(List<ExtractedLine> lines) {
+    final ourUciAt = <String, String>{};
+    for (final line in lines) {
+      for (final choice in line.choices) {
+        if (choice.isOurMove && choice.moveIndex < line.movesUci.length) {
+          ourUciAt.putIfAbsent(
+            choice.fenBefore,
+            () => line.movesUci[choice.moveIndex],
+          );
+        }
+      }
+    }
+    return ourUciAt;
+  }
+
   /// The most-played book move at [fen] when it is not [ourUci]; null when
   /// the position is unknown or masters agree with us.
   BookMove? _masterMoveOtherThan(String fen, String ourUci) {
@@ -170,6 +179,8 @@ class MasterImprovementProber {
     try {
       moves = book(fen);
     } catch (_) {
+      // A book that cannot answer (closed database, corrupt page) costs this
+      // one site; the pass is best-effort by contract.
       return null;
     }
     if (moves.isEmpty) return null;
@@ -238,6 +249,7 @@ class MasterImprovementProber {
       final cpWhite = r.lines.first.effectiveCp;
       return config.playAsWhite ? cpWhite : -cpWhite;
     } catch (_) {
+      // The pool is stopped, or the position was rejected: no verdict.
       return null;
     }
   }
@@ -260,30 +272,29 @@ class MasterImprovementProber {
     Position pos = Chess.initial;
     final limit = sans.length < maxReplayPlies ? sans.length : maxReplayPlies;
     for (var i = 0; i < limit; i++) {
+      final move = _parseSanOrNull(pos, sans[i]);
+      if (move == null) return null;
       if (canonicalizeFen4(pos.fen) == target) {
-        final Move? m;
-        try {
-          m = pos.parseSan(sans[i]);
-        } catch (_) {
-          return null;
-        }
-        if (m == null || m.uci != masterUci) return null;
+        if (move.uci != masterUci) return null;
         final end = i + 1 + continuationPlies;
         return (
           sans[i],
           sans.sublist(i + 1, end < sans.length ? end : sans.length),
         );
       }
-      final Move? m;
-      try {
-        m = pos.parseSan(sans[i]);
-      } catch (_) {
-        return null;
-      }
-      if (m == null) return null;
-      pos = pos.play(m);
+      pos = pos.play(move);
     }
     return null;
+  }
+
+  /// [san] as a move in [pos], or null when it is illegal or unparsable —
+  /// the game record is corrupt from here on, so replay stops.
+  static Move? _parseSanOrNull(Position pos, String san) {
+    try {
+      return pos.parseSan(san);
+    } catch (_) {
+      return null;
+    }
   }
 }
 

@@ -84,6 +84,82 @@ void main() {
     });
   });
 
+  group('copyNodeAnalysis', () {
+    BuildTreeNode node(String uci) => BuildTreeNode(
+      fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+      moveSan: 'e4',
+      moveUci: uci,
+      ply: 1,
+      isWhiteToMove: false,
+      nodeId: 1,
+    );
+
+    test('copies analysis values and database stats', () {
+      final from = node('e2e4')
+        ..engineEvalCp = 35
+        ..explored = true
+        ..pruneReason = PruneReason.evalTooLow
+        ..pruneEvalCp = -300
+        ..openingName = "King's Pawn"
+        ..openingEco = 'B00'
+        ..maiaFrequency = 0.42
+        ..pvContinuationMove = 'e7e5'
+        ..engineInjected = true
+        ..extEvalMode = ExtEvalMode.skipExternal
+        ..ease = 0.7
+        ..localCpl = 12.5
+        ..expectimaxValue = 0.61
+        ..hasExpectimax = true
+        ..opponentEase = 0.3
+        ..trapScore = 0.05
+        ..myEase = 0.8;
+      from.setLichessStats(10, 5, 3);
+      final into = node('e2e4');
+
+      copyNodeAnalysis(into, from: from);
+
+      expect(into.engineEvalCp, 35);
+      expect(into.explored, isTrue);
+      expect(into.pruneReason, PruneReason.evalTooLow);
+      expect(into.pruneEvalCp, -300);
+      expect(into.openingName, "King's Pawn");
+      expect(into.openingEco, 'B00');
+      expect(into.maiaFrequency, 0.42);
+      expect(into.pvContinuationMove, 'e7e5');
+      expect(into.engineInjected, isTrue);
+      expect(into.extEvalMode, ExtEvalMode.skipExternal);
+      expect(into.ease, 0.7);
+      expect(into.localCpl, 12.5);
+      expect(into.expectimaxValue, 0.61);
+      expect(into.hasExpectimax, isTrue);
+      expect(into.opponentEase, 0.3);
+      expect(into.trapScore, 0.05);
+      expect(into.myEase, 0.8);
+      expect(into.whiteWins, 10);
+      expect(into.blackWins, 5);
+      expect(into.draws, 3);
+      expect(into.totalGames, 18);
+    });
+
+    test('leaves structure, Pure fields, selection and PV to the caller', () {
+      final from = node('e2e4')
+        ..historyAware = true
+        ..terminalValue = 0.5
+        ..isRepertoireMove = true
+        ..enginePv = const ['e7e5', 'g1f3'];
+      final into = node('e2e4');
+
+      copyNodeAnalysis(into, from: from);
+
+      expect(into.historyAware, isFalse);
+      expect(into.terminalValue, isNull);
+      expect(into.isRepertoireMove, isFalse);
+      expect(into.enginePv, isEmpty);
+      expect(into.parent, isNull);
+      expect(into.children, isEmpty);
+    });
+  });
+
   group('reopenExpansionLeaves', () {
     test('reopens depth-capped leaves, keeps pruned and deep ones closed', () {
       final t = StandardTree();

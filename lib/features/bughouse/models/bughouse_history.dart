@@ -86,6 +86,31 @@ class BughouseHistory {
     _cursor = _plies.length;
   }
 
+  /// Plays [move] on [which] from [current] and records the ply, routing any
+  /// capture to the partner board the way [BughouseState.playMove] does.
+  ///
+  /// Null, with nothing recorded, when the move is not legal there. The one
+  /// path a move takes onto a line — the pane, the match runner and the
+  /// replay all go through it, so a live game and a replayed one cannot
+  /// disagree about a capture.
+  BughousePly? play(BughouseBoard which, Move move) {
+    final before = current;
+    final board = before.board(which);
+    if (!board.isLegal(move)) return null;
+    final san = board.makeSan(move).$2;
+    final after = before.playMove(which, move);
+    if (after == null) return null;
+    final ply = BughousePly(
+      board: which,
+      move: move,
+      san: san,
+      before: before,
+      after: after,
+    );
+    push(ply);
+    return ply;
+  }
+
   /// Removes the ply before the cursor and steps back onto its predecessor.
   BughousePly? undo() {
     if (_cursor == 0) return null;
@@ -146,9 +171,6 @@ class BughouseHistory {
     for (final which in BughouseBoard.values)
       '${which.label}: ${movetextFor(which)}'.trimRight(),
   ].join('\n');
-
-  /// A fresh history rooted at [state], keeping nothing.
-  static BughouseHistory from(BughouseState state) => BughouseHistory(state);
 
   /// Re-roots the line at [state] while keeping the plies — used when a
   /// setting that is not part of the position (team, clocks, time advantage)

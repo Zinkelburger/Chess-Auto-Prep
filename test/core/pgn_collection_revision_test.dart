@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart' as pgn;
+import 'package:chess_auto_prep/services/pgn_position_replay.dart' as pgn;
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
@@ -187,6 +187,11 @@ void main() {
     () async {
       StorageFactory.instanceForTest = _IndexedStorage(game.pgnText);
       await controller.loadFile('/virtual/games.pgn', restoreSavedSlice: false);
+      // The persisted index is restored by the deferred collection
+      // preparation, which runs after the game is already on screen.
+      while (controller.isPreparingCollection) {
+        await Future<void>.delayed(Duration.zero);
+      }
       final index = controller.fenIndex;
       expect(index, isNotNull);
 

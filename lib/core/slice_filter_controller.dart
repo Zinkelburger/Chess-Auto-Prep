@@ -10,7 +10,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/widgets.dart';
 
 import '../models/pgn_filter_models.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
+import '../services/pgn_slice_filter.dart' as pgn;
 import '../utils/chess_utils.dart' show playSanOrNullMove;
 import '../utils/fen_utils.dart';
 import '../utils/san_token_utils.dart';
@@ -71,6 +71,12 @@ PositionParseResult _parseSanSequence(String input) {
 
 // ── Header filter rows ───────────────────────────────────────────────────────
 
+/// Field a new header row starts on.
+const String _defaultHeaderField = 'Black';
+
+/// Plies of slack a sequence filter allows between its groups.
+const int _defaultSequenceGap = 4;
+
 /// Available PGN header field options. [kPlayerHeaderField] is a pseudo
 /// field (matches either colour, `;`-separated names); the rest are real
 /// PGN headers.
@@ -114,7 +120,7 @@ class HeaderFilterRow {
   final TextEditingController controller;
 
   HeaderFilterRow({
-    this.field = 'Black',
+    this.field = _defaultHeaderField,
     this.mode = MatchMode.contains,
     String initialValue = '',
   }) : value = initialValue,
@@ -216,7 +222,7 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Current max-gap setting.
-  int get sequenceGap => int.tryParse(gapText.text) ?? 4;
+  int get sequenceGap => int.tryParse(gapText.text) ?? _defaultSequenceGap;
 
   bool get hasSequenceFilter => sequenceText.text.trim().isNotEmpty;
 
@@ -269,7 +275,7 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
           .map((f) => (field: f.field, mode: f.mode, value: f.value))
           .toList();
 
-  void addHeaderRow({String field = 'Black'}) {
+  void addHeaderRow({String field = _defaultHeaderField}) {
     headerRows.add(HeaderFilterRow(field: field));
     notifyListeners();
   }
@@ -379,14 +385,16 @@ class SliceFilterController extends ChangeNotifier with SafeChangeNotifier {
         : const PositionParseResult.ok(null);
 
     sequenceText.text = config?.sequencePattern ?? '';
-    gapText.text = '${config?.sequenceGap ?? 4}';
+    gapText.text = '${config?.sequenceGap ?? _defaultSequenceGap}';
     _sequenceError = null;
 
     for (final f in config?.headerFilters ?? const <HeaderFilterConfig>[]) {
       if (f.value.isEmpty) continue;
       headerRows.add(
         HeaderFilterRow(
-          field: kHeaderFieldOptions.contains(f.field) ? f.field : 'Black',
+          field: kHeaderFieldOptions.contains(f.field)
+              ? f.field
+              : _defaultHeaderField,
           mode: f.mode,
           initialValue: f.value,
         ),

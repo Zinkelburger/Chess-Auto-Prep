@@ -11,17 +11,17 @@ void main() {
         'move:d2d4,score:25,rank:1,note:,winrate:0.512',
       );
       expect(r, isNotNull);
-      expect(r!.cp, 30);
+      expect(r!.score, 30);
       expect(r.bestMove, 'e2e4');
     });
 
     test('simple format', () {
       final r = parseCdbDirectResponse('e2e4:30|d2d4:25');
-      expect(r?.cp, 30);
+      expect(r?.score, 30);
     });
 
     test('eval only', () {
-      expect(parseCdbDirectResponse('eval:42')?.cp, 42);
+      expect(parseCdbDirectResponse('eval:42')?.score, 42);
     });
 
     test('null and unknown', () {

@@ -101,7 +101,7 @@ class ReviewProgressStore {
     // No file (nothing loaded) means nothing to mirror into; the reviews CSV
     // already holds the schedule either way.
     if (path == null || path.isEmpty || batch.isEmpty) return;
-    await repertoireService.updateManyLineReviewHeaders(path, batch);
+    await repertoireService.files.updateManyLineReviewHeaders(path, batch);
   }
 
   /// Stop the pending flush timer. The batch itself is dropped: the CSV
@@ -147,21 +147,13 @@ class ReviewProgressStore {
         );
     byLine[line.id] = updated;
 
-    final savedReviews = byLine.values.toList();
-    final savedMoves = moveProgress.values.toList();
-    await reviewService.saveAll(savedReviews, repertoireId: sourcePath);
-    await reviewService.saveMoveProgress(savedMoves, repertoireId: sourcePath);
-    await reviewService.appendHistory([
-      RepertoireReviewHistoryEntry(
-        repertoireId: sourcePath,
-        lineId: line.persistedId,
-        timestampUtc: DateTime.now().toUtc(),
-        rating: rating.name,
-        hadMistake: hadMistake,
-        sessionType: sessionType,
-      ),
-    ]);
-
+    await _persistLineOutcome(
+      line,
+      sourcePath: sourcePath,
+      rating: rating.name,
+      hadMistake: hadMistake,
+      sessionType: sessionType,
+    );
     _queueHeaderWrite(sourcePath, line.persistedId, updated);
 
     return updated;
@@ -184,16 +176,38 @@ class ReviewProgressStore {
       failCount: hadMistake ? existing.failCount + 1 : existing.failCount,
     );
 
-    final savedReviews = byLine.values.toList();
-    final savedMoves = moveProgress.values.toList();
-    await reviewService.saveAll(savedReviews, repertoireId: sourcePath);
-    await reviewService.saveMoveProgress(savedMoves, repertoireId: sourcePath);
+    await _persistLineOutcome(
+      line,
+      sourcePath: sourcePath,
+      rating: '',
+      hadMistake: hadMistake,
+      sessionType: sessionType,
+    );
+  }
+
+  /// Write the reviews and move streaks for [sourcePath], then append one
+  /// history row for [line]. [rating] is empty for an unrated completion.
+  Future<void> _persistLineOutcome(
+    RepertoireLine line, {
+    required String sourcePath,
+    required String rating,
+    required bool hadMistake,
+    required String sessionType,
+  }) async {
+    await reviewService.saveAll(
+      byLine.values.toList(),
+      repertoireId: sourcePath,
+    );
+    await reviewService.saveMoveProgress(
+      moveProgress.values.toList(),
+      repertoireId: sourcePath,
+    );
     await reviewService.appendHistory([
       RepertoireReviewHistoryEntry(
         repertoireId: sourcePath,
         lineId: line.persistedId,
         timestampUtc: DateTime.now().toUtc(),
-        rating: '',
+        rating: rating,
         hadMistake: hadMistake,
         sessionType: sessionType,
       ),
@@ -324,7 +338,7 @@ class ReviewProgressStore {
     // Fold in anything still waiting so the two writes cannot race for the
     // same file, then write once.
     await flushHeaders();
-    await repertoireService.updateManyLineReviewHeaders(
+    await repertoireService.files.updateManyLineReviewHeaders(
       sourcePath,
       headerUpdates,
     );

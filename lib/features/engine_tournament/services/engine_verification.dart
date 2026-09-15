@@ -16,6 +16,7 @@ import 'package:dartchess/dartchess.dart' hide File;
 
 import '../../../constants/chess_constants.dart';
 import 'uci_engine.dart';
+import 'uci_protocol.dart';
 
 class EngineVerification {
   const EngineVerification({
@@ -53,6 +54,9 @@ class EngineVerification {
       options.any((o) => o.name.toLowerCase() == option.toLowerCase());
 }
 
+/// First lines of engine output kept for the report.
+const int _transcriptLines = 40;
+
 /// Run the full check against [executablePath].
 ///
 /// Never throws: a failure is a result, since the whole point is to report
@@ -89,101 +93,18 @@ Future<EngineVerification> verifyUciEngine(
       arguments: arguments,
     );
     final sub = engine.traffic.listen((line) {
-      if (transcript.length < 40) transcript.add(line);
+      if (transcript.length < _transcriptLines) transcript.add(line);
     });
-
-    final UciIdentity identity;
     try {
-      identity = await engine.initialize(timeout: handshakeTimeout);
-    } on UciFailure catch (e) {
+      return await _verifyLaunched(
+        engine,
+        transcript: transcript,
+        handshakeTimeout: handshakeTimeout,
+        moveTimeout: moveTimeout,
+      );
+    } finally {
       await sub.cancel();
-      return EngineVerification(
-        ok: false,
-        message:
-            'It started, but never answered "uci" with "uciok" — so it is '
-            'not a UCI engine.\n${e.message}',
-        transcript: List.of(transcript),
-      );
     }
-
-    try {
-      await engine.isReady(timeout: handshakeTimeout);
-    } on UciFailure catch (e) {
-      await sub.cancel();
-      return EngineVerification(
-        ok: false,
-        message: '"${identity.name}" did not answer "isready".\n${e.message}',
-        name: identity.name,
-        author: identity.author,
-        options: identity.options,
-        transcript: List.of(transcript),
-      );
-    }
-
-    // The handshake is cheap to fake; playing a legal move is not.
-    final EngineSearch search;
-    try {
-      await engine.newGame();
-      search = await engine.search(
-        startFen: kStandardStartFen,
-        movesUci: const [],
-        limits: const GoLimits(movetimeMs: 300),
-        hardLimit: moveTimeout,
-      );
-    } on UciFailure catch (e) {
-      await sub.cancel();
-      return EngineVerification(
-        ok: false,
-        message:
-            '"${identity.name}" never produced a move from the starting '
-            'position.\n${e.message}',
-        name: identity.name,
-        author: identity.author,
-        options: identity.options,
-        transcript: List.of(transcript),
-      );
-    }
-
-    await sub.cancel();
-
-    if (!search.hasMove) {
-      return EngineVerification(
-        ok: false,
-        message:
-            '"${identity.name}" answered "bestmove ${search.bestMoveUci}" '
-            'from the starting position, which is not a move.',
-        name: identity.name,
-        author: identity.author,
-        options: identity.options,
-        transcript: List.of(transcript),
-      );
-    }
-
-    final start = Chess.fromSetup(Setup.parseFen(kStandardStartFen));
-    final move = Move.parse(search.bestMoveUci);
-    if (move == null || !start.isLegal(move)) {
-      return EngineVerification(
-        ok: false,
-        message:
-            '"${identity.name}" answered "${search.bestMoveUci}" from the '
-            'starting position, which is not a legal move. It speaks UCI but '
-            'is not playing chess.',
-        name: identity.name,
-        author: identity.author,
-        options: identity.options,
-        transcript: List.of(transcript),
-      );
-    }
-
-    return EngineVerification(
-      ok: true,
-      message: 'Verified — answered "uci", "isready", and played a legal move.',
-      name: identity.name,
-      author: identity.author,
-      options: identity.options,
-      sampleMove: start.makeSan(move).$2,
-      transcript: List.of(transcript),
-    );
   } on UciFailure catch (e) {
     return EngineVerification(
       ok: false,
@@ -201,11 +122,105 @@ Future<EngineVerification> verifyUciEngine(
   }
 }
 
+/// The conversation with a process that did start: handshake, readiness,
+/// and one legal move from the standard position.
+Future<EngineVerification> _verifyLaunched(
+  UciEngine engine, {
+  required List<String> transcript,
+  required Duration handshakeTimeout,
+  required Duration moveTimeout,
+}) async {
+  final UciIdentity identity;
+  try {
+    identity = await engine.initialize(timeout: handshakeTimeout);
+  } on UciFailure catch (e) {
+    return EngineVerification(
+      ok: false,
+      message:
+          'It started, but never answered "uci" with "uciok" — so it is '
+          'not a UCI engine.\n${e.message}',
+      transcript: List.of(transcript),
+    );
+  }
+
+  EngineVerification report({required bool ok, required String message}) =>
+      EngineVerification(
+        ok: ok,
+        message: message,
+        name: identity.name,
+        author: identity.author,
+        options: identity.options,
+        transcript: List.of(transcript),
+      );
+
+  try {
+    await engine.isReady(timeout: handshakeTimeout);
+  } on UciFailure catch (e) {
+    return report(
+      ok: false,
+      message: '"${identity.name}" did not answer "isready".\n${e.message}',
+    );
+  }
+
+  // The handshake is cheap to fake; playing a legal move is not.
+  final EngineSearch search;
+  try {
+    await engine.newGame();
+    search = await engine.search(
+      startFen: kStandardStartFen,
+      movesUci: const [],
+      limits: const GoLimits(movetimeMs: 300),
+      hardLimit: moveTimeout,
+    );
+  } on UciFailure catch (e) {
+    return report(
+      ok: false,
+      message:
+          '"${identity.name}" never produced a move from the starting '
+          'position.\n${e.message}',
+    );
+  }
+
+  if (!search.hasMove) {
+    return report(
+      ok: false,
+      message:
+          '"${identity.name}" answered "bestmove ${search.bestMoveUci}" '
+          'from the starting position, which is not a move.',
+    );
+  }
+
+  final start = Chess.fromSetup(Setup.parseFen(kStandardStartFen));
+  final move = Move.parse(search.bestMoveUci);
+  if (move == null || !start.isLegal(move)) {
+    return report(
+      ok: false,
+      message:
+          '"${identity.name}" answered "${search.bestMoveUci}" from the '
+          'starting position, which is not a legal move. It speaks UCI but '
+          'is not playing chess.',
+    );
+  }
+
+  return EngineVerification(
+    ok: true,
+    message: 'Verified — answered "uci", "isready", and played a legal move.',
+    name: identity.name,
+    author: identity.author,
+    options: identity.options,
+    sampleMove: start.makeSan(move).$2,
+    transcript: List.of(transcript),
+  );
+}
+
+/// Owner, group and other execute bits of a POSIX mode.
+const int _executeBits = 0x49;
+
 bool _isExecutable(File file) {
   try {
-    final mode = file.statSync().mode;
-    return mode & 0x49 != 0; // any of owner/group/other execute bits
-  } catch (_) {
+    return file.statSync().mode & _executeBits != 0;
+  } on FileSystemException {
+    // Unreadable metadata: let the launch attempt say what is wrong.
     return true;
   }
 }

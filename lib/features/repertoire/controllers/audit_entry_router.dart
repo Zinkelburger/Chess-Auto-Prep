@@ -6,9 +6,8 @@
 /// panel's own start action) pass [forceConfig] to say so.
 ///
 /// Pure state-free routing: it names the destination, the screen opens it.
-/// This used to be [InlineConfigRouter], which additionally tracked whether
-/// each config form was open on the Jobs tab; both forms are full-screen
-/// routes now, so the Navigator holds that state and the booleans are gone.
+/// Both config forms are full-screen routes, so the Navigator holds any
+/// "is the form open" state; nothing is tracked here.
 library;
 
 /// Where the Audit entry point should land.

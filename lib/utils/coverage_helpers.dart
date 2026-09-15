@@ -1,5 +1,6 @@
+import '../features/coverage/services/coverage_service.dart';
 import '../models/repertoire_line.dart';
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
+import 'pgn_utils.dart' show commonPrefixLength, isMovesPrefix;
 
 /// Pre-computed coverage info for a single repertoire line.
 class LineCoverageInfo {
@@ -44,12 +45,10 @@ LineCoverageInfo matchLineToCoverage(
     }
   }
 
-  final unaccounted = <UnaccountedMove>[];
-  for (final um in result.unaccountedMoves) {
-    if (isMovesPrefix(um.parentMoves, lineMoves)) {
-      unaccounted.add(um);
-    }
-  }
+  final unaccounted = [
+    for (final um in result.unaccountedMoves)
+      if (isMovesPrefix(um.parentMoves, lineMoves)) um,
+  ];
 
   final groupedUnaccounted = <String, List<UnaccountedMove>>{};
   for (final um in unaccounted) {
@@ -64,39 +63,25 @@ LineCoverageInfo matchLineToCoverage(
   );
 }
 
-int commonPrefixLength(List<String> a, List<String> b) {
-  var i = 0;
-  while (i < a.length && i < b.length && a[i] == b[i]) {
-    i++;
-  }
-  return i;
-}
-
-bool isMovesPrefix(List<String> prefix, List<String> list) {
-  if (prefix.length > list.length) return false;
-  for (var i = 0; i < prefix.length; i++) {
-    if (prefix[i] != list[i]) return false;
-  }
-  return true;
-}
+int _countLines(
+  Map<String, LineCoverageInfo> lineCoverage,
+  bool Function(LineCoverageInfo info) test,
+) => lineCoverage.values.where(test).length;
 
 int countCoveredLines(Map<String, LineCoverageInfo> lineCoverage) =>
-    lineCoverage.values
-        .where((i) => i.leaf?.category == LeafCategory.covered)
-        .length;
+    _countLines(lineCoverage, (i) => i.leaf?.category == LeafCategory.covered);
 
 int countShallowLines(Map<String, LineCoverageInfo> lineCoverage) =>
-    lineCoverage.values
-        .where((i) => i.leaf?.category == LeafCategory.tooShallow)
-        .length;
+    _countLines(
+      lineCoverage,
+      (i) => i.leaf?.category == LeafCategory.tooShallow,
+    );
 
-int countDeepLines(Map<String, LineCoverageInfo> lineCoverage) => lineCoverage
-    .values
-    .where((i) => i.leaf?.category == LeafCategory.tooDeep)
-    .length;
+int countDeepLines(Map<String, LineCoverageInfo> lineCoverage) =>
+    _countLines(lineCoverage, (i) => i.leaf?.category == LeafCategory.tooDeep);
 
 int countUnaccountedLines(Map<String, LineCoverageInfo> lineCoverage) =>
-    lineCoverage.values.where((i) => i.unaccountedMoves.isNotEmpty).length;
+    _countLines(lineCoverage, (i) => i.unaccountedMoves.isNotEmpty);
 
 int totalUnaccountedMoves(Map<String, LineCoverageInfo> lineCoverage) =>
     lineCoverage.values.fold(0, (sum, i) => sum + i.unaccountedMoves.length);

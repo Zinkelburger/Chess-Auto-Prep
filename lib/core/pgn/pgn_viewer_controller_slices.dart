@@ -48,9 +48,9 @@ mixin _SliceOps on ChangeNotifier {
     if (config == null) return;
     if (!isActive() || epoch != _sliceEpoch) return;
 
-    final allRecords = entries
-        .map((g) => (headers: g.headers, pgnText: g.pgnText))
-        .toList();
+    final allRecords = [
+      for (final g in entries) (headers: g.headers, pgnText: g.pgnText),
+    ];
     isLoading = true;
     notifyListeners();
 
@@ -130,67 +130,8 @@ mixin _SliceOps on ChangeNotifier {
   }
 
   Future<void> removeSliceChip(int chipIndex) async {
-    final labels = activeSliceConfig.chipLabels;
-    if (chipIndex < 0 || chipIndex >= labels.length) return;
-
-    final hasPos =
-        activeSliceConfig.positionInput != null &&
-        activeSliceConfig.positionInput!.isNotEmpty;
-    final hasSeq =
-        activeSliceConfig.sequencePattern != null &&
-        activeSliceConfig.sequencePattern!.isNotEmpty;
-    String? newPositionInput = activeSliceConfig.positionInput;
-    final newPositions = List<String>.from(
-      activeSliceConfig.additionalPositions,
-    );
-    String? newSequencePattern = activeSliceConfig.sequencePattern;
-    int newSequenceGap = activeSliceConfig.sequenceGap;
-    final newHeaders = List<HeaderFilterConfig>.from(
-      activeSliceConfig.headerFilters,
-    );
-
-    int idx = chipIndex;
-    if (hasPos && idx == 0) {
-      newPositionInput = null;
-      idx = -1;
-    } else if (hasPos) {
-      idx--;
-    }
-
-    if (idx >= 0 && idx < newPositions.length) {
-      newPositions.removeAt(idx);
-      idx = -1;
-    } else if (idx >= 0) {
-      idx -= newPositions.length;
-    }
-
-    if (idx >= 0 && hasSeq && idx == 0) {
-      newSequencePattern = null;
-      idx = -1;
-    } else if (hasSeq && idx >= 0) {
-      idx--;
-    }
-
-    if (idx >= 0) {
-      int count = -1;
-      for (int i = 0; i < newHeaders.length; i++) {
-        if (newHeaders[i].value.isNotEmpty) count++;
-        if (count == idx) {
-          newHeaders.removeAt(i);
-          break;
-        }
-      }
-    }
-
-    final newConfig = SliceConfig(
-      positionInput: newPositionInput,
-      additionalPositions: newPositions,
-      matchAny: activeSliceConfig.matchAny,
-      headerFilters: newHeaders,
-      sequencePattern: newSequencePattern,
-      sequenceGap: newSequenceGap,
-    );
-
+    final newConfig = sliceConfigWithoutChip(activeSliceConfig, chipIndex);
+    if (newConfig == null) return;
     await recomputeAndApplyConfig(newConfig);
   }
 
@@ -232,9 +173,9 @@ mixin _SliceOps on ChangeNotifier {
     }
 
     final epoch = _sliceEpoch;
-    final allRecords = allGames
-        .map((g) => (headers: g.headers, pgnText: g.pgnText))
-        .toList();
+    final allRecords = [
+      for (final g in allGames) (headers: g.headers, pgnText: g.pgnText),
+    ];
     isLoading = true;
     notifyListeners();
 
@@ -254,18 +195,20 @@ mixin _SliceOps on ChangeNotifier {
   }
 
   Future<void> persistSliceConfig(SliceConfig config) async {
-    if (filePath == null) return;
-    await SlicePersistence.save(filePath!, config);
+    final path = filePath;
+    if (path == null) return;
+    await SlicePersistence.save(path, config);
   }
 
   Future<void> clearSavedSlice() async {
-    if (filePath == null) return;
-    await SlicePersistence.clear(filePath!);
+    final path = filePath;
+    if (path == null) return;
+    await SlicePersistence.clear(path);
   }
 
   Future<String?> exportSliceToPath(String outPath) async {
     if (filteredGames.isEmpty || filePath == null) return null;
-    final savePath = outPath.endsWith('.pgn') ? outPath : '$outPath.pgn';
+    final savePath = p.extension(outPath) == '.pgn' ? outPath : '$outPath.pgn';
     try {
       await StorageFactory.instance.writeFile(savePath, buildExportContent());
       return savePath;

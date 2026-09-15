@@ -42,6 +42,8 @@ int twicIssueYearsBack(int years, {DateTime? now}) {
 
 Uri twicZipUri(int issue) => Uri.parse('${kTwicZipBase}twic${issue}g.zip');
 
+/// One issue could not be fetched; [issue] is 0 when the site itself did not
+/// answer.
 class TwicDownloadException implements Exception {
   final int issue;
   final String message;
@@ -50,9 +52,12 @@ class TwicDownloadException implements Exception {
   String toString() => 'TWIC $issue: $message';
 }
 
+/// Downloads issues from theweekinchess.com.
 class TwicClient {
   final http.Client _http;
-  static const _userAgent = 'ChessAutoPrep (+https://github.com/)';
+  static const _headers = {
+    'User-Agent': 'ChessAutoPrep (+https://github.com/)',
+  };
 
   TwicClient({http.Client? httpClient}) : _http = httpClient ?? http.Client();
 
@@ -60,10 +65,7 @@ class TwicClient {
 
   /// Whether issue [issue] is published (HEAD on its zip).
   Future<bool> exists(int issue) async {
-    final r = await _http.head(
-      twicZipUri(issue),
-      headers: {'User-Agent': _userAgent},
-    );
+    final r = await _http.head(twicZipUri(issue), headers: _headers);
     return r.statusCode == 200;
   }
 
@@ -73,25 +75,23 @@ class TwicClient {
   /// issues to find the newest one that is.  Null when nothing answers,
   /// which means the site is unreachable rather than "no issues".
   Future<int?> latestIssue({required int from, int maxBacktrack = 8}) async {
-    var n = from;
-    if (!await exists(n)) {
+    if (!await exists(from)) {
       for (var back = 1; back <= maxBacktrack; back++) {
-        if (n - back < kTwicFirstPgnIssue) return null;
-        if (await exists(n - back)) return n - back;
+        final candidate = from - back;
+        if (candidate < kTwicFirstPgnIssue) return null;
+        if (await exists(candidate)) return candidate;
       }
       return null;
     }
-    var last = n;
+    var last = from;
     var misses = 0;
-    n++;
-    while (misses < 2) {
+    for (var n = from + 1; misses < 2; n++) {
       if (await exists(n)) {
         last = n;
         misses = 0;
       } else {
         misses++;
       }
-      n++;
     }
     return last;
   }
@@ -99,10 +99,7 @@ class TwicClient {
   /// Download and unzip one issue; returns the PGN text (all `.pgn` members
   /// concatenated — there is normally exactly one).
   Future<String> fetchIssuePgn(int issue) async {
-    final r = await _http.get(
-      twicZipUri(issue),
-      headers: {'User-Agent': _userAgent},
-    );
+    final r = await _http.get(twicZipUri(issue), headers: _headers);
     if (r.statusCode == 404) {
       throw TwicDownloadException(issue, 'not published');
     }

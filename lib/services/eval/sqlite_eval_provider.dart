@@ -8,11 +8,17 @@ import 'dart:io' show File, Platform;
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../utils/eval_constants.dart';
 import '../../utils/fen_utils.dart';
 import 'eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
 typedef SqliteEvalDatabaseFactory = Future<Database> Function(String path);
+
+const String _kTable = 'chessdb_evals';
+
+bool get _usesFfiDatabase =>
+    Platform.isLinux || Platform.isMacOS || Platform.isWindows;
 
 /// Opens [path] read-only and validates the expected schema.
 Future<Database?> openChessDbEvalDatabase(String path) async {
@@ -20,12 +26,13 @@ Future<Database?> openChessDbEvalDatabase(String path) async {
   if (!await File(path).exists()) return null;
 
   try {
-    if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+    final DatabaseFactory factory;
+    if (_usesFfiDatabase) {
       sqfliteFfiInit();
+      factory = databaseFactoryFfi;
+    } else {
+      factory = databaseFactory;
     }
-    final factory = (Platform.isLinux || Platform.isMacOS || Platform.isWindows)
-        ? databaseFactoryFfi
-        : databaseFactory;
 
     final db = await factory.openDatabase(
       path,
@@ -33,7 +40,7 @@ Future<Database?> openChessDbEvalDatabase(String path) async {
     );
 
     final tables = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='chessdb_evals'",
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='$_kTable'",
     );
     if (tables.isEmpty) {
       await db.close();
@@ -55,6 +62,19 @@ Future<bool> validateChessDbEvalFile(String path) async {
   return true;
 }
 
+/// White-normalized centipawns from a row's raw `cp` / `mate` columns, both
+/// stored from the side to move's point of view. Null when the row has
+/// neither.
+int? _whiteCpFromRow({
+  required int? cp,
+  required int? mate,
+  required bool isWhiteToMove,
+}) {
+  final stmCp = mate != null ? mateToCp(mate) : cp;
+  if (stmCp == null) return null;
+  return isWhiteToMove ? stmCp : -stmCp;
+}
+
 class SqliteEvalProvider implements ExternalEvalProvider {
   Database? _db;
   final String path;
@@ -66,9 +86,8 @@ class SqliteEvalProvider implements ExternalEvalProvider {
   Future<bool> init() async {
     if (_db != null) return true;
     if (path.isEmpty) return false;
-    _db = _openOverride != null
-        ? await _openOverride(path)
-        : await openChessDbEvalDatabase(path);
+    final open = _openOverride;
+    _db = open != null ? await open(path) : await openChessDbEvalDatabase(path);
     return _db != null;
   }
 
@@ -83,11 +102,10 @@ class SqliteEvalProvider implements ExternalEvalProvider {
     if (db == null) return const EvalLookupResult.miss();
 
     final key = canonicalizeFen4(fen);
-    final isWhiteStm = isWhiteToMove(key);
 
     try {
       final rows = await db.query(
-        'chessdb_evals',
+        _kTable,
         columns: ['cp', 'mate', 'depth', 'move'],
         where: 'fen = ?',
         whereArgs: [key],
@@ -96,18 +114,15 @@ class SqliteEvalProvider implements ExternalEvalProvider {
       if (rows.isEmpty) return const EvalLookupResult.hardMiss();
 
       final row = rows.first;
-      final cpRaw = row['cp'];
-      final mateRaw = row['mate'];
+      final cp = (row['cp'] as num?)?.toInt();
+      final mate = (row['mate'] as num?)?.toInt();
       final depth = (row['depth'] as num?)?.toInt() ?? 0;
       final move = row['move'] as String?;
 
-      final cp = cpRaw == null ? null : (cpRaw as num).toInt();
-      final mate = mateRaw == null ? null : (mateRaw as num).toInt();
-
-      final whiteCp = mapSqliteScoreToWhiteCp(
+      final whiteCp = _whiteCpFromRow(
         cp: cp,
         mate: mate,
-        isWhiteToMove: isWhiteStm,
+        isWhiteToMove: isWhiteToMove(key),
       );
       if (whiteCp == null) return const EvalLookupResult.hardMiss();
 
@@ -118,7 +133,7 @@ class SqliteEvalProvider implements ExternalEvalProvider {
           cp: whiteCp,
           mate: mate,
           depth: depth,
-          bestMove: move?.isNotEmpty == true ? move : null,
+          bestMove: (move == null || move.isEmpty) ? null : move,
         ),
       );
     } catch (e) {

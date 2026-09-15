@@ -1,5 +1,14 @@
+/// Turns a [BuildTree] into the immutable [EvalTreeSnapshot] the viewer
+/// reads, deriving what the tree may not have stored (subtree size and
+/// depth) in one bottom-up pass.
+library;
+
 import '../../../models/build_tree_node.dart';
+import '../../../utils/san_token_utils.dart';
 import '../models/eval_tree_snapshot.dart';
+
+/// Subtree size and depth as derived for one node.
+typedef _SubtreeMetrics = ({int subtreeSize, int subtreePly});
 
 class EvalTreeSnapshotAdapter {
   static EvalTreeSnapshot fromBuildTree(
@@ -11,35 +20,33 @@ class EvalTreeSnapshotAdapter {
     return EvalTreeSnapshot(
       rootNodeId: tree.root.nodeId,
       playAsWhite: playAsWhite,
-      startMovesSan: _parseStartMoves(tree.startMoves),
+      startMovesSan: cleanSanTokens(tree.startMoves),
       configSnapshot: tree.configSnapshot,
       nodesById: nodesById,
     );
   }
 
-  static _DerivedNodeMetrics _visitNode(
+  static _SubtreeMetrics _visitNode(
     BuildTreeNode node,
     bool playAsWhite,
     Map<int, EvalTreeNodeSnapshot> nodesById,
   ) {
     var derivedSubtreeSize = 1;
     var derivedSubtreePly = 0;
-
     for (final child in node.children) {
       final childMetrics = _visitNode(child, playAsWhite, nodesById);
       derivedSubtreeSize += childMetrics.subtreeSize;
-      final candidatePly = childMetrics.subtreePly + 1;
-      if (candidatePly > derivedSubtreePly) {
-        derivedSubtreePly = candidatePly;
-      }
+      derivedSubtreePly = _max(derivedSubtreePly, childMetrics.subtreePly + 1);
     }
 
-    final localCpl = node.hasExpectimax
-        ? node.localCpl
-        : (node.localCpl > 0 ? node.localCpl : null);
-    final repertoireScore = node.repertoireScore != 0.0
-        ? node.repertoireScore
-        : (node.isRepertoireMove ? node.expectimaxValue : 0.0);
+    // The tree's own metadata wins when it was computed; a tree that never
+    // had computeMetadata run gets the values derived here.
+    final metrics = (
+      subtreeSize: node.subtreeSize > 0 ? node.subtreeSize : derivedSubtreeSize,
+      subtreePly: node.subtreePly > 0 || node.children.isEmpty
+          ? node.subtreePly
+          : derivedSubtreePly,
+    );
 
     nodesById[node.nodeId] = EvalTreeNodeSnapshot(
       id: node.nodeId,
@@ -53,59 +60,39 @@ class EvalTreeSnapshotAdapter {
       moveProbability: node.moveProbability,
       cumulativeProbability: node.cumulativeProbability,
       isRepertoireMove: node.isRepertoireMove,
-      repertoireScore: repertoireScore,
+      repertoireScore: _repertoireScore(node),
       ease: node.ease,
       expectimaxValue: node.hasExpectimax ? node.expectimaxValue : null,
-      localCpl: localCpl,
+      localCpl: _localCpl(node),
       trapScore: node.trapScore >= 0.0 ? node.trapScore : null,
       myEase: node.myEase >= 0.0 ? node.myEase : null,
-      subtreeSize: node.subtreeSize > 0 ? node.subtreeSize : derivedSubtreeSize,
-      subtreePly: node.subtreePly > 0 || node.children.isEmpty
-          ? node.subtreePly
-          : derivedSubtreePly,
-      pruneKind: _mapPruneKind(node.pruneReason),
+      subtreeSize: metrics.subtreeSize,
+      subtreePly: metrics.subtreePly,
+      pruneKind: _pruneKind(node.pruneReason),
       pruneEvalCp: node.pruneEvalCp,
       totalGames: node.totalGames,
     );
-
-    return _DerivedNodeMetrics(
-      subtreeSize: node.subtreeSize > 0 ? node.subtreeSize : derivedSubtreeSize,
-      subtreePly: node.subtreePly > 0 || node.children.isEmpty
-          ? node.subtreePly
-          : derivedSubtreePly,
-    );
+    return metrics;
   }
 
-  static EvalTreePruneKind _mapPruneKind(PruneReason reason) {
-    switch (reason) {
-      case PruneReason.none:
-        return EvalTreePruneKind.none;
-      case PruneReason.evalTooHigh:
-        return EvalTreePruneKind.evalTooHigh;
-      case PruneReason.evalTooLow:
-        return EvalTreePruneKind.evalTooLow;
-    }
-  }
+  /// A node without expectimax only has a meaningful loss when one was
+  /// recorded; zero there means "unknown", not "best".
+  static double? _localCpl(BuildTreeNode node) => node.hasExpectimax
+      ? node.localCpl
+      : (node.localCpl > 0 ? node.localCpl : null);
 
-  static List<String> _parseStartMoves(String startMoves) {
-    final trimmed = startMoves.trim();
-    if (trimmed.isEmpty) return const [];
-    return trimmed
-        .split(RegExp(r'\s+'))
-        .where(
-          (token) =>
-              token.isNotEmpty && !RegExp(r'^\d+\.(?:\.\.)?$').hasMatch(token),
-        )
-        .toList(growable: false);
-  }
-}
+  /// Older trees stored no repertoire score; the expectimax value of a
+  /// selected move stands in for it.
+  static double _repertoireScore(BuildTreeNode node) =>
+      node.repertoireScore != 0.0
+      ? node.repertoireScore
+      : (node.isRepertoireMove ? node.expectimaxValue : 0.0);
 
-class _DerivedNodeMetrics {
-  final int subtreeSize;
-  final int subtreePly;
+  static EvalTreePruneKind _pruneKind(PruneReason reason) => switch (reason) {
+    PruneReason.none => EvalTreePruneKind.none,
+    PruneReason.evalTooHigh => EvalTreePruneKind.evalTooHigh,
+    PruneReason.evalTooLow => EvalTreePruneKind.evalTooLow,
+  };
 
-  const _DerivedNodeMetrics({
-    required this.subtreeSize,
-    required this.subtreePly,
-  });
+  static int _max(int a, int b) => a > b ? a : b;
 }

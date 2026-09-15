@@ -8,170 +8,32 @@
 /// bolted onto [EvalWorker].
 ///
 /// Pure `dart:io`: no Flutter imports, so `tools/run_engine_tournament.dart`
-/// can drive the same code headlessly.
+/// can drive the same code headlessly. The protocol vocabulary lives in
+/// `uci_protocol.dart`; this file owns the process and the pipes.
 library;
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-/// Anything that makes an engine unusable: it would not start, would not
-/// speak UCI, went silent, or died.
-class UciFailure implements Exception {
-  UciFailure(this.message);
-  final String message;
-  @override
-  String toString() => 'UciFailure: $message';
-}
+import 'package:path/path.dart' as p;
 
-/// One `option name … type …` line from the handshake.
-class UciOptionInfo {
-  const UciOptionInfo({
-    required this.name,
-    required this.type,
-    this.defaultValue,
-    this.min,
-    this.max,
-    this.values = const [],
-  });
+import 'uci_protocol.dart';
+import 'uci_search_tracker.dart';
 
-  final String name;
-  final String type;
-  final String? defaultValue;
-  final String? min;
-  final String? max;
-  final List<String> values;
-}
+/// How long an engine is given to answer `stop` after overrunning its hard
+/// limit before it is written off as hung.
+const Duration _stopGrace = Duration(seconds: 5);
 
-/// What an engine says about itself before the first move.
-class UciIdentity {
-  const UciIdentity({
-    required this.name,
-    required this.author,
-    required this.options,
-  });
+/// How long a `quit` is given before the process is killed.
+const Duration _quitGrace = Duration(seconds: 2);
 
-  final String name;
-  final String author;
-  final List<UciOptionInfo> options;
+/// How long a killed process is given to go before SIGKILL.
+const Duration _sigkillDelay = Duration(seconds: 2);
 
-  bool supportsOption(String name) =>
-      options.any((o) => o.name.toLowerCase() == name.toLowerCase());
-}
-
-/// The limits half of a `go` command.
-class GoLimits {
-  const GoLimits({
-    this.whiteTimeMs,
-    this.blackTimeMs,
-    this.whiteIncrementMs,
-    this.blackIncrementMs,
-    this.movesToGo,
-    this.movetimeMs,
-    this.depth,
-    this.nodes,
-  });
-
-  final int? whiteTimeMs;
-  final int? blackTimeMs;
-  final int? whiteIncrementMs;
-  final int? blackIncrementMs;
-  final int? movesToGo;
-  final int? movetimeMs;
-  final int? depth;
-  final int? nodes;
-
-  String toCommand() {
-    final parts = <String>['go'];
-    void add(String key, int? value) {
-      if (value != null) parts.addAll([key, '$value']);
-    }
-
-    add('wtime', whiteTimeMs);
-    add('btime', blackTimeMs);
-    add('winc', whiteIncrementMs);
-    add('binc', blackIncrementMs);
-    add('movestogo', movesToGo);
-    add('movetime', movetimeMs);
-    add('depth', depth);
-    add('nodes', nodes);
-    if (parts.length == 1) parts.add('infinite');
-    return parts.join(' ');
-  }
-}
-
-/// The engine's answer to one `go`.
-class EngineSearch {
-  const EngineSearch({
-    required this.bestMoveUci,
-    required this.elapsedMs,
-    this.ponderUci,
-    this.scoreCp,
-    this.scoreMate,
-    this.depth = 0,
-    this.nodes,
-  });
-
-  /// UCI move string, or `(none)` / `0000` when the engine sees no move.
-  final String bestMoveUci;
-
-  final String? ponderUci;
-
-  /// Last reported score, in the **side-to-move** perspective UCI defines.
-  final int? scoreCp;
-  final int? scoreMate;
-
-  final int depth;
-  final int? nodes;
-  final int elapsedMs;
-
-  bool get hasMove =>
-      bestMoveUci.isNotEmpty &&
-      bestMoveUci != '(none)' &&
-      bestMoveUci != '0000' &&
-      bestMoveUci != 'null';
-
-  /// Mate scores collapsed onto the centipawn axis so adjudication can
-  /// compare them with ordinary evaluations. A mate in 1 must outrank any
-  /// finite advantage, and a longer mate must outrank a shorter one from the
-  /// losing side's view.
-  int? get comparableCp {
-    if (scoreMate != null) {
-      final n = scoreMate!;
-      // `mate 0` is UCI for "the side to move is mated" — a loss, and
-      // emphatically not the level score a plain zero would read as.
-      if (n == 0) return -30000;
-      final magnitude = 30000 - n.abs();
-      return n > 0 ? magnitude : -magnitude;
-    }
-    return scoreCp;
-  }
-}
-
-/// What the game runner needs from a competitor.
-///
-/// Narrower than [UciEngine] on purpose: the arbiter only ever asks for a
-/// move, and an interface this small is what lets the game loop be tested
-/// against scripted engines instead of real processes.
-abstract interface class PlayingEngine {
-  bool get isAlive;
-
-  /// Tell the engine a new game is starting and wait for it to be ready.
-  Future<void> newGame();
-
-  Future<EngineSearch> search({
-    required String startFen,
-    required List<String> movesUci,
-    required GoLimits limits,
-    required Duration hardLimit,
-  });
-
-  /// Ask it to exit, then make sure it has.
-  Future<void> quit();
-
-  /// Stop it now, without waiting.
-  void dispose();
-}
+/// Stderr lines kept for the failure message.
+const int _stderrLinesKept = 8;
+const int _stderrLinesShown = 4;
 
 class UciEngine implements PlayingEngine {
   UciEngine._(this._process, this.executablePath) {
@@ -182,9 +44,14 @@ class UciEngine implements PlayingEngine {
     _stderrSub = _process.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .listen((line) {
-          if (_stderr.length < 8) _stderr.add(line);
-        }, onError: (Object _) {});
+        .listen(
+          (line) {
+            if (_stderr.length < _stderrLinesKept) _stderr.add(line);
+          },
+          onError: (Object _) {
+            // Stderr is advisory; losing it must not fail the engine.
+          },
+        );
     unawaited(
       _process.exitCode.then((code) {
         if (_disposed) return;
@@ -217,8 +84,9 @@ class UciEngine implements PlayingEngine {
 
   Completer<UciIdentity>? _handshake;
   final List<Completer<void>> _readyQueue = [];
-  Completer<EngineSearch>? _search;
+  _PendingSearch? _search;
 
+  // Identity as it arrives during the handshake.
   final List<UciOptionInfo> _options = [];
   String _name = '';
   String _author = '';
@@ -227,13 +95,6 @@ class UciEngine implements PlayingEngine {
   bool _disposed = false;
   bool _dead = false;
   String? _deathReason;
-
-  // Accumulated `info` state for the search in flight.
-  int? _scoreCp;
-  int? _scoreMate;
-  int _depth = 0;
-  int? _nodes;
-  Stopwatch? _searchClock;
 
   /// Every line the engine printed, for the log pane / verification report.
   Stream<String> get traffic => _traffic.stream;
@@ -255,7 +116,7 @@ class UciEngine implements PlayingEngine {
       process = await Process.start(
         executablePath,
         arguments,
-        workingDirectory: workingDirectory ?? File(executablePath).parent.path,
+        workingDirectory: workingDirectory ?? p.dirname(executablePath),
       );
     } on ProcessException catch (e) {
       throw UciFailure('cannot start "$executablePath": ${e.message}');
@@ -270,12 +131,14 @@ class UciEngine implements PlayingEngine {
     Duration timeout = const Duration(seconds: 15),
   }) async {
     _requireAlive();
-    if (_identity != null) return _identity!;
+    final known = _identity;
+    if (known != null) return known;
     final completer = Completer<UciIdentity>();
     _handshake = completer;
     _send('uci');
+    final UciIdentity identity;
     try {
-      _identity = await completer.future.timeout(timeout);
+      identity = await completer.future.timeout(timeout);
     } on TimeoutException {
       _handshake = null;
       throw UciFailure(
@@ -283,7 +146,8 @@ class UciEngine implements PlayingEngine {
         'UCI engine${_stderrSuffix()}',
       );
     }
-    return _identity!;
+    _identity = identity;
+    return identity;
   }
 
   Future<void> setOption(String name, String? value) async {
@@ -330,32 +194,27 @@ class UciEngine implements PlayingEngine {
     required Duration hardLimit,
   }) async {
     _requireAlive();
-    if (_search != null && !_search!.isCompleted) {
+    final running = _search;
+    if (running != null && !running.completer.isCompleted) {
       throw UciFailure('a search is already running');
     }
-
-    _scoreCp = null;
-    _scoreMate = null;
-    _depth = 0;
-    _nodes = null;
 
     final moves = movesUci.isEmpty ? '' : ' moves ${movesUci.join(' ')}';
     _send('position fen $startFen$moves');
 
-    final completer = Completer<EngineSearch>();
-    _search = completer;
-    _searchClock = Stopwatch()..start();
+    final pending = _PendingSearch();
+    _search = pending;
     _send(limits.toCommand());
 
     try {
-      return await completer.future.timeout(hardLimit);
+      return await pending.completer.future.timeout(hardLimit);
     } on TimeoutException {
       // Give it one chance to answer a `stop` before writing it off — an
       // engine that overshoots its budget is a forfeit, not a crash, and the
       // caller wants the move to tell them which.
       _send('stop');
       try {
-        return await completer.future.timeout(const Duration(seconds: 5));
+        return await pending.completer.future.timeout(_stopGrace);
       } on TimeoutException {
         _search = null;
         _die('stopped responding after ${hardLimit.inSeconds}s');
@@ -367,7 +226,7 @@ class UciEngine implements PlayingEngine {
   }
 
   @override
-  Future<void> quit({Duration grace = const Duration(seconds: 2)}) async {
+  Future<void> quit({Duration grace = _quitGrace}) async {
     if (_disposed) return;
     try {
       _send('quit');
@@ -386,24 +245,22 @@ class UciEngine implements PlayingEngine {
     unawaited(_stdoutSub.cancel());
     unawaited(_stderrSub.cancel());
     _failPending(UciFailure(_deathReason ?? 'engine disposed'));
-    try {
-      _process.kill();
-    } catch (_) {
-      /* already gone */
-    }
+    _kill();
     if (!Platform.isWindows) {
-      Future.delayed(const Duration(seconds: 2), () {
-        try {
-          _process.kill(ProcessSignal.sigkill);
-        } catch (_) {
-          /* already gone */
-        }
-      });
+      Future.delayed(_sigkillDelay, () => _kill(ProcessSignal.sigkill));
     }
     unawaited(_traffic.close());
   }
 
   // ── internals ────────────────────────────────────────────────────────────
+
+  void _kill([ProcessSignal signal = ProcessSignal.sigterm]) {
+    try {
+      _process.kill(signal);
+    } catch (_) {
+      // Already gone.
+    }
+  }
 
   void _requireAlive() {
     if (_dead || _disposed) {
@@ -421,7 +278,7 @@ class UciEngine implements PlayingEngine {
   }
 
   String _stderrSuffix() =>
-      _stderr.isEmpty ? '' : '\n${_stderr.take(4).join('\n')}';
+      _stderr.isEmpty ? '' : '\n${_stderr.take(_stderrLinesShown).join('\n')}';
 
   void _die(String reason) {
     if (_dead) return;
@@ -438,7 +295,9 @@ class UciEngine implements PlayingEngine {
     }
     final search = _search;
     _search = null;
-    if (search != null && !search.isCompleted) search.completeError(error);
+    if (search != null && !search.completer.isCompleted) {
+      search.completer.completeError(error);
+    }
     final ready = List.of(_readyQueue);
     _readyQueue.clear();
     for (final c in ready) {
@@ -452,161 +311,56 @@ class UciEngine implements PlayingEngine {
     if (!_traffic.isClosed) _traffic.add(line);
 
     if (line == 'uciok') {
-      final completer = _handshake;
-      _handshake = null;
-      completer?.complete(
-        UciIdentity(
-          name: _name.isEmpty ? _fallbackName() : _name,
-          author: _author,
-          options: List.unmodifiable(_options),
-        ),
-      );
-      return;
-    }
-    if (line == 'readyok') {
-      if (_readyQueue.isNotEmpty) {
-        final c = _readyQueue.removeAt(0);
-        if (!c.isCompleted) c.complete();
-      }
-      return;
-    }
-    if (line.startsWith('id ')) {
-      _parseId(line);
-      return;
-    }
-    if (line.startsWith('option ')) {
-      final option = _parseOption(line);
-      if (option != null) _options.add(option);
-      return;
-    }
-    if (line.startsWith('bestmove')) {
-      _completeSearch(line);
-      return;
-    }
-    if (line.startsWith('info ')) {
-      _parseInfo(line);
-    }
-  }
-
-  String _fallbackName() {
-    final base = executablePath.split(Platform.pathSeparator).last;
-    return base.isEmpty ? 'Engine' : base;
-  }
-
-  void _parseId(String line) {
-    if (line.startsWith('id name ')) {
+      _completeHandshake();
+    } else if (line == 'readyok') {
+      _completeReady();
+    } else if (line.startsWith('id name ')) {
       _name = line.substring('id name '.length).trim();
     } else if (line.startsWith('id author ')) {
       _author = line.substring('id author '.length).trim();
+    } else if (line.startsWith('option ')) {
+      final option = UciOptionInfo.parse(line);
+      if (option != null) _options.add(option);
+    } else if (line.startsWith('bestmove')) {
+      _completeSearch(line);
+    } else if (line.startsWith('info ')) {
+      _search?.tracker.observeInfo(line);
     }
   }
 
-  static const _optionKeywords = {
-    'name',
-    'type',
-    'default',
-    'min',
-    'max',
-    'var',
-  };
-
-  UciOptionInfo? _parseOption(String line) {
-    // `option name Foo Bar type spin default 1 min 0 max 8` — names contain
-    // spaces, so the fields are split on keywords rather than whitespace.
-    final tokens = line.split(RegExp(r'\s+')).skip(1).toList();
-    final fields = <String, List<String>>{};
-    String? key;
-    for (final token in tokens) {
-      if (_optionKeywords.contains(token)) {
-        key = token;
-        if (token == 'var') {
-          fields.putIfAbsent('var', () => []).add('');
-        } else {
-          fields[token] = [];
-        }
-        continue;
-      }
-      if (key == null) continue;
-      if (key == 'var') {
-        final list = fields['var']!;
-        list[list.length - 1] = '${list.last} $token'.trim();
-      } else {
-        fields[key]!.add(token);
-      }
-    }
-    final name = fields['name']?.join(' ').trim();
-    if (name == null || name.isEmpty) return null;
-    return UciOptionInfo(
-      name: name,
-      type: fields['type']?.join(' ').trim() ?? 'string',
-      defaultValue: fields['default']?.join(' ').trim(),
-      min: fields['min']?.join(' ').trim(),
-      max: fields['max']?.join(' ').trim(),
-      values: fields['var']?.where((v) => v.isNotEmpty).toList() ?? const [],
-    );
-  }
-
-  void _parseInfo(String line) {
-    // `info string …` is chatter, and its words collide with real keys.
-    if (line.startsWith('info string')) return;
-    final parts = line.split(RegExp(r'\s+'));
-    // Only the principal variation matters for the played move; a MultiPV
-    // engine's lower lines would otherwise overwrite the best score.
-    for (var i = 0; i < parts.length - 1; i++) {
-      if (parts[i] == 'multipv' && parts[i + 1] != '1') return;
-    }
-    for (var i = 0; i < parts.length; i++) {
-      switch (parts[i]) {
-        case 'depth':
-          if (i + 1 < parts.length) {
-            _depth = int.tryParse(parts[i + 1]) ?? _depth;
-          }
-        case 'nodes':
-          if (i + 1 < parts.length) {
-            _nodes = int.tryParse(parts[i + 1]) ?? _nodes;
-          }
-        case 'score':
-          if (i + 2 < parts.length) {
-            final value = int.tryParse(parts[i + 2]);
-            if (value != null) {
-              if (parts[i + 1] == 'cp') {
-                _scoreCp = value;
-                _scoreMate = null;
-              } else if (parts[i + 1] == 'mate') {
-                _scoreMate = value;
-                _scoreCp = null;
-              }
-            }
-          }
-        case 'pv':
-          return;
-      }
-    }
-  }
-
-  void _completeSearch(String line) {
-    final completer = _search;
-    _search = null;
-    if (completer == null || completer.isCompleted) return;
-    final parts = line.split(RegExp(r'\s+'));
-    final best = parts.length > 1 ? parts[1] : '';
-    String? ponder;
-    final ponderIndex = parts.indexOf('ponder');
-    if (ponderIndex >= 0 && ponderIndex + 1 < parts.length) {
-      ponder = parts[ponderIndex + 1];
-    }
-    final clock = _searchClock;
-    _searchClock = null;
-    completer.complete(
-      EngineSearch(
-        bestMoveUci: best,
-        ponderUci: ponder,
-        scoreCp: _scoreCp,
-        scoreMate: _scoreMate,
-        depth: _depth,
-        nodes: _nodes,
-        elapsedMs: clock?.elapsedMilliseconds ?? 0,
+  void _completeHandshake() {
+    final completer = _handshake;
+    _handshake = null;
+    completer?.complete(
+      UciIdentity(
+        name: _name.isEmpty ? _fallbackName() : _name,
+        author: _author,
+        options: List.unmodifiable(_options),
       ),
     );
   }
+
+  void _completeReady() {
+    if (_readyQueue.isEmpty) return;
+    final completer = _readyQueue.removeAt(0);
+    if (!completer.isCompleted) completer.complete();
+  }
+
+  void _completeSearch(String line) {
+    final pending = _search;
+    _search = null;
+    if (pending == null || pending.completer.isCompleted) return;
+    pending.completer.complete(pending.tracker.finish(line));
+  }
+
+  String _fallbackName() {
+    final base = p.basename(executablePath);
+    return base.isEmpty ? 'Engine' : base;
+  }
+}
+
+/// A `go` that has not yet been answered.
+class _PendingSearch {
+  final Completer<EngineSearch> completer = Completer<EngineSearch>();
+  final UciSearchTracker tracker = UciSearchTracker();
 }

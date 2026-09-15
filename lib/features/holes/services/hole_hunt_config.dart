@@ -7,6 +7,9 @@
 /// search: near-best attacker moves and novelties are probed a few ply deep
 /// with Maia expectimax, and reported when they score better in practice
 /// than the engine-best move.
+///
+/// Immutable; [toMap] and [fromMap] are the persisted form stored with each
+/// hunt report, so keys are append-only.
 library;
 
 class HoleHuntConfig {
@@ -101,22 +104,34 @@ class HoleHuntConfig {
     'maiaElo': maiaElo,
   };
 
-  factory HoleHuntConfig.fromMap(Map<String, dynamic> m) => HoleHuntConfig(
-    discoveryDepth: m['discoveryDepth'] as int? ?? 14,
-    discoveryMultiPv: m['discoveryMultiPv'] as int? ?? 4,
-    maxPly: m['maxPly'] as int? ?? 30,
-    strongMoveWindowCp: m['strongMoveWindowCp'] as int? ?? 30,
-    uncoveredMinAdvantageCp: m['uncoveredMinAdvantageCp'] as int? ?? -25,
-    outOfBookBonusCp: m['outOfBookBonusCp'] as int? ?? 50,
-    refutationThresholdCp: m['refutationThresholdCp'] as int? ?? 80,
-    verifyDepth: m['verifyDepth'] as int? ?? 20,
-    candidateWindowCp: m['candidateWindowCp'] as int? ?? 60,
-    probeBudget: m['probeBudget'] as int? ?? 24,
-    probePly: m['probePly'] as int? ?? 4,
-    probeEvalDepth: m['probeEvalDepth'] as int? ?? 12,
-    minNetGainCp: m['minNetGainCp'] as int? ?? 40,
-    maiaElo: m['maiaElo'] as int? ?? 2000,
-  );
+  /// Missing keys take the constructor defaults, so a report saved by an
+  /// older build reads back with the fields it did not know about.
+  factory HoleHuntConfig.fromMap(Map<String, dynamic> m) {
+    const defaults = HoleHuntConfig();
+    return HoleHuntConfig(
+      discoveryDepth: m['discoveryDepth'] as int? ?? defaults.discoveryDepth,
+      discoveryMultiPv:
+          m['discoveryMultiPv'] as int? ?? defaults.discoveryMultiPv,
+      maxPly: m['maxPly'] as int? ?? defaults.maxPly,
+      strongMoveWindowCp:
+          m['strongMoveWindowCp'] as int? ?? defaults.strongMoveWindowCp,
+      uncoveredMinAdvantageCp:
+          m['uncoveredMinAdvantageCp'] as int? ??
+          defaults.uncoveredMinAdvantageCp,
+      outOfBookBonusCp:
+          m['outOfBookBonusCp'] as int? ?? defaults.outOfBookBonusCp,
+      refutationThresholdCp:
+          m['refutationThresholdCp'] as int? ?? defaults.refutationThresholdCp,
+      verifyDepth: m['verifyDepth'] as int? ?? defaults.verifyDepth,
+      candidateWindowCp:
+          m['candidateWindowCp'] as int? ?? defaults.candidateWindowCp,
+      probeBudget: m['probeBudget'] as int? ?? defaults.probeBudget,
+      probePly: m['probePly'] as int? ?? defaults.probePly,
+      probeEvalDepth: m['probeEvalDepth'] as int? ?? defaults.probeEvalDepth,
+      minNetGainCp: m['minNetGainCp'] as int? ?? defaults.minNetGainCp,
+      maiaElo: m['maiaElo'] as int? ?? defaults.maiaElo,
+    );
+  }
 
   /// Compact one-line summary for display next to a saved report.
   String get summaryLabel =>

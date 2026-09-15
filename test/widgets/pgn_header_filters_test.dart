@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/core/slice_filter_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart'
+import 'package:chess_auto_prep/services/pgn_slice_filter.dart'
     show playerFieldMatches;
 import 'package:chess_auto_prep/widgets/slice/header_filters.dart';
 import 'package:flutter/material.dart';

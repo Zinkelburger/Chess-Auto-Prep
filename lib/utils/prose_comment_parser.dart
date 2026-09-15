@@ -3,7 +3,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import 'pgn_comment_utils.dart';
+import 'comment_move_tokens.dart';
 
 final _lexeme = RegExp(
   r'\[--\]|\n\s*\n|•|[()]|'

@@ -4,10 +4,13 @@ import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
 import 'package:chess_auto_prep/models/repertoire_review_history_entry.dart';
 import 'package:chess_auto_prep/models/training_settings.dart';
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
+import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:chess_auto_prep/services/training/review_progress_store.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'training_fakes.dart' show RecordingFileEditor;
 
 /// [ReviewProgressStore] holds the persisted half of training progress,
 /// extracted from TrainingSessionController. The pure scheduling logic
@@ -21,29 +24,8 @@ class _FakeRepertoireService extends RepertoireService {
   final headerPaths = <String>[];
 
   @override
-  Future<bool> updateLineReviewHeaders(
-    String filePath,
-    String lineId, {
-    required DateTime? lastReview,
-    required double difficulty,
-    required double intervalDays,
-    required DateTime? dueDate,
-    required int passCount,
-    required int failCount,
-  }) async {
-    headerUpdates.add(lineId);
-    return true;
-  }
-
-  @override
-  Future<bool> updateManyLineReviewHeaders(
-    String filePath,
-    Map<String, RepertoireReviewEntry> entriesByLineId,
-  ) async {
-    headerUpdates.addAll(entriesByLineId.keys);
-    headerPaths.add(filePath);
-    return true;
-  }
+  RepertoireFileEditor get files =>
+      RecordingFileEditor(headerUpdates, headerPaths: headerPaths);
 }
 
 class _FakeReviewService extends RepertoireReviewService {

@@ -18,16 +18,19 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/eval_database_settings.dart';
 import '../../utils/safe_change_notifier.dart';
 import '../../utils/time_format.dart';
 import '../jobs/repertoire_job.dart';
+import 'eval_database_job.dart';
 import 'lichess_eval_import.dart';
 import 'lichess_eval_source.dart';
 import 'lichess_eval_store.dart';
 import 'storage_volumes.dart';
+import 'transfer_rate_meter.dart';
 import 'zstd_stream.dart';
 
 enum LichessEvalPhase {
@@ -42,6 +45,16 @@ enum LichessEvalPhase {
 
 /// Free space kept in hand rather than filling the disk to the last byte.
 const int kLichessHeadroomBytes = 2 * 1000 * 1000 * 1000;
+
+/// Share of the progress bar the download takes; the import is the rest.
+/// Guessing is better than a bar that jumps back to zero.
+const double _downloadShare = 0.6;
+
+/// Share of the progress bar the import's scan takes; the merge is the rest.
+const double _scanShare = 0.3;
+
+/// The import is given up as stalled after this long without finishing.
+const Duration _importTimeout = Duration(days: 2);
 
 class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   LichessEvalController({
@@ -58,10 +71,13 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   /// Folder name created inside the directory the user picks.
   static const String folderName = 'lichess-evals';
 
+  static const String _archiveName = 'lichess_db_eval.jsonl.zst';
+
   final LichessEvalSource _source;
   final Uri Function() _urlBuilder;
   final bool _spawnIsolate;
   final HttpClient _http = HttpClient()..idleTimeout = const Duration(hours: 1);
+  final TransferRateMeter _rate = TransferRateMeter();
 
   LichessEvalPhase _phase = LichessEvalPhase.idle;
   LichessEvalSourceInfo? _info;
@@ -70,8 +86,6 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
 
   int _archiveDone = 0;
   int _archiveTotal = 0;
-  double _bytesPerSecond = 0;
-  int _lastSample = 0;
   Timer? _ticker;
 
   int _linesRead = 0;
@@ -94,7 +108,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
 
   int get archiveBytesDone => _archiveDone;
   int get archiveBytesTotal => _archiveTotal;
-  double get bytesPerSecond => _bytesPerSecond;
+  double get bytesPerSecond => _rate.bytesPerSecond;
   int get linesRead => _linesRead;
   int get rowsWritten => _rowsWritten;
   int get bucketsMerged => _bucketsMerged;
@@ -111,16 +125,20 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   int get storedPositions => _manifest?.records ?? 0;
 
   /// Where everything lives, once a directory is chosen.
-  String? get storeDirectory => _parentDir == null
-      ? null
-      : '$_parentDir${Platform.pathSeparator}$folderName';
+  String? get storeDirectory {
+    final parent = _parentDir;
+    return parent == null ? null : p.join(parent, folderName);
+  }
 
-  String? get archivePath => storeDirectory == null
-      ? null
-      : '$storeDirectory${Platform.pathSeparator}lichess_db_eval.jsonl.zst';
+  String? get archivePath {
+    final directory = storeDirectory;
+    return directory == null ? null : p.join(directory, _archiveName);
+  }
 
-  LichessEvalStorePaths? get storePaths =>
-      storeDirectory == null ? null : LichessEvalStorePaths(storeDirectory!);
+  LichessEvalStorePaths? get storePaths {
+    final directory = storeDirectory;
+    return directory == null ? null : LichessEvalStorePaths(directory);
+  }
 
   /// Peak disk the whole operation needs: the archive plus the store, which
   /// coexist while the buckets are merged.
@@ -135,14 +153,14 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
       case LichessEvalPhase.downloading:
       case LichessEvalPhase.paused:
         if (_archiveTotal <= 0) return 0;
-        // The download is the first two-thirds of the wait; the import is the
-        // rest.  Guessing is better than a bar that jumps back to zero.
-        return (_archiveDone / _archiveTotal) * 0.6;
+        return (_archiveDone / _archiveTotal) * _downloadShare;
       case LichessEvalPhase.importing:
         final total = _info?.positions ?? 0;
         final scanned = total == 0 ? 0.0 : (_linesRead / total).clamp(0.0, 1.0);
         final merged = _bucketsMerged / kBucketCount;
-        return 0.6 + (scanned * 0.3) + (merged * 0.1);
+        return _downloadShare +
+            scanned * _scanShare +
+            merged * (1 - _downloadShare - _scanShare);
       case LichessEvalPhase.complete:
         return 1;
       case LichessEvalPhase.idle:
@@ -152,14 +170,9 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  Duration? get eta {
-    if (_phase != LichessEvalPhase.downloading || _bytesPerSecond <= 0) {
-      return null;
-    }
-    final remaining = _archiveTotal - _archiveDone;
-    if (remaining <= 0) return null;
-    return Duration(seconds: (remaining / _bytesPerSecond).round());
-  }
+  Duration? get eta => _phase == LichessEvalPhase.downloading
+      ? _rate.eta(_archiveTotal - _archiveDone)
+      : null;
 
   /// Re-attach to whatever is already on disk.  Never starts a transfer.
   Future<void> loadSaved() async {
@@ -171,10 +184,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     _parentDir = prefs.getString(_keyDirectory);
     if (_parentDir == null) {
       final saved = EvalDatabaseSettings.instance.lichessEvalsPath;
-      if (saved.isNotEmpty) {
-        final dir = Directory(saved).parent.path;
-        _parentDir = dir;
-      }
+      if (saved.isNotEmpty) _parentDir = p.dirname(saved);
     }
     await refreshStoreState();
   }
@@ -182,20 +192,20 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   /// Re-read the manifest and the partially downloaded archive.
   Future<void> refreshStoreState() async {
     final paths = storePaths;
-    if (paths == null) {
+    final archive = archivePath;
+    if (paths == null || archive == null) {
       _manifest = null;
       notifyListeners();
       return;
     }
-    _manifest = await readManifest(paths);
-    final archive = File(archivePath!);
-    _archiveDone = await archive.exists() ? await archive.length() : 0;
-    if (_manifest?.complete == true) {
+    final manifest = _manifest = await readManifest(paths);
+    _archiveDone = await _lengthOf(File(archive));
+    if (manifest != null && manifest.complete) {
       _phase = LichessEvalPhase.complete;
-      _rowsWritten = _manifest!.records;
-    } else if (_archiveDone > 0 || (_manifest?.linesRead ?? 0) > 0) {
+      _rowsWritten = manifest.records;
+    } else if (_archiveDone > 0 || (manifest?.linesRead ?? 0) > 0) {
       _phase = LichessEvalPhase.paused;
-      _linesRead = _manifest?.linesRead ?? 0;
+      _linesRead = manifest?.linesRead ?? 0;
     }
     notifyListeners();
   }
@@ -227,7 +237,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     _error = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyDirectory, parentDir);
-    await Directory(storeDirectory!).create(recursive: true);
+    await Directory(p.join(parentDir, folderName)).create(recursive: true);
     await refreshStoreState();
   }
 
@@ -236,7 +246,8 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     if (isBusy) return;
     final info = _info;
     final directory = storeDirectory;
-    if (info == null || directory == null) {
+    final archive = archivePath;
+    if (info == null || directory == null || archive == null) {
       _fail('Choose where the database should live first.');
       return;
     }
@@ -249,35 +260,32 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
 
     _stopRequested = false;
     _error = null;
-    _ensureJob();
+    _job = ensureEvalDatabaseJob(
+      _job,
+      label: 'Lichess evaluations',
+      onCancel: () => unawaited(pause()),
+    );
 
     try {
       if (!isReady) {
-        await _download(info);
+        await _download(info, File(archive));
         if (_stopRequested) {
           _setPaused();
           return;
         }
-        await _runImport(info, backend);
+        await _runImport(
+          archivePath: archive,
+          storeDirectory: directory,
+          info: info,
+          backend: backend,
+        );
         if (_stopRequested) {
           _setPaused();
           return;
         }
       }
       await refreshStoreState();
-      if (isReady) {
-        await EvalDatabaseSettings.instance.setLichessEvalsPath(directory);
-        await EvalDatabaseSettings.instance.setEnableLichessEvals(true);
-        _phase = LichessEvalPhase.complete;
-        _job?.updateProgress(
-          JobProgress(
-            fraction: 1,
-            message: '${_formatCount(storedPositions)} positions ready',
-          ),
-        );
-        _job?.updateStatus(JobStatus.completed);
-        _job = null;
-      }
+      if (isReady) await _completeJob(directory);
     } catch (e) {
       _fail('$e');
     } finally {
@@ -286,12 +294,26 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  Future<void> _completeJob(String directory) async {
+    await EvalDatabaseSettings.instance.setLichessEvalsPath(directory);
+    await EvalDatabaseSettings.instance.setEnableLichessEvals(true);
+    _phase = LichessEvalPhase.complete;
+    _job?.updateProgress(
+      JobProgress(
+        fraction: 1,
+        message: '${_formatCount(storedPositions)} positions ready',
+      ),
+    );
+    _job?.updateStatus(JobStatus.completed);
+    _job = null;
+  }
+
   /// Stop after the current chunk or checkpoint; everything already written
   /// stays, so [start] resumes from there.
   Future<void> pause() async {
     if (!isBusy) return;
     _stopRequested = true;
-    _isolateControl?.send('cancel');
+    _isolateControl?.send(kLichessImportCancelMessage);
     notifyListeners();
   }
 
@@ -328,10 +350,12 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
 
   // ── Download ───────────────────────────────────────────────────────────
 
-  Future<void> _download(LichessEvalSourceInfo info) async {
-    final target = File(archivePath!);
+  static Future<int> _lengthOf(File file) async =>
+      await file.exists() ? file.length() : 0;
+
+  Future<void> _download(LichessEvalSourceInfo info, File target) async {
     await target.parent.create(recursive: true);
-    var existing = await target.exists() ? await target.length() : 0;
+    var existing = await _lengthOf(target);
     if (existing > info.bytes) {
       // A stale, longer file cannot be a prefix of this one.
       await target.delete();
@@ -395,10 +419,12 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
 
   // ── Import ─────────────────────────────────────────────────────────────
 
-  Future<void> _runImport(
-    LichessEvalSourceInfo info,
-    ZstdBackend backend,
-  ) async {
+  Future<void> _runImport({
+    required String archivePath,
+    required String storeDirectory,
+    required LichessEvalSourceInfo info,
+    required ZstdBackend backend,
+  }) async {
     _phase = LichessEvalPhase.importing;
     _bucketsMerged = 0;
     notifyListeners();
@@ -410,67 +436,11 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     // listener keeps that from surfacing as an unhandled async error; the real
     // await still receives it.
     unawaited(finished.future.catchError((_) {}));
-    receive.listen((message) {
-      if (message is SendPort) {
-        _isolateControl = message;
-        if (_stopRequested) message.send('cancel');
-        return;
-      }
-      // This port is also the isolate's `onExit` and `onError` port, so it
-      // carries two messages that are not progress reports. Dropping them —
-      // which is what the `is!` check below used to do on its own — meant an
-      // isolate that died from an uncaught error never completed [finished],
-      // never reached the `finally` that kills it, and left the job showing
-      // "importing" until the two-day timeout.
-      if (message == null) {
-        // onExit. Harmless after a `done`/`failed` report; the only signal
-        // there is when the isolate died without sending one.  A cancelled
-        // import also exits without one, on purpose — that is a pause.
-        if (!finished.isCompleted) {
-          if (_stopRequested) {
-            finished.complete();
-          } else {
-            finished.completeError(
-              StateError('the import isolate stopped before it finished'),
-            );
-          }
-        }
-        return;
-      }
-      if (message is List) {
-        // onError sends [error, stackTrace], both already stringified.
-        if (!finished.isCompleted) {
-          final error = message.isNotEmpty ? message.first : 'unknown error';
-          finished.completeError(StateError('import failed: $error'));
-        }
-        return;
-      }
-      if (message is! LichessImportProgress) return;
-      _linesRead = message.linesRead;
-      _rowsWritten = message.rowsWritten;
-      _bucketsMerged = message.bucketsMerged;
-      switch (message.phase) {
-        case LichessImportPhase.failed:
-          if (!finished.isCompleted) {
-            finished.completeError(
-              StateError(message.error ?? 'import failed'),
-            );
-          }
-        case LichessImportPhase.done:
-          if (!finished.isCompleted) finished.complete();
-        case LichessImportPhase.scanning:
-        case LichessImportPhase.merging:
-          break;
-      }
-      _job?.updateProgress(
-        JobProgress(fraction: fraction, message: _importMessage(message)),
-      );
-      notifyListeners();
-    });
+    receive.listen((message) => _onImportMessage(message, finished));
 
     final request = LichessImportRequest(
-      archivePath: archivePath!,
-      storeDirectory: storeDirectory!,
+      archivePath: archivePath,
+      storeDirectory: storeDirectory,
       sendPort: receive.sendPort,
       sourceLastModified: info.lastModified,
       sourceBytes: info.bytes,
@@ -486,7 +456,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
           onError: receive.sendPort,
         );
         await finished.future.timeout(
-          const Duration(days: 2),
+          _importTimeout,
           onTimeout: () => throw StateError('the import stalled'),
         );
       } else {
@@ -499,6 +469,66 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
       _isolate = null;
       _isolateControl = null;
     }
+  }
+
+  /// One message on the import port.
+  ///
+  /// The port is also the isolate's `onExit` and `onError` port, so besides
+  /// [LichessImportProgress] reports it carries the isolate's control port,
+  /// a `null` on exit and an `[error, stackTrace]` pair on an uncaught error.
+  /// Dropping the last two would leave an isolate that died without a report
+  /// showing "importing" until [_importTimeout].
+  void _onImportMessage(Object? message, Completer<void> finished) {
+    switch (message) {
+      case SendPort():
+        _isolateControl = message;
+        if (_stopRequested) message.send(kLichessImportCancelMessage);
+      case null:
+        // onExit. Harmless after a `done`/`failed` report; the only signal
+        // there is when the isolate died without sending one.  A cancelled
+        // import also exits without one, on purpose — that is a pause.
+        if (finished.isCompleted) return;
+        if (_stopRequested) {
+          finished.complete();
+        } else {
+          finished.completeError(
+            StateError('the import isolate stopped before it finished'),
+          );
+        }
+      case List():
+        // onError sends [error, stackTrace], both already stringified.
+        if (finished.isCompleted) return;
+        final error = message.isNotEmpty ? message.first : 'unknown error';
+        finished.completeError(StateError('import failed: $error'));
+      case LichessImportProgress():
+        _applyImportProgress(message, finished);
+      default:
+        break;
+    }
+  }
+
+  void _applyImportProgress(
+    LichessImportProgress progress,
+    Completer<void> finished,
+  ) {
+    _linesRead = progress.linesRead;
+    _rowsWritten = progress.rowsWritten;
+    _bucketsMerged = progress.bucketsMerged;
+    switch (progress.phase) {
+      case LichessImportPhase.failed:
+        if (!finished.isCompleted) {
+          finished.completeError(StateError(progress.error ?? 'import failed'));
+        }
+      case LichessImportPhase.done:
+        if (!finished.isCompleted) finished.complete();
+      case LichessImportPhase.scanning:
+      case LichessImportPhase.merging:
+        break;
+    }
+    _job?.updateProgress(
+      JobProgress(fraction: fraction, message: _importMessage(progress)),
+    );
+    notifyListeners();
   }
 
   String _importMessage(LichessImportProgress progress) =>
@@ -535,37 +565,18 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  void _ensureJob() {
-    final existing = _job;
-    if (existing != null && existing.isActive) {
-      existing.updateStatus(JobStatus.running);
-      return;
-    }
-    final job = JobManager.instance.createJob(
-      type: JobType.evalDatabase,
-      label: 'Lichess evaluations',
-    );
-    job.resumable = true;
-    job.onCancel = () => unawaited(pause());
-    job.updateStatus(JobStatus.running);
-    _job = job;
-  }
-
   void _startTicker() {
-    _lastSample = _archiveDone;
+    _rate.reset(_archiveDone);
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      final delta = _archiveDone - _lastSample;
-      _lastSample = _archiveDone;
-      _bytesPerSecond = _bytesPerSecond == 0
-          ? delta.toDouble()
-          : _bytesPerSecond * 0.7 + delta * 0.3;
+      _rate.sample(_archiveDone);
+      final eta = this.eta;
       _job?.updateProgress(
         JobProgress(
           fraction: fraction,
           message:
               '${formatBytes(_archiveDone)} of ${formatBytes(_archiveTotal)}'
-              '${eta == null ? '' : ' — ${formatCoarseDuration(eta!)} left'}',
+              '${eta == null ? '' : ' — ${formatCoarseDuration(eta)} left'}',
         ),
       );
       notifyListeners();
@@ -575,7 +586,7 @@ class LichessEvalController extends ChangeNotifier with SafeChangeNotifier {
   void _stopTicker() {
     _ticker?.cancel();
     _ticker = null;
-    _bytesPerSecond = 0;
+    _rate.reset(_archiveDone);
   }
 
   @override

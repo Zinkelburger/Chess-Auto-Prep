@@ -18,6 +18,10 @@ import '../../models/build_tree_node.dart';
 import '../../utils/eval_constants.dart';
 import '../../utils/findability.dart';
 
+/// Eval swing, in centipawns, at which a popular mistake counts as a full
+/// trap; smaller swings scale the score down linearly.
+const int kTrapFullSwingCp = 200;
+
 /// Result of analyzing an opponent-move node's children for a trap.
 class TrapScoreAnalysis {
   /// Child with the highest move probability.
@@ -117,7 +121,7 @@ TrapScoreAnalysis? analyzeTrapScore(
 
   var evalDiff = (bestEval - popularEval).toDouble();
   if (evalDiff < 0) evalDiff = 0;
-  var trap = evalDiff / 200.0;
+  var trap = evalDiff / kTrapFullSwingCp;
   if (trap > 1.0) trap = 1.0;
   trap *= highestProb;
 

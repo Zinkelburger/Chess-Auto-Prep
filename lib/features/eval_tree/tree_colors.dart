@@ -28,37 +28,25 @@ const Color kNodeColorInaccuracy = AppColors.treeNodeInaccuracy;
 const Color kNodeColorNeutral = AppColors.treeNodeNeutral;
 const Color kNodeAccentRepertoire = AppColors.treeNodeAccentRepertoire;
 
-/// Returns true when the move represented by [node] was played by us.
-bool isOurMoveNode(EvalTreeSnapshot snapshot, EvalTreeNodeSnapshot node) {
-  final parent = snapshot.parentOf(node.id);
-  if (parent == null) return false;
-  return parent.sideToMoveIsWhite == snapshot.playAsWhite;
-}
-
 /// Returns the centipawn loss of the move represented by [node] compared with
-/// the mover's best sibling move from the same parent position.
+/// the mover's best sibling move from the same parent position: the highest
+/// eval for us among our moves, the lowest among the opponent's.
 double? nodeMoveLossCp(EvalTreeSnapshot snapshot, EvalTreeNodeSnapshot node) {
   final parent = snapshot.parentOf(node.id);
   final nodeEval = node.evalForUsCp;
   if (parent == null || nodeEval == null) return null;
 
-  final siblings = snapshot.childrenOf(parent.id);
-  var hasAnyEval = false;
-  final ourMove = parent.sideToMoveIsWhite == snapshot.playAsWhite;
-  var bestEvalForUs = ourMove ? -1000000 : 1000000;
-
-  for (final sibling in siblings) {
+  final ourMove = snapshot.isOurMove(node.id);
+  int? bestEvalForUs;
+  for (final sibling in snapshot.childrenOf(parent.id)) {
     final eval = sibling.evalForUsCp;
     if (eval == null) continue;
-    hasAnyEval = true;
-    if (ourMove) {
-      if (eval > bestEvalForUs) bestEvalForUs = eval;
-    } else {
-      if (eval < bestEvalForUs) bestEvalForUs = eval;
+    final best = bestEvalForUs;
+    if (best == null || (ourMove ? eval > best : eval < best)) {
+      bestEvalForUs = eval;
     }
   }
-
-  if (!hasAnyEval) return null;
+  if (bestEvalForUs == null) return null;
   final loss = ourMove ? bestEvalForUs - nodeEval : nodeEval - bestEvalForUs;
   return loss <= 0 ? 0.0 : loss.toDouble();
 }
@@ -84,7 +72,7 @@ Color graphNodeColor({
     if (moveLossCp >= kCplInaccuracyThreshold) return kNodeColorInaccuracy;
   }
 
-  if (isOurMoveNode(snapshot, node)) {
+  if (snapshot.isOurMove(node.id)) {
     return node.isRepertoireMove
         ? kNodeColorOurMoveRepertoire
         : kNodeColorOurMove;
@@ -92,15 +80,13 @@ Color graphNodeColor({
   return kNodeColorOpponentMove;
 }
 
-Color nodeTextColor(Color fillColor) {
-  return AppColors.ink;
-}
+/// Title text on any node fill: ink reads on every fill in the palette.
+const Color kNodeTextColor = AppColors.ink;
 
-Color nodeSecondaryTextColor(Color fillColor) {
-  // 0.92 keeps the raw ratio at or above 4.5:1 even on the brightest fill
-  // (treeNodeInaccuracy: 4.66:1); the 1px glyph outline adds further margin.
-  return AppColors.ink.withValues(alpha: 0.92);
-}
+/// Secondary text on any node fill. 0.92 keeps the raw ratio at or above
+/// 4.5:1 even on the brightest fill (treeNodeInaccuracy: 4.66:1); the 1px
+/// glyph outline adds further margin.
+final Color kNodeSecondaryTextColor = AppColors.ink.withValues(alpha: 0.92);
 
 Color nodeSelectionColor(Color fillColor) {
   return ThemeData.estimateBrightnessForColor(fillColor) == Brightness.light
@@ -108,49 +94,15 @@ Color nodeSelectionColor(Color fillColor) {
       : AppColors.ink;
 }
 
+/// A 1px outline around node text, as eight hard shadows, so the text reads
+/// on any fill.
 List<Shadow> nodeTextOutline(Color fillColor) {
   final outlineColor = AppColors.backdrop.withValues(alpha: 0.9);
   const outlineWidth = 1.0;
   return [
-    Shadow(
-      offset: const Offset(outlineWidth, 0),
-      blurRadius: 0,
-      color: outlineColor,
-    ),
-    Shadow(
-      offset: const Offset(-outlineWidth, 0),
-      blurRadius: 0,
-      color: outlineColor,
-    ),
-    Shadow(
-      offset: const Offset(0, outlineWidth),
-      blurRadius: 0,
-      color: outlineColor,
-    ),
-    Shadow(
-      offset: const Offset(0, -outlineWidth),
-      blurRadius: 0,
-      color: outlineColor,
-    ),
-    Shadow(
-      offset: const Offset(outlineWidth, outlineWidth),
-      blurRadius: 0,
-      color: outlineColor,
-    ),
-    Shadow(
-      offset: const Offset(-outlineWidth, outlineWidth),
-      blurRadius: 0,
-      color: outlineColor,
-    ),
-    Shadow(
-      offset: const Offset(outlineWidth, -outlineWidth),
-      blurRadius: 0,
-      color: outlineColor,
-    ),
-    Shadow(
-      offset: const Offset(-outlineWidth, -outlineWidth),
-      blurRadius: 0,
-      color: outlineColor,
-    ),
+    for (final dx in const [-outlineWidth, 0.0, outlineWidth])
+      for (final dy in const [-outlineWidth, 0.0, outlineWidth])
+        if (dx != 0 || dy != 0)
+          Shadow(offset: Offset(dx, dy), blurRadius: 0, color: outlineColor),
   ];
 }

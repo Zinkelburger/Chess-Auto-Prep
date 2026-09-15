@@ -37,6 +37,7 @@ import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
 import 'chapter_store.dart';
+import 'pgn_game_headers.dart';
 import 'review_progress_repointer.dart';
 
 /// What a split did, for the toast and for the caller to follow the active
@@ -97,7 +98,7 @@ class ChapterSplitter {
     String chapterPath, {
     required bool isWhite,
   }) async {
-    final document = await _repertoire.readPgnDocument(chapterPath);
+    final document = await _repertoire.files.readPgnDocument(chapterPath);
     if (document == null) {
       throw const ChapterSplitException('That chapter is no longer there.');
     }
@@ -106,28 +107,22 @@ class ChapterSplitter {
     // belongs to, and what id it resolves to — so ask it rather than
     // re-deriving either here.
     final parsed = await _repertoire.parseRepertoireFile(chapterPath);
-    final titleByIndex = <int, String>{};
-    final idByIndex = <int, String>{};
-    final nameByIndex = <int, String>{};
-    final modelGames = <int>{};
-    for (final line in parsed) {
-      if (line.gameIndex < 0 || line.gameIndex >= document.games.length) {
-        continue;
-      }
-      idByIndex[line.gameIndex] = line.id;
-      nameByIndex[line.gameIndex] = line.name;
-      if (line.isModelGame) modelGames.add(line.gameIndex);
-      final chapter = line.chapter;
-      if (chapter != null && chapter.trim().isNotEmpty) {
-        titleByIndex[line.gameIndex] = chapter.trim();
-      }
+    final gameCount = document.games.length;
+    final lineByIndex = {
+      for (final line in parsed)
+        if (line.gameIndex >= 0 && line.gameIndex < gameCount)
+          line.gameIndex: line,
+    };
+    String? titleOf(int index) {
+      final chapter = lineByIndex[index]?.chapter?.trim();
+      return chapter == null || chapter.isEmpty ? null : chapter;
     }
 
     // First-seen order, so the new files come out in the course's own order
     // rather than alphabetically.
     final titles = <String>[];
-    for (var i = 0; i < document.games.length; i++) {
-      final title = titleByIndex[i];
+    for (var i = 0; i < gameCount; i++) {
+      final title = titleOf(i);
       if (title != null && !titles.contains(title)) titles.add(title);
     }
     if (titles.length < 2) {
@@ -142,12 +137,12 @@ class ChapterSplitter {
     // Pin id and name before anything moves — for the games that stay as
     // well as the ones that leave, since both are re-indexed by the split.
     final games = [
-      for (var i = 0; i < document.games.length; i++)
+      for (var i = 0; i < gameCount; i++)
         _pinned(
           document.games[i],
-          id: idByIndex[i],
-          name: nameByIndex[i],
-          isModelGame: modelGames.contains(i),
+          id: lineByIndex[i]?.id,
+          name: lineByIndex[i]?.name,
+          isModelGame: lineByIndex[i]?.isModelGame ?? false,
         ),
     ];
 
@@ -163,9 +158,9 @@ class ChapterSplitter {
       final path = _storage.chapterFilePath(folder, name);
       final indices = [
         for (var i = 0; i < games.length; i++)
-          if (titleByIndex[i] == title) i,
+          if (titleOf(i) == title) i,
       ];
-      await _repertoire.writePgnDocument(
+      await _repertoire.files.writePgnDocument(
         path,
         preamble: ChapterStore.chapterHeader(
           name: name,
@@ -179,7 +174,7 @@ class ChapterSplitter {
       createdPaths.add(path);
       movedIdsByPath[path] = {
         for (final i in indices)
-          if (idByIndex[i] != null) idByIndex[i]!,
+          if (lineByIndex[i] case final line?) line.id,
       };
       movedLines += indices.length;
     }
@@ -188,13 +183,13 @@ class ChapterSplitter {
     // under its new chapter.
     final remaining = [
       for (var i = 0; i < games.length; i++)
-        if (titleByIndex[i] == null) games[i],
+        if (titleOf(i) == null) games[i],
     ];
     final sourceRemoved = remaining.isEmpty;
     if (sourceRemoved) {
       await _storage.deleteFile(chapterPath);
     } else {
-      await _repertoire.writePgnDocument(
+      await _repertoire.files.writePgnDocument(
         chapterPath,
         preamble: document.preamble,
         games: remaining,
@@ -267,22 +262,6 @@ class ChapterSplitter {
     multiLine: true,
   );
 
-  static final _eventHeader = RegExp(r'^\[Event .*\]$', multiLine: true);
-
-  static String? _headerValue(String gameText, String key) => RegExp(
-    '^\\[$key\\s+"([^"]*)"\\]\$',
-    multiLine: true,
-  ).firstMatch(gameText)?.group(1);
-
-  /// [gameText] with [headers] added straight after its `[Event]` line, or at
-  /// the top when it has none.
-  static String _insertAfterEvent(String gameText, String headers) {
-    final event = _eventHeader.firstMatch(gameText);
-    return event == null
-        ? '$headers\n$gameText'
-        : gameText.replaceRange(event.end, event.end, '\n$headers');
-  }
-
   /// [gameText] with the three things the split would otherwise take from it
   /// written into its own headers.
   ///
@@ -310,17 +289,17 @@ class ChapterSplitter {
   }) {
     var text = gameText;
     if (isModelGame && !_modelGameHeader.hasMatch(text)) {
-      final white = _headerValue(text, 'White') ?? '?';
-      final result = _headerValue(text, 'Result') ?? '*';
-      text = _insertAfterEvent(
+      final white = pgnHeaderValue(text, 'White') ?? '?';
+      final result = pgnHeaderValue(text, 'Result') ?? '*';
+      text = insertHeadersAfterEvent(
         text,
         '[$kModelGameWhiteTag "$white"]\n[$kModelGameResultTag "$result"]',
       );
     }
     if (name != null && name.trim().isNotEmpty) {
       final title = '[Event "${name.replaceAll('"', "'").trim()}"]';
-      text = _eventHeader.hasMatch(text)
-          ? text.replaceFirst(_eventHeader, title)
+      text = eventHeaderPattern.hasMatch(text)
+          ? text.replaceFirst(eventHeaderPattern, title)
           : '$title\n$text';
     }
     if (id != null) text = ReviewProgressRepointer.pinLineId(text, id);

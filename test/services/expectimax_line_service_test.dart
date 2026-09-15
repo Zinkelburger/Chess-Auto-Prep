@@ -233,7 +233,7 @@ void main() {
     test('populates moveInfo with correct metadata', () {
       final eca = ExpectimaxCalculator(config: config);
       final path = followExpectimaxLine(tree.root, config, eca, maxPlies: 10);
-      final line = ExpectimaxLine.fromPath(tree.root, path, config, rank: 1);
+      final line = ExpectimaxLine.fromPath(path, config, rank: 1);
 
       expect(line.rank, 1);
       expect(line.depth, 3);

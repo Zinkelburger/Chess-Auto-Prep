@@ -9,54 +9,18 @@ import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';
 import '../services/generation/engine_fakes.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
+import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
 import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
-import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'fake_storage.dart';
 
 const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
 const _afterE4C5 =
     'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2';
-
-class _MemoryStorage implements StorageService {
-  final Map<String, String> files = {};
-  bool failWrites = false;
-  Future<void> Function(String)? beforeExists;
-
-  @override
-  Future<bool> fileExists(String path) async {
-    await beforeExists?.call(path);
-    return files.containsKey(path);
-  }
-
-  @override
-  Future<String?> readFile(String path) async => files[path];
-
-  @override
-  Future<void> writeFile(
-    String path,
-    String content, {
-    bool createOnly = false,
-    String? expectedContent,
-  }) async {
-    if (failWrites) throw StateError('disk full');
-    if (createOnly && files.containsKey(path)) {
-      throw StateError('file exists');
-    }
-    files[path] = content;
-  }
-
-  @override
-  Future<void> deleteFile(String path) async {
-    files.remove(path);
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError('${invocation.memberName} is not used here');
-}
 
 BuildTree _tree(String rootFen, {String childFen = _afterE4}) {
   final root = BuildTreeNode(
@@ -114,9 +78,9 @@ const _pvTarget = ExpectimaxProbeTarget(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late _MemoryStorage storage;
+  late MemoryStorage storage;
   setUp(() {
-    storage = _MemoryStorage();
+    storage = MemoryStorage();
     StorageFactory.instanceForTest = storage;
   });
   tearDown(() => StorageFactory.instanceForTest = null);

@@ -8,7 +8,8 @@ import 'storage/storage_factory.dart';
 /// Singleton service for loading, saving, and managing solitaire trophies.
 ///
 /// Trophies are persisted as a JSON array in `solitaire_trophies.json` in the
-/// app documents directory.
+/// app documents directory, newest first. The list is read once and then
+/// kept in memory; every mutation rewrites the whole file.
 class SolitaireTrophyService {
   SolitaireTrophyService._();
   static final instance = SolitaireTrophyService._();
@@ -17,59 +18,49 @@ class SolitaireTrophyService {
 
   List<SolitaireTrophy>? _cache;
 
-  Future<List<SolitaireTrophy>> loadAll() async {
-    if (_cache != null) return List.unmodifiable(_cache!);
-    final storage = StorageFactory.instance;
-    final content = await storage.readFile(_fileName);
-    if (content == null || content.trim().isEmpty) {
-      _cache = [];
-      return const [];
-    }
-    try {
-      final list = (jsonDecode(content) as List)
-          .cast<Map<String, dynamic>>()
-          .map(SolitaireTrophy.fromJson)
-          .toList();
-      _cache = list;
-      return List.unmodifiable(list);
-    } catch (e) {
-      debugPrint('Failed to parse trophies: $e');
-      _cache = [];
-      return const [];
-    }
-  }
+  /// Every trophy, newest first. Read-only; mutate through [addTrophy],
+  /// [addTrophies], [deleteById] and [clearAll].
+  Future<List<SolitaireTrophy>> loadAll() async =>
+      List.unmodifiable(await _loaded());
 
-  Future<void> addTrophy(SolitaireTrophy trophy) async {
-    final all = List<SolitaireTrophy>.from(await loadAll());
-    all.insert(0, trophy);
-    _cache = all;
-    await _persist();
-  }
+  Future<void> addTrophy(SolitaireTrophy trophy) => addTrophies([trophy]);
 
   Future<void> addTrophies(List<SolitaireTrophy> trophies) async {
     if (trophies.isEmpty) return;
-    final all = List<SolitaireTrophy>.from(await loadAll());
-    all.insertAll(0, trophies);
-    _cache = all;
-    await _persist();
+    await _persist([...trophies, ...await _loaded()]);
   }
 
   Future<void> deleteById(String id) async {
-    final all = List<SolitaireTrophy>.from(await loadAll());
-    all.removeWhere((t) => t.id == id);
-    _cache = all;
-    await _persist();
+    final remaining = [
+      for (final trophy in await _loaded())
+        if (trophy.id != id) trophy,
+    ];
+    await _persist(remaining);
   }
 
-  Future<void> clearAll() async {
-    _cache = [];
-    await _persist();
+  Future<void> clearAll() => _persist([]);
+
+  /// The cached list, read from disk on first use. A missing, empty or
+  /// unreadable file is an empty shelf, never an error.
+  Future<List<SolitaireTrophy>> _loaded() async {
+    final cached = _cache;
+    if (cached != null) return cached;
+    final content = await StorageFactory.instance.readFile(_fileName);
+    if (content == null || content.trim().isEmpty) return _cache = [];
+    try {
+      return _cache = (jsonDecode(content) as List)
+          .cast<Map<String, dynamic>>()
+          .map(SolitaireTrophy.fromJson)
+          .toList();
+    } catch (e) {
+      debugPrint('Failed to parse trophies: $e');
+      return _cache = [];
+    }
   }
 
-  int get count => _cache?.length ?? 0;
-
-  Future<void> _persist() async {
-    final json = jsonEncode(_cache!.map((t) => t.toJson()).toList());
+  Future<void> _persist(List<SolitaireTrophy> trophies) async {
+    _cache = trophies;
+    final json = jsonEncode([for (final t in trophies) t.toJson()]);
     await StorageFactory.instance.writeFile(_fileName, json);
   }
 }

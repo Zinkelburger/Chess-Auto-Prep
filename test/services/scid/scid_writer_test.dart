@@ -130,10 +130,10 @@ void main() {
     final res = await writeFixture();
     final ours = _parseNameBase(
       await io.File(res.namePath).readAsBytes(),
-    ).where((e) => e.$1 != ScidNameType.dbInfo).toSet();
+    ).where((e) => e.$1 != ScidNameType.dbInfo.code).toSet();
     final theirs = _parseNameBase(
       await io.File('$_dir/ref5.sn5').readAsBytes(),
-    ).where((e) => e.$1 != ScidNameType.dbInfo).toSet();
+    ).where((e) => e.$1 != ScidNameType.dbInfo.code).toSet();
     expect(ours, theirs);
   });
 

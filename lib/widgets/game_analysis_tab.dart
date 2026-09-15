@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../models/solitaire_trophy.dart';
 import '../models/bulk_analysis_settings.dart';
 import '../services/game_analysis_controller.dart';
+import '../services/move_eval.dart';
 import 'clickable_move_line.dart';
 import 'engine/engine_gate.dart';
 import 'game_analysis_chart.dart';

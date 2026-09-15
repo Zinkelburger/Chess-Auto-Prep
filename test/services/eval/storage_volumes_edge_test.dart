@@ -89,23 +89,24 @@ void main() {
     });
 
     test('a value that rounds up to the next unit is shown in that unit', () {
-      // BUG: the unit is chosen before rounding, so 999,999 bytes prints
-      // "1000 kB" and 99,950 bytes prints "100.0 kB" — both wrong by the
-      // function's own three-digit rule.
+      // The unit is chosen after rounding: 999,999 bytes is not "1000 kB"
+      // and 99,950 bytes is not "100.0 kB", by the three-digit rule.
       expect(formatBytes(999999), '1.0 MB');
       expect(formatBytes(99950), '100 kB');
-    }, skip: 'documents bug: formatBytes picks the unit before rounding');
+      expect(formatBytes(99940), '99.9 kB');
+    });
   });
 
   group('stripPartitionSuffix', () {
     test('virtual and raid disks with a digit in the whole-disk name', () {
-      // BUG: `md0`, `zram0` and `loop0` are whole devices — the sysfs node
-      // is `/sys/block/md0` — yet they lose their digit and the rotational
-      // probe looks under a name that does not exist.  `vda1` → `vda` is
-      // right, `md0` → `md` is not.
+      // `md0`, `zram0` and `loop0` are whole devices — the sysfs node is
+      // `/sys/block/md0` — so the digit stays; their partitions carry a `p`.
       expect(stripPartitionSuffix('vda1'), 'vda');
       expect(stripPartitionSuffix('md0'), 'md0');
       expect(stripPartitionSuffix('md127p1'), 'md127');
-    }, skip: 'documents bug: whole-disk names ending in a digit are mangled');
+      expect(stripPartitionSuffix('loop0'), 'loop0');
+      expect(stripPartitionSuffix('zram0'), 'zram0');
+      expect(stripPartitionSuffix('sr0'), 'sr0');
+    });
   });
 }

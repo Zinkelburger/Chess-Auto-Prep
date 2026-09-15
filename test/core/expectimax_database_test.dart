@@ -1,0 +1,327 @@
+// ExpectimaxDatabase: the published bundle, probe landings, and the round
+// trip through the artifact store. No engine and no disk.
+
+import 'dart:async';
+
+import 'package:chess_auto_prep/constants/chess_constants.dart';
+import 'package:chess_auto_prep/core/expectimax_database.dart';
+import 'package:chess_auto_prep/core/generation_artifacts.dart';
+import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
+import 'package:chess_auto_prep/services/generation/generation_config.dart';
+import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'fake_storage.dart';
+
+const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+const _afterE4C5 =
+    'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2';
+const _afterD4 = 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1';
+
+BuildTree _tree(
+  String rootFen, {
+  String childFen = _afterE4,
+  Map<String, dynamic> configSnapshot = const {},
+}) {
+  final root = BuildTreeNode(
+    fen: rootFen,
+    moveSan: '',
+    moveUci: '',
+    ply: 0,
+    isWhiteToMove: true,
+    nodeId: 1,
+  )..engineEvalCp = 20;
+  root.children.add(
+    BuildTreeNode(
+      fen: childFen,
+      moveSan: 'x',
+      moveUci: 'a1a1',
+      ply: 1,
+      isWhiteToMove: false,
+      nodeId: 2,
+      parent: root,
+    )..engineEvalCp = 25,
+  );
+  return BuildTree(root: root, totalNodes: 2, configSnapshot: configSnapshot)
+    ..computeMetadata();
+}
+
+const _config = TreeBuildConfig(startFen: kStandardStartFen, playAsWhite: true);
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late MemoryStorage storage;
+  late ExpectimaxDatabase db;
+  setUp(() {
+    storage = MemoryStorage();
+    db = ExpectimaxDatabase(
+      store: GenerationArtifactStore(storage: () => storage),
+    );
+  });
+
+  group('publish', () {
+    test('derives the bundle and reads the side from the snapshot', () {
+      db.publish(
+        _tree(kStandardStartFen, configSnapshot: {'play_as_white': false}),
+      );
+
+      expect(db.current!.playAsWhite, isFalse);
+      expect(db.current!.fenMap.getCanonical(_afterE4), isNotNull);
+      expect(db.mainTreeIsProbe, isFalse);
+    });
+
+    test('a full build keeps a probe-origin main tree as a probe', () {
+      final probe = _tree(_afterE4C5, childFen: 'probe-child');
+      db.publish(probe, probes: const [], mainIsProbe: true);
+
+      db.publish(_tree(kStandardStartFen));
+
+      expect(db.current!.tree.root.fen, kStandardStartFen);
+      expect(db.probes.single, same(probe));
+      expect(db.mainTreeIsProbe, isFalse);
+    });
+
+    test('republishing the same tree with more probes keeps its snapshot', () {
+      final tree = _tree(kStandardStartFen);
+      db.publish(tree);
+      final before = db.current!;
+
+      db.publish(tree, probes: [_tree(_afterE4C5, childFen: 'c')]);
+
+      expect(db.current!.snapshot, same(before.snapshot));
+      expect(db.current!.probes.length, 1);
+    });
+
+    test('clear drops everything and forgets the path', () async {
+      storage.files['/r/x_tree.json'] = serializeTree(_tree(kStandardStartFen));
+      await db.load('/r/x.pgn', canApply: () => true);
+      expect(db.isFor('/r/x.pgn'), isTrue);
+
+      db.clear();
+
+      expect(db.current, isNull);
+      expect(db.probes, isEmpty);
+      expect(db.path, isNull);
+    });
+  });
+
+  group('load', () {
+    test('a saved tree and its probes become the bundle', () async {
+      storage.files['/r/x_tree.json'] = serializeTree(_tree(kStandardStartFen));
+      storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+        _tree(_afterE4C5, childFen: 'probe-child'),
+      ]);
+
+      final outcome = await db.load('/r/x.pgn', canApply: () => true);
+
+      expect(outcome, ExpectimaxLoadOutcome.loaded);
+      expect(db.current!.tree.root.fen, kStandardStartFen);
+      expect(db.current!.probes.length, 1);
+      expect(db.isFor('/r/x.pgn'), isTrue);
+    });
+
+    test('with only probes saved, the first stands in as the tree', () async {
+      storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+        _tree(_afterE4C5, childFen: 'probe-child'),
+        _tree(_afterE4, childFen: 'other-child'),
+      ]);
+
+      await db.load('/r/x.pgn', canApply: () => true);
+
+      expect(db.current!.tree.root.fen, _afterE4C5);
+      expect(db.probes.single.root.fen, _afterE4);
+      expect(db.mainTreeIsProbe, isTrue);
+    });
+
+    test('nothing saved empties the bundle', () async {
+      db.publish(_tree(kStandardStartFen));
+
+      final outcome = await db.load('/r/none.pgn', canApply: () => true);
+
+      expect(outcome, ExpectimaxLoadOutcome.empty);
+      expect(db.current, isNull);
+      expect(db.isFor('/r/none.pgn'), isTrue);
+    });
+
+    test('an older load landing after a newer one is superseded', () async {
+      storage.files['/r/a_tree.json'] = serializeTree(_tree(_afterD4));
+      storage.files['/r/b_tree.json'] = serializeTree(_tree(kStandardStartFen));
+      final release = Completer<void>();
+      storage.beforeExists = (path) async {
+        if (path == '/r/a_tree.json') await release.future;
+      };
+
+      final first = db.load('/r/a.pgn', canApply: () => true);
+      final second = await db.load('/r/b.pgn', canApply: () => true);
+      release.complete();
+
+      expect(second, ExpectimaxLoadOutcome.loaded);
+      expect(await first, ExpectimaxLoadOutcome.superseded);
+      expect(db.current!.tree.root.fen, kStandardStartFen);
+      expect(db.isFor('/r/b.pgn'), isTrue);
+    });
+
+    test('the owner can refuse to apply a finished load', () async {
+      storage.files['/r/x_tree.json'] = serializeTree(_tree(kStandardStartFen));
+
+      final outcome = await db.load('/r/x.pgn', canApply: () => false);
+
+      expect(outcome, ExpectimaxLoadOutcome.superseded);
+      expect(db.current, isNull);
+    });
+  });
+
+  group('recordEnginePv', () {
+    test('a known position gets the eval and PV in place', () {
+      final tree = _tree(kStandardStartFen);
+      db.publish(tree);
+      final probe = enginePvProbe(
+        fen: _afterE4,
+        evalCpWhite: 31,
+        pv: ['e7e5', 'g1f3'],
+        startMoves: const ['e4'],
+        config: _config,
+      );
+
+      final mainTreeChanged = db.recordEnginePv(probe);
+
+      expect(mainTreeChanged, isTrue);
+      expect(tree.root.children.single.engineEvalCp, 31);
+      expect(tree.root.children.single.enginePv, ['e7e5', 'g1f3']);
+      expect(db.probes, isEmpty, reason: 'nothing grafted, nothing added');
+    });
+
+    test('an unknown position joins as a probe of its own', () {
+      db.publish(_tree(kStandardStartFen));
+      final probe = enginePvProbe(
+        fen: _afterD4,
+        evalCpWhite: 10,
+        pv: ['d7d5'],
+        startMoves: const ['d4'],
+        config: _config,
+      );
+
+      expect(db.recordEnginePv(probe), isFalse);
+      expect(db.probes.single, same(probe));
+      expect(db.current!.fenMap.getCanonical(_afterD4), isNotNull);
+    });
+
+    test('with no bundle the PV probe becomes the main tree', () {
+      final probe = enginePvProbe(
+        fen: _afterD4,
+        evalCpWhite: 10,
+        pv: const [],
+        startMoves: const ['d4'],
+        config: _config,
+      );
+      expect(db.recordEnginePv(probe), isFalse);
+      expect(db.current!.tree, same(probe));
+      expect(db.mainTreeIsProbe, isTrue);
+    });
+  });
+
+  group('addBoundedProbe', () {
+    const bounded = {'bounded_database': true};
+
+    test('replaces an earlier bounded probe at the same root', () {
+      db.publish(_tree(kStandardStartFen));
+      final old = _tree(_afterD4, childFen: 'old', configSnapshot: bounded);
+      db.publish(db.current!.tree, probes: [old]);
+      final fresh = _tree(_afterD4, childFen: 'new', configSnapshot: bounded);
+
+      db.addBoundedProbe(
+        fresh,
+        config: _config.copyWith(boundedDatabase: true),
+        prefix: const ['d4'],
+      );
+
+      expect(db.probes, [same(fresh)]);
+      expect(fresh.startMoves, 'd4');
+    });
+
+    test('with no bundle the probe becomes the main tree', () {
+      final probe = _tree(_afterD4, configSnapshot: bounded);
+      db.addBoundedProbe(probe, config: _config, prefix: const ['d4']);
+      expect(db.current!.tree, same(probe));
+      expect(db.mainTreeIsProbe, isTrue);
+    });
+  });
+
+  group('landProbe', () {
+    test('a probe rooted outside the database is kept as its own tree', () {
+      db.publish(_tree(kStandardStartFen));
+      final probe = _tree(_afterD4, childFen: 'deep');
+
+      final landing = db.landProbe(
+        probe,
+        config: _config,
+        prefix: const ['d4'],
+        repertoireFilePath: '/r/x.pgn',
+      );
+
+      expect(landing.added, probe.totalNodes);
+      expect(landing.mainTreeChanged, isFalse);
+      expect(db.probes.single, same(probe));
+      expect(probe.startMoves, 'd4');
+      expect(db.isFor('/r/x.pgn'), isTrue);
+    });
+
+    test('a probe rooted inside the main tree is grafted into it', () {
+      final tree = _tree(kStandardStartFen);
+      db.publish(tree);
+      final probe = _tree(_afterE4, childFen: _afterE4C5);
+
+      final landing = db.landProbe(
+        probe,
+        config: _config,
+        prefix: const ['e4'],
+        repertoireFilePath: '/r/x.pgn',
+      );
+
+      expect(landing.mainTreeChanged, isTrue);
+      expect(landing.added, 1);
+      expect(db.probes, isEmpty);
+      expect(db.current!.fenMap.getCanonical(_afterE4C5), isNotNull);
+    });
+  });
+
+  group('persist', () {
+    test('writes the probes and the changed main tree', () async {
+      db.publish(_tree(kStandardStartFen), probes: [_tree(_afterD4)]);
+
+      await db.persist('/r/x.pgn', mainTreeChanged: true);
+
+      expect(
+        storage.files.keys,
+        containsAll(['/r/x_tree.json', '/r/x_expectimax.json']),
+      );
+      expect(
+        ExpectimaxProbeStore.decode(
+          storage.files['/r/x_expectimax.json']!,
+        ).single.root.fen,
+        _afterD4,
+      );
+    });
+
+    test('a probe-origin main tree is saved among the probes', () async {
+      db.publish(_tree(_afterD4), probes: const [], mainIsProbe: true);
+
+      await db.persist('/r/x.pgn', mainTreeChanged: true);
+
+      expect(storage.files.containsKey('/r/x_tree.json'), isFalse);
+      expect(
+        ExpectimaxProbeStore.decode(
+          storage.files['/r/x_expectimax.json']!,
+        ).single.root.fen,
+        _afterD4,
+      );
+    });
+
+    test('an empty bundle writes nothing', () async {
+      await db.persist('/r/x.pgn', mainTreeChanged: true);
+      expect(storage.files, isEmpty);
+    });
+  });
+}

@@ -85,21 +85,19 @@ class _FenListWidgetState extends State<FenListWidget>
   /// FEN → reach estimate, memoised per tree (null = position not in tree).
   final Map<String, ReachEstimate?> _reachCache = {};
 
-  Map<String, String> get _sortMap => {
-    'Bad Eval': _badEvalSortKey,
-    'Good Eval': _goodEvalSortKey,
-    'Lowest Win Rate': 'win_rate',
-    'Highest Win Rate': 'win_rate_desc',
-    'Most Games': 'games',
-    'Most Wins': 'wins',
-    'Most Losses': 'losses',
+  Map<String, PositionSort> get _sortMap => {
+    'Bad Eval': widget.playerIsWhite
+        ? PositionSort.evalBadWhite
+        : PositionSort.evalBadBlack,
+    'Good Eval': widget.playerIsWhite
+        ? PositionSort.evalGoodWhite
+        : PositionSort.evalGoodBlack,
+    'Lowest Win Rate': PositionSort.winRate,
+    'Highest Win Rate': PositionSort.winRateDesc,
+    'Most Games': PositionSort.games,
+    'Most Wins': PositionSort.wins,
+    'Most Losses': PositionSort.losses,
   };
-
-  String get _badEvalSortKey =>
-      widget.playerIsWhite ? 'eval_bad_white' : 'eval_bad_black';
-
-  String get _goodEvalSortKey =>
-      widget.playerIsWhite ? 'eval_good_white' : 'eval_good_black';
 
   bool get _isEvalSort => _sortBy == 'Bad Eval' || _sortBy == 'Good Eval';
 

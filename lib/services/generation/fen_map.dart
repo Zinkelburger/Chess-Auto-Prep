@@ -12,6 +12,8 @@ import '../eval/eval_canonicalize.dart';
 /// castling rights, and en passant square (matches C `fen_map_canonicalize_key`).
 String canonicalizeFen(String fen) => canonicalizeFen4(fen);
 
+/// Canonical node per position plus the transposition leaves that resolve
+/// through it. Frozen once the generated bundle is published.
 class FenMap {
   final Map<String, BuildTreeNode> _canonical = {};
   final Map<String, List<BuildTreeNode>> _equivalents = {};
@@ -221,7 +223,9 @@ BuildTreeNode resolveTransposition(BuildTreeNode node, FenMap? fenMap) {
     return node;
   }
   final canonical = fenMap.getCanonical(node.fen);
-  if (canonical != null && canonical != node && canonical.children.isNotEmpty) {
+  if (canonical != null &&
+      !identical(canonical, node) &&
+      canonical.children.isNotEmpty) {
     return canonical;
   }
   return node;

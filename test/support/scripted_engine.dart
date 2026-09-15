@@ -19,6 +19,7 @@ library;
 import 'dart:async';
 
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
+import 'package:chess_auto_prep/services/engine/engine_interrupt.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 
 /// One scripted engine line: a score (side-to-move relative) and a PV.
@@ -149,7 +150,7 @@ class ScriptedEngine implements EngineConnection {
   void crash() {
     if (!_done.isCompleted) _done.complete();
     if (!_stdout.isClosed) {
-      _stdout.addError(StateError('Stockfish process exited (1)'));
+      _stdout.addError(EngineProcessExitedError(1));
     }
   }
 

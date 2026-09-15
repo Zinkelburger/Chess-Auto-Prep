@@ -14,6 +14,8 @@
 /// the nearest endpoint before callers apply Maia bounds (600–2400).
 library;
 
+import 'piecewise_linear.dart';
+
 /// Sorted (Chess.com blitz, Lichess blitz) anchors — do not reorder.
 const List<(int chessCom, int lichessBlitz)> kChessComBlitzToLichessBlitzTable =
     [
@@ -58,23 +60,8 @@ const List<(int chessCom, int lichessBlitz)> kChessComBlitzToLichessBlitzTable =
 ///
 /// Linear interpolation between [kChessComBlitzToLichessBlitzTable] anchors;
 /// out-of-range inputs clamp to the first/last Lichess value (not extrapolated).
-int chessComBlitzToLichessBlitz(int chessComBlitz) {
-  const table = kChessComBlitzToLichessBlitzTable;
-  if (table.isEmpty) return chessComBlitz;
-
-  if (chessComBlitz <= table.first.$1) return table.first.$2;
-  if (chessComBlitz >= table.last.$1) return table.last.$2;
-
-  for (var i = 0; i < table.length - 1; i++) {
-    final lo = table[i];
-    final hi = table[i + 1];
-    if (chessComBlitz < lo.$1) continue;
-    if (chessComBlitz > hi.$1) continue;
-    if (chessComBlitz == lo.$1) return lo.$2;
-    if (chessComBlitz == hi.$1) return hi.$2;
-    final t = (chessComBlitz - lo.$1) / (hi.$1 - lo.$1);
-    return (lo.$2 + t * (hi.$2 - lo.$2)).round();
-  }
-
-  return table.last.$2;
-}
+int chessComBlitzToLichessBlitz(int chessComBlitz) =>
+    interpolatePiecewiseLinear(
+      kChessComBlitzToLichessBlitzTable,
+      chessComBlitz,
+    ).round();

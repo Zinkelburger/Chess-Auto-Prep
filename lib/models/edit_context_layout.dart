@@ -1,14 +1,7 @@
 /// User-arrangeable column/stack layout for [EditContextZone].
 library;
 
-import 'package:chess_auto_prep/models/repertoire_mode.dart';
-
-EditContextView? _viewFromName(String name) {
-  for (final v in EditContextView.values) {
-    if (v.name == name) return v;
-  }
-  return null;
-}
+import 'repertoire_mode.dart';
 
 /// One horizontal pane with a vertical stack of context views.
 class EditContextColumnLayout {
@@ -51,9 +44,10 @@ class EditContextColumnLayout {
 
   factory EditContextColumnLayout.fromJson(Map<String, dynamic> json) {
     final rawViews = json['views'] as List<dynamic>? ?? const [];
+    final byName = EditContextView.values.asNameMap();
     final views = <EditContextView>[];
     for (final name in rawViews) {
-      final v = _viewFromName(name.toString());
+      final v = byName[name.toString()];
       if (v != null && !views.contains(v)) views.add(v);
     }
     final vFlex = (json['vFlex'] as List<dynamic>?)

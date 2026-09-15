@@ -23,6 +23,7 @@ import '../../utils/chess_utils.dart' show playUciFrom, tryParseFen;
 import '../../utils/fen_utils.dart' show isWhiteToMove;
 import '../engine/stockfish_pool.dart';
 import 'generation_config.dart';
+import 'lanes.dart';
 import 'line_extractor.dart';
 
 /// A computed continuation for one leaf position.
@@ -58,33 +59,29 @@ Future<Map<String, EngineTail>> computeEngineTails({
 
   // A line cut at a transposition did not stop where the build stopped —
   // its continuation is another line's — so it gets no tail.
-  final fens = <String>{
-    for (final line in lines)
-      if (!line.isTransposition &&
-          line.leafFen != null &&
-          line.leafFen!.isNotEmpty)
-        line.leafFen!,
-  };
+  final fens = <String>{};
+  for (final line in lines) {
+    final leafFen = line.leafFen;
+    if (line.isTransposition || leafFen == null || leafFen.isEmpty) continue;
+    fens.add(leafFen);
+  }
   if (fens.isEmpty) return const {};
 
   final depth = config.resolvedEngineTailDepth;
   final targets = fens.toList();
   final out = <String, EngineTail>{};
   var done = 0;
-  var next = 0;
 
   // One search per worker, in flight at once. The pool hands each
   // [discoverMoves] call its own worker, so running these serially would
   // leave every worker but one idle — on a 300-line export at the
   // verification depth that is the difference between a minute and twenty.
-  Future<void> search() async {
-    while (true) {
-      if (isCancelled?.call() ?? false) return;
-      if (pauseGate != null) await pauseGate();
-      final index = next++;
-      if (index >= targets.length) return;
-      final fen = targets[index];
-
+  await runLanes(
+    targets,
+    lanes: pool.workerCount,
+    stop: isCancelled,
+    pause: pauseGate,
+    task: (fen) async {
       final DiscoveryResult result;
       try {
         result = await pool.discoverMoves(
@@ -95,22 +92,17 @@ Future<Map<String, EngineTail>> computeEngineTails({
         );
       } catch (_) {
         // A tail is a nicety; a failed search must never fail an export.
-        continue;
+        return;
       }
       onProgress?.call(++done, targets.length);
-      if (result.lines.isEmpty) continue;
+      if (result.lines.isEmpty) return;
 
       final tail = _sanTail(fen, result.lines.first.pv, plies);
-      if (tail.isEmpty) continue;
+      if (tail.isEmpty) return;
       // Single-threaded isolate: no lock needed around this write.
       out[fen] = EngineTail(movesSan: tail, depth: result.depth);
-    }
-  }
-
-  final lanes = pool.workerCount < 1 ? 1 : pool.workerCount;
-  await Future.wait([
-    for (var i = 0; i < lanes && i < targets.length; i++) search(),
-  ]);
+    },
+  );
   return out;
 }
 

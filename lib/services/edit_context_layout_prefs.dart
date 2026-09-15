@@ -8,7 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/edit_context_layout.dart';
 
-class EditContextLayoutPrefs {
+/// Load/save of the Edit context column layout in [SharedPreferences].
+///
+/// Both operations swallow storage failures: a layout is a convenience, and
+/// the default layout is always a valid fallback.
+abstract final class EditContextLayoutPrefs {
   static const _keyLayout = 'edit_context.layout_v1';
 
   static Future<EditContextLayout> load() async {

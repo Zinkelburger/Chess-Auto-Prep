@@ -6,6 +6,11 @@ import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 
+/// Marks the repertoire move at every reachable our-turn node.
+///
+/// Selection follows [ExpectimaxCalculator.scoreOurMoveChildren] exactly, so
+/// the exported policy is the one the backup valued; the calculator must
+/// have run over [BuildTree] first.
 class RepertoireSelector {
   final TreeBuildConfig config;
   final ExpectimaxCalculator ecaCalc;
@@ -16,6 +21,9 @@ class RepertoireSelector {
     this.fenMap,
   });
 
+  /// Clear every repertoire flag, then walk from the root: our nodes take
+  /// the scorer's winner, opponent nodes follow every positive-probability
+  /// reply. Returns the number of moves marked.
   int select(BuildTree tree) {
     void clear(BuildTreeNode node) {
       node.isRepertoireMove = false;

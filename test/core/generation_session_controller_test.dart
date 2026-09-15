@@ -12,8 +12,10 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
+import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
+import 'package:chess_auto_prep/services/jobs/generation_phase.dart';
 import 'package:chess_auto_prep/services/master_games/master_games_service.dart';
 import 'package:chess_auto_prep/services/master_games/twic_client.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -160,10 +162,10 @@ void main() {
   });
 
   group('progress plumbing', () {
-    test('updateProgress stores every field it is given', () {
+    test('progress.update stores every field it is given', () {
       final controller = GenerationSessionController();
 
-      controller.updateProgress(
+      controller.progress.update(
         nodes: 42,
         depth: 5,
         maxPlyConfig: 18,
@@ -190,10 +192,10 @@ void main() {
       var notified = 0;
       controller.addListener(() => notified++);
 
-      controller.updateProgress(nodes: 1);
+      controller.progress.update(nodes: 1);
       expect(notified, 1, reason: 'first update notifies immediately');
 
-      controller.updateProgress(nodes: 2);
+      controller.progress.update(nodes: 2);
       expect(controller.progress.nodes, 2, reason: 'state updates instantly');
       expect(notified, 1, reason: 'second notify is deferred');
 
@@ -249,8 +251,8 @@ void main() {
       var notified = 0;
       controller.addListener(() => notified++);
 
-      controller.updateProgress(nodes: 1); // immediate notify
-      controller.updateProgress(nodes: 2); // schedules the trailing timer
+      controller.progress.update(nodes: 1); // immediate notify
+      controller.progress.update(nodes: 2); // schedules the trailing timer
       expect(notified, 1);
 
       controller.dispose();
@@ -264,7 +266,7 @@ void main() {
 
       // A straggling build callback landing after teardown must not throw:
       // SafeChangeNotifier drops the notification.
-      controller.updateProgress(nodes: 99);
+      controller.progress.update(nodes: 99);
       expect(controller.progress.nodes, 99);
       await Future<void>.delayed(const Duration(milliseconds: 200));
     });
@@ -295,12 +297,15 @@ void main() {
       return Uint8List.fromList(ZipEncoder().encode(archive));
     }
 
-    /// Answers HEADs immediately (so the issue probe finishes) but parks
-    /// every zip body on [hold].
+    /// Answers HEADs immediately (so the issue probe, which starts near
+    /// today's estimated issue, finishes) but parks every zip body on
+    /// [hold].
     http.Client stalling() => MockClient((request) async {
       final m = RegExp(r'twic(\d+)g\.zip$').firstMatch(request.url.path);
       final issue = m == null ? null : int.parse(m.group(1)!);
-      if (issue == null || issue < 1650 || issue > 1651) {
+      if (issue == null ||
+          issue < 1650 ||
+          issue > twicIssueEstimateFor(DateTime.now())) {
         return http.Response('', 404);
       }
       if (request.method == 'HEAD') return http.Response('', 200);

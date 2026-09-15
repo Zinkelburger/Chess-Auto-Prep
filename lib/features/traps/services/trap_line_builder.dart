@@ -7,8 +7,8 @@
 library;
 
 import '../../../models/move_tree.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
-import 'package:chess_auto_prep/models/trap_reply.dart';
+import '../../../models/trap_line_info.dart';
+import '../../../models/trap_reply.dart';
 
 class TrapLineBuilder {
   const TrapLineBuilder._();
@@ -38,9 +38,10 @@ class TrapLineBuilder {
       if (next == null) return null;
       cursor = next;
     }
-    if (trap.fen != null &&
+    final fen = trap.fen;
+    if (fen != null &&
         cursor.isNotEmpty &&
-        !_samePosition(tree.fenAt(cursor), trap.fen!)) {
+        !_samePosition(tree.fenAt(cursor), fen)) {
       return null;
     }
     if (cursor.isNotEmpty) {
@@ -84,11 +85,13 @@ class TrapLineBuilder {
       node.nags = _nagsFor(reply.classification);
       node.comment = _replyComment(trap, reply);
 
-      if (reply.san == trap.popularMove && trap.refutationMove != null) {
-        final refPath = tree.addMove(replyPath, trap.refutationMove!);
+      final refutation = trap.refutationMove;
+      if (reply.san == trap.popularMove && refutation != null) {
+        final refPath = tree.addMove(replyPath, refutation);
         if (refPath != null) {
-          final evalText = trap.refutationEvalCp != null
-              ? ' (${trap.formatEval(trap.refutationEvalCp!)})'
+          final refutationEval = trap.refutationEvalCp;
+          final evalText = refutationEval != null
+              ? ' (${trap.formatEval(refutationEval)})'
               : '';
           tree.setComment(refPath, 'Refutation$evalText.');
         }

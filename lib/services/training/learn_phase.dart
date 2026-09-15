@@ -158,10 +158,10 @@ class LearnPhase {
       _s.currentAnnotation =
           _s.currentLine!.comments[_s.currentMoveIndex.toString()];
       _s.emitChange();
-      await Future.delayed(const Duration(milliseconds: 1200));
+      await Future.delayed(wrongMoveCorrectionDelay);
       if (generation != _s.lineGeneration) return;
       _s.session.playMove(expectedSan);
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(learnCorrectionRewindDelay);
       if (generation != _s.lineGeneration) return;
       _s.session.goBack();
       _s.feedback = 'Play $expectedSan';

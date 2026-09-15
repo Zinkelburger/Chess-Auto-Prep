@@ -1,21 +1,21 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
-import '../../utils/lru_map.dart';
+
 import 'package:path/path.dart' as p;
-import '../../utils/atomic_file.dart';
-import '../../utils/file_text_reader.dart';
-import '../../utils/safe_file_name.dart';
+
 import '../../models/repertoire_metadata.dart';
 import '../../models/tactics_set_metadata.dart';
-import '../pgn_parsing_service.dart' as pgn;
+import '../../utils/atomic_file.dart';
+import '../../utils/file_text_reader.dart';
+import '../../utils/log.dart';
+import '../../utils/safe_file_name.dart';
 import '../game_store/game_store.dart';
 import '../game_store/game_store_service.dart';
+import '../training/move_attempt_store.dart';
 import 'app_paths.dart';
 import 'file_mutation_service.dart';
+import 'pgn_game_count_cache.dart';
 import 'storage_service.dart';
-import '../training/move_attempt_store.dart';
-import 'package:chess_auto_prep/utils/log.dart';
 
 StorageService getStorageService() => IOStorageService();
 
@@ -39,15 +39,7 @@ class IOStorageService implements StorageService {
   static const String _repertoireMoveProgressFileName =
       'repertoire_move_progress.csv';
 
-  /// Per-file game-count cache for the list/picker screens, validated by the
-  /// file's `(size, modified)` stat. Reading + counting every PGN on every
-  /// navigation is what made the pickers feel slow; caching the count lets a
-  /// re-entry skip the read entirely while a stat mismatch (including writes
-  /// made outside this service) still forces a fresh count.
-  final _countCache = LruMap<String, ({int size, int modifiedMs, int count})>(
-    maxEntries: 2048,
-  );
-  Future<void> _counting = Future.value();
+  final PgnGameCountCache _gameCounts = PgnGameCountCache();
   final FileMutationService _mutations = FileMutationService.instance;
 
   Future<Directory> _documentsRoot() async =>
@@ -76,39 +68,45 @@ class IOStorageService implements StorageService {
     return File(p.join((await _documentsRoot()).path, filename));
   }
 
-  /// Returns the game count for [file], reusing the cached value when the
-  /// file's size and modified time are unchanged since it was last counted.
-  Future<int> _cachedGameCount(File file, FileStat stat) {
-    // Bound whole-file reads across simultaneous listings, including listings
-    // of different directories. The tail never retains a failed operation.
-    final result = _counting.then((_) => _readGameCount(file, stat));
-    _counting = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
-    return result;
-  }
+  /// `.pgn` files directly inside [dir] (not recursive), in listing order.
+  Future<List<File>> _pgnFiles(
+    Directory dir, {
+    bool Function(String path) accept = _isPgnFile,
+  }) async => [
+    await for (final entity in dir.list())
+      if (entity is File && accept(entity.path)) entity,
+  ];
 
-  Future<int> _readGameCount(File file, FileStat stat) async {
-    final modifiedMs = stat.modified.millisecondsSinceEpoch;
-    final cached = _countCache[file.path];
-    if (cached != null &&
-        cached.size == stat.size &&
-        cached.modifiedMs == modifiedMs) {
-      return cached.count;
-    }
+  static bool _isPgnFile(String path) =>
+      p.extension(path).toLowerCase() == '.pgn';
 
-    final content = await readTextFileSafely(file);
-    if (content == null) {
-      throw FileSystemException('File disappeared while listing', file.path);
-    }
-    final count = content.length < 256 * 1024
-        ? pgn.countPgnGamesFast(content)
-        : await Isolate.run(() => pgn.countPgnGamesFast(content));
-    _countCache[file.path] = (
-      size: stat.size,
-      modifiedMs: modifiedMs,
-      count: count,
-    );
-    return count;
-  }
+  /// A `.pgn` under the repertoires tree that is a real chapter (not the
+  /// raw-games sidecar written by the build-from-games flow).
+  static bool _isChapterFile(String path) =>
+      _isPgnFile(path) &&
+      !p.basenameWithoutExtension(path).endsWith('_raw_games');
+
+  /// [RepertoireMetadata] for each of [files], game counts from the cache.
+  Future<List<RepertoireMetadata>> _describeFiles(List<File> files) =>
+      Future.wait(
+        files.map((file) async {
+          final stat = await file.stat();
+          return RepertoireMetadata(
+            filePath: file.path,
+            name: p.basenameWithoutExtension(file.path),
+            gameCount: await _gameCounts.countFor(file, stat),
+            lastModified: stat.modified,
+          );
+        }),
+      );
+
+  /// [_describeFiles], sorted by name case-insensitively.
+  Future<List<RepertoireMetadata>> _describeFilesByName(
+    List<File> files,
+  ) async => (await _describeFiles(files))..sort(_byName);
+
+  static int _byName(RepertoireMetadata a, RepertoireMetadata b) =>
+      a.name.toLowerCase().compareTo(b.name.toLowerCase());
 
   Future<File> _resolveFile(String path) async {
     if (p.isAbsolute(path)) return File(path);
@@ -206,6 +204,7 @@ class IOStorageService implements StorageService {
       if (stat.type == FileSystemEntityType.notFound) return null;
       return (size: stat.size, modified: stat.modified);
     } catch (_) {
+      // Unreadable is "absent" to callers that only want a freshness check.
       return null;
     }
   }
@@ -230,28 +229,10 @@ class IOStorageService implements StorageService {
   // ── Repertoire file management ────────────────────────────────────────────
 
   @override
-  Future<List<RepertoireMetadata>> listRepertoireFiles() async {
-    final dir = await _repertoiresRoot();
-    final files = <File>[
-      await for (final entity in dir.list())
-        if (entity is File &&
-            entity.path.toLowerCase().endsWith('.pgn') &&
-            !p.basenameWithoutExtension(entity.path).endsWith('_raw_games'))
-          entity,
-    ];
-
-    return Future.wait(
-      files.map((file) async {
-        final stat = await file.stat();
-        return RepertoireMetadata(
-          filePath: file.path,
-          name: p.basenameWithoutExtension(file.path),
-          gameCount: await _cachedGameCount(file, stat),
-          lastModified: stat.modified,
-        );
-      }),
-    );
-  }
+  Future<List<RepertoireMetadata>> listRepertoireFiles() async =>
+      _describeFiles(
+        await _pgnFiles(await _repertoiresRoot(), accept: _isChapterFile),
+      );
 
   @override
   Future<String> repertoireFilePath(String name) async {
@@ -260,12 +241,6 @@ class IOStorageService implements StorageService {
   }
 
   // ── Repertoire folders + chapters ─────────────────────────────────────────
-
-  /// A `.pgn` under the repertoires tree that is a real chapter (not the
-  /// raw-games sidecar written by the build-from-games flow).
-  static bool _isChapterFile(String path) =>
-      path.toLowerCase().endsWith('.pgn') &&
-      !p.basenameWithoutExtension(path).endsWith('_raw_games');
 
   /// One-time fold of legacy flat `repertoires/<name>.pgn` files into
   /// `repertoires/<name>/Main.pgn` so every repertoire is a folder. Each move
@@ -323,28 +298,7 @@ class IOStorageService implements StorageService {
   ) async {
     final dir = Directory(repertoireDirPath);
     if (!await dir.exists()) return [];
-
-    final files = <File>[
-      await for (final entity in dir.list())
-        if (entity is File && _isChapterFile(entity.path)) entity,
-    ];
-
-    final entries = await Future.wait(
-      files.map((file) async {
-        final stat = await file.stat();
-        return RepertoireMetadata(
-          filePath: file.path,
-          name: p.basenameWithoutExtension(file.path),
-          gameCount: await _cachedGameCount(file, stat),
-          lastModified: stat.modified,
-        );
-      }),
-    );
-
-    entries.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
-    return entries;
+    return _describeFilesByName(await _pgnFiles(dir, accept: _isChapterFile));
   }
 
   @override
@@ -425,31 +379,8 @@ class IOStorageService implements StorageService {
   // ── Study file management ────────────────────────────────────────────────
 
   @override
-  Future<List<RepertoireMetadata>> listStudyFiles() async {
-    final dir = await _studiesRoot();
-    final files = <File>[
-      await for (final entity in dir.list())
-        if (entity is File && entity.path.toLowerCase().endsWith('.pgn'))
-          entity,
-    ];
-
-    final entries = await Future.wait(
-      files.map((file) async {
-        final stat = await file.stat();
-        return RepertoireMetadata(
-          filePath: file.path,
-          name: p.basenameWithoutExtension(file.path),
-          gameCount: await _cachedGameCount(file, stat),
-          lastModified: stat.modified,
-        );
-      }),
-    );
-
-    entries.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
-    return entries;
-  }
+  Future<List<RepertoireMetadata>> listStudyFiles() async =>
+      _describeFilesByName(await _pgnFiles(await _studiesRoot()));
 
   @override
   Future<String> studyFilePath(String name) async {
@@ -461,29 +392,18 @@ class IOStorageService implements StorageService {
 
   @override
   Future<List<TacticsSetMetadata>> listTacticsSets() async {
-    final dir = await _tacticsSetsRoot();
-    final files = <File>[
-      await for (final entity in dir.list())
-        if (entity is File && entity.path.toLowerCase().endsWith('.pgn'))
-          entity,
+    final sets = await _describeFilesByName(
+      await _pgnFiles(await _tacticsSetsRoot()),
+    );
+    return [
+      for (final set in sets)
+        TacticsSetMetadata(
+          filePath: set.filePath,
+          name: set.name,
+          positionCount: set.gameCount,
+          lastModified: set.lastModified,
+        ),
     ];
-
-    final entries = await Future.wait(
-      files.map((file) async {
-        final stat = await file.stat();
-        return TacticsSetMetadata(
-          filePath: file.path,
-          name: p.basenameWithoutExtension(file.path),
-          positionCount: await _cachedGameCount(file, stat),
-          lastModified: stat.modified,
-        );
-      }),
-    );
-
-    entries.sort(
-      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
-    return entries;
   }
 
   @override
@@ -500,15 +420,11 @@ class IOStorageService implements StorageService {
   @override
   Future<List<({String name, String path})>> listLegacyTacticsCsvSets() async {
     final dir = await _tacticsSetsRoot();
-    final entries = <({String name, String path})>[];
-    await for (final entity in dir.list()) {
-      if (!entity.path.toLowerCase().endsWith('.csv')) continue;
-      entries.add((
-        name: p.basenameWithoutExtension(entity.path),
-        path: entity.path,
-      ));
-    }
-    return entries;
+    return [
+      await for (final entity in dir.list())
+        if (p.extension(entity.path).toLowerCase() == '.csv')
+          (name: p.basenameWithoutExtension(entity.path), path: entity.path),
+    ];
   }
 
   @override

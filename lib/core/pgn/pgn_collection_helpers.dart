@@ -4,12 +4,11 @@
 /// importers keep working.
 library;
 
-import 'dart:math' as math;
-
 import '../../models/pgn_filter_models.dart';
 import '../../models/pgn_game_entry.dart';
 import '../../services/games_library/game_filter.dart' show dedupKeyForHeaders;
 import '../../services/pgn_parsing_service.dart' as pgn;
+import '../../services/pgn_slice_filter.dart' as pgn;
 
 // ---------------------------------------------------------------------------
 // Top-level helpers used inside Isolate.run closures.
@@ -189,51 +188,104 @@ Future<List<int>> applySliceConfig(
   );
 }
 
-final studyRatingRe = RegExp(r'\[StudyRating\s+"[^"]*"\]');
-final studyRatingLineRe = RegExp(r'\[StudyRating\s+"[^"]*"\]\n?');
-final studySummaryRe = RegExp(r'\[StudySummary\s+"[^"]*"\]');
-final studySummaryLineRe = RegExp(r'\[StudySummary\s+"[^"]*"\]\n?');
+/// [config] without the filter that entry [chipIndex] of
+/// [SliceConfig.chipLabels] describes, or null when [chipIndex] names no
+/// chip. Chips are laid out as the position input, then each non-empty
+/// additional position, then the sequence pattern, then each header filter
+/// with a value.
+SliceConfig? sliceConfigWithoutChip(SliceConfig config, int chipIndex) {
+  if (chipIndex < 0 || chipIndex >= config.chipLabels.length) return null;
+  final hasPosition = config.positionInput?.isNotEmpty ?? false;
+  final hasSequence = config.sequencePattern?.isNotEmpty ?? false;
+  final positionSlots = [
+    for (final (i, p) in config.additionalPositions.indexed)
+      if (p.isNotEmpty) i,
+  ];
+  final headerSlots = [
+    for (final (i, f) in config.headerFilters.indexed)
+      if (f.value.isNotEmpty) i,
+  ];
 
+  SliceConfig build({
+    String? positionInput,
+    List<String>? additionalPositions,
+    String? sequencePattern,
+    List<HeaderFilterConfig>? headerFilters,
+  }) => SliceConfig(
+    positionInput: positionInput,
+    additionalPositions: additionalPositions ?? config.additionalPositions,
+    matchAny: config.matchAny,
+    headerFilters: headerFilters ?? config.headerFilters,
+    sequencePattern: sequencePattern,
+    sequenceGap: config.sequenceGap,
+  );
+
+  var index = chipIndex;
+  if (hasPosition) {
+    if (index == 0) {
+      return build(sequencePattern: config.sequencePattern);
+    }
+    index--;
+  }
+  if (index < positionSlots.length) {
+    return build(
+      positionInput: config.positionInput,
+      additionalPositions: List.of(config.additionalPositions)
+        ..removeAt(positionSlots[index]),
+      sequencePattern: config.sequencePattern,
+    );
+  }
+  index -= positionSlots.length;
+  if (hasSequence) {
+    if (index == 0) return build(positionInput: config.positionInput);
+    index--;
+  }
+  return build(
+    positionInput: config.positionInput,
+    sequencePattern: config.sequencePattern,
+    headerFilters: List.of(config.headerFilters)..removeAt(headerSlots[index]),
+  );
+}
+
+/// [pgn] with `[name "value"]` set: an existing header of that name is
+/// replaced in place, otherwise the header is inserted after the first line
+/// (a PGN's first line is its `[Event]` header). A single-line [pgn] has no
+/// header block to insert into and is returned unchanged.
+String upsertPgnHeader(String pgn, String name, String value) {
+  final header = '[$name "$value"]';
+  final existing = _headerRe(name);
+  if (existing.hasMatch(pgn)) return pgn.replaceFirst(existing, header);
+  final firstNewline = pgn.indexOf('\n');
+  if (firstNewline == -1) return pgn;
+  return '${pgn.substring(0, firstNewline)}\n$header'
+      '${pgn.substring(firstNewline)}';
+}
+
+/// [pgn] without its first `[name "..."]` header line, if any.
+String removePgnHeader(String pgn, String name) =>
+    pgn.replaceFirst(_headerLineRe(name), '');
+
+RegExp _headerRe(String name) => RegExp('\\[$name\\s+"[^"]*"\\]');
+RegExp _headerLineRe(String name) => RegExp('\\[$name\\s+"[^"]*"\\]\\n?');
+
+/// Each game's text with its `[StudyRating]` / `[StudySummary]` headers
+/// brought in line with the rating and summary it carries: written when set,
+/// removed when cleared. Summary quotes become apostrophes so the header
+/// value stays a single PGN string.
 List<String> buildMetadataOutput(
   List<({String pgn, int rating, String summary})> gameData,
-) {
-  final results = <String>[];
-  for (final game in gameData) {
-    var pgn = game.pgn;
+) => [
+  for (final game in gameData)
+    _withStudySummary(_withStudyRating(game.pgn, game.rating), game.summary),
+];
 
-    if (game.rating > 0) {
-      if (studyRatingRe.hasMatch(pgn)) {
-        pgn = pgn.replaceFirst(studyRatingRe, '[StudyRating "${game.rating}"]');
-      } else {
-        final firstNewline = pgn.indexOf('\n');
-        if (firstNewline != -1) {
-          pgn =
-              '${pgn.substring(0, firstNewline)}\n[StudyRating "${game.rating}"]${pgn.substring(firstNewline)}';
-        }
-      }
-    } else {
-      pgn = pgn.replaceFirst(studyRatingLineRe, '');
-    }
+String _withStudyRating(String pgn, int rating) => rating > 0
+    ? upsertPgnHeader(pgn, 'StudyRating', '$rating')
+    : removePgnHeader(pgn, 'StudyRating');
 
-    if (game.summary.isNotEmpty) {
-      final escaped = game.summary.replaceAll('"', "'");
-      if (studySummaryRe.hasMatch(pgn)) {
-        pgn = pgn.replaceFirst(studySummaryRe, '[StudySummary "$escaped"]');
-      } else {
-        final firstNewline = pgn.indexOf('\n');
-        if (firstNewline != -1) {
-          pgn =
-              '${pgn.substring(0, firstNewline)}\n[StudySummary "$escaped"]${pgn.substring(firstNewline)}';
-        }
-      }
-    } else {
-      pgn = pgn.replaceFirst(studySummaryLineRe, '');
-    }
-
-    results.add(pgn);
-  }
-  return results;
-}
+String _withStudySummary(String pgn, String summary) => summary.isNotEmpty
+    ? upsertPgnHeader(pgn, 'StudySummary', summary.replaceAll('"', "'"))
+    : removePgnHeader(pgn, 'StudySummary');
 
 /// Detect the player a whole collection is "about" by scanning every game's
 /// White/Black headers. Counts by surname (text before the first comma) so
@@ -286,23 +338,14 @@ String? detectSingleCollectionPlayer(List<PgnGameEntry> games) {
   return candidates.length == 1 ? names[candidates.single] : null;
 }
 
+/// A player named in every game of the first four: the quick guess used
+/// while a collection is still loading. Null when none recurs.
 String? detectProtagonistFrom(List<PgnGameEntry> games) {
   if (games.length < 2) return null;
-  final sample = games.take(math.min(4, games.length));
-  final counts = <String, int>{};
-  for (final g in sample) {
-    final w = g.headers['White'];
-    final b = g.headers['Black'];
-    if (w != null && w.isNotEmpty && w != '?') {
-      counts[w] = (counts[w] ?? 0) + 1;
-    }
-    if (b != null && b.isNotEmpty && b != '?') {
-      counts[b] = (counts[b] ?? 0) + 1;
-    }
-  }
-  final sampleSize = sample.length;
-  for (final entry in counts.entries) {
-    if (entry.value >= sampleSize) return entry.key;
+  final sample = games.take(_protagonistSampleSize).toList();
+  final counts = _playerCounts(sample);
+  for (final MapEntry(key: name, value: count) in counts.entries) {
+    if (count >= sample.length) return name;
   }
   return null;
 }
@@ -314,27 +357,32 @@ String? detectProtagonistFrom(List<PgnGameEntry> games) {
   List<PgnGameEntry> games,
 ) {
   if (games.length < 2) return null;
-  final sample = games.take(math.min(6, games.length)).toList();
-  final counts = <String, int>{};
-  for (final g in sample) {
-    final w = g.headers['White'];
-    final b = g.headers['Black'];
-    if (w != null && w.isNotEmpty && w != '?') {
-      counts[w] = (counts[w] ?? 0) + 1;
-    }
-    if (b != null && b.isNotEmpty && b != '?') {
-      counts[b] = (counts[b] ?? 0) + 1;
-    }
-  }
-  final sampleSize = sample.length;
-  final recurring = counts.entries
-      .where((e) => e.value >= sampleSize)
-      .map((e) => e.key)
-      .toList();
+  final sample = games.take(_bothPlayersSampleSize).toList();
+  final counts = _playerCounts(sample);
+  final recurring = [
+    for (final MapEntry(key: name, value: count) in counts.entries)
+      if (count >= sample.length) name,
+  ];
   if (recurring.length < 2) return null;
-  // Return with the player who appears as White more often listed first.
   int whiteCount(String name) =>
       sample.where((g) => g.headers['White'] == name).length;
   recurring.sort((a, b) => whiteCount(b).compareTo(whiteCount(a)));
   return (player1: recurring[0], player2: recurring[1]);
+}
+
+const _protagonistSampleSize = 4;
+const _bothPlayersSampleSize = 6;
+
+/// How many games of [sample] each named player takes part in, by exact
+/// header spelling, in first-seen order.
+Map<String, int> _playerCounts(List<PgnGameEntry> sample) {
+  final counts = <String, int>{};
+  for (final game in sample) {
+    for (final field in const ['White', 'Black']) {
+      final name = game.headers[field];
+      if (name == null || name.isEmpty || name == '?') continue;
+      counts[name] = (counts[name] ?? 0) + 1;
+    }
+  }
+  return counts;
 }

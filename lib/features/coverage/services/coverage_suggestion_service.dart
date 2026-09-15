@@ -10,9 +10,9 @@ import 'package:dartchess/dartchess.dart';
 import '../../../models/build_tree_node.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../services/coherence_service.dart';
+import '../../../services/generation/fen_map.dart';
 import '../../../utils/ease_utils.dart' show winProbability;
 import 'coverage_service.dart';
-import '../../../services/generation/fen_map.dart';
 
 enum GapType { tooShallow, unaccounted }
 
@@ -35,17 +35,6 @@ class GapCandidate {
 }
 
 class SuggestedLine {
-  final GapCandidate gap;
-  final List<String> fullMoves;
-  final List<String> newMoves;
-  final double coverageGain;
-  final double score;
-  final String source;
-  final int? leafEvalCp;
-  final double? linePlayability;
-  final int trapCount;
-  final double? coherenceBonus;
-
   const SuggestedLine({
     required this.gap,
     required this.fullMoves,
@@ -58,6 +47,34 @@ class SuggestedLine {
     this.trapCount = 0,
     this.coherenceBonus,
   });
+
+  final GapCandidate gap;
+  final List<String> fullMoves;
+  final List<String> newMoves;
+
+  /// Coverage percentage points the line would add.
+  final double coverageGain;
+  final double score;
+
+  /// Where the continuation came from; only `tree` today.
+  final String source;
+  final int? leafEvalCp;
+  final double? linePlayability;
+  final int trapCount;
+  final double? coherenceBonus;
+
+  SuggestedLine withScore(double score) => SuggestedLine(
+    gap: gap,
+    fullMoves: fullMoves,
+    newMoves: newMoves,
+    coverageGain: coverageGain,
+    score: score,
+    source: source,
+    leafEvalCp: leafEvalCp,
+    linePlayability: linePlayability,
+    trapCount: trapCount,
+    coherenceBonus: coherenceBonus,
+  );
 }
 
 /// Exponents on each factor of a suggestion's score.  Every one is its own
@@ -79,6 +96,15 @@ class SuggestionWeights {
 }
 
 class CoverageSuggestionService {
+  /// Only the biggest gaps are resolved into lines.
+  static const int _maxGapsResolved = 50;
+
+  /// How far a suggested continuation follows the tree past the gap.
+  static const int _maxLineDepth = 12;
+
+  /// Trap count at which the trap factor saturates.
+  static const int _trapSaturation = 5;
+
   final CoverageResult coverage;
   final BuildTree? tree;
   final FenMap? fenMap;
@@ -145,36 +171,35 @@ class CoverageSuggestionService {
     return gaps;
   }
 
-  List<SuggestedLine> _resolveLines(List<GapCandidate> gaps, bool playAsWhite) {
-    final results = <SuggestedLine>[];
-    final maxGaps = gaps.length > 50 ? 50 : gaps.length;
-
-    for (var i = 0; i < maxGaps; i++) {
-      final gap = gaps[i];
-      final treeLine = _findTreePath(gap, playAsWhite);
-      if (treeLine != null) {
-        results.add(treeLine);
-      }
-    }
-
-    return results;
-  }
+  List<SuggestedLine> _resolveLines(
+    List<GapCandidate> gaps,
+    bool playAsWhite,
+  ) => [
+    for (final gap in gaps.take(_maxGapsResolved))
+      ?_findTreePath(gap, playAsWhite),
+  ];
 
   SuggestedLine? _findTreePath(GapCandidate gap, bool playAsWhite) {
+    final tree = this.tree;
     if (tree == null) return null;
 
+    final fenMap = this.fenMap;
     BuildTreeNode? node;
     if (gap.fen.isNotEmpty && fenMap != null) {
-      node = fenMap!.getCanonical(gap.fen);
+      node = fenMap.getCanonical(gap.fen);
     }
-    node ??= _walkTree(tree!.root, gap.pathToGap);
+    node ??= _walkTree(tree.root, gap.pathToGap);
     if (node == null) return null;
 
     final path = <String>[...gap.pathToGap];
     var current = node;
     int trapCount = 0;
 
-    for (var depth = 0; depth < 12 && current.children.isNotEmpty; depth++) {
+    for (
+      var depth = 0;
+      depth < _maxLineDepth && current.children.isNotEmpty;
+      depth++
+    ) {
       final repertoireChild = current.children
           .where((c) => c.isRepertoireMove)
           .toList();
@@ -231,9 +256,11 @@ class CoverageSuggestionService {
   BuildTreeNode? _walkTree(BuildTreeNode root, List<String> moves) {
     var current = root;
     for (final move in moves) {
-      final child = current.children.where((c) => c.moveSan == move).toList();
-      if (child.isEmpty) return null;
-      current = child.first;
+      final child = current.children
+          .where((c) => c.moveSan == move)
+          .firstOrNull;
+      if (child == null) return null;
+      current = child;
     }
     return current;
   }
@@ -241,32 +268,19 @@ class CoverageSuggestionService {
   List<SuggestedLine> _scoreAll(
     List<SuggestedLine> candidates,
     SuggestionWeights w,
-  ) {
-    return candidates.map((line) {
-      final score = _scoreLine(line, w);
-      return SuggestedLine(
-        gap: line.gap,
-        fullMoves: line.fullMoves,
-        newMoves: line.newMoves,
-        coverageGain: line.coverageGain,
-        score: score,
-        source: line.source,
-        leafEvalCp: line.leafEvalCp,
-        linePlayability: line.linePlayability,
-        trapCount: line.trapCount,
-        coherenceBonus: line.coherenceBonus,
-      );
-    }).toList()..sort((a, b) => b.score.compareTo(a.score));
-  }
+  ) =>
+      candidates.map((line) => line.withScore(_scoreLine(line, w))).toList()
+        ..sort((a, b) => b.score.compareTo(a.score));
 
+  /// Product of the factors each raised to its weight; every factor is a
+  /// 0..1 quantity floored at 0.001 so a zero never wipes the others out.
   double _scoreLine(SuggestedLine line, SuggestionWeights w) {
     final impact = line.coverageGain / 100.0;
-    final eval = line.leafEvalCp != null
-        ? winProbability(line.leafEvalCp!)
-        : 0.5;
+    final leafEvalCp = line.leafEvalCp;
+    final eval = leafEvalCp != null ? winProbability(leafEvalCp) : 0.5;
     final ease = line.linePlayability ?? 0.5;
     final traps = line.trapCount > 0
-        ? 0.7 + 0.3 * (line.trapCount / 5).clamp(0.0, 1.0)
+        ? 0.7 + 0.3 * (line.trapCount / _trapSaturation).clamp(0.0, 1.0)
         : 0.5;
 
     var score =
@@ -276,8 +290,9 @@ class CoverageSuggestionService {
                 pow(traps.clamp(0.001, 1.0), w.trapExp))
             .toDouble();
 
-    if (line.coherenceBonus != null) {
-      score *= pow(line.coherenceBonus!.clamp(0.001, 1.0), w.coherenceExp);
+    final coherenceBonus = line.coherenceBonus;
+    if (coherenceBonus != null) {
+      score *= pow(coherenceBonus.clamp(0.001, 1.0), w.coherenceExp);
     }
 
     return score;

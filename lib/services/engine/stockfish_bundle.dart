@@ -16,6 +16,11 @@ import '../storage/app_paths.dart';
 /// Where [tools/fetch_assets.py] records upstream URLs and checksums.
 const kStockfishLockAsset = 'tools/assets.lock.json';
 
+/// The engine could not be installed from the bundle or the pinned release.
+class StockfishInstallError extends StateError {
+  StockfishInstallError(super.message);
+}
+
 /// File name of the extracted engine in the support directory (and of the
 /// bundled `.gz` slot). macOS Apple Silicon and Intel share `stockfish-macos`;
 /// [stockfishLockKey] says which upstream archive belongs in that slot.
@@ -54,9 +59,50 @@ Uint8List stockfishLargestArchiveMember(Uint8List bytes, String url) {
     if (biggest == null || f.size > biggest.size) biggest = f;
   }
   if (biggest == null) {
-    throw StateError('Stockfish archive from $url is empty');
+    throw StockfishInstallError('Stockfish archive from $url is empty');
   }
   return Uint8List.fromList(biggest.content);
+}
+
+/// One platform's entry in `tools/assets.lock.json`.
+class _LockEntry {
+  const _LockEntry({
+    required this.key,
+    required this.sourceSha256,
+    required this.outputSha256,
+    required this.url,
+  });
+
+  /// Decode the entry for [key]; both checksums are mandatory, the URL is
+  /// only needed when the bundle has no engine.
+  factory _LockEntry.fromLock(Map<String, dynamic> lock, String key) {
+    final entry = lock[key];
+    if (entry is! Map ||
+        entry['source_sha256'] is! String ||
+        entry['output_sha256'] is! String) {
+      throw StockfishInstallError(
+        'Missing Stockfish checksums for $key in $kStockfishLockAsset',
+      );
+    }
+    return _LockEntry(
+      key: key,
+      sourceSha256: entry['source_sha256'] as String,
+      outputSha256: entry['output_sha256'] as String,
+      url: entry['url'] as String?,
+    );
+  }
+
+  final String key;
+
+  /// SHA-256 of the upstream archive; also the installed engine's identity.
+  final String sourceSha256;
+
+  /// SHA-256 of the bundled `.gz` asset.
+  final String outputSha256;
+  final String? url;
+
+  /// What the `.origin` stamp next to the installed binary records.
+  String get identity => '$key:$sourceSha256';
 }
 
 /// Extracts or downloads Stockfish into the app support directory.
@@ -72,20 +118,10 @@ class StockfishBundle {
   /// Cached after the first success. Must run on the main isolate (assets /
   /// path_provider). Subsequent pool workers should reuse the returned path.
   static Future<String> ensureExecutable() async {
-    if (_cachedPath != null) return _cachedPath!;
+    if (_cachedPath case final cached?) return cached;
 
     final binaryName = stockfishBinaryName();
-    final key = stockfishLockKey();
-    final lock = await _loadLock();
-    final entry = lock[key];
-    if (entry is! Map ||
-        entry['source_sha256'] is! String ||
-        entry['output_sha256'] is! String) {
-      throw StateError(
-        'Missing Stockfish checksums for $key in $kStockfishLockAsset',
-      );
-    }
-    final identity = '$key:${entry['source_sha256']}';
+    final entry = _LockEntry.fromLock(await _loadLock(), stockfishLockKey());
     final dir = await AppPaths.supportDirectory();
     final file = File(p.join(dir.path, binaryName));
     final stamp = File('${file.path}.origin');
@@ -94,41 +130,29 @@ class StockfishBundle {
       final stamped = await stamp.exists()
           ? (await stamp.readAsString()).trim()
           : null;
-      if (stamped == identity) {
-        _cachedPath = file.path;
-        return _cachedPath!;
-      }
-      log.i('Refreshing Stockfish ($stamped → $identity)');
+      if (stamped == entry.identity) return _cachedPath = file.path;
+      log.i('Refreshing Stockfish ($stamped → ${entry.identity})');
       await file.delete();
     }
 
     await file.parent.create(recursive: true);
     log.i('Installing Stockfish to ${file.path}...');
 
-    Object? bundleError;
+    var downloaded = false;
     try {
-      await _extractFromAssetBundle(
-        binaryName,
-        file.path,
-        entry['output_sha256'] as String,
-      );
+      await _extractFromAssetBundle(binaryName, file.path, entry.outputSha256);
     } catch (e) {
-      bundleError = e;
-      log.i(
-        'Bundled Stockfish missing ($e); downloading ${stockfishLockKey()}…',
-      );
-      await _downloadFromLockfile(key, file.path);
+      downloaded = true;
+      log.i('Bundled Stockfish missing ($e); downloading ${entry.key}…');
+      await _downloadFromLockfile(entry, file.path);
     }
 
     if (!Platform.isWindows) {
       await Process.run('chmod', ['+x', file.path]);
     }
-    await stamp.writeAsString(identity);
-    _cachedPath = file.path;
-    if (bundleError != null) {
-      log.i('Stockfish downloaded for local/unbundled run');
-    }
-    return _cachedPath!;
+    await stamp.writeAsString(entry.identity);
+    if (downloaded) log.i('Stockfish downloaded for local/unbundled run');
+    return _cachedPath = file.path;
   }
 
   static Future<void> _extractFromAssetBundle(
@@ -145,7 +169,7 @@ class StockfishBundle {
     );
     await Isolate.run(() {
       if (sha256.convert(compressed).toString() != expectedSha) {
-        throw StateError(
+        throw StockfishInstallError(
           'Bundled Stockfish does not match $kStockfishLockAsset',
         );
       }
@@ -155,21 +179,13 @@ class StockfishBundle {
   }
 
   static Future<void> _downloadFromLockfile(
-    String key,
+    _LockEntry entry,
     String targetPath,
   ) async {
-    final lock = await _loadLock();
-    final entry = lock[key];
-    if (entry is! Map) {
-      throw StateError(
-        'No $key in $kStockfishLockAsset. Run: python3 tools/fetch_assets.py',
-      );
-    }
-    final url = entry['url'] as String?;
+    final url = entry.url;
     if (url == null || url.isEmpty) {
-      throw StateError('Lockfile $key has no url');
+      throw StockfishInstallError('Lockfile ${entry.key} has no url');
     }
-    final expectedSha = entry['source_sha256'] as String?;
 
     final tmp = File('$targetPath.download');
     try {
@@ -179,11 +195,11 @@ class StockfishBundle {
           archivePath: tmp.path,
           targetPath: targetPath,
           url: url,
-          expectedSha: expectedSha,
+          expectedSha: entry.sourceSha256,
         );
       });
     } catch (e) {
-      throw StateError(
+      throw StockfishInstallError(
         'Could not install Stockfish. On a source checkout run '
         '`python3 tools/fetch_assets.py`, or check the network.\n$e',
       );
@@ -192,6 +208,8 @@ class StockfishBundle {
     }
   }
 
+  /// The lockfile from the asset bundle, or from the source tree when running
+  /// unbundled (tests, `flutter run` from a checkout).
   static Future<Map<String, dynamic>> _loadLock() async {
     try {
       final json = await rootBundle.loadString(kStockfishLockAsset);
@@ -212,8 +230,8 @@ class StockfishBundle {
       final request = http.Request('GET', url);
       request.headers['User-Agent'] = 'chess-auto-prep-fetch';
       final response = await client.send(request);
-      if (response.statusCode != 200) {
-        throw StateError(
+      if (response.statusCode != HttpStatus.ok) {
+        throw StockfishInstallError(
           'Stockfish download HTTP ${response.statusCode} from $url',
         );
       }
@@ -234,12 +252,12 @@ void _unpackDownloadedArchive({
   required String archivePath,
   required String targetPath,
   required String url,
-  required String? expectedSha,
+  required String expectedSha,
 }) {
   final archiveBytes = File(archivePath).readAsBytesSync();
   final digest = sha256.convert(archiveBytes).toString();
-  if (expectedSha != null && digest != expectedSha) {
-    throw StateError(
+  if (digest != expectedSha) {
+    throw StockfishInstallError(
       'Stockfish checksum mismatch for $url\n'
       '  expected $expectedSha\n  got      $digest',
     );

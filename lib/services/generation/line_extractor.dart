@@ -227,9 +227,6 @@ class LineExtractor {
   /// Eval gaps beyond this add no extra only-move weight.
   static const int _sharpnessCapCp = 200;
 
-  /// An our-move this far ahead of every alternative is effectively forced.
-  ///
-
   /// Upper bound on lines one extraction will produce.  A safety valve
   /// against a pathological tree, not a tuning knob: a real 31.8k-node
   /// build yields a few hundred.  When it is hit, [wasTruncated] says so
@@ -325,14 +322,19 @@ class LineExtractor {
   static Set<String> _playedPrefixes(List<ExtractedLine> lines) {
     final played = <String>{};
     for (final line in lines) {
-      final buffer = StringBuffer();
-      for (var i = 0; i < line.movesSan.length; i++) {
-        if (i > 0) buffer.write(' ');
-        buffer.write(line.movesSan[i]);
-        played.add(buffer.toString());
-      }
+      _addMoveOrderPrefixes(line.movesSan, played);
     }
     return played;
+  }
+
+  /// Add every non-empty prefix of [moves] (space-joined) to [into].
+  static void _addMoveOrderPrefixes(List<String> moves, Set<String> into) {
+    final buffer = StringBuffer();
+    for (var i = 0; i < moves.length; i++) {
+      if (i > 0) buffer.write(' ');
+      buffer.write(moves[i]);
+      into.add(buffer.toString());
+    }
   }
 
   /// First pass: the same traversal as [_extractDfs], recording for every
@@ -359,9 +361,7 @@ class LineExtractor {
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     if (isOurMove) {
-      final selected = resolved.children
-          .where((c) => c.isRepertoireMove)
-          .firstOrNull;
+      final selected = _selectedChild(resolved);
       if (selected != null) {
         movesSan.add(selected.moveSan);
         _ownerDfs(
@@ -387,6 +387,10 @@ class LineExtractor {
     }
     leaveFenPath(key, visited);
   }
+
+  /// The repertoire move at an our-move [position], if selection chose one.
+  static BuildTreeNode? _selectedChild(BuildTreeNode position) =>
+      position.children.where((c) => c.isRepertoireMove).firstOrNull;
 
   /// Opponent replies below the reach floor are not exported unless the
   /// coverage floor forced an answer for them.
@@ -510,9 +514,7 @@ class LineExtractor {
     if (!cycle) {
       final key = enterFenPath(resolved, visited);
       if (isOurMove) {
-        final selected = resolved.children
-            .where((c) => c.isRepertoireMove)
-            .firstOrNull;
+        final selected = _selectedChild(resolved);
         if (selected != null) {
           pushedAny = true;
           final gapCp = _annotator.leadOverAlternatives(resolved, selected);
@@ -628,12 +630,7 @@ class LineExtractor {
       ];
     }
 
-    final prefix = StringBuffer();
-    for (var i = 0; i < path.movesSan.length; i++) {
-      if (i > 0) prefix.write(' ');
-      prefix.write(path.movesSan[i]);
-      _playedMoveOrders.add(prefix.toString());
-    }
+    _addMoveOrderPrefixes(path.movesSan, _playedMoveOrders);
     lines.add(
       ExtractedLine(
         movesSan: List.unmodifiable(path.movesSan),

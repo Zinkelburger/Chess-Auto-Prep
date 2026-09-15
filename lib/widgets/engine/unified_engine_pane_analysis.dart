@@ -255,7 +255,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       _probabilityService.currentPosition.value = cached.dbResponse;
 
       _analysis.poolStatus.value = PoolStatus(
-        phase: 'complete',
+        phase: PoolPhase.complete,
         totalMoves: cached.selectedMoveUcis.length,
         completedMoves: cached.poolResults.length,
       );

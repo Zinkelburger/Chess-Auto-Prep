@@ -46,7 +46,8 @@ class MasterPracticeController extends ChangeNotifier with SafeChangeNotifier {
   MasterPracticeEntry? get selected => _selected;
   MasterGamesStats? get stats => _service.stats;
 
-  MasterPracticeReviewer? _reviewerFor(MasterGamesDb db) => _reviewer ??=
+  /// The injected reviewer, or one over [db] built on first use and kept.
+  MasterPracticeReviewer _reviewerFor(MasterGamesDb db) => _reviewer ??=
       MasterPracticeReviewer(lookup: db.bookMoves, gameById: db.game);
 
   /// Walk [games] and select the first entry worth looking at.
@@ -57,7 +58,7 @@ class MasterPracticeController extends ChangeNotifier with SafeChangeNotifier {
       notifyListeners();
       return;
     }
-    final reviewer = _reviewerFor(db)!;
+    final reviewer = _reviewerFor(db);
     _loading = true;
     _cancelled = false;
     _error = null;
@@ -68,11 +69,10 @@ class MasterPracticeController extends ChangeNotifier with SafeChangeNotifier {
         isCancelled: () => _cancelled,
       );
       _review = result;
-      _selected = result.mine.isNotEmpty
-          ? result.mine.first
-          : result.theirs.isNotEmpty
-          ? result.theirs.first
-          : result.inBook.firstOrNull;
+      _selected =
+          result.mine.firstOrNull ??
+          result.theirs.firstOrNull ??
+          result.inBook.firstOrNull;
     } catch (e) {
       _error = 'Could not check your games: $e';
       _review = null;
@@ -94,21 +94,17 @@ class MasterPracticeController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   /// Write [entry]'s key games as one PGN collection and return its path and
-  /// the index of [focus] in it, for the viewer.
+  /// the index of [focus] in it (0 when [focus] is not among them), for the
+  /// viewer.
   Future<({String path, int index})> writeKeyGames(
     MasterPracticeEntry entry, {
     required MasterGame focus,
   }) async {
     final dir = await AppPaths.pgnCollectionsDirectory(create: true);
     final file = File(p.join(dir.path, collectionName));
-    final buffer = StringBuffer();
-    var index = 0;
-    for (var i = 0; i < entry.keyGames.length; i++) {
-      final game = entry.keyGames[i].game;
-      if (game.id == focus.id) index = i;
-      buffer.write(game.toPgn());
-    }
-    await writeTextFileAtomically(file, buffer.toString());
-    return (path: file.path, index: index);
+    final games = [for (final key in entry.keyGames) key.game];
+    final index = games.indexWhere((g) => g.id == focus.id);
+    await writeTextFileAtomically(file, games.map((g) => g.toPgn()).join());
+    return (path: file.path, index: index < 0 ? 0 : index);
   }
 }

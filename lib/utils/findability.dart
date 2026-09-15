@@ -7,6 +7,8 @@
 /// it caps at 1.0, so a findable move is never boosted.
 library;
 
+import 'piecewise_linear.dart';
+
 /// (elo, pRef) anchor points, elo ascending.  A 600 needs ~1-in-8 play
 /// probability before a move counts as findable; a 2600 finds nearly
 /// everything.
@@ -21,21 +23,8 @@ const List<(int, double)> kFindabilityAnchors = [
 
 /// Piecewise-linear interpolation of the findability bar at [elo], clamped
 /// to the anchor range.
-double pRefForElo(int elo) {
-  final first = kFindabilityAnchors.first;
-  final last = kFindabilityAnchors.last;
-  if (elo <= first.$1) return first.$2;
-  if (elo >= last.$1) return last.$2;
-  for (var i = 0; i < kFindabilityAnchors.length - 1; i++) {
-    final lo = kFindabilityAnchors[i];
-    final hi = kFindabilityAnchors[i + 1];
-    if (elo >= lo.$1 && elo <= hi.$1) {
-      final t = (elo - lo.$1) / (hi.$1 - lo.$1);
-      return lo.$2 + t * (hi.$2 - lo.$2);
-    }
-  }
-  return last.$2;
-}
+double pRefForElo(int elo) =>
+    interpolatePiecewiseLinear(kFindabilityAnchors, elo);
 
 /// Demote-only findability weight: `min(1, p / pRef)`.
 ///

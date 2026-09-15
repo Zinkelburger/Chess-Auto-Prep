@@ -8,6 +8,7 @@ import 'package:dartchess/dartchess.dart';
 
 import '../services/eval/eval_canonicalize.dart' show canonicalizeFen4;
 import 'eval_constants.dart' show cpToMate;
+import 'lru_map.dart';
 
 /// Convert a UCI move string (e.g. `e2e4`) to SAN notation given [fen].
 ///
@@ -40,18 +41,13 @@ String uciToSan(String fen, String uci) => uciToSanOrNull(fen, uci) ?? uci;
 /// every candidate move on every notifier tick during a live search (its
 /// merged-move map is rebuilt each tick, so the cached `san` field is always
 /// empty); `(fen, uci)` fully determines the result, so caching is safe.
-final Map<String, String> _uciSanCache = {};
-const int _uciSanCacheMax = 2048;
+///
+/// Both memos live for the process: a chess position's SAN never changes, so
+/// there is nothing to invalidate, only a cap to stay under.
+final _uciSanCache = LruMap<String, String>(maxEntries: 2048);
 
-String uciToSanCached(String fen, String uci) {
-  final key = '$fen|$uci';
-  final hit = _uciSanCache[key];
-  if (hit != null) return hit;
-  if (_uciSanCache.length >= _uciSanCacheMax) _uciSanCache.clear();
-  final san = uciToSan(fen, uci);
-  _uciSanCache[key] = san;
-  return san;
-}
+String uciToSanCached(String fen, String uci) =>
+    _uciSanCache.putIfAbsent('$fen|$uci', () => uciToSan(fen, uci));
 
 /// Convert a SAN move to standard UCI in the position given by [fen].
 ///
@@ -65,38 +61,6 @@ String? sanToUci(String fen, String san) {
     return moveToStandardUci(position, move);
   } catch (_) {
     return null;
-  }
-}
-
-/// Format a PV continuation (skip the first move) as SAN text.
-///
-/// Returns at most [maxMoves] SAN tokens joined by spaces.
-String formatContinuation(String fen, List<String> fullPv, {int maxMoves = 6}) {
-  if (fullPv.length <= 1) return '';
-
-  try {
-    Position pos = Chess.fromSetup(Setup.parseFen(fen));
-    final sanMoves = <String>[];
-
-    for (int i = 0; i < fullPv.length && sanMoves.length < maxMoves; i++) {
-      final uci = fullPv[i];
-      final move = Move.parse(uci);
-      if (move == null) break;
-
-      try {
-        if (i >= 1) {
-          final (_, san) = pos.makeSan(move);
-          sanMoves.add(san);
-        }
-        pos = pos.play(move);
-      } catch (_) {
-        break;
-      }
-    }
-
-    return sanMoves.join(' ');
-  } catch (_) {
-    return '';
   }
 }
 
@@ -334,19 +298,16 @@ List<String> uciPvToSan(String fen, List<String> uciMoves, {int maxMoves = 8}) {
 /// engine search the same (position, PV) recurs on every widget rebuild —
 /// several MultiPV lines re-parsing the FEN and replaying the line each frame
 /// is what drops frames. The key `(fen, pv)` fully determines the output, so
-/// caching is always correct; the map is cleared wholesale past a size cap.
-final Map<String, List<String>> _pvSanCache = {};
-const int _pvSanCacheMax = 512;
+/// caching is always correct; the least recently used lines go first past the
+/// size cap.
+final _pvSanCache = LruMap<String, List<String>>(maxEntries: 512);
 
 List<String> uciPvToSanCached(String fen, List<String> uciMoves) {
   if (uciMoves.isEmpty) return const [];
-  final key = '$fen|${uciMoves.join(' ')}';
-  final hit = _pvSanCache[key];
-  if (hit != null) return hit;
-  if (_pvSanCache.length >= _pvSanCacheMax) _pvSanCache.clear();
-  final san = uciPvToSan(fen, uciMoves, maxMoves: uciMoves.length);
-  _pvSanCache[key] = san;
-  return san;
+  return _pvSanCache.putIfAbsent(
+    '$fen|${uciMoves.join(' ')}',
+    () => uciPvToSan(fen, uciMoves, maxMoves: uciMoves.length),
+  );
 }
 
 /// Format a large integer with k/M suffixes, using [mDecimals] decimal places

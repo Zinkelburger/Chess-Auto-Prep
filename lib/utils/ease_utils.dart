@@ -17,11 +17,7 @@ const double kEaseBeta = 1.5;
 ///
 /// Maps large scores (mate) to +/-1 and uses a logistic curve for normal
 /// centipawn values. Uses [kWinProbK] for consistency with [winProbability].
-double scoreToQ(int cp) {
-  if (cp.abs() > kMateSaturationCp) return cp > 0 ? 1.0 : -1.0;
-  final winProb = 1.0 / (1.0 + math.exp(-kWinProbK * cp));
-  return 2.0 * winProb - 1.0;
-}
+double scoreToQ(int cp) => 2.0 * winProbability(cp) - 1.0;
 
 /// Win probability sigmoid used by expectimax value propagation.
 ///

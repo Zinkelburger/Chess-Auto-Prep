@@ -20,10 +20,5 @@ enum BoardSize {
   final double widthFactor;
 
   /// Parse a persisted [name], falling back to [large] (the classic layout).
-  static BoardSize fromName(String? name) {
-    for (final size in values) {
-      if (size.name == name) return size;
-    }
-    return large;
-  }
+  static BoardSize fromName(String? name) => values.asNameMap()[name] ?? large;
 }
