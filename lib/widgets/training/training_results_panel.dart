@@ -1,3 +1,5 @@
+import '../../utils/app_shortcuts.dart';
+import '../shortcut_tooltip.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/repertoire_line.dart';
@@ -439,13 +441,22 @@ class TrainingRatingButtons extends StatelessWidget {
             for (final (rating, label, color) in _ratings)
               SizedBox(
                 width: tileWidth,
-                child: _RatingButton(
-                  rating: rating,
-                  label: label,
-                  color: color,
-                  previewEntry: previewEntry,
-                  reviewService: reviewService,
-                  onRateLine: onRateLine,
+                child: ShortcutTooltip(
+                  description: label,
+                  shortcut: switch (rating) {
+                    ReviewRating.again => AppShortcut.rateAgain,
+                    ReviewRating.hard => AppShortcut.rateHard,
+                    ReviewRating.good => AppShortcut.rateGood,
+                    ReviewRating.easy => AppShortcut.rateEasy,
+                  },
+                  child: _RatingButton(
+                    rating: rating,
+                    label: label,
+                    color: color,
+                    previewEntry: previewEntry,
+                    reviewService: reviewService,
+                    onRateLine: onRateLine,
+                  ),
                 ),
               ),
           ],

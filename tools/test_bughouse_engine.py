@@ -54,7 +54,7 @@ NETWORK = "hivemind.onnx"
 # The engine's directory is the first place every platform's loader looks, so
 # a dependency is "covered" when it is one of these, or when the OS itself
 # guarantees it.
-BESIDE_THE_ENGINE = {"onnxruntime.dll", "libonnxruntime.so.1", "libonnxruntime.dylib"}
+BESIDE_THE_ENGINE = {"hivemind_ort.dll", "libonnxruntime.so.1", "libonnxruntime.dylib"}
 
 # Deployed beside the engine by BughouseBundle.installWindowsRuntime, copied
 # from the app's own directory where windows/CMakeLists.txt puts them. Named
@@ -254,6 +254,8 @@ def audit_target(name: str, workdir: Path) -> list[str]:
     }
 
     if name == "bughouse-windows":
+        if "onnxruntime.dll" in [dll.lower() for dll in pe_imports(files["engine"].read_bytes())]:
+            fail("Windows engine still implicitly imports onnxruntime.dll")
         for role, path in files.items():
             for dll in pe_imports(path.read_bytes()):
                 low = dll.lower()

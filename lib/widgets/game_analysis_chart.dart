@@ -5,6 +5,8 @@
 /// blunders with colored dots. Clicking a point navigates to that move.
 library;
 
+import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
+
 import 'dart:async';
 
 import 'package:fl_chart/fl_chart.dart';
@@ -324,9 +326,9 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
             return Scrollbar(
               controller: _scrollController,
               thumbVisibility: _chartWidth > _availableWidth,
-              child: SingleChildScrollView(
+              child: HorizontalWheelScroll(
                 controller: _scrollController,
-                scrollDirection: Axis.horizontal,
+
                 child: SizedBox(width: _chartWidth, child: chart),
               ),
             );

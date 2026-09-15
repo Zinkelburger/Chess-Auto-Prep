@@ -406,7 +406,7 @@ class MistakeCounts extends StatelessWidget {
       style: AppTextStyles.body.copyWith(
         fontSize: 14,
         fontWeight: value > 0 ? FontWeight.w600 : FontWeight.w400,
-        color: value > 0 ? color : AppColors.onSurfaceDisabled,
+        color: value > 0 ? color : AppColors.onSurfaceMuted,
       ),
     ),
   );
@@ -480,7 +480,7 @@ class ReviewCounts extends StatelessWidget {
 
   Widget _row(int count, String word, Color color) {
     final any = count > 0;
-    final ink = any ? AppColors.ink : AppColors.onSurfaceDisabled;
+    final ink = any ? AppColors.ink : AppColors.onSurfaceMuted;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
@@ -490,7 +490,7 @@ class ReviewCounts extends StatelessWidget {
             height: 8,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: any ? color : AppColors.onSurfaceDisabled,
+              color: any ? color : AppColors.onSurfaceMuted,
             ),
           ),
           const SizedBox(width: 8),

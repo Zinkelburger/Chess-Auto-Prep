@@ -26,9 +26,8 @@ bool get isPrimaryModifierPressed {
 /// Always dispatch through [handleKeyBindings], which enforces the app-wide
 /// safety rules — most importantly that **no binding ever fires while a text
 /// field has focus**, so shortcuts can never eat typed characters. Never wire
-/// single-key shortcuts through Flutter's [Shortcuts]/[CallbackShortcuts]
-/// widgets: those intercept keys before descendant text fields see them
-/// (that bug once made "e" un-typeable in the tactics import form).
+/// bare-letter shortcuts without this guard: key dispatch happens before
+/// platform text input, including when using [Shortcuts]/[CallbackShortcuts].
 @immutable
 class KeyBinding {
   const KeyBinding(
@@ -200,6 +199,16 @@ final Set<LogicalKeyboardKey> _chessMoveTextKeys = {
   LogicalKeyboardKey.keyQ,
   LogicalKeyboardKey.keyR,
   LogicalKeyboardKey.keyX,
+  LogicalKeyboardKey.digit0,
+  LogicalKeyboardKey.numpad0,
+  LogicalKeyboardKey.numpad1,
+  LogicalKeyboardKey.numpad2,
+  LogicalKeyboardKey.numpad3,
+  LogicalKeyboardKey.numpad4,
+  LogicalKeyboardKey.numpad5,
+  LogicalKeyboardKey.numpad6,
+  LogicalKeyboardKey.numpad7,
+  LogicalKeyboardKey.numpad8,
   LogicalKeyboardKey.digit1,
   LogicalKeyboardKey.digit2,
   LogicalKeyboardKey.digit3,
@@ -255,7 +264,7 @@ bool debugAssertNoDeadBindings(List<KeyBinding> bindings) {
   return true;
 }
 
-/// Handler for `MoveInputWidget.onNavigationKey`: runs only the bindings
+/// Navigation dispatch for a focused move field: runs only the bindings
 /// that are [KeyBinding.safeWhileTypingMoves], so shortcuts on non-move keys
 /// (Space, S, J, arrows, …) keep working while a move is being typed, and
 /// move characters ("e4", "Nf3") always type normally. Returns true when a

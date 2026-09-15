@@ -46,88 +46,32 @@ void main() {
     expect(find.text('Save token'), findsOneWidget);
   });
 
-  testWidgets('the usernames section is a summary and a button', (
+  testWidgets('usernames are editable inline and saved explicitly', (
     tester,
   ) async {
-    await pumpSection(tester, const ChessUsernamesSection());
-
-    expect(find.text('Log into Lichess'), findsNothing);
-    expect(find.text('No usernames set'), findsOneWidget);
-    expect(find.text('Set up…'), findsOneWidget);
-    // The boxes are in the dialog, not on the settings page.
-    expect(find.byType(TextField), findsNothing);
-  });
-
-  testWidgets('the dialog commits both usernames on Save', (tester) async {
-    final appState = await pumpSection(tester, const ChessUsernamesSection());
-
-    await tester.tap(find.text('Set up…'));
-    await tester.pumpAndSettle();
-
+    final app = await pumpSection(tester, const ChessUsernamesSection());
+    addTearDown(app.dispose);
+    expect(find.byType(AlertDialog), findsNothing);
     await tester.enterText(
       find.byKey(const Key('lichess-username-field')),
-      '  MyLichessName ',
+      '  Alice  ',
     );
     await tester.enterText(
       find.byKey(const Key('chesscom-username-field')),
-      'MyChesscomName',
+      'Bob',
     );
-    // Nothing is saved while typing — Save is the commit.
-    expect(appState.lichessUsername, isNull);
-
+    expect(app.lichessUsername, isNull);
     await tester.tap(find.byKey(const Key('accounts-save-button')));
     await tester.pumpAndSettle();
-
-    expect(appState.lichessUsername, 'MyLichessName');
-    expect(appState.chesscomUsername, 'MyChesscomName');
-    expect(find.text('Lichess: MyLichessName'), findsNothing);
-    expect(
-      find.textContaining('MyLichessName'),
-      findsOneWidget,
-      reason: 'the tile now names what was saved',
-    );
-
-    // Clearing a box clears the saved default rather than storing ''.
-    await tester.tap(find.text('Change…'));
-    await tester.pumpAndSettle();
+    expect(app.lichessUsername, 'Alice');
+    expect(app.chesscomUsername, 'Bob');
+    expect(find.text('Usernames saved.'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('lichess-username-field')), '');
+    await tester.pump();
+    expect(find.text('Usernames saved.'), findsNothing);
     await tester.tap(find.byKey(const Key('accounts-save-button')));
     await tester.pumpAndSettle();
-    expect(appState.lichessUsername, isNull);
-  });
-
-  testWidgets('Cancel leaves the saved names alone', (tester) async {
-    final appState = await pumpSection(tester, const ChessUsernamesSection());
-
-    await tester.tap(find.text('Set up…'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('lichess-username-field')),
-      'typed-then-abandoned',
-    );
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
-    expect(appState.lichessUsername, isNull);
-  });
-
-  testWidgets('the tile names what is already configured', (tester) async {
-    SharedPreferences.setMockInitialValues({'lichess_username': 'prefilled'});
-    final appState = AppState();
-    await appState.loadUsernames();
-
-    await tester.pumpWidget(
-      ChangeNotifierProvider<AppState>.value(
-        value: appState,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(child: ChessUsernamesSection()),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('Lichess: prefilled'), findsOneWidget);
-    expect(find.text('Change…'), findsOneWidget);
+    expect(app.lichessUsername, isNull);
+    expect(tester.takeException(), isNull);
   });
 }

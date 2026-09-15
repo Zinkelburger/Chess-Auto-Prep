@@ -22,7 +22,7 @@ void main() {
     workingDirectory: r'C:\support\bughouse',
     exitCode: -1073741701,
     spoke: false,
-    directory: ['onnxruntime.dll 16149344 bytes'],
+    directory: ['hivemind_ort.dll 16149344 bytes'],
     libraries: [],
     stdout: [],
     stderr: ['last raw stderr line'],

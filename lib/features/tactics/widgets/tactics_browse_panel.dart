@@ -5,6 +5,7 @@ import '../../../utils/san_display.dart';
 import '../models/tactics_position.dart';
 import '../../../theme/app_colors.dart';
 import '../../../widgets/common/list_search_field.dart';
+import '../../../widgets/common/item_title.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
 import 'puzzle_stats_display.dart';
@@ -111,7 +112,12 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) =>
+        _buildContents(context, constraints.maxWidth),
+  );
+
+  Widget _buildContents(BuildContext context, double width) {
     final positions = widget.positions;
 
     if (positions.isEmpty) {
@@ -197,14 +203,14 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
           ),
         ),
         const Divider(height: 1),
-        const TacticsBrowseHeader(),
+        if (width >= 760) const TacticsBrowseHeader(),
         const Divider(height: 1),
         Expanded(
           child: ListView.builder(
             itemCount: visibleIndices.length,
             // Fixed row height lets the list lay out without measuring every
             // child — noticeably snappier with board previews.
-            itemExtent: 68,
+            itemExtent: width < 760 ? 108 : 68,
             itemBuilder: (context, visIdx) {
               final realIndex = visibleIndices[visIdx];
               final pos = positions[realIndex];

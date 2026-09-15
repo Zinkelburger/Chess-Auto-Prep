@@ -75,7 +75,7 @@ class ExplorerGameOpener {
     ExplorerGame game, {
     required String fen,
   }) async {
-    final pgn = await _pgnFor(game);
+    final pgn = await fetchPgn(game);
     if (pgn == null) return null;
 
     final dir = await _collectionsDirectory();
@@ -95,7 +95,8 @@ class ExplorerGameOpener {
     );
   }
 
-  Future<String?> _pgnFor(ExplorerGame game) async => switch (game.source) {
+  /// Fetch a reference PGN without adding it to a collection.
+  Future<String?> fetchPgn(ExplorerGame game) async => switch (game.source) {
     ExplorerGameSource.twic => _localPgn(game.id),
     ExplorerGameSource.masters => _client.fetchGamePgn(game.id, masters: true),
     ExplorerGameSource.lichess => _client.fetchGamePgn(game.id, masters: false),

@@ -137,7 +137,7 @@ void main() {
     // No chooser dialog in between: the menu opens right here, and with
     // nothing in the app it says so instead of dead-ending.
     await openAddExisting(tester);
-    expect(find.text('New empty repertoire…'), findsOneWidget);
+    expect(find.text('New repertoire'), findsNWidgets(2));
     expect(find.byType(AlertDialog), findsNothing);
   });
 
@@ -145,8 +145,7 @@ void main() {
     tester,
   ) async {
     await pumpPanel(tester);
-    await openAddExisting(tester);
-    await tester.tap(find.text('New empty repertoire…'));
+    await tester.tap(find.text('New repertoire').first);
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -178,8 +177,7 @@ void main() {
       ),
     ];
     await pumpPanel(tester);
-    await openAddExisting(tester);
-    await tester.tap(find.text('New empty repertoire…'));
+    await tester.tap(find.text('New repertoire').first);
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('repertoire-name-field')),

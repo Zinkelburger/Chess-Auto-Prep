@@ -71,7 +71,7 @@ def binary_name() -> str:
 
 def runtime_name() -> str:
     return {
-        "Windows": "onnxruntime.dll",
+        "Windows": "hivemind_ort.dll",
         "Darwin": "libonnxruntime.dylib",
     }.get(platform.system(), "libonnxruntime.so.1")
 

@@ -19,7 +19,7 @@ void main() {
   const manifest = 'assets/bughouse/manifest.json';
 
   String runtimeKey() {
-    if (Platform.isWindows) return 'assets/bughouse/onnxruntime.dll.gz';
+    if (Platform.isWindows) return 'assets/bughouse/hivemind_ort.dll.gz';
     if (Platform.isMacOS) return 'assets/bughouse/libonnxruntime.dylib.gz';
     return 'assets/bughouse/libonnxruntime.so.1.gz';
   }
@@ -118,7 +118,7 @@ void main() {
   });
 
   group('the Visual C++ runtime the Windows engine needs', () {
-    // onnxruntime.dll imports MSVCP140.dll, MSVCP140_1.dll, VCRUNTIME140.dll
+    // hivemind_ort.dll imports MSVCP140.dll, MSVCP140_1.dll, VCRUNTIME140.dll
     // and VCRUNTIME140_1.dll. None of them is part of a clean Windows
     // install; windows/CMakeLists.txt deploys them beside the app, and the
     // engine is a separate process in a different directory, which resolves
@@ -144,10 +144,10 @@ void main() {
     });
 
     test('leaves everything else where it is', () {
-      // Copying the app's own onnxruntime.dll (Maia's) beside the engine
+      // Copying the app's own hivemind_ort.dll (Maia's) beside the engine
       // would shadow the engine's own with a different build.
       for (final name in [
-        'onnxruntime.dll',
+        'hivemind_ort.dll',
         'flutter_windows.dll',
         'chess_auto_prep.exe',
         'msvcp140.txt',

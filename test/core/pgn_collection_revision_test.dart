@@ -187,6 +187,11 @@ void main() {
     () async {
       StorageFactory.instanceForTest = _IndexedStorage(game.pgnText);
       await controller.loadFile('/virtual/games.pgn', restoreSavedSlice: false);
+      // The persisted index is restored by the deferred collection
+      // preparation, which runs after the game is already on screen.
+      while (controller.isPreparingCollection) {
+        await Future<void>.delayed(Duration.zero);
+      }
       final index = controller.fenIndex;
       expect(index, isNotNull);
 

@@ -48,6 +48,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final CoherenceResult? coherenceResult;
   final bool isAnalysisActive;
   final bool embedAnalysisDock;
+  final bool showToolbar;
 
   /// Read-only header shown instead of the title field for ephemeral lines
   /// (e.g. "Trap #45 · Sicilian Defense").
@@ -78,6 +79,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
     this.coherenceResult,
     required this.isAnalysisActive,
     this.embedAnalysisDock = true,
+    this.showToolbar = true,
     this.ephemeralTitle,
   });
 
@@ -135,7 +137,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildToolbar(),
+        if (widget.showToolbar) _buildToolbar(),
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -253,6 +255,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       repertoireColor: widget.repertoireColor,
       isEditingExistingLine: widget.isEditingExistingLine,
       onLineEdited: widget.onLineEdited,
+      onPendingAutoSaveChanged: widget.controller.setPendingLineSave,
       onViewInLines: widget.onViewInLines,
       ephemeralTitle: widget.ephemeralTitle,
     );

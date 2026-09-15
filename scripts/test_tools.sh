@@ -16,6 +16,7 @@ TESTS=(
   tools/verify_maia_model.py
   tools/test_vc_redist.py
   tools/test_package_bughouse_runtime.py
+  tools/test_windows_ort_bundle.py
   tools/mcp/test_chess_prep.py
   tools/mcp/test_opening_tree.py
   tools/mcp/test_expectimax.py

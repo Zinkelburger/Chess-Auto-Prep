@@ -168,6 +168,22 @@ class DatabaseCard extends StatelessWidget {
                   const SizedBox(height: 10),
                   _actions(),
                 ],
+                if (menu.isNotEmpty)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final action in menu)
+                        TextButton.icon(
+                          onPressed: action.enabled ? action.onRun : null,
+                          icon: Icon(
+                            action.icon ?? Icons.chevron_right,
+                            size: 16,
+                          ),
+                          label: Text(action.label),
+                        ),
+                    ],
+                  ),
                 if (details != null) ...[
                   const SizedBox(height: 4),
                   _detailsTile(context),
@@ -228,10 +244,6 @@ class DatabaseCard extends StatelessWidget {
               Text(freshness!, style: AppTextStyles.caption),
           ],
         ),
-        if (menu.isNotEmpty && !unavailable) ...[
-          const SizedBox(width: 4),
-          AppOverflowMenu(entries: menu),
-        ],
       ],
     );
   }
@@ -287,17 +299,10 @@ class DatabaseCard extends StatelessWidget {
   /// build ("ListTile background color or ink splashes may be invisible").
   /// The only thing this needs to change is the divider the tile draws for
   /// itself, which doubles up with the card's own border.
-  Widget _detailsTile(BuildContext context) {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(top: 4, bottom: 8),
-        title: Text(detailsLabel, style: AppTextStyles.caption),
-        children: [details!],
-      ),
-    );
-  }
+  Widget _detailsTile(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8, bottom: 8),
+    child: details!,
+  );
 
   Widget _reasonBanner(String message) {
     return Container(

@@ -2,10 +2,9 @@
 /// keyboard navigation, and selected-state highlighting.
 ///
 /// Lives in the bottom pane Findings tab. Receives results from the screen
-/// state; does not own the audit service. Findings are sorted by reach
-/// probability (cumulative likelihood of the line occurring) and capped at
-/// a user-configurable limit (default 20). As the user dismisses findings,
-/// lower-probability ones surface automatically.
+/// state; does not own the audit service. Findings are searchable, sorted by
+/// severity by default (or estimated frequency), and capped at a configurable
+/// limit. Dismissing findings brings the next items into the review queue.
 library;
 
 import 'dart:async';
@@ -13,6 +12,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
+import '../../../widgets/common/list_search_field.dart';
+import '../services/audit_config.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
 import '../../../widgets/common/anchor_menu.dart';
@@ -32,6 +34,10 @@ class AuditFindingsPanel extends StatefulWidget {
   final bool isAuditing;
   final int auditNodesChecked;
   final int auditTotalNodes;
+  final String? errorText;
+  final String? chapterName;
+  final bool subtreeOnly;
+  final AuditConfig? config;
 
   /// Called when a finding is selected. Passes the full finding so the screen
   /// can handle ephemeral missing-move preview, navigation, etc.
@@ -52,6 +58,10 @@ class AuditFindingsPanel extends StatefulWidget {
     this.isAuditing = false,
     this.auditNodesChecked = 0,
     this.auditTotalNodes = 0,
+    this.errorText,
+    this.chapterName,
+    this.subtreeOnly = false,
+    this.config,
     this.onFindingSelected,
     this.onResultChanged,
     this.onRerunAudit,
@@ -67,6 +77,8 @@ class AuditFindingsPanel extends StatefulWidget {
 
 class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   int _selectedIndex = -1;
+  String _search = '';
+  bool _sortByFrequency = false;
   bool _hideDismissed = true;
 
   /// Active type filters. Empty set = show all types.
@@ -110,6 +122,9 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
 
   bool _matchesFilters(AuditFinding f) {
     if (_hideDismissed && f.dismissed) return false;
+    if (!matchesSearch(_search, '${f.summary} ${f.movePathString}')) {
+      return false;
+    }
     if (_activeFilters.isNotEmpty && !_activeFilters.contains(f.type)) {
       return false;
     }
@@ -122,15 +137,27 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   }
 
   void _recomputeVisible() {
+    final selected =
+        _selectedIndex >= 0 && _selectedIndex < _visibleFindings.length
+        ? _visibleFindings[_selectedIndex]
+        : null;
     final allFindings = widget.result?.findings ?? widget.liveFindings;
 
     var filtered = allFindings.where(_matchesFilters).toList();
 
-    filtered.sort(
-      (a, b) => (b.cumulativeProbability ?? 0).compareTo(
+    filtered.sort((a, b) {
+      if (!_sortByFrequency) {
+        final severity = a.severity.index.compareTo(b.severity.index);
+        if (severity != 0) return severity;
+      }
+      final reach = (b.cumulativeProbability ?? 0).compareTo(
         a.cumulativeProbability ?? 0,
-      ),
-    );
+      );
+      if (reach != 0) return reach;
+      final loss = (b.evalLossCp ?? 0).compareTo(a.evalLossCp ?? 0);
+      if (loss != 0) return loss;
+      return a.dismissKey.compareTo(b.dismissKey);
+    });
 
     if (filtered.length > _maxVisible) {
       _visibleFindings = filtered.sublist(0, _maxVisible);
@@ -138,9 +165,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       _visibleFindings = filtered;
     }
 
-    if (_selectedIndex >= _visibleFindings.length) {
-      _selectedIndex = _visibleFindings.isEmpty ? -1 : 0;
-    }
+    _selectedIndex = selected == null ? -1 : _visibleFindings.indexOf(selected);
   }
 
   /// Total findings that match the current type filter (regardless of auto-scale cap).
@@ -150,6 +175,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   }
 
   void _applyCapFromField() {
+    if (!mounted) return;
     final parsed = int.tryParse(_capController.text.trim());
     if (parsed == null || parsed < 1) {
       _capController.text = '$_maxVisible';
@@ -174,6 +200,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   }
 
   void setFilterType(AuditFindingType? type) {
+    if (!mounted) return;
     setState(() {
       _activeFilters.clear();
       if (type != null) _activeFilters.add(type);
@@ -183,6 +210,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   }
 
   void _toggleFilter(AuditFindingType type) {
+    if (!mounted) return;
     setState(() {
       if (_activeFilters.contains(type)) {
         _activeFilters.remove(type);
@@ -222,6 +250,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   }
 
   void _selectFinding(int index) {
+    if (!mounted) return;
     if (index < 0 || index >= _visibleFindings.length) return;
     setState(() => _selectedIndex = index);
     _navigateToFinding(_visibleFindings[index]);
@@ -260,14 +289,14 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
 
   void _dismissCurrent() {
     if (_selectedIndex < 0 || _selectedIndex >= _visibleFindings.length) return;
-    final finding = _visibleFindings[_selectedIndex];
+    final index = _selectedIndex;
+    final finding = _visibleFindings[index];
     _dismissFinding(finding);
     _recomputeVisible();
-    if (_selectedIndex >= _visibleFindings.length &&
-        _visibleFindings.isNotEmpty) {
-      _selectedIndex = _visibleFindings.length - 1;
-    }
-    if (_visibleFindings.isNotEmpty && _selectedIndex >= 0) {
+    _selectedIndex = _visibleFindings.isEmpty
+        ? -1
+        : index.clamp(0, _visibleFindings.length - 1);
+    if (_selectedIndex >= 0) {
       _navigateToFinding(_visibleFindings[_selectedIndex]);
     }
     setState(() {});
@@ -340,6 +369,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   }
 
   void _restoreAll() {
+    if (!mounted) return;
     final allFindings = widget.result?.findings ?? widget.liveFindings;
     for (final f in allFindings) {
       f.dismissed = false;
@@ -355,39 +385,167 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     }
   }
 
+  int _searchReset = 0;
+  void _clearFilters() {
+    if (!mounted) return;
+    setState(() {
+      _search = '';
+      _searchReset++;
+      _activeFilters.clear();
+      _clashOnly = false;
+      _recomputeVisible();
+    });
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final hasData = widget.result != null || widget.liveFindings.isNotEmpty;
-
-    if (!hasData && !widget.isAuditing) {
-      return const Center(
-        child: Text(
-          'No audit results yet.\nRun an audit from the toolbar.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 13),
-        ),
-      );
-    }
+    final allFindings = widget.result?.findings ?? widget.liveFindings;
+    final hasData =
+        widget.result != null ||
+        allFindings.isNotEmpty ||
+        widget.interruptedSnapshot != null;
+    final hasFilters =
+        _search.isNotEmpty || _activeFilters.isNotEmpty || _clashOnly;
+    final allDismissed =
+        allFindings.isNotEmpty && allFindings.every((f) => f.dismissed);
+    final warnings =
+        widget.result?.warnings ??
+        widget.interruptedSnapshot?.result.warnings ??
+        const <String>[];
+    final checked = widget.result?.nodesChecked ?? widget.auditNodesChecked;
+    final emptyTitle = !hasData
+        ? 'Check this chapter'
+        : hasFilters
+        ? 'No findings match these filters'
+        : allDismissed
+        ? 'All findings dismissed'
+        : widget.interruptedSnapshot != null
+        ? 'Audit interrupted'
+        : checked == 0
+        ? 'No positions checked'
+        : warnings.isNotEmpty
+        ? 'No findings from the available checks'
+        : 'No issues found in the checked positions';
+    final emptyMessage = !hasData
+        ? 'Find weak repertoire moves and missing opponent replies. Select a finding to review its line on the board.'
+        : hasFilters
+        ? 'Clear the filters to see the rest of the report.'
+        : allDismissed
+        ? 'Dismissed findings are still saved. Restore them below to review again.'
+        : widget.interruptedSnapshot != null
+        ? 'Resume to finish checking this chapter.'
+        : warnings.isNotEmpty
+        ? 'Some enabled checks were unavailable. Review the notice above before relying on this result.'
+        : 'Results apply to the selected scope, sources and thresholds.';
 
     return Focus(
       focusNode: _listFocusNode,
       onKeyEvent: _handleKeyEvent,
       child: Column(
         children: [
+          if (widget.chapterName != null || hasData || widget.errorText != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Tooltip(
+                      message:
+                          widget.config?.summaryLabel ??
+                          'Audit of the current chapter',
+                      child: Text(
+                        '${widget.chapterName ?? 'Chapter audit'}${widget.subtreeOnly ? ' · Subtree' : ''}${hasData && !widget.isAuditing ? ' · $checked positions checked' : ''}',
+                        style: AppTextStyles.bodyStrong,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  if (warnings.isNotEmpty)
+                    Tooltip(
+                      message: warnings.join('\n'),
+                      child: const Text(
+                        'Some checks unavailable',
+                        style: TextStyle(
+                          color: AppColors.warning,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (widget.errorText != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Text(
+                widget.errorText!,
+                style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           if (widget.interruptedSnapshot != null && !widget.isAuditing)
             AuditResumeBanner(
               snapshot: widget.interruptedSnapshot!,
               onResume: widget.onResumeAudit,
               onStartFresh: widget.onStartFreshAudit,
             ),
+          if (allFindings.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ListSearchField(
+                      hintText: 'Find a move or line',
+                      key: ValueKey(_searchReset),
+                      onChanged: (value) {
+                        if (!mounted) return;
+                        setState(() {
+                          _search = value;
+                          _recomputeVisible();
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message:
+                        'Priority puts serious findings first. Frequency uses estimates from repertoire branch counts and source probabilities, not measured game frequency.',
+                    child: SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Priority')),
+                        ButtonSegment(value: true, label: Text('Frequency')),
+                      ],
+                      selected: {_sortByFrequency},
+                      onSelectionChanged: (value) {
+                        if (!mounted) return;
+                        setState(() {
+                          _sortByFrequency = value.single;
+                          _recomputeVisible();
+                        });
+                      },
+                    ),
+                  ),
+                  if (hasFilters)
+                    TextButton(
+                      onPressed: _clearFilters,
+                      child: const Text('Clear filters'),
+                    ),
+                ],
+              ),
+            ),
           AuditFilterBar(
             findings: widget.result?.findings ?? widget.liveFindings,
             activeFilters: _activeFilters,
+            includeDismissed: !_hideDismissed,
             onToggle: _toggleFilter,
             clashOnly: _clashOnly,
             onToggleClashOnly: () {
+              if (!mounted) return;
               setState(() {
                 _clashOnly = !_clashOnly;
                 _selectedIndex = -1;
@@ -395,26 +553,28 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
               });
             },
           ),
-          AuditStatusRow(
-            isAuditing: widget.isAuditing,
-            nodesChecked: widget.auditNodesChecked,
-            totalNodes: widget.auditTotalNodes,
-            visibleCount: _visibleFindings.length,
-            totalMatching: _totalMatchingFindings,
-            selectedIndex: _selectedIndex,
-            hideDismissed: _hideDismissed,
-            capController: _capController,
-            reachThreshold: _reachThreshold,
-            resultTimestamp: widget.result?.timestamp,
-            onRerunAudit: widget.onRerunAudit,
-            onApplyCap: _applyCapFromField,
-            onToggleHideDismissed: () {
-              setState(() {
-                _hideDismissed = !_hideDismissed;
-                _recomputeVisible();
-              });
-            },
-          ),
+          if (hasData || widget.isAuditing)
+            AuditStatusRow(
+              isAuditing: widget.isAuditing,
+              nodesChecked: widget.auditNodesChecked,
+              totalNodes: widget.auditTotalNodes,
+              visibleCount: _visibleFindings.length,
+              totalMatching: _totalMatchingFindings,
+              selectedIndex: _selectedIndex,
+              hideDismissed: _hideDismissed,
+              capController: _capController,
+              reachThreshold: _sortByFrequency ? _reachThreshold : null,
+              resultTimestamp: widget.result?.timestamp,
+              onRerunAudit: widget.isAuditing ? null : widget.onRerunAudit,
+              onApplyCap: _applyCapFromField,
+              onToggleHideDismissed: () {
+                if (!mounted) return;
+                setState(() {
+                  _hideDismissed = !_hideDismissed;
+                  _recomputeVisible();
+                });
+              },
+            ),
           const Divider(height: 1),
           Expanded(
             child: AuditFindingsList(
@@ -422,9 +582,17 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
               isAuditing: widget.isAuditing,
               scrollController: _scrollController,
               selectedIndex: _selectedIndex,
-              onStartAudit: widget.onStartAudit,
+              emptyTitle: emptyTitle,
+              emptyMessage: emptyMessage,
+              emptyActionLabel: hasFilters ? 'Clear filters' : 'Start audit',
+              onStartAudit: hasFilters
+                  ? _clearFilters
+                  : (!hasData || checked == 0)
+                  ? widget.onStartAudit
+                  : null,
               onSelect: _selectFinding,
               onToggleDismiss: (finding) {
+                if (!mounted) return;
                 setState(() {
                   _dismissFinding(finding);
                   _recomputeVisible();

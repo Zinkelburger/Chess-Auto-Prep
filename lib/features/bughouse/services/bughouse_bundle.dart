@@ -130,7 +130,7 @@ class BughouseBundle {
   }
 
   static String _runtimeName() {
-    if (Platform.isWindows) return 'onnxruntime.dll';
+    if (Platform.isWindows) return 'hivemind_ort.dll';
     if (Platform.isMacOS) return 'libonnxruntime.dylib';
     return 'libonnxruntime.so.1';
   }

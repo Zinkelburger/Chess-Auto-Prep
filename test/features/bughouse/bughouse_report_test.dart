@@ -58,7 +58,7 @@ void main() {
         final text = report(
           integrity: const ContentVerification(
             lines: [
-              '  onnxruntime.dll             matches the copy inside '
+              '  hivemind_ort.dll             matches the copy inside '
                   'this build',
             ],
             damaged: [],
@@ -74,15 +74,15 @@ void main() {
         final text = report(
           integrity: const ContentVerification(
             lines: [
-              '  onnxruntime.dll             DOES NOT MATCH the copy '
+              '  hivemind_ort.dll             DOES NOT MATCH the copy '
                   'inside this build',
             ],
-            damaged: ['onnxruntime.dll'],
+            damaged: ['hivemind_ort.dll'],
           ),
         );
         expect(text, contains('DOES NOT MATCH'));
         expect(text, contains('!!'));
-        expect(text, contains('File mismatch: onnxruntime.dll'));
+        expect(text, contains('File mismatch: hivemind_ort.dll'));
         expect(text, contains('Open Bughouse Lab again'));
       });
     });
@@ -98,11 +98,11 @@ void main() {
       test('lists every mismatched file', () {
         final message = const ContentVerification(
           lines: [],
-          damaged: ['onnxruntime.dll', 'hivemind.onnx'],
+          damaged: ['hivemind_ort.dll', 'hivemind.onnx'],
         ).repairedMessage;
         expect(
           message,
-          contains('File mismatch: onnxruntime.dll, hivemind.onnx'),
+          contains('File mismatch: hivemind_ort.dll, hivemind.onnx'),
         );
       });
     });
@@ -308,7 +308,7 @@ void main() {
       },
     );
 
-    /// The failure this exists for: Windows keeps its own onnxruntime.dll in
+    /// The failure this exists for: Windows keeps its own hivemind_ort.dll in
     /// System32, so an engine whose copy is short does not fail to find a
     /// runtime — it finds the wrong one.
     test('a short file is named, with both sizes', () async {

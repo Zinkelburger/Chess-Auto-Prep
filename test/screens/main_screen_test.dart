@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/core/app_history.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/main_screen.dart';
+import 'package:chess_auto_prep/widgets/settings/settings_navigation.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +53,11 @@ void main() {
       await pumpNavigation();
 
       expect(find.text('Which player?'), findsNothing);
+      final registry = ViewSettingsRegistry.forApp(appState);
+      registry.requestView(AppMode.repertoireTrainer);
+      await pumpNavigation();
+      expect(registry.entries[AppMode.repertoireTrainer]?.builder, isNotNull);
+      expect(appState.currentMode, AppMode.tactics);
 
       appState.setMode(AppMode.positionAnalysis);
       await pumpNavigation();

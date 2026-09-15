@@ -14,6 +14,8 @@ void main() {
     expect(AppMode.engineTournament.usesInteractiveEngine, isFalse);
     // Databases has no board: it reads file sizes.
     expect(AppMode.databases.usesInteractiveEngine, isFalse);
+    expect(AppMode.repertoireLibrary.usesInteractiveEngine, isFalse);
+    expect(AppMode.playersPrep.usesInteractiveEngine, isFalse);
   });
 
   test('every mode has a label of its own', () {

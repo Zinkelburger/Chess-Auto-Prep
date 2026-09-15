@@ -9,9 +9,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../../core/app_state.dart';
 import '../../services/lichess_auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
@@ -279,53 +277,12 @@ class _LichessLoginTileState extends State<_LichessLoginTile> {
 // Default usernames
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// What is configured, and one button onto the form.
-///
-/// The boxes themselves live in [AccountsDialog], which the tactics home's
-/// accounts card also opens: one form, whichever door you came through. There
-/// used to be two copies of the same two fields with different commit rules —
-/// this one saving on focus loss, the home card's per keystroke — which is how
-/// "what did I set my username to" became a question with two answers.
+/// The same form as the account shortcut, directly editable in Settings.
 class _UsernamesTile extends StatelessWidget {
   const _UsernamesTile();
-
   @override
-  Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
-    final lichess = app.lichessUsername?.trim() ?? '';
-    final chesscom = app.chesscomUsername?.trim() ?? '';
-    final configured = [
-      if (lichess.isNotEmpty) 'Lichess: $lichess',
-      if (chesscom.isNotEmpty) 'Chess.com: $chesscom',
-    ];
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          Icon(
-            configured.isEmpty
-                ? Icons.person_off_outlined
-                : Icons.check_circle_outline,
-            size: 18,
-            color: configured.isEmpty
-                ? AppColors.onSurfaceMuted
-                : AppColors.success,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              configured.isEmpty
-                  ? 'No usernames set'
-                  : configured.join('   ·   '),
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
-          OutlinedButton(
-            onPressed: () => showAccountsDialog(context),
-            child: Text(configured.isEmpty ? 'Set up…' : 'Change…'),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.all(20),
+    child: AccountsDialog(embedded: true),
+  );
 }

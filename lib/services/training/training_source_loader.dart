@@ -8,8 +8,9 @@
 ///
 /// A source is one of:
 ///
-///  * a repertoire `.pgn` — parsed once, with playability read from its
-///    `<name>_tree.json` when the generator wrote one;
+///  * a repertoire `.pgn` — parsed once; its `<name>_tree.json`, when the
+///    generator wrote one, is read separately by [playabilityFromTree] so the
+///    owner can show the first queue before the tree is decoded;
 ///  * a repertoire *folder* — every chapter `.pgn` under it, recursively,
 ///    each parsed with its own remembered training colour and its lines
 ///    scoped with [RepertoireLine.inSource] so same-named lines in two
@@ -20,7 +21,7 @@ library;
 
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, listEquals;
 import 'package:path/path.dart' as p;
 
 import '../../models/repertoire_line.dart';
@@ -43,7 +44,7 @@ class LoadedTrainingSource {
     required this.reviewByLine,
     required this.moveProgress,
     required this.otherRepertoires,
-    required this.playabilityByLine,
+    required this.isFolder,
   });
 
   /// Parsed lines in file order. Empty when the source holds nothing to train.
@@ -58,9 +59,10 @@ class LoadedTrainingSource {
   /// Stored entries belonging to sources other than this one.
   final List<RepertoireReviewEntry> otherRepertoires;
 
-  /// Playability from the generated tree, 0 (hardest) to 1 (easiest), keyed
-  /// by line id. Empty for studies, folders, and files without a tree.
-  final Map<String, double> playabilityByLine;
+  /// True when the source was a folder of chapter files. Folders and studies
+  /// have no generated tree, so [TrainingSourceLoader.playabilityFromTree]
+  /// only applies to a single repertoire file.
+  final bool isFolder;
 }
 
 class TrainingSourceLoader {
@@ -82,12 +84,14 @@ class TrainingSourceLoader {
   /// file trains; it beats the per-chapter answers and the file's own header.
   /// [isStale] is polled after every await that took real time; when it
   /// reports the load was superseded the loader stops and returns null
-  /// without writing anything further.
+  /// without writing anything further. [onStatus] hears what the loader is
+  /// doing, in words the owner can show under its spinner.
   Future<LoadedTrainingSource?> load(
     RepertoireMetadata source, {
     required bool isStudy,
     required bool? colorOverrideIsWhite,
     required bool Function() isStale,
+    void Function(String status)? onStatus,
   }) async {
     final filePath = source.filePath;
     final isFolder =
@@ -112,6 +116,7 @@ class TrainingSourceLoader {
                   subject: chapter.filePath,
                 )
               : null);
+      onStatus?.call('Preparing lines in ${chapter.name}…');
       final parsed = await repertoireService.parseRepertoireFile(
         chapter.filePath,
         trainingColor: switch (chapterIsWhite) {
@@ -124,15 +129,25 @@ class TrainingSourceLoader {
       );
       if (isStale()) return null;
 
+      final existing = [
+        for (final entry in allEntries)
+          if (entry.repertoireId == chapter.filePath) entry,
+      ];
       final merged = reviewService.syncEntries(
         repertoireId: chapter.filePath,
         lines: parsed,
-        existing: [
-          for (final entry in allEntries)
-            if (entry.repertoireId == chapter.filePath) entry,
-        ],
+        existing: existing,
       );
-      await reviewService.saveAll(merged, repertoireId: chapter.filePath);
+      onStatus?.call('Restoring review progress…');
+      // Reopening unchanged material must not rewrite the review store:
+      // only save when syncing actually produced different rows.
+      if (!listEquals(
+        [for (final entry in existing) entry.toCsvRow()],
+        [for (final entry in merged) entry.toCsvRow()],
+      )) {
+        await reviewService.saveAll(merged, repertoireId: chapter.filePath);
+        if (isStale()) return null;
+      }
       final entriesById = {for (final entry in merged) entry.lineId: entry};
       for (final line in parsed) {
         final scoped = isFolder
@@ -149,11 +164,6 @@ class TrainingSourceLoader {
     }
     if (isStale()) return null;
 
-    final playability = isStudy || isFolder || lines.isEmpty
-        ? const <String, double>{}
-        : await _playabilityFromTree(filePath, lines);
-    if (isStale()) return null;
-
     return LoadedTrainingSource(
       lines: lines,
       reviewByLine: reviewByLine,
@@ -162,7 +172,7 @@ class TrainingSourceLoader {
         for (final entry in allEntries)
           if (!sources.any((s) => s.filePath == entry.repertoireId)) entry,
       ],
-      playabilityByLine: playability,
+      isFolder: isFolder,
     );
   }
 
@@ -176,38 +186,50 @@ class TrainingSourceLoader {
     return files;
   }
 
-  /// Per-line playability from the repertoire's generated `<name>_tree.json`.
+  /// Per-line playability from the repertoire's generated `<name>_tree.json`,
+  /// 0 (hardest) to 1 (easiest), keyed by line id.
+  ///
   /// Empty when there is no tree or it cannot be read: playability only
-  /// orders the queue, so a broken tree must not block training.
-  Future<Map<String, double>> _playabilityFromTree(
+  /// orders the queue, so a broken tree must not block training. Difficulty
+  /// is optional builder metadata; the owner calls this after [load] so the
+  /// first queue is not held up by decoding a multi-MB tree. [isStale] is
+  /// polled between the file read and the decode so a superseded load does
+  /// not spin up an isolate for nothing.
+  Future<Map<String, double>> playabilityFromTree(
     String filePath,
-    List<RepertoireLine> lines,
-  ) async {
+    List<RepertoireLine> lines, {
+    bool Function()? isStale,
+  }) async {
     final treePath = '${p.withoutExtension(filePath)}_tree.json';
     final storage = _storage();
     try {
       if (!await storage.fileExists(treePath)) return const {};
       final json = await storage.readFile(treePath);
       if (json == null || json.isEmpty) return const {};
-
-      // Multi-MB jsonDecode + recursive node build — off the UI isolate so
-      // opening the trainer doesn't freeze the frame.
-      final tree = await Isolate.run(() => deserializeTree(json));
-      final playAsWhite = tree.configSnapshot['play_as_white'] as bool? ?? true;
-
-      final playability = <String, double>{};
-      for (final line in lines) {
-        final linePath = walkTreeForLine(tree.root, line.moves);
-        if (linePath.length < 2) continue;
-        playability[line.id] = computeLinePlayability(
-          linePath,
-          playAsWhite,
-        ).playability;
-      }
-      return playability;
+      if (isStale?.call() ?? false) return const {};
+      final linePaths = [
+        for (final line in lines) (id: line.id, moves: line.moves),
+      ];
+      // Keep both the decode and the tree walk off the UI isolate so the
+      // large tree object never has to cross back to it.
+      return await Isolate.run(() => _playabilityScores(json, linePaths));
     } catch (e) {
       debugPrint('[TrainingSourceLoader] Failed to load tree: $e');
       return const {};
     }
   }
+}
+
+Map<String, double> _playabilityScores(
+  String json,
+  List<({String id, List<String> moves})> lines,
+) {
+  final tree = deserializeTree(json);
+  final isWhite = tree.configSnapshot['play_as_white'] as bool? ?? true;
+  return {
+    for (final line in lines)
+      if (walkTreeForLine(tree.root, line.moves) case final path
+          when path.length >= 2)
+        line.id: computeLinePlayability(path, isWhite).playability,
+  };
 }

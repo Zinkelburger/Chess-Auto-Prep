@@ -20,6 +20,9 @@ class AuditFindingsList extends StatelessWidget {
     required this.scrollController,
     required this.selectedIndex,
     required this.onStartAudit,
+    required this.emptyTitle,
+    required this.emptyMessage,
+    required this.emptyActionLabel,
     required this.onSelect,
     required this.onToggleDismiss,
     required this.onContextMenu,
@@ -31,6 +34,9 @@ class AuditFindingsList extends StatelessWidget {
   final ScrollController scrollController;
   final int selectedIndex;
   final VoidCallback? onStartAudit;
+  final String emptyTitle;
+  final String emptyMessage;
+  final String emptyActionLabel;
   final void Function(int index) onSelect;
   final void Function(AuditFinding finding) onToggleDismiss;
   final void Function(AuditFinding finding, Offset position) onContextMenu;
@@ -47,38 +53,45 @@ class AuditFindingsList extends StatelessWidget {
         );
       }
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.verified_outlined,
-              size: 40,
-              color: AppColors.onSurfaceDim,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.fact_check_outlined,
+                  size: 40,
+                  color: AppColors.onSurfaceDim,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  emptyTitle,
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceSoft,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  emptyMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceMuted,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (onStartAudit != null)
+                  OutlinedButton.icon(
+                    onPressed: onStartAudit,
+                    icon: const Icon(Icons.policy_outlined, size: 16),
+                    label: Text(emptyActionLabel),
+                  ),
+              ],
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'No audit findings',
-              style: TextStyle(
-                color: AppColors.onSurfaceSoft,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Run an audit to check your repertoire for gaps, '
-              'weak moves, and missing responses.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.onSurfaceMuted, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
-            if (onStartAudit != null)
-              OutlinedButton.icon(
-                onPressed: onStartAudit,
-                icon: const Icon(Icons.policy_outlined, size: 16),
-                label: const Text('Start Audit'),
-              ),
-          ],
+          ),
         ),
       );
     }

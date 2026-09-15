@@ -28,6 +28,9 @@ class PgnTreeGamesList extends StatefulWidget {
   final Widget? toolbarLeading;
   final bool initiallyShowMoves;
 
+  /// Hosts with their own search and paging can use just the shared rows.
+  final bool showToolbar;
+
   /// Keep live filter previews secondary to their editing controls.
   final bool subdued;
 
@@ -40,6 +43,7 @@ class PgnTreeGamesList extends StatefulWidget {
     this.onSearch,
     this.toolbarLeading,
     this.initiallyShowMoves = true,
+    this.showToolbar = true,
     this.subdued = false,
   });
 
@@ -115,35 +119,36 @@ class _PgnTreeGamesListState extends State<PgnTreeGamesList> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-            child: Wrap(
-              alignment: WrapAlignment.start,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                if (widget.toolbarLeading case final leading?)
-                  leading
-                else
-                  GameNumberField(
-                    currentIndex: current < 0 ? 0 : current,
-                    gameCount: games.length,
-                    onGoToGame: widget.onGameSelected,
-                    tooltip:
-                        'Games that reach this opening-tree position, '
-                        'in the current sort.\n'
-                        'Type a number and press Enter to open that game',
-                  ),
-                if (widget.onSearch != null)
-                  GameSearchButton(
-                    shortcut: AppShortcut.searchGames,
-                    onPressed: widget.onSearch!,
-                  ),
-                _ShowMovesToggle(value: _showMoves, onChanged: _setShowMoves),
-              ],
+          if (widget.showToolbar)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+              child: Wrap(
+                alignment: WrapAlignment.start,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  if (widget.toolbarLeading case final leading?)
+                    leading
+                  else
+                    GameNumberField(
+                      currentIndex: current < 0 ? 0 : current,
+                      gameCount: games.length,
+                      onGoToGame: widget.onGameSelected,
+                      tooltip:
+                          'Games that reach this opening-tree position, '
+                          'in the current sort.\n'
+                          'Type a number and press Enter to open that game',
+                    ),
+                  if (widget.onSearch != null)
+                    GameSearchButton(
+                      shortcut: AppShortcut.searchGames,
+                      onPressed: widget.onSearch!,
+                    ),
+                  _ShowMovesToggle(value: _showMoves, onChanged: _setShowMoves),
+                ],
+              ),
             ),
-          ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.only(bottom: 4),

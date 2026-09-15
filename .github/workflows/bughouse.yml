@@ -84,6 +84,11 @@ jobs:
         timeout-minutes: 10
         run: python tools/test_bughouse_engine.py run --install-to "engine under test"
 
+      - name: Verify private Windows ONNX loading and incompatible-runtime failures
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        run: python tools/test_windows_ort_loading.py
+
       - run: flutter pub get
 
       - name: Drive the engine through the app's client

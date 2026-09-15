@@ -10,6 +10,22 @@ $function = $ast.Find({ param($node)
 }, $true)
 Invoke-Expression $function.Extent.Text
 
+$observer = $ast.Find({ param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Write-LoadedRuntime'
+}, $true)
+Invoke-Expression $observer.Extent.Text
+$fakeProcess = [PSCustomObject]@{ Modules = @() }
+$fakeProcess | Add-Member -MemberType ScriptMethod -Name Refresh -Value { }
+if (Write-LoadedRuntime $fakeProcess) { throw 'Claimed an observation without a module' }
+$fakeProcess.Modules = @([PSCustomObject]@{
+  ModuleName = 'hivemind_ort.dll'
+  FileName = 'C:\engine folder\hivemind_ort.dll'
+  FileVersionInfo = [PSCustomObject]@{ FileVersion = '1.29.0' }
+})
+if (-not (Write-LoadedRuntime $fakeProcess)) { throw 'Lost the observed private runtime' }
+$fakeProcess | Add-Member -MemberType ScriptMethod -Name Refresh -Value { throw 'Process exited' } -Force
+if (Write-LoadedRuntime $fakeProcess) { throw 'Claimed an observation after access failed' }
+
 # A real pipe with delayed banner and readiness response. Multiple timeouts
 # must retain the pending read, and EOF must stop further reads.
 $payload = "Start-Sleep -Milliseconds 800; [Console]::WriteLine('uciok'); Start-Sleep -Milliseconds 800; [Console]::WriteLine('readyok')"

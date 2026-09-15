@@ -188,7 +188,11 @@ void main() {
   late _MemoryStorage storage;
 
   setUp(() {
-    SharedPreferences.setMockInitialValues({});
+    // File-preservation tests own their edits; opening classification has its
+    // own tests and must not race these snapshots with extra header writes.
+    SharedPreferences.setMockInitialValues({
+      'pgn_viewer.auto_detect_openings': false,
+    });
     storage = _MemoryStorage();
     StorageFactory.instanceForTest = storage;
   });

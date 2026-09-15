@@ -76,9 +76,86 @@ void main() {
     expect(loaded.reviewByLine['b']!.isNew, isTrue, reason: 'synced fresh');
     expect(loaded.moveProgress.keys, ['b:0']);
     expect(loaded.otherRepertoires.map((e) => e.lineId), ['z']);
-    expect(loaded.playabilityByLine, isEmpty, reason: 'no tree.json');
+    expect(loaded.isFolder, isFalse);
     expect(reviewService.saveAllCalls, 1);
     expect(repService.parseCalls.single.trainingColor, isNull);
+  });
+
+  test(
+    'reloading unchanged material does not rewrite the review store',
+    () async {
+      final source = file('rep');
+      repService.lines = [
+        fakeLine('a', ['e4', 'e5']),
+      ];
+      Future<LoadedTrainingSource?> reload() => loader.load(
+        source,
+        isStudy: false,
+        colorOverrideIsWhite: null,
+        isStale: () => false,
+      );
+
+      await reload();
+      expect(reviewService.saveAllCalls, 1, reason: 'first open syncs fresh');
+      final again = await reload();
+      expect(reviewService.saveAllCalls, 1, reason: 'same rows, no write');
+      expect(again!.reviewByLine.keys, ['a']);
+
+      repService.lines = [
+        fakeLine('a', ['e4', 'e5']),
+        fakeLine('b', ['d4']),
+      ];
+      await reload();
+      expect(reviewService.saveAllCalls, 2, reason: 'a new line changes rows');
+    },
+  );
+
+  test('reports what it is doing, one chapter at a time', () async {
+    final folder = Directory(p.join(tempDir.path, 'Course'))..createSync();
+    File(p.join(folder.path, 'One.pgn')).writeAsStringSync('1. e4 e5 *');
+    File(p.join(folder.path, 'Two.pgn')).writeAsStringSync('1. d4 d5 *');
+    repService.lines = [
+      fakeLine('shared', ['e4', 'e5']),
+    ];
+    final statuses = <String>[];
+
+    await loader.load(
+      RepertoireMetadata(
+        filePath: folder.path,
+        name: 'Course',
+        lastModified: DateTime.now(),
+      ),
+      isStudy: false,
+      colorOverrideIsWhite: null,
+      isStale: () => false,
+      onStatus: statuses.add,
+    );
+
+    expect(statuses, [
+      'Preparing lines in One…',
+      'Restoring review progress…',
+      'Preparing lines in Two…',
+      'Restoring review progress…',
+    ]);
+  });
+
+  test('playability is empty without a generated tree', () async {
+    final source = file('rep');
+    final scores = await loader.playabilityFromTree(source.filePath, [
+      fakeLine('a', ['e4', 'e5']),
+    ]);
+    expect(scores, isEmpty);
+  });
+
+  test('a superseded playability read stops before decoding', () async {
+    final source = file('rep');
+    File(
+      '${p.withoutExtension(source.filePath)}_tree.json',
+    ).writeAsStringSync('not even json');
+    final scores = await loader.playabilityFromTree(source.filePath, [
+      fakeLine('a', ['e4', 'e5']),
+    ], isStale: () => true);
+    expect(scores, isEmpty);
   });
 
   test('a hand-set colour is passed to the parser', () async {

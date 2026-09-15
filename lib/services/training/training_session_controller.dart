@@ -137,6 +137,8 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Empty when no tree.json exists for the repertoire.
   Map<String, double> playabilityMap = {};
 
+  String loadingStatus = 'Reading repertoire…';
+
   // -- Training state --
   List<RepertoireLine> dueQueue = [];
   RepertoireLine? currentLine;
@@ -239,6 +241,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   @override
   void dispose() {
+    _loadGeneration++;
     _lineGeneration++;
     learn.cancelPending();
     // Get the session's schedules into the PGN before the timer that would
@@ -351,6 +354,8 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     run.clear();
     final loadIsStudy = sourceIsStudy;
     isLoading = true;
+    loadingStatus = 'Reading repertoire…';
+    playabilityMap = {};
     error = null;
     feedback = null;
     notifyListeners();
@@ -371,6 +376,11 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
         isStudy: loadIsStudy,
         colorOverrideIsWhite: colorOverrideIsWhite,
         isStale: stale,
+        onStatus: (status) {
+          if (stale()) return;
+          loadingStatus = status;
+          notifyListeners();
+        },
       );
       if (loaded == null) return;
       if (loaded.lines.isEmpty) {
@@ -386,7 +396,15 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
         moveProgress: loaded.moveProgress,
         otherRepertoires: loaded.otherRepertoires,
       );
-      playabilityMap = loaded.playabilityByLine;
+      // Difficulty is optional builder metadata. Only the difficulty sort
+      // needs it before the first queue can be displayed.
+      final wantsTree = !loadIsStudy && !loaded.isFolder;
+      if (wantsTree && settings.reviewOrder == ReviewOrder.hardestFirst) {
+        loadingStatus = 'Preparing difficulty order…';
+        notifyListeners();
+        await _loadPlayability(filePath, loaded.lines, generation);
+        if (stale()) return;
+      }
 
       _linearDone.clear();
       await chapterScope.resolveLayout(filePath, isStudy: loadIsStudy);
@@ -397,6 +415,9 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       }
       dueQueue = _buildQueue();
       notifyListeners();
+      if (wantsTree && settings.reviewOrder != ReviewOrder.hardestFirst) {
+        unawaited(_loadPlayability(filePath, loaded.lines, generation));
+      }
 
       // Land on the line browser; only jump straight into a line when the
       // caller asked for one (e.g. "Train this line" from the Builder).
@@ -415,6 +436,25 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// Reads the generated tree's playability for [lines] and, when this
+  /// load is still current, re-sorts a queue nobody has started yet.
+  Future<void> _loadPlayability(
+    String filePath,
+    List<RepertoireLine> lines,
+    int generation,
+  ) async {
+    bool stale() => generation != _loadGeneration;
+    final scores = await _loader.playabilityFromTree(
+      filePath,
+      lines,
+      isStale: stale,
+    );
+    if (stale()) return;
+    playabilityMap = scores;
+    if (!isLoading && currentLine == null) dueQueue = _buildQueue();
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
@@ -899,7 +939,19 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
+  bool _ratingInFlight = false;
+
   Future<void> rateLine(ReviewRating rating) async {
+    if (_ratingInFlight) return;
+    _ratingInFlight = true;
+    try {
+      await _recordLineRating(rating);
+    } finally {
+      _ratingInFlight = false;
+    }
+  }
+
+  Future<void> _recordLineRating(ReviewRating rating) async {
     final line = currentLine;
     if (line == null) return;
     // Linear mode has no ratings — completion was recorded in _finishLine;

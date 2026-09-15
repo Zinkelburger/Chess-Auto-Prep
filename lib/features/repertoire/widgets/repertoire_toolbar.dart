@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../widgets/settings/settings_navigation.dart';
 
 import '../../../models/repertoire_metadata.dart';
 import '../../../theme/app_colors.dart';
@@ -7,8 +6,8 @@ import '../../../theme/app_text_styles.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
 import '../../../widgets/app_mode_switcher.dart';
 import '../../../widgets/app_settings_button.dart';
+import '../../games/widgets/my_repertoires_section.dart';
 import '../../../core/app_state.dart';
-import '../../../widgets/analysis/analysis_panels_dialog.dart';
 import '../../../widgets/app_overflow_menu.dart';
 import '../../../widgets/common/searchable_picker_dialog.dart';
 import '../../../widgets/layout/board_zone.dart';
@@ -51,6 +50,8 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onPlanBuild,
     this.onOpenAudit,
     this.onImportPgn,
+    this.onReload,
+    this.onGenerationSettings,
     this.repertoireSettingsBuilder,
   });
 
@@ -75,6 +76,8 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onPlanBuild;
   final VoidCallback? onOpenAudit;
   final VoidCallback? onImportPgn;
+  final VoidCallback? onReload;
+  final VoidCallback? onGenerationSettings;
 
   /// Controls for the selected repertoire, embedded in the shared settings pane.
   final WidgetBuilder? repertoireSettingsBuilder;
@@ -102,7 +105,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
-            label: isExpectimaxProbe ? 'Computing expectimax…' : null,
+            label: isExpectimaxProbe ? 'Generating evals…' : null,
             onTap: onOpenGeneration,
           ),
         RepertoireActionsMenu(
@@ -110,6 +113,10 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           onPlanBuild: onPlanBuild,
           onGenerate: onOpenGeneration,
           onImportPgn: onImportPgn,
+          onReload: onReload,
+          onGenerationSettings: onGenerationSettings,
+          onSettings: () =>
+              openAppSettings(context, initialMode: AppMode.repertoire),
           onTrain: showTrainAction ? onTrainRepertoire : null,
           onAudit: onOpenAudit,
           trainEnabled: !generationLocked,
@@ -121,19 +128,18 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           contentBuilder: (context) => ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              if (SettingsChapterScope.maybeOf(context) == 0)
-                if (repertoireSettingsBuilder != null)
-                  repertoireSettingsBuilder!(context)
-                else
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text(
-                      'Open a repertoire in the builder to change its playing side and board size.',
-                      style: AppTextStyles.muted,
-                    ),
+              const MyRepertoiresSection(),
+              const Text('Current repertoire', style: AppTextStyles.bodyStrong),
+              if (repertoireSettingsBuilder != null)
+                repertoireSettingsBuilder!(context)
+              else
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Open a repertoire in the builder to change its playing side and board size.',
+                    style: AppTextStyles.muted,
                   ),
-              if (SettingsChapterScope.maybeOf(context) == 1)
-                const AnalysisPanelsSettingsBody(),
+                ),
             ],
           ),
         ),
@@ -264,7 +270,9 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
       children: [
         Text(
           'Repertoire Builder',
-          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppColors.onSurfaceMuted,
+          ),
         ),
         const SizedBox(height: 1),
         Row(
@@ -292,7 +300,11 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(Icons.chevron_right, size: 18, color: Colors.grey[500]),
+            const Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: AppColors.onSurfaceMuted,
+            ),
             Flexible(child: _buildChapterMenu(context, theme)),
           ],
         ),
@@ -319,7 +331,7 @@ class RepertoireBreadcrumbTitle extends StatelessWidget {
           Icon(
             Icons.arrow_drop_down,
             size: 20,
-            color: enabled ? Colors.grey[400] : Colors.grey[700],
+            color: enabled ? AppColors.onSurfaceMuted : Colors.grey[700],
           ),
         ],
       ),
@@ -486,6 +498,9 @@ class RepertoireActionsMenu extends StatelessWidget {
     this.onTrain,
     this.onAudit,
     this.onChoose,
+    this.onReload,
+    this.onGenerationSettings,
+    this.onSettings,
     this.trainEnabled = true,
   });
 
@@ -495,6 +510,9 @@ class RepertoireActionsMenu extends StatelessWidget {
   final VoidCallback? onTrain;
   final VoidCallback? onAudit;
   final VoidCallback? onChoose;
+  final VoidCallback? onReload;
+  final VoidCallback? onGenerationSettings;
+  final VoidCallback? onSettings;
 
   /// False keeps the Train row visible but greyed — while a build runs the
   /// chapter is changing under the trainer, so the row waits.
@@ -532,7 +550,7 @@ class RepertoireActionsMenu extends StatelessWidget {
       // pick a transport before it will show them the import.
       if (onImportPgn != null)
         AppMenuEntry(
-          label: 'From a PGN…',
+          label: 'Import PGN…',
           icon: Icons.description_outlined,
           onRun: onImportPgn!,
         ),
@@ -559,6 +577,24 @@ class RepertoireActionsMenu extends StatelessWidget {
       ..._headed(_import, import_),
       ..._headed(_train, train),
       ..._headed(_check, check),
+      if (onReload != null)
+        AppMenuEntry(
+          label: 'Check disk for changes',
+          icon: Icons.refresh,
+          onRun: onReload!,
+        ),
+      if (onGenerationSettings != null)
+        AppMenuEntry(
+          label: 'Generation settings…',
+          icon: Icons.tune,
+          onRun: onGenerationSettings!,
+        ),
+      if (onSettings != null)
+        AppMenuEntry(
+          label: 'Settings…',
+          icon: Icons.settings_outlined,
+          onRun: onSettings!,
+        ),
       if (onChoose != null)
         AppMenuEntry(
           heading: 'Library',

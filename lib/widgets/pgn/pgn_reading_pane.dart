@@ -86,6 +86,10 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
   double? _restoreOffset;
   int _scrollRequest = 0;
 
+  double get readingAnchor => _anchor;
+
+  void applyReadingOption(String value) => _applyReadingOption(value);
+
   void _applyReadingOption(String value) {
     if (!mounted) return;
     setState(() {
@@ -295,7 +299,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
         borderRadius: BorderRadius.circular(8),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final inset = constraints.maxWidth >= 700 ? 45.0 : 32.0;
+            final inset = constraints.maxWidth >= 700 ? 32.0 : 24.0;
             return Stack(
               fit: StackFit.expand,
               children: [
@@ -326,7 +330,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
                         child: Align(
                           alignment: Alignment.topLeft,
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 760),
+                            constraints: const BoxConstraints(maxWidth: 900),
                             child: PgnReadingAnchorLayout(
                               revision: _scrollRequest,
                               child: KeyedSubtree(

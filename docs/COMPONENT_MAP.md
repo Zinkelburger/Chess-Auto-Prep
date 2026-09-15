@@ -108,6 +108,20 @@ File/DLL inspection after a startup failure precedes repair; collection errors s
 without discarding the rest of the report. DLL candidates are a filesystem
 inspection, not an observed Windows loader trace.
 
+The Windows Hivemind build loads `hivemind_ort.dll` by absolute path beside
+its executable, resolves the API from that module handle, and checks API
+compatibility before constructing any ONNX objects. Its Unicode Windows entry
+point and explicit UTF-8 filesystem conversions preserve non-ASCII profile and
+model paths. It reports the actual DLL
+path/version on stderr and exits cleanly for missing or incompatible runtimes.
+It never falls back to the generic `onnxruntime.dll` in System32 or an older
+installation. The engine, complete corresponding source and build hashes live
+under [`tools/bughouse_windows/`](../tools/bughouse_windows/README.md); normal
+asset fetching verifies that build and includes its source archive. The
+runtime bytes remain the pinned Microsoft 1.29.0 build. Windows release gates
+exercise an incompatible runtime, corrupt/missing private DLL, and a successful
+search with an old basename DLL present in a Unicode installation path.
+
 Windows first-use checks run in the built desktop app via
 `integration_test/bughouse_first_run_test.dart`: an empty disposable profile
 with spaces and non-ASCII characters, real bundled extraction, app-local VC++
@@ -189,6 +203,7 @@ main.dart
 |------|--------|-------------|
 | `tactics` | Embedded `_TacticsModeView` | Tactics from user's own games (Stockfish analysis + Maia line extension) |
 | `positionAnalysis` | `AnalysisScreen` | Weak positions from user games |
+| `repertoireLibrary` | `RepertoireLibraryScreen` | Import, create and organize repertoire material; explicit Read / Train / Build handoffs |
 | `repertoire` | `RepertoireScreen` | Opening repertoire builder |
 | `repertoireTrainer` | `RepertoireTrainingScreen` | Spaced repetition training |
 | `pgnViewer` | `PgnViewerScreen` | Standalone game PGN + inline engine |
@@ -197,7 +212,7 @@ main.dart
 | `bughouse` | `BughouseScreen` | Two-board analysis and matches |
 | `databases` | `DatabasesScreen` | Local data inventory, downloads and storage |
 
-Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens on hover or click with a grouped, text-only menu (Train / Build / Analyse / Lab / Data, order in `kAppModeGroups`); switching views uses this menu, with no Ctrl/Cmd+number bindings.
+Mode switcher: `widgets/app_mode_switcher.dart` — the labelled **View** selector (`Tactics ▾`) on the right of the app bar opens on hover or click with a grouped, text-only menu (Train / Library / Build / Analyse / Lab / Data, order in `kAppModeGroups`); switching views uses this menu, with no Ctrl/Cmd+number bindings.
 
 #### View composition audit (September 2026)
 
@@ -210,7 +225,7 @@ finished. Update these rows when adding or retiring a route or parallel renderer
 | View | Duplicate surfaces retired in this pass | Canonical organization / retained feature surfaces |
 |---|---:|---|
 | Repertoire trainer | 4 (five bespoke reader/phase surfaces → one phase surface) | Library → browser → session/results. `TrainingPhasePanel` uses shared PGN movetext; Read opens PGN Viewer. Mistakes is a searchable panel, not another board/reader. Chapter selection is optional scope. |
-| Repertoire builder | 1 | Outline + board/editor + Engine/Database/Generate tabs. Repertoire tree and opening explorer are Database sources; background jobs remain in the bottom panel. Whole-repertoire opening bypasses the forced chapter gate. |
+| Repertoire builder | 1 | Outline + board/editor + Engine/Database tabs. Repertoire tree and opening explorer are Database sources; background jobs remain in the bottom panel. Whole-repertoire opening bypasses the forced chapter gate. |
 | Tactics | 1 | Queue/browser → puzzle. Opening-review cards hand off to PGN Viewer; the nested book/game review dialog is removed. |
 | PGN Viewer | 0 | Owns reading, game navigation, analysis graph, collection filtering and book comparison. Book contents and matching lines use the same Book panel. |
 | Player analysis | 0 | Compact player selection → `PositionAnalysisWidget`; findings reuse `HolesReportPanel`. |
@@ -233,21 +248,114 @@ stable controls. Listudy was consulted for the guided/repetition flow. We reuse
 these interaction principles rather than importing an unrelated training model,
 predictive learnability score or mandatory daily quota.
 
+#### Standalone workflow audit (September 13, 2026)
+
+The inventory includes all mode roots and their substantial nested routes,
+selection states, tabs and dialogs. A workflow merits a destination when users
+can finish a useful job there and several consumers use its output. A board,
+settings form or confirmation alone does not merit another mode.
+
+| Current root and implicit views | Ownership decision |
+|---|---|
+| Repertoire trainer: material picker, chapter/line browser, learn/review/drill, mistakes, results, settings | Material creation and organization belong to **Repertoires**. Keep lesson phases and session results in Trainer; Read uses PGN Viewer. |
+| Repertoire builder: outline, editor, Engine/Database sources, build configuration, planner, jobs, audit/traps/coverage/coherence | The outline is shared with Repertoires. Editing and position-dependent tools stay in Builder. Build configuration, queues and audit reports remain attached to the selected repertoire/chapter. |
+| Tactics: recent games/downloads, opening review, puzzle catalog/import, puzzle/game tabs, session recap | **My games stays in Tactics**: improve the embedded download, filtering and opening-review UI and keep direct links to Viewer and Player analysis. Puzzle import/catalog can remain Trainer-local until another workflow needs to manage it. |
+| Players & prep: All players, searchable Groups, group sheets, imports and linked studies; Player analysis: picker/import, board and engine hunts | **Players & prep is standalone** under Library. People and groups share saved records, with explicit analysis handoffs. The board and engine tools remain in Player analysis. |
+| PGN Viewer: collection/import, filters, Game/Book/Explorer/Analysis/Tree panels, annotation and solitaire | Keep it the canonical reader for games, studies and repertoire lines. Explorer/Tree are reusable position panels; adding another top-level reader would duplicate its job. Share game selection helpers with the My games area in Tactics. |
+| Study: study/chapter pickers, chapter ordering, annotations, board/engine, reading/training handoffs | Keep Study as the authoring destination. A future material catalog may include studies, but do not merge their puzzle/annotation storage semantics with repertoires. |
+| Engine tournament: results, setup, games, engine registry | Already an independent workflow. Registry is shared Settings; tournament game reading uses PGN Viewer. |
+| Bughouse: positions, reserves, analysis, game/match setup and archives | Keep the distinct two-board workspace. Its analysis and match controls depend on both boards. |
+| Databases: inventories, downloads, local engine-eval stores, own-game storage, recovery trash | Already standalone. Keep storage maintenance here; the My games area in Tactics owns chess browsing/review rather than disk maintenance. |
+| Shared Settings: accounts, board/moves, analysis, training, tactics, viewer, repertoires, engines, data, app and shortcuts | Already independent. Keep configuration centralized with contextual links; creation/import belongs beside material. |
+
+**Players & prep** is now implemented as a standalone destination. My games stays in
+Tactics. Builds start from a repertoire, with the output chapter explicit in
+setup; planning and run history should improve there. Audits remain in Builder:
+reviewing a finding requires its line, board and editing context. Improve those
+contextual workflows before considering a separate reports catalog. Generation
+setup, engine settings, chapter naming and import confirmations remain forms,
+not modes. These are ownership decisions; the remaining work is tracked in
+[Layout & navigation](FUTURE_FEATURES.md#layout--navigation).
+
+#### Repertoire library and shared creation
+
+`RepertoireLibraryScreen` is available under **Library → Repertoires**. It
+reuses `RepertoireListBody` for search, direct file/paste imports and repertoire
+rename/delete. Opening a repertoire shows `RepertoireOutlinePanel` with its
+existing controller/service, independent of a board or engine: folders,
+chapters, line moves/reordering, drag/drop and Undo use the same disk operations
+as Builder. Chapter selection stays in the organizer. Explicit actions send the
+selected chapter to Read, Train or Build; Train repertoire sends the folder.
+Opening a line hands its game index to PGN Viewer. Returning to the library
+refreshes material changed in another mode.
+
+`RepertoireCreationScreen` is the shared creation route from the library,
+Builder and Trainer material selectors. It accepts a name, White/Black side,
+file or pasted PGN, or an explicitly empty repertoire. It returns a
+`RepertoireCreationResult` without switching modes or loading Builder's last
+file. Valid imported material returns to the caller's selection flow; a
+multi-chapter course keeps chapter selection. Empty creation returns to the
+list without attempting a lesson. Cancel writes nothing, duplicate names are
+refused, and write failures retain the form. Direct **Open PGN file…** continues
+to import immediately; users need not fill a creation form for that shortcut.
+The outline supports moving chapters **into folders** and reordering **lines**;
+arbitrary sibling chapter ordering and cross-repertoire drag/drop are not added
+by this extraction.
+
 #### App bar conventions (unified June 2026)
 
 Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:
 
 - **`titleSpacing: 16`** on every `AppBar`.
 - **Top bar**: the left title holds the current material, breadcrumb and contextual status. The right controls are **Actions ▾ → separator → View selector → settings gear**. The shared mode switcher owns the separator and spacing, with the current mode name as its anchor; labelled actions have at least 44px click targets. This separates screen operations from app navigation consistently across views. Actions open on hover or click and use named groups with leading Material icons across modes, with no settings-only ellipsis. Shared operations reuse the PGN viewer’s symbols for copy, import, edit and study actions. Shared Actions and view menus use 32px minimum rows, 13px labels, a 240px minimum width and 16px horizontal insets; faint inset 1px dividers separate groups, adding only 1px before section headings. Both Actions and the view selector support keyboard navigation, Escape and outside-click dismissal. Player Analysis keeps its player picker inside the mode body, below the same Actions / View / Settings bar; selecting or changing a player never replaces that bar. The picker is centered at a maximum width of 1040px, with one Add player button and direct Update games / Change range / Remove buttons per card (file imports only offer Remove). Cards wrap their actions below the metadata on narrower windows. Player analysis retains download refresh beside its subtitle; PGN Viewer retains collection filters on the left.
-- **Back navigation**: `AppHistory` records mode switches and cross-view links. The shared toolbar keeps Back visible even when the breadcrumb is too narrow, returning to the previous destination. Mounted screens retain their context. PGN Viewer also captures its live collection, filters, game, reading position and tabs before leaving, so revisiting it with another game does not overwrite the earlier history entry.
-- **Settings**: Every `AppSettingsButton(mode: ...)` opens the same persistent settings route at that view. Trainer chapters are Session, Learning, Playback and Material; Tactics has Session, Puzzle selection and Game downloads. Global Engine contains cores, memory, board depth, bulk depth and line count. PVs stay one row until explicitly expanded into a fixed scrolling viewport. The PGN viewer, tactics Analysis gear, repertoire dock and unified engine pane use the same compact engine popup and save shared preferences immediately. `BulkAnalysisSettings` owns the persisted depth for game reviews, full-game analysis, audits, hole hunts and new repertoire builds, migrating the old tactics depth; `EngineSettings.depth` controls live board analysis. Saved build configurations retain their captured depth for resume. Panel visibility and move-table controls remain in view settings. Settings use concise labels without introductory paragraphs. Game downloads use Apply; session and trainer preferences save automatically. PGN Viewer separates Playback, Board and moves, and Analysis panels. Narrow windows use searchable view and chapter pickers. `ViewSettingsRegistry` connects mounted view-owned builders; unmounted views initialise underneath the open route, respecting the generation lock. Global account drafts survive category navigation.
+- **Back navigation**: `AppHistory` records cross-view links. Manually selecting a view starts a fresh trail, including when selecting the current view. The shared toolbar keeps Back visible even when the breadcrumb is too narrow, returning to the previous destination. Mounted screens retain their context. PGN Viewer also captures its live collection, filters, game, reading position and tabs before leaving, so revisiting it with another game does not overwrite the earlier history entry.
+- **Settings**: One persistent route with a flat section list, a visible “Find a setting” field that matches section/control keywords, and one scrollable form per section. Wide windows show all section links in a sidebar; narrow windows show a horizontally scrolling section strip with the same search. No Views/Global navigation split or chapter submenus. Existing deep links resolve to the relevant flat section. View gears land on their own form; Study and Player analysis land on shared Analysis, and Databases lands on Data & storage. All compact engine gears use this same Analysis destination.
+
+  | Section | Complete control map and scope |
+  |---|---|
+  | Accounts | Lichess and Chess.com username fields with explicit Save usernames; optional Lichess connection/logout and inline personal-token fallback. Username drafts survive section navigation and do not trigger downloads while typing. Authentication may open the browser. |
+  | Board & moves | Shared coordinates, legal-move hints, piece notation and live preview. Applies to boards throughout the app. |
+  | Analysis | Shared CPU cores, memory, board-analysis depth, game-analysis depth, suggested lines and Maia prediction rating. Shared panel/table switches: engine continuations, practical scores (Expectimax), Maia move frequency, engine move-table scores and number of moves shown. Study uses the board controls; panel/table choices apply only to views that render those panels. `BulkAnalysisSettings` owns review/audit/hole-hunt/new-build depth; saved builds retain their captured depth. `EngineSettings.depth` is live board depth. |
+  | Training | One form for training mode, review schedule, new/review line limits (explicit Unlimited), correct-answer streak, drill depth, replay mistakes, manual rating, review order, quiz advancement/delay, automatic next line, opponent/intro delays, skipping to comments, current material’s playing side (from file/White/Black), chapter grouping, separator and inline grouping preview. Conditional controls follow the selected training/review mode. Changes persist through the existing training controller. |
+  | Tactics | Puzzle order, grouping by game, accepting alternative winning moves, age window/all dates, mistake types, unreviewed-only and one-star filtering. Game downloads directly below: last N games/days, time controls, games per site for repertoire comparison, startup checks and Save download settings. Session preferences save immediately; download drafts apply together so editing does not repeatedly reset the review run. |
+  | Game viewer | Playback visibility, seconds per move, continue to next game, PGN autosave, filling missing opening/ECO tags, orientation and current reader’s move-list anchor/expand/fold controls. Reader controls require loaded material. Flip and fullscreen remain workspace actions. Reset game viewer preferences affects the viewer preferences, not engine or global board settings. |
+  | Repertoires | White/Black books used for opening review, direct import/add-existing/new/remove designation controls; current builder repertoire’s playing side and board size below. Playing-side changes still use an explicit Apply because they reinterpret the loaded repertoire and remain locked during generation. |
+  | Tournament engines | Engine registry directly embedded. Add selects an executable; verification result appears inline; Edit reveals name, memory, cores, pondering and extra UCI fields inside the engine row. Save applies the engine draft; Cancel discards it. These settings affect tournament participants only. Match rules/time controls belong to New tournament. Removing an engine still confirms. |
+  | Bughouse (when available) | Hivemind cores, lines, memory, time per pass and batch size. These are separate from Stockfish preferences. |
+  | Data & storage | The database management body is embedded directly without navigating away. Master-game years/automatic updates/build usage sit alongside download status. Lichess and ChessDB installation/use/location controls, download progress and maintenance remain attached to their stores; preferences no longer hide under a Settings disclosure. Includes online ChessDB build lookup preference, own-game storage, bughouse archive status, leftovers/trash and refresh usage. Downloads remain explicit actions and permanent deletion confirms. The bughouse archive still requires its existing external build workflow; this settings redesign does not add a new downloader. |
+  | App | Installed version, automatic update checks/downloads, check/download/install-on-close/cancel actions, release/project/license links, and explicitly scoped reset of engine/analysis/display/database preferences. Accounts and material are kept; this is not a reset of every view preference. |
+  | Shortcuts | Read-only Action / Key / Where reference, backed by `app_shortcuts.dart`. |
+
+  `ViewSettingsRegistry` requests lazy view owners from `MainScreen` without calling `AppState.setMode`: browsing Settings does not change the active workspace, history or handoff. Mounted views retain their controllers; forms are kept mounted after first visit so drafts survive navigation. Closing the route restores focus through the active view’s callback; inactive settings owners never claim keyboard focus. Normal switches and numeric controls save through existing models; account/download/engine drafts and repertoire-side changes use labelled commit buttons. File selection, authentication and destructive confirmations remain separate interactions; ordinary preferences do not open another settings dialog.
 - **Layout body splits** at `kCompactBreakpoint` (960 px) from side-by-side to stacked.
 - **Action padding** is `right: 8` for all toolbar action widgets.
 - **Shared constants** live in `constants/ui_breakpoints.dart`.
 
-### Repertoire screen layout (right pane + bottom pane, redesigned June 2026)
+### Repertoire builder workspace
 
-Design principles (Chessable-style, Aug 2026): **what the repertoire contains** on the left (the outline: folders → chapters → lines, a real file structure), **the position** in the middle (board + PGN editor; no eval bar by design), **evidence about the position** on the right (Analysis panel: Engine | Database | Generate). **Bottom pane** = job output (Findings, Jobs/config) — collapsed by default. Generation and audit config are inline in the Jobs tab; the outline's chapter menu ("Generate lines into this chapter…") switches to that chapter, puts the board on the chapter's shared root, and opens it.
+The wide workspace keeps chapters on the left, the board in the center, and
+moves/comments above Engine / Database tabs on the right. Database sources are
+Engine evals (generated locally), ChessDB, Repertoire, Opening explorer, and
+Local PGN. No permanent bottom reference dock or duplicate Expectimax panel is
+shown. The eval source shows a legal-move table first; depth, cores, engine-move
+count and Maia coverage live in a persisted settings overlay accessible from its
+gear and the Actions menu. Import PGN and disk refresh also live in Actions.
+TWIC download status belongs inside the database surface. The comment editor is
+labelled Comment and expands on click or annotation focus.
+
+The [interactive JS design reference](../design/repertoire-builder/index.html)
+is a standalone mockup using sample data, adapted from the supplied
+[Chess.ceo reference](https://chess.ceo/). Serve that directory with a local HTTP
+server or open the HTML directly. It is a layout reference, not a chess engine.
+Flutter retains the app's typography, theme and real data sources.
+
+Chapter switches keep the workspace mounted with a thin loading indicator and
+temporary input lock. Initial opening still shows a loading state while files
+are read and parsed. Debounced line saves capture their destination and content;
+reloads flush and await queued writes before reading, and late writes cannot
+change the newly opened chapter's in-memory state. Board
+navigation sits immediately beneath the board. Go to start preserves the loaded
+line and annotations so Forward can continue through it.
 
 ```
 RepertoireScreen (composition root — wires controllers to widgets)
@@ -262,35 +370,30 @@ RepertoireScreen (composition root — wires controllers to widgets)
   ├─ TrapIndexService
   │
   ├─ Wide (≥ kCompactBreakpoint):
-  │     Row: Outline column (resizable, collapsible → "Chapters" strip)
-  │          | Board (square, annotated)
-  │          | PGN editor (PgnWithAnalysisPane) + NavControls
-  │          | Analysis panel (resizable, collapsible → "Analysis" strip)
-  │              TabBar: Engine | Database | Generate
-  │                Engine: InlineEngineBar over InlineExpectimaxBar
-  │                Database: RepertoireDatabasePane (Repertoire / Opening explorer source selector)
-  │                Generate: GeneratePositionPane (local analysis, live scores, single-move PV)
-  │       Outline column content = RepertoireOutlinePanel (default)
-  │          | line-metrics view (old RepertoireLinesBrowser: coverage/ease/coherence/traps, via
-  │            the header's metrics button, "Back to chapters" returns)
-  │       BottomPane (collapsed by default, full width): Findings | Jobs
+  │     Outline column (resizable, collapsible → "Chapters" strip)
+  │       beside a workspace containing:
+  │         Board + NavControls | Moves + Comment (PgnWithAnalysisPane)
+  │                             | Engine / Database tabs
+  │         Database source menu: Engine evals | Repertoire | Opening explorer | Local PGN
+  │     Outline content = RepertoireOutlinePanel, or the optional line-metrics view
+  │     BottomPane (collapsed by default, full width): Findings | Jobs
   │
   ├─ Compact (<960px):
-  │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN (with engine bars) | Chapters | Database | Generate
+  │     Column: Board (flex 4) | ToolsColumn (flex 5): PGN | Chapters | Database | Engine
   │
-  ├─ Inline config (in Jobs tab): Actions ▾ → Generate from here… / outline chapter menu → RepertoireGenerationTab;
+  ├─ Inline config (in Jobs tab): Actions ▾ → Generate from here… opens Database → Engine evals; outline chapter menu → RepertoireGenerationTab;
   │     Audit button / chapter menu → AuditConfigPanel
   ├─ RepertoireStatusBar (clickable badges → toggle bottom pane tabs)
   └─ optional TrapWalkthrough overlay
 ```
 
-**Outline panel** (`features/repertoire/widgets/repertoire_outline_panel.dart`): header (repertoire name, "N chapters · M lines", metrics button, collapse, `+` = New chapter…), search field, "At this position" filter chip; tree rows for folders (nestable, expand/collapse), chapters (active one highlighted; unfold to show lines; course-composer `[White]` sections shown as uppercase section headers), lines (name + move preview + ply count; model games italic). **Selection**: Ctrl/Cmd-click toggles a line, Shift-click extends; a selection lives in one chapter and a drag or menu on any picked line acts on all of them. **Right-click / long-press menus**: empty space → New chapter…, New folder…; folder → New chapter here…, New folder here…, Rename…, Move to…, Delete folder…; chapter → Open, Generate lines into this chapter…, Audit this chapter, Train this chapter, Rename…, Move to folder…, New chapter next to this…, Split into chapters… (course exports only), Delete chapter…; line → Load on the board, Train this line, Rename…, Move [N lines] to chapter…, Move [N lines] to a new chapter…, Delete [N lines] (no confirmation — the toast has Undo). **Drag & drop** (a mouse drags at once; touch after a press): a line onto a chapter row appends it, between two lines (top/bottom half of the row, drawn as an insertion line) lands it there — in another chapter or its own (reorder); lines onto a folder or the foot drop zone (shown only during a drag, = the top level) start a new chapter there, named after the first line; chapters and folders onto folders or the foot zone (a folder cannot be dropped into itself). A closed folder/chapter opens after the pointer rests on it 600 ms; the list auto-scrolls near its edges. Moves and deletions finish quietly. Edit outcomes retain undo callbacks (`OutlineEditOutcome.undo`), but no completion toast or toast action is displayed. A line that crosses files keeps its training progress: `ReviewProgressRepointer` pins `[LineID]` into the game and re-points the review CSVs (shared with the chapter splitter). Names go through the shared `showNameEntryDialog` with `RepertoireOutlineService.validateName` plus a same-folder duplicate check. Line edits address games by file index (`RepertoireLine.gameIndex`) because the move-based line id truncates and collides for lines sharing a long prefix.
+**Outline panel** (`features/repertoire/widgets/repertoire_outline_panel.dart`): header (Chapters, options menu with counts/metrics, collapse, `+` = New chapter…), visible search field, position filter in a menu; tree rows for folders (nestable, expand/collapse), chapters (active one highlighted; unfold to show lines; course-composer `[White]` sections shown as uppercase section headers), lines (name + move preview + ply count; model games italic). **Selection**: Ctrl/Cmd-click toggles a line, Shift-click extends; a selection lives in one chapter and a drag or menu on any picked line acts on all of them. **Right-click / long-press menus**: empty space → New chapter…, New folder…; folder → New chapter here…, New folder here…, Rename…, Move to…, Delete folder…; chapter → Open, Generate lines into this chapter…, Audit this chapter, Train this chapter, Rename…, Move to folder…, New chapter next to this…, Split into chapters… (course exports only), Delete chapter…; line → Load on the board, Train this line, Rename…, Move [N lines] to chapter…, Move [N lines] to a new chapter…, Delete [N lines] (no confirmation — the toast has Undo). **Drag & drop** (a mouse drags at once; touch after a press): a line onto a chapter row appends it, between two lines (top/bottom half of the row, drawn as an insertion line) lands it there — in another chapter or its own (reorder); lines onto a folder or the foot drop zone (shown only during a drag, = the top level) start a new chapter there, named after the first line; chapters and folders onto folders or the foot zone (a folder cannot be dropped into itself). A closed folder/chapter opens after the pointer rests on it 600 ms; the list auto-scrolls near its edges. Moves and deletions finish quietly. Edit outcomes retain undo callbacks (`OutlineEditOutcome.undo`), but no completion toast or toast action is displayed. A line that crosses files keeps its training progress: `ReviewProgressRepointer` pins `[LineID]` into the game and re-points the review CSVs (shared with the chapter splitter). Names go through the shared `showNameEntryDialog` with `RepertoireOutlineService.validateName` plus a same-folder duplicate check. Line edits address games by file index (`RepertoireLine.gameIndex`) because the move-based line id truncates and collides for lines sharing a long prefix.
 
 **Planner (`lib/features/planner/`, “Plan starting lines…”)**: full-width planning mode (`PlanBuildScreen`) accepts several named move sequences from the initial position, one per row (`Name | 1.d4 Nf6 …`). Users can add/remove positions, select a root to preview or extend on the board, and return from review to edit the starts. **Choose ECO openings…** opens the shared catalog picker: search by code/prefix or opening name, tick multiple named lines, preview their boards and edit their moves before adding them as named starting lines. Existing nonempty starts are preserved; duplicate/overlapping roots use the same validation as typed lines. `models/plan_starting_line.dart` canonicalizes legal SAN and rejects invalid moves, duplicate positions and overlapping ancestor/descendant paths instead of silently truncating input. **Guided choices** runs the opening-book or own-games quiz across every supplied root; Back and Finish now preserve the remaining roots. Own-games thresholds are relative to each root’s sample. **Use these positions** skips the questions, starts with the ChessDB compact profile and sends one named chapter per root to review. The review validates build settings before generation, permits renaming/removing chapters, and preserves settings when returning to setup. Generation limits apply per build point.
 
 The quiz uses `services/eco_trie.dart` to identify opening forks and `services/plan_data_source.dart` for ECO names, Maia probabilities and ChessDB evaluations. `services/plan_knowledge.dart` overlays existing chapter choices and the user’s games. `PlanController.startMany` keeps distinct root chapters and walks their branches in order; no build runs during planning. Review returns `PlanBuildResult`; `PlanRunner` creates chapter files through `RepertoireOutlineService`, then queues each `PlanBuildPoint` through `GenerationSessionController`. Every request carries its complete starting move prefix and the standard PGN root, so KID, Fianchetto and London continuations all export from move one.
 
-**Toolbar**: title/breadcrumb (repertoire ▸ chapter switcher) · `Actions ▾` — one sectioned menu (`AppMenuEntry.heading`): GENERATE (Plan the lines…, Generate from here…) · IMPORT (From a PGN…) · TRAIN (Train this chapter) · CHECK (Audit for gaps…) · mode switcher · settings gear (embedded repertoire options and analysis chapters in the shared settings sidebar). "Play the moves myself" and "From my games" were removed in Sept 2026: both are the planner's job (moves played on the board at a question; the "My games" walk).
+**Toolbar**: title/breadcrumb (repertoire ▸ chapter switcher) · `Actions ▾` — one sectioned menu (`AppMenuEntry.heading`): GENERATE (Plan the lines…, Generate from here…) · IMPORT (From a PGN…) · TRAIN (Train this chapter) · CHECK (Audit for gaps…) · mode switcher · settings gear (Repertoires form in the shared flat Settings screen). "Play the moves myself" and "From my games" were removed in Sept 2026: both are the planner's job (moves played on the board at a question; the "My games" walk).
 
 **Key files:**
 - `lib/core/generation_session_controller.dart` — owns the run and the generated-tree bundle; pause/resume/cancel survive dialog disposal; `dispose()` stops build. Progress UI state lives on `GenerationProgress`; mid-run line export lives on `SnapshotExporter`.
@@ -298,8 +401,6 @@ The quiz uses `services/eco_trie.dart` to identify opening forks and `services/p
 - `lib/features/coverage/controllers/coverage_controller.dart` — owns coverage result + progress state
 - `lib/widgets/layout/bottom_pane.dart` — resizable, collapsible, tabbed bottom pane (Findings/Jobs — the Lines list lives only in the side panel)
 - `lib/widgets/engine/inline_expectimax_bar.dart` — compact toggleable expectimax PV display
-- `lib/widgets/generation_config_dialog.dart` — legacy modal dialog (still importable but generation config now shows inline in Jobs tab)
-- `lib/features/audit/widgets/audit_config_dialog.dart` — legacy modal dialog (audit config now shows inline in Jobs tab)
 - `lib/features/audit/widgets/audit_findings_panel.dart` — findings list with category filter chips, auto-scaled to ~20 findings, bulk dismiss, keyboard navigation, and interrupted-audit resume banner; dismiss context menus use `showAnchorMenu` (shared with the holes report)
 - `lib/features/audit/services/audit_persistence.dart` — centralized save/load for audit snapshots (result + config + resume state)
 - `lib/widgets/layout/jobs_panel.dart` — jobs panel: one compact card per active generation/audit job (phase, live stats, threads/hash, progress bar, controls); completed jobs as simple tiles; no duplicate status banners
@@ -314,10 +415,37 @@ The quiz uses `services/eco_trie.dart` to identify opening forks and `services/p
 
 **Line metrics view (outline column):** The old `RepertoireLinesBrowser` (search/filter/sort, coverage/ease/coherence columns, gap buttons) plus the Lines/Traps segmented toggle, reached from the outline header's metrics button; "Back to chapters" returns to the outline. The Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges, and expandable detail cards. `BoardPreviewController` is threaded through; a `FloatingBoardPreview` overlay is mounted in the view's `Stack`.
 
-**Database tab (analysis panel):** The Repertoire source shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **paths** (including variations) when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
+**Database tab:** The Repertoire source shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines via the same `OpeningTreeBuilder` as the PGN viewer (Actions → Tree). Course-style `*` games fold RAVs in; frequency shows as **paths** (including variations) when there is no W/D/L. The cursor is FEN-keyed: a different move order that reaches a known position still shows that position's continuations, and a position the PGN never reached still lists legal moves that transpose into book (marked `≈`). Navigates with back/forward and syncs with the board via `RepertoireController.userSelectedTreeMove` (plays from the board cursor so the user's move order is kept). When no opening tree is available (empty repertoire), shows an empty-state message.
 
 The separate Tree tab has been removed. Database offers the repertoire tree and
-live opening explorer through a compact source switcher. Copying moves stays in
+live opening explorer and local PGN databases through a compact source switcher.
+The selected source is remembered. Explorer games open in a separate reference
+viewer at the board position, preserving the repertoire cursor. `ExplorerGameOpener.fetchPgn`
+fetches the game without adding a copy to a collection.
+
+**Local PGN** (`features/repertoire/services/local_reference_database.dart`,
+`widgets/local_reference_pane.dart`): choose any standard-chess PGN, switch among
+eight recent paths, or refresh after changing the file. A cancellable isolate
+streams one game at a time into a SQLite cache under
+`<application cache>/repertoire-reference/`. The original PGN is read-only.
+Completed indexes are keyed by source path, size, modification time and schema
+version; incomplete builds use private staging directories and are not reused.
+The index stores original single-game PGNs, a canonical-FEN game index and
+pre-aggregated move counts. All mainline positions, including terminal positions,
+are indexed; each game contributes only its first continuation at a repeated
+position. Transpositions merge, FEN starts are supported, and illegal/unsupported
+mainlines are skipped with a visible count. Variations and annotations are
+preserved for reading but do not inflate played-game statistics. Unknown results
+count as games, not draws.
+
+Move statistics and matching games appear side by side at wider dock sizes;
+narrow docks use Moves / Games tabs. Search filters the matching games by player,
+event, site or ECO; it does not change the position's move statistics. Queries
+run off the UI isolate, return at most 50 PGNs per page, and discard superseded
+results. A move row plays the move; its explicit `+` adds it to the repertoire.
+Game rows reuse `PgnTreeGamesList` with host-owned search and paging, and open a
+separate board/notation dialog. This source supplies browsing evidence; automatic
+generation continues to use its existing configured sources. Copying moves stays in
 the PGN editor context menu. Repertoire selection uses compact searchable rows:
 clicking a repertoire opens it directly (Builder opens its first file with the
 full outline available), while Browse chapters is an optional action.
@@ -457,38 +585,21 @@ CoverageCalculatorWidget / CoverageService
 
 ### Audit
 
-Config in dialog, results in bottom pane:
+Configuration opens as a route; results stay in Builder's bottom pane.
+See [the audit feature](#libfeaturesaudit) for lifecycle and persisted report details.
 
 ```
-AuditSessionController (owns RepertoireAuditService + all audit state)
-  ← Screen delegates pause/resume/cancel via controller methods
-  ← tryRestore() on repertoire load; launchResume() for interrupted audits
-  ← Persistence: saveProgress/saveComplete/onResultChanged via AuditPersistence
+AuditConfigPanel → AuditSessionController.launch
+  → engine setup → RepertoireAuditService.audit → engine cleanup
+  → guarded progress and findings → AuditFindingsPanel
+  → chapter-specific partial / complete snapshot
 
-AuditConfigDialog (toolbar button)
-  → Wraps AuditConfigPanel in a modal dialog
-  → Config: source toggles (Stockfish/Maia; Lichess DB mothballed, `useLichessDb` defaults false), thresholds, scope
-  → Start button closes dialog, task runs in background
-  → Bottom pane auto-opens to Findings tab
-  → RepertoireAuditService.audit(openingTree, config)
-       BFS: our moves → StockfishPool.discoverMoves (eval loss check)
-       BFS: opponent turns → MaiaFactory (gap check); ProbabilityService mothballed (no Lichess API); clash tree from book PGNs (source: clash)
-       BFS: leaves → dead-end detection (stores uncovered move SANs)
-       Cumulative probability: product of opponent move frequencies from root
-  → Callbacks: controller.onAuditingChanged, .onResultReady, .onLiveFinding
-
-AuditFindingsPanel (bottom pane Findings tab)
-  → Receives AuditResult from controller; `interruptedSnapshot` + resume banner when incomplete audit detected
-  → onResumeAudit / onStartFreshAudit → controller.launchResume / startFresh
-  → FindingsDisplayFilter: auto-scales when >100 findings (drops info → raises reach floor)
-  → Summary card: soundness %, coverage %, clickable type badges
-  → Filter bar: severity chips (Critical/Warning/Info), "X of N" counter
-  → Findings list: sort (severity/reach/ply), filter by type
-  → Bulk dismiss: right-click → dismiss similar / at depth / all of type
-  → Keyboard: ↓/↑ cycle findings when panel focused (board navigates); dismiss with the row menu
-  → Selected finding highlighted, board arrows shown
-  → Dismissed section: count + "Restore all" at bottom
-  → Finding tap → RepertoireController.loadMoveSequence()
+AuditFindingsPanel
+  → chapter, checked positions, settings tooltip, source warnings and errors
+  → Priority / Frequency sort, move/line search, type and clash filters
+  → configurable cap, stable selected finding, board navigation
+  → dismiss / restore / bulk dismiss, keyboard navigation
+  → interrupted report: Resume original scope / Start fresh
 
 Controller state:
   → AuditResult + liveFindings + interruptedSnapshot + progress + _activeRepertoireId
@@ -633,18 +744,41 @@ matching line for reading. `MoveAttemptStore` keeps this history attached when
 lines move or split into chapters, and when an owned chapter or repertoire
 folder is renamed or moved.
 
+Trainer loading shows the current stage (preparing lines or restoring progress),
+reuses the last parsed source when its contents and training side are unchanged,
+skips unchanged review-file writes, and computes builder-tree difficulty in a
+worker that returns only per-line scores. Difficulty preparation runs in the
+background unless the selected queue order requires it. Reading and training use
+the builder's saved PGN and stable line identities; edits require reloading the
+trainer's source. Keyboard ratings **1 / 2 / 3 / 4** select **Again / Hard / Good /
+Easy** on the manual review result screen, with interval previews and shortcut
+tooltips. These keys remain text while an input has focus.
+
 Trainer view organization: source browser, lesson and results share the same
 board/panel frame. One phase panel replaces separate intro/learn/drill/replay
 views and move-pair cards. The independent chapter reader was removed; PGN
 reading belongs to the canonical viewer. Mistakes is a list in the existing
 side pane, not a separate screen.
-Training uses Actions → view picker → gear. The gear opens the shared settings sidebar with nested Session, Learning, Playback and Material chapters. **Skip** is visible during a
+Training uses Actions → view picker → gear. The gear opens the single Training form in shared Settings. **Skip** is visible during a
 lesson and leaves a line out for the current sitting without rating it.
 **Line → Exclude from training** saves an exclusion alongside review progress;
 excluded lines remain readable and can be restored from their line options.
 They do not contribute to Learn/Review counts or either scheduling queue.
 
 ### PGN viewer (Open PGN)
+
+Opening a collection reads its text and indexes game headers off the UI thread;
+the selected game becomes readable before collection-wide opening classification
+and position indexing. A thin progress bar identifies this background work while
+game navigation remains available. Saved filters are restored before reading
+(and may require opening classification); the previous game and ply are retained.
+A manual board flip becomes the fixed perspective for subsequent games; selecting
+a player perspective restores automatic orientation for that player.
+Shared horizontal reader controls, breadcrumbs, filter strips and evaluation
+graphs accept vertical mouse-wheel scrolling, including in Tactics. Horizontal
+trackpad scrolling is retained, and vertical scrolling passes to a surrounding
+scroll view when the strip reaches its edge.
+
 
 **Actions ▾** offers icon-labelled **Edit**, **Show opening / Hide opening**, **Show Engine / Hide Engine**,
 **Evaluation graph / Tree**, **Copy Game PGN**, **Copy mainline PGN (no comments)**,
@@ -688,7 +822,7 @@ board arrow, and resets when the position changes. It is unavailable in check
 or at game end. Threat lines offer board previews but cannot be inserted into
 the real game's move list, and their evals are not cached as game evaluations.
 Turning the engine off, hiding it, or leaving the active Game tab releases its
-worker. View settings now contain Playback and Board and moves; view settings
+worker. Game viewer settings contain playback and board/move controls in one form; view settings
 content is capped at 728px including padding so controls remain beside labels.
 Move-quality glyphs on mainlines and variations, inline analysis verdicts and their borders, and
 the analysis move list use the shared NAG palette: blue inaccuracies, amber
@@ -748,15 +882,16 @@ whose title, moves and notes fit stay at the top for every anchor setting.
 Long chapters retain the selected anchor while content remains below it;
 near the end, scrolling stops at the document boundary instead of revealing
 a screen of blank space.
-Global **Settings → Keyboard shortcuts** shows a compact, bordered Action / Key / Where table with keycaps. Bindings and reference rows live together in `app_shortcuts.dart`; there is no separate list of handwritten mappings. Shared settings cards use 10px vertical row/header padding and 12px group gaps, with a 680px content cap to keep labels and values close together.
+**Settings → Shortcuts** shows a compact, bordered Action / Key / Where table with keycaps. Bindings and reference rows live together in `app_shortcuts.dart`; there is no separate list of handwritten mappings. Shared settings cards use 10px vertical row/header padding and 12px group gaps, with a 680px content cap to keep labels and values close together.
 
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
   → StorageService.fileExists / readFile (absolute paths as-is; relative → app documents)
-  → compute(parseMultiGamePgn) → allGames / filteredGames
+  → compute(parseMultiGamePgn) → lightweight headers/raw text in allGames / filteredGames; only the selected game is parsed into the reader
   → on failure: controller.errorMessage + debugPrint; screen shows SnackBar + inline error in empty state
   → on success: recent-files prefs, missing ECO/Opening tags, optional saved slice and reading-session restore, loadCurrentGame
   → viewer startup reopens the last file, filters, sort order, game and mainline move; explicit file/game handoffs take precedence. Closing the collection clears auto-reopen, keeping its per-file bookmark. `ViewerSessionStore` validates game identity before restoring a cursor, including when a file was reordered.
+  → ordinary opens make the selected game available before background opening classification and position indexing finish (saved filters needing opening tags wait for classification). Opening-tag autosaves match source game ranges in one pass and assemble the document in an isolate under the atomic file lock; they preserve untouched text and reject changed/duplicate source games.
   → default-on **Board and moves → Auto-detect ECO and opening** classifies every game's mainline using the bundled opening book (including transpositions). Missing/placeholder ECO and Opening tags are patched into the source PGN without replacing existing values or reserializing movetext. Detected tags appear above the game and in exported/copied PGNs. Turning this off stops detection and hides that label; previously saved tags remain in the PGN.
   → game change (↓/↑, dropdown, slice, sort): `loadCurrentGame` resets `currentPosition` to start; `PgnViewerWidget._loadGame` defers `onPositionChanged` to a post-frame callback (avoids setState-during-build when called from `didUpdateWidget`)
 Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].pgnText` → `Clipboard.setData` + `AppMessages.pgnCopied` snackbar
@@ -829,7 +964,16 @@ available, including ungrouped games. Search matches game labels, chapters,
 players, event, place, dates, openings and study text within the selected group;
 empty results offer Search all games. A number still offers Go to game N.
 Narrow windows move the compact group rows into a horizontal strip. Repertoire
-and training chapter pickers also use reduced row padding.
+and training chapter pickers use compact rows with at most two title lines and
+full-name tooltips. Full-screen repertoire and chapter libraries cap their reading
+width at 920px. Embedded course contents show three chapters initially, with a
+Show all / Show fewer toggle; searching reveals matching chapters even when
+collapsed. Line counts use bright 13px text; trainer chapter cards keep progress counts without repeating a full progress bar per row. Chapter setup scrolls within short
+windows, and study chapter names expose full titles on hover.
+Shared tooltips wrap at 480px. Database destination rows wrap drive metadata beneath a bounded path instead of reserving fixed columns. Review zero counts, one-star tactics and selectable
+game-window alternatives retain readable ink. Below 760px, optional tactics filters and sorting collapse behind a disclosure; actions and sort choices wrap. Tactics browse rows stack game and move details with a per-row actions menu instead of squeezing the full table. Move entry hints and borders remain
+visible before typing; annotation and finding colors use brighter green, red and
+purple for dark surfaces.
 
 PGN moves use a consistent 16px regular weight across annotated moves,
 unannotated moves and variations. The current move is marked by its background
@@ -893,7 +1037,7 @@ Toggled through **Actions → Edit PGN**. When active:
 - **Save status and annotation panel**: PGN Viewer keeps autosave controls in Actions/settings without a persistent status label; failed autosaves expose Save to retry. Study shows a quiet, fixed-width status beside the file title: **Autosave on · Saved**, **Saving…**, or **Not saved** on failure. There are no success popups or animated indicators, and saving does not insert a toolbar or shift the board. Hover reveals the file path or failure details. Manual saving reports **Autosave off · Saved** / **Unsaved changes** and keeps **Save** available; pasted games say **Not saved to a file** and offer **Save as…**. Failed viewer autosaves expose **Save** to retry. The shared Notes panel labels its target move; NAG buttons retain move-quality colors. Emptying an existing comment field keeps the stored comment until the explicit Delete comment action is confirmed, allowing replacement text without a popup while typing. Submitting an empty inline comment asks before removal. Branch deletion always confirms the count of moves and prose comments across all nested variations; chapter deletion and bulk clearing also show affected counts, including chapter introductions and variation starting comments. Confirmed removals follow the host's normal save setting.
 - **Context menu**: Right-click in edit mode shows Comment, Annotate, Promote (variation), Delete — with promote/delete gated by `protectOriginal`.
 - **Keyboard**: `Escape` exits edit mode.
-- **Persistence**: User-added moves and variations persist in both reading and edit mode; Edit PGN exposes annotation controls. **Settings → PGN Viewer → Board and moves → Autosave PGN edits** defaults on. Turning it off keeps edits in memory across game navigation until **Save**; closing the file, replacing the collection, or closing the window offers Save / Discard / Cancel. Solitaire guesses and read-only reference readers remain temporary. Saves patch changed games into the source file, preserve unrelated games and file preambles, and retain unsaved status on failure. Pending comments flush on Save and when finishing editing, before the annotation panel is removed; repainting waits until the widget tree unlocks. NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
+- **Persistence**: User-added moves and variations persist in both reading and edit mode; Edit PGN exposes annotation controls. **Settings → Game viewer → Autosave PGN edits** defaults on. Turning it off keeps edits in memory across game navigation until **Save**; closing the file, replacing the collection, or closing the window offers Save / Discard / Cancel. Solitaire guesses and read-only reference readers remain temporary. Saves patch changed games into the source file, preserve unrelated games and file preambles, and retain unsaved status on failure. Pending comments flush on Save and when finishing editing, before the annotation panel is removed; repainting waits until the widget tree unlocks. NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
 
 Key files: `pgn_comment_utils.dart` (`buildGameMovetext`, the one serializer for a parsed game), `pgn_viewer_widget.dart` (`editMode`), `pgn/pgn_annotation_panel.dart`, `pgn/pgn_viewer_widget_annotations.dart`, `pgn_viewer_screen.dart` (`_editMode`, `_buildEditModeBar`).
 
@@ -997,8 +1141,8 @@ Used by:
 | `generation_session_types.dart` | `GenerationRequest` (+ `expectimaxProbe`, `resolveLinePrefix`), `GeneratedLineExport`, `TreeAnalysis`, `ExtractedLines`, `ExpectimaxProbeTarget` (+ `moves`, `probeConfig`, `movePvConfig`) | — |
 | `game_sorting.dart` | Comparators behind the PGN viewer's `GameSortMode`s | `sortGamesInPlace`, `compareGamesBy*` |
 | `move_navigation.dart` | `MoveNavigation` mixin (back/forward/start/end over a `MoveTree` + `TreePath`) and `MoveTree.pathForSans` | `goBack`, `goForward`, `goToStart`, `goToEnd`, `pathForSans` |
-| `audit_session_controller.dart` | **Audit session state** — owns `RepertoireAuditService` + result, live findings, progress, config, interrupted snapshot; handles persistence via `AuditPersistence`; `onLiveFinding` creates a new list on each addition (avoids stale-reference bugs in widget comparisons) | `pause`, `resume`, `cancel`, `saveProgress`, `tryRestore`, `launchResume`, `startFresh`, `onAuditingChanged`, `onResultReady`, `onLiveFinding`, `onProgress` |
-| `coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
+| `features/audit/controllers/audit_session_controller.dart` | **Audit session state** — owns `RepertoireAuditService` + result, live findings, progress, config, interrupted snapshot; handles persistence via `AuditPersistence`; `onLiveFinding` creates a new list on each addition (avoids stale-reference bugs in widget comparisons) | `pause`, `resume`, `cancel`, `saveProgress`, `tryRestore`, `launch`, `launchResume`, `startFresh`, `onAuditingChanged`, `onResultReady`, `onLiveFinding`, `onProgress` |
+| `features/coverage/controllers/coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
 | `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `collectionRevision` invalidates search snapshots after in-place header/movetext changes; movetext edits invalidate the FEN index and use replay until rebuilt; `detectProtagonist`, `detectBothPlayers` (two-player matchup detection); `loadCurrentGame` parks at `pgnInitialFen` when set (tree landing / restored game cursor), else game start; `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); loads persisted `.fenidx` companion file on open (validated against PGN file size + mtime + game count; FENIDX3, RAVs included), or builds `fenIndex` in background, for instant position-filter and tree-position lookups; re-persists `.fenidx` after PGN metadata writes to keep stat values fresh; solitaire mode (`toggleSolitaire`, `SolitaireController`); used by `PgnViewerScreen` |
@@ -1014,10 +1158,8 @@ Used by:
 |------|---------|
 | `analysis/discovery_result.dart` | Engine discovery lines (MultiPV) |
 | `analysis/move_analysis_result.dart` | Per-move analysis in game review |
-| `analysis_node.dart` | Game tree node for analysis |
 | `analysis_player_info.dart` | Player metadata for analysis; `accounts` (the chess.com/lichess handles an opponent's merged game-set came from — what makes it re-downloadable) and `group` (event name); `displayName` is the first `;`-segment of the username |
 | `build_tree_node.dart` | **Generated tree node**: eval, ease, myEase, expectimax, traps, `pvContinuationMove`, `engineInjected`, children, serialization |
-| `chess_game.dart` | Loaded game model for tactics/analysis |
 | `engine_evaluation.dart` | Single eval result |
 | `engine_settings.dart` | **Singleton** engine/generation/explorer settings + SharedPreferences persistence; setters share `_assignIfChanged` / `_assignInRange`; persist is fire-and-forget via `_persist()` |
 | `engine_weakness_result.dart` | Weak square / position analysis output |
@@ -1039,8 +1181,8 @@ Used by:
 | `repertoire_review_entry.dart` | FSRS-style review scheduling |
 | `repertoire_review_history_entry.dart` | Review history log |
 | `settings_enums.dart` | `CandidateSource`, `SelectionMode` (`expectimax`, `engineOnly`, `dbWinRateOnly`), `OpponentProbabilityMode`, etc. |
-| `tactics_position.dart` | Tactics puzzle position; includes `int rating` (0=unrated, 1–5 stars; 1-star excluded from training by default) |
-| `tactics_session_settings.dart` | `TacticsSessionSettings` — order (`newestFirst`/`leastReviewed`/`worstSuccessRate`/`random`), `mistakeTypes` filter, `includeOneStar` toggle, `acceptAlternatives` (ask Stockfish about a non-matching move before calling it wrong; off by default); `accepts(pos)` for session filtering |
+| `features/tactics/models/tactics_position.dart` | Tactics puzzle position; includes `int rating` (0=unrated, 1–5 stars; 1-star excluded from training by default) |
+| `features/tactics/models/tactics_session_settings.dart` | `TacticsSessionSettings` — order (`newestFirst`/`leastReviewed`/`worstSuccessRate`/`random`), `mistakeTypes` filter, `includeOneStar` toggle, `acceptAlternatives` (ask Stockfish about a non-matching move before calling it wrong; off by default); `accepts(pos)` for session filtering |
 | `training_settings.dart` | Trainer behavior (persisted); `ReviewOrder` enum includes `hardestFirst` (sorts by ascending playability from tree) |
 
 ### `lib/features/browse/`
@@ -1071,7 +1213,7 @@ Used by:
 | **widgets/trap_move_indicator.dart** | Orange dot for pre-trap PGN moves, enriched multi-line tooltip (mistake desc, popularity, reach, score) |
 | **widgets/trap_navigation_buttons.dart** | Prev/next trap in line (board toolbar) |
 | **widgets/trap_summary_header.dart** | Aggregate trap stats + ETV |
-| **widgets/trap_walkthrough.dart** | Sequential trap tour with list hover preview |
+| **widgets/trap_tour_bar.dart** | Sequential trap tour bar with list hover preview |
 | **widgets/traps_browser.dart** | Rich trap list with mini board, per-reply stats, classification badges, sort by Eval Drop/Most Common/Trap%/Surplus; filter toggle: All Explored vs In Repertoire (wired into repertoire screen Lines tab) |
 
 ### `lib/features/eval_tree/`
@@ -1106,40 +1248,46 @@ Repertoire quality audit — BFS over the existing `OpeningTree` to detect mista
 | **services/audit_config.dart** | `AuditConfig` thresholds (mistake/inaccuracy cp, min games, Maia prob, depth); `useLichessDb` defaults `false`; `clashPgnPaths` for repertoire-clash checking against book/course PGNs; `toMap()`/`fromMap()` serialization; `summaryLabel` compact display |
 | **services/repertoire_audit_service.dart** | BFS walker: Stockfish MultiPV for our moves, Maia for opponent gaps (Lichess mothballed), repertoire-clash check against book/course PGN tree (`MissingResponseSource.clash`); reads/writes `EvalCache`; computes cumulative reach probability per finding; transposition detection for missing moves (checks if resulting FEN exists in tree's `fenToNodes`); `pause()`/`resume()`/`cancel()`; exposes `checkedFens` for resume support; accepts `skipFens`/`priorFindings` to resume interrupted audits |
 | **services/audit_persistence.dart** | `AuditPersistence` singleton: centralized save/load for audit snapshots (`AuditSnapshot` = result + config + checked FENs + completion state). Auto-loads on repertoire open, auto-saves on dismiss changes. Handles v1 (legacy) and v2 (envelope) JSON formats |
-| **widgets/audit_config_panel.dart** | Compact audit configuration: always uses Stockfish + Maia (no source toggles), scope toggle (subtree-only chip), key thresholds (Eval Depth/Max Ply/Maia Elo) shown by default, detailed thresholds under "More thresholds" expander (Mistake cp, Inaccuracy cp, Min Maia Prob — minGames hidden since Lichess mothballed), **Repertoire Clashes** section with PGN file picker for checking against book/course lines, compact start/cancel with inline progress; `useLichessDb` hardcoded false; accepts external `RepertoireAuditService` for pause/resume from Jobs tab |
-| **widgets/audit_config_dialog.dart** | Modal dialog wrapping AuditConfigPanel; forwards `auditService` and `onConfigChanged` |
-| **widgets/audit_findings_panel.dart** | Results display: category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends) + Clashes source filter (purple, shown when clash findings exist), sorted by reach probability with per-tile probability label, user-configurable visible cap (default 20, inline text field), reach range shown in status row, bulk dismiss context menu, keyboard navigation (↓/↑ and D when panel focused; suppressed in text fields), selected state, timestamp display, "Re-run audit" button; resume banner when `interruptedSnapshot` set (`onResumeAudit`, `onStartFreshAudit`) |
+| **widgets/audit_config_panel.dart** | Configuration-only route: Current chapter / current-position subtree, Stockfish + Maia, optional ChessDB strong replies, depth/ply/rating and validated detailed thresholds, optional clash PGNs. Calls `onStart(config, startFen)`; the session controller owns execution after the route closes. |
+| **widgets/audit_findings_panel.dart** | Builder Findings tab: severity-first Priority or estimated Frequency sort, move/line search, category and clash filters, configurable visible cap, dismiss/restore, keyboard navigation and stable live selection. Chapter/count/settings context, source warnings, visible run errors, and interrupted-run Resume / Start fresh. |
 
-**Entry points:** Toolbar "Audit" button is context-aware: opens bottom pane Findings tab if audit running or results exist; opens config dialog otherwise. Force-open config via "Re-run audit" button in findings panel. Results appear in bottom pane Findings tab.
+**Entry points:** Builder's context-aware Audit action opens Findings for a run
+or saved report, otherwise the **Check this chapter** configuration route.
+The findings refresh action opens configuration again. Creation and organization
+remain in Repertoires; audits stay beside the lines being reviewed.
 
-**Persistence:** Audit results are saved to `<repertoire>_audit.json` via `AuditPersistence`. Results auto-load when a repertoire is opened (`AuditSessionController.tryRestore()` in `_onRepertoireChanged`), so findings survive app restarts. Dismissal changes auto-save via `controller.onResultChanged`. Cancel/dispose call `controller.saveProgress()` → `AuditPersistence.saveProgress()`. `tryRestore()` checks `isComplete` and sets `interruptedSnapshot` for incomplete audits; `controller.launchResume()` resumes with `skipFens`/`priorFindings`. The snapshot envelope (v2) stores the `AuditConfig`, checked FEN set, and completion state.
+**Persistence and lifecycle:** `<chapter>_audit.json` stores the result, config,
+completion state, checked FENs for interrupted runs and optional subtree start
+FEN. Old v1/v2 reports still load. Dismissal edits preserve partial status and
+resume scope. Writes are serialized per report path. `AuditSessionController.launch`
+owns engine preparation, service execution and cleanup; run versions guard
+callbacks, and replacement runs wait for cancelled work to finish. Cancellation
+and chapter switches save progress before invalidating the run. Engine startup
+and run failures keep an interrupted report and expose an error. Resume traverses
+already-checked positions for complete statistics without rechecking leaves.
 
-**Data flow:**
-```
-AuditSessionController._launchAuditConfig() (via screen)
-  ├─ AuditConfigDialog → AuditConfigPanel._startAudit()
-  │    ├─ onConfigChanged → controller.lastConfig (stored on controller + job.configSnapshot)
-  │    ├─ EngineLifecycle.enterGeneration(1)
-  │    ├─ EvalCache.init()  ← shared SQLite eval store
-  │    ├─ controller.service.audit(openingTree, config, ...)
-  │    │    ├─ BFS over OpeningTree nodes (tracks cumulative reach probability)
-  │    │    ├─ Our turn: StockfishPool.discoverMoves → cache best-line eval
-  │    │    │    └─ Per-move: EvalCache hit? → skip Stockfish : evaluateFen → cache
-  │    │    ├─ Opponent turn: MaiaFactory → check coverage (ProbabilityService mothballed)
-  │    │    └─ Leaves: check for uncovered opponent continuations
-  │    ├─ onProgress → controller.nodesChecked/totalNodes + currentJob.updateProgress()
-  │    ├─ onLiveFinding → controller.liveFindings
-  │    └─ onResultReady → controller.result + persisted to <repertoire>_audit.json
-  ├─ RepertoireAuditService owned by controller → pause/resume/cancel from Jobs tab
-  └─ EngineLifecycle.exitGeneration() on cancel
-```
+**Data flow:** configuration → controller.launch → engine preparation → service
+BFS → guarded findings/progress callbacks → report save → engine cleanup.
+The service checks our moves with Stockfish MultiPV and per-move evals, checks
+opponent replies with Maia / ChessDB / Stockfish / clash PGNs, and probes line
+endings. Stockfish and Maia reuse the generation caches. Jobs controls pause,
+resume and cancel through the controller.
+
+**Practical limits:** This is a targeted chapter check, not proof of a sound or
+complete repertoire. Depth, MultiPV, reply windows and source availability limit
+coverage. Unavailable sources and unscored ChessDB positions produce persisted
+warnings. Frequency estimates combine repertoire branch counts and source
+probabilities; they are not measured frequencies from the user's games. Whole-
+repertoire aggregation and automatic detection of edits since the saved audit
+remain follow-ups. Rerun after changing lines. Soundness counts affected positions
+once even when one move produces both a move-quality and weak-position finding.
 
 **Finding UX:**
 - Clicking a finding navigates within the existing repertoire tree (via `navigateToLineMove`) — the full tree with all variations is preserved.
 - **Missing-move ephemeral preview:** Clicking a missing-move finding navigates to the parent position AND shows the missing move played ephemerally on the board (position after the missing move). A blue "Go to position" bar appears below the board with the missing move name; clicking it navigates to that position in the tree. Close button dismisses the ephemeral preview. Ephemeral state auto-clears when the user navigates normally.
 - **Transposition detection:** Missing-move findings check if the resulting FEN (after playing the missing move) already exists in the repertoire tree. If so, the finding is tagged "transposes" in the summary — indicating the gap is less critical because the position is already covered elsewhere.
 - Category filter chips: Blunders, Inaccuracies, Missing, Weak, Dead Ends — click to toggle (multi-select). Counts shown per chip.
-- **Auto-scaling:** At most ~20 findings shown at a time (sorted by reach probability, highest first). As findings are dismissed, lower-probability ones surface. Status bar shows "20 of 150 findings" when capped.
+- **Auto-scaling:** At most ~20 findings shown at a time (severity first by default). As findings are dismissed, the next priority items surface. Frequency ordering remains available. Status bar shows "20 of 150 findings" when capped.
 - **Probability display:** Missing moves show Maia probability (e.g. "p=0.003 Maia" for small values). Uses adaptive formatting: ≥10% → integer, ≥1% → 1 decimal, ≥0.001 → 3 decimals, smaller → scientific notation.
 - Move numbers in summaries: "Missing: 3...Nd2" instead of "Missing: Nd2". Also for mistakes/inaccuracies.
 - Dismiss button: 16px icon with 32px hit target and hover feedback.
@@ -1242,7 +1390,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `study_screen.dart` | **Composition root** for Study mode — wires `StudyController` to `StudyBoardPane`, `StudySidePane`, `StudyPickerBar`, `StudyChapterSidebar`; keyboard, import/export, train/browse handoffs stay on the screen |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: arrows, Home/End, Enter, Space, Escape, Ctrl/Cmd+V paste, F11 fullscreen; caches `AppState` so dispose does not `context.read` |
 | `player_selection_screen.dart` | Embedded player pick for analysis, with a bounded list and direct per-player actions: cached game-sets from chess.com / lichess downloads, PGN-file imports, and **opponent lists** (`OpponentListImportDialog` → one merged player per opponent, sourced from every account listed, tagged with the event as `group`; batch download with per-person progress, skip-existing, failures reported not swallowed); search matches name, platform and group |
-| `settings_screen.dart` | Persistent shared settings route with expandable view chapters and grouped Views / Global navigation; shared preferences (accounts, **display** — board coordinates and piece notation with a live preview board, my repertoires, engine cores, ChessDB); focused sections have independent scrolling; Keyboard shortcuts lists mappings by view; per-panel gears deep-link to shared analysis chapters |
+| `settings_screen.dart` | Flat settings sections with keyword search, direct preferences, embedded databases and contextual forms. See the complete Settings control map above. |
 
 ### `lib/services/` (grouped)
 
@@ -1315,7 +1463,6 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 |------|---------|
 | `repertoire_service.dart` | Load/save repertoire, parse lines, append moves; in-place line edits and deletion locate games via `_findGameIndexByLineId` and rewrite via `_reassembleDocument` (atomic `_writeAtomically`); `deleteLine(filePath, lineId)` removes a game from disk |
 | `repertoire_review_service.dart` | Review scheduling |
-| `pgn_service.dart` | General PGN load/save |
 | `pgn_parsing_service.dart` | Multi-game split/count (`splitPgnIntoGames`, `countPgnGames`); `[Event]`-delimited chunks, including back-to-back games without blank lines (tree_builder exports); `buildFenIndex` builds an inverted FEN→game-indices map in an isolate for O(1) position lookups (mainline **and RAVs**); `computeSliceMatches` is the shared entry point for position+header+sequence filtering (fast path with FEN index, slow path without); `serializeFenIndex`/`deserializeFenIndex` persist the index as a FENIDX3-format companion `.fenidx` file (header stores game count, PGN file size, and mtime for staleness detection; older blobs rebuild); `parseTargetFen` / `gamePassesThroughFen` / `buildFenIndex` / `mainlineSansAfterFen` replay ChessBase/Chessable **null moves** (`--` / `Z0`) as a turn pass so later same-side SAN stays on the index; `promoteNullMoveDummyMainline` runs before replay so Chessable intro chapters index the lesson moves; `gameMatchesSequence` ignores those tokens; `mainlineSansAfterFen` returns remaining SAN after a FEN along the line that found it (used by the opening-tree games list PV) |
 | `opening_tree_builder.dart` | Build opening tree from PGN via `walkMainlineIntoTree`; `*` / empty Result → `userResult: null` and `includeVariations: true` (course sidelines become tree siblings); scored games stay mainline-only; `--`/`Z0` pass without a tree node |
 | `pgn_tree_core.dart` | Shared PGN attribution + walk used by `OpeningTreeBuilder` and `UnifiedAnalysisBuilder`; `includeVariations` counts each RAV as a line so sibling frequencies still sum to 100% |
@@ -1335,7 +1482,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 
 | File | Purpose |
 |------|---------|
-| `maia_service.dart`, `maia_native.dart`, `maia_stub.dart`, `maia_factory.dart`, `maia_tensor.dart` | Human move prediction; ONNX model + vocab JSON are git-tracked Flutter assets; native ORT comes from the `onnxruntime` plugin (Linux/Windows/macOS). `evaluate()` checks `MaiaCache` before inference. |
+| `maia/maia_service.dart`, `maia/maia_native.dart`, `maia/maia_stub.dart`, `maia/maia_factory.dart`, `maia/maia_tensor.dart` | Human move prediction; ONNX model + vocab JSON are git-tracked Flutter assets; native ORT comes from the `onnxruntime` plugin (Linux/Windows/macOS). `evaluate()` checks `MaiaCache` before inference. |
 | `lichess_api_client.dart` | Authenticated API; explorer lookups ask for the games lists, and `fetchGamePgn` fetches one listed game from the masters PGN endpoint or the site's export |
 | `explorer_game_opener.dart` | Opening a game the explorer listed: fetch its PGN (local database, masters endpoint or game export), file it in the `explorer-games.pgn` collection without duplicates, and report the index and the ply at which it reaches the position |
 | `live_explorer_service.dart` | Debounced, cached, coalesced explorer lookups for the panel; the TWIC source is answered synchronously from the local book (classical-only rows when asked) with the citation and latest game per move as its games list |
@@ -1346,15 +1493,13 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 
 | File | Purpose |
 |------|---------|
-| `alternative_move_judge.dart` | "Accept other winning moves": `isAcceptableAlternative` is the rule (the played move must score within 50cp of the stored answer, both from the mover's side — a slower mate passes, trading a mate for a won endgame does not); `EngineAlternativeJudge` scores the position after each move at depth 14 on one pool worker and answers `false` whenever it cannot ask (no engine, a build holds it, an unparseable move). The session controller shows "Checking…", locks input, drops a verdict that arrives after a reset, and finishes the tactic on the played move when the answer is yes |
-| `tactics_engine.dart` | Puzzle validation; `buildTrainableLine` extends lines using **Maia opponent-probability** (≥ 85% threshold) when available — agreement with PV continues from PV, disagreement triggers a fresh Stockfish depth-14 eval for the user's best reply then stops, low confidence stops at single move; falls back to captures/checks/mates heuristic when Maia is unavailable; max 6 ply (3 user moves); `solutionPv` + `solutionLineToSan` for Show Solution |
-| `tactics_database.dart` | Local puzzle store; `startSession(settings)` builds filtered/ordered queue; `setRating(fen, rating)` persists star rating + removes 1-star from live queue |
-| `tactics_import_service.dart` | Import from Lichess/Chess.com; supports `since` parameter for date-based fetch (Lichess `since` query param, Chess.com archive month filtering + PGN date header filtering); 200-game safety cap on date-based imports; initializes Maia at import start; extracts user Elo from first game PGN headers (`WhiteElo`/`BlackElo`) — Lichess uses PGN Elo as-is; Chess.com maps blitz Elo via `chesscom_lichess_elo.dart` then clamps 600–2400 (default 2200); passes `MaiaEvaluator` + `EvalWorker` to `buildTrainableLine` for line extension; **atomic per-game completion**: positions are awaited/persisted before `markGameAnalyzed`, so an app close mid-batch never permanently skips a game's blunders; `countPendingGames()` reports stored-but-unanalyzed count; `resumeStoredPgns()` re-analyzes from storage (splits by source prefix, uses appropriate username per platform); all public import/resume methods return `ImportResult` (`positions`, `gamesAnalyzed`, `gamesSkipped`) so callers can distinguish "all skipped" from "analyzed with no blunders" |
-| `tactics_export_import.dart` | Export/import facade |
-| `tactics_export_import_io.dart` / `tactics_export_import_stub.dart` | Platform export/import |
-| `tactics_parallel_analyzer.dart` / `tactics_parallel_analyzer_stub.dart` | Parallel puzzle analysis |
-| `tactics/tactics_session_controller.dart` | Puzzle session; `startSession(settings)` delegates to DB queue; `setRating(star)` on current position |
-| `tactics/tactics_import_coordinator.dart` | Import UI coordination; `TacticsImportMode.recent` / `TacticsImportMode.sinceDate` for count-based vs date-based fetch; passes `since` param through to service; **resume analysis**: `refreshPendingCount()` diffs stored PGN game IDs against `analyzedGameIds` to detect interrupted imports; `resumeAnalysis()` re-processes only un-analyzed games from storage (no re-download); `pendingGameCount`/`totalStoredGames` drive the resume button; `_statusMessage(ImportResult)` picks "Games were already analyzed" / "No new blunders found" / "Added N …" based on `gamesAnalyzed` count |
+| `features/tactics/services/alternative_move_judge.dart` | "Accept other winning moves": `isAcceptableAlternative` is the rule (the played move must score within 50cp of the stored answer, both from the mover's side — a slower mate passes, trading a mate for a won endgame does not); `EngineAlternativeJudge` scores the position after each move at depth 14 on one pool worker and answers `false` whenever it cannot ask (no engine, a build holds it, an unparseable move). The session controller shows "Checking…", locks input, drops a verdict that arrives after a reset, and finishes the tactic on the played move when the answer is yes |
+| `features/tactics/services/tactics_engine.dart` | Puzzle validation; `buildTrainableLine` extends lines using **Maia opponent-probability** (≥ 85% threshold) when available — agreement with PV continues from PV, disagreement triggers a fresh Stockfish depth-14 eval for the user's best reply then stops, low confidence stops at single move; falls back to captures/checks/mates heuristic when Maia is unavailable; max 6 ply (3 user moves); `solutionPv` + `solutionLineToSan` for Show Solution |
+| `features/tactics/services/tactics_database.dart` | Local puzzle store; `startSession(settings)` builds filtered/ordered queue; `setRating(fen, rating)` persists star rating + removes 1-star from live queue |
+| `features/tactics/services/tactics_import_service.dart` | Import from Lichess/Chess.com; supports `since` parameter for date-based fetch (Lichess `since` query param, Chess.com archive month filtering + PGN date header filtering); 200-game safety cap on date-based imports; initializes Maia at import start; extracts user Elo from first game PGN headers (`WhiteElo`/`BlackElo`) — Lichess uses PGN Elo as-is; Chess.com maps blitz Elo via `chesscom_lichess_elo.dart` then clamps 600–2400 (default 2200); passes `MaiaEvaluator` + `EvalWorker` to `buildTrainableLine` for line extension; **atomic per-game completion**: positions are awaited/persisted before `markGameAnalyzed`, so an app close mid-batch never permanently skips a game's blunders; `countPendingGames()` reports stored-but-unanalyzed count; `resumeStoredPgns()` re-analyzes from storage (splits by source prefix, uses appropriate username per platform); all public import/resume methods return `ImportResult` (`positions`, `gamesAnalyzed`, `gamesSkipped`) so callers can distinguish "all skipped" from "analyzed with no blunders" |
+| `features/tactics/services/tactics_parallel_analyzer.dart` / `features/tactics/services/tactics_parallel_analyzer_stub.dart` | Parallel puzzle analysis |
+| `features/tactics/controllers/tactics_session_controller.dart` | Puzzle session; `startSession(settings)` delegates to DB queue; `setRating(star)` on current position |
+| `features/tactics/services/tactics_import_coordinator.dart` | Import UI coordination; `TacticsImportMode.recent` / `TacticsImportMode.sinceDate` for count-based vs date-based fetch; passes `since` param through to service; **resume analysis**: `refreshPendingCount()` diffs stored PGN game IDs against `analyzedGameIds` to detect interrupted imports; `resumeAnalysis()` re-processes only un-analyzed games from storage (no re-download); `pendingGameCount`/`totalStoredGames` drive the resume button; `_statusMessage(ImportResult)` picks "Games were already analyzed" / "No new blunders found" / "Added N …" based on `gamesAnalyzed` count |
 | `training/training_session_controller.dart` | Repertoire training flow; `TrainingMode` × `RepetitionMode`; owns queue, drill, and session stats. Learn walkthrough and missed-move replay are collaborators (`LearnPhase`, `ReplayPhase`); chapter grouping is `ChapterScope`; disk review state is `ReviewProgressStore` |
 | `training/learn_phase.dart` | New-line acknowledge / quiz walkthrough |
 | `training/replay_phase.dart` | Missed-move replay after a drill with mistakes |
@@ -1374,7 +1519,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `storage/schema_guard.dart` | Reject newer SQLite schemas; flushed SQLite snapshot before saved-game schema upgrades |
 | `features/updates/services/app_update_service.dart` | Daily stable GitHub release checks, persisted check/download preferences, streamed size/SHA-256 verification, reusable verified download, install scheduling/cancellation |
 | `features/updates/services/update_installer.dart` | Detect Windows Setup, Linux deb/rpm or marked portable bundles; launch an acknowledged detached helper that waits for normal app close |
-| `features/updates/widgets/app_updates.dart` | Startup update popup and Settings → About controls; installation is explicitly scheduled, never a forced exit |
+| `features/updates/widgets/app_updates.dart` | Startup update popup and Settings → App controls; installation is explicitly scheduled, never a forced exit |
 
 **Storage and upgrade policy.** Installation directories contain replaceable
 application code/assets. App version numbers never enter the user-data paths.
@@ -1441,7 +1586,6 @@ release smoke testing. No release or update is triggered by these tests.
 
 | File | Purpose |
 |------|---------|
-| `layout/repertoire_layout.dart` | 3-zone orchestrator (board / main / context) |
 | `layout/board_zone.dart` | Board wrapper; app-bar trap navigation via `BoardZoneControls` |
 | `layout/edit_main_zone.dart` | PGN editor column shell (clipboard + view-in-lines adapters) |
 | `layout/edit_context_zone.dart` | Edit context column: FilterChip visibility toggles; user-arrangeable **columns** (horizontal, draggable dividers) each with a **vertical stack** of panels (draggable dividers). Default layout: col1 = Browse+Engine+Expectimax+Tree stacked, col2 = Lines. **Arrange panes** sheet + long-press chip → assign column. Layout persisted via [EditContextLayoutPrefs] (`edit_context.layout_v1`). Panel shells use [AutomaticKeepAliveClientMixin] but **rebuild slot content** each parent update (tree/generation props must not freeze). Expectimax uses [ExpectimaxPanelHost] (built-tree values only, same as dock). `selectedViewsNotifier` mirrors visible set. |
@@ -1450,10 +1594,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `layout/edit_context_layout_sheet.dart` | Bottom sheet: reorder stacks, move views between columns |
 | `models/edit_context_layout.dart` | `EditContextLayout` / `EditContextColumnLayout` column+stack model |
 | `services/edit_context_layout_prefs.dart` | SharedPreferences persistence for edit context layout |
-| `layout/analyze_main_zone.dart` | Analyze mode main column shell |
-| `layout/analyze_context_zone.dart` | Detail pane (eval graph, trap card) |
-| `layout/repertoire_mode.dart` | `RepertoireMode`, `EditContextView` enums |
-| `layout/repertoire_mode_switcher.dart` | Edit/Analyze toggle (legacy — not wired from screen) |
+| `models/repertoire_mode.dart` | `EditContextView` enum (edit context panels) |
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
 | `layout/empty_state_placeholder.dart` | Shared empty states |
@@ -1464,13 +1605,9 @@ release smoke testing. No release or update is triggered by these tests.
 
 | File | Purpose |
 |------|---------|
-| `repertoire/repertoire_board_pane.dart` | Board + preview overlay + generation dim |
-| `repertoire/repertoire_shortcuts.dart` | `RepertoireShortcuts` — `CallbackShortcuts` (Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+V paste FEN) + `Focus.onKeyEvent` for arrow/Escape bindings; suppresses shortcuts while a text field is focused (`isTextInputFocused()` in `lib/utils/keyboard_shortcut_utils.dart`) |
-| `repertoire/repertoire_toolbar.dart` | App bar: repertoire/chapter breadcrumb title; Actions → view picker → gear. |
-| `repertoire/repertoire_tab_bar.dart` | Compact layout tab bar (PGN | Context) + navigation trail |
-| `repertoire/repertoire_analyze_pane.dart` | Wires analyze zones (lines, coverage, traps) |
-| `repertoire/repertoire_analyze_props.dart` | Prop bag for analyze pane |
-| `repertoire/repertoire_lines_with_traps.dart` | Lines tab with trap + coherence panels |
+| `features/repertoire/widgets/repertoire_board_pane.dart` | Board + preview overlay + generation dim |
+| `features/repertoire/widgets/repertoire_shortcuts.dart` | `RepertoireShortcuts` — `CallbackShortcuts` (Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+V paste FEN) + `Focus.onKeyEvent` for arrow/Escape bindings; suppresses shortcuts while a text field is focused (`isTextInputFocused()` in `lib/utils/keyboard_shortcut_utils.dart`) |
+| `features/repertoire/widgets/repertoire_toolbar.dart` | App bar: repertoire/chapter breadcrumb title; Actions → view picker → gear. |
 | `generation/generation_config_form.dart` | `GenerationConfigForm` — settings form (controllers, build mode, advanced thresholds, eval sources); prominent **Engine resources** section (threads, hash MB, logical core count) when Stockfish is used; `toConfig({startFen, playAsWhite})`, `validateBeforeStart()`, `seedDbExplorer()`, optional `initialConfig`; DB Explorer mode shows `PgnSourcesPanel` + tuning fields; owns `EvalSourcesController` / `SkeletonPlanController` / `PgnSourcesController`, which hold the three sub-editors' state |
 | `generation/eval_sources_controller.dart` | `EvalSourcesController` — the eval lookup chain's settings (local ChessDB file, ChessDB API quota/concurrency, subtree skip, depth floor) plus today's API spend; `applyConfig` ↔ `applyTo` are the two halves of the config round trip |
 | `generation/skeleton_plan_controller.dart` | `SkeletonPlanController` + `kStructureVetoes` — the typed lines and active vetoes behind `SkeletonPlanCard`; `loadPlan` / `currentPlan(playAsWhite:)` |
@@ -1481,7 +1618,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `opening_tree_widget.dart` | Compact tree navigator. Continuations come from `OpeningTree.continuations` (played moves plus one-ply transpositions, marked `≈` / "transp.") |
 | `opening_tree/opening_tree_move_row.dart` | Tree row |
 | `opening_tree/coverage_annotation.dart` | Coverage badges on tree |
-| `coverage_calculator_widget.dart` | Run coverage analysis UI |
+| `features/coverage/widgets/coverage_calculator_widget.dart` | Run coverage analysis UI |
 | `coherence_panel.dart` | Cluster list + global coherence score |
 
 #### Engine widgets
@@ -1515,10 +1652,9 @@ release smoke testing. No release or update is triggered by these tests.
 | `clickable_move_line.dart` | SAN line with tap + hover callbacks |
 | `navigation_trail.dart` | Breadcrumb trail widget (used by repertoire tab bar) |
 | `analysis_tab.dart` | Legacy browse/analysis tab wrapper (not used in current repertoire screen) |
-| `generation_config_dialog.dart` | Modal dialog wrapping RepertoireGenerationTab; pops on generation start via controller listener; opened by sparkles button |
 | `layout/jobs_panel.dart` | Jobs tab: single rich card per active generation or audit job (name, build mode config summary, phase icon/label, C-style live stats, thread/hash chips, linear progress, elapsed, pause/resume/cancel/finish-now); completed jobs as compact list tiles |
 | `services/jobs/generation_job_display.dart` | Phase labels, stats-line formatting, and progress fraction helpers for generation job cards |
-| `analysis/stockfish_settings_dialog.dart` | Shared engine controls for global Engine settings and `InlineEngineSettings` popups; board and bulk depths persist independently. |
+| `analysis/stockfish_settings_dialog.dart` | Shared Analysis controls reached by every `InlineEngineSettings` shortcut; board and bulk depths persist independently. |
 | `analysis_download_dialog.dart` | Download games for analysis: site, username, range (months or last N games) and time controls. Given a saved `player`, site and username are fixed and it pops that player with the new range — the refresh button beside "downloaded … ago" in Player Analysis and "Change range…" on the picker both use it |
 | `game_analysis_tab.dart` | PGN viewer closable Analysis tab: opening a recent tactics game with stored evaluations also opens this tab in the background, keeping the annotated Game reader selected; saved evaluation coverage explains missing played positions and offers a full pass; null PGN moves are excluded from coverage totals while ply coordinates stay unchanged. chart, classified move list, best-line / Maia taps; each tap adds an **ephemeral RAV** at that ply (accumulates; does not clear prior lines); move list scrolls only when the nearest classified row changes (instant `ensureVisible`, no per-ply jump+animate) |
 | `game_analysis_chart.dart` | Eval chart for game review |
@@ -1531,7 +1667,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `fen_list_widget.dart` | Ranked positions list of Player Analysis. The Bad/Good Eval sorts are always offered; picked before any engine pass, the empty state explains and carries the **Analyze with engine…** button (`onAnalyzeWithEngine`) |
 | `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
-| `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); movetext via `PgnMovetextView` (near-white `PgnTextStyles`, comments/variations on own rows); larger branch chips + Return-to-mainline + nav icons; **Edit mode** (`editMode` prop): NAG inline display, annotation panel, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildGameMovetext` |
+| `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); movetext via `PgnMovetextView` (near-white `PgnTextStyles`, comments/variations on own rows; reading column capped at 900 logical pixels with 24–32 pixel side insets, prose capped at 640 pixels for readability); larger branch chips + Return-to-mainline + nav icons; **Edit mode** (`editMode` prop): NAG inline display, annotation panel, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildGameMovetext` |
 | `core/pgn/pgn_analysis_variations.dart` | Converts classified legacy/new engine PVs to standard RAVs, reuses existing branches, and synchronizes the `[%bestline]` display reference after edits; shared by full review, tactics annotation and viewer loading. |
 | `pgn/pgn_movetext_view.dart` | Mainline + sideline + comment rendering; analyzed games annotate every classified move for both sides (Interesting, Inaccuracy, Mistake, Blunder), including short games and scores mixed with prose, using the graph’s shared classifier; move suffixes show `!?`, `?!`, `?`, or `??` even for older cached games. Full review and tactics analysis also save these as standard PGN NAGs, preserving existing author glyphs and positional annotations; verdicts and their saved RAVs share an inset block with a left rule and extra space before play resumes; those same nodes handle navigation and edits, with no duplicated preview line. Uses `PgnTextStyles` (comments upright, not italic). ChessBase/Chessable **null moves** (`--` / `Z0`) are hidden in the SAN but still pass the turn. Chessable intro dummies are promoted to the mainline before render, so `1. Z0 (1. d4 Z0 2. Nf3 …)` shows the lesson text on the spine |
 | `pgn/pgn_opening_tree_panel.dart` | Opening-tree side panel (replaces Game/Analysis + nav bar). Resizable split between `OpeningTreeWidget` and `PgnTreeGamesList`. While the tree is open, `/` searches the games-at-position list (not the full file) and picking a row/`G` number calls `loadGameFromTree` |
@@ -1549,22 +1685,21 @@ release smoke testing. No release or update is triggered by these tests.
 | `position_analysis_widget.dart` | Player analysis: Positions/Holes list, board, and Move Tree/Games/Try moves tabs. Games opens its reader inline with Back to games. |
 | `engine_weakness_dialog.dart` | Engine-analysis setup (depth, min games, thresholds, workers); reached from the positions list's eval-sort empty state or the kebab. Re-downloading games is no longer part of it — that is the subtitle refresh button |
 | `lichess_db_info_icon.dart` | Lichess DB info + OAuth entry point |
-| `tactics_control_panel.dart` | Tactics mode shell; warms Maia on page load but leaves Stockfish lazy so an idle home screen holds no engine processes; PGN tab builds a synthetic PGN from the tactic FEN + **trainable line** (`correctLine`) as the **mainline** (`_buildSolutionPgn`) — correct user moves and opponent replies advance through the mainline via `goForward()`; FEN comparison in `onPositionChanged` prevents double-updates; Show Solution midway through a multi-move tactic navigates to current position via `_navigateToSolutionIndex` instead of jumping to end; keyboard: **E** (inline engine), **J** (auto-advance), **A** (analyze/reset), **P**/**N** (prev/skip), Space, arrows, Escape (letter keys suppressed in text fields; digit star-rating shortcuts removed) |
-| `tactics/tactics_training_panel.dart` | Puzzle UI; the three buttons keep fixed homes (Show Solution's slot empties but holds its width once solved, Analyze never turns into anything else, Reset is an icon button disabled at the puzzle position); Skip reads Next once an attempt has been scored, not only once solved; the "You played h5 (blunder)" line is a caption with no full stop; **played-moves trail** shows numbered SAN for moves completed so far in multi-move tactics; **Show Solution** = numbered SAN line + highlight; midway Show Solution navigates to current position (not end); star rating after solve/reveal |
-| `tactics/tactics_browse_panel.dart` | Puzzle browser with full filter/sort toolbar: **Mistake-type chips** (toggle `??` blunders, `?` mistakes, `?!` inaccuracies independently), **Status filter** (All / New / Struggling < 50% success), **Min-rating popup** (Any / 2★+ / 3★+ …), **Sort chips** (Newest / Oldest / Worst success / Least reviewed); **Multi-select mode** (checklist icon → checkboxes on rows, Select All, batch Delete with confirmation); per-row: tappable 5-star rating, 1-star rows dimmed; count shows "visible / total tactics" |
-| `tactics/tactics_import_panel.dart` | Import tactics from Lichess/Chess.com; **fetch mode toggle** (Recent N games / Since date) with segmented button; date picker for since-date mode; **auto-fetch on startup** checkbox with last-synced label; **Session Settings** dialog (order, mistake-type filter, 1-star toggle) opened from toolbar button beside Browse Tactics; live matching count on Start Session |
-| `tactics/puzzle_stats_display.dart` | Puzzle statistics display |
-| `tactics/tactics_delayed_tooltip.dart` | Delayed tooltip for puzzle hints |
-| `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **PGN-style lessons** reveal played moves and introductory prose through `PgnMovetextView`, with a compact fixed **Next button** (Space shortcut); recall mode hides explanations except on mistakes; **J** toggles learn auto-advance (`learnRequiresClick`) on training screen + settings tooltip; `MoveInputWidget` below board accepts SAN/UCI text input, auto-submits on unique legal-move match (Escape clears & blurs) |
+| `features/tactics/widgets/tactics_control_panel.dart` | Tactics mode shell; warms Maia on page load but leaves Stockfish lazy so an idle home screen holds no engine processes; PGN tab builds a synthetic PGN from the tactic FEN + **trainable line** (`correctLine`) as the **mainline** (`_buildSolutionPgn`) — correct user moves and opponent replies advance through the mainline via `goForward()`; FEN comparison in `onPositionChanged` prevents double-updates; Show Solution midway through a multi-move tactic navigates to current position via `_navigateToSolutionIndex` instead of jumping to end; keyboard commands come from `AppShortcut` through `BoardKeyboardScope`; Space reveals the solution, arrows navigate, Escape leaves the editor/tab/session in order; move letters take precedence while move entry is enabled |
+| `features/tactics/widgets/tactics_training_panel.dart` | Puzzle UI; the three buttons keep fixed homes (Show Solution's slot empties but holds its width once solved, Analyze never turns into anything else, Reset is an icon button disabled at the puzzle position); Skip reads Next once an attempt has been scored, not only once solved; the "You played h5 (blunder)" line is a caption with no full stop; **played-moves trail** shows numbered SAN for moves completed so far in multi-move tactics; **Show Solution** = numbered SAN line + highlight; midway Show Solution navigates to current position (not end); star rating after solve/reveal |
+| `features/tactics/widgets/tactics_browse_panel.dart` | Puzzle browser with full filter/sort toolbar: **Mistake-type chips** (toggle `??` blunders, `?` mistakes, `?!` inaccuracies independently), **Status filter** (All / New / Struggling < 50% success), **Min-rating popup** (Any / 2★+ / 3★+ …), **Sort chips** (Newest / Oldest / Worst success / Least reviewed); **Multi-select mode** (checklist icon → checkboxes on rows, Select All, batch Delete with confirmation); per-row: tappable 5-star rating, 1-star rows dimmed; count shows "visible / total tactics" |
+| `features/tactics/widgets/tactics_import_panel.dart` | Import tactics from Lichess/Chess.com; **fetch mode toggle** (Recent N games / Since date) with segmented button; date picker for since-date mode; **auto-fetch on startup** checkbox with last-synced label; **Session Settings** dialog (order, mistake-type filter, 1-star toggle) opened from toolbar button beside Browse Tactics; live matching count on Start Session |
+| `features/tactics/widgets/puzzle_stats_display.dart` | Puzzle statistics display |
+| `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **PGN-style lessons** reveal played moves and introductory prose through `PgnMovetextView`, with a compact fixed **Next button** (Space shortcut); recall mode hides explanations except on mistakes; `MoveInputWidget` below board accepts SAN/UCI text input and auto-submits on a unique legal-move match; `BoardKeyboardScope` shares typing and navigation behavior across trainers |
+| `board_keyboard_scope.dart` | Shared `FocusScope` around Study, Repertoire Trainer and both Tactics panes. Uses the screen's `KeyBinding` list from the `AppShortcut` registry. With an enabled move field, SAN/UCI characters focus it and insert the first character once; normal Flutter text input handles the rest. Other editors retain typing, dialogs retain focus, hidden modes cannot capture keys, and field blur returns to this scope. Empty move fields forward navigation/repeats; partial moves retain left/right caret editing; Tab/Shift+Tab traverse and Escape clears/blurs. `MoveInputWidget` inherits navigation bindings, disables desktop select-all-on-focus, and never steals focus when enabled after an opponent reply. |
 | `study/study_board_pane.dart` | Study board + SAN input; board-shape helpers (`applyStudyBoardShape`) |
 | `study/study_side_pane.dart` | Engine bar + compact chapter bar + PGN editor; shared borderless move selection/hover and neutral Notes field with no move-specific placeholder |
 | `pgn/add_to_study_dialog.dart` | Shared destination picker for adding lines and games: an always-visible Add new study button opens a dedicated name prompt with a suggested unused name and duplicate validation; search and Enter select existing studies only. |
 | `study/study_picker_bar.dart` | App-bar study switcher with an explicit Rename study pencil and inline name editing |
 | `study/study_chapter_sidebar.dart` | Searchable, reorderable chapter list; New chapter sits above the filter and rows, with per-chapter actions in a trailing menu |
 | `study/study_name_dialog.dart` | Shared name prompt for studies and chapters |
-| `features/opponents/` | Player database: autosaving `PlayerTable` opens to all players, with account/game-set links, inline list import and reference studies/chapters. Analysis opens on a separate route with a return to the preserved table; group navigation and duplicate prep controls are deferred. `OpponentStore` serializes writes; legacy people/tournament files remain readable. See [Player database and analysis](OPPONENT_PREP.md#in-the-app). |
+| `features/opponents/` | `PlayersPrepScreen` is Library → Players & prep: persistent All players / Groups tabs, searchable groups and inline group sheets under the mode bar. Reuses `PeopleScreen`, `TournamentsScreen`, `TournamentScreen` and `PlayerTable` over `OpponentStore`; no file migration or interactive engine. Selection, filters and group context survive mode changes, and game-set links refresh on return. `OpenPlayerAnalysis` delivers the selected corpus once to the canonical Analysis screen, including when it is already mounted. Study/train actions retain their existing handoffs. See [Players and groups](OPPONENT_PREP.md#in-the-app). |
 | `opponent_list_import_dialog.dart` | Import an opponent-list JSON into Player Analysis |
-| `training/training_lines_panel.dart` | **Training Lines browser** — replaces raw `RepertoireLinesBrowser` in the trainer Lines tab; top action bar with **Learn** (new lines) / **Review** (due lines) buttons with count badges; lines grouped into three sections: **Due for Review** (sorted weakest-first), **New** (unseen), **Learned** (collapsed by default, sorted by next due date); each row shows color chip, line name, status label ("Due 2h ago" / "New" / "Next: 3d"), pass/fail ratio, and move mastery bar; tapping a row starts that line |
 | `settings/settings_widgets.dart` | Reusable settings tiles; Study exposes Engine (cores, memory, board depth, lines) and Display preferences. Maia/Expectimax move-table toggles remain with the analysis views that consume them |
 | `eval_database_settings_panel.dart` | CdbDirect configuration and the download card: start / pause / resume / check / delete, live progress with rate and ETA, the data-directory picker with a **Show in file manager** button, and a collapsed "Download it yourself instead" section carrying the rsync command for the current snapshot. On non-Linux, shows that the dump reader is unavailable instead of hiding the section. |
 | `lichess_eval_settings_panel.dart` | The Lichess evaluations card: download, progress through both stages, pause/resume, open folder, free the archive once the store is built, rebuild from a newer file. Separate from the ChessDB panel because that one is gated on the Linux-only native reader while this store is plain Dart |
@@ -1574,7 +1709,6 @@ release smoke testing. No release or update is triggered by these tests.
 | `lichess_db_selector.dart` | Explorer source picker (Lichess / Masters, and TWIC when the caller has a local database) with speed/rating chips for Lichess and a classical-OTB-only chip for TWIC |
 | `opening_explorer/opening_explorer_panel.dart` | The live explorer: filter header, source picker, move rows, Σ totals and — for a host that can open one — the games the source lists. Answers Lichess through `LiveExplorerService` and TWIC from the local book; says when TWIC's classical-only counts still need their index |
 | `opening_explorer/explorer_games_list.dart` | The games under the table, lila's "top games": players, ratings, result, the move played, one row per game, click to open |
-| `generation/build_progress_display.dart` | Generation progress UI |
 | `generation/eval_sources_section.dart` | Eval source picker in generation |
 
 ### `lib/utils/`
@@ -1598,7 +1732,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `eval_constants.dart` | Eval display thresholds |
 | `chesscom_lichess_elo.dart` | Chess.com blitz → Lichess blitz Elo table + `chessComBlitzToLichessBlitz()` for Maia (tactics Chess.com import) |
 | `app_messages.dart` | Routine success notifications are silent. Snackbars are reserved for errors and explicitly flagged notices requiring attention. Adding to a study finishes quietly; explicit Edit in study opens the editor directly. |
-| `keyboard_shortcut_utils.dart` | Shared `isTextInputFocused()`, `isPrimaryModifierPressed` and the `KeyBinding` dispatcher for keyboard shortcut guards |
+| `keyboard_shortcut_utils.dart` | Shared `KeyBinding` dispatch, `isTextInputFocused()` and modifier guards, plus the SAN/UCI key classification used for move capture and move-safe navigation; shortcut chords and tooltip labels remain in `app_shortcuts.dart` |
 | `file_text_reader.dart` | UTF-8 file read with Latin-1 fallback (`decodeTextBytes`, `decodeTextBytesDetailed`, sync/async helpers) for PGN / text imports |
 | `system_info.dart` | CPU core count (native/stub) |
 
@@ -1635,7 +1769,6 @@ release smoke testing. No release or update is triggered by these tests.
 | `test/features/coverage/coverage_result_test.dart` | `CoverageResult.findNextGap` / `findBiggestGap` gap ordering |
 | `test/features/traps/trap_index_service_test.dart` | FEN index, line traps |
 | `test/features/traps/trap_navigation_buttons_test.dart` | Trap jump UI |
-| `test/features/traps/trap_walkthrough_test.dart` | Walkthrough navigation |
 | `test/features/master_games/master_practice_review_test.dart` | Your games vs the master book: who left first, book depth, grouping by branch point, key games, cancellation |
 | `test/features/master_games/master_practice_dialog_test.dart` | The dialog against a real database: sections, the detail pane's moves and games, the hand-offs to the viewer, narrow-window layout |
 | `test/services/master_games/master_games_query_test.dart` | Browse filters, as clauses and against a real database |
@@ -1688,9 +1821,9 @@ release smoke testing. No release or update is triggered by these tests.
 | `test/services/pgn_parsing_service_test.dart` | PGN parsing; `mainlineSansAfterFen` remaining SAN |
 | `test/services/repertoire_service_test.dart` | Repertoire I/O |
 | `test/services/trap_extractor_test.dart` | Trap extraction |
-| `test/services/tactics/tactics_session_controller_test.dart` | Tactics session |
+| `test/features/tactics/controllers/tactics_session_controller_test.dart` | Tactics session |
 | `test/services/training/training_session_controller_test.dart` | Repertoire trainer: `loadRepertoire` happy/error paths, due-queue ordering, `setIdle`, `isCorrectUserMove` SAN/UCI edge cases, drill/learn/replay phase transitions, session statistics, move-progress streaks, dispose safety (in-memory service fakes) |
-| `test/services/tactics_engine_test.dart` | `checkMoveAtIndex`, SAN normalization, mate-in-1 from mid-game FEN; `buildTrainableLine` fallback + Maia agree/disagree/low-confidence paths with mock evaluator |
+| `test/features/tactics/services/tactics_engine_test.dart` | `checkMoveAtIndex`, SAN normalization, mate-in-1 from mid-game FEN; `buildTrainableLine` fallback + Maia agree/disagree/low-confidence paths with mock evaluator |
 | `test/services/eval/test_*.dart` | Eval provider chain (helpers) |
 | `test/widgets/layout/edit_context_zone_test.dart` | Context zone multi-panel chips |
 | `test/widgets/position_analysis_widget_test.dart` | Analysis widget |

@@ -1,0 +1,108 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Repertoire builder · design reference</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#232527;color:#dce0e3;font:14px system-ui,sans-serif}button,select,input,textarea{font:inherit;color:inherit}button,select{background:transparent;border:0;border-radius:4px;padding:8px 12px;cursor:pointer}button:hover,button.active{background:#353b40}button:focus-visible,select:focus-visible{outline:2px solid #61b4d8}header{height:54px;display:flex;align-items:center;gap:12px;padding:0 18px;border-bottom:1px solid #414447;background:#1e2022}header strong{margin-right:auto}small,.muted{color:#9aa3aa}main{height:calc(100vh - 54px);display:grid;grid-template-columns:210px minmax(320px,1.1fr) minmax(370px,1fr);gap:16px;padding:16px}aside{border-right:1px solid #414447;padding-right:14px}aside .heading{display:flex;align-items:center;justify-content:space-between;color:#9aa3aa;margin-bottom:12px}aside button{display:block;width:100%;text-align:left;margin:3px 0}aside button.active{border-left:3px solid #61b4d8}.variation{padding:8px 16px 8px 32px;color:#9aa3aa;font-size:13px}.board-zone{display:flex;flex-direction:column;justify-content:center;min-width:0}.board{aspect-ratio:1;display:grid;grid-template-columns:repeat(8,1fr);width:100%;max-height:calc(100vh - 150px);align-self:center}.sq{display:grid;place-items:center;background:#e7cfac;color:#151719;position:relative;font:clamp(25px,4.5vw,70px) Georgia}.sq.dark{background:#ae754f}.sq b{font-weight:normal;line-height:1}.sq.white b{color:#fff4e4;text-shadow:1px 1px #17191b,-1px -1px #17191b,1px -1px #17191b,-1px 1px #17191b}.sq small{position:absolute;left:3px;top:2px;color:#64482f;font:11px system-ui}.nav{display:flex;justify-content:space-around;padding:8px}.right{display:flex;flex-direction:column;min-height:0}.editor{flex:1;min-height:180px;display:flex;flex-direction:column}.line-title{display:flex;align-items:center;gap:10px;padding:10px 12px;color:#9aa3aa}.line-title strong{color:#dce0e3}.moves{line-height:2.3;padding:12px}.moves button{padding:1px 9px;font-weight:600}.moves button.active{color:#71c5e7}.comment{margin-top:auto;border-top:1px solid #414447;padding:12px}.comment textarea{display:block;resize:vertical;min-height:58px;width:100%;background:transparent;border:0;padding:12px 0;outline:0}.analysis{flex:1;min-height:230px;border-top:1px solid #414447;overflow:auto}.tabs{display:flex;border-bottom:1px solid #414447;height:42px;align-items:stretch}.tabs button.active{background:transparent;border-radius:0;border-bottom:2px solid #61b4d8}.tools{display:flex;align-items:center;gap:8px;padding:8px 0}.tools .spacer{flex:1}.tools select{max-width:180px;background:#2b2e31}table{border-collapse:collapse;width:100%;text-align:left}th{font-weight:500;color:#9aa3aa;font-size:12px}td,th{padding:9px 12px;border-bottom:1px solid #363a3d}tbody tr{cursor:pointer}tbody tr:hover{background:#30363a}.eval{color:#83b59a}.primary{background:#345b48;color:#e4f3e8}.primary:hover{background:#426f59}dialog{background:#292d30;color:#dce0e3;border:1px solid #596067;border-radius:8px;width:400px;padding:24px}dialog::backdrop{background:#0008}dialog label{display:flex;align-items:center;justify-content:space-between;margin:16px 0}dialog input{width:100px;background:#202325;border:1px solid #596067;padding:7px}dialog footer{display:flex;justify-content:end;margin-top:24px}.menu{position:absolute;right:16px;top:52px;background:#2c3033;border:1px solid #51575b;padding:6px;z-index:2;box-shadow:0 8px 30px #0006}.menu button{display:block;text-align:left;width:100%}[hidden]{display:none!important}@media(max-width:950px){main{grid-template-columns:165px 1fr 1fr;gap:10px;padding:10px}.sq{font-size:40px}}@media(max-width:730px){header small{display:none}main{height:auto;grid-template-columns:minmax(0,1fr)}aside{border-right:0;border-bottom:1px solid #414447;padding-bottom:10px}#chapters{display:flex;overflow:auto}#chapters button{width:auto;white-space:nowrap}.variation{display:none}.right{grid-column:1}.board{max-height:none}.analysis{min-height:340px}.tools{flex-wrap:wrap}.sq{font-size:clamp(22px,8vw,48px)}}
+</style>
+<header><span style="color:#71c5e7">♞</span><strong>My repertoire <span class="muted"> / </span><span id="chapter-title">Italian game</span></strong><small>Interactive design · sample data</small><button id="menu-button">Menu ▾</button></header>
+<div class="menu" id="menu" hidden><button data-action="Import PGN">Import PGN…</button><button data-action="Check disk for changes">Check disk for changes</button><button id="menu-settings">Generation settings…</button><button data-action="App settings">Settings…</button></div>
+<main><aside><div class="heading">Chapters <button id="add">+</button></div><div id="chapters"><button class="active">Italian game</button><div class="variation">▾ Main line<br>　Two knights<br>　Giuoco Piano</div><button>Sicilian defense</button><button>French defense</button><button>Caro-Kann</button></div></aside><section class="board-zone"><div class="board" id="board" aria-label="Chessboard"></div><div class="nav"><button title="First move">⇤</button><button title="Previous move">←</button><button title="Next move">→</button><button title="Last move">⇥</button><button id="flip" title="Flip board">⇅</button></div></section><section class="right"><div class="editor"><div class="line-title"><strong id="line-title">Main line</strong><small>Saved</small></div><div class="moves"><span class="muted">1.</span> <button>e4</button><button>e5</button> <span class="muted">2.</span><button>Nf3</button><button>Nc6</button> <span class="muted">3.</span><button class="active">Bc4</button></div><div class="comment"><small>Comment</small><textarea placeholder="Add a comment…" aria-label="Comment"></textarea></div></div><div class="analysis"><div class="tabs"><button data-tab="engine">Engine</button><button data-tab="database" class="active">Database</button></div><div class="tools"><select id="source" aria-label="Database source"><option>Engine evals</option><option>ChessDB</option><option>Repertoire</option><option>Opening explorer</option><option>Local PGN</option></select><span class="spacer"></span><button id="generate" class="primary">Generate</button><button id="settings" title="Generation settings">⚙</button></div><div id="database-note" class="muted" hidden style="padding:8px 12px">Local PGN · TWIC updates and PGN imports</div><table><thead><tr><th>Move</th><th id="value-heading">Evaluation</th><th id="detail-heading">Continuation</th></tr></thead><tbody id="rows"></tbody></table></div></section></main>
+<dialog id="settings-dialog"><h3>Generation settings</h3><label>Depth (half-moves)<input type="number" value="6" min="1" max="60"></label><label>CPU cores<input type="number" value="1" min="1"></label><label>Engine moves<input type="number" value="4" min="1" max="20"></label><label>Maia coverage (%)<input type="number" value="60" min="1" max="100"></label><footer><button id="done" class="primary">Done</button></footer></dialog>
+<script>
+// Layout reference only: fixed, labelled sample data. No network or storage.
+const $ = selector => document.querySelector(selector);
+const initial = ['♜♞♝♛♚♝♞♜', '♟♟♟♟♟♟♟♟', '        ', '        ',
+  '        ', '        ', '♙♙♙♙♙♙♙♙', '♖♘♗♕♔♗♘♖'];
+const chapters = {
+  'Italian game': [['e4', 'e2', 'e4'], ['e5', 'e7', 'e5'], ['Nf3', 'g1', 'f3'], ['Nc6', 'b8', 'c6'], ['Bc4', 'f1', 'c4']],
+  'Sicilian defense': [['e4', 'e2', 'e4'], ['c5', 'c7', 'c5'], ['Nf3', 'g1', 'f3']],
+  'French defense': [['e4', 'e2', 'e4'], ['e6', 'e7', 'e6'], ['d4', 'd2', 'd4']],
+  'Caro-Kann': [['e4', 'e2', 'e4'], ['c6', 'c7', 'c6'], ['d4', 'd2', 'd4']],
+};
+let flipped = false, activeChapter = 'Italian game', ply = 5, activeTab = 'database';
+const index = square => (8 - Number(square[1])) * 8 + square.charCodeAt(0) - 97;
+function board() {
+  const pieces = initial.join('').split('');
+  for (const [, from, to] of chapters[activeChapter].slice(0, ply)) {
+    pieces[index(to)] = pieces[index(from)];
+    pieces[index(from)] = ' ';
+  }
+  const squares = pieces.map((piece, i) => {
+    const r = Math.floor(i / 8), c = i % 8;
+    return `<div class="sq ${(r+c)%2 ? 'dark' : ''} ${'♙♘♗♖♕♔'.includes(piece) ? 'white' : ''}">
+      ${c === 0 ? `<small>${8-r}</small>` : ''}<b>${piece}</b></div>`;
+  });
+  $('#board').innerHTML = (flipped ? squares.reverse() : squares).join('');
+  $('.moves').replaceChildren();
+  chapters[activeChapter].forEach(([san], i) => {
+    if (i % 2 === 0) {
+      const number = document.createElement('span');
+      number.className = 'muted'; number.textContent = `${i / 2 + 1}. `;
+      $('.moves').append(number);
+    }
+    const move = document.createElement('button');
+    move.textContent = san; move.classList.toggle('active', i === ply - 1);
+    move.onclick = () => { ply = i + 1; board(); };
+    $('.moves').append(move);
+  });
+}
+const sampleMoves = [['Bc5', '+0.24', '4. c3 Nf6 5. d3'], ['Nf6', '+0.31', '4. d3 Bc5 5. c3'],
+  ['Be7', '+0.48', '4. d4 exd4 5. Nxd4'], ['d6', '+0.52', '4. d4 Nf6 5. Nc3'], ['h6', '+0.76', '4. d4 exd4 5. Nxd4']];
+function rows() {
+  const games = !['Engine evals', 'ChessDB'].includes($('#source').value);
+  $('#value-heading').textContent = games ? 'Games' : 'Evaluation';
+  $('#detail-heading').textContent = games ? 'White score' : 'Continuation';
+  $('#rows').innerHTML = sampleMoves.map((move, i) => `<tr tabindex="0">
+    <td><b>${move[0]}</b></td><td class="eval">${games ? [12452,10321,950,722,121][i].toLocaleString() : move[1]}</td>
+    <td>${games ? [51,52,55,54,58][i] + '%' : move[2]}</td></tr>`).join('');
+  $('#rows').querySelectorAll('tr').forEach(row => {
+    row.onclick = () => {
+      $('#rows').querySelectorAll('tr').forEach(other => other.style.background = '');
+      row.style.background = '#354148';
+    };
+    row.onkeydown = event => { if (event.key === 'Enter') row.click(); };
+  });
+  $('#generate').hidden = games && activeTab === 'database';
+  $('#database-note').hidden = $('#source').value !== 'Local PGN';
+}
+board(); rows();
+$('#flip').onclick = () => { flipped = !flipped; board(); };
+const nav = $('.nav').querySelectorAll('button');
+nav[0].onclick = () => { ply = 0; board(); };
+nav[1].onclick = () => { ply = Math.max(0, ply - 1); board(); };
+nav[2].onclick = () => { ply = Math.min(chapters[activeChapter].length, ply + 1); board(); };
+nav[3].onclick = () => { ply = chapters[activeChapter].length; board(); };
+$('#source').onchange = rows;
+document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => {
+  activeTab = button.dataset.tab;
+  document.querySelectorAll('[data-tab]').forEach(other => other.classList.toggle('active', other === button));
+  $('#source').hidden = activeTab === 'engine';
+  $('#generate').textContent = activeTab === 'engine' ? 'Start analysis' : 'Generate';
+  rows();
+});
+$('#settings').onclick = $('#menu-settings').onclick = () => {
+  $('#menu').hidden = true; $('#settings-dialog').showModal();
+};
+$('#done').onclick = () => $('#settings-dialog').close();
+$('#menu-button').onclick = () => $('#menu').hidden = !$('#menu').hidden;
+$('#chapters').onclick = event => {
+  if (event.target.tagName !== 'BUTTON') return;
+  $('#chapters').querySelectorAll('button').forEach(button => button.classList.toggle('active', button === event.target));
+  activeChapter = event.target.textContent;
+  $('#chapter-title').textContent = activeChapter;
+  ply = chapters[activeChapter].length; board();
+};
+$('#generate').onclick = () => {
+  $('#generate').textContent = 'Sample evals ready';
+  setTimeout(() => $('#generate').textContent = activeTab === 'engine' ? 'Start analysis' : 'Generate', 1500);
+};
+document.querySelectorAll('[data-action]').forEach(button => button.onclick = () => {
+  $('#menu').hidden = true;
+  alert(button.dataset.action + ' is implemented in Flutter. This reference uses sample data.');
+});
+$('#add').onclick = () => {
+  const name = prompt('Chapter name')?.trim();
+  if (!name || Object.hasOwn(chapters, name)) return;
+  chapters[name] = [];
+  const button = document.createElement('button'); button.textContent = name;
+  $('#chapters').append(button);
+};
+</script></html>

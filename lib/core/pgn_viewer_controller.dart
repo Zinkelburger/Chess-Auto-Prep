@@ -70,16 +70,20 @@ class Perspective {
   ///
   /// An explicit `StudyPerspective` header wins. Failing that, a collection
   /// of two or more games that share one protagonist opens from that
-  /// player's side — a single game is left alone, since "the protagonist" of
-  /// one game is just whoever the reader is looking at.
-  static Perspective forCollection(List<PgnGameEntry> entries) {
+  /// player's side. Otherwise the reader's [current] preference carries over:
+  /// a single game has no protagonist beyond whoever is looking at it, and an
+  /// explicit flip on the previous collection stays in force.
+  static Perspective forCollection(
+    List<PgnGameEntry> entries, {
+    required Perspective current,
+  }) {
     final raw = entries.isNotEmpty
         ? (entries.first.headers['StudyPerspective'] ?? '')
         : '';
-    final fromHeader = Perspective.fromHeaderValue(raw);
-    if (raw.trim().isNotEmpty || entries.length < 2) return fromHeader;
+    if (raw.trim().isNotEmpty) return Perspective.fromHeaderValue(raw);
+    if (entries.length < 2) return current;
     final protagonist = detectProtagonistFrom(entries);
-    if (protagonist == null) return fromHeader;
+    if (protagonist == null) return current;
     return Perspective(mode: PerspectiveMode.player, playerName: protagonist);
   }
 
@@ -533,6 +537,7 @@ class PgnViewerController extends ChangeNotifier
     if (!canReplaceCollection()) return;
     unawaited(saveSession());
     final loadEpoch = ++_loadEpoch;
+    isPreparingCollection = false;
     _restoringSession = false;
     // A collection request also makes any cached-analysis parse for the old
     // selected game stale immediately, before the new file finishes reading.
@@ -597,7 +602,10 @@ class PgnViewerController extends ChangeNotifier
       _adoptCollection(
         path: path,
         entries: entries,
-        newPerspective: Perspective.forCollection(entries),
+        newPerspective: Perspective.forCollection(
+          entries,
+          current: perspective,
+        ),
         preamble: pgnCollectionPreamble(content),
       );
       loadedFileModified = modified?.modified;
@@ -606,19 +614,38 @@ class PgnViewerController extends ChangeNotifier
       await addToRecentFiles(path);
       if (!_isCurrentLoad(loadEpoch)) return;
       _fenIndex.reset();
-      await _fenIndex.tryLoadPersisted(path, entries.length);
-      if (!_isCurrentLoad(loadEpoch)) return;
       final prefs = await SharedPreferences.getInstance();
       if (!_isCurrentLoad(loadEpoch)) return;
       autoDetectOpenings =
           prefs.getBool('pgn_viewer.auto_detect_openings') ?? true;
-      // ECO/name filters must see detected tags before restoring their matches.
-      if (_fenIndex.value == null) unawaited(_buildFenIndex());
+      // A saved filter can depend on inferred opening tags. Ordinary opens
+      // should display the game before classifying the entire collection.
+      final savedSlice = restoreSavedSlice
+          ? await SlicePersistence.load(path)
+          : null;
       if (!_isCurrentLoad(loadEpoch)) return;
-      await classifyOpenings();
-      if (!_isCurrentLoad(loadEpoch)) return;
-      if (restoreSavedSlice) {
+      final needsOpeningTags =
+          savedSlice?.headerFilters.any(
+            (filter) => filter.field == 'ECO' || filter.field == 'Opening',
+          ) ??
+          false;
+      if (savedSlice != null) {
+        if (needsOpeningTags) {
+          await classifyOpenings();
+          if (!_isCurrentLoad(loadEpoch)) return;
+        }
+        // Reuse a saved position index when restoring position filters.
+        // Deferring this read must not force those filters to replay all games.
+        if ((savedSlice.positionInput?.trim().isNotEmpty ?? false) ||
+            savedSlice.additionalPositions.any(
+              (position) => position.trim().isNotEmpty,
+            )) {
+          await _fenIndex.tryLoadPersisted(path, entries.length);
+          if (!_isCurrentLoad(loadEpoch)) return;
+        }
         await tryRestoreSavedSlice(path, entries);
+      }
+      if (restoreSavedSlice) {
         if (!_isCurrentLoad(loadEpoch)) return;
         final session = await _sessions.load(path);
         if (!_isCurrentLoad(loadEpoch)) return;
@@ -639,6 +666,8 @@ class PgnViewerController extends ChangeNotifier
       await loadCurrentGame();
       if (!_isCurrentLoad(loadEpoch)) return;
       await saveSession();
+      if (!_isCurrentLoad(loadEpoch)) return;
+      unawaited(_prepareCollection(loadEpoch, classify: !needsOpeningTags));
     } catch (e) {
       if (!_isCurrentLoad(loadEpoch)) return;
       isLoading = false;
@@ -660,6 +689,7 @@ class PgnViewerController extends ChangeNotifier
     if (!canReplaceCollection()) return;
     unawaited(saveSession());
     final loadEpoch = ++_loadEpoch;
+    isPreparingCollection = false;
     _restoringSession = false;
     _gameLoadEpoch++;
     errorMessage = null;
@@ -694,19 +724,18 @@ class PgnViewerController extends ChangeNotifier
     _adoptCollection(
       path: null,
       entries: entries,
-      newPerspective: Perspective.forCollection(entries),
+      newPerspective: Perspective.forCollection(entries, current: perspective),
     );
     pgnInitialFen = initialFen;
     notifyListeners();
 
     await loadCurrentGame();
     if (!_isCurrentLoad(loadEpoch)) return;
-    unawaited(_buildFenIndex());
     final prefs = await SharedPreferences.getInstance();
     if (!_isCurrentLoad(loadEpoch)) return;
     autoDetectOpenings =
         prefs.getBool('pgn_viewer.auto_detect_openings') ?? true;
-    await classifyOpenings();
+    unawaited(_prepareCollection(loadEpoch));
   }
 
   /// Capture the live collection and reading cursor for app navigation. Games
@@ -735,6 +764,7 @@ class PgnViewerController extends ChangeNotifier
     return () async {
       if (!isActive() || !canReplaceCollection()) return false;
       final loadEpoch = ++_loadEpoch;
+      isPreparingCollection = false;
       _sliceEpoch++;
       _gameLoadEpoch++;
       stopAutoPlay();
@@ -772,7 +802,9 @@ class PgnViewerController extends ChangeNotifier
         if (!_isCurrentLoad(loadEpoch)) return;
         pgnWidgetController.goToMainLineIndex(cursorPly);
       });
-      unawaited(_buildFenIndex());
+      // Resume enrichment if this visit was left before it finished. Its
+      // retained games may differ from today's file, so rebuild their index.
+      unawaited(_prepareCollection(loadEpoch, restoreIndex: false));
       return true;
     };
   }
@@ -791,6 +823,7 @@ class PgnViewerController extends ChangeNotifier
     // Bumped first: an in-flight load or slice recompute would otherwise land
     // its results — and its isLoading release — on the cleared state.
     _loadEpoch++;
+    isPreparingCollection = false;
     _gameLoadEpoch++;
     _sliceEpoch++;
     stopAutoPlay();
@@ -814,6 +847,41 @@ class PgnViewerController extends ChangeNotifier
     boardFlipped = false;
     _fenIndex.reset();
     notifyListeners();
+  }
+
+  bool isPreparingCollection = false;
+
+  /// Optional collection-wide work never holds the reader's loading overlay.
+  Future<void> _prepareCollection(
+    int epoch, {
+    bool classify = true,
+    bool restoreIndex = true,
+  }) async {
+    if (!_isCurrentLoad(epoch)) return;
+    isPreparingCollection = true;
+    notifyListeners();
+    try {
+      // Yield a frame before preparing snapshots for the workers.
+      await Future<void>.delayed(Duration.zero);
+      if (!_isCurrentLoad(epoch)) return;
+      if (classify) await classifyOpenings();
+      if (!_isCurrentLoad(epoch)) return;
+      final path = filePath;
+      if (restoreIndex && path != null && _fenIndex.value == null) {
+        await _fenIndex.tryLoadPersisted(path, allGames.length);
+      }
+      if (!_isCurrentLoad(epoch)) return;
+      if (_fenIndex.value == null) await _buildFenIndex();
+    } catch (e) {
+      if (_isCurrentLoad(epoch)) {
+        debugPrint('Collection preparation failed: $e');
+      }
+    } finally {
+      if (_isCurrentLoad(epoch)) {
+        isPreparingCollection = false;
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> _buildFenIndex() {

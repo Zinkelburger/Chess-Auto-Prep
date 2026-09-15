@@ -102,7 +102,7 @@ abstract final class AppColors {
   // ── Canonical semantic colors (one name per distinct value) ─────────────
 
   static const success = Color(0xFF66BB6A);
-  static const danger = Color(0xFFEF5350);
+  static const danger = Color(0xFFFF807B);
   static const warning = Color(0xFFFFCA28);
   static const info = Color(0xFF42A5F5);
 
@@ -133,7 +133,7 @@ abstract final class AppColors {
 
   /// App-wide selected/active accent (tabs, active zone chrome). Also the
   /// legacy repertoire "mainline" hue — see [pgnMainLine].
-  static const accent = Color(0xFF26A69A);
+  static const accent = expectimax;
 
   /// Star ratings, trophies, favorites. Pair text/icons ON it with
   /// [onWarning].
@@ -320,21 +320,21 @@ abstract final class AppColors {
 
   // ── Game-analysis move classification (chart + move list) ───────────────
 
-  static const moveClassBlunder = Color(0xFFDB3B21);
+  static const moveClassBlunder = danger;
   static const moveClassMistake = Color(0xFFE69F00);
   static const moveClassInaccuracy = Color(0xFF56B4E9);
-  static const moveClassInteresting = Color(0xFF9C27B0);
+  static const moveClassInteresting = maia;
 
   // ── NAG glyph colors ($1–$6 annotations rendered in comments) ───────────
 
-  static const nagBrilliant = Color(0xFF168226);
+  static const nagBrilliant = successSoft;
   static const nagGood = Color(0xFF4CAF50);
-  static const nagInteresting = Color(0xFFEA45D8);
+  static const nagInteresting = maia;
 
   /// `?!` and `?` share the move-classification hues by design.
   static const nagDubious = moveClassInaccuracy;
   static const nagMistake = moveClassMistake;
-  static const nagBlunder = Color(0xFFDF5353);
+  static const nagBlunder = danger;
 
   // ── Game-analysis eval chart (game_analysis_chart.dart) ─────────────────
 
@@ -402,8 +402,8 @@ abstract final class AppColors {
   static const findingMissingResponse = info;
   static const findingWeakPosition = Color(0xFFFF5722);
   static const findingUncoveredStrongMove = Color(0xFF00BCD4);
-  static const findingTrickyMove = Color(0xFF7C4DFF);
-  static const findingClash = Color(0xFF9C27B0);
+  static const findingTrickyMove = Color(0xFFB39DDB);
+  static const findingClash = maia;
 
   // ── Trap reply classification (blunder → good) ──────────────────────────
 

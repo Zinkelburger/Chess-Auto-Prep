@@ -95,6 +95,18 @@ class RepertoireService {
   /// The editor for the files these lines come from.
   RepertoireFileEditor get files => const RepertoireFileEditor();
 
+  // One source per service: revisiting unchanged material avoids rebuilding
+  // every move tree. Compare contents, not only mtime, so builder edits and
+  // review-header writes are always picked up, even on coarse filesystems.
+  ({
+    String content,
+    String? color,
+    bool startingSide,
+    bool infer,
+    List<RepertoireLine> lines,
+  })?
+  _lastParse;
+
   /// Parses a repertoire PGN file and extracts all trainable lines.
   ///
   /// If [trainingColor] is provided ('white' or 'black') it is used directly;
@@ -115,11 +127,20 @@ class RepertoireService {
       throw Exception('Repertoire file not found: $filePath');
     }
 
+    final cached = _lastParse;
+    if (cached != null &&
+        cached.content == content &&
+        cached.color == trainingColor &&
+        cached.startingSide == colorFromStartingSide &&
+        cached.infer == inferColorWhenUnknown) {
+      return List.of(cached.lines);
+    }
+
     // The builder path already parses via compute(); the trainer parsed on the
     // UI isolate. A repertoire PGN is hundreds of KB / hundreds of games, each
     // fully replayed — run it off the UI isolate. A fresh (stateless) service
     // inside the isolate avoids capturing `this`.
-    return Isolate.run(
+    final lines = await Isolate.run(
       () => RepertoireService().parseRepertoirePgn(
         content,
         trainingColor: trainingColor,
@@ -127,6 +148,35 @@ class RepertoireService {
         inferColorWhenUnknown: inferColorWhenUnknown,
       ),
     );
+    // Cached line values must not share writable maps or move lists with
+    // callers. The returned outer list remains freely sortable.
+    final frozen = [
+      for (final line in lines)
+        RepertoireLine(
+          id: line.id,
+          sourcePath: line.sourcePath,
+          sourceLineId: line.sourceLineId,
+          name: line.name,
+          moves: List.unmodifiable(line.moves),
+          color: line.color,
+          startPosition: line.startPosition,
+          fullPgn: line.fullPgn,
+          comments: Map.unmodifiable(line.comments),
+          headers: Map.unmodifiable(line.headers),
+          importance: line.importance,
+          chapter: line.chapter,
+          isModelGame: line.isModelGame,
+          gameIndex: line.gameIndex,
+        ),
+    ];
+    _lastParse = (
+      content: content,
+      color: trainingColor,
+      startingSide: colorFromStartingSide,
+      infer: inferColorWhenUnknown,
+      lines: frozen,
+    );
+    return List.of(frozen);
   }
 
   /// The course chapters a chapter file carries in its game headers — the

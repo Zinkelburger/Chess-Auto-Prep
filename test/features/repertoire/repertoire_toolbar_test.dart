@@ -14,6 +14,7 @@ Future<void> _pump(
   VoidCallback? onPlanBuild,
   VoidCallback? onGenerate,
   VoidCallback? onImportPgn,
+  VoidCallback? onReload,
   VoidCallback? onChoose,
 }) async {
   tester.view.physicalSize = const Size(1600, 900);
@@ -39,6 +40,7 @@ Future<void> _pump(
             onPlanBuild: onPlanBuild,
             onOpenGeneration: onGenerate,
             onImportPgn: onImportPgn,
+            onReload: onReload,
             onSelectRepertoire: onChoose,
             repertoireSettingsBuilder: (_) => const Text('Repertoire options'),
           ),
@@ -83,7 +85,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Repertoire options'), findsOneWidget);
-        expect(find.text('GLOBAL'), findsOneWidget);
+        expect(find.byKey(const Key('settings-navigation')), findsOneWidget);
+        expect(find.byKey(const Key('settings-nav-3')), findsOneWidget);
         expect(find.byKey(const Key('settings-view-tactics')), findsOneWidget);
         expect(find.byIcon(Icons.more_vert), findsNothing);
         expect(find.text('Audit for gaps…'), findsNothing);
@@ -129,7 +132,7 @@ void main() {
 
       expect(find.text('IMPORT'), findsOneWidget);
       // File and paste are one entry: the dialog it opens offers both.
-      expect(find.text('From a PGN…'), findsOneWidget);
+      expect(find.text('Import PGN…'), findsOneWidget);
       expect(find.text('Paste PGN…'), findsNothing);
 
       expect(find.text('TRAIN'), findsOneWidget);
@@ -178,6 +181,26 @@ void main() {
       expect(ran, ['generate', 'train', 'audit']);
     });
 
+    testWidgets('import and disk refresh remain accessible from Actions', (
+      tester,
+    ) async {
+      final ran = <String>[];
+      await _pump(
+        tester,
+        onImportPgn: () => ran.add('import'),
+        onReload: () => ran.add('reload'),
+      );
+      expect(find.text('Import PGN…'), findsNothing);
+      expect(find.text('Check disk for changes'), findsNothing);
+      await _openActions(tester);
+      await tester.tap(find.text('Import PGN…'));
+      await tester.pumpAndSettle();
+      await _openActions(tester);
+      await tester.tap(find.text('Check disk for changes'));
+      await tester.pumpAndSettle();
+      expect(ran, ['import', 'reload']);
+    });
+
     testWidgets('Train waits while a build runs; adding lines does not', (
       tester,
     ) async {
@@ -195,12 +218,18 @@ void main() {
       expect(trained, isFalse);
     });
 
-    testWidgets('the menu disappears entirely when nothing is wired', (
+    testWidgets('the empty builder keeps settings accessible in its menu', (
       tester,
     ) async {
       await _pump(tester);
 
-      expect(find.text('Actions'), findsNothing);
+      await _openActions(tester);
+      expect(find.text('Settings…'), findsOneWidget);
+      expect(find.text('Import PGN…'), findsNothing);
+      await tester.tap(find.text('Settings…'));
+      await tester.pumpAndSettle();
+      expect(find.text('Repertoire options'), findsOneWidget);
+      expect(find.byTooltip('Close settings (Esc)'), findsOneWidget);
     });
   });
 }

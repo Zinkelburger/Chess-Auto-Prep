@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/widgets/app_settings_button.dart';
-import 'package:chess_auto_prep/widgets/settings/settings_navigation.dart';
 import 'package:chess_auto_prep/features/tactics/widgets/tactics_session_settings_form.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_session_settings.dart';
@@ -80,9 +79,6 @@ void main() {
                         TacticsSessionSettingsForm(
                           settings: session.sessionSettings,
                           showCustomType: true,
-                          section: SettingsChapterScope.maybeOf(context) == 0
-                              ? TacticsSettingsSection.session
-                              : TacticsSettingsSection.selection,
                           onChanged: session.setSessionSettings,
                         ),
                       ],
@@ -138,10 +134,7 @@ void main() {
   ) async {
     await pumpPanel(tester, positions: [_position(id: '1')], isImporting: true);
 
-    expect(
-      find.textContaining('Analyzing games…'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Analyzing games…'), findsOneWidget);
     final button = tester.widget<FilledButton>(
       find.byKey(const Key('play-tactics-button')),
     );
@@ -182,7 +175,7 @@ void main() {
     await tester.pumpAndSettle();
 
     const field = Key('tactics-expiry-days-field');
-    expect(find.text('Tactics expire after'), findsOneWidget);
+    expect(find.text('Include puzzles from the last'), findsOneWidget);
     expect(
       tester.widget<TextField>(find.byKey(field)).controller!.text,
       '${session.sessionSettings.maxAgeDays}',
@@ -208,7 +201,7 @@ void main() {
 
     await tester.tap(find.text('Filters…'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Never expire'));
+    await tester.tap(find.text('Include all dates'));
     await tester.pump();
 
     expect(
@@ -322,7 +315,7 @@ void main() {
     await tester.pumpAndSettle();
     final expected = EngineSettings.systemCores > 1 ? 2 : 1;
     expect(runner.cores, expected);
-    await tester.tap(find.byTooltip('Engine settings'));
+    await tester.tap(find.byTooltip('Close settings (Esc)'));
     await tester.pumpAndSettle();
     expect(
       tester.widget<Text>(find.byKey(const Key('review-cores-readout'))).data,

@@ -10,7 +10,11 @@ ChapterLayoutProposal _proposal(int chapterCount) => ChapterLayoutProposal(
   explanation: 'Every game names its chapter in the [White] header.',
   chapters: [
     for (var i = 0; i < chapterCount; i++)
-      ChapterSummary(name: 'Chapter $i', lineCount: i + 1),
+      ChapterSummary(
+        name:
+            'Chapter $i: A long imported chapter name with practical sidelines and transpositions',
+        lineCount: i + 1,
+      ),
   ],
   ungroupedLineCount: 12,
 );
@@ -21,50 +25,56 @@ void main() {
   // reached the viewport and threw, which left the dialog's render box without
   // a size — after which every hit test threw, MouseTracker stayed stuck in
   // its device-update phase, and the whole app stopped taking pointer input.
-  testWidgets('lays out with a long chapter list and no exceptions', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1400, 1000);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
+  for (final size in [const Size(1400, 1000), const Size(520, 480)]) {
+    testWidgets('lays out a long chapter list at $size without exceptions', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: ElevatedButton(
-                onPressed: () => showChapterSetupDialog(
-                  context,
-                  // 37 chapters is what a real Chessable course export
-                  // produces; one screenful is not enough to force scrolling.
-                  proposal: _proposal(37),
-                  chaptersCurrentlyOn: false,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () => showChapterSetupDialog(
+                    context,
+                    // 37 chapters is what a real Chessable course export
+                    // produces; one screenful is not enough to force scrolling.
+                    proposal: _proposal(37),
+                    chaptersCurrentlyOn: false,
+                  ),
+                  child: const Text('open'),
                 ),
-                child: const Text('open'),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-    expect(find.text('Looks like a course export'), findsOneWidget);
-    expect(find.text('Sort 703 lines into these 37 chapters?'), findsOneWidget);
-    expect(find.text('Sort into chapters'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Looks like a course export'), findsOneWidget);
+      expect(
+        find.text('Sort 703 lines into these 37 chapters?'),
+        findsOneWidget,
+      );
+      expect(find.text('Sort into chapters'), findsOneWidget);
 
-    // The dialog must be hit-testable: a sizeless render box is exactly the
-    // failure mode this test exists for.
-    await tester.tap(find.text('Sort into chapters'));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text('Looks like a course export'), findsNothing);
-  });
+      // The dialog must be hit-testable: a sizeless render box is exactly the
+      // failure mode this test exists for.
+      await tester.ensureVisible(find.text('Sort into chapters'));
+      await tester.tap(find.text('Sort into chapters'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Looks like a course export'), findsNothing);
+    });
+  }
 }

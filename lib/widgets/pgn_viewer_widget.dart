@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -192,6 +193,11 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   /// Jump from the current variation back to the mainline branch point.
   @override
   void returnToMainline() => _state?._returnToMainline();
+
+  double get readingAnchor =>
+      _state?._readingPaneKey.currentState?.readingAnchor ?? 0;
+  void applyReadingOption(String value) =>
+      _state?._readingPaneKey.currentState?.applyReadingOption(value);
 
   void showReadingOptions() =>
       _state?._readingPaneKey.currentState?.showReadingOptions();

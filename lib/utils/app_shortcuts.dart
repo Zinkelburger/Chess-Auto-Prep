@@ -177,6 +177,11 @@ class AppShortcut {
 
   // ── Trainers ───────────────────────────────────────────────────────────
 
+  static const rateAgain = AppShortcut([KeyChord(LogicalKeyboardKey.digit1)]);
+  static const rateHard = AppShortcut([KeyChord(LogicalKeyboardKey.digit2)]);
+  static const rateGood = AppShortcut([KeyChord(LogicalKeyboardKey.digit3)]);
+  static const rateEasy = AppShortcut([KeyChord(LogicalKeyboardKey.digit4)]);
+
   static const toggleSolution = AppShortcut([
     KeyChord(LogicalKeyboardKey.space),
   ]);
@@ -202,6 +207,10 @@ class AppShortcut {
 
   /// Every assigned action; checked against the reference below.
   static const all = <AppShortcut>[
+    rateAgain,
+    rateHard,
+    rateGood,
+    rateEasy,
     previousItem,
     nextItem,
     backOneMove,
@@ -284,6 +293,10 @@ const shortcutReference = [
     'Show solution / next learning step',
     AppShortcut.toggleSolution,
   ),
+  ShortcutReference('Training', 'Again', AppShortcut.rateAgain),
+  ShortcutReference('Training', 'Hard', AppShortcut.rateHard),
+  ShortcutReference('Training', 'Good', AppShortcut.rateGood),
+  ShortcutReference('Training', 'Easy', AppShortcut.rateEasy),
   ShortcutReference('Study / repertoire', 'Undo', AppShortcut.undo),
   ShortcutReference('Study / repertoire', 'Paste FEN', AppShortcut.pasteFen),
 ];

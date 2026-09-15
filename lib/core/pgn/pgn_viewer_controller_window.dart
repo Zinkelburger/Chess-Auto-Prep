@@ -90,6 +90,11 @@ mixin _WindowOps on ChangeNotifier {
   /// side it was started for.
   void toggleBoardFlipped() {
     boardFlipped = !boardFlipped;
+    // An explicit flip becomes the reading preference for subsequent games.
+    // Selecting a player again restores automatic player-based orientation.
+    perspective = Perspective(
+      mode: boardFlipped ? PerspectiveMode.black : PerspectiveMode.white,
+    );
     notifyListeners();
   }
 

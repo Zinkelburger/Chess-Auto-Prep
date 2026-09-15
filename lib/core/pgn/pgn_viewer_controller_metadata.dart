@@ -238,7 +238,7 @@ mixin _MetadataOps on ChangeNotifier {
       try {
         await StorageFactory.instance.updateFile(path, (current) {
           if (current == null) throw StateError('The source file is missing.');
-          return patchPgnDocument(current, edits);
+          return patchPgnDocumentAsync(current, edits);
         });
       } catch (e) {
         // Preserve the edited snapshot even if the user has already navigated

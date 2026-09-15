@@ -21,7 +21,7 @@ import '../widgets/analysis/player_downloads.dart';
 import '../widgets/analysis_download_dialog.dart';
 import '../widgets/analysis_import_dialog.dart';
 import '../widgets/common/list_search_field.dart';
-import '../features/opponents/widgets/people_screen.dart';
+import '../features/opponents/widgets/opponent_actions.dart' show popToRoot;
 
 class PlayerSelectionScreen extends StatefulWidget {
   const PlayerSelectionScreen({
@@ -126,7 +126,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                     key: const Key('player-database'),
                     onPressed: _openDatabase,
                     icon: const Icon(Icons.table_chart_outlined, size: 18),
-                    label: const Text('Player database'),
+                    label: const Text('Players & prep'),
                   ),
                   const SizedBox(width: 8),
                   AddPlayerButton(onSelected: _addPlayerFrom),
@@ -305,10 +305,12 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   }
 
   Future<void> _openDatabase() async {
-    await Navigator.of(
-      context,
-    ).push<void>(MaterialPageRoute(builder: (_) => const PeopleScreen()));
-    if (mounted) await _loadCachedPlayers();
+    if (!mounted) return;
+    context.read<AppState>().pushMode(
+      AppMode.playersPrep,
+      historyLabel: 'Players & prep',
+    );
+    popToRoot(context);
   }
 
   /// Seed the app-wide default username, but only when none is saved yet:

@@ -14,7 +14,6 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../controllers/engine_tournament_controller.dart';
 import '../models/engine_spec.dart';
-import '../services/engine_verification.dart';
 
 Future<void> showEngineManagerDialog(
   BuildContext context,
@@ -26,23 +25,30 @@ Future<void> showEngineManagerDialog(
       insetPadding: const EdgeInsets.all(24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640, maxHeight: 560),
-        child: _EngineManagerBody(controller: controller),
+        child: EngineManagerBody(controller: controller),
       ),
     ),
   );
 }
 
-class _EngineManagerBody extends StatefulWidget {
-  const _EngineManagerBody({required this.controller});
+class EngineManagerBody extends StatefulWidget {
+  const EngineManagerBody({
+    super.key,
+    required this.controller,
+    this.embedded = false,
+  });
+  final bool embedded;
 
   final EngineTournamentController controller;
 
   @override
-  State<_EngineManagerBody> createState() => _EngineManagerBodyState();
+  State<EngineManagerBody> createState() => _EngineManagerBodyState();
 }
 
-class _EngineManagerBodyState extends State<_EngineManagerBody> {
+class _EngineManagerBodyState extends State<EngineManagerBody> {
   bool _busy = false;
+  EngineSpec? _editing;
+  String? _report;
 
   @override
   Widget build(BuildContext context) {
@@ -68,15 +74,40 @@ class _EngineManagerBodyState extends State<_EngineManagerBody> {
                 itemCount: engines.length,
                 separatorBuilder: (_, _) =>
                     const Divider(height: 1, color: AppColors.divider),
-                itemBuilder: (context, index) => _EngineRow(
-                  spec: engines[index],
-                  busy: _busy,
-                  onVerify: () => _verify(engines[index]),
-                  onEdit: () => _edit(engines[index]),
-                  onRemove: () => _remove(engines[index]),
+                itemBuilder: (context, index) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _EngineRow(
+                      spec: engines[index],
+                      busy: _busy,
+                      onVerify: () => _verify(engines[index]),
+                      onEdit: () => _edit(engines[index]),
+                      onRemove: () => _remove(engines[index]),
+                    ),
+                    if (_editing?.id == engines[index].id)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: _EngineEditDialog(
+                          key: ValueKey(engines[index].id),
+                          spec: engines[index],
+                          onCancel: () {
+                            if (mounted) setState(() => _editing = null);
+                          },
+                          onSave: (updated) async {
+                            await widget.controller.updateEngine(updated);
+                            if (mounted) setState(() => _editing = null);
+                          },
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
+            if (_report != null)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(_report!, style: AppTextStyles.body),
+              ),
             const Divider(height: 1, color: AppColors.divider),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -95,10 +126,11 @@ class _EngineManagerBodyState extends State<_EngineManagerBody> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   const Spacer(),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Done'),
-                  ),
+                  if (!widget.embedded)
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Done'),
+                    ),
                 ],
               ),
             ),
@@ -117,7 +149,10 @@ class _EngineManagerBodyState extends State<_EngineManagerBody> {
     final report = await widget.controller.addEngine(path);
     if (!mounted) return;
     setState(() => _busy = false);
-    await _showVerificationResult(context, path, report);
+    setState(
+      () => _report =
+          '${report.ok ? "Engine added" : "Could not add engine"}: ${report.message}',
+    );
   }
 
   Future<void> _verify(EngineSpec spec) async {
@@ -125,20 +160,13 @@ class _EngineManagerBodyState extends State<_EngineManagerBody> {
     final report = await widget.controller.verifyEngine(spec);
     if (!mounted) return;
     setState(() => _busy = false);
-    await _showVerificationResult(
-      context,
-      spec.executablePath ?? 'bundled Stockfish',
-      report,
-    );
+    setState(() => _report = '${spec.name}: ${report.message}');
   }
 
-  Future<void> _edit(EngineSpec spec) async {
-    final updated = await showDialog<EngineSpec>(
-      context: context,
-      builder: (_) => _EngineEditDialog(spec: spec),
-    );
-    if (updated == null) return;
-    await widget.controller.updateEngine(updated);
+  void _edit(EngineSpec spec) {
+    if (mounted) {
+      setState(() => _editing = _editing?.id == spec.id ? null : spec);
+    }
   }
 
   Future<void> _remove(EngineSpec spec) async {
@@ -166,98 +194,6 @@ class _EngineManagerBodyState extends State<_EngineManagerBody> {
   }
 }
 
-Future<void> _showVerificationResult(
-  BuildContext context,
-  String path,
-  EngineVerification report,
-) async {
-  if (!context.mounted) return;
-  await showDialog<void>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      icon: Icon(
-        report.ok ? Icons.check_circle_outline : Icons.error_outline,
-        color: report.ok ? AppColors.success : AppColors.danger,
-      ),
-      title: Text(report.ok ? 'Engine verified' : 'Not a usable UCI engine'),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(path, style: AppTextStyles.caption),
-              const SizedBox(height: 10),
-              Text(report.message, style: AppTextStyles.body),
-              if (report.ok) ...[
-                const SizedBox(height: 12),
-                _Fact('Reports itself as', report.name),
-                if (report.author.isNotEmpty) _Fact('Author', report.author),
-                _Fact('UCI options', '${report.options.length}'),
-                _Fact(
-                  'Hash / Threads',
-                  '${report.supportsHash ? "Hash" : "no Hash"}, '
-                      '${report.supportsThreads ? "Threads" : "no Threads"}',
-                ),
-              ],
-              if (!report.ok && report.transcript.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                const Text('What it said:', style: AppTextStyles.caption),
-                const SizedBox(height: 4),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceInset,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: SelectableText(
-                    report.transcript.take(12).join('\n'),
-                    style: AppTextStyles.caption.copyWith(
-                      fontFamily: AppTextStyles.monoFamily,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('Close'),
-        ),
-      ],
-    ),
-  );
-}
-
-class _Fact extends StatelessWidget {
-  const _Fact(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 130,
-            child: Text(label, style: AppTextStyles.caption),
-          ),
-          Expanded(child: Text(value, style: AppTextStyles.body)),
-        ],
-      ),
-    );
-  }
-}
-
 class _EngineRow extends StatelessWidget {
   const _EngineRow({
     required this.spec,
@@ -275,41 +211,37 @@ class _EngineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      leading: Icon(
-        spec.isBundled ? Icons.verified_outlined : Icons.terminal,
-        color: spec.isBundled ? AppColors.success : AppColors.onSurfaceSoft,
-      ),
-      title: Text(spec.name, style: AppTextStyles.bodyStrong),
-      subtitle: Text(
-        spec.isBundled
-            ? 'Bundled with the app · Hash ${spec.hashMb} MB · '
-                  '${spec.threads} thread${spec.threads == 1 ? "" : "s"}'
-            : '${spec.executablePath} · Hash ${spec.hashMb} MB · '
-                  '${spec.threads} thread${spec.threads == 1 ? "" : "s"}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppTextStyles.caption,
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextButton(
-            onPressed: busy ? null : onVerify,
-            child: const Text('Verify'),
+          Text(spec.name, style: AppTextStyles.bodyStrong),
+          Text(
+            '${spec.isBundled ? "Bundled with the app" : spec.executablePath} · ${spec.hashMb} MB · ${spec.threads} CPU ${spec.threads == 1 ? 'core' : 'cores'}',
+            style: AppTextStyles.caption,
           ),
-          IconButton(
-            tooltip: 'Settings',
-            icon: const Icon(Icons.tune, size: 18),
-            onPressed: busy ? null : onEdit,
-          ),
-          IconButton(
-            tooltip: spec.isBundled
-                ? 'The bundled engine cannot be removed'
-                : 'Remove',
-            icon: const Icon(Icons.delete_outline, size: 18),
-            onPressed: busy || spec.isBundled ? null : onRemove,
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              TextButton.icon(
+                onPressed: busy ? null : onVerify,
+                icon: const Icon(Icons.check_circle_outline, size: 18),
+                label: const Text('Test engine'),
+              ),
+              TextButton.icon(
+                onPressed: busy ? null : onEdit,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Edit'),
+              ),
+              if (!spec.isBundled)
+                TextButton.icon(
+                  onPressed: busy ? null : onRemove,
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('Remove'),
+                ),
+            ],
           ),
         ],
       ),
@@ -318,7 +250,14 @@ class _EngineRow extends StatelessWidget {
 }
 
 class _EngineEditDialog extends StatefulWidget {
-  const _EngineEditDialog({required this.spec});
+  const _EngineEditDialog({
+    super.key,
+    required this.spec,
+    required this.onSave,
+    required this.onCancel,
+  });
+  final Future<void> Function(EngineSpec) onSave;
+  final VoidCallback onCancel;
 
   final EngineSpec spec;
 
@@ -327,6 +266,8 @@ class _EngineEditDialog extends StatefulWidget {
 }
 
 class _EngineEditDialogState extends State<_EngineEditDialog> {
+  String? _error;
+  bool _saving = false;
   late final TextEditingController _name = TextEditingController(
     text: widget.spec.name,
   );
@@ -355,7 +296,7 @@ class _EngineEditDialogState extends State<_EngineEditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    final form = AlertDialog(
       title: Text('${widget.spec.name} settings'),
       content: SizedBox(
         width: 440,
@@ -386,7 +327,7 @@ class _EngineEditDialogState extends State<_EngineEditDialog> {
                   child: TextField(
                     controller: _hash,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Hash (MB)'),
+                    decoration: const InputDecoration(labelText: 'Memory (MB)'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -394,7 +335,7 @@ class _EngineEditDialogState extends State<_EngineEditDialog> {
                   child: TextField(
                     controller: _threads,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Threads'),
+                    decoration: const InputDecoration(labelText: 'CPU cores'),
                   ),
                 ),
               ],
@@ -408,7 +349,7 @@ class _EngineEditDialogState extends State<_EngineEditDialog> {
               value: _ponder,
               onChanged: (v) => setState(() => _ponder = v ?? false),
               title: const Text(
-                'Permanent thinking',
+                'Think during opponent’s turn',
                 style: AppTextStyles.body,
               ),
               subtitle: const Text(
@@ -431,41 +372,86 @@ class _EngineEditDialogState extends State<_EngineEditDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+        TextButton(onPressed: widget.onCancel, child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: Text(_saving ? 'Saving…' : 'Save'),
         ),
-        FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        form.content!,
+        if (_error != null)
+          Text(
+            _error!,
+            style: const TextStyle(color: AppColors.danger, fontSize: 13),
+          ),
+        const SizedBox(height: 12),
+        Wrap(spacing: 8, children: form.actions!),
       ],
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
+    final memory = int.tryParse(_hash.text);
+    final cores = int.tryParse(_threads.text);
+    if (memory == null ||
+        memory < 1 ||
+        memory > 65536 ||
+        cores == null ||
+        cores < 1 ||
+        cores > 1024) {
+      setState(
+        () =>
+            _error = 'Enter memory from 1–65536 MB and CPU cores from 1–1024.',
+      );
+      return;
+    }
     final options = <String, String>{};
     for (final line in _options.text.split('\n')) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;
       final split = trimmed.indexOf('=');
-      if (split <= 0) continue;
+      if (split <= 0) {
+        setState(() => _error = 'Enter each extra option as Name=Value.');
+        return;
+      }
       options[trimmed.substring(0, split).trim()] = trimmed
           .substring(split + 1)
           .trim();
     }
-    Navigator.of(context).pop(
-      widget.spec.copyWith(
-        name: _name.text.trim().isEmpty ? widget.spec.name : _name.text.trim(),
-        hashMb: (int.tryParse(_hash.text) ?? widget.spec.hashMb).clamp(
-          1,
-          65536,
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onSave(
+        widget.spec.copyWith(
+          name: _name.text.trim().isEmpty
+              ? widget.spec.name
+              : _name.text.trim(),
+          hashMb: (int.tryParse(_hash.text) ?? widget.spec.hashMb).clamp(
+            1,
+            65536,
+          ),
+          threads: (int.tryParse(_threads.text) ?? widget.spec.threads).clamp(
+            1,
+            1024,
+          ),
+          options: options,
+          ponder: _ponder,
         ),
-        threads: (int.tryParse(_threads.text) ?? widget.spec.threads).clamp(
-          1,
-          1024,
-        ),
-        options: options,
-        ponder: _ponder,
-      ),
-    );
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Could not save engine settings. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 }
 

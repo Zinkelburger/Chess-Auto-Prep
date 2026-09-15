@@ -42,9 +42,13 @@ class OpeningExplorerPanel extends StatefulWidget {
     this.repertoireMovesAtPosition = const {},
     this.onOpenGame,
     this.masterGames,
+    this.sideBySideGames = false,
   });
 
   final LiveExplorerService service;
+
+  /// Wide reference docks keep supporting games beside the move table.
+  final bool sideBySideGames;
 
   /// Open one of the listed games in the viewer.  When null, the games are
   /// not listed at all — a host with nowhere to open them in has no use for
@@ -315,19 +319,22 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Row(
           children: [
-            Icon(Icons.tune, size: 14, color: Colors.grey[400]),
+            const Icon(Icons.tune, size: 14, color: AppColors.onSurfaceMuted),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
                 summary,
-                style: TextStyle(fontSize: 12, color: Colors.grey[300]),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.onSurfaceMuted,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             Icon(
               _filtersExpanded ? Icons.expand_less : Icons.expand_more,
               size: 16,
-              color: Colors.grey[400],
+              color: AppColors.onSurfaceMuted,
             ),
           ],
         ),
@@ -410,9 +417,63 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
     );
   }
 
-  Widget _buildTable(BuildContext context, ExplorerResponse data) {
+  Widget _buildTable(
+    BuildContext context,
+    ExplorerResponse data, {
+    bool split = true,
+    bool showGames = true,
+  }) {
     final openGame = widget.onOpenGame;
     final lichessDb = _database == LichessDatabase.lichess;
+    if (split && widget.sideBySideGames && openGame != null) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 700) {
+            return _buildTable(context, data, split: false);
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: constraints.maxWidth * .45,
+                child: _buildTable(
+                  context,
+                  data,
+                  split: false,
+                  showGames: false,
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: data.topGames.isEmpty && data.recentGames.isEmpty
+                    ? _buildMessage(
+                        Icons.search_off,
+                        'No sample games listed for this position.',
+                      )
+                    : ListView(
+                        padding: EdgeInsets.zero,
+                        children: [
+                          ExplorerGamesList(
+                            games: data.topGames,
+                            heading: lichessDb ? 'Top games' : 'Games',
+                            busyId: _openingGameId,
+                            onOpen: (g) => unawaited(_openGame(g, openGame)),
+                          ),
+                          ExplorerGamesList(
+                            games: data.recentGames,
+                            heading: 'Recent games',
+                            busyId: _openingGameId,
+                            onOpen: (g) => unawaited(_openGame(g, openGame)),
+                          ),
+                        ],
+                      ),
+              ),
+            ],
+          );
+        },
+      );
+    }
+
     return Column(
       children: [
         if (_database != LichessDatabase.twic) _buildOpeningHeader(data),
@@ -447,7 +508,7 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
                     ),
                   ),
                 ExplorerTotalsRow.lichess(response: data),
-                if (openGame != null) ...[
+                if (showGames && openGame != null) ...[
                   ExplorerGamesList(
                     games: data.topGames,
                     heading: lichessDb ? 'Top games' : 'Games',
@@ -550,12 +611,15 @@ class _OpeningExplorerPanelState extends State<OpeningExplorerPanel> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 24, color: Colors.grey[600]),
+            Icon(icon, size: 24, color: AppColors.onSurfaceMuted),
             const SizedBox(height: 8),
             Text(
               text,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.onSurfaceMuted,
+              ),
             ),
           ],
         ),

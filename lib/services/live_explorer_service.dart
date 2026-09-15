@@ -434,6 +434,7 @@ class LiveExplorerService {
   }
 
   void dispose() {
+    _requestSeq++; // In-flight responses must not notify the disposed state.
     _debounceTimer?.cancel();
     state.dispose();
   }

@@ -272,13 +272,15 @@ class _PgnMovetextViewState extends State<PgnMovetextView> {
       );
       if (rendered.block != null) {
         // Blocks already carry their own vertical margin — don't double it.
-        emitFullWidthRow(rendered.block!, vertical: 0);
+        emitFullWidthRow(_readableProse(rendered.block!), vertical: 0);
       } else if (rendered.spans.isNotEmpty) {
         emitFullWidthRow(
-          RichText(
-            text: TextSpan(
-              style: PgnTextStyles.commentAt(0),
-              children: List.of(rendered.spans),
+          _readableProse(
+            RichText(
+              text: TextSpan(
+                style: PgnTextStyles.commentAt(0),
+                children: List.of(rendered.spans),
+              ),
             ),
           ),
         );

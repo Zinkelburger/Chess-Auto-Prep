@@ -457,6 +457,10 @@ class _ColorDesignation extends StatelessWidget {
                     ),
                   ),
                 ),
+                TextButton(
+                  onPressed: onCreateEmpty,
+                  child: const Text('New repertoire'),
+                ),
                 _AddExistingMenu(
                   candidates: candidates,
                   onDesignate: onDesignate,
@@ -565,11 +569,6 @@ class _AddExistingMenu extends StatelessWidget {
               label: r.name,
               icon: Icons.menu_book_outlined,
             ),
-          const ChoiceItem(
-            value: '__new__',
-            label: 'New empty repertoire…',
-            icon: Icons.create_new_folder_outlined,
-          ),
         ],
         onChanged: (path) {
           if (path == '__new__') {

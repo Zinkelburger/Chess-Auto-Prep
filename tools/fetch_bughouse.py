@@ -86,7 +86,7 @@ TARGETS = {
     "bughouse-windows": {
         "archive": "hivemind-windows-x64.zip",
         "engine": ("hivemind.exe", "assets/bughouse/hivemind-windows.exe.gz"),
-        "runtime": ("onnxruntime.dll", "assets/bughouse/onnxruntime.dll.gz"),
+        "runtime": ("onnxruntime.dll", "assets/bughouse/hivemind_ort.dll.gz"),
     },
     "bughouse-macos-arm64": {
         "archive": "hivemind-macos-arm64.tar.gz",
@@ -353,6 +353,12 @@ def fetch_network(lock: dict, force: bool) -> None:
 
 
 def fetch(name: str, lock: dict, force: bool) -> None:
+    windows_engine = None
+    if name == "bughouse-windows":
+        from bughouse_windows import HERE, verified_engine
+        windows_engine = verified_engine()
+        ASSETS.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(HERE / "hivemind-source.tar.gz", ASSETS / "hivemind-windows-source.tar.gz")
     spec = TARGETS[name]
     engine_member, engine_dest = spec["engine"]
     runtime_member, runtime_dest = spec["runtime"]
@@ -364,6 +370,8 @@ def fetch(name: str, lock: dict, force: bool) -> None:
         and f"{name}:runtime" in lock
         and dest_is_current(f"{name}:engine", engine_path, lock)
         and dest_is_current(f"{name}:runtime", runtime_path, lock)
+        and (windows_engine is None or lock[f"{name}:engine"].get("payload_sha256")
+             == hashlib.sha256(windows_engine).hexdigest())
     )
     if fresh and not force:
         # Still rewrite the manifest. The platform pair and the network are
@@ -406,6 +414,9 @@ def fetch(name: str, lock: dict, force: bool) -> None:
         engine_bytes = read_member(tmp, engine_member)
         runtime_bytes = read_member(tmp, runtime_member)
 
+    if windows_engine is not None:
+        engine_bytes = windows_engine
+
     write_gz(engine_bytes, engine_path)
     write_gz(runtime_bytes, runtime_path)
     write_manifest(
@@ -426,6 +437,8 @@ def fetch(name: str, lock: dict, force: bool) -> None:
         "output_bytes": engine_path.stat().st_size,
         "uncompressed_bytes": len(engine_bytes),
     }
+    if windows_engine is not None:
+        lock[f"{name}:engine"]["build_manifest"] = "tools/bughouse_windows/build.json"
     lock[f"{name}:runtime"] = {
         "output_sha256": sha256_file(runtime_path),
         "payload_sha256": hashlib.sha256(runtime_bytes).hexdigest(),
@@ -520,6 +533,14 @@ def install_from_build(checkout: Path, build: str) -> int:
 
 def check(names: list[str], lock: dict) -> int:
     problems: list[str] = []
+    if "bughouse-windows" in names:
+        from bughouse_windows import HERE, verified_engine
+        engine = verified_engine()
+        if hashlib.sha256(engine).hexdigest() != lock["bughouse-windows:engine"].get("payload_sha256"):
+            problems.append("Windows engine lock is stale; fetch the rebuilt engine")
+        source = ASSETS / "hivemind-windows-source.tar.gz"
+        if not source.exists() or sha256_file(source) != sha256_file(HERE / "hivemind-source.tar.gz"):
+            problems.append("Windows corresponding-source archive missing or stale")
     paths: list[tuple[str, Path]] = [("network", REPO_ROOT / NETWORK["dest"])]
     for n in names:
         paths.append((f"{n}:engine", REPO_ROOT / TARGETS[n]["engine"][1]))

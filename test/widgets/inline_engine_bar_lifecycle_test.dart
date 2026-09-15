@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:provider/provider.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'dart:ui' show PointerDeviceKind;
 
@@ -80,6 +82,33 @@ void main() {
         child: const InlineEngineBar(fen: fen),
       ),
     ),
+  );
+
+  testWidgets(
+    'compact engine starts and stops analysis with settings available',
+    (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: InlineEngineBar(fen: fen, compactChrome: true)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Stockfish'), findsOneWidget);
+      await tester.tap(find.text('Start analysis'));
+      await tester.pumpAndSettle();
+      expect(find.text('e4'), findsOneWidget);
+      expect(find.textContaining('depth '), findsNothing);
+      expect(find.byTooltip('Engine settings'), findsOneWidget);
+      await tester.tap(find.byTooltip('Analysis options'));
+      await tester.pumpAndSettle();
+      expect(find.text('Show threat'), findsOneWidget);
+      await tester.tapAt(const Offset(10, 400));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Stop'));
+      await tester.pumpAndSettle();
+      expect(find.text('e4'), findsNothing);
+      expect(find.text('Start analysis'), findsOneWidget);
+    },
   );
 
   testWidgets(
@@ -392,7 +421,12 @@ void main() {
     (tester) async {
       final settings = EngineSettings.instance;
       final before = settings.cores;
-      await tester.pumpWidget(harness(active: true));
+      await tester.pumpWidget(
+        ChangeNotifierProvider(
+          create: (_) => AppState(),
+          child: harness(active: true),
+        ),
+      );
       await tester.tap(find.byTooltip('Engine settings'));
       await tester.pumpAndSettle();
       final cores = find.byType(NumberStepper).first;

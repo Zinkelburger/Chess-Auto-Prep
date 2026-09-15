@@ -12,6 +12,7 @@ void main() {
     TrainingSettings settings, {
     Size size = const Size(1100, 850),
     VoidCallback? changeSide,
+    ValueChanged<bool?>? selectSide,
     VoidCallback? grouping,
     bool declined = false,
   }) async {
@@ -35,6 +36,7 @@ void main() {
               onRepetitionModeChanged: (v) => setState(() => repetition = v),
               playingWhite: false,
               onChangePlayingSide: changeSide,
+              onPlayingSideChanged: selectSide,
               onOpenChapterSetup: grouping,
               chaptersDeclined: declined,
             ),
@@ -44,73 +46,67 @@ void main() {
     );
   }
 
-  testWidgets('settings show one category and retain edits across categories', (
+  testWidgets('one training form edits learning and session preferences', (
     tester,
   ) async {
-    final settings = TrainingSettings();
+    final settings = TrainingSettings()..newLinesPerSession = 20;
     await mount(tester, settings);
-    expect(find.text('New lines'), findsOneWidget);
-    expect(find.text('Drill depth'), findsNothing);
-    expect(find.text('Change side…'), findsNothing);
+    expect(find.byKey(const Key('training-settings-nav-0')), findsNothing);
     await tester.enterText(find.byKey(const ValueKey('New lines')), '12');
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('training-settings-nav-1')));
+    await tester.scrollUntilVisible(
+      find.text('Train the whole line'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Train the whole line'));
     await tester.pumpAndSettle();
-    expect(find.text('New lines'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('training-depth')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.enterText(find.byKey(const Key('training-depth')), '8');
     await tester.pumpAndSettle();
-    expect((await TrainingSettings.load()).trainingDepth, 8);
-    await tester.tap(find.byKey(const Key('training-settings-nav-0')));
-    await tester.pumpAndSettle();
-    expect(find.text('12'), findsOneWidget);
     expect((await TrainingSettings.load()).newLinesPerSession, 12);
+    expect((await TrainingSettings.load()).trainingDepth, 8);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'material exposes colour and explicit grouping without extra menus',
-    (tester) async {
-      var side = 0;
-      var grouping = 0;
-      await mount(
-        tester,
-        TrainingSettings(),
-        changeSide: () => side++,
-        grouping: () => grouping++,
-      );
-      await tester.tap(find.byKey(const Key('training-settings-nav-3')));
-      await tester.pumpAndSettle();
-      expect(find.text('You play Black'), findsOneWidget);
-      await tester.tap(find.text('Change side…'));
-      await tester.tap(find.text('Preview chapter grouping…'));
-      expect(side, 1);
-      expect(grouping, 1);
-      expect(find.text('Name separator'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'narrow settings use a section picker and one pass hides session limits',
-    (tester) async {
-      await mount(tester, TrainingSettings(), size: const Size(540, 850));
-      expect(
-        find.byKey(const Key('training-settings-section')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const Key('training-settings-nav-0')), findsNothing);
-      await tester.tap(find.text('Spaced repetition'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('One pass').last);
-      await tester.pumpAndSettle();
-      expect(find.text('Session size'), findsNothing);
-      await tester.tap(find.byKey(const Key('training-settings-section')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Playback').last);
-      await tester.pumpAndSettle();
-      expect(find.text('Wait for Next'), findsOneWidget);
-      expect(find.text('Review schedule'), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('session limits have an explicit unlimited choice', (
+    tester,
+  ) async {
+    final settings = TrainingSettings()..newLinesPerSession = 20;
+    await mount(tester, settings, size: const Size(540, 850));
+    await tester.tap(find.text('Unlimited new lines'));
+    await tester.pumpAndSettle();
+    expect(settings.newLinesPerSession, 0);
+    expect(find.byKey(const ValueKey('New lines')), findsNothing);
+    await tester.tap(find.text('Unlimited new lines'));
+    await tester.pumpAndSettle();
+    expect(settings.newLinesPerSession, greaterThan(0));
+    expect(find.byKey(const ValueKey('New lines')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('playing side is a direct choice with no dialog', (tester) async {
+    bool? chosen;
+    await mount(
+      tester,
+      TrainingSettings(),
+      selectSide: (value) => chosen = value,
+    );
+    await tester.scrollUntilVisible(
+      find.text('You play Black'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('From file'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('White').last);
+    await tester.pumpAndSettle();
+    expect(chosen, isTrue);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

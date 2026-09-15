@@ -25,13 +25,13 @@ import '../utils/app_messages.dart';
 import '../utils/log.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../widgets/chess_board_widget.dart';
-import '../widgets/master_games_prompt_banner.dart';
 import '../features/coverage/widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
 import '../services/storage/storage_factory.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
 import '../features/generate/widgets/generate_position_pane.dart';
+import '../features/generate/widgets/position_generation_settings.dart';
 import '../widgets/generation/generation_lock_overlay.dart';
 import '../widgets/layout/board_zone.dart';
 import '../widgets/layout/bottom_pane.dart';
@@ -49,7 +49,6 @@ import '../features/repertoire/widgets/repertoire_shortcuts.dart';
 import '../features/repertoire/widgets/repertoire_nav_controls.dart';
 import '../features/repertoire/widgets/repertoire_tab_labels.dart';
 import '../widgets/engine/inline_engine_bar.dart';
-import '../widgets/engine/inline_expectimax_bar.dart';
 import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../services/jobs/repertoire_job.dart';
 import '../features/audit/models/audit_finding.dart';
@@ -63,6 +62,7 @@ import '../features/traps/widgets/trap_tour_bar.dart';
 import '../features/traps/widgets/traps_tab_content.dart';
 import '../widgets/engine/floating_board_preview.dart';
 import '../features/repertoire/controllers/repertoire_layout_prefs.dart';
+import '../features/repertoire/widgets/repertoire_workspace_panel.dart';
 import '../features/repertoire/services/chapter_store.dart';
 import '../widgets/common/name_entry_dialog.dart';
 import '../features/repertoire/services/repertoire_outline_service.dart';
@@ -85,6 +85,7 @@ import '../features/repertoire/controllers/audit_entry_router.dart';
 import '../features/repertoire/controllers/repertoire_outline_controller.dart';
 import '../features/repertoire/models/repertoire_outline.dart';
 import '../features/repertoire/widgets/repertoire_outline_panel.dart';
+import '../features/repertoire/widgets/repertoire_loading_frame.dart';
 import '../features/planner/controllers/plan_runner.dart';
 import '../features/planner/widgets/plan_build_screen.dart';
 import '../features/planner/widgets/plan_runner_banner.dart';
@@ -175,6 +176,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   /// panel on the right — the PGN editor stays visible in the middle column
   /// and the outline (chapters and lines) holds the left column.
   late final TabController _sidePanelTabController;
+  int _databaseSource = 3;
   bool _showTrapsInLinesTab = false;
 
   /// The repertoire as chapters, folders and lines — the left column. Reads
@@ -250,11 +252,13 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
 
   /// Reveal generation beside the board at its current position.
   Future<void> _openGenerateTab() async {
+    if (!mounted) return;
+    setState(() => _databaseSource = 3);
     if (_isCompactLayout) {
-      _toolsTabController.animateTo(3);
+      _toolsTabController.animateTo(2);
     } else {
       unawaited(_layout.setLinesPanelCollapsed(false));
-      _sidePanelTabController.animateTo(2);
+      _sidePanelTabController.animateTo(1);
     }
     _reclaimFocus();
   }
@@ -325,11 +329,15 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   Future<void> _openAuditConfigRoute() async {
     if (_configRouteOpen) return;
     _configRouteOpen = true;
+    final tree = _controller.openingTree;
+    final path = _repertoireFilePath;
+    final isWhite = _controller.isRepertoireWhite;
+    final label = _controller.currentRepertoire?.name;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
-          title: 'Audit for gaps',
+          title: 'Check this chapter',
           startSignal: _auditController,
           hasStarted: () => _auditController.isAuditing,
           child: AuditConfigPanel(
@@ -338,19 +346,20 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
             currentFen: _controller.fen,
             currentMoveSequence: _controller.currentMoveSequence,
             repertoireFilePath: _repertoireFilePath,
-            auditService: _auditController.service,
-            onConfigChanged: _auditController.onConfigChanged,
-            onAuditingChanged: _onAuditingChanged,
-            onResultReady: (result) {
-              if (mounted) {
-                _auditController.onResultReady(result, _repertoireFilePath);
-              }
-            },
-            onLiveFinding: (finding) {
-              if (mounted) _auditController.onLiveFinding(finding);
-            },
-            onProgress: (checked, total) {
-              if (mounted) _auditController.onProgress(checked, total);
+            onStart: (config, startFen) {
+              if (!mounted || tree == null) return;
+              unawaited(
+                _auditController.launch(
+                  config: config,
+                  tree: tree,
+                  isWhiteRepertoire: isWhite,
+                  jobManager: _jobManager,
+                  repertoireLabel: label,
+                  repertoireFilePath: path,
+                  startFen: startFen,
+                ),
+              );
+              _openBottomPane(BottomPaneTab.findings);
             },
           ),
         ),
@@ -359,16 +368,6 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     _configRouteOpen = false;
     if (!mounted) return;
     _reclaimFocus();
-  }
-
-  void _onAuditingChanged(bool auditing) {
-    if (!mounted) return;
-    _auditController.onAuditingChanged(
-      auditing,
-      _jobManager,
-      _controller.currentRepertoire?.name ?? 'Audit',
-    );
-    if (auditing) _openBottomPane(BottomPaneTab.findings);
   }
 
   void _discoverTrapsFromRepertoire() {
@@ -455,7 +454,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     super.initState();
 
     _toolsTabController = TabController(length: 4, vsync: this);
-    _sidePanelTabController = TabController(length: 3, vsync: this);
+    _sidePanelTabController = TabController(length: 2, vsync: this);
     _outline = RepertoireOutlineController(
       onActiveChapterMoved: _onActiveChapterMoved,
     );
@@ -492,9 +491,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     final handoff = appState.takeHandoff<OpenBuilder>();
     if (handoff == null) return;
 
-    // Load the requested repertoire if different from current
+    // A library handoff reloads structural edits even for the current file.
     final currentPath = _controller.currentRepertoire?.filePath;
-    if (currentPath != handoff.repertoirePath) {
+    if (currentPath != handoff.repertoirePath || handoff.reloadFromDisk) {
       unawaited(
         _controller.setRepertoire(
           RepertoireMetadata(
@@ -970,7 +969,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
 
   @override
   Widget build(BuildContext context) {
-    if (_controller.isLoading) {
+    if (_controller.isLoading && _lastRepertoireId == null) {
       return Scaffold(
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
@@ -1052,137 +1051,138 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     }
 
     final repertoire = _controller.currentRepertoire!;
-    return Scaffold(
-      appBar: RepertoireToolbar(
-        title: RepertoireBreadcrumbTitle(
-          repertoireName: p.basename(
-            StorageFactory.instance.parentPath(repertoire.filePath),
+    return RepertoireLoadingFrame(
+      isLoading: _controller.isLoading,
+      child: Scaffold(
+        appBar: RepertoireToolbar(
+          title: RepertoireBreadcrumbTitle(
+            repertoireName: p.basename(
+              StorageFactory.instance.parentPath(repertoire.filePath),
+            ),
+            chapterName: repertoire.name,
+            chapters: _chapters,
+            currentChapterPath: repertoire.filePath,
+            enabled: !_generationController.isGenerating,
+            onSwitchRepertoire: _showRepertoireSelection,
+            onSelectChapter: _onChapterSelected,
+            onAddChapter: _addChapterInline,
+            onViewChapters: _showChapterList,
           ),
-          chapterName: repertoire.name,
-          chapters: _chapters,
-          currentChapterPath: repertoire.filePath,
-          enabled: !_generationController.isGenerating,
-          onSwitchRepertoire: _showRepertoireSelection,
-          onSelectChapter: _onChapterSelected,
-          onAddChapter: _addChapterInline,
-          onViewChapters: _showChapterList,
+          isGenerating: _generationController.isGenerating,
+          isGenerationPaused: _generationController.isPaused,
+          isExpectimaxProbe: _generationController.isExpectimaxProbe,
+          showTrainAction: true,
+          showSelectRepertoireAction: true,
+          generationLocked: _generationController.isGenerating,
+          onSettingsClosed: _reclaimFocus,
+          onSelectRepertoire: _showRepertoireSelection,
+          onTrainRepertoire: _trainRepertoire,
+          onOpenGeneration: _openGenerateTab,
+          onPlanBuild: () => unawaited(_openPlanner()),
+          onOpenAudit: _openAuditDialog,
+          onImportPgn: _importPgn,
+          onReload: _reloadRepertoire,
+          onGenerationSettings: () =>
+              showPositionGenerationSettings(context, _generationController),
+          trapNavigation: _buildTrapNavigation(),
+          repertoireSettingsBuilder: (_) => RepertoireSettingsBody(
+            isWhiteRepertoire: _controller.isRepertoireWhite,
+            sideChangeEnabled: !_generationController.isGenerating,
+            onSideChanged: (isWhite) => _controller.setRepertoireColor(isWhite),
+            boardSize: _layout.boardSize,
+            onBoardSizeChanged: _layout.setBoardSize,
+          ),
         ),
-        isGenerating: _generationController.isGenerating,
-        isGenerationPaused: _generationController.isPaused,
-        isExpectimaxProbe: _generationController.isExpectimaxProbe,
-        showTrainAction: true,
-        showSelectRepertoireAction: true,
-        generationLocked: _generationController.isGenerating,
-        onSettingsClosed: _reclaimFocus,
-        onSelectRepertoire: _showRepertoireSelection,
-        onTrainRepertoire: _trainRepertoire,
-        onOpenGeneration: _openGenerateTab,
-        onPlanBuild: () => unawaited(_openPlanner()),
-        onOpenAudit: _openAuditDialog,
-        onImportPgn: _importPgn,
-        trapNavigation: _buildTrapNavigation(),
-        repertoireSettingsBuilder: (_) => RepertoireSettingsBody(
-          isWhiteRepertoire: _controller.isRepertoireWhite,
-          sideChangeEnabled: !_generationController.isGenerating,
-          onSideChanged: (isWhite) => _controller.setRepertoireColor(isWhite),
-          boardSize: _layout.boardSize,
-          onBoardSizeChanged: _layout.setBoardSize,
-        ),
-      ),
-      body: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: _reclaimFocus,
-        child: _buildShortcuts(
-          child: Column(
-            children: [
-              // Paused builds free the tab and the engine; a slim banner
-              // keeps resume/discard in reach.
-              if (_planRunner.isRunning)
-                PlanRunnerBanner(
-                  runner: _planRunner,
-                  isPaused: _generationController.isPaused,
-                  onPause: _generationController.pauseBuild,
-                  onResume: _generationController.resumeBuild,
-                )
-              else if (_generationController.isGenerating &&
-                  _generationController.isPaused)
-                GenerationPausedBanner(
-                  onResume: _generationController.resumeBuild,
-                  onDiscard: _confirmDiscardBuild,
-                )
-              else
-                // Master-games download nudge / progress; renders nothing
-                // once the database exists or the prompt was dismissed.
-                MasterGamesPromptBanner(
-                  onShowJobs: () => _openBottomPane(BottomPaneTab.jobs),
-                ),
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final isCompact =
-                            constraints.maxWidth < kCompactBreakpoint;
-                        if (isCompact != _isCompactLayout) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) _updateCompactLayout(isCompact);
-                          });
-                        }
-                        if (isCompact) {
-                          return _buildCompactLayout();
-                        }
-                        return _buildWideLayout();
-                      },
-                    ),
-                    // Lock the whole tab (board, PGN editor, engine panes)
-                    // while a build actively runs; the bottom pane and status
-                    // bar stay reachable below for job progress.
-                    // A probe borrows the engine but leaves the board and
-                    // the panes alone — browsing the database while it
-                    // runs is the point.
-                    if (_generationController.isGenerating &&
-                        !_generationController.isPaused &&
-                        !_generationController.isExpectimaxProbe)
-                      GenerationLockOverlay(
-                        statusText: _generationController.progress.status,
-                        canPause: _generationController.canPause,
-                        isCancelling: _generationController.isCancelling,
-                        onPause: _generationController.pauseBuild,
-                        isAwaitingMasterGames:
-                            _generationController.isAwaitingMasterGames,
-                        onSkipMasterGames:
-                            _generationController.skipMasterGamesDownload,
+        body: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _reclaimFocus,
+          child: _buildShortcuts(
+            child: Column(
+              children: [
+                // Paused builds free the tab and the engine; a slim banner
+                // keeps resume/discard in reach.
+                if (_planRunner.isRunning)
+                  PlanRunnerBanner(
+                    runner: _planRunner,
+                    isPaused: _generationController.isPaused,
+                    onPause: _generationController.pauseBuild,
+                    onResume: _generationController.resumeBuild,
+                  )
+                else if (_generationController.isGenerating &&
+                    _generationController.isPaused)
+                  GenerationPausedBanner(
+                    onResume: _generationController.resumeBuild,
+                    onDiscard: _confirmDiscardBuild,
+                  ),
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isCompact =
+                              constraints.maxWidth < kCompactBreakpoint;
+                          if (isCompact != _isCompactLayout) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) _updateCompactLayout(isCompact);
+                            });
+                          }
+                          if (isCompact) {
+                            return _buildCompactLayout();
+                          }
+                          return _buildWideLayout();
+                        },
                       ),
-                  ],
+                      // Lock the whole tab (board, PGN editor, engine panes)
+                      // while a build actively runs; the bottom pane and status
+                      // bar stay reachable below for job progress.
+                      // A probe borrows the engine but leaves the board and
+                      // the panes alone — browsing the database while it
+                      // runs is the point.
+                      if (_generationController.isGenerating &&
+                          !_generationController.isPaused &&
+                          !_generationController.isExpectimaxProbe)
+                        GenerationLockOverlay(
+                          statusText: _generationController.progress.status,
+                          canPause: _generationController.canPause,
+                          isCancelling: _generationController.isCancelling,
+                          onPause: _generationController.pauseBuild,
+                          isAwaitingMasterGames:
+                              _generationController.isAwaitingMasterGames,
+                          onSkipMasterGames:
+                              _generationController.skipMasterGamesDownload,
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              if (_trapSession.tourVisible && _trapSession.index != null)
-                TrapTourBar(
-                  key: _trapTourKey,
-                  trapIndex: _trapSession.index!,
-                  initialTrap: _trapSession.tourInitialTrap,
-                  onClose: _trapSession.closeTour,
-                  // Each stop loads the annotated trap line into the PGN
-                  // tab, where the moves are clickable.
-                  onShowTrap: _showTrapLine,
+                if (_trapSession.tourVisible && _trapSession.index != null)
+                  TrapTourBar(
+                    key: _trapTourKey,
+                    trapIndex: _trapSession.index!,
+                    initialTrap: _trapSession.tourInitialTrap,
+                    onClose: _trapSession.closeTour,
+                    // Each stop loads the annotated trap line into the PGN
+                    // tab, where the moves are clickable.
+                    onShowTrap: _showTrapLine,
+                  ),
+                _buildBottomPane(),
+                RepertoireStatusBar(
+                  findingsCount: _auditController.activeFindingCount,
+                  jobsStatus: _generationController.isGenerating
+                      ? (_generationController.isPaused
+                            ? 'Paused'
+                            : 'Generating...')
+                      : _auditController.isAuditing
+                      ? (_auditController.isPaused
+                            ? 'Audit paused'
+                            : 'Auditing...')
+                      : null,
+                  onFindingsTap: () =>
+                      _toggleBottomPane(BottomPaneTab.findings),
+                  onJobsTap: () => _toggleBottomPane(BottomPaneTab.jobs),
                 ),
-              _buildBottomPane(),
-              RepertoireStatusBar(
-                findingsCount: _auditController.activeFindingCount,
-                jobsStatus: _generationController.isGenerating
-                    ? (_generationController.isPaused
-                          ? 'Paused'
-                          : 'Generating...')
-                    : _auditController.isAuditing
-                    ? (_auditController.isPaused
-                          ? 'Audit paused'
-                          : 'Auditing...')
-                    : null,
-                onFindingsTap: () => _toggleBottomPane(BottomPaneTab.findings),
-                onJobsTap: () => _toggleBottomPane(BottomPaneTab.jobs),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

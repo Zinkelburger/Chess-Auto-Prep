@@ -93,8 +93,16 @@ mixin _RepertoireTabContent
     );
   }
 
-  Widget _buildGenerateTabContent() {
+  Widget _buildGenerateTabContent({
+    Widget? sourceControl,
+    bool? chessDbSource,
+  }) {
     return GeneratePositionPane(
+      sourceControl: sourceControl,
+      chessDbSource: chessDbSource,
+      onShowGenerated: () {
+        if (mounted) setState(() => _databaseSource = 3);
+      },
       fen: _controller.fen,
       databaseName:
           '${p.basename(p.dirname(_controller.currentRepertoire!.filePath))} / ${_controller.currentRepertoire!.name}',
@@ -139,37 +147,25 @@ mixin _RepertoireTabContent
     );
   }
 
-  /// Engine tab of the analysis panel: Stockfish lines with the expectimax
-  /// bar under them. Stacked, because the panel is a column and the two bars
-  /// were built as headers that read left to right.
-  Widget _buildEngineTabContent() {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InlineEngineBar(
-            fen: _controller.fen,
-            isActive: true,
-            previewFlipped: _boardFlipped,
-          ),
-          const Divider(height: 1),
-          InlineExpectimaxBar(
-            controller: _controller,
-            tree: _generationController.generatedTree,
-            treeConfig: _generationController.generatedTreeConfig,
-            fenMap: _generationController.generatedTreeFenMap,
-            boardPreview: _boardPreview,
-            coherenceResult: _generationController.coherenceService.result,
-            generation: _generationController,
-          ),
-        ],
-      ),
-    );
-  }
+  /// Live engine analysis; saved/generated evaluations are a database source.
+  Widget _buildEngineTabContent() => SingleChildScrollView(
+    child: InlineEngineBar(
+      fen: _controller.fen,
+      isActive: true,
+      previewFlipped: _boardFlipped,
+      compactChrome: true,
+    ),
+  );
 
   /// Database tab of the analysis panel: the live opening explorer.
   Widget _buildDatabaseTabContent() {
     return RepertoireDatabasePane(
+      source: _databaseSource,
+      onSourceChanged: (source) {
+        if (mounted) setState(() => _databaseSource = source);
+      },
+      evaluationsBuilder: (menu, chessDb) =>
+          _buildGenerateTabContent(sourceControl: menu, chessDbSource: chessDb),
       tree: _controller.openingTree,
       repertoireLines: _controller.repertoireLines,
       onHoverTreeMove: _onTreeMoveHover,
@@ -181,51 +177,6 @@ mixin _RepertoireTabContent
       onPlayMove: _controller.playMove,
       onAddMove: _onExplorerAddMove,
       onHoverMove: _onExplorerMoveHover,
-    );
-  }
-
-  Widget _buildPgnTabWithEngines() {
-    return Column(
-      children: [
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: InlineEngineBar(
-                  fen: _controller.fen,
-                  isActive: true,
-                  previewFlipped: _boardFlipped,
-                ),
-              ),
-              VerticalDivider(
-                width: 1,
-                thickness: 1,
-                color: Theme.of(context).dividerColor,
-              ),
-              Expanded(
-                child: InlineExpectimaxBar(
-                  controller: _controller,
-                  tree: _generationController.generatedTree,
-                  treeConfig: _generationController.generatedTreeConfig,
-                  fenMap: _generationController.generatedTreeFenMap,
-                  boardPreview: _boardPreview,
-                  coherenceResult:
-                      _generationController.coherenceService.result,
-                  generation: _generationController,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(4.0),
-            child: _buildPgnTab(),
-          ),
-        ),
-      ],
     );
   }
 
@@ -257,6 +208,9 @@ mixin _RepertoireTabContent
       isAuditing: ac.isAuditing,
       auditNodesChecked: ac.nodesChecked,
       auditTotalNodes: ac.totalNodes,
+      errorText: ac.error,
+      chapterName: _controller.currentRepertoire?.name,
+      config: ac.lastConfig,
       onFindingSelected: _onFindingSelected,
       onResultChanged: (updatedResult) {
         ac.onResultChanged(updatedResult, _repertoireFilePath);
@@ -319,6 +273,7 @@ mixin _RepertoireTabContent
   }
 
   Widget _buildPgnTab() {
+    final saveLine = _controller.selectedLineSaver;
     return PgnWithAnalysisPane(
       controller: _controller,
       tree: _controller.tree,
@@ -331,9 +286,9 @@ mixin _RepertoireTabContent
       onMakeMainLine: (path) => _controller.makeMainLine(path),
       repertoireColor: _controller.isRepertoireWhite ? 'White' : 'Black',
       isEditingExistingLine: _controller.selectedPgnLine != null,
-      onLineEdited: (updatedPgn) {
-        unawaited(_controller.updateSelectedLineContent(updatedPgn));
-      },
+      onLineEdited: saveLine == null
+          ? null
+          : (updatedPgn) => unawaited(saveLine(updatedPgn)),
       onImportPgn: _importPgn,
       onViewInLines: _showLinesSurface,
       onReload: _reloadRepertoire,
@@ -345,6 +300,7 @@ mixin _RepertoireTabContent
       coherenceResult: _generationController.coherenceService.result,
       isAnalysisActive: true,
       embedAnalysisDock: false,
+      showToolbar: false,
       ephemeralTitle: _controller.annotatedLineLabel,
     );
   }
@@ -439,8 +395,14 @@ mixin _RepertoireTabContent
     final tree = _controller.tree;
     final path = _controller.path;
     final children = path.isEmpty ? tree.roots : tree.nodeAt(path)?.children;
-    if (children == null) return const {};
-    return {for (final c in children) c.san};
+    final saved = _controller.openingTree;
+    return {
+      if (children != null)
+        for (final child in children) child.san,
+      if (saved != null)
+        for (final group in saved.continuationsAt(_controller.fen))
+          if (!group.viaTransposition) group.move,
+    };
   }
 
   /// Echo the hovered explorer row on the board, the way Lichess arrows a

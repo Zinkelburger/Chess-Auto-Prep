@@ -65,7 +65,7 @@ class WindowsLoaderCheck {
   /// shipped binaries' real import tables and fails CI if they ever ask for
   /// something that is neither part of Windows nor shipped beside the engine.
   static const List<String> engineDependencies = [
-    'onnxruntime.dll',
+    'hivemind_ort.dll',
     'MSVCP140.dll',
     'MSVCP140_1.dll',
     'VCRUNTIME140.dll',

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/features/repertoire/widgets/repertoire_import_dialog.dart';
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/screens/repertoire_creation_screen.dart';
 import 'package:chess_auto_prep/services/repertoire_creation.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
@@ -249,6 +250,128 @@ void main() {
       expect(selected!.filePath, '/repertoires/Pasted repertoire/Main.pgn');
       expect(selected!.gameCount, 2);
       expect(tester.takeException(), isNull);
+    },
+  );
+  Future<void> openCreation(WidgetTester tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: RepertoireListBody(onSelected: (_) {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create new repertoire'));
+    await tester.pumpAndSettle();
+    expect(find.byType(RepertoireCreationScreen), findsOneWidget);
+  }
+
+  testWidgets('create opens a fresh form and cancel returns to its caller', (
+    tester,
+  ) async {
+    await openCreation(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('repertoire-create-name')),
+      'Draft',
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(storage.files, isEmpty);
+    expect(find.byType(RepertoireListBody), findsOneWidget);
+    await tester.tap(find.text('Create new repertoire'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextFormField>(find.byType(TextFormField)).controller!.text,
+      isEmpty,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('create imports named black lines and returns to the caller', (
+    tester,
+  ) async {
+    RepertoireMetadata? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RepertoireListBody(onSelected: (value) => selected = value),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create new repertoire'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('repertoire-create-name')),
+      'My Caro',
+    );
+    await tester.tap(find.text('Black'));
+    await tester.enterText(
+      find.byKey(const ValueKey('repertoire-create-pgn')),
+      _pgn,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
+    await tester.pumpAndSettle();
+    expect(find.byType(RepertoireCreationScreen), findsNothing);
+    expect(selected!.filePath, '/repertoires/My Caro/Main.pgn');
+    expect(selected!.gameCount, 2);
+    expect(storage.files.values.single, contains('// Color: Black'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'creation validates moves and retains input after write failure',
+    (tester) async {
+      await openCreation(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('repertoire-create-name')),
+        'My Caro',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Open or paste a PGN with moves to train.'),
+        findsOneWidget,
+      );
+      expect(storage.files, isEmpty);
+      await tester.enterText(
+        find.byKey(const ValueKey('repertoire-create-pgn')),
+        _pgn,
+      );
+      storage.failWrite = true;
+      await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Your input is still here'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('repertoire-create-pgn')),
+            )
+            .controller!
+            .text,
+        _pgn,
+      );
+      storage.failWrite = false;
+      await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
+      await tester.pumpAndSettle();
+      expect(storage.files, hasLength(1));
+      expect(find.byType(RepertoireCreationScreen), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'explicit empty creation stays in the library without loading a lesson',
+    (tester) async {
+      await openCreation(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('repertoire-create-name')),
+        'Later',
+      );
+      await tester.tap(find.text('Empty repertoire'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
+      await tester.pumpAndSettle();
+      expect(storage.files.keys.single, '/repertoires/Later/Main.pgn');
+      expect(find.byType(RepertoireListBody), findsOneWidget);
+      expect(find.byType(RepertoireCreationScreen), findsNothing);
     },
   );
 }

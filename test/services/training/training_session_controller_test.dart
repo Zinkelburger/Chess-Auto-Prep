@@ -49,6 +49,25 @@ void main() {
   );
 
   test(
+    'reopening unchanged material does not rewrite review progress',
+    () async {
+      repService.lines = [
+        fakeLine('same', ['e4', 'e5']),
+      ];
+      final controller = buildController();
+      addTearDown(controller.dispose);
+      controller.setRepertoire(meta());
+      await controller.loadRepertoire();
+      final writes = reviewService.saveAllCalls;
+      expect(writes, 1);
+      await controller.loadRepertoire();
+      expect(reviewService.saveAllCalls, writes);
+      expect(controller.lines.single.id, 'same');
+      expect(controller.isLoading, isFalse);
+    },
+  );
+
+  test(
     'whole-folder training keeps same-named chapter line identities separate',
     () async {
       final folder = Directory('${tempDir.path}/Course')..createSync();

@@ -10,62 +10,59 @@ mixin _RepertoireLayout
         _RepertoireScreenStateBase,
         _RepertoireSessionHandlers,
         _RepertoireTabContent {
-  /// Wide layout, left to right: the outline (chapters and lines), the
-  /// board, the PGN editor, and the analysis panel (engine, database, tree).
-  /// What the repertoire *contains* on the left, the *position* in the
-  /// middle, *evidence about the position* on the right.
-  Widget _buildWideLayout() {
+  /// Chapters, board and a moves / analysis column share the workspace.
+  Widget _buildWideLayout() => LayoutBuilder(
+    builder: (context, constraints) {
+      // Opening a tall Jobs pane must not squeeze the workspace's controls
+      // into negative space. The workspace scrolls only when it is very short.
+      return SingleChildScrollView(
+        child: SizedBox(
+          height: constraints.maxHeight.clamp(500.0, double.infinity),
+          child: _buildWideWorkspace(),
+        ),
+      );
+    },
+  );
+
+  Widget _buildWideWorkspace() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final outlineWidth = _layout.outlinePanelCollapsed
             ? 28.0
-            : _layout.resolveOutlinePanelWidth(constraints.maxWidth);
-        final panelWidth = _layout.linesPanelCollapsed
-            ? 28.0
-            : _layout.resolveLinesPanelWidth(constraints.maxWidth);
-        // The board zone needs a bounded width: the bars under the board
-        // (build-session, ephemeral finding) hold Rows with Expanded
-        // children, which cannot lay out under the Row's unbounded width.
-        // It sizes against what is left once both side columns are placed,
-        // so opening the outline never crowds the PGN editor out.
-        final boardZoneWidth = _layout.boardZoneWidth(
-          availableWidth: constraints.maxWidth - outlineWidth - panelWidth,
-          availableHeight: constraints.maxHeight,
+            : _layout
+                  .resolveOutlinePanelWidth(constraints.maxWidth)
+                  .clamp(220.0, constraints.maxWidth * .24);
+        final boardWidth = _layout.boardZoneWidth(
+          availableWidth: constraints.maxWidth - outlineWidth - 32,
+          availableHeight: constraints.maxHeight - 48,
         );
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildOutlineSidePanel(outlineWidth),
-            if (_layout.outlinePanelCollapsed)
-              _verticalZoneDivider()
-            else
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildOutlineSidePanel(outlineWidth),
               RepertoireLinesPanelDragHandle(
                 currentWidth: outlineWidth,
                 minWidth: RepertoireLayoutPrefs.minPanelWidth,
-                maxWidth: RepertoireLayoutPrefs.maxLinesPanelWidth(
-                  constraints.maxWidth,
-                ),
+                maxWidth: constraints.maxWidth * .24,
                 panelOnLeft: true,
                 onWidthChanged: _layout.dragOutlinePanelWidth,
                 onDragEnd: _layout.saveOutlinePanelWidth,
               ),
-            SizedBox(width: boardZoneWidth, child: _buildBoardZone()),
-            _verticalZoneDivider(),
-            Expanded(child: _buildWideToolsColumn()),
-            if (_layout.linesPanelCollapsed)
-              _verticalZoneDivider()
-            else
-              RepertoireLinesPanelDragHandle(
-                currentWidth: panelWidth,
-                minWidth: RepertoireLayoutPrefs.minPanelWidth,
-                maxWidth: RepertoireLayoutPrefs.maxLinesPanelWidth(
-                  constraints.maxWidth,
+              SizedBox(
+                width: boardWidth,
+                child: Column(
+                  children: [
+                    Expanded(child: _buildBoardZone()),
+                    _buildNavControls(),
+                  ],
                 ),
-                onWidthChanged: _layout.dragLinesPanelWidth,
-                onDragEnd: _layout.saveLinesPanelWidth,
               ),
-            _buildAnalysisSidePanel(panelWidth),
-          ],
+              const SizedBox(width: 16),
+              Expanded(child: _buildWideToolsColumn()),
+            ],
+          ),
         );
       },
     );
@@ -99,32 +96,50 @@ mixin _RepertoireLayout
   Widget _buildOutlineColumnContent() =>
       _cursorScoped((_) => _buildSecondTabContent());
 
-  /// The right column: Engine | Database | Tree, collapsible to a strip.
-  Widget _buildAnalysisSidePanel(double width) {
-    return RepertoireLinesSidePanel(
-      collapsed: _layout.linesPanelCollapsed,
-      width: width,
-      lineCount: _controller.repertoireLines.length,
-      tabController: _sidePanelTabController,
-      tabs: const [
-        Tab(height: 30, child: Text('Engine', style: TextStyle(fontSize: 12))),
-        Tab(
-          height: 30,
-          child: Text('Database', style: TextStyle(fontSize: 12)),
-        ),
-        Tab(
-          height: 30,
-          child: Text('Generate', style: TextStyle(fontSize: 12)),
-        ),
-      ],
-      stripLabel: 'Analysis',
-      hideTooltip: 'Hide analysis panel',
-      showTooltip: 'Show analysis panel',
-      onCollapsedChanged: _layout.setLinesPanelCollapsed,
+  Widget _buildAnalysisDock() {
+    return Column(
       children: [
-        _cursorScoped((_) => _buildEngineTabContent()),
-        _cursorScoped((_) => _buildDatabaseTabContent()),
-        _cursorScoped((_) => _buildGenerateTabContent()),
+        SizedBox(
+          height: 34,
+          child: Row(
+            children: [
+              Expanded(
+                child: TabBar(
+                  controller: _sidePanelTabController,
+                  indicatorColor: AppColors.accent,
+                  labelColor: AppColors.accent,
+                  unselectedLabelColor: AppColors.onSurfaceMuted,
+                  tabs: const [
+                    Tab(text: 'Engine', height: 32),
+                    Tab(text: 'Database', height: 32),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: _layout.linesPanelCollapsed
+                    ? 'Show analysis panel'
+                    : 'Hide analysis panel',
+                icon: Icon(
+                  _layout.linesPanelCollapsed
+                      ? Icons.expand_more
+                      : Icons.expand_less,
+                  size: 18,
+                ),
+                onPressed: _layout.toggleLinesPanelCollapsed,
+              ),
+            ],
+          ),
+        ),
+        if (!_layout.linesPanelCollapsed)
+          Expanded(
+            child: TabBarView(
+              controller: _sidePanelTabController,
+              children: [
+                _cursorScoped((_) => _buildEngineTabContent()),
+                _cursorScoped((_) => _buildDatabaseTabContent()),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -140,7 +155,7 @@ mixin _RepertoireLayout
       focusNode: _focusNode,
       onPasteFenFromClipboard: _pastePositionFromClipboard,
       onUndo: _performUndo,
-      onToggleExpectimax: InlineExpectimaxBar.toggle,
+      onToggleExpectimax: () => unawaited(_openGenerateTab()),
       onToggleLinesTab: () {
         if (_isCompactLayout) {
           _toolsTabController.animateTo(_toolsTabController.index == 1 ? 0 : 1);
@@ -253,10 +268,10 @@ mixin _RepertoireLayout
             controller: _toolsTabController,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _cursorScoped((_) => _buildPgnTabWithEngines()),
+              _cursorScoped((_) => _buildPgnTab()),
               _cursorScoped((_) => _buildSecondTabContent()),
               _cursorScoped((_) => _buildDatabaseTabContent()),
-              _cursorScoped((_) => _buildGenerateTabContent()),
+              _cursorScoped((_) => _buildEngineTabContent()),
             ],
           ),
         ),
@@ -265,19 +280,21 @@ mixin _RepertoireLayout
     );
   }
 
-  /// Wide-layout tools column: the PGN editor, always visible. The engine
-  /// and database live in the analysis panel to the right, the chapters and
-  /// lines in the outline to the left.
   Widget _buildWideToolsColumn() {
     return Column(
       children: [
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(4.0),
+          flex: 2,
+          child: RepertoireWorkspacePanel(
+            icon: Icons.edit_note,
             child: _cursorScoped((_) => _buildPgnTab()),
           ),
         ),
-        _buildNavControls(),
+        const SizedBox(height: 8),
+        if (_layout.linesPanelCollapsed)
+          SizedBox(height: 34, child: _buildAnalysisDock())
+        else
+          Expanded(flex: 3, child: _buildAnalysisDock()),
       ],
     );
   }
@@ -290,7 +307,7 @@ mixin _RepertoireLayout
         _buildPgnTabLabel(),
         _buildLinesTabLabel(),
         const Tab(text: 'Database'),
-        const Tab(text: 'Generate'),
+        const Tab(text: 'Engine'),
       ],
       labelPadding: const EdgeInsets.symmetric(horizontal: 12),
       indicatorSize: TabBarIndicatorSize.label,
@@ -306,7 +323,7 @@ mixin _RepertoireLayout
 
   Widget _buildNavControls() {
     return RepertoireNavControls(
-      onGoToStart: () => _controller.loadMoveSequence([]),
+      onGoToStart: _controller.goToStart,
       onGoBack: _sessionAwareGoBack,
       onGoForward: _sessionAwareGoForward,
       onGenerateFromHere: _openGenerateTab,
@@ -316,9 +333,5 @@ mixin _RepertoireLayout
       boardSize: _isCompactLayout ? null : _layout.boardSize,
       onBoardSizeChanged: _isCompactLayout ? null : _layout.setBoardSize,
     );
-  }
-
-  Widget _verticalZoneDivider() {
-    return Container(width: 1, color: AppColors.outline);
   }
 }
