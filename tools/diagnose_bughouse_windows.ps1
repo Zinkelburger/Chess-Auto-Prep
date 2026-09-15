@@ -12,8 +12,9 @@
   loader stops the engine before it runs a single instruction, and the app can
   only report a process that started, said nothing and exited.
 
-  This script walks the same search order the loader does, reads every
-  candidate's real PE header, and then tries to start the engine for real.
+  This script lists filesystem candidates, checks loader overrides and PE
+  headers, then starts the engine and tries to observe its loaded runtime.
+  Filesystem candidates are not proof of which DLL Windows actually loads.
 
   Nothing here writes, installs or downloads anything. It needs no checkout of
   the project: copy this one file to the machine and run it.
@@ -99,6 +100,18 @@ function Get-PeMachine([string]$path) {
   }
 }
 
+function Write-LoadedRuntime($process) {
+  try {
+    $process.Refresh()
+    $modules = @($process.Modules | Where-Object { $_.ModuleName -in 'onnxruntime.dll', 'hivemind_ort.dll' })
+    if ($modules.Count -eq 0) { return $false }
+    foreach ($module in $modules) {
+      Write-Host ("  observed loaded runtime: {0} (file version {1})" -f $module.FileName, $module.FileVersionInfo.FileVersion)
+    }
+    return $true
+  } catch { return $false }
+}
+
 function Read-EngineLine($state, [int]$timeoutMs) {
   # Keep exactly one pending read across timeout polls. Starting another read
   # would throw or consume the eventual banner without returning it.
@@ -146,6 +159,21 @@ if (-not $EngineDir -or -not (Test-Path $EngineDir)) {
   exit 2
 }
 Write-Host ("Engine folder : " + $EngineDir)
+
+$engineFile = Join-Path $EngineDir 'hivemind-windows.exe'
+if (Test-Path -LiteralPath $engineFile -PathType Leaf) {
+  $engineHash = (Get-FileHash -LiteralPath $engineFile -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($engineHash -eq '2e0516406c45a83fc886c37e2a5061a1f100de4afdd2f7541aa99b1c8d4374c0') {
+    $Expected['hivemind-windows.exe'] = 1780736
+    $ExpectedHash['hivemind-windows.exe'] = $engineHash
+    $Expected['hivemind_ort.dll'] = $Expected['onnxruntime.dll']
+    $ExpectedHash['hivemind_ort.dll'] = $ExpectedHash['onnxruntime.dll']
+    $Expected.Remove('onnxruntime.dll')
+    $ExpectedHash.Remove('onnxruntime.dll')
+    $Dependencies = @($Dependencies | ForEach-Object { if ($_ -eq 'onnxruntime.dll') { 'hivemind_ort.dll' } else { $_ } })
+  }
+}
+
 
 if (-not $AppDir) {
   $proc = Get-Process -Name 'chess_auto_prep' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -292,7 +320,7 @@ try {
 
 # ---------------------------------------------------- the loader's search
 
-Write-Head 'Where Windows resolves each library the engine needs'
+Write-Head 'DLL candidates (filesystem search; not a Windows loader trace)'
 $searchDirs = New-Object System.Collections.ArrayList
 [void]$searchDirs.Add($EngineDir)
 [void]$searchDirs.Add((Join-Path $env:SystemRoot 'System32'))
@@ -319,7 +347,7 @@ foreach ($dep in $Dependencies) {
     Write-Host $line
   } else {
     Write-Host $line -ForegroundColor Red
-    [void]$problems.Add("$dep resolves to a $arch file at $found -- the engine is 64-bit and cannot load it")
+    [void]$problems.Add("$dep has a $arch candidate at $found -- the engine is 64-bit and cannot load that file")
   }
 }
 
@@ -342,22 +370,46 @@ foreach ($dep in $Dependencies) {
 }
 if ($shadows -eq 0) { Write-Host '  none -- every library has exactly one copy on the search path' }
 
-# Windows 10 and 11 ship their own ONNX Runtime in System32 for Windows ML. It
-# is a different, older build than the one the engine is compiled against, and
-# it only ever gets loaded if the engine's own copy is missing or unreadable --
-# in which case the engine does not fail to find a runtime, it silently finds
-# the wrong one. Worth naming, because "there are two of these on the machine"
-# is the sort of thing that looks fine until it is not.
-$systemOrt = Join-Path (Join-Path $env:SystemRoot 'System32') 'onnxruntime.dll'
-if (Test-Path -LiteralPath $systemOrt) {
-  $ours = Join-Path $EngineDir 'onnxruntime.dll'
-  if (Test-Path -LiteralPath $ours) {
-    Write-Host "  note: Windows has its own onnxruntime.dll in System32; the engine's own copy is present and wins."
-  } else {
-    Write-Host "  WARNING: the engine has no onnxruntime.dll of its own, so Windows' System32 copy will be loaded instead. That is the wrong version." -ForegroundColor Red
-    [void]$problems.Add("the engine's onnxruntime.dll is missing, so Windows would load its own incompatible copy from System32")
+# Disk versions and loader overrides are evidence, not a loaded-module trace.
+Write-Head 'ONNX Runtime versions and loader overrides'
+foreach ($candidate in @(
+  (Join-Path $EngineDir 'hivemind_ort.dll'),
+  (Join-Path $EngineDir 'onnxruntime.dll'),
+  (Join-Path (Join-Path $env:SystemRoot 'System32') 'onnxruntime.dll')
+)) {
+  if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+    $version = (Get-Item -LiteralPath $candidate).VersionInfo.FileVersion
+    Write-Host ("  file version {0}: {1}" -f $version, $candidate)
   }
 }
+Write-Host '  File presence/version does not establish which DLL was loaded.'
+$registry = $null
+$known = $null
+try {
+  # The engine is x64 even when the diagnostic was opened in 32-bit PowerShell.
+  $registry = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+    [Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
+  $known = $registry.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\KnownDLLs')
+  if ($null -eq $known) { throw 'KnownDLLs key unavailable' }
+  $knownEntries = @($known.GetValueNames() | Where-Object {
+    $_ -match '(onnx|hivemind_ort)' -or [string]$known.GetValue($_) -match '(onnx|hivemind_ort)'
+  })
+  if ($knownEntries.Count -eq 0) {
+    Write-Host '  KnownDLLs (64-bit registry): no ONNX/Hivemind entry found'
+  } else {
+    foreach ($name in $knownEntries) {
+      Write-Host ("  KnownDLLs: {0} = {1}" -f $name, $known.GetValue($name)) -ForegroundColor Yellow
+    }
+  }
+} catch {
+  Write-Host ('  KnownDLLs could not be checked: ' + $_.Exception.Message)
+} finally {
+  if ($null -ne $known) { $known.Dispose() }
+  if ($null -ne $registry) { $registry.Dispose() }
+}
+$redirection = Join-Path $EngineDir 'hivemind-windows.exe.local'
+Write-Host ("  DLL redirection marker {0}: {1}" -f $redirection, (Test-Path -LiteralPath $redirection))
+Write-Host '  For an early crash, capture Process Monitor Load Image events for hivemind-windows.exe and ONNX runtime DLL paths.'
 
 # ------------------------------------------------------------ app folder
 
@@ -428,6 +480,7 @@ if (-not $NoRun) {
       $uciokAt = $null
       $readyokAt = $null
       $bestmove = $null
+      $observedRuntime = $false
 
       try {
         $p.StandardInput.WriteLine('uci')
@@ -439,6 +492,7 @@ if (-not $NoRun) {
       # scanning it for the first time can take most of that. Anything less
       # here would report a slow machine as a broken one.
       while ($clock.Elapsed.TotalSeconds -lt 120) {
+        if (-not $observedRuntime) { $observedRuntime = Write-LoadedRuntime $p }
         $line = Read-EngineLine $outState 2000
         if ($null -eq $line) {
           if ($outState.Ended -or $p.HasExited) { break }
@@ -465,6 +519,9 @@ if (-not $NoRun) {
           $bestmove = $line
           break
         }
+      }
+      if (-not $observedRuntime) {
+        Write-Host '  Loaded runtime could not be observed before exit; use engine stderr or a Process Monitor trace.'
       }
       $elapsed = $clock.Elapsed.TotalSeconds
 

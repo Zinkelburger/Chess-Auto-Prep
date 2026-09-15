@@ -52,10 +52,11 @@
     "url": "https://github.com/Zinkelburger/hivemind/releases/download/engine-v0.1.0/hivemind-windows-x64.zip"
   },
   "bughouse-windows:engine": {
-    "output_bytes": 1472897,
-    "output_sha256": "0f2f7e2ce19718dde14778341e2633319e9b8cd03b4aaaa80fd43451006af85d",
-    "payload_sha256": "726cf9baad7d050b3d351e32d3ebd908eb249d9995b53263c62b5033ce759040",
-    "uncompressed_bytes": 5161647
+    "build_manifest": "tools/bughouse_windows/build.json",
+    "output_bytes": 691457,
+    "output_sha256": "2d3c103661497fea2fd1cdc38eba30b8e04fcf0e8b0d2fd5e72a3fd168a68331",
+    "payload_sha256": "2e0516406c45a83fc886c37e2a5061a1f100de4afdd2f7541aa99b1c8d4374c0",
+    "uncompressed_bytes": 1780736
   },
   "bughouse-windows:runtime": {
     "output_bytes": 5900343,

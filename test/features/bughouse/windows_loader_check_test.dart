@@ -149,9 +149,9 @@ void main() {
 
     test('a truncated extraction reads as unloadable, not as fine', () async {
       final half = pe(0x8664).sublist(0, 0x20);
-      await File(p.join(first.path, 'onnxruntime.dll')).writeAsBytes(half);
+      await File(p.join(first.path, 'hivemind_ort.dll')).writeAsBytes(half);
 
-      final found = await WindowsLoaderCheck.resolve('onnxruntime.dll', [
+      final found = await WindowsLoaderCheck.resolve('hivemind_ort.dll', [
         first.path,
       ]);
       expect(found.isWrongArchitecture, isTrue);
@@ -257,13 +257,13 @@ void main() {
     test('lists every library with where it came from', () {
       final text = WindowsLoaderCheck.report(const [
         DllResolution(
-          name: 'onnxruntime.dll',
-          path: r'C:\e\onnxruntime.dll',
+          name: 'hivemind_ort.dll',
+          path: r'C:\e\hivemind_ort.dll',
           machine: WindowsLoaderCheck.amd64,
         ),
         DllResolution(name: 'dbghelp.dll', path: null, machine: null),
       ]);
-      expect(text, contains(r'C:\e\onnxruntime.dll'));
+      expect(text, contains(r'C:\e\hivemind_ort.dll'));
       expect(text, contains('64-bit'));
       expect(text, contains('dbghelp.dll'));
       expect(text, contains('not found'));

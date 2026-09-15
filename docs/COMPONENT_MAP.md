@@ -108,6 +108,18 @@ File/DLL inspection after a startup failure precedes repair; collection errors s
 without discarding the rest of the report. DLL candidates are a filesystem
 inspection, not an observed Windows loader trace.
 
+The Windows Hivemind build loads `hivemind_ort.dll` by absolute path beside
+its executable, resolves the API from that module handle, and checks API
+compatibility before constructing any ONNX objects. It reports the actual DLL
+path/version on stderr and exits cleanly for missing or incompatible runtimes.
+It never falls back to the generic `onnxruntime.dll` in System32 or an older
+installation. The engine, complete corresponding source and build hashes live
+under [`tools/bughouse_windows/`](../tools/bughouse_windows/README.md); normal
+asset fetching verifies that build and includes its source archive. The
+runtime bytes remain the pinned Microsoft 1.29.0 build. Windows release gates
+exercise an incompatible runtime, corrupt/missing private DLL, and a successful
+search with an old basename DLL present in a Unicode installation path.
+
 Windows first-use checks run in the built desktop app via
 `integration_test/bughouse_first_run_test.dart`: an empty disposable profile
 with spaces and non-ASCII characters, real bundled extraction, app-local VC++
