@@ -24,6 +24,8 @@ class WindowsOrtBundleTest(unittest.TestCase):
         self.assertNotIn("hivemind_ort.dll", imports)
         self.assertEqual(hashlib.sha256(engine).hexdigest(),
                          fetch_bughouse.load_lock()["bughouse-windows:engine"]["payload_sha256"])
+        self.assertIn(hashlib.sha256(engine).hexdigest(),
+                      (fetch_bughouse.REPO_ROOT / "tools/diagnose_bughouse_windows.ps1").read_text())
 
     def test_editing_loader_requires_rebuilding_binary(self):
         with tempfile.TemporaryDirectory() as td:

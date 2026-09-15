@@ -8,6 +8,8 @@ linking. The engine loads `hivemind_ort.dll` by absolute Unicode path relative
 to its own executable, uses the returned module handle for `OrtGetApiBase`,
 checks the loaded path and API compatibility, and initializes the C++ wrapper
 before creating any ONNX objects. Errors reach stderr and exit normally.
+The Windows entry point preserves Unicode arguments and enables UTF-8 path
+conversions while retaining the C numeric locale for UCI.
 There is no fallback to `onnxruntime.dll`, PATH, or the current directory.
 
 The runtime bytes remain Microsoft's pinned 1.29.0 build. Only its installed

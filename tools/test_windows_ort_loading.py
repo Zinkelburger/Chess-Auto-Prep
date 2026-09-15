@@ -7,7 +7,7 @@ Native Windows by default. --wine runs on Linux in a disposable prefix;
 import argparse
 import gzip
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import queue
 import shutil
 import subprocess
@@ -22,8 +22,12 @@ from test_bughouse_engine import ASSETS, START_DUAL_FEN, pe_imports
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wine", action="store_true")
+    parser.add_argument("--wine-template", type=Path,
+                        help="Copy this prepared test prefix into a disposable directory; skip wineboot")
     parser.add_argument("--runtime-from", type=Path)
     args = parser.parse_args()
+    if args.wine_template and not args.wine:
+        parser.error("--wine-template requires --wine")
     if os.name != "nt" and not args.wine:
         raise SystemExit("Run on Windows or explicitly use --wine")
     payload = verified_engine()
@@ -40,6 +44,7 @@ def main():
         private = work / "hivemind_ort.dll"
         generic = work / "onnxruntime.dll"
         generic.write_bytes(fixture)
+        (work / "hivemind.onnx").write_bytes(gzip.decompress((ASSETS / "hivemind.onnx.gz").read_bytes()))
         if args.runtime_from:
             for file in args.runtime_from.iterdir():
                 if file.suffix.lower() == ".dll" and file.name.lower().startswith(("msvcp140", "vcruntime140", "concrt140")):
@@ -50,13 +55,17 @@ def main():
             prefix = ["wine"]
             env.update(WINEPREFIX=str(root / "wine"), WINEARCH="win64", WINEDEBUG="-all",
                        WINEDLLOVERRIDES="winemenubuilder.exe,mscoree,mshtml=d")
-            try:
-                subprocess.run(["wine", "wineboot.exe", "-u"], env=env, check=True, timeout=90,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except Exception:
-                subprocess.run(["wineserver", "-k"], env=env, timeout=15, check=False)
-                subprocess.run(["wineserver", "-w"], env=env, timeout=15, check=False)
-                raise
+            if args.wine_template:
+                shutil.copytree(args.wine_template, root / "wine", symlinks=True)
+                env["WINEDLLOVERRIDES"] += ";wineboot.exe=d"
+            else:
+                try:
+                    subprocess.run(["wine", "wineboot.exe", "-u"], env=env, check=True, timeout=90,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    subprocess.run(["wineserver", "-k"], env=env, timeout=15, check=False)
+                    subprocess.run(["wineserver", "-w"], env=env, timeout=15, check=False)
+                    raise
         else:
             # Remove unrelated toolchains from the DLL search environment.
             path_key = next((k for k in env if k.lower() == "path"), "PATH")
@@ -79,7 +88,6 @@ def main():
                 print(f"PASS {label}: clean exit 1 and actionable runtime error", flush=True)
 
             private.write_bytes(gzip.decompress((ASSETS / "hivemind_ort.dll.gz").read_bytes()))
-            (work / "hivemind.onnx").write_bytes(gzip.decompress((ASSETS / "hivemind.onnx.gz").read_bytes()))
             proc = subprocess.Popen(command, cwd=work, env=env, stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     text=True, encoding="utf-8", errors="replace", bufsize=1)
@@ -91,7 +99,8 @@ def main():
                     lines.put(line.strip())
 
             def pump_errors():
-                errors.extend(proc.stderr.readlines())
+                for line in proc.stderr:
+                    errors.append(line)
 
             reader = threading.Thread(target=pump, daemon=True)
             error_reader = threading.Thread(target=pump_errors, daemon=True)
@@ -134,6 +143,13 @@ def main():
                 loaded = next(line for line in report.splitlines() if line.startswith("Hivemind ORT loaded path:"))
                 assert "Chess Auto Prep é棋" in loaded and loaded.endswith("hivemind_ort.dll"), loaded
                 print("PASS private runtime: Unicode path, old basename DLL ignored, model loaded, " + best)
+                full_model = str(PureWindowsPath(loaded.split(": ", 1)[1]).parent / "hivemind.onnx")
+                absolute = subprocess.run(prefix + [str(exe), "--model", full_model],
+                    cwd=work, env=env, input="uci\nisready\nquit\n", capture_output=True,
+                    text=True, encoding="utf-8", errors="replace", timeout=90)
+                assert absolute.returncode == 0, absolute.stderr
+                assert "uciok" in absolute.stdout and "readyok" in absolute.stdout, absolute.stdout
+                print("PASS absolute Unicode model argument: readyok and clean exit")
             finally:
                 if proc.poll() is None:
                     proc.kill()

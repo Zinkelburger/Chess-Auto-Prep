@@ -1,59 +1,81 @@
 --- a/engine/CMakeLists.txt
 +++ b/engine/CMakeLists.txt
-@@ -203,7 +203,7 @@
-     target_compile_definitions(${PROJECT_NAME}_lib PUBLIC HIVEMIND_BACKEND_TENSORRT)
- else()
-     target_include_directories(${PROJECT_NAME}_lib SYSTEM PUBLIC ${ONNXRuntime_INCLUDE_DIR})
+@@ -206 +206 @@
 -    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC HIVEMIND_BACKEND_ONNXRUNTIME)
 +    target_compile_definitions(${PROJECT_NAME}_lib PUBLIC HIVEMIND_BACKEND_ONNXRUNTIME ORT_API_MANUAL_INIT)
- endif()
- target_include_directories(${PROJECT_NAME}_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
- target_compile_definitions(${PROJECT_NAME}_lib PUBLIC
-@@ -216,7 +216,7 @@
- endif()
- if(HIVEMIND_BACKEND STREQUAL "tensorrt")
-     target_link_libraries(${PROJECT_NAME}_lib PUBLIC ${CUDA_LIBRARIES} ${TensorRT_LIBRARIES})
+@@ -219 +219 @@
 -else()
 +elseif(NOT WIN32)
-     target_link_libraries(${PROJECT_NAME}_lib PUBLIC ${ONNXRuntime_LIBRARY})
- endif()
- target_link_libraries(${PROJECT_NAME}_lib PUBLIC ${CMAKE_THREAD_LIBS_INIT} Fairy-Stockfish Threads::Threads)
-@@ -235,8 +235,8 @@
-     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                 "${ONNXRuntime_ROOT}/lib/onnxruntime.dll"
+@@ -230,0 +231,5 @@
++if(WIN32)
++    target_sources(${PROJECT_NAME} PRIVATE src/windows_main.cc)
++    target_compile_definitions(${PROJECT_NAME} PRIVATE main=hivemind_main)
++    target_link_options(${PROJECT_NAME} PRIVATE -municode)
++endif()
+@@ -238,2 +243,2 @@
 -                "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
 -        COMMENT "Copying onnxruntime.dll next to hivemind.exe")
 +                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/hivemind_ort.dll"
 +        COMMENT "Copying private Hivemind runtime")
- endif()
- 
- # The sh wrapper is a POSIX convenience; on Windows the .exe is the entry point.
 --- a/engine/src/nn/engine_ort.cc
 +++ b/engine/src/nn/engine_ort.cc
-@@ -16,6 +16,7 @@
- #include "nn/engine.h"
- 
- #include <onnxruntime_cxx_api.h>
+@@ -18,0 +19,2 @@
 +#include "nn/ort_loader.h"
- 
- #include <algorithm>
- #include <array>
-@@ -91,7 +92,7 @@
- Engine::Engine(int deviceId, int batchSize)
-     : m_deviceId(deviceId),
-       m_batchSize(batchSize > 0 ? batchSize : SearchParams::BATCH_SIZE),
++#include "nn/onnx_utils.h"
+@@ -94 +96 @@
 -      m_ort(std::make_unique<OrtState>()) {}
 +      m_ort(nullptr) {}
- 
- Engine::~Engine() {
-     if (!m_ort) return;
-@@ -110,6 +111,8 @@
- bool Engine::loadNetwork(const std::string& onnxFile,
-                          const std::string& /*engineFile*/) {
-     try {
+@@ -112,0 +115,2 @@
 +        initialize_hivemind_ort();
 +        if (!m_ort) m_ort = std::make_unique<OrtState>();
-         auto& state = *m_ort;
- 
-         state.options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+@@ -130 +134 @@
+-        const std::filesystem::path onnxPath(onnxFile);
++        const std::filesystem::path onnxPath = pathFromUtf8(onnxFile);
+--- a/engine/src/main.cc
++++ b/engine/src/main.cc
+@@ -204 +204 @@
+-                else if (option == "--model" || option == "--network") modelPath = value;
++                else if (option == "--model" || option == "--network") modelPath = pathFromUtf8(value);
+@@ -230 +230 @@
+-        const string onnxFile = resolveModelPath(modelPath.string());
++        const string onnxFile = resolveModelPath(pathAsUtf8(modelPath));
+@@ -387 +387 @@
+-                modelPath = value;
++                modelPath = pathFromUtf8(value);
+@@ -401 +401 @@
+-    if (!uci.initializeEngines(deviceIds, modelPath.string(), uciBatchSize)) {
++    if (!uci.initializeEngines(deviceIds, pathAsUtf8(modelPath), uciBatchSize)) {
+@@ -405 +405,2 @@
+-}
++    return EXIT_SUCCESS;
++}
+--- a/engine/src/nn/onnx_utils.h
++++ b/engine/src/nn/onnx_utils.h
+@@ -18,0 +19,10 @@
++
++// Explicit UTF-8 conversions avoid the Windows ANSI code page.
++#include <filesystem>
++inline std::string pathAsUtf8(const std::filesystem::path& path) {
++    const auto value = path.u8string();
++    return std::string(value.begin(), value.end());
++}
++inline std::filesystem::path pathFromUtf8(const std::string& value) {
++    return std::filesystem::path(std::u8string(value.begin(), value.end()));
++}
+--- a/engine/src/nn/onnx_utils.cc
++++ b/engine/src/nn/onnx_utils.cc
+@@ -48 +48 @@
+-                latestFile = entry.path().string();
++                latestFile = pathAsUtf8(entry.path());
+@@ -57,3 +57,3 @@
+-    fs::path onnx = fs::weakly_canonical(onnxPath);
+-    std::string modelName = onnx.stem().string();
+-    std::string directory = onnx.parent_path().string();
++    fs::path onnx = fs::weakly_canonical(pathFromUtf8(onnxPath));
++    std::string modelName = pathAsUtf8(onnx.stem());
++    std::string directory = pathAsUtf8(onnx.parent_path());
+--- a/engine/src/interface/uci.cc
++++ b/engine/src/interface/uci.cc
+@@ -47 +47 @@
+-    if (!std::filesystem::is_regular_file(onnxFile)) {
++    if (!std::filesystem::is_regular_file(pathFromUtf8(onnxFile))) {

@@ -46,8 +46,9 @@ def main():
         "git", "-C", str(args.source), "archive", REVISION, "engine", "LICENSE"])
     with tarfile.open(fileobj=io.BytesIO(archive)) as tf:
         tf.extractall(stage, filter="data")
-    subprocess.run(["git", "apply", str(HERE / "engine.patch")], cwd=stage, check=True)
+    subprocess.run(["git", "apply", "--unidiff-zero", str(HERE / "engine.patch")], cwd=stage, check=True)
     shutil.copyfile(HERE / "ort_loader.h", stage / "engine/src/nn/ort_loader.h")
+    shutil.copyfile(HERE / "windows_main.cc", stage / "engine/src/windows_main.cc")
     with zipfile.ZipFile(deps / "ort.zip") as zf:
         zf.extractall(deps / "ort")
     ort = deps / "ort/onnxruntime-win-x64-1.29.0"
@@ -88,16 +89,26 @@ def main():
                 info.uname = info.gname = ""
                 with path.open("rb") as fh:
                     tf.addfile(info, fh)
-        for path in [HERE / "README.md", HERE / "build.py", HERE / "inputs.json"]:
+        for path in [HERE / "README.md", HERE / "build.py", HERE / "inputs.json",
+                     HERE / "engine.patch", HERE / "ort_loader.h", HERE / "windows_main.cc", HERE / "incompatible_runtime.c",
+                     ROOT / "LICENSE"]:
             data = path.read_bytes()
             info = tarfile.TarInfo("build-instructions/" + path.name)
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+        toolchain = deps / TOOLCHAIN
+        notices = [toolchain / "LICENSE.TXT"] + sorted(
+            (toolchain / "x86_64-w64-mingw32/share/mingw32").glob("COPYING*"))
+        for path in notices:
+            data = path.read_bytes()
+            info = tarfile.TarInfo("toolchain-notices/" + path.name)
             info.size = len(data)
             tf.addfile(info, io.BytesIO(data))
     source_archive = HERE / "hivemind-source.tar.gz"
     source_archive.write_bytes(gzip.compress(buf.getvalue(), mtime=0))
     outputs[source_archive.name] = digest(source_archive)
     sources = {name: digest(HERE / name) for name in
-               ["build.py", "engine.patch", "ort_loader.h", "incompatible_runtime.c", "inputs.json", "README.md"]}
+               ["build.py", "engine.patch", "ort_loader.h", "windows_main.cc", "incompatible_runtime.c", "inputs.json", "README.md"]}
     (HERE / "build.json").write_text(json.dumps({
         "revision": REVISION, "toolchain": TOOLCHAIN,
         "compiler": subprocess.check_output([str(compiler), "--version"], text=True).splitlines()[0],

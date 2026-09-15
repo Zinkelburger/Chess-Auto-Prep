@@ -110,7 +110,9 @@ inspection, not an observed Windows loader trace.
 
 The Windows Hivemind build loads `hivemind_ort.dll` by absolute path beside
 its executable, resolves the API from that module handle, and checks API
-compatibility before constructing any ONNX objects. It reports the actual DLL
+compatibility before constructing any ONNX objects. Its Unicode Windows entry
+point and explicit UTF-8 filesystem conversions preserve non-ASCII profile and
+model paths. It reports the actual DLL
 path/version on stderr and exits cleanly for missing or incompatible runtimes.
 It never falls back to the generic `onnxruntime.dll` in System32 or an older
 installation. The engine, complete corresponding source and build hashes live

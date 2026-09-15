@@ -53,10 +53,10 @@
   },
   "bughouse-windows:engine": {
     "build_manifest": "tools/bughouse_windows/build.json",
-    "output_bytes": 691457,
-    "output_sha256": "2d3c103661497fea2fd1cdc38eba30b8e04fcf0e8b0d2fd5e72a3fd168a68331",
-    "payload_sha256": "2e0516406c45a83fc886c37e2a5061a1f100de4afdd2f7541aa99b1c8d4374c0",
-    "uncompressed_bytes": 1780736
+    "output_bytes": 694544,
+    "output_sha256": "1b36bb17b397bcf22d6d6289b12aa9265989e25262e654b32a7f907c8d192b33",
+    "payload_sha256": "8906c792e21ab823090395a73330742c862fc1ebb8de6fdb871fe496eed8e1c8",
+    "uncompressed_bytes": 1787904
   },
   "bughouse-windows:runtime": {
     "output_bytes": 5900343,

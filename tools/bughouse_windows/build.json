@@ -3,18 +3,19 @@
   "toolchain": "llvm-mingw-20260908-ucrt-ubuntu-22.04-x86_64",
   "compiler": "clang version 23.1.1 (https://github.com/llvm/llvm-project.git 6dfe1677ab8dffbc6ec13d53a1e0215d75147689)",
   "sha256": {
-    "hivemind-windows.exe.gz": "2d3c103661497fea2fd1cdc38eba30b8e04fcf0e8b0d2fd5e72a3fd168a68331",
+    "hivemind-windows.exe.gz": "1b36bb17b397bcf22d6d6289b12aa9265989e25262e654b32a7f907c8d192b33",
     "incompatible-runtime.dll.gz": "dabc1dca9ba8aa072c0aa5d4c241c218241322346bf385f2d79f4a499b526f25",
-    "hivemind-source.tar.gz": "d7f41f21eafb31a450226be5d60a214329b8e40f95310530b659cc4d2be25467"
+    "hivemind-source.tar.gz": "b638ddbf011d256861c88b5177aecba8480f95fda04281398dbbaf0dea9d5856"
   },
   "source_sha256": {
-    "build.py": "9da2ea66bf573f329c6318f4a394ebcafa67ad49c4badf4d8a397da417167d6b",
-    "engine.patch": "2e0f366c683e8c367cba251e4993b8b9b7e182528f2c45912cc68c74c0a25ae2",
+    "build.py": "2e904c5159ea29b70f71f4cddebc4a0e69fd8fe8dde65eaeda41bef5da40e26b",
+    "engine.patch": "61ad4b59b7943ea4267a2e8e9fd488333a2450e97aeddf3de2127f3bbf416b59",
     "ort_loader.h": "30f4b683418ce593109d05ab13048634aec4112e73df707056eb10fb0b667ae3",
+    "windows_main.cc": "ffc50d7a4a613cadcf29742629ceb63cb2f9eeffdd671d2dec2e248a5f5ece85",
     "incompatible_runtime.c": "7eafebbc14ccf656d1aa71e0d02286e8c61d638c7c0e88c25ccc5c83ba5039ae",
     "inputs.json": "537ae55ebb4d8081e975a2deaa12845ab54464208aa2c43eca920def91564c6b",
-    "README.md": "d7eb1e222d64d8c02e98e871408458637e7ed20b9ca43ab359ba7d563b9c7384"
+    "README.md": "cef42e14a8a91099fa69704d96eb1ca4c986e8a953f5dc5765a667a112e1062f"
   },
-  "engine_payload_sha256": "2e0516406c45a83fc886c37e2a5061a1f100de4afdd2f7541aa99b1c8d4374c0",
-  "engine_bytes": 1780736
+  "engine_payload_sha256": "8906c792e21ab823090395a73330742c862fc1ebb8de6fdb871fe496eed8e1c8",
+  "engine_bytes": 1787904
 }
