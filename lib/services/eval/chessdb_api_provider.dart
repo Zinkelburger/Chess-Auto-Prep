@@ -35,10 +35,11 @@ EvalHit? parseChessDbQueryScoreBody(String body, String fen) {
   final trimmed = body.trim();
   if (trimmed.isEmpty) return null;
 
+  final lower = trimmed.toLowerCase();
   if (trimmed.contains('unknown') ||
       trimmed.contains('invalid board') ||
-      trimmed.toLowerCase().contains('rate limit') ||
-      trimmed.toLowerCase().contains('too many')) {
+      lower.contains('rate limit') ||
+      lower.contains('too many')) {
     return null;
   }
 
@@ -52,43 +53,41 @@ EvalHit? parseChessDbQueryScoreBody(String body, String fen) {
   if (evalMatch != null) {
     final raw = int.parse(evalMatch.group(1)!);
     final mapped = mapChessDbApiScore(raw, isWhiteToMove: isWhiteStm);
-    if (mapped == null) return null;
-    final cp = mapped.$1;
-    final mate = mapped.$2;
-    return EvalHit(cp: cp, mate: mate, depth: 0);
+    return EvalHit(cp: mapped.whiteCp, mate: mapped.mate, depth: 0);
   }
 
   // JSON: {"status":"ok","eval":123,...}
+  final Object? json;
   try {
-    final json = jsonDecode(trimmed);
-    if (json is Map<String, dynamic>) {
-      final status = json['status']?.toString() ?? '';
-      if (status == 'unknown' || status == 'invalid board') return null;
-      if (json.containsKey('eval')) {
-        final raw = (json['eval'] as num).toInt();
-        final mapped = mapChessDbApiScore(raw, isWhiteToMove: isWhiteStm);
-        if (mapped == null) return null;
-        final cp = mapped.$1;
-        final mate = mapped.$2;
-        final depth = (json['depth'] as num?)?.toInt() ?? 0;
-        return EvalHit(cp: cp, mate: mate, depth: depth);
-      }
-    }
-  } catch (_) {
-    // Not JSON — fall through.
+    json = jsonDecode(trimmed);
+  } on FormatException {
+    return null;
   }
-
-  return null;
+  if (json is! Map<String, dynamic>) return null;
+  final status = json['status']?.toString() ?? '';
+  if (status == 'unknown' || status == 'invalid board') return null;
+  final raw = json['eval'];
+  if (raw is! num) return null;
+  final mapped = mapChessDbApiScore(raw.toInt(), isWhiteToMove: isWhiteStm);
+  final depth = json['depth'];
+  return EvalHit(
+    cp: mapped.whiteCp,
+    mate: mapped.mate,
+    depth: depth is num ? depth.toInt() : 0,
+  );
 }
 
-/// Map ChessDB raw score (STM) to white-normalized (cp, mate?).
-(int cp, int? mate)? mapChessDbApiScore(
+/// Map a raw ChessDB score (side to move) to white-normalized centipawns plus
+/// the side-to-move mate distance when the score encodes one.
+({int whiteCp, int? mate}) mapChessDbApiScore(
   int raw, {
   required bool isWhiteToMove,
 }) {
   final decoded = mapChessDbRawScoreStm(raw);
-  final whiteCp = isWhiteToMove ? decoded.stmCp : -decoded.stmCp;
-  return (whiteCp, decoded.mate);
+  return (
+    whiteCp: isWhiteToMove ? decoded.stmCp : -decoded.stmCp,
+    mate: decoded.mate,
+  );
 }
 
 /// Parse a `queryall&json=1` body into a ranked move list.
@@ -101,10 +100,10 @@ List<DbMove> parseChessDbQueryAllBody(String body) {
   final trimmed = body.trim();
   if (trimmed.isEmpty) return const [];
 
-  final dynamic decoded;
+  final Object? decoded;
   try {
     decoded = jsonDecode(trimmed);
-  } catch (_) {
+  } on FormatException {
     return const [];
   }
   if (decoded is! Map<String, dynamic>) return const [];
@@ -113,29 +112,62 @@ List<DbMove> parseChessDbQueryAllBody(String body) {
   final rawMoves = decoded['moves'];
   if (rawMoves is! List) return const [];
 
-  final moves = <DbMove>[];
-  for (final entry in rawMoves) {
-    if (entry is! Map<String, dynamic>) continue;
-    final uci = entry['uci']?.toString() ?? '';
-    final score = (entry['score'] as num?)?.toInt();
-    if (uci.isEmpty || score == null) continue;
-    final mapped = mapChessDbRawScoreStm(score);
-    final note = entry['note']?.toString().trim();
-    moves.add(
-      DbMove(
-        uci: uci,
-        san: entry['san']?.toString() ?? '',
-        stmCp: mapped.stmCp,
-        mate: mapped.mate,
-        rank: (entry['rank'] as num?)?.toInt(),
-        note: (note == null || note.isEmpty) ? null : note,
-      ),
-    );
-  }
-  return DbMoveList.sorted(moves);
+  return DbMoveList.sorted([
+    for (final entry in rawMoves)
+      if (entry is Map<String, dynamic>) ?_decodeQueryAllMove(entry),
+  ]);
+}
+
+DbMove? _decodeQueryAllMove(Map<String, dynamic> entry) {
+  final uci = entry['uci']?.toString() ?? '';
+  final score = entry['score'];
+  if (uci.isEmpty || score is! num) return null;
+  final mapped = mapChessDbRawScoreStm(score.toInt());
+  final rank = entry['rank'];
+  final note = entry['note']?.toString().trim();
+  return DbMove(
+    uci: uci,
+    san: entry['san']?.toString() ?? '',
+    stmCp: mapped.stmCp,
+    mate: mapped.mate,
+    rank: rank is num ? rank.toInt() : null,
+    note: (note == null || note.isEmpty) ? null : note,
+  );
 }
 
 class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
+  /// Wait out an active cooldown up to this long before giving a book lookup
+  /// up as refused.
+  static const Duration _maxWaitForCooldown = Duration(seconds: 90);
+
+  /// How long one HTTP request may take before it is abandoned.
+  ///
+  /// `package:http` has no default timeout, and both lookups run inside a
+  /// [concurrency]-wide slot. A server that accepts the connection and then
+  /// never answers therefore used to hold its slot for the life of the
+  /// process: with the default two slots, two such requests wedged every
+  /// later lookup behind a [Completer] that nothing would ever complete.
+  /// Timing out is what lets the `finally` release the slot.
+  ///
+  /// Generous on purpose — this is the "it is never coming" bound, not a
+  /// latency target. A slow answer is still an answer.
+  static const Duration _requestTimeout = Duration(seconds: 20);
+
+  /// Attempts a refused book lookup gets before giving up on the position.
+  ///
+  /// Worth retrying where a single eval is not: the caller's alternative is a
+  /// full-depth engine search, which costs far more than sitting out a
+  /// backoff — and answers a different question. Kept small (about 3s of
+  /// waiting in total) so one unlucky position cannot walk the provider into
+  /// its own [_standDownAfter] stand-down.
+  static const int _bookRetries = 3;
+
+  /// Consecutive rate limits after which the provider stands down for the
+  /// rest of the day.
+  static const int _standDownAfter = 6;
+
+  static const int _maxBackoffSeconds = 60;
+
   final int dailyQuota;
   final int concurrency;
   final ChessDbHttpFetch? httpFetch;
@@ -182,7 +214,7 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
 
   Future<void> init() async {
     if (_quotaLoaded) return;
-    final prefs = prefsOverride ?? await SharedPreferences.getInstance();
+    final prefs = await _prefs();
     final today = _todayKey();
     _quotaDate = prefs.getString(_quotaDateKey) ?? '';
     if (_quotaDate == today) {
@@ -198,10 +230,13 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
 
   Future<void> flushQuota() async {
     if (!_quotaLoaded) return;
-    final prefs = prefsOverride ?? await SharedPreferences.getInstance();
+    final prefs = await _prefs();
     await prefs.setString(_quotaDateKey, _quotaDate);
     await prefs.setInt(_quotaCountKey, _usedToday);
   }
+
+  Future<SharedPreferences> _prefs() async =>
+      prefsOverride ?? await SharedPreferences.getInstance();
 
   @override
   Future<EvalLookupResult> lookup(String fen, {required int minDepth}) async {
@@ -214,10 +249,7 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
         return const EvalLookupResult.miss();
       }
 
-      final board = Uri.encodeComponent(canonicalizeFen4(fen));
-      final uri = Uri.parse('$_defaultBaseUrl?action=queryscore&board=$board');
-      final fetch = httpFetch ?? http.get;
-      final response = await fetch(uri).timeout(_requestTimeout);
+      final response = await _fetch(_endpoint('queryscore', fen));
 
       if (_isRateLimitResponse(response)) {
         _noteRateLimited();
@@ -231,16 +263,13 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
         return const EvalLookupResult.miss();
       }
 
-      // A real answer means we are not rate-limited: clear any backoff.
-      _consecutiveLimits = 0;
-      _cooldownUntil = null;
+      _noteAnswered();
 
       if (hit.depth > 0 && hit.depth < minDepth) {
         return const EvalLookupResult.shallow();
       }
 
-      _usedToday++;
-      unawaited(flushQuota());
+      _spendQuota();
       return EvalLookupResult.found(hit);
     } catch (e) {
       if (kDebugMode) debugPrint('[ChessDbApiProvider] lookup failed: $e');
@@ -261,10 +290,7 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
     await init();
     if (!quotaRemaining) return DbMoveList.empty;
 
-    final board = Uri.encodeComponent(canonicalizeFen4(fen));
-    final uri = Uri.parse(
-      '$_defaultBaseUrl?action=queryall&json=1&board=$board',
-    );
+    final uri = _endpoint('queryall', fen, json: true);
 
     for (var attempt = 0; attempt < _bookRetries; attempt++) {
       if (!await _awaitCooldown()) return DbMoveList.empty;
@@ -273,7 +299,7 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
       await _acquireSlot();
       final http.Response response;
       try {
-        response = await (httpFetch ?? http.get)(uri).timeout(_requestTimeout);
+        response = await _fetch(uri);
       } catch (e) {
         if (kDebugMode) debugPrint('[ChessDbApiProvider] queryall failed: $e');
         return DbMoveList.empty;
@@ -289,18 +315,36 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
         continue;
       }
 
-      _consecutiveLimits = 0;
-      _cooldownUntil = null;
+      _noteAnswered();
 
       final moves = parseChessDbQueryAllBody(response.body);
       if (moves.isEmpty) return DbMoveList.empty;
 
-      _usedToday++;
-      unawaited(flushQuota());
+      _spendQuota();
       return DbMoveList(moves: moves, source: DbMoveSource.chessDbApi);
     }
 
     return DbMoveList.empty;
+  }
+
+  Uri _endpoint(String action, String fen, {bool json = false}) {
+    final board = Uri.encodeComponent(canonicalizeFen4(fen));
+    final jsonFlag = json ? '&json=1' : '';
+    return Uri.parse('$_defaultBaseUrl?action=$action$jsonFlag&board=$board');
+  }
+
+  Future<http.Response> _fetch(Uri uri) =>
+      (httpFetch ?? http.get)(uri).timeout(_requestTimeout);
+
+  /// A real answer means we are not rate-limited: clear any backoff.
+  void _noteAnswered() {
+    _consecutiveLimits = 0;
+    _cooldownUntil = null;
+  }
+
+  void _spendQuota() {
+    _usedToday++;
+    unawaited(flushQuota());
   }
 
   /// Whether [response] is the server refusing to answer, as opposed to
@@ -339,30 +383,6 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
     return true;
   }
 
-  static const Duration _maxWaitForCooldown = Duration(seconds: 90);
-
-  /// How long one HTTP request may take before it is abandoned.
-  ///
-  /// `package:http` has no default timeout, and both lookups run inside a
-  /// [concurrency]-wide slot. A server that accepts the connection and then
-  /// never answers therefore used to hold its slot for the life of the
-  /// process: with the default two slots, two such requests wedged every
-  /// later lookup behind a [Completer] that nothing would ever complete.
-  /// Timing out is what lets the `finally` release the slot.
-  ///
-  /// Generous on purpose — this is the "it is never coming" bound, not a
-  /// latency target. A slow answer is still an answer.
-  static const Duration _requestTimeout = Duration(seconds: 20);
-
-  /// Attempts a refused book lookup gets before giving up on the position.
-  ///
-  /// Worth retrying where a single eval is not: the caller's alternative is a
-  /// full-depth engine search, which costs far more than sitting out a
-  /// backoff — and answers a different question. Kept small (about 3s of
-  /// waiting in total) so one unlucky position cannot walk the provider into
-  /// its own [_standDownAfter] stand-down.
-  static const int _bookRetries = 3;
-
   /// Record a rate-limit and extend the cooldown. Exponential in the number
   /// of consecutive limits (1s, 2s, 4s, …) capped at 60s; after
   /// [_standDownAfter] in a row, stand down for the rest of the day so the
@@ -380,9 +400,6 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
     );
     _cooldownUntil = now.add(Duration(seconds: backoffSeconds));
   }
-
-  static const int _standDownAfter = 6;
-  static const int _maxBackoffSeconds = 60;
 
   Future<void> _acquireSlot() async {
     while (_inFlight >= concurrency) {
@@ -402,6 +419,8 @@ class ChessDbApiProvider implements ExternalEvalProvider, ExternalMoveProvider {
 
   static String _todayKey() {
     final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    return '${now.year}-$month-$day';
   }
 }

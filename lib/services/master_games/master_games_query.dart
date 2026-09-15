@@ -133,35 +133,29 @@ class MasterGamesQuery {
   final clauses = <String>[];
   final args = <Object?>[];
 
-  final player = query.player?.trim();
-  final opponent = query.opponent?.trim();
-  if (player != null && player.isNotEmpty) {
-    if (opponent != null && opponent.isNotEmpty) {
-      // Either seating of the pairing.
-      clauses.add(
-        '((white LIKE ? COLLATE NOCASE AND black LIKE ? COLLATE NOCASE) OR '
-        '(white LIKE ? COLLATE NOCASE AND black LIKE ? COLLATE NOCASE))',
-      );
-      args.addAll(['$player%', '$opponent%', '$opponent%', '$player%']);
-    } else {
-      clauses.add(
-        '(white LIKE ? COLLATE NOCASE OR black LIKE ? COLLATE NOCASE)',
-      );
-      args.addAll(['$player%', '$player%']);
-    }
-  } else if (opponent != null && opponent.isNotEmpty) {
+  final player = _trimmed(query.player);
+  final opponent = _trimmed(query.opponent);
+  if (player != null && opponent != null) {
+    // Either seating of the pairing.
+    clauses.add(
+      '((white LIKE ? COLLATE NOCASE AND black LIKE ? COLLATE NOCASE) OR '
+      '(white LIKE ? COLLATE NOCASE AND black LIKE ? COLLATE NOCASE))',
+    );
+    args.addAll(['$player%', '$opponent%', '$opponent%', '$player%']);
+  } else if (player != null || opponent != null) {
+    final name = player ?? opponent;
     clauses.add('(white LIKE ? COLLATE NOCASE OR black LIKE ? COLLATE NOCASE)');
-    args.addAll(['$opponent%', '$opponent%']);
+    args.addAll(['$name%', '$name%']);
   }
 
-  final event = query.event?.trim();
-  if (event != null && event.isNotEmpty) {
+  final event = _trimmed(query.event);
+  if (event != null) {
     clauses.add('event LIKE ? COLLATE NOCASE');
     args.add('%$event%');
   }
 
-  final eco = query.eco?.trim();
-  if (eco != null && eco.isNotEmpty) {
+  final eco = _trimmed(query.eco);
+  if (eco != null) {
     clauses.add('eco LIKE ? COLLATE NOCASE');
     args.add('$eco%');
   }
@@ -198,6 +192,12 @@ class MasterGamesQuery {
   }
 
   return (where: clauses.join(' AND '), args: args);
+}
+
+/// [value] trimmed, or null when it is null or blank.
+String? _trimmed(String? value) {
+  final trimmed = value?.trim();
+  return trimmed == null || trimmed.isEmpty ? null : trimmed;
 }
 
 /// `ORDER BY` for [order].

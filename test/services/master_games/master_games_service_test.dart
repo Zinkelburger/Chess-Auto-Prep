@@ -64,6 +64,11 @@ void main() {
     dbPathProvider: () async => '${tmp.path}/master_games.db',
   );
 
+  // A fresh database probes for the newest issue near today's estimate and
+  // walks back at most a few numbers, so the mock's issues must sit near
+  // the calendar rather than at fixed numbers that age out of reach.
+  final base = twicIssueEstimateFor(DateTime.now()) - 3;
+
   test('unzips a TWIC issue to PGN text', () {
     final text = TwicClient.unzipPgn(
       _zip('twic1650.pgn', _issuePgn(1650)),
@@ -75,19 +80,22 @@ void main() {
   test('sync imports every published issue from the start issue, '
       'registers a job, and is incremental', () async {
     final calls = <int>[];
-    final svc = service(_twic({1650, 1651, 1652}, log: calls));
+    final svc = service(_twic({base, base + 1, base + 2}, log: calls));
     addTearDown(svc.dispose);
     await svc.load();
-    await svc.setStartIssue(1650);
+    await svc.setStartIssue(base);
 
     await svc.sync();
 
     expect(svc.lastError, isNull);
     expect(svc.stats!.games, 3);
-    expect(svc.stats!.firstIssue, 1650);
-    expect(svc.stats!.lastIssue, 1652);
+    expect(svc.stats!.firstIssue, base);
+    expect(svc.stats!.lastIssue, base + 2);
     expect(svc.hasGames, isTrue);
-    expect(svc.db!.gamesByPlayer('Player1651').single.white, 'Player1651,A');
+    expect(
+      svc.db!.gamesByPlayer('Player${base + 1}').single.white,
+      'Player${base + 1},A',
+    );
 
     final job = JobManager.instance.jobs.firstWhere(
       (j) => j.type == JobType.masterGames,
@@ -101,18 +109,18 @@ void main() {
     await svc.sync();
     expect(svc.status, contains('Up to date'));
     expect(svc.stats!.games, 3);
-    expect(calls.where((c) => c >= 0).every((c) => c >= 1652), isTrue);
+    expect(calls.where((c) => c >= 0).every((c) => c >= base + 2), isTrue);
   });
 
   test('stopping keeps the issues already imported', () async {
-    final svc = service(_twic({1650, 1651, 1652}));
+    final svc = service(_twic({base, base + 1, base + 2}));
     addTearDown(svc.dispose);
     await svc.load();
-    await svc.setStartIssue(1650);
+    await svc.setStartIssue(base);
 
     // Cancel as soon as the first issue lands.
     svc.addListener(() {
-      if (svc.status.contains('TWIC 1651')) svc.cancel();
+      if (svc.status.contains('TWIC ${base + 1}')) svc.cancel();
     });
     await svc.sync();
 
@@ -125,7 +133,7 @@ void main() {
     final svc = service(MockClient((_) async => http.Response('boom', 500)));
     addTearDown(svc.dispose);
     await svc.load();
-    await svc.setStartIssue(1650);
+    await svc.setStartIssue(base);
     await svc.sync();
     expect(svc.isSyncing, isFalse);
     expect(svc.lastError, contains('could not reach'));
@@ -163,18 +171,18 @@ void main() {
 
   test('auto-sync is due only with a database, a new week, and no recent '
       'check', () async {
-    final svc = service(_twic({1650, 1651}));
+    final svc = service(_twic({base, base + 1}));
     addTearDown(svc.dispose);
     await svc.load();
     // Empty database: never automatic — the user opts in by downloading.
     expect(svc.isAutoSyncDue(now: DateTime.utc(2026, 9, 1)), isFalse);
 
-    await svc.setStartIssue(1650);
+    await svc.setStartIssue(base);
     await svc.sync(); // records a check now
-    expect(svc.stats!.lastIssue, 1651);
+    expect(svc.stats!.lastIssue, base + 1);
     // Just checked: not due, even though newer issues exist by the date.
     expect(svc.isAutoSyncDue(now: DateTime.now()), isFalse);
-    // A day later, with the calendar past issue 1651: due.
+    // Two days later, with the calendar past the newest issue: due.
     final later = DateTime.now().add(const Duration(days: 2));
     expect(svc.isAutoSyncDue(now: later), isTrue);
     await svc.setAutoSync(false);
@@ -184,10 +192,10 @@ void main() {
   test('a second caller joins the sync in flight instead of starting '
       'another', () async {
     final calls = <int>[];
-    final svc = service(_twic({1650, 1651}, log: calls));
+    final svc = service(_twic({base, base + 1}, log: calls));
     addTearDown(svc.dispose);
     await svc.load();
-    await svc.setStartIssue(1650);
+    await svc.setStartIssue(base);
 
     // Nothing running: the completion future is already done, so a joiner
     // never blocks on a sync that will not happen.
@@ -204,7 +212,7 @@ void main() {
     expect(svc.isSyncing, isFalse);
     expect(svc.stats!.games, 2);
     // One pass over the issues, not two.
-    expect(calls.where((c) => c == 1650).length, lessThanOrEqualTo(2));
+    expect(calls.where((c) => c == base).length, lessThanOrEqualTo(2));
   });
 
   test('latestIssue walks down from an overshooting estimate', () async {

@@ -8,6 +8,7 @@
 /// analysis used, then compare both evals from the guesser's side.
 library;
 
+import 'package:dartchess/dartchess.dart' show Position;
 import 'package:flutter/foundation.dart';
 
 import '../core/pgn/solitaire_controller.dart' show SolitaireGuess;
@@ -15,7 +16,7 @@ import '../models/solitaire_trophy.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import '../utils/eval_constants.dart' show effectiveCpFromScores;
 import 'engine/stockfish_pool.dart';
-import 'game_analysis_controller.dart' show MoveEval;
+import 'move_eval.dart' show MoveEval;
 
 /// A guess must beat the game move by at least this much to earn a trophy.
 /// Below it the "improvement" is engine noise between two reasonable moves.
@@ -39,6 +40,9 @@ int trophyAdvantageCp({
   return userFromUser - gmFromUser;
 }
 
+/// The strongest qualifying wrong attempt at one position.
+typedef _BestAttempt = ({String san, int advantageCp, int userCpFromUser});
+
 /// Scan [guesses] against the completed [evals] and return a trophy for every
 /// position where a rejected guess beat the game's move.
 ///
@@ -58,13 +62,8 @@ Future<List<SolitaireTrophy>> detectSolitaireTrophies({
 }) async {
   if (guesses.isEmpty || evals.isEmpty) return const [];
 
-  final evalByPly = <int, MoveEval>{};
-  for (final e in evals) {
-    evalByPly[e.ply] = e;
-  }
-  final seen = {for (final t in existing) '${t.fen}|${t.userMove}'};
-
-  final pool = StockfishPool.instance;
+  final evalByPly = {for (final e in evals) e.ply: e};
+  final awarded = {for (final t in existing) _attemptKey(t.fen, t.userMove)};
   final trophies = <SolitaireTrophy>[];
 
   for (final guess in guesses) {
@@ -92,56 +91,81 @@ Future<List<SolitaireTrophy>> detectSolitaireTrophies({
       scoreCp: gameMove.scoreCp,
       scoreMate: gameMove.scoreMate,
     );
+    final best = await _bestAttempt(
+      before: before,
+      fenBefore: gameMove.fenBefore,
+      attempts: guess.wrongAttempts,
+      awarded: awarded,
+      gmCp: gmCp,
+      userIsWhite: userIsWhite,
+      depth: depth,
+      minAdvantageCp: minAdvantageCp,
+    );
+    if (best == null) continue;
 
-    // Best qualifying attempt at this position wins the trophy.
-    String? bestSan;
-    int bestAdvantage = 0;
-    int bestUserCp = 0;
-
-    for (final san in guess.wrongAttempts) {
-      if (seen.contains('${gameMove.fenBefore}|$san')) continue;
-      final move = before.parseSan(san);
-      if (move == null) continue;
-
-      try {
-        final after = before.play(move);
-        final result = await pool.evaluateFen(after.fen, depth);
-        final userCpFromUser = -result.effectiveCp;
-        final advantage = trophyAdvantageCp(
-          gmCpWhiteNorm: gmCp,
-          userCpAfterMove: result.effectiveCp,
-          userIsWhite: userIsWhite,
-        );
-        if (advantage >= minAdvantageCp && advantage > bestAdvantage) {
-          bestSan = san;
-          bestAdvantage = advantage;
-          bestUserCp = userCpFromUser;
-        }
-      } catch (e) {
-        debugPrint('Trophy detection: eval of $san failed: $e');
-      }
-    }
-
-    if (bestSan != null) {
-      trophies.add(
-        SolitaireTrophy(
-          id: '${DateTime.now().microsecondsSinceEpoch}_${guess.ply}',
-          date: DateTime.now(),
-          fen: gameMove.fenBefore,
-          userMove: bestSan,
-          gmMove: gameMove.san,
-          // Stored from the guesser's side, which is how the cabinet reads
-          // them out ("you played X (+1.2), they played Y (+0.3)").
-          userEvalCp: bestUserCp,
-          gmEvalCp: userIsWhite ? gmCp : -gmCp,
-          advantageCp: bestAdvantage,
-          gameLabel: gameLabel,
-          headers: headers,
-          pgn: pgn,
-        ),
-      );
-    }
+    trophies.add(
+      SolitaireTrophy(
+        id: '${DateTime.now().microsecondsSinceEpoch}_${guess.ply}',
+        date: DateTime.now(),
+        fen: gameMove.fenBefore,
+        userMove: best.san,
+        gmMove: gameMove.san,
+        // Stored from the guesser's side, which is how the cabinet reads
+        // them out ("you played X (+1.2), they played Y (+0.3)").
+        userEvalCp: best.userCpFromUser,
+        gmEvalCp: userIsWhite ? gmCp : -gmCp,
+        advantageCp: best.advantageCp,
+        gameLabel: gameLabel,
+        headers: headers,
+        pgn: pgn,
+      ),
+    );
   }
 
   return trophies;
+}
+
+String _attemptKey(String fen, String san) => '$fen|$san';
+
+/// Evaluate each of [attempts] from [before] and return the one with the
+/// largest advantage over the game move, or null when none clears
+/// [minAdvantageCp]. Attempts already in [awarded] and unparseable or
+/// failing evaluations are skipped.
+Future<_BestAttempt?> _bestAttempt({
+  required Position before,
+  required String fenBefore,
+  required List<String> attempts,
+  required Set<String> awarded,
+  required int gmCp,
+  required bool userIsWhite,
+  required int depth,
+  required int minAdvantageCp,
+}) async {
+  final pool = StockfishPool.instance;
+  _BestAttempt? best;
+  for (final san in attempts) {
+    if (awarded.contains(_attemptKey(fenBefore, san))) continue;
+    final move = before.parseSan(san);
+    if (move == null) continue;
+
+    try {
+      final after = before.play(move);
+      final result = await pool.evaluateFen(after.fen, depth);
+      final advantage = trophyAdvantageCp(
+        gmCpWhiteNorm: gmCp,
+        userCpAfterMove: result.effectiveCp,
+        userIsWhite: userIsWhite,
+      );
+      if (advantage >= minAdvantageCp && advantage > (best?.advantageCp ?? 0)) {
+        best = (
+          san: san,
+          advantageCp: advantage,
+          userCpFromUser: -result.effectiveCp,
+        );
+      }
+    } catch (e) {
+      debugPrint('Trophy detection: eval of $san failed: $e');
+    }
+  }
+  return best;
 }

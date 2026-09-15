@@ -4,8 +4,10 @@ library;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../utils/safe_change_notifier.dart';
 
+/// Process-wide singleton; widgets listen to it like [EngineSettings].
 class EvalDatabaseSettings extends ChangeNotifier with SafeChangeNotifier {
   EvalDatabaseSettings._();
   static final EvalDatabaseSettings instance = EvalDatabaseSettings._();
@@ -21,6 +23,8 @@ class EvalDatabaseSettings extends ChangeNotifier with SafeChangeNotifier {
   /// Half-moves an on-demand expectimax probe explores unless the user picks
   /// another depth in the pane.
   static const int defaultExpectimaxProbePlies = 12;
+  static const int minExpectimaxProbePlies = 2;
+  static const int maxExpectimaxProbePlies = 60;
 
   bool _loaded = false;
   bool _enableCdbDirect = false;
@@ -66,61 +70,73 @@ class EvalDatabaseSettings extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setChessDbApiForExpectimax(bool value) async {
-    if (_chessDbApiForExpectimax == value) return;
-    _chessDbApiForExpectimax = value;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyChessDbApiForExpectimax, value);
-  }
+  Future<void> setChessDbApiForExpectimax(bool value) => _update(
+    _keyChessDbApiForExpectimax,
+    value,
+    () => _chessDbApiForExpectimax,
+    (v) => _chessDbApiForExpectimax = v,
+  );
 
-  Future<void> setExpectimaxProbePlies(int value) async {
-    final clamped = value.clamp(2, 60);
-    if (_expectimaxProbePlies == clamped) return;
-    _expectimaxProbePlies = clamped;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyExpectimaxProbePlies, clamped);
-  }
+  Future<void> setExpectimaxProbePlies(int value) => _update(
+    _keyExpectimaxProbePlies,
+    value.clamp(minExpectimaxProbePlies, maxExpectimaxProbePlies),
+    () => _expectimaxProbePlies,
+    (v) => _expectimaxProbePlies = v,
+  );
 
-  Future<void> setEnableCdbDirect(bool value) async {
-    if (_enableCdbDirect == value) return;
-    _enableCdbDirect = value;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyEnableCdbDirect, value);
-  }
+  Future<void> setEnableCdbDirect(bool value) => _update(
+    _keyEnableCdbDirect,
+    value,
+    () => _enableCdbDirect,
+    (v) => _enableCdbDirect = v,
+  );
 
-  Future<void> setCdbDirectPath(String value) async {
-    if (_cdbDirectPath == value) return;
-    _cdbDirectPath = value;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyCdbDirectPath, value);
-  }
+  Future<void> setCdbDirectPath(String value) => _update(
+    _keyCdbDirectPath,
+    value,
+    () => _cdbDirectPath,
+    (v) => _cdbDirectPath = v,
+  );
 
-  Future<void> setCdbDirectReadAhead(bool value) async {
-    if (_cdbDirectReadAhead == value) return;
-    _cdbDirectReadAhead = value;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyCdbDirectReadAhead, value);
-  }
+  Future<void> setCdbDirectReadAhead(bool value) => _update(
+    _keyCdbDirectReadAhead,
+    value,
+    () => _cdbDirectReadAhead,
+    (v) => _cdbDirectReadAhead = v,
+  );
 
-  Future<void> setEnableLichessEvals(bool value) async {
-    if (_enableLichessEvals == value) return;
-    _enableLichessEvals = value;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyEnableLichessEvals, value);
-  }
+  Future<void> setEnableLichessEvals(bool value) => _update(
+    _keyEnableLichessEvals,
+    value,
+    () => _enableLichessEvals,
+    (v) => _enableLichessEvals = v,
+  );
 
-  Future<void> setLichessEvalsPath(String value) async {
-    if (_lichessEvalsPath == value) return;
-    _lichessEvalsPath = value;
+  Future<void> setLichessEvalsPath(String value) => _update(
+    _keyLichessEvalsPath,
+    value,
+    () => _lichessEvalsPath,
+    (v) => _lichessEvalsPath = v,
+  );
+
+  /// Store [value] under [key] when it differs from what [read] returns:
+  /// listeners hear about it at once, the preference is written after.
+  Future<void> _update<T extends Object>(
+    String key,
+    T value,
+    T Function() read,
+    void Function(T) assign,
+  ) async {
+    if (read() == value) return;
+    assign(value);
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyLichessEvalsPath, value);
+    await switch (value) {
+      final bool v => prefs.setBool(key, v),
+      final int v => prefs.setInt(key, v),
+      final String v => prefs.setString(key, v),
+      _ => throw ArgumentError.value(value, 'value', 'unsupported type'),
+    };
   }
 
   Future<void> resetToDefaults() async {

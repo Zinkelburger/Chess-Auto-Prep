@@ -11,6 +11,10 @@ import 'dart:isolate';
 
 import 'pgn_compression.dart';
 
+/// Files at least this large are decoded off the calling isolate.
+const int _offloadDecodeBytes = 256 * 1024;
+
+/// Decoded text plus whether strict UTF-8 had to be abandoned for Latin-1.
 class TextDecodeResult {
   final String text;
   final bool usedLatin1Fallback;
@@ -18,24 +22,23 @@ class TextDecodeResult {
   const TextDecodeResult({required this.text, this.usedLatin1Fallback = false});
 }
 
+/// Reads [file] as text, gunzipping when its bytes say so.
 Future<String> readTextFile(File file) async {
   final bytes = await file.readAsBytes();
   // Decompression and text decoding are CPU work even after an async read.
   // A small gzip can expand to a large library, so always offload gzip.
-  final compressed = bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
-  if (compressed || bytes.length >= 256 * 1024) {
+  if (looksGzipped(bytes) || bytes.length >= _offloadDecodeBytes) {
     return Isolate.run(() => decodeTextBytes(maybeGunzip(bytes)));
   }
   return decodeTextBytes(bytes);
 }
 
-String readTextFileSync(File file) {
-  return decodeTextBytes(maybeGunzip(file.readAsBytesSync()));
-}
+/// [readTextFile] for callers that cannot await.
+String readTextFileSync(File file) =>
+    decodeTextBytes(maybeGunzip(file.readAsBytesSync()));
 
-String decodeTextBytes(List<int> bytes) {
-  return decodeTextBytesDetailed(bytes).text;
-}
+/// The text in [bytes]; see [decodeTextBytesDetailed] for the encoding rule.
+String decodeTextBytes(List<int> bytes) => decodeTextBytesDetailed(bytes).text;
 
 /// A file that fails strict UTF-8 is read one of two ways. A Latin-1 file
 /// fails on its very first accented letter and has no valid multi-byte

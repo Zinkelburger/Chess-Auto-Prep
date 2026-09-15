@@ -162,27 +162,22 @@ bool? resolveUserColor({
     return userIsWhiteFilter ?? true;
   }
 
-  final white = whiteHeader.toLowerCase();
-  final black = blackHeader.toLowerCase();
+  final whiteIsUser = headerNamesUser(whiteHeader, usernameLower);
+  final blackIsUser = headerNamesUser(blackHeader, usernameLower);
 
-  // Match by username OR any repertoire player pattern.
-  final whiteIsUser =
-      userNameMatchesHeader(white, usernameLower) || isRepertoirePlayer(white);
-  final blackIsUser =
-      userNameMatchesHeader(black, usernameLower) || isRepertoirePlayer(black);
-
-  bool isUserWhiteInGame;
-  if (whiteIsUser && !blackIsUser) {
-    isUserWhiteInGame = true;
-  } else if (blackIsUser && !whiteIsUser) {
-    isUserWhiteInGame = false;
+  final bool isUserWhiteInGame;
+  if (whiteIsUser != blackIsUser) {
+    isUserWhiteInGame = whiteIsUser;
   } else if (userIsWhiteFilter != null) {
     // Both or neither match - use the filter to decide.
     isUserWhiteInGame = userIsWhiteFilter;
-  } else if (unattributablePolicy == UnattributableGamePolicy.skip) {
-    return null;
   } else {
-    isUserWhiteInGame = true;
+    switch (unattributablePolicy) {
+      case UnattributableGamePolicy.skip:
+        return null;
+      case UnattributableGamePolicy.assumeWhite:
+        isUserWhiteInGame = true;
+    }
   }
 
   // Apply colour filter if specified.
@@ -191,6 +186,16 @@ bool? resolveUserColor({
   }
 
   return isUserWhiteInGame;
+}
+
+/// Whether a raw `White`/`Black` header names the user: it contains one of
+/// the user's names (see [userNameMatchesHeader]) or is a repertoire
+/// placeholder (see [isRepertoirePlayer]). [usernameLower] must already be
+/// lower-cased; [header] may be any case.
+bool headerNamesUser(String header, String usernameLower) {
+  final headerLower = header.toLowerCase();
+  return userNameMatchesHeader(headerLower, usernameLower) ||
+      isRepertoirePlayer(headerLower);
 }
 
 /// Score a PGN `Result` header from the user's perspective:
@@ -307,7 +312,8 @@ void walkMainlineIntoTree({
       currentNode = childNode;
       depth++;
     } catch (_) {
-      break; // Stop if an illegal move is encountered.
+      // An unparseable or illegal move ends the line; what was walked stays.
+      break;
     }
   }
 
@@ -469,6 +475,8 @@ void _walkVariationsIntoTree({
         userResult: userResult,
       );
     } catch (_) {
+      // An unparseable or illegal variation is skipped; its siblings still
+      // fold in.
       continue;
     }
   }

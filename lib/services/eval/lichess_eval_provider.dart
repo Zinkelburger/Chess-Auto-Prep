@@ -53,26 +53,14 @@ class LichessEvalProvider implements ExternalEvalProvider {
       return const EvalLookupResult.miss();
     }
     if (found == null) return const EvalLookupResult.hardMiss();
-
-    final isWhiteStm = isWhiteToMove(fen);
-    final whiteMate = found.mate;
-    final int whiteCp;
-    int? stmMate;
-    if (whiteMate != null) {
-      stmMate = isWhiteStm ? whiteMate : -whiteMate;
-      whiteCp = whiteMate > 0
-          ? kMateCpBase - whiteMate
-          : -kMateCpBase - whiteMate;
-    } else {
-      whiteCp = found.cp;
-    }
-
     if (found.depth < minDepth) return const EvalLookupResult.shallow();
 
+    final whiteMate = found.mate;
+    final isWhiteStm = isWhiteToMove(fen);
     return EvalLookupResult.found(
       EvalHit(
-        cp: whiteCp,
-        mate: stmMate,
+        cp: whiteMate == null ? found.cp : mateToCp(whiteMate),
+        mate: whiteMate == null || isWhiteStm ? whiteMate : -whiteMate,
         depth: found.depth,
         bestMove: found.move,
       ),

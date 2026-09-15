@@ -118,6 +118,34 @@ void main() {
       expect(service.result, isNull);
     });
 
+    test('a mining failure surfaces and does not wedge the service', () async {
+      final lines = List.generate(
+        6,
+        (i) => _makeLine('l$i', ['d4', 'Nf6', 'c4', 'g6', 'Nc3']),
+      );
+      var failNext = true;
+      final service = CoherenceService(
+        mine: (input) async {
+          if (failNext) throw StateError('mining failed');
+          return runFpGrowthMining(input);
+        },
+      );
+
+      await expectLater(
+        service.compute(lines: lines, playAsWhite: true),
+        throwsStateError,
+      );
+      expect(service.result, isNull);
+
+      failNext = false;
+      await service.compute(lines: lines, playAsWhite: true);
+      expect(
+        service.result,
+        isNotNull,
+        reason: 'a failed run must not block the next',
+      );
+    });
+
     test('invalidate clears result', () async {
       final lines = List.generate(
         6,

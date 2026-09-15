@@ -32,6 +32,8 @@ double effectiveSearchPriority(BuildTreeNode node) => node.searchPriority >= 0.0
     ? node.searchPriority
     : node.cumulativeProbability;
 
+/// The set of nodes waiting to be expanded, popped in FIFO or best-first
+/// order; see the library comment for the ordering and the indexing.
 class FrontierQueue {
   final bool bestFirst;
 

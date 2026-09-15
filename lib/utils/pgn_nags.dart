@@ -19,6 +19,7 @@ import '../theme/app_colors.dart';
 /// Standard move-quality NAG definitions following PGN spec.
 /// Order: best-to-worst (toolbar display order).
 class NagInfo {
+  /// The PGN `$N` number.
   final int id;
   final String symbol;
   final String name;
@@ -43,6 +44,9 @@ const kMoveNags = [
   NagInfo(2, '?', 'Mistake', AppColors.nagMistake),
   NagInfo(4, '??', 'Blunder', AppColors.nagBlunder),
 ];
+
+/// Whether [id] is one of the six mutually exclusive move-quality verdicts.
+bool _isQualityNag(int id) => id >= 1 && id <= 6;
 
 /// Lookup NAG info by ID. Returns null for unknown NAGs.
 NagInfo? nagInfoById(int id) {
@@ -120,7 +124,7 @@ Color nagColor(int id) => nagInfoById(id)?.color ?? AppColors.onSurfaceMuted;
 int? primaryQualityNag(List<int>? nags) {
   if (nags == null) return null;
   for (final n in nags) {
-    if (n >= 1 && n <= 6) return n;
+    if (_isQualityNag(n)) return n;
   }
   return null;
 }
@@ -132,7 +136,7 @@ String qualityNagSuffix(List<int>? nags) {
   if (nags == null) return '';
   final buf = StringBuffer();
   for (final n in nags) {
-    if (n >= 1 && n <= 6) buf.write(nagSymbol(n));
+    if (_isQualityNag(n)) buf.write(nagSymbol(n));
   }
   return buf.toString();
 }
@@ -143,10 +147,11 @@ String qualityNagSuffix(List<int>? nags) {
 /// it. Non-quality NAGs are preserved. The result may be empty (callers store
 /// `null` for an empty NAG list).
 List<int> toggleQualityNag(List<int>? current, int nagId) {
+  final existing = current ?? const <int>[];
   final others = [
-    for (final n in current ?? const <int>[])
-      if (n < 1 || n > 6) n,
+    for (final n in existing)
+      if (!_isQualityNag(n)) n,
   ];
-  final alreadyOn = (current ?? const <int>[]).contains(nagId);
-  return <int>[if (!alreadyOn && nagId >= 1 && nagId <= 6) nagId, ...others];
+  final alreadyOn = existing.contains(nagId);
+  return <int>[if (!alreadyOn && _isQualityNag(nagId)) nagId, ...others];
 }

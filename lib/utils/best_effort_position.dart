@@ -50,7 +50,7 @@ Position? _fromMoveSequence(String input) {
   int ply = 0;
 
   for (int g = 0; g < groups.length; g++) {
-    final tokens = _tokenize(groups[g]);
+    final tokens = cleanSanTokens(groups[g]);
 
     for (final token in tokens) {
       final legalResult = _tryLegalMove(pos, token);
@@ -81,9 +81,6 @@ List<String> _splitOnGaps(String input) {
       .where((s) => s.isNotEmpty)
       .toList();
 }
-
-/// Tokenize a move group: strip move numbers and results, split on whitespace.
-List<String> _tokenize(String group) => cleanSanTokens(group);
 
 /// Try to play [san] as a legal move from [pos].
 Position? _tryLegalMove(Position pos, String san) {
@@ -122,60 +119,39 @@ Position _forcePlacePiece(Position pos, String san, int ply) {
 
 /// Handle castling by manually repositioning king and rook.
 Position? _tryCastleFallback(Position pos, String san, int ply) {
-  final cleaned = san.replaceAll(RegExp(r'[+#!?]'), '');
-  final isWhite = ply.isEven;
-  final rank = isWhite ? 0 : 7; // rank index: 0=1st rank, 7=8th rank
+  final cleaned = san.replaceAll(_glyphRe, '');
+  // (rook's home file, king's destination file, rook's destination file)
+  final (int rookFrom, int kingTo, int rookTo)? files = switch (cleaned) {
+    'O-O' || '0-0' => (7, 6, 5), // kingside: king e→g, rook h→f
+    'O-O-O' || '0-0-0' => (0, 2, 3), // queenside: king e→c, rook a→d
+    _ => null,
+  };
+  if (files == null) return null;
 
-  Square sq(int file, int r) => Square(file + r * 8);
+  final color = _sideAtPly(ply);
+  final rank = color == Side.white ? 0 : 7; // rank index: 0=1st, 7=8th
+  Square sq(int file) => Square(file + rank * 8);
+  const kingFile = 4;
 
-  if (cleaned == 'O-O' || cleaned == '0-0') {
-    // Kingside: king e→g, rook h→f
-    var board = pos.board
-        .removePieceAt(sq(4, rank)) // remove king from e-file
-        .removePieceAt(sq(7, rank)); // remove rook from h-file
-    board = board
-        .setPieceAt(
-          sq(6, rank),
-          Piece(color: isWhite ? Side.white : Side.black, role: Role.king),
-        )
-        .setPieceAt(
-          sq(5, rank),
-          Piece(color: isWhite ? Side.white : Side.black, role: Role.rook),
-        );
-    return Chess(
-      board: board,
-      turn: pos.turn.opposite,
-      castles: Castles.empty,
-      halfmoves: 0,
-      fullmoves: (ply ~/ 2) + 1,
-    );
-  }
-
-  if (cleaned == 'O-O-O' || cleaned == '0-0-0') {
-    // Queenside: king e→c, rook a→d
-    var board = pos.board
-        .removePieceAt(sq(4, rank)) // remove king from e-file
-        .removePieceAt(sq(0, rank)); // remove rook from a-file
-    board = board
-        .setPieceAt(
-          sq(2, rank),
-          Piece(color: isWhite ? Side.white : Side.black, role: Role.king),
-        )
-        .setPieceAt(
-          sq(3, rank),
-          Piece(color: isWhite ? Side.white : Side.black, role: Role.rook),
-        );
-    return Chess(
-      board: board,
-      turn: pos.turn.opposite,
-      castles: Castles.empty,
-      halfmoves: 0,
-      fullmoves: (ply ~/ 2) + 1,
-    );
-  }
-
-  return null;
+  final board = pos.board
+      .removePieceAt(sq(kingFile))
+      .removePieceAt(sq(files.$1))
+      .setPieceAt(sq(files.$2), Piece(color: color, role: Role.king))
+      .setPieceAt(sq(files.$3), Piece(color: color, role: Role.rook));
+  return Chess(
+    board: board,
+    turn: pos.turn.opposite,
+    castles: Castles.empty,
+    halfmoves: 0,
+    fullmoves: (ply ~/ 2) + 1,
+  );
 }
+
+/// Check, mate and annotation glyphs a SAN token may carry.
+final _glyphRe = RegExp(r'[+#!?]');
+
+/// The side that plays the 0-based [ply] of a game from the initial position.
+Side _sideAtPly(int ply) => ply.isEven ? Side.white : Side.black;
 
 /// Advance the turn without making a move (for gap plies).
 Position _advanceTurn(Position pos) {
@@ -193,12 +169,12 @@ Position _advanceTurn(Position pos) {
 /// Returns null if the destination square can't be determined.
 (Piece, Square)? _parseSanFallback(String san, int ply) {
   // Strip check/mate indicators and capture notation
-  var s = san.replaceAll(RegExp(r'[+#!?]'), '');
+  var s = san.replaceAll(_glyphRe, '');
 
   // Handle castling -- can't meaningfully place without context
   if (s == 'O-O' || s == 'O-O-O') return null;
 
-  final color = ply.isEven ? Side.white : Side.black;
+  final color = _sideAtPly(ply);
 
   // Handle promotion: e8=Q, exd8=N, etc.
   Role role = Role.pawn;

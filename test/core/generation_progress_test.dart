@@ -3,6 +3,7 @@
 library;
 
 import 'package:chess_auto_prep/core/generation_progress.dart';
+import 'package:chess_auto_prep/services/jobs/generation_phase.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
 import 'package:fake_async/fake_async.dart';

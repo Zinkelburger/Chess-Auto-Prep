@@ -1,13 +1,18 @@
 import '../utils/training_csv.dart';
 
+/// How well one move of a line is known, from consecutive correct answers.
 class RepertoireMoveProgress {
   final String repertoireId;
   final String lineId;
   final int moveIndex;
-  final int correctStreak; // number of consecutive correct attempts
-  final bool learned; // true when streak >= threshold
 
-  RepertoireMoveProgress({
+  /// Consecutive correct attempts.
+  final int correctStreak;
+
+  /// Whether [correctStreak] has reached the trainer's threshold.
+  final bool learned;
+
+  const RepertoireMoveProgress({
     required this.repertoireId,
     required this.lineId,
     required this.moveIndex,
@@ -35,7 +40,7 @@ class RepertoireMoveProgress {
     ]);
   }
 
-  static RepertoireMoveProgress fromCsvRow(String row) {
+  factory RepertoireMoveProgress.fromCsvRow(String row) {
     final cells = decodeTrainingRow(row, 5);
     if (cells.length != 5) {
       throw FormatException('Invalid move progress row: $row');

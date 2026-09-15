@@ -10,10 +10,10 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../utils/safe_change_notifier.dart';
+import 'board_engine.dart';
 import 'engine_serial_queue.dart';
 import 'stockfish_pool.dart';
-import 'board_engine.dart';
-import '../../utils/safe_change_notifier.dart';
 
 enum EngineState { off, idle, analyzing, generating }
 
@@ -30,14 +30,39 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     : _pool = pool ?? StockfishPool.instance,
       _board = board ?? BoardEngine.instance;
 
+  static const _toggleKey = 'engine_lifecycle.toggle_on';
+
+  /// When true, [toggleOn]/[toggleOff] skip pool I/O (unit tests only).
+  @visibleForTesting
+  static bool testMode = false;
+
   final StockfishPool _pool;
   final BoardEngine _board;
+  var _queue = EngineSerialQueue();
 
   EngineState _state = EngineState.off;
   EngineState get state => _state;
 
+  /// Whether the engine was on when generation was entered, so leaving
+  /// generation restores what the user's toggle implies.
   bool _toggleStateBeforeGeneration = false;
 
+  /// The user's persisted preference.  Only [toggleOn]/[toggleOff] (explicit
+  /// user actions) change it — [suspend] shuts the engine down without
+  /// touching it, so app-driven shutdowns (mode switch, app close) can't
+  /// masquerade as the user disabling the engine.
+  bool _userWantsEngine = true;
+
+  /// Number of background jobs currently borrowing the shared pool (e.g. a
+  /// tactics import). While positive, [suspend]/[toggleOff] cancel
+  /// interactive analysis but leave the pool's workers alive — disposing
+  /// them mid-import killed every search the job had in flight (the classic
+  /// repro: start a tactics import, visit the Repertoire tab, leave it).
+  int _poolLeases = 0;
+
+  Future<void> _serialExec(Future<void> Function() fn) => _queue.run(fn);
+
+  /// Notify now, or after the current frame when called mid-build.
   void _notifyListenersSafe() {
     if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
       notifyListeners();
@@ -45,22 +70,6 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
       WidgetsBinding.instance.addPostFrameCallback((_) => notifyListeners());
     }
   }
-
-  var _queue = EngineSerialQueue();
-
-  static const _toggleKey = 'engine_lifecycle.toggle_on';
-
-  /// When true, [toggleOn]/[toggleOff] skip pool I/O (unit tests only).
-  @visibleForTesting
-  static bool testMode = false;
-
-  Future<void> _serialExec(Future<void> Function() fn) => _queue.run(fn);
-
-  /// The user's persisted preference.  Only [toggleOn]/[toggleOff] (explicit
-  /// user actions) change it — [suspend] shuts the engine down without
-  /// touching it, so app-driven shutdowns (mode switch, app close) can't
-  /// masquerade as the user disabling the engine.
-  bool _userWantsEngine = true;
 
   /// Load persisted toggle state. Call once at app startup.
   ///
@@ -81,13 +90,6 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     _board.suspend();
     await _doShutdown();
   });
-
-  /// Number of background jobs currently borrowing the shared pool (e.g. a
-  /// tactics import). While positive, [suspend]/[toggleOff] cancel
-  /// interactive analysis but leave the pool's workers alive — disposing
-  /// them mid-import killed every search the job had in flight (the classic
-  /// repro: start a tactics import, visit the Repertoire tab, leave it).
-  int _poolLeases = 0;
 
   /// Mark the shared pool as in use by a background job. Pair every call
   /// with [releasePool] in a `finally`.
@@ -135,8 +137,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> _doShutdown() async {
-    if (_state == EngineState.off) return;
-    if (_state == EngineState.generating) return;
+    if (_state == EngineState.off || _state == EngineState.generating) return;
     _board.pauseAll();
     // A leased pool belongs to a running background job — leave its workers
     // alive. On app close the orphaned engines still exit on their own:
@@ -148,10 +149,9 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Called when the current FEN changes and state is idle/analyzing.
+  /// Called when the current FEN changes; only an idle engine starts analyzing.
   void onPositionChanged(String fen) {
-    if (_state == EngineState.off || _state == EngineState.generating) return;
-    if (_state == EngineState.analyzing) return;
+    if (_state != EngineState.idle) return;
     _state = EngineState.analyzing;
     _notifyListenersSafe();
   }
@@ -198,8 +198,7 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   Future<void> _doPauseGeneration() async {
     if (_state != EngineState.generating) return;
     _resumeBoard();
-    _state = _toggleStateBeforeGeneration ? EngineState.idle : EngineState.off;
-    notifyListeners();
+    _restoreToggleState();
   }
 
   /// Called when generation finishes or is cancelled.
@@ -210,6 +209,10 @@ class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
     // Interactive analysis no longer borrows the generation pool. Keep only
     // workers leased by another job after the build has ended.
     if (_poolLeases == 0) _pool.dispose();
+    _restoreToggleState();
+  }
+
+  void _restoreToggleState() {
     _state = _toggleStateBeforeGeneration ? EngineState.idle : EngineState.off;
     notifyListeners();
   }

@@ -7,7 +7,6 @@ import '../eval_cache.dart';
 import '../generation/generation_config.dart';
 import 'chessdb_api_provider.dart';
 import 'external_eval_provider.dart';
-import 'sqlite_eval_provider.dart';
 
 enum EvalChainSource {
   transposition,
@@ -19,10 +18,16 @@ enum EvalChainSource {
   stockfish,
 }
 
+/// What [resolveEvalChain] found, and where.
 class EvalChainOutcome {
   final EvalChainSource? source;
+
+  /// White-normalized centipawns, or null when no source answered.
   final int? whiteCp;
   final int depth;
+
+  /// The external-eval mode the caller's subtree should continue in: flips to
+  /// [ExtEvalMode.skipExternal] once every local database hard-missed.
   final ExtEvalMode extEvalMode;
 
   const EvalChainOutcome({
@@ -40,17 +45,17 @@ typedef StockfishEvalFn =
 
 /// Resolve an eval using the configured external-source chain.
 ///
-/// Returns [EvalChainOutcome] with [whiteCp] set when a source succeeds.
-/// [stockfishEval] is invoked only when earlier sources miss.
+/// Returns [EvalChainOutcome] with [EvalChainOutcome.whiteCp] set when a
+/// source succeeds. [stockfishEval] is invoked only when earlier sources
+/// miss; [cacheWrite] persists every external or engine answer.
 Future<EvalChainOutcome> resolveEvalChain({
   required String fen,
   required TreeBuildConfig config,
   required EvalCache cache,
   required BuildStats stats,
-  SqliteEvalProvider? localChessDb,
+  ExternalEvalProvider? localChessDb,
   ExternalEvalProvider? cdbDirect,
   ExternalEvalProvider? lichessEvals,
-  ExternalEvalProvider? localEvalProvider,
   ChessDbApiProvider? chessDbApi,
   ExtEvalMode extEvalMode = ExtEvalMode.none,
   BuildTreeNode? canonicalNode,
@@ -79,15 +84,12 @@ Future<EvalChainOutcome> resolveEvalChain({
     );
   }
 
-  if (canonicalNode != null && canonicalNode.hasEngineEval) {
+  final canonicalCp = canonicalNode?.engineEvalCp;
+  if (canonicalCp != null) {
     stats.transpositionEvalHits++;
-    final isWhiteStm = isWhiteToMove(fen);
-    final whiteCp = isWhiteStm
-        ? canonicalNode.engineEvalCp!
-        : -canonicalNode.engineEvalCp!;
     return EvalChainOutcome(
       source: EvalChainSource.transposition,
-      whiteCp: whiteCp,
+      whiteCp: isWhiteToMove(fen) ? canonicalCp : -canonicalCp,
       depth: config.evalDepth,
       extEvalMode: mode,
     );
@@ -107,45 +109,36 @@ Future<EvalChainOutcome> resolveEvalChain({
   }
   stats.dbEvalMisses++;
 
+  final consultExternal = mode != ExtEvalMode.skipExternal;
   var localHardMiss = false;
-  var localHit = false;
 
-  if (mode != ExtEvalMode.skipExternal &&
-      config.enableCdbDirect &&
-      cdbDirect != null) {
-    final cdb = await cdbDirect.lookup(fen, minDepth: minDepth);
-    if (cdb.isHit) {
-      stats.cdbDirectHits++;
-      localHit = true;
-      return recordHit(EvalChainSource.cdbDirect, cdb.hit!);
-    }
-    if (cdb.shallow) {
-      stats.cdbDirectShallow++;
-    } else if (cdb.hardMiss) {
-      stats.cdbDirectHardMisses++;
-      localHardMiss = true;
-    } else {
-      stats.cdbDirectMisses++;
+  if (consultExternal && config.enableCdbDirect && cdbDirect != null) {
+    switch (await cdbDirect.lookup(fen, minDepth: minDepth)) {
+      case EvalLookupHit(:final hit):
+        stats.cdbDirectHits++;
+        return recordHit(EvalChainSource.cdbDirect, hit);
+      case EvalLookupShallow():
+        stats.cdbDirectShallow++;
+      case EvalLookupHardMiss():
+        stats.cdbDirectHardMisses++;
+        localHardMiss = true;
+      case EvalLookupMiss():
+        stats.cdbDirectMisses++;
     }
   }
 
-  if (mode != ExtEvalMode.skipExternal &&
-      config.enableLocalChessDb &&
-      (localChessDb != null || localEvalProvider != null)) {
-    final localSource = localEvalProvider ?? localChessDb!;
-    final local = await localSource.lookup(fen, minDepth: minDepth);
-    if (local.isHit) {
-      stats.localChessDbHits++;
-      localHit = true;
-      return recordHit(EvalChainSource.localChessDb, local.hit!);
-    }
-    if (local.shallow) {
-      stats.localChessDbShallow++;
-    } else if (local.hardMiss) {
-      stats.localChessDbHardMisses++;
-      localHardMiss = true;
-    } else {
-      stats.localChessDbMisses++;
+  if (consultExternal && config.enableLocalChessDb && localChessDb != null) {
+    switch (await localChessDb.lookup(fen, minDepth: minDepth)) {
+      case EvalLookupHit(:final hit):
+        stats.localChessDbHits++;
+        return recordHit(EvalChainSource.localChessDb, hit);
+      case EvalLookupShallow():
+        stats.localChessDbShallow++;
+      case EvalLookupHardMiss():
+        stats.localChessDbHardMisses++;
+        localHardMiss = true;
+      case EvalLookupMiss():
+        stats.localChessDbMisses++;
     }
   }
 
@@ -153,22 +146,19 @@ Future<EvalChainOutcome> resolveEvalChain({
   // it answers last among the local sources and — unlike them — a miss here
   // says nothing about the subtree, which is why it stays out of the
   // hard-miss bookkeeping below.
-  if (mode != ExtEvalMode.skipExternal &&
-      config.enableLichessEvals &&
-      lichessEvals != null) {
-    final hit = await lichessEvals.lookup(fen, minDepth: minDepth);
-    if (hit.isHit) {
-      stats.lichessEvalHits++;
-      return recordHit(EvalChainSource.lichessEvals, hit.hit!);
-    }
-    if (hit.shallow) {
-      stats.lichessEvalShallow++;
-    } else {
-      stats.lichessEvalMisses++;
+  if (consultExternal && config.enableLichessEvals && lichessEvals != null) {
+    switch (await lichessEvals.lookup(fen, minDepth: minDepth)) {
+      case EvalLookupHit(:final hit):
+        stats.lichessEvalHits++;
+        return recordHit(EvalChainSource.lichessEvals, hit);
+      case EvalLookupShallow():
+        stats.lichessEvalShallow++;
+      case EvalLookupHardMiss() || EvalLookupMiss():
+        stats.lichessEvalMisses++;
     }
   }
 
-  if (localHardMiss && !localHit && config.enableExtEvalSubtreeSkip) {
+  if (localHardMiss && config.enableExtEvalSubtreeSkip) {
     mode = ExtEvalMode.skipExternal;
     stats.extEvalSubtreeSkips++;
   }
@@ -179,15 +169,14 @@ Future<EvalChainOutcome> resolveEvalChain({
     if (!chessDbApi.quotaRemaining) {
       stats.chessDbApiQuotaBlocked++;
     } else {
-      final api = await chessDbApi.lookup(fen, minDepth: minDepth);
-      if (api.isHit) {
-        stats.chessDbApiHits++;
-        return recordHit(EvalChainSource.chessDbApi, api.hit!);
-      }
-      if (api.shallow) {
-        stats.chessDbApiShallow++;
-      } else {
-        stats.chessDbApiMisses++;
+      switch (await chessDbApi.lookup(fen, minDepth: minDepth)) {
+        case EvalLookupHit(:final hit):
+          stats.chessDbApiHits++;
+          return recordHit(EvalChainSource.chessDbApi, hit);
+        case EvalLookupShallow():
+          stats.chessDbApiShallow++;
+        case EvalLookupHardMiss() || EvalLookupMiss():
+          stats.chessDbApiMisses++;
       }
     }
   }
@@ -198,8 +187,7 @@ Future<EvalChainOutcome> resolveEvalChain({
 
   final sf = await stockfishEval(fen, config.evalDepth);
   stats.sfSingleCalls++;
-  final isWhiteStm = isWhiteToMove(fen);
-  final whiteCp = isWhiteStm ? sf.stmCp : -sf.stmCp;
+  final whiteCp = isWhiteToMove(fen) ? sf.stmCp : -sf.stmCp;
   await cacheWrite?.call(fen, whiteCp, sf.depth);
 
   return EvalChainOutcome(

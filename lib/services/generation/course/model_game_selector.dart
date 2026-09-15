@@ -180,9 +180,10 @@ class ModelGameSelector {
     if (improvedFens.isNotEmpty) {
       final improved = [
         for (final g in candidates)
-          if (g.departure != null &&
-              g.departure!.kind == DepartureKind.ours &&
-              improvedFens.contains(g.departure!.fenBefore))
+          if (g.departure case ModelGameDeparture(
+            kind: DepartureKind.ours,
+            :final fenBefore,
+          ) when improvedFens.contains(fenBefore))
             g,
       ];
       final reserve = limit ~/ 2 < 1 ? 1 : limit ~/ 2;
@@ -269,13 +270,7 @@ class ModelGameSelector {
       final resolved = resolveTransposition(node, fenMap);
       final isOurTurn = resolved.isWhiteToMove == playAsWhite;
 
-      BuildTreeNode? next;
-      for (final child in resolved.children) {
-        if (child.moveSan == san) {
-          next = child;
-          break;
-        }
-      }
+      final next = _childPlaying(resolved, san);
       final stays = next != null && (!isOurTurn || next.isRepertoireMove);
       if (!stays) {
         return (followed, _departure(resolved, followed, san, fenMap));
@@ -284,6 +279,13 @@ class ModelGameSelector {
       followed++;
     }
     return (followed, null);
+  }
+
+  static BuildTreeNode? _childPlaying(BuildTreeNode node, String san) {
+    for (final child in node.children) {
+      if (child.moveSan == san) return child;
+    }
+    return null;
   }
 
   ModelGameDeparture? _departure(

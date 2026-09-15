@@ -8,7 +8,8 @@
 /// top-level so batches can run through `compute`.
 library;
 
-import '../../../services/game_analysis_controller.dart';
+import '../../../services/game_eval_annotations.dart';
+import '../../../services/move_eval.dart';
 
 /// One of my classified mistakes, with enough to draw it and open it: the
 /// position it was played in, the move, and what the engine wanted instead

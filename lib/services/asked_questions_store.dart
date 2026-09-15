@@ -59,10 +59,10 @@ class AskedQuestionAnswer {
     this.note,
   });
 
-  Map<String, dynamic> toJson() => {
+  Map<String, Object?> toJson() => {
     'answer': answer,
     'askedUtc': askedUtc.toIso8601String(),
-    if (note != null && note!.isNotEmpty) 'note': note,
+    if (note case final note? when note.isNotEmpty) 'note': note,
   };
 
   static AskedQuestionAnswer? fromJson(Object? raw) {

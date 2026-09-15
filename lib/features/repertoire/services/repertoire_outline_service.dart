@@ -426,7 +426,7 @@ class RepertoireOutlineService {
         }
       }
     }
-    final landed = await _repertoire.moveGamesTo(
+    final landed = await _repertoire.files.moveGamesTo(
       fromPath: fromChapterPath,
       gameIndexes: gameIndexes,
       toPath: toChapterPath,
@@ -458,9 +458,9 @@ class RepertoireOutlineService {
     String chapterPath,
     Set<int> gameIndexes,
   ) async {
-    final removed = await _repertoire.readGameTextsAt(chapterPath, gameIndexes);
+    final removed = await _repertoire.files.readGameTextsAt(chapterPath, gameIndexes);
     if (removed == null || removed.isEmpty) return const [];
-    await _repertoire.deleteLinesAt(chapterPath, gameIndexes);
+    await _repertoire.files.deleteLinesAt(chapterPath, gameIndexes);
     _lineCache.remove(chapterPath);
     return removed;
   }
@@ -470,7 +470,7 @@ class RepertoireOutlineService {
     String chapterPath,
     List<({int index, String text})> lines,
   ) async {
-    await _repertoire.insertGameTextsAt(chapterPath, lines);
+    await _repertoire.files.insertGameTextsAt(chapterPath, lines);
     _lineCache.remove(chapterPath);
   }
 
@@ -479,7 +479,7 @@ class RepertoireOutlineService {
     int gameIndex,
     String newName,
   ) async {
-    final ok = await _repertoire.updateGameTitleAt(
+    final ok = await _repertoire.files.updateGameTitleAt(
       chapterPath,
       gameIndex,
       newName,
@@ -489,7 +489,7 @@ class RepertoireOutlineService {
   }
 
   Future<bool> deleteLine(String chapterPath, int gameIndex) async {
-    final ok = await _repertoire.deleteGameAt(chapterPath, gameIndex);
+    final ok = await _repertoire.files.deleteGameAt(chapterPath, gameIndex);
     _lineCache.remove(chapterPath);
     return ok;
   }

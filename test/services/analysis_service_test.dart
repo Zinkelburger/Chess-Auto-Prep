@@ -95,7 +95,7 @@ void main() {
         expect(results['d2d4']!.scoreCp, -15);
 
         final status = service.poolStatus.value;
-        expect(status.phase, 'complete');
+        expect(status.phase, PoolPhase.complete);
         expect(status.totalMoves, 2);
         expect(status.completedMoves, 2);
         expect(status.evaluatingUcis, isEmpty);
@@ -185,7 +185,7 @@ void main() {
         moveUcis: const [],
         evalDepth: 12,
       );
-      expect(service.poolStatus.value.phase, 'complete');
+      expect(service.poolStatus.value.phase, PoolPhase.complete);
       expect(service.poolStatus.value.totalMoves, 0);
       expect(engine.commands.where((c) => c.startsWith('go ')), isEmpty);
     });
@@ -240,7 +240,7 @@ void main() {
           hasLength(1),
           reason: 'the queue was dropped',
         );
-        expect(service.poolStatus.value.phase, 'idle');
+        expect(service.poolStatus.value.phase, PoolPhase.idle);
         expect(service.poolStatus.value.evaluatingUcis, isEmpty);
       },
     );
@@ -265,7 +265,7 @@ void main() {
       expect(result.lines.map((l) => l.pvNumber), [1, 2]);
       expect(result.depth, 18);
       expect(identical(service.discoveryResult.value, result), isTrue);
-      expect(service.poolStatus.value.phase, 'discovering');
+      expect(service.poolStatus.value.phase, PoolPhase.discovering);
       expect(service.poolStatus.value.discoveryDepth, 18);
     });
 
@@ -316,7 +316,7 @@ void main() {
       );
       expect(result.lines, isEmpty);
       expect(service.discoveryResult.value.lines, isEmpty);
-      expect(service.poolStatus.value.phase, 'idle');
+      expect(service.poolStatus.value.phase, PoolPhase.idle);
     });
   });
 }

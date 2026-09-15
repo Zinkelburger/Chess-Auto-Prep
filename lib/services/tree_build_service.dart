@@ -17,9 +17,10 @@ import 'dart:convert';
 
 import '../models/build_tree_node.dart';
 import '../utils/fen_utils.dart';
-import 'engine/stockfish_pool.dart';
-import 'engine/engine_lifecycle.dart';
 import 'engine/engine_interrupt.dart';
+import 'engine/engine_lifecycle.dart';
+import 'engine/stockfish_pool.dart';
+import 'coverage_sweep.dart';
 import 'eval/chessdb_api_provider.dart';
 import 'generation/build_run.dart';
 import 'generation/fen_map.dart';
@@ -27,22 +28,19 @@ import 'generation/frontier_queue.dart';
 import 'generation/generation_config.dart';
 import 'generation/lanes.dart';
 import 'generation/node_expander.dart';
-import 'generation/opponent_prior.dart';
 import 'generation/pgn_freq_map.dart';
-import 'generation/pgn_freq_parser.dart';
+import 'generation/pure_tree_builder.dart';
 import 'generation/run_debug_dump.dart';
 import 'generation/tree_build_progress.dart';
-import 'jobs/generation_phase.dart';
 import 'generation/tree_eval_resolver.dart';
 import 'generation/tree_prune.dart';
-import 'generation/pure_tree_builder.dart';
+import 'jobs/generation_phase.dart';
 import 'master_games/master_games_db.dart' show BookLookup;
-
+import 'tree_build_db_explorer.dart';
+import 'tree_build_gates.dart';
 import 'tree_build_types.dart';
 
 export 'tree_build_types.dart' show BuildCancelledException;
-
-part 'tree_build_db_explorer.dart';
 
 class TreeBuildService {
   final StockfishPool _pool = StockfishPool.instance;
@@ -194,6 +192,23 @@ class TreeBuildService {
     return run;
   }
 
+  /// A fresh tree holding only [config]'s start position, and the id the
+  /// next node takes.
+  static (BuildTree, int nextNodeId) _newTree(TreeBuildConfig config) {
+    final rootFen = config.startFen;
+    final root = BuildTreeNode(
+      fen: rootFen,
+      moveSan: '',
+      moveUci: '',
+      ply: 0,
+      isWhiteToMove: isWhiteToMove(rootFen),
+      nodeId: 1,
+    );
+    final tree = BuildTree(root: root, configSnapshot: config.toJson());
+    tree.registerNode(root);
+    return (tree, 2);
+  }
+
   // ── Public API ─────────────────────────────────────────────────────────
 
   /// Phase 1 build.  [isCancelled] is the hard-cancel signal (the tree stays
@@ -220,18 +235,7 @@ class TreeBuildService {
         tree.computeMetadata();
       }
     } else {
-      nextNodeId = 1;
-      final rootFen = config.startFen;
-      final root = BuildTreeNode(
-        fen: rootFen,
-        moveSan: '',
-        moveUci: '',
-        ply: 0,
-        isWhiteToMove: isWhiteToMove(rootFen),
-        nodeId: nextNodeId++,
-      );
-      tree = BuildTree(root: root, configSnapshot: config.toJson());
-      tree.registerNode(root);
+      (tree, nextNodeId) = _newTree(config);
     }
 
     final run = _startRun(
@@ -354,29 +358,125 @@ class TreeBuildService {
     }
   }
 
+  /// Build a tree by parsing PGN files into a frequency map, then BFS-
+  /// expanding from the root using move frequencies.  Matches C
+  /// `tree_build_from_freqmap` + `tree_enrich_evals`; the phases live in
+  /// [DbExplorerTreeBuilder].
+  ///
+  /// [finishNow] stops the BFS expansion early but does NOT skip eval
+  /// enrichment or the coverage sweep — a finished-early tree still gets
+  /// evals so downstream selection has something to work with.  Throws
+  /// [BuildCancelledException] when hard-cancelled during PGN parsing.
+  Future<BuildTree> buildFromPgnFreqMap({
+    required TreeBuildConfig config,
+    required bool Function() isCancelled,
+    required void Function(BuildProgress) onProgress,
+    bool Function()? finishNow,
+    void Function(String status, GenerationPhase phase)? onStatusChanged,
+    String? startMoves,
+  }) async {
+    if (config.pgnFilePaths.isEmpty) {
+      throw StateError('DB Explorer requires at least one PGN file.');
+    }
+
+    // Synchronous prologue — see _startRun for why.
+    final (tree, nextNodeId) = _newTree(config);
+    tree.root.cumulativeProbability = 1.0;
+    tree.root.searchPriority = 1.0;
+
+    final run = _startRun(
+      config: config,
+      tree: tree,
+      fenMap: FenMap(),
+      isCancelled: isCancelled,
+      finishNow: finishNow ?? () => false,
+      onProgress: onProgress,
+      nextNodeId: nextNodeId,
+    );
+    _log('DB Explorer start: config=${jsonEncode(config.toJson())}');
+    final explorer = DbExplorerTreeBuilder(run);
+
+    try {
+      onStatusChanged?.call('Parsing PGN files...', GenerationPhase.parsingPgn);
+      final (freqMap, freqStats) = await explorer.parseGames(
+        startMoves: startMoves,
+      );
+      lastGameDatabase = freqMap;
+
+      onStatusChanged?.call(
+        'Building tree from ${freqStats.totalGames} games, '
+        '${freqStats.positions} positions...',
+        GenerationPhase.buildingTree,
+      );
+      await explorer.expand(freqMap);
+
+      // Eval enrichment runs on finish-now too — a tree without evals is
+      // useless to the selection phases downstream.
+      if (!run.isCancelled) {
+        onStatusChanged?.call(
+          'Enriching evals (${tree.totalNodes} nodes)...',
+          GenerationPhase.enrichingEvals,
+        );
+
+        await _evalResolver.evalCache.init();
+        await _evalResolver.initProviders(config);
+
+        if ((config.usesStockfish || config.needsStockfish) &&
+            EngineLifecycle.instance.state != EngineState.generating) {
+          await _pool.prepareForTreeBuild(config.resolvedEngineThreads);
+        }
+
+        try {
+          await explorer.enrichEvals();
+          // After enrichment the engine is available, so holes where the
+          // user's games ran out can get an engine answer.
+          if (!run.isCancelled) {
+            await _coverageSweep(run, NodeExpander.forRun(run));
+          }
+        } finally {
+          run.fenMap.clear();
+          await _evalResolver.teardownProviders();
+        }
+      }
+
+      _log(
+        'DB Explorer complete: ${tree.totalNodes} nodes, '
+        '${run.stopwatch.elapsedMilliseconds}ms',
+      );
+      _log('Stats: ${jsonEncode(_stats.toJson())}');
+
+      return tree;
+    } on Object catch (e) {
+      if (run.isCancelled && isEngineInterrupt(e)) {
+        tree.buildComplete = false;
+        return tree;
+      }
+      rethrow;
+    } finally {
+      _isBuilding = false;
+      run.stopwatch.stop();
+    }
+  }
+
   // ── BFS build loop ─────────────────────────────────────────────────────
 
   /// Collect frontier leaves for resume — matches C `resume_prepare_frontier`.
+  ///
+  /// A node still awaiting expansion is a frontier leaf whether or not it
+  /// already has children (a partial expansion); nothing below it is walked.
   static (List<BuildTreeNode> frontier, int minPly) prepareResumeFrontier(
     BuildTreeNode root,
   ) {
     final frontier = <BuildTreeNode>[];
     var minPly = _frontierMinPlySentinel;
     void walk(BuildTreeNode node) {
-      if (node.children.isNotEmpty) {
-        if (!node.explored) {
-          frontier.add(node);
-          if (node.ply < minPly) minPly = node.ply;
-          return;
-        }
-        for (final child in node.children) {
-          walk(child);
-        }
-        return;
-      }
       if (!node.explored) {
         frontier.add(node);
         if (node.ply < minPly) minPly = node.ply;
+        return;
+      }
+      for (final child in node.children) {
+        walk(child);
       }
     }
 
@@ -470,50 +570,6 @@ class TreeBuildService {
     await Future.wait([for (var i = 0; i < run.expansionLanes; i++) lane()]);
   }
 
-  /// Below-floor check shared by the main loop and the DB-explorer loop:
-  /// discounted our-move alternatives whose priority fell below the floor
-  /// are not worth budget (searchPriority ≤ cumulativeProbability always).
-  static bool _belowSearchFloor(BuildTreeNode node, TreeBuildConfig config) {
-    return node.cumulativeProbability < config.minProbability ||
-        (config.bestFirst &&
-            node.searchPriority >= 0.0 &&
-            node.searchPriority < config.minProbability);
-  }
-
-  /// Transposition detection: when [node]'s position is already expanded
-  /// elsewhere, register [node] as a transposition leaf (adding its reach
-  /// probability to the canonical subtree) and return true.
-  /// Otherwise register [node] as the canonical expansion and return false.
-  static bool _resolveTranspositionOrRegister(
-    BuildRun run,
-    BuildTreeNode node,
-    FrontierQueue queue,
-  ) {
-    final canonical = run.fenMap.getCanonical(node.fen);
-    // A node that already holds children (a resumed partial expansion) must
-    // not become a transposition leaf: [resolveTransposition] only redirects
-    // childless nodes, so its partial subtree would shadow the canonical one.
-    // It re-expands instead, as before the table was seeded on resume.
-    if (canonical != null &&
-        !identical(canonical, node) &&
-        node.children.isEmpty) {
-      // A second way into the position: its reach is the sum of both.
-      if (run.fenMap.addTransposition(node.fen, node)) {
-        addArrivalCumP(
-          canonical,
-          node.cumulativeProbability,
-          run.config.minProbability,
-          queue,
-          fenMap: run.fenMap,
-        );
-      }
-      run.markExplored(node);
-      return true;
-    }
-    run.fenMap.putCanonical(node.fen, node);
-    return false;
-  }
-
   Future<void> _processBuildNode({
     required BuildRun run,
     required BuildTreeNode node,
@@ -559,7 +615,7 @@ class TreeBuildService {
       }
       coverageOnly = true;
     }
-    if (_belowSearchFloor(node, config) && !coverageOnly) {
+    if (run.belowSearchFloor(node) && !coverageOnly) {
       if (!owesAnswer) return;
       coverageOnly = true;
     }
@@ -604,8 +660,7 @@ class TreeBuildService {
       }
     }
 
-    // Transposition detection
-    if (_resolveTranspositionOrRegister(run, node, queue)) return;
+    if (run.resolveTranspositionOrRegister(node, queue)) return;
 
     if (isOurMove) {
       await expander.expandOurMove(node, queue, coverageOnly: coverageOnly);
@@ -635,158 +690,10 @@ class TreeBuildService {
     }
   }
 
-  // ── Coverage sweep: no silent holes ─────────────────────────────────────
-
-  /// End-of-build guarantee: every our-turn node in the final tree has at
-  /// least one answer, carries an explicit pruneReason, or transposes to an
-  /// answered position.  Dangling our-turn leaves (left by the node budget,
-  /// the search floor, or maxPly parity) whose incoming opponent move clears
-  /// [TreeBuildConfig.coverMinProb] get a coverage-only expansion; the rest
-  /// are removed so their mass returns honestly to the expectimax tail term
-  /// instead of ending exported lines on an unanswered opponent move.
-  ///
-  /// Returns the number of holes closed (answered + removed).
-  Future<int> _coverageSweep(BuildRun run, NodeExpander expander) async {
-    final tree = run.tree;
-    final config = run.config;
-    if (config.coverMinProb <= 0.0) return 0;
-
-    final dangling = <BuildTreeNode>[];
-    void collect(BuildTreeNode node) {
-      for (final child in node.children) {
-        collect(child);
-      }
-      if (node.ply == 0 || node.children.isNotEmpty) return;
-      if (node.isWhiteToMove != config.playAsWhite) return; // tail-covered
-      if (node.pruneReason != PruneReason.none) return; // explicit prune
-      dangling.add(node);
-    }
-
-    collect(tree.root);
-    if (dangling.isEmpty) return 0;
-
-    // One expansion per position: group duplicates so the answer lands on
-    // the canonical node and transposition leaves resolve through it.
-    final groups = <String, List<BuildTreeNode>>{};
-    for (final n in dangling) {
-      (groups[canonicalizeFen(n.fen)] ??= []).add(n);
-    }
-
-    final tally = _SweepTally();
-    final throwawayQueue = FrontierQueue(bestFirst: false);
-
-    // Holes are independent positions, so they are answered [expansionLanes]
-    // at a time: one recorded run swept 152 minutes for 4,590 holes, one
-    // MultiPV search after another on a single worker.
-    await runLanes(
-      groups.values.toList(),
-      lanes: run.expansionLanes,
-      stop: () => run.isCancelled,
-      task: (group) => _sweepGroup(run, expander, group, throwawayQueue, tally),
-    );
-
-    lastRemovedUncovered = tally.removedLines;
-    if (tally.answered > 0 || tally.removed > 0) {
-      _log(
-        'Coverage sweep: ${tally.answered} holes answered, '
-        '${tally.removed} uncovered leaves removed'
-        '${tally.outOfTime > 0 ? ', ${tally.outOfTime} left unanswered (out of time)' : ''}',
-      );
-    }
-    return tally.answered + tally.removed;
+  /// The coverage sweep (see [CoverageSweep]), recording what it removed in
+  /// [lastRemovedUncovered].
+  Future<void> _coverageSweep(BuildRun run, NodeExpander expander) async {
+    final result = await CoverageSweep(run, expander).sweep();
+    lastRemovedUncovered = result.removedLines;
   }
-
-  /// Answer or remove one equivalence group of dangling our-turn leaves.
-  Future<void> _sweepGroup(
-    BuildRun run,
-    NodeExpander expander,
-    List<BuildTreeNode> group,
-    FrontierQueue throwawayQueue,
-    _SweepTally tally,
-  ) async {
-    final config = run.config;
-    await waitIfPaused();
-    if (run.isCancelled) return;
-    // Past the budget's sweep grace we stop *answering* holes but keep
-    // walking, so the leaves we never got to are still removed rather than
-    // left dangling on an unanswered opponent move.
-    final graced = !run.sweepBudgetExhausted;
-
-    final canonical = run.fenMap.getCanonical(group.first.fen);
-    if (canonical != null && !group.contains(canonical)) {
-      // The position lives elsewhere in the tree: answered there, or
-      // explicitly pruned there — these leaves resolve via transposition.
-      if (canonical.children.isNotEmpty ||
-          canonical.pruneReason != PruneReason.none) {
-        return;
-      }
-    }
-
-    // Representative: the registered canonical when it dangles here,
-    // else the most-reachable member (registered for future resolution).
-    final rep = (canonical != null && group.contains(canonical))
-        ? canonical
-        : (group..sort(
-                (a, b) =>
-                    b.cumulativeProbability.compareTo(a.cumulativeProbability),
-              ))
-              .first;
-    run.fenMap.putCanonical(rep.fen, rep);
-
-    // The hole is worth answering if any path into this position carries
-    // an opponent move at/above the coverage floor.
-    var maxProb = 0.0;
-    for (final n in group) {
-      if (n.moveProbability > maxProb) maxProb = n.moveProbability;
-    }
-    for (final t in run.fenMap.getTranspositions(rep.fen)) {
-      if (t.moveProbability > maxProb) maxProb = t.moveProbability;
-    }
-
-    final worthAnswering = maxProb >= config.coverMinProb;
-    if (worthAnswering && !graced) tally.outOfTime++;
-    if (worthAnswering && graced) {
-      final canExpand =
-          config.buildMode == BuildMode.maiaDbExplore || _pool.workerCount > 0;
-      if (config.buildMode == BuildMode.maiaDbExplore) {
-        await _evalResolver.ensureEval(
-          rep,
-          config,
-          fenMap: run.fenMap,
-          pool: _pool,
-          dbOnly: true,
-        );
-      }
-      if (canExpand) {
-        await expander.expandOurMove(rep, throwawayQueue, coverageOnly: true);
-      }
-      run.markExplored(rep);
-      if (rep.children.isNotEmpty) {
-        tally.answered++;
-        return; // duplicates resolve via transposition
-      }
-      // Now explicitly flagged (eval window) — keep, it's not silent.
-      if (rep.pruneReason != PruneReason.none) return;
-    }
-
-    // Below the floor, or the expansion produced no answer: remove the
-    // whole equivalence group so no line ends on an unanswered move.
-    for (final n in group) {
-      tally.removedLines.add(PrunedLine.fromNode(n));
-      run.removeLeaf(n);
-      tally.removed++;
-    }
-  }
-
-  bool _fenKeysEqual(String fenA, String fenB) {
-    return canonicalizeFen(fenA) == canonicalizeFen(fenB);
-  }
-}
-
-/// Counters the coverage sweep's lanes share.
-class _SweepTally {
-  int answered = 0;
-  int removed = 0;
-  int outOfTime = 0;
-  final List<PrunedLine> removedLines = [];
 }

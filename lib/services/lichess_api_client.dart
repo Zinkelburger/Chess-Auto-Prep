@@ -21,12 +21,8 @@ import 'package:http/http.dart' as http;
 import '../models/explorer_response.dart';
 import 'lichess_auth_service.dart';
 
-class _SlotWaitInfo {
-  final int backoffMs;
-  final int politenessMs;
-
-  const _SlotWaitInfo({required this.backoffMs, required this.politenessMs});
-}
+/// How long [_waitForSlot] held a request back, for the profiling log.
+typedef _SlotWait = ({int backoffMs, int politenessMs});
 
 class LichessApiClient {
   // ── Singleton (main thread) ─────────────────────────────────────────
@@ -58,6 +54,12 @@ class LichessApiClient {
   static const Duration politenessDelay = Duration(milliseconds: 100);
   static const int defaultMaxRetries = 3;
   static const int _baseBackoffSeconds = 60;
+
+  /// Pause before retrying a request that failed with a transport error.
+  static const Duration _transientRetryDelay = Duration(seconds: 2);
+
+  static const String _explorerHost = 'https://explorer.lichess.ovh';
+  static const String _siteHost = 'https://lichess.org';
 
   // ── State ───────────────────────────────────────────────────────────
 
@@ -99,8 +101,9 @@ class LichessApiClient {
   void _profile(String message) {
     if (!_profilingEnabled) return;
     final line = '[LichessProfile] $message';
-    if (_profilingLogger != null) {
-      _profilingLogger!(line);
+    final logger = _profilingLogger;
+    if (logger != null) {
+      logger(line);
     } else if (kDebugMode) {
       debugPrint(line);
     }
@@ -114,19 +117,17 @@ class LichessApiClient {
     if (_useAuthService) {
       return LichessAuthService.instance.getHeaders(extra);
     }
-    final headers = <String, String>{};
-    if (extra != null) headers.addAll(extra);
-    if (_authToken != null) {
-      headers['Authorization'] = 'Bearer $_authToken';
-    }
-    return headers;
+    return {
+      ...?extra,
+      if (_authToken != null) 'Authorization': 'Bearer $_authToken',
+    };
   }
 
   // ── Rate-limit gate ─────────────────────────────────────────────────
 
-  Future<_SlotWaitInfo> _waitForSlot() async {
-    int backoffMs = 0;
-    int politenessMs = 0;
+  Future<_SlotWait> _waitForSlot() async {
+    var backoffMs = 0;
+    var politenessMs = 0;
 
     // Honour any active 429 backoff window.
     final now = DateTime.now();
@@ -136,7 +137,7 @@ class LichessApiClient {
       if (kDebugMode) {
         debugPrint('[LichessAPI] Backoff active — waiting ${wait.inSeconds}s');
       }
-      await Future.delayed(wait);
+      await Future<void>.delayed(wait);
     }
 
     // Polite inter-request delay.
@@ -144,10 +145,10 @@ class LichessApiClient {
     if (gap < politenessDelay) {
       final wait = politenessDelay - gap;
       politenessMs = wait.inMilliseconds;
-      await Future.delayed(wait);
+      await Future<void>.delayed(wait);
     }
     _lastRequestTime = DateTime.now();
-    return _SlotWaitInfo(backoffMs: backoffMs, politenessMs: politenessMs);
+    return (backoffMs: backoffMs, politenessMs: politenessMs);
   }
 
   void _handle429(int attempt, int maxRetries, http.Response response) {
@@ -172,61 +173,12 @@ class LichessApiClient {
     Uri url, {
     Map<String, String>? extraHeaders,
     int maxRetries = defaultMaxRetries,
-  }) async {
-    final opSw = Stopwatch()..start();
-    for (int attempt = 0; attempt <= maxRetries; attempt++) {
-      final attemptSw = Stopwatch()..start();
-      final waitInfo = await _waitForSlot();
-      final afterWaitMs = attemptSw.elapsedMilliseconds;
-
-      try {
-        final headerSw = Stopwatch()..start();
-        final headers = await _resolveHeaders(extraHeaders);
-        final headerMs = headerSw.elapsedMilliseconds;
-
-        final netSw = Stopwatch()..start();
-        final response = await _httpClient.get(url, headers: headers);
-        final netMs = netSw.elapsedMilliseconds;
-        _profile(
-          'GET attempt=${attempt + 1}/${maxRetries + 1} '
-          'status=${response.statusCode} '
-          'wait=${afterWaitMs}ms(backoff=${waitInfo.backoffMs}ms,'
-          'polite=${waitInfo.politenessMs}ms) '
-          'headers=${headerMs}ms net=${netMs}ms '
-          'attemptTotal=${attemptSw.elapsedMilliseconds}ms',
-        );
-
-        if (response.statusCode == 429) {
-          _handle429(attempt, maxRetries, response);
-          if (attempt < maxRetries) continue;
-          _profile(
-            'GET exhausted after 429 '
-            'total=${opSw.elapsedMilliseconds}ms',
-          );
-          return null;
-        }
-
-        _profile('GET done total=${opSw.elapsedMilliseconds}ms');
-        return response;
-      } catch (e) {
-        _profile(
-          'GET error attempt=${attempt + 1}/${maxRetries + 1} '
-          'elapsed=${attemptSw.elapsedMilliseconds}ms err=$e',
-        );
-        if (kDebugMode) {
-          debugPrint('[LichessAPI] GET error (attempt ${attempt + 1}): $e');
-        }
-        if (attempt < maxRetries) {
-          await Future.delayed(const Duration(seconds: 2));
-          _profile('GET retry sleep=2000ms');
-          continue;
-        }
-        _profile('GET failed total=${opSw.elapsedMilliseconds}ms');
-        return null;
-      }
-    }
-    return null;
-  }
+  }) => _sendWithRetries(
+    'GET',
+    extraHeaders: extraHeaders,
+    maxRetries: maxRetries,
+    send: (headers) => _httpClient.get(url, headers: headers),
+  );
 
   /// HTTP POST with automatic rate-limiting and retries.
   ///
@@ -237,29 +189,43 @@ class LichessApiClient {
     Object? body,
     Map<String, String>? extraHeaders,
     int maxRetries = defaultMaxRetries,
+  }) => _sendWithRetries(
+    'POST',
+    extraHeaders: extraHeaders,
+    maxRetries: maxRetries,
+    send: (headers) => _httpClient.post(url, headers: headers, body: body),
+  );
+
+  /// The retry loop shared by every verb: wait for a slot, resolve headers,
+  /// [send], back off on 429 and sleep briefly on a transport error.  Null
+  /// once `maxRetries + 1` attempts are spent.  [method] only labels the
+  /// profiling log.
+  Future<http.Response?> _sendWithRetries(
+    String method, {
+    required Map<String, String>? extraHeaders,
+    required int maxRetries,
+    required Future<http.Response> Function(Map<String, String> headers) send,
   }) async {
+    final totalAttempts = maxRetries + 1;
     final opSw = Stopwatch()..start();
-    for (int attempt = 0; attempt <= maxRetries; attempt++) {
+    for (var attempt = 0; attempt <= maxRetries; attempt++) {
       final attemptSw = Stopwatch()..start();
-      final waitInfo = await _waitForSlot();
+      final waited = await _waitForSlot();
       final afterWaitMs = attemptSw.elapsedMilliseconds;
 
       try {
         final headerSw = Stopwatch()..start();
         final headers = await _resolveHeaders(extraHeaders);
         final headerMs = headerSw.elapsedMilliseconds;
+
         final netSw = Stopwatch()..start();
-        final response = await _httpClient.post(
-          url,
-          headers: headers,
-          body: body,
-        );
+        final response = await send(headers);
         final netMs = netSw.elapsedMilliseconds;
         _profile(
-          'POST attempt=${attempt + 1}/${maxRetries + 1} '
+          '$method attempt=${attempt + 1}/$totalAttempts '
           'status=${response.statusCode} '
-          'wait=${afterWaitMs}ms(backoff=${waitInfo.backoffMs}ms,'
-          'polite=${waitInfo.politenessMs}ms) '
+          'wait=${afterWaitMs}ms(backoff=${waited.backoffMs}ms,'
+          'polite=${waited.politenessMs}ms) '
           'headers=${headerMs}ms net=${netMs}ms '
           'attemptTotal=${attemptSw.elapsedMilliseconds}ms',
         );
@@ -268,28 +234,30 @@ class LichessApiClient {
           _handle429(attempt, maxRetries, response);
           if (attempt < maxRetries) continue;
           _profile(
-            'POST exhausted after 429 '
+            '$method exhausted after 429 '
             'total=${opSw.elapsedMilliseconds}ms',
           );
           return null;
         }
 
-        _profile('POST done total=${opSw.elapsedMilliseconds}ms');
+        _profile('$method done total=${opSw.elapsedMilliseconds}ms');
         return response;
       } catch (e) {
         _profile(
-          'POST error attempt=${attempt + 1}/${maxRetries + 1} '
+          '$method error attempt=${attempt + 1}/$totalAttempts '
           'elapsed=${attemptSw.elapsedMilliseconds}ms err=$e',
         );
         if (kDebugMode) {
-          debugPrint('[LichessAPI] POST error (attempt ${attempt + 1}): $e');
+          debugPrint('[LichessAPI] $method error (attempt ${attempt + 1}): $e');
         }
         if (attempt < maxRetries) {
-          await Future.delayed(const Duration(seconds: 2));
-          _profile('POST retry sleep=2000ms');
+          await Future<void>.delayed(_transientRetryDelay);
+          _profile(
+            '$method retry sleep=${_transientRetryDelay.inMilliseconds}ms',
+          );
           continue;
         }
-        _profile('POST failed total=${opSw.elapsedMilliseconds}ms');
+        _profile('$method failed total=${opSw.elapsedMilliseconds}ms');
         return null;
       }
     }
@@ -319,28 +287,13 @@ class LichessApiClient {
         ? fen.substring(0, fen.indexOf(' '))
         : fen;
 
-    final encodedFen = Uri.encodeComponent(fen);
-    final Uri url;
-    // The games lists are what makes the position openable, lila-style.
-    // Masters lists up to 15 top games; the player database caps both of
-    // its lists at 4.
-    if (useMasters) {
-      url = Uri.parse(
-        'https://explorer.lichess.ovh/masters?'
-        'topGames=15&'
-        'fen=$encodedFen',
-      );
-    } else {
-      url = Uri.parse(
-        'https://explorer.lichess.ovh/lichess?'
-        'variant=$variant&'
-        'speeds=$speeds&'
-        'ratings=$ratings&'
-        'topGames=4&'
-        'recentGames=4&'
-        'fen=$encodedFen',
-      );
-    }
+    final url = _explorerUrl(
+      fen,
+      variant: variant,
+      speeds: speeds,
+      ratings: ratings,
+      useMasters: useMasters,
+    );
 
     _profile('Explorer start fen=$fenShort');
     final getSw = Stopwatch()..start();
@@ -399,6 +352,31 @@ class LichessApiClient {
     return parsed;
   }
 
+  /// The Explorer endpoint for [fen].  The games lists are what makes the
+  /// position openable, lila-style: masters lists up to 15 top games; the
+  /// player database caps both of its lists at 4.
+  static Uri _explorerUrl(
+    String fen, {
+    required String variant,
+    required String speeds,
+    required String ratings,
+    required bool useMasters,
+  }) {
+    final encodedFen = Uri.encodeComponent(fen);
+    if (useMasters) {
+      return Uri.parse('$_explorerHost/masters?topGames=15&fen=$encodedFen');
+    }
+    return Uri.parse(
+      '$_explorerHost/lichess?'
+      'variant=$variant&'
+      'speeds=$speeds&'
+      'ratings=$ratings&'
+      'topGames=4&'
+      'recentGames=4&'
+      'fen=$encodedFen',
+    );
+  }
+
   /// The PGN of one game the explorer listed, or null when it cannot be
   /// fetched.
   ///
@@ -408,10 +386,9 @@ class LichessApiClient {
   Future<String?> fetchGamePgn(String id, {required bool masters}) async {
     final safeId = Uri.encodeComponent(id);
     final url = masters
-        ? Uri.parse('https://explorer.lichess.ovh/masters/pgn/$safeId')
+        ? Uri.parse('$_explorerHost/masters/pgn/$safeId')
         : Uri.parse(
-            'https://lichess.org/game/export/$safeId'
-            '?evals=0&clocks=0&literate=0',
+            '$_siteHost/game/export/$safeId?evals=0&clocks=0&literate=0',
           );
     final response = await get(
       url,

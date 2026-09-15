@@ -1,18 +1,14 @@
-/// Shared PGN comment parsing, filtering, and movetext serialization.
+/// The machine side of a PGN comment: the `[%tag …]` tokens the app writes
+/// and reads back, how to strip them for display, and how to serialize a
+/// parsed game.
 ///
-/// Centralises helpers that were duplicated across [GameAnalysisController],
-/// [PgnViewerWidget], and [InteractivePgnEditor].
+/// Book-style comment *structure* lives next door: `move_metrics.dart` reads
+/// a generated repertoire's per-move facts, `chessable_comment_format.dart`
+/// parses Chessable's `@@…@@` markers and `comment_move_tokens.dart` recovers
+/// the inline analysis lines book PGNs embed in prose.
 library;
 
 import 'package:dartchess/dartchess.dart';
-
-import '../services/generation/export/move_annotation.dart'
-    show MoveLikelihoodSource;
-import 'movetext_builder.dart';
-import '../utils/fen_utils.dart';
-
-export '../services/generation/export/move_annotation.dart'
-    show MoveLikelihoodSource;
 
 // ---------------------------------------------------------------------------
 // Multi-block comments
@@ -35,35 +31,20 @@ String joinComments(List<String>? comments) {
 // ---------------------------------------------------------------------------
 
 /// Matches `[%eval 1.23]`, `[%eval 1.23,18]`, `[%eval #3]`, `[%eval #3,20]`.
-final evalCommentRe = RegExp(r'\[%eval\s+(#?[+-]?\d+\.?\d*)(?:,(\d+))?\]');
+final _evalCommentRe = RegExp(r'\[%eval\s+(#?[+-]?\d+\.?\d*)(?:,(\d+))?\]');
 
 /// Matches `[%maia 0.03]`.
-final maiaCommentRe = RegExp(r'\[%maia\s+(\d+\.?\d*)\]');
-
-/// Matches `[%maiaProbability 0.42]` — per-move Maia likelihood.
-final maiaProbabilityCommentRe = RegExp(r'\[%maiaProbability\s+(\d+\.?\d*)\]');
-
-/// Matches `[%humanFrequency 0.42]` — per-move Lichess human frequency.
-final humanFrequencyCommentRe = RegExp(r'\[%humanFrequency\s+(\d+\.?\d*)\]');
+final _maiaCommentRe = RegExp(r'\[%maia\s+(\d+\.?\d*)\]');
 
 /// Matches `[%cumProb 12.529%]` — cumulative line probability (percentage).
-final cumProbCommentRe = RegExp(r'\[%cumProb\s+([\d.]+)%?\]');
+final _cumProbCommentRe = RegExp(r'\[%cumProb\s+([\d.]+)%?\]');
 
 /// Legacy `[%importance 0.85]` — cumulative line probability (0–1 fraction).
-final importanceCommentRe = RegExp(r'\[%importance\s+(\d+\.?\d*)\]');
+final _importanceCommentRe = RegExp(r'\[%importance\s+(\d+\.?\d*)\]');
 
 /// Matches `[%transposes Nf3 d5 d4 Nf6]` — the move order a line cut at a
 /// transposition continues in.  Space-separated SAN from the game's start.
-final transposesCommentRe = RegExp(r'\[%transposes\s+([^\]]+)\]');
-
-/// The moves a `[%transposes …]` token names, or null when absent.
-List<String>? parseTransposesToken(String? comment) {
-  if (comment == null) return null;
-  final m = transposesCommentRe.firstMatch(comment);
-  if (m == null) return null;
-  final moves = m.group(1)!.trim().split(RegExp(r'\s+'));
-  return moves.where((s) => s.isNotEmpty).toList();
-}
+final _transposesCommentRe = RegExp(r'\[%transposes\s+([^\]]+)\]');
 
 /// Legacy PV payloads and references to an engine line stored as a real RAV.
 final pvCommentRe = RegExp(r'\[%(?:pv|bestline)\s+([^\]]+)\]');
@@ -71,15 +52,29 @@ final legacyPvCommentRe = RegExp(r'\[%pv\s+([^\]]+)\]');
 final bestLineCommentRe = RegExp(r'\[%bestline\s+([^\]]+)\]');
 
 /// Matches `[%maiatop Nf3,0.450]` — MAIA's most likely move and its prob.
-final maiaTopCommentRe = RegExp(r'\[%maiatop\s+([^,\]]+),(\d+\.?\d*)\]');
+final _maiaTopCommentRe = RegExp(r'\[%maiatop\s+([^,\]]+),(\d+\.?\d*)\]');
+
+/// Catch-all for any `[%tag ...]` annotation token — the app's own metrics,
+/// Lichess `[%cal]` arrows / `[%csl]` circles, `[%clk]` clocks — so scraped
+/// PGNs never leak raw tokens into displayed prose.
+final _anyPgnTokenRe = RegExp(r'\[%[a-zA-Z]+[^\]]*\]');
 
 // ---------------------------------------------------------------------------
 // Parse helpers
 // ---------------------------------------------------------------------------
 
+/// The moves a `[%transposes …]` token names, or null when absent.
+List<String>? parseTransposesToken(String? comment) {
+  if (comment == null) return null;
+  final m = _transposesCommentRe.firstMatch(comment);
+  if (m == null) return null;
+  final moves = m.group(1)!.trim().split(RegExp(r'\s+'));
+  return moves.where((s) => s.isNotEmpty).toList();
+}
+
 /// Parse a `[%eval ...]` token into centipawns, mate-in-N, and optional depth.
 ({int? cp, int? mate, int? depth})? parseEvalComment(String comment) {
-  final match = evalCommentRe.firstMatch(comment);
+  final match = _evalCommentRe.firstMatch(comment);
   if (match == null) return null;
   final raw = match.group(1)!;
   final depthStr = match.group(2);
@@ -98,7 +93,7 @@ final maiaTopCommentRe = RegExp(r'\[%maiatop\s+([^,\]]+),(\d+\.?\d*)\]');
 
 /// Parse a `[%maia ...]` token into a probability (0-1).
 double? parseMaiaComment(String comment) {
-  final match = maiaCommentRe.firstMatch(comment);
+  final match = _maiaCommentRe.firstMatch(comment);
   if (match == null) return null;
   return double.tryParse(match.group(1)!);
 }
@@ -106,19 +101,19 @@ double? parseMaiaComment(String comment) {
 /// Parse cumulative line probability from `[%cumProb ...]` (percentage) or
 /// legacy `[%importance ...]` (0–1 fraction). Returns 0–1.
 double? parseImportanceComment(String comment) {
-  final cumMatch = cumProbCommentRe.firstMatch(comment);
+  final cumMatch = _cumProbCommentRe.firstMatch(comment);
   if (cumMatch != null) {
     final pct = double.tryParse(cumMatch.group(1)!);
     if (pct != null) return pct / 100.0;
   }
-  final match = importanceCommentRe.firstMatch(comment);
+  final match = _importanceCommentRe.firstMatch(comment);
   if (match == null) return null;
   return double.tryParse(match.group(1)!);
 }
 
 /// Parse a `[%maiatop ...]` token into the top move (SAN) and its probability.
 ({String move, double prob})? parseMaiaTopComment(String comment) {
-  final match = maiaTopCommentRe.firstMatch(comment);
+  final match = _maiaTopCommentRe.firstMatch(comment);
   if (match == null) return null;
   final move = match.group(1)!;
   final prob = double.tryParse(match.group(2)!);
@@ -162,253 +157,48 @@ String formatEvalCommentValue({int? scoreCp, int? scoreMate, int? depth}) {
   return depth != null ? '$base,$depth' : base;
 }
 
-/// Replace or insert a `[%eval ...]` token in a comment string.
-String setEvalInComment(String comment, String evalValue) {
-  final token = '[%eval $evalValue]';
-  if (evalCommentRe.hasMatch(comment)) {
-    return comment.replaceFirst(evalCommentRe, token);
+/// Replace the token [existing] matches in [comment] with [token], or add
+/// [token] when there is none — in front of the prose when [prepend], after
+/// it otherwise.
+String _upsertToken(
+  String comment,
+  RegExp existing,
+  String token, {
+  bool prepend = false,
+}) {
+  if (existing.hasMatch(comment)) {
+    return comment.replaceFirst(existing, token);
   }
   final trimmed = comment.trim();
   if (trimmed.isEmpty) return token;
-  return '$token $trimmed';
+  return prepend ? '$token $trimmed' : '$trimmed $token';
 }
+
+/// Replace or insert a `[%eval ...]` token in a comment string.
+String setEvalInComment(String comment, String evalValue) =>
+    _upsertToken(comment, _evalCommentRe, '[%eval $evalValue]', prepend: true);
 
 /// Replace or append a `[%maia ...]` token in a comment string.
-String setMaiaInComment(String comment, double prob) {
-  final token = '[%maia ${prob.toStringAsFixed(3)}]';
-  if (maiaCommentRe.hasMatch(comment)) {
-    return comment.replaceFirst(maiaCommentRe, token);
-  }
-  final trimmed = comment.trim();
-  if (trimmed.isEmpty) return token;
-  return '$trimmed $token';
-}
+String setMaiaInComment(String comment, double prob) =>
+    _upsertToken(comment, _maiaCommentRe, '[%maia ${prob.toStringAsFixed(3)}]');
 
 /// Replace or append a `[%maiatop ...]` token in a comment string.
-String setMaiaTopInComment(String comment, String move, double prob) {
-  final token = '[%maiatop $move,${prob.toStringAsFixed(3)}]';
-  if (maiaTopCommentRe.hasMatch(comment)) {
-    return comment.replaceFirst(maiaTopCommentRe, token);
-  }
-  final trimmed = comment.trim();
-  if (trimmed.isEmpty) return token;
-  return '$trimmed $token';
-}
+String setMaiaTopInComment(String comment, String move, double prob) =>
+    _upsertToken(
+      comment,
+      _maiaTopCommentRe,
+      '[%maiatop $move,${prob.toStringAsFixed(3)}]',
+    );
 
 /// Replace or append a `[%pv ...]` token in a comment string.
 String setPvInComment(String comment, List<String> pv) {
   if (pv.isEmpty) return comment;
-  final token = '[%pv ${pv.join(',')}]';
-  if (pvCommentRe.hasMatch(comment)) {
-    return comment.replaceFirst(pvCommentRe, token);
-  }
-  final trimmed = comment.trim();
-  if (trimmed.isEmpty) return token;
-  return '$trimmed $token';
+  return _upsertToken(comment, pvCommentRe, '[%pv ${pv.join(',')}]');
 }
-
-// ---------------------------------------------------------------------------
-// Generated move metrics
-// ---------------------------------------------------------------------------
-
-/// What a generated repertoire says about one move, read back out of its
-/// `[%...]` tokens.
-///
-/// The generator writes these (see `generation/export/move_annotation.dart`);
-/// every viewer in the app strips them as engine noise, which left an
-/// annotated export looking like bare movetext.  [labels] turns whatever is
-/// present into plain English for display — nothing invented, nothing implied
-/// by a missing token.
-class MoveMetrics {
-  /// Engine eval after the move, in centipawns from the mover's own book
-  /// perspective (the generator writes it from the repertoire owner's side).
-  final int? evalCp;
-
-  /// Mate distance, when the eval is a mate score instead of centipawns.
-  final int? evalMate;
-
-  /// Expectimax (practical) value after the move, in centipawns from the
-  /// repertoire owner's side — the engine eval folded with how often
-  /// opponents go wrong from here.  Written by the generator as
-  /// `[%expectimax +0.45]`.
-  final int? expectimaxCp;
-
-  /// The move is far enough ahead of every alternative to be forced.
-  final bool isOnlyMove;
-
-  /// How naturally a human finds *our* move here, in [0, 1].
-  final double? myEase;
-
-  /// How easily the opponent finds a good move here, in [0, 1].
-  final double? opponentEase;
-
-  /// Score our side achieved from here in real games, in [0, 1].
-  final double? practicalScore;
-
-  final int? gameCount;
-  final int? lastPlayedYear;
-
-  /// Probability the opponent plays this move, in [0, 1], and where the
-  /// number came from.
-  final double? likelihood;
-  final MoveLikelihoodSource? likelihoodSource;
-
-  /// What a refuted alternative costs the side that plays it, in centipawns.
-  final int? lossCp;
-
-  const MoveMetrics({
-    this.evalCp,
-    this.evalMate,
-    this.expectimaxCp,
-    this.isOnlyMove = false,
-    this.myEase,
-    this.opponentEase,
-    this.practicalScore,
-    this.gameCount,
-    this.lastPlayedYear,
-    this.likelihood,
-    this.likelihoodSource,
-    this.lossCp,
-  });
-
-  static const none = MoveMetrics();
-
-  bool get isEmpty => labels.isEmpty;
-
-  /// Parse every recognised token in [comment]; unknown tokens and prose are
-  /// ignored, so this is safe to run over any comment from any source.
-  static MoveMetrics parse(String comment) {
-    if (!comment.contains('[%')) return none;
-
-    int? evalCp;
-    int? evalMate;
-    int? expectimaxCp;
-    var isOnlyMove = false;
-    double? myEase;
-    double? opponentEase;
-    double? practicalScore;
-    int? gameCount;
-    int? lastPlayedYear;
-    double? likelihood;
-    MoveLikelihoodSource? likelihoodSource;
-    int? lossCp;
-
-    for (final match in _metricTokenRe.allMatches(comment)) {
-      final name = match.group(1)!;
-      final raw = match.group(2)!.trim();
-      switch (name) {
-        case 'eval':
-          final parsed = parseEvalComment('[%eval $raw]');
-          evalCp = parsed?.cp;
-          evalMate = parsed?.mate;
-        case 'expectimax':
-          final pawns = double.tryParse(raw);
-          if (pawns != null) expectimaxCp = (pawns * 100).round();
-        case 'onlyMove':
-          isOnlyMove = true;
-        case 'myEase':
-          myEase = double.tryParse(raw);
-        case 'ease':
-          opponentEase = double.tryParse(raw);
-        case 'score':
-          final percent = double.tryParse(raw.replaceAll('%', ''));
-          if (percent != null) practicalScore = percent / 100.0;
-        case 'games':
-          gameCount = int.tryParse(raw);
-        case 'lastPlayed':
-          lastPlayedYear = int.tryParse(raw);
-        case 'maiaProbability':
-          likelihood = double.tryParse(raw);
-          likelihoodSource = MoveLikelihoodSource.maia;
-        case 'humanFrequency':
-          likelihood = double.tryParse(raw);
-          likelihoodSource = MoveLikelihoodSource.gameDatabase;
-        case 'engineReply':
-          likelihood = double.tryParse(raw);
-          likelihoodSource = MoveLikelihoodSource.engine;
-        case 'chessDbMove':
-          likelihood = double.tryParse(raw);
-          likelihoodSource = MoveLikelihoodSource.positionDatabase;
-        case 'loss':
-          final pawns = double.tryParse(raw);
-          if (pawns != null) lossCp = (pawns * 100).round();
-      }
-    }
-
-    return MoveMetrics(
-      evalCp: evalCp,
-      evalMate: evalMate,
-      expectimaxCp: expectimaxCp,
-      isOnlyMove: isOnlyMove,
-      myEase: myEase,
-      opponentEase: opponentEase,
-      practicalScore: practicalScore,
-      gameCount: gameCount,
-      lastPlayedYear: lastPlayedYear,
-      likelihood: likelihood,
-      likelihoodSource: likelihoodSource,
-      lossCp: lossCp,
-    );
-  }
-
-  /// One short phrase per fact present, in reading order: what the engine
-  /// thinks, how likely the move is, how it has actually gone for humans.
-  List<String> get labels => [
-    if (evalMate != null) 'mate in ${evalMate!.abs()}',
-    if (evalMate == null && evalCp != null) 'eval ${_signedPawns(evalCp!)}',
-    if (expectimaxCp != null) 'expectimax ${_signedPawns(expectimaxCp!)}',
-    if (lossCp != null) 'costs ${(lossCp! / 100).toStringAsFixed(2)}',
-    if (isOnlyMove) 'only move',
-    if (likelihood != null && likelihoodSource != null)
-      switch (likelihoodSource!) {
-        MoveLikelihoodSource.maia => '${_percent(likelihood!)} likely',
-        MoveLikelihoodSource.gameDatabase => 'played ${_percent(likelihood!)}',
-        MoveLikelihoodSource.engine => 'engine reply',
-        // No percentage: this is the database's choice of move, not a claim
-        // about how often anyone plays it.
-        MoveLikelihoodSource.positionDatabase => 'ChessDB move',
-      },
-    if (gameCount != null && gameCount! > 0) '$gameCount games',
-    if (practicalScore != null) 'you score ${_percent(practicalScore!)}',
-    if (myEase != null) 'natural for you ${_percent(myEase!)}',
-    if (opponentEase != null) 'easy for them ${_percent(opponentEase!)}',
-    if (lastPlayedYear != null && lastPlayedYear! > 0)
-      'last played $lastPlayedYear',
-  ];
-
-  /// The whole thing on one line, or empty when the comment held no metrics.
-  String get summary => labels.join(' · ');
-
-  /// True when an engine score is the *only* thing here.
-  ///
-  /// This is what separates a game-analysis annotation, which a pass writes on
-  /// every ply and which the viewer therefore hides, from a generated
-  /// repertoire's per-move facts, which always carry more than a score
-  /// (likelihood, expectimax, ease, game counts) and stay on the page.
-  bool get isEvalOnly =>
-      labels.length == 1 && (evalCp != null || evalMate != null);
-
-  static String _percent(double fraction) => '${(fraction * 100).round()}%';
-
-  static String _signedPawns(int centipawns) {
-    final pawns = (centipawns / 100).toStringAsFixed(2);
-    return centipawns > 0 ? '+$pawns' : pawns;
-  }
-}
-
-/// `[%name value]` — the shape every generated annotation token takes.
-final _metricTokenRe = RegExp(r'\[%(\w+)\s*([^\]]*)\]');
 
 // ---------------------------------------------------------------------------
 // Display comment filtering
 // ---------------------------------------------------------------------------
-
-final _clkRe = RegExp(r'\[%clk [^\]]+\]');
-
-/// Catch-all for any `[%tag ...]` annotation token (e.g. Lichess `[%cal]`
-/// arrows / `[%csl]` circles) so scraped PGNs never leak raw tokens into
-/// displayed prose.
-final _anyPgnTokenRe = RegExp(r'\[%[a-zA-Z]+[^\]]*\]');
 
 /// cutechess's per-move engine comment — `+0.31/24 2.001s`, `-M3/18 0.500s`,
 /// `book 0.010s` — which engine-vs-engine PGNs (this app's own tournaments,
@@ -423,6 +213,13 @@ final _classificationRe = RegExp(
 );
 final _wasBestRe = RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?');
 final _whitespaceRe = RegExp(r'\s+');
+
+/// Matches all `@@TagName@@` markers for stripping in plain-text mode.
+final _chessableMarkerStripRe = RegExp(
+  r'@@(?:HeaderStart|HeaderEnd|StartBlockQuote|EndBlockQuote|'
+  r'StartBracket|EndBracket|StartFEN|EndFEN|'
+  r'StartSquare|EndSquare|LinkStart|LinkEnd)@@',
+);
 
 /// The `[%tag …]` tokens in [comment], in the order they appear.
 ///
@@ -453,68 +250,35 @@ String mergeCommentProse(String original, String prose) {
 ///
 /// The cheap half of [filterDisplayComment], for callers that only need to
 /// know whether a comment is *all* tokens — a test that runs over every ply of
-/// a game on every movetext rebuild, where the full filter's fifteen passes
-/// would be felt.
+/// a game on every movetext rebuild, where the full filter's passes would be
+/// felt.
 String stripPgnTokens(String comment) => comment.replaceAll(_anyPgnTokenRe, '');
+
+/// Everything in [comment] a machine wrote and a reader should not see:
+/// `[%tag …]` tokens, cutechess per-move readouts, Lichess classification
+/// sentences and score arrows. Whitespace is left for the caller to settle.
+String _stripMachineAnnotations(String comment) => comment
+    .replaceAll(_anyPgnTokenRe, '')
+    .replaceAll(_engineMoveCommentRe, ' ')
+    .replaceAll(_scoreArrowRe, '')
+    .replaceAll(_classificationRe, '');
+
+/// A stripped comment that held nothing but annotations reads as empty.
+String _emptyIfOnlyPunctuation(String comment) =>
+    comment.isEmpty || comment == '.,;!?' ? '' : comment;
 
 /// Strip engine annotation tokens (`[%eval]`, `[%clk]`, `[%maia]`, `[%pv]`),
 /// cutechess-style per-move engine readouts, Lichess classification text,
 /// score arrows, and Chessable `@@...@@` wrapper markers from a PGN comment,
 /// leaving only human-readable prose.
 String filterDisplayComment(String comment) {
-  comment = comment.replaceAll(evalCommentRe, '');
-  comment = comment.replaceAll(_clkRe, '');
-  comment = comment.replaceAll(maiaCommentRe, '');
-  comment = comment.replaceAll(maiaProbabilityCommentRe, '');
-  comment = comment.replaceAll(humanFrequencyCommentRe, '');
-  comment = comment.replaceAll(cumProbCommentRe, '');
-  comment = comment.replaceAll(importanceCommentRe, '');
-  comment = comment.replaceAll(pvCommentRe, '');
-  comment = comment.replaceAll(transposesCommentRe, '');
-  comment = comment.replaceAll(maiaTopCommentRe, '');
-  comment = comment.replaceAll(_anyPgnTokenRe, '');
-  comment = comment.replaceAll(_engineMoveCommentRe, ' ');
-  comment = comment.replaceAll(_scoreArrowRe, '');
-  comment = comment.replaceAll(_classificationRe, '');
-  comment = comment.replaceAll(_wasBestRe, '');
-  // Strip Chessable @@ markers but keep the content between them
-  comment = comment.replaceAll(_chessableMarkerStripRe, '');
-  comment = comment.replaceAll(_whitespaceRe, ' ').trim();
-  if (comment.isEmpty || comment == '.,;!?') return '';
-  return comment;
-}
-
-/// Matches all `@@TagName@@` markers for stripping in plain-text mode.
-final _chessableMarkerStripRe = RegExp(
-  r'@@(?:HeaderStart|HeaderEnd|StartBlockQuote|EndBlockQuote|'
-  r'StartBracket|EndBracket|StartFEN|EndFEN|'
-  r'StartSquare|EndSquare|LinkStart|LinkEnd)@@',
-);
-
-// ---------------------------------------------------------------------------
-// Prose comment formatting (book-style PGNs)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Chessable rich-comment support
-// ---------------------------------------------------------------------------
-
-/// Segment types emitted by [parseRichComment].
-enum RichSegmentType { text, header, blockQuote, bracket, fen, link }
-
-/// A single segment of a rich (Chessable-style) PGN comment.
-class RichSegment {
-  final RichSegmentType type;
-
-  /// The textual content of the segment. For [RichSegmentType.text] this may
-  /// contain paragraph breaks encoded as `\n`.
-  final String content;
-
-  const RichSegment(this.type, this.content);
-
-  @override
-  String toString() =>
-      'RichSegment($type, "${content.length > 40 ? '${content.substring(0, 40)}...' : content}")';
+  final stripped = _stripMachineAnnotations(comment)
+      .replaceAll(_wasBestRe, '')
+      // Strip Chessable @@ markers but keep the content between them.
+      .replaceAll(_chessableMarkerStripRe, '')
+      .replaceAll(_whitespaceRe, ' ')
+      .trim();
+  return _emptyIfOnlyPunctuation(stripped);
 }
 
 /// Strip engine tokens but preserve Chessable `@@...@@` markers.
@@ -522,431 +286,15 @@ class RichSegment {
 /// Crucially this preserves the double-space token structure that book-style
 /// PGNs use to separate inline moves and paragraphs (unlike
 /// [filterDisplayComment], which collapses all whitespace). Used by
-/// [parseRichComment] and [parseCommentTokens].
+/// `parseRichComment` and `parseCommentTokens`.
 String stripEngineTokens(String comment) {
-  comment = comment.replaceAll(evalCommentRe, '');
-  comment = comment.replaceAll(_clkRe, '');
-  comment = comment.replaceAll(maiaCommentRe, '');
-  comment = comment.replaceAll(maiaProbabilityCommentRe, '');
-  comment = comment.replaceAll(humanFrequencyCommentRe, '');
-  comment = comment.replaceAll(cumProbCommentRe, '');
-  comment = comment.replaceAll(importanceCommentRe, '');
-  comment = comment.replaceAll(pvCommentRe, '');
-  comment = comment.replaceAll(maiaTopCommentRe, '');
-  comment = comment.replaceAll(_anyPgnTokenRe, '');
-  comment = comment.replaceAll(_engineMoveCommentRe, ' ');
-  comment = comment.replaceAll(_scoreArrowRe, '');
-  comment = comment.replaceAll(_classificationRe, '');
-  comment = comment.replaceAll(_wasBestRe, '');
-  // Collapse runs of single spaces (but preserve double-spaces for paragraph
-  // detection) — replace 3+ spaces with double-space, single stays.
-  comment = comment.replaceAll(RegExp(r' {3,}'), '  ');
-  comment = comment.trim();
-  if (comment.isEmpty || comment == '.,;!?') return '';
-  return comment;
-}
-
-/// Chessable `@@...@@` marker regex. Captures tag name and inner content.
-final _chessableMarkerRe = RegExp(
-  r'@@(HeaderStart|HeaderEnd|StartBlockQuote|EndBlockQuote|'
-  r'StartBracket|EndBracket|StartFEN|EndFEN|'
-  r'StartSquare|EndSquare|LinkStart|LinkEnd)@@',
-);
-
-/// Returns true when the comment contains Chessable-style `@@...@@` markers,
-/// or when it appears to use double-space paragraph breaks (long prose with
-/// 2+ instances of `  ` that are not mere move-notation spacing).
-bool hasChessableFormatting(String comment) {
-  if (_chessableMarkerRe.hasMatch(comment) || _fenRe.hasMatch(comment)) {
-    return true;
-  }
-  // Detect double-space paragraph breaks in long prose: require the comment
-  // to be long enough that double-spaces are likely real paragraph separators,
-  // not just spacing around move notation.
-  if (comment.length > 300) {
-    final dsCount = '  '.allMatches(comment).length;
-    if (dsCount >= 2) return true;
-  }
-  return false;
-}
-
-/// Parse a Chessable-formatted comment into a list of [RichSegment]s.
-///
-/// Handles:
-/// - `@@HeaderStart@@...@@HeaderEnd@@` → [RichSegmentType.header]
-/// - `@@StartBlockQuote@@...@@EndBlockQuote@@` → [RichSegmentType.blockQuote]
-/// - `@@StartBracket@@...@@EndBracket@@` → [RichSegmentType.bracket]
-/// - `@@StartSquare@@...@@EndSquare@@` → [RichSegmentType.bracket]
-/// - `@@StartFEN@@...@@EndFEN@@` → [RichSegmentType.fen]
-/// - `@@LinkStart@@...@@LinkEnd@@` → [RichSegmentType.link]
-/// - Double-space (`  `) → paragraph break (encoded as `\n` in text segments)
-///
-/// Engine annotation tokens are stripped before parsing (but `@@` markers are
-/// preserved for the parser to consume).
-List<RichSegment> parseRichComment(String comment) {
-  final stripped = stripEngineTokens(comment);
-  if (stripped.isEmpty) return const [];
-
-  final segments = <RichSegment>[];
-  final markers = _chessableMarkerRe.allMatches(stripped).toList();
-
-  if (markers.isEmpty) {
-    _addTextSegments(segments, stripped);
-    return segments;
-  }
-
-  var cursor = 0;
-  var i = 0;
-
-  while (i < markers.length) {
-    final marker = markers[i];
-    final tag = marker.group(1)!;
-
-    // Emit any text before this marker
-    if (marker.start > cursor) {
-      _addTextSegments(segments, stripped.substring(cursor, marker.start));
-    }
-
-    final endTag = _closingTag(tag);
-    if (endTag != null) {
-      // Find the matching end marker
-      final endIdx = markers.indexWhere((m) => m.group(1) == endTag, i + 1);
-      if (endIdx != -1) {
-        final innerStart = marker.end;
-        final innerEnd = markers[endIdx].start;
-        final inner = stripped.substring(innerStart, innerEnd).trim();
-        if (inner.isNotEmpty) {
-          segments.add(RichSegment(_segmentType(tag), inner));
-        }
-        cursor = markers[endIdx].end;
-        i = endIdx + 1;
-        continue;
-      }
-    }
-
-    // Unmatched/closing tag — skip it
-    cursor = marker.end;
-    i++;
-  }
-
-  // Remaining text after last marker
-  if (cursor < stripped.length) {
-    _addTextSegments(segments, stripped.substring(cursor));
-  }
-
-  return segments;
-}
-
-/// Add text segments, splitting on double-space paragraph breaks and `---`.
-void _addTextSegments(List<RichSegment> segments, String text) {
-  // Split on double-space (Chessable paragraph break) and `---`
-  final paragraphs = text
-      .split(RegExp(r'\s{2,}|---'))
-      .map((p) => p.trim())
-      .where((p) => p.isNotEmpty)
-      .toList();
-
-  if (paragraphs.isEmpty) return;
-  segments.add(RichSegment(RichSegmentType.text, paragraphs.join('\n')));
-}
-
-/// Map an opening tag to its expected closing tag.
-String? _closingTag(String openTag) {
-  switch (openTag) {
-    case 'HeaderStart':
-      return 'HeaderEnd';
-    case 'StartBlockQuote':
-      return 'EndBlockQuote';
-    case 'StartBracket':
-      return 'EndBracket';
-    case 'StartSquare':
-      return 'EndSquare';
-    case 'StartFEN':
-      return 'EndFEN';
-    case 'LinkStart':
-      return 'LinkEnd';
-    default:
-      return null;
-  }
-}
-
-/// Map an opening tag to a [RichSegmentType].
-RichSegmentType _segmentType(String openTag) {
-  switch (openTag) {
-    case 'HeaderStart':
-      return RichSegmentType.header;
-    case 'StartBlockQuote':
-      return RichSegmentType.blockQuote;
-    case 'StartBracket':
-    case 'StartSquare':
-      return RichSegmentType.bracket;
-    case 'StartFEN':
-      return RichSegmentType.fen;
-    case 'LinkStart':
-      return RichSegmentType.link;
-    default:
-      return RichSegmentType.text;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Inline-move comment tokenization (book-style PGNs)
-// ---------------------------------------------------------------------------
-
-/// A comment token: prose, an embedded position, or a preview move.
-///
-/// Book PGNs (Chessable / Forward Chess exports) embed analysis lines directly
-/// in comment text, with double-spaces separating each move token (e.g.
-/// `Or  40.cxb5  c4!-+  , winning the pawn ending.`). [parseCommentTokens]
-/// recovers that structure so the viewer can render the moves as clickable
-/// chips and flow the prose naturally instead of one-token-per-line.
-sealed class CommentToken {
-  const CommentToken();
-}
-
-/// An embedded FEN to render independently of the main board.
-class CommentDiagram extends CommentToken {
-  final String fen;
-  const CommentDiagram(this.fen);
-}
-
-/// A run of human-readable prose.
-class CommentProse extends CommentToken {
-  final String text;
-  const CommentProse(this.text);
-
-  @override
-  String toString() => 'CommentProse("$text")';
-}
-
-/// A single chess move embedded in a comment.
-class CommentMove extends CommentToken {
-  /// The playable SAN core (e.g. `cxb5`, `Rxc4`, `O-O`), with move numbers,
-  /// check/mate glyphs, annotations (`!?`) and eval symbols (`-+`) stripped.
-  final String san;
-
-  /// The original text as written, for display (e.g. `40.cxb5`, `42...Kc3?`).
-  final String display;
-
-  /// Fullmove number this move belongs to, or -1 when it could not be
-  /// determined (in which case the move is shown but not clickable).
-  final int moveNumber;
-
-  /// Whether it is White's move.
-  final bool isWhite;
-
-  /// Identifier of the contiguous run of moves this belongs to. Clicking a
-  /// move replays its whole run from the run's first move.
-  final int runId;
-
-  /// When non-null, the run this move belongs to starts from this FEN position
-  /// (a bare FEN dropped in the comment prose) rather than the mainline. Book
-  /// PGNs use this to attach analysis lines to positions unrelated to the
-  /// current move. Replayed from the FEN instead of by move number.
-  final String? anchorFen;
-
-  const CommentMove({
-    required this.san,
-    required this.display,
-    required this.moveNumber,
-    required this.isWhite,
-    required this.runId,
-    this.anchorFen,
-  });
-
-  bool get isClickable => moveNumber >= 0;
-
-  @override
-  String toString() => 'CommentMove($display)';
-}
-
-/// The SAN move-core grammar (no move number, check/mate, or annotation
-/// glyphs): castling, or a piece/pawn move with optional disambiguation,
-/// capture, and promotion. The alternation is a single capturing group so
-/// callers embedding it can capture the core. Shared by [_commentMoveRe] here
-/// and the prose move detector in the movetext view.
-const String kSanCorePattern =
-    r'(O-O-O|O-O|'
-    r'(?:[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?:=[QRBN])?)';
-
-/// Matches one move token: optional move number + dots, SAN core, optional
-/// check/mate, annotation glyphs, and eval symbols.
-final _commentMoveRe = RegExp(
-  r'^(?:(\d+)(\.{3}|\.))?'
-  '$kSanCorePattern'
-  r'([+#]?)'
-  r'(?:[!?]{1,2})?'
-  r'(?:[-+=]{1,2}|[-+]/[-+]|±|∓|⩲|⩱)?$',
-);
-
-/// Splits a comment into tokens: double-space, newline, and `---` are all
-/// token separators in the book-PGN convention.
-final _commentTokenSplitRe = RegExp(r'\n|---|\s{2,}');
-
-/// Matches a full FEN embedded in comment prose: board (8 ranks) / side /
-/// castling / en-passant / halfmove / fullmove. Book PGNs (Chessable) drop a
-/// bare FEN in front of an analysis line to mark that line's start position.
-final _fenRe = RegExp(
-  r'(?:[pnbrqkPNBRQK1-8]+/){7}[pnbrqkPNBRQK1-8]+ [wb] (?:-|[KQkq]+) '
-  r'(?:-|[a-h][36]) \d+ \d+',
-);
-
-/// True when [fen] parses as a legal position setup.
-bool _isValidFen(String fen) {
-  try {
-    Setup.parseFen(fen);
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-/// The (moveNumber, isWhite) of the ply *before* the side to move in [fen],
-/// used to seed inline move-number continuity so an unnumbered first move after
-/// the FEN lands on the right ply. Null when the FEN is the very first ply.
-({int number, bool white})? _fenPrevPly(String fen) {
-  final fields = fen.split(' ');
-  if (fields.length < 6) return null;
-  final fullmove = int.tryParse(fields[5]);
-  if (fullmove == null) return null;
-  if (isWhiteToMove(fen)) {
-    // White to move on `fullmove`: previous ply was Black's move fullmove-1.
-    if (fullmove <= 1) return null;
-    return (number: fullmove - 1, white: false);
-  }
-  // Black to move: White has just moved on `fullmove`.
-  return (number: fullmove, white: true);
-}
-
-/// Parse engine-stripped comment text into prose / move tokens.
-///
-/// Pass the output of [stripEngineTokens] (which preserves the double-space
-/// structure), or a [RichSegment] text body (whose `\n`s mark token breaks).
-List<CommentToken> parseCommentTokens(String text) {
-  final rawParts = text.split(_commentTokenSplitRe);
-
-  final tokens = <CommentToken>[];
-  var runId = 0;
-  // Last move seen (regardless of interspersed prose), used both to derive
-  // unnumbered moves and to decide run membership by move-number continuity.
-  int? lastNumber;
-  bool? lastWhite;
-  // A bare FEN in the prose anchors the *next* run to that position instead of
-  // the mainline. `pending` is armed by a FEN and consumed by the first move of
-  // the run it opens; the anchor then stays attached to that run's moves.
-  String? pendingAnchorFen;
-  String? activeRunAnchorFen;
-  int? anchoredRunId;
-  var forceNewRun = false;
-
-  void handleMove(String part) {
-    final m = _commentMoveRe.firstMatch(part);
-    if (m == null) {
-      tokens.add(CommentProse(part));
-      return;
-    }
-
-    final numStr = m.group(1);
-    final dots = m.group(2);
-
-    // Expected successor ply of the previous move. (Copied into locals so they
-    // promote — the closure captures the mutable outer fields.)
-    final ln = lastNumber;
-    final lw = lastWhite;
-    int? expectedNumber;
-    bool? expectedWhite;
-    if (ln != null && lw != null) {
-      expectedNumber = lw ? ln : ln + 1;
-      expectedWhite = !lw;
-    }
-
-    int number;
-    bool white;
-    if (numStr != null) {
-      number = int.parse(numStr);
-      white = dots != '...';
-    } else if (expectedNumber != null) {
-      // Unnumbered move: it is the successor of the previous move.
-      number = expectedNumber;
-      white = expectedWhite!;
-    } else {
-      number = -1;
-      white = true;
-    }
-
-    // A move continues the current line when it is exactly the expected
-    // successor of the previous move; otherwise it starts a new run. Lines
-    // survive interspersed prose ("... is a draw: 43.Rxc4+ ...") but break
-    // when the analysis jumps back to try a different move. A FEN always forces
-    // a fresh run so its line isn't glued onto the preceding one.
-    final continues =
-        !forceNewRun &&
-        number >= 0 &&
-        expectedNumber != null &&
-        number == expectedNumber &&
-        white == expectedWhite;
-    if (!continues) runId++;
-
-    // Attach a freshly-armed FEN anchor to the run this move opens; the anchor
-    // then carries to the run's continuation moves.
-    if (forceNewRun && pendingAnchorFen != null) {
-      activeRunAnchorFen = pendingAnchorFen;
-      anchoredRunId = runId;
-      pendingAnchorFen = null;
-    }
-    forceNewRun = false;
-
-    tokens.add(
-      CommentMove(
-        san: m.group(3)!,
-        display: part,
-        moveNumber: number,
-        isWhite: white,
-        runId: runId,
-        anchorFen: runId == anchoredRunId ? activeRunAnchorFen : null,
-      ),
-    );
-
-    if (number >= 0) {
-      lastNumber = number;
-      lastWhite = white;
-    } else {
-      lastNumber = null;
-      lastWhite = null;
-    }
-  }
-
-  for (final raw in rawParts) {
-    final part = raw.trim();
-    if (part.isEmpty) continue;
-
-    // Move tokens never contain a FEN — handle directly.
-    if (_commentMoveRe.hasMatch(part)) {
-      handleMove(part);
-      continue;
-    }
-
-    // Prose: pull out any embedded FEN(s), emitting the surrounding text and
-    // arming the anchor for the following run and preserving its diagram.
-    var cursor = 0;
-    for (final match in _fenRe.allMatches(part)) {
-      final fen = match.group(0)!;
-      if (!_isValidFen(fen)) continue;
-      final before = part.substring(cursor, match.start).trim();
-      if (before.isNotEmpty) handleMove(before);
-      tokens.add(CommentDiagram(fen));
-      pendingAnchorFen = fen;
-      forceNewRun = true;
-      final seed = _fenPrevPly(fen);
-      lastNumber = seed?.number;
-      lastWhite = seed?.white;
-      cursor = match.end;
-    }
-    final after = part.substring(cursor).trim();
-    if (after.isNotEmpty) handleMove(after);
-  }
-
-  return tokens;
+  final stripped = _stripMachineAnnotations(comment)
+      .replaceAll(_wasBestRe, '')
+      // Collapse runs of single spaces (but preserve double-spaces for
+      // paragraph detection) — replace 3+ spaces with double-space.
+      .replaceAll(RegExp(r' {3,}'), '  ')
+      .trim();
+  return _emptyIfOnlyPunctuation(stripped);
 }
 
 // ---------------------------------------------------------------------------
@@ -966,7 +314,7 @@ List<CommentToken> parseCommentTokens(String text) {
 /// documented: a lossy writer beside a lossless one, both feeding the same
 /// sink, is the shape of that bug. A caller that genuinely holds only a flat
 /// move list it built itself (a puzzle solution, a downloaded game's plies)
-/// wants [buildNumberedMovetext].
+/// wants `buildNumberedMovetext`.
 ///
 /// Serialization is dartchess's own `makePgn`, which is why this takes the
 /// tree rather than a list: variations, `{}` escaping and the numbering that

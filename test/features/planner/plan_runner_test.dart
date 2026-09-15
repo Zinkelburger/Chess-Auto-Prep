@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
+import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/features/planner/controllers/plan_runner.dart';
 import 'package:chess_auto_prep/features/planner/models/plan_models.dart';
 import 'package:chess_auto_prep/features/planner/models/plan_starting_line.dart';

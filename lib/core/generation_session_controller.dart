@@ -7,29 +7,30 @@
 /// [startBuild]; it can unmount the moment the build starts without
 /// affecting the run.  Pause/resume/cancel/finish-now work from any surface
 /// (Jobs panel, board overlay) through this controller.
+///
+/// Collaborators own the parts that are not the running order:
+/// [GenerationProgress] (live stats), [SnapshotExporter] (mid-run export),
+/// [MasterGamesWait] (parking on a download), [ExpectimaxDatabase] (the
+/// published tree bundle and its probes) and [GenerationArtifactStore] (the
+/// files beside the repertoire).
 library;
 
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/build_tree_node.dart';
+import '../models/eval_database_settings.dart';
+import '../models/trap_line_info.dart';
 import '../services/coherence_service.dart';
-import '../utils/log.dart';
-import '../services/engine/engine_lifecycle.dart';
 import '../services/engine/engine_interrupt.dart';
+import '../services/engine/engine_lifecycle.dart';
 import '../services/engine/stockfish_pool.dart';
-import '../services/generation/course/chapter_titles.dart';
 import '../services/generation/course/course_builder.dart';
 import '../services/generation/course/course_composer.dart';
 import '../services/generation/course/enrichment_runner.dart';
-import '../services/master_games/master_games_db.dart';
-import '../services/master_games/master_games_service.dart';
-import '../models/eval_database_settings.dart';
 import '../services/generation/eca_calculator.dart';
-import '../services/generation/expectimax_probe.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
@@ -43,30 +44,26 @@ import '../services/generation/tree_build_progress.dart';
 import '../services/generation/tree_ease.dart';
 import '../services/generation/tree_my_ease.dart';
 import '../services/generation/tree_serialization.dart';
-import '../services/jobs/generation_job_display.dart';
+import '../services/jobs/generation_phase.dart';
 import '../services/jobs/repertoire_job.dart';
-import '../services/storage/storage_factory.dart';
+import '../services/master_games/master_games_db.dart';
+import '../services/master_games/master_games_service.dart';
 import '../services/tree_build_service.dart';
 import '../utils/chess_utils.dart' show fenAfterMoves;
 import '../utils/fen_utils.dart';
 import '../utils/findability.dart';
+import '../utils/log.dart';
 import '../utils/movetext_builder.dart';
-import '../utils/time_format.dart';
-import 'generated_repertoire.dart';
 import '../utils/safe_change_notifier.dart';
+import '../utils/time_format.dart';
+import 'expectimax_database.dart';
+import 'generated_repertoire.dart';
+import 'generation_artifacts.dart';
 import 'generation_progress.dart';
+import 'generation_run_summary.dart';
 import 'generation_session_types.dart';
+import 'master_games_wait.dart';
 import 'snapshot_exporter.dart';
-
-export 'generation_progress.dart';
-export 'generation_session_types.dart'
-    show
-        GeneratedLineExport,
-        GenerationRequest,
-        TreeAnalysis,
-        ExtractedLines,
-        ExpectimaxProbeTarget;
-export 'snapshot_exporter.dart';
 
 class GenerationSessionController extends ChangeNotifier
     with SafeChangeNotifier {
@@ -75,6 +72,12 @@ class GenerationSessionController extends ChangeNotifier
     EngineLifecycle? engineLifecycle,
   }) : _enginePool = enginePool ?? StockfishPool.instance,
        _engineLifecycle = engineLifecycle ?? EngineLifecycle.instance;
+
+  static const String _logName = 'GenerationSession';
+
+  /// Lines queued before the PGN file is flushed mid-export, so a long
+  /// export neither sits in memory nor rewrites the file per line.
+  static const int _pgnFlushEveryLines = 10;
 
   final StockfishPool _enginePool;
   final EngineLifecycle _engineLifecycle;
@@ -86,13 +89,11 @@ class GenerationSessionController extends ChangeNotifier
   /// this controller is constructed.
   MasterGamesService Function() masterGames = () => MasterGamesService.instance;
 
-  /// The database to use for this run, or null when off/absent.
-  MasterGamesDb? _masterDbFor(TreeBuildConfig config) {
-    if (!config.usesMasterGames) return null;
-    final service = masterGames();
-    if (!service.isAvailableForGeneration) return null;
-    return service.db;
-  }
+  final GenerationArtifactStore _artifacts = GenerationArtifactStore();
+  final MasterGamesWait _masterWait = MasterGamesWait();
+  late final ExpectimaxDatabase _database = ExpectimaxDatabase(
+    store: _artifacts,
+  );
 
   /// Live BFS / phase stats. The Jobs panel reads this; the pipeline writes it.
   late final GenerationProgress progress = GenerationProgress(
@@ -116,7 +117,26 @@ class GenerationSessionController extends ChangeNotifier
     progress: () => progress,
   );
 
-  static const int _pgnFlushEveryLines = 10;
+  /// Runs the best-effort post-build passes and keeps their counts.
+  late final EnrichmentRunner _enrichment = EnrichmentRunner(
+    config: () => activeConfig,
+    isCancelled: () => _cancelRequested,
+    onStatus: (message) =>
+        progress.setStatus(message, GenerationPhase.extractingLines),
+    ensureEngine: _ensureEnginePool,
+  );
+
+  /// Turns the extracted lines into the course document — the enrichment
+  /// passes, the model games, the naming and the composition.
+  late final CourseBuilder _courseBuilder = CourseBuilder(
+    enrichment: _enrichment,
+    gameDatabase: () => buildService.lastGameDatabase,
+    masterDbFor: _masterDbFor,
+    fenMap: () => _database.current?.fenMap,
+  );
+
+  final PgnBatchWriter _pgnWriter = PgnBatchWriter();
+  Stopwatch _pipelineSw = Stopwatch();
 
   bool _isGenerating = false;
   bool _isPaused = false;
@@ -127,43 +147,6 @@ class GenerationSessionController extends ChangeNotifier
   /// is left to resume.  Tracked separately from [_cancelRequested] because
   /// the unwind must skip the partial-tree save and delete the file instead.
   bool _discardRequested = false;
-
-  /// Set once the user answers "start now without them" to the master-games
-  /// wait.  Session-scoped on purpose: a plan run builds one chapter after
-  /// another, and being asked to wait again for every chapter would make the
-  /// answer meaningless.
-  bool _masterGamesDownloadDeclined = false;
-
-  /// Completes when the run stops waiting for the master-games download —
-  /// because the user said so, or because the build was cancelled. Null
-  /// whenever the run is not parked on that wait.
-  Completer<void>? _masterWaitGate;
-
-  /// Whether the sync being waited on was started by this run (so stopping
-  /// the wait may stop the download) rather than joined.
-  bool _startedMasterSync = false;
-
-  /// Single source of truth for the generated tree and every artifact derived
-  /// from it (FenMap, eval-tree snapshot, trap index).
-  GeneratedRepertoire? _current;
-
-  /// On-demand probe trees for the repertoire at [_databasePath]: positions
-  /// the main tree never reached, built one request at a time from the
-  /// expectimax pane. Published through [current] as part of its FenMap.
-  final List<BuildTree> _probes = [];
-
-  /// The main tree of [current] is itself a probe — there was no full build
-  /// when the first probe ran, so it stood in as the root of the bundle.
-  /// A later full build moves it into [_probes] rather than dropping it.
-  bool _mainTreeIsProbe = false;
-
-  /// Repertoire file whose expectimax database is loaded, if any.
-  String? _databasePath;
-
-  /// Guards [loadSavedTreeFor] against an older load landing after a newer
-  /// one — switching repertoires twice while the first file is still being
-  /// parsed must show the second repertoire's tree.
-  int _loadSeq = 0;
 
   /// Context for saving partial tree state — set at build start so that
   /// pause/cancel from any source can persist the in-progress tree to disk.
@@ -204,45 +187,9 @@ class GenerationSessionController extends ChangeNotifier
   /// them (see [GenerationRequest.existingLineKeys]).
   int _duplicatesSkipped = 0;
 
-  /// Where the last run wrote its companion model-games file, if it did.
-  String? lastModelGamesPath;
-
   /// Losing replies the last run showed the punishment for.
-  /// Runs the best-effort post-build passes and keeps their counts.
-  late final EnrichmentRunner _enrichment = EnrichmentRunner(
-    config: () => activeConfig,
-    isCancelled: () => _cancelRequested,
-    onStatus: (message) =>
-        progress.setStatus(message, GenerationPhase.extractingLines),
-    ensureEngine: _ensureEnginePool,
-  );
-
-  /// Turns the extracted lines into the course document — the enrichment
-  /// passes, the model games, the naming and the composition.
-  late final CourseBuilder _courseBuilder = CourseBuilder(
-    enrichment: _enrichment,
-    gameDatabase: () => buildService.lastGameDatabase,
-    masterDbFor: _masterDbFor,
-    fenMap: () => _current?.fenMap,
-  );
-
-  /// Bring the shared engine pool up if nothing has started it yet.
-  ///
-  /// The four enrichment passes each carried their own copy of this block,
-  /// which is exactly the kind of thing that drifts apart.
-  Future<void> _ensureEnginePool() async {
-    if (StockfishPool.instance.workerCount != 0) return;
-    final threads = activeConfig?.resolvedEngineThreads;
-    if (threads == null) return;
-    await StockfishPool.instance.prepareForTreeBuild(threads);
-  }
-
   int get lastRefutationCount =>
       _enrichment.countOf(EnrichmentPass.refutations);
-
-  /// Leaf positions given an engine continuation by the last export.
-  int get lastEngineTailCount =>
-      _enrichment.countOf(EnrichmentPass.engineTails);
 
   /// Positions where the last run showed a refuted move the book leaves out.
   int get lastAlternativeCount =>
@@ -252,8 +199,11 @@ class GenerationSessionController extends ChangeNotifier
   int get lastImprovementCount =>
       _enrichment.countOf(EnrichmentPass.improvements);
 
-  final PgnBatchWriter _pgnWriter = PgnBatchWriter();
-  Stopwatch _pipelineSw = Stopwatch();
+  EnrichmentCounts get _enrichmentCounts => (
+    refutations: lastRefutationCount,
+    alternatives: lastAlternativeCount,
+    improvements: lastImprovementCount,
+  );
 
   bool get isGenerating => _isGenerating;
   bool get isPaused => _isPaused;
@@ -284,45 +234,33 @@ class GenerationSessionController extends ChangeNotifier
     required bool verify,
   }) => snapshots.export(repertoireName: repertoireName, verify: verify);
 
-  /// Test and overlay helper — forwards to [progress.update].
-  ///
-  /// Everything else about progress is read straight off [progress]. There
-  /// used to be seventeen `progressX` getters forwarding to a field that was
-  /// already public, which meant a new progress field was invisible to the
-  /// jobs panel until someone remembered to add an eighteenth.
-  void updateProgress({
-    int? nodes,
-    int? depth,
-    int? maxPlyConfig,
-    int? unexploredAtDepth,
-    int? totalAtDepth,
-    int? lines,
-    double? nodesPerMinute,
-    int? elapsedMs,
-  }) => progress.update(
-    nodes: nodes,
-    depth: depth,
-    maxPlyConfig: maxPlyConfig,
-    unexploredAtDepth: unexploredAtDepth,
-    totalAtDepth: totalAtDepth,
-    lines: lines,
-    nodesPerMinute: nodesPerMinute,
-    elapsedMs: elapsedMs,
-  );
-
   /// The current generated repertoire bundle, or null when none is loaded.
-  GeneratedRepertoire? get current => _current;
+  GeneratedRepertoire? get current => _database.current;
 
-  // Backward-compatible accessors — all delegate to [_current] so existing
-  // call-sites keep working while sharing one source of truth.
-  BuildTree? get generatedTree => _current?.tree;
-  TreeBuildConfig? get generatedTreeConfig => _current?.config;
-  FenMap? get generatedTreeFenMap => _current?.fenMap;
+  BuildTree? get generatedTree => current?.tree;
+  TreeBuildConfig? get generatedTreeConfig => current?.config;
+  FenMap? get generatedTreeFenMap => current?.fenMap;
 
   /// Read only the board's candidate positions during expansion. Indexing is
   /// incremental at node attachment, never a whole-tree walk on a UI tick.
   BuildTreeNode? liveNodeAt(String fen) =>
       _isGenerating ? buildService.liveNodeAt(fen) : null;
+
+  /// The database to use for this run, or null when off/absent.
+  MasterGamesDb? _masterDbFor(TreeBuildConfig config) {
+    if (!config.usesMasterGames) return null;
+    final service = masterGames();
+    if (!service.isAvailableForGeneration) return null;
+    return service.db;
+  }
+
+  /// Bring the shared engine pool up if nothing has started it yet.
+  Future<void> _ensureEnginePool() async {
+    if (StockfishPool.instance.workerCount != 0) return;
+    final threads = activeConfig?.resolvedEngineThreads;
+    if (threads == null) return;
+    await StockfishPool.instance.prepareForTreeBuild(threads);
+  }
 
   // ── Pipeline ─────────────────────────────────────────────────────────
 
@@ -342,7 +280,7 @@ class GenerationSessionController extends ChangeNotifier
     // state changes, so a resume-position mismatch is a clean refusal.
     final List<String> prefix;
     try {
-      prefix = _resolveLinePrefix(request);
+      prefix = request.resolveLinePrefix();
     } on StateError catch (e) {
       lastError = e.message;
       lastRunSummary = e.message;
@@ -409,13 +347,20 @@ class GenerationSessionController extends ChangeNotifier
 
       await _exportLinesPhase(tree, extracted, request, prefix);
       await _persistArtifactsPhase(tree, analysis, extracted, config, filePath);
-      _publishSummary(
-        tree,
-        analysis,
-        extracted,
-        config,
+      lastRunSummary = composeRunSummary(
+        tree: tree,
+        analysis: analysis,
+        extracted: extracted,
+        config: config,
+        elapsed: _pipelineSw.elapsed,
+        duplicatesSkipped: _duplicatesSkipped,
+        courseOutline: lastCourseOutline,
+        enrichment: _enrichmentCounts,
+        modelGameNote: lastModelGameNote,
+        bookStats: buildService.buildStats,
         finishedEarly: finishedEarly,
       );
+      progress.setStatus(lastRunSummary, GenerationPhase.extractingLines);
     } on BuildCancelledException catch (e) {
       _cancelRequested = true;
       lastRunSummary = e.message;
@@ -436,70 +381,33 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Fill an empty master-games database before building, when the config
   /// asked for master practice and
-  /// [TreeBuildConfig.downloadMasterGamesIfMissing] is on.  Runs before the
-  /// engine is claimed, so a multi-gigabyte download does not strand
-  /// Stockfish, and returns as soon as the sync ends — finished, cancelled
-  /// or failed.  A failure is not fatal: the build proceeds without a book,
-  /// exactly as it does today.  Does nothing when the database already has
-  /// games or when the user declined the wait earlier this session.
+  /// [TreeBuildConfig.downloadMasterGamesIfMissing] is on.  Returns as soon
+  /// as the sync ends — finished, cancelled or failed; a failure is not
+  /// fatal, the build proceeds without a book.  Does nothing when the
+  /// database already has games or when the user declined the wait earlier
+  /// this session.
   Future<void> _downloadMasterGamesPhase(TreeBuildConfig config) async {
     if (!config.usesMasterGames || !config.downloadMasterGamesIfMissing) return;
-    if (_masterGamesDownloadDeclined || _cancelRequested) return;
+    if (_masterWait.declined || _cancelRequested) return;
     final service = masterGames();
     if (service.hasGames) return;
 
     progress.setStatus(
-      'Downloading master games…',
+      MasterGamesWait.downloadingStatus,
       GenerationPhase.downloadingMasterGames,
     );
     // Mirror the service's own progress line into the build status, so the
     // lock overlay and the job tile show issue counts rather than a bare
     // spinner.
-    void mirror() {
-      if (!isAwaitingMasterGames) return;
-      final status = service.status;
-      progress.setStatus(
-        status.isEmpty ? 'Downloading master games…' : status,
-        GenerationPhase.downloadingMasterGames,
-      );
-    }
-
-    // A sync already in flight (the startup auto-sync, or one started from
-    // Settings) is joined rather than duplicated — and, because it is not
-    // ours, is left running when we stop waiting.
-    _startedMasterSync = !service.isSyncing;
-    final gate = _masterWaitGate = Completer<void>();
-    service.addListener(mirror);
-    try {
-      final sync =
-          (_startedMasterSync ? service.sync() : service.syncCompletion)
-              .catchError((Object e) {
-                log.w(
-                  'master games download failed',
-                  name: 'GenerationSession',
-                  error: e,
-                );
-              });
-      // Whichever comes first: the sync ending, or the user (or a cancel)
-      // deciding not to wait for it.
-      await Future.any([sync, gate.future]);
-    } finally {
-      service.removeListener(mirror);
-      _masterWaitGate = null;
-    }
+    await _masterWait.park(
+      MasterGamesServiceSync(service),
+      onStatus: (status) {
+        if (!isAwaitingMasterGames) return;
+        progress.setStatus(status, GenerationPhase.downloadingMasterGames);
+      },
+    );
     if (_cancelRequested) return;
     progress.setStatus('Starting build…', GenerationPhase.idle);
-  }
-
-  /// Stop waiting for the master-games download.  The download itself is
-  /// cancelled only when this run started it — a sync the user kicked off
-  /// from Settings is theirs, and keeps going.  Cancelled or not, issues
-  /// already imported are kept and the next sync resumes from there.
-  void _stopWaitingForMasterGames() {
-    final gate = _masterWaitGate;
-    if (gate == null || gate.isCompleted) return;
-    if (_startedMasterSync) masterGames().cancel();
-    gate.complete();
   }
 
   /// "Start now without them": get on with the build using Maia and the
@@ -507,8 +415,7 @@ class GenerationSessionController extends ChangeNotifier
   /// chapter after another does not ask again for every chapter.
   void skipMasterGamesDownload() {
     if (!isAwaitingMasterGames) return;
-    _masterGamesDownloadDeclined = true;
-    _stopWaitingForMasterGames();
+    _masterWait.decline();
     progress.setStatus('Starting build…', GenerationPhase.idle);
     notifyListeners();
   }
@@ -546,16 +453,16 @@ class GenerationSessionController extends ChangeNotifier
     _activeRequest = request;
 
     coherenceService.invalidate();
-    // A full build replaces the database; a probe adds to it, and the pane
-    // keeps showing it while the probe runs.
-    if (!request.expectimaxOnly) _current = null;
+    // A full build replaces the tree; a probe adds to the database, and the
+    // pane keeps showing it while the probe runs.
+    if (!request.expectimaxOnly) _database.dropTree();
     // Hosts listening for isGenerating create the Jobs-panel job here.
     notifyListeners();
     currentJob
       ?..configSnapshot = Map<String, dynamic>.from(config.toJson())
       ..updateStatus(JobStatus.running);
 
-    _seedResumeProgress(existingTree, config);
+    _seedResumeProgress(existingTree);
     progress.setStatus(
       existingTree != null
           ? 'Phase 1: Resuming build...'
@@ -576,7 +483,7 @@ class GenerationSessionController extends ChangeNotifier
     // A discarded build leaves nothing to resume: drop the partial tree
     // that cancelBuild would otherwise have saved.
     if (_discardRequested) {
-      await _deletePartialTree(filePath);
+      await _artifacts.deletePartialTree(filePath);
     }
     // Release any dangling pause gate so nothing awaits it forever.
     buildService.resumeBuild();
@@ -628,9 +535,10 @@ class GenerationSessionController extends ChangeNotifier
       // Keep the original error; a failed flush must not mask it.
     }
     await _writeFailureDump(config, error);
-    lastError = 'Generation failed: $error';
-    lastRunSummary = lastError!;
-    currentJob?.fail(lastError!);
+    final message = 'Generation failed: $error';
+    lastError = message;
+    lastRunSummary = message;
+    currentJob?.fail(message);
   }
 
   /// Claim engine threads when the config needs Stockfish.  Returns whether
@@ -665,26 +573,23 @@ class GenerationSessionController extends ChangeNotifier
         onStatusChanged: progress.setStatus,
         onProgress: progress.handleBuildProgress,
       );
+    } else if (existingTree != null &&
+        existingTree.maxPlyReached >= config.maxPly) {
+      tree = existingTree;
+      progress.setStatus(
+        'Tree already at depth ${existingTree.maxPlyReached}, '
+        'skipping build...',
+        GenerationPhase.buildingTree,
+      );
     } else {
-      final skipBuild =
-          existingTree != null && existingTree.maxPlyReached >= config.maxPly;
-      if (skipBuild) {
-        tree = existingTree;
-        progress.setStatus(
-          'Tree already at depth ${existingTree.maxPlyReached}, '
-          'skipping build...',
-          GenerationPhase.buildingTree,
-        );
-      } else {
-        tree = await buildService.build(
-          config: config,
-          isCancelled: () => _cancelRequested,
-          finishNow: () => _finishNowRequested,
-          existingTree: existingTree,
-          onProgress: progress.handleBuildProgress,
-          masterBook: _masterDbFor(config)?.bookMoves,
-        );
-      }
+      tree = await buildService.build(
+        config: config,
+        isCancelled: () => _cancelRequested,
+        finishNow: () => _finishNowRequested,
+        existingTree: existingTree,
+        onProgress: progress.handleBuildProgress,
+        masterBook: _masterDbFor(config)?.bookMoves,
+      );
     }
 
     if (_cancelRequested) {
@@ -800,7 +705,7 @@ class GenerationSessionController extends ChangeNotifier
     } catch (e) {
       // Verification is best-effort on engine failures; the build-time
       // evals still stand.
-      debugPrint('Verification pass failed: $e');
+      log.w('verification pass failed', name: _logName, error: e);
     }
   }
 
@@ -826,10 +731,7 @@ class GenerationSessionController extends ChangeNotifier
     var trapsOnlyNote = '';
     if (config.trapsOnly) {
       final beforeTraps = lines.length;
-      final traps = TrapExtractor(
-        playAsWhite: config.playAsWhite,
-        findabilityPRef: pRefForElo(config.maiaElo),
-      ).extract(tree);
+      final traps = _trapExtractorFor(config).extract(tree);
       lines = keepLinesThroughTraps(lines, traps, (line) => line.movesSan);
       trapsOnlyNote = lines.isEmpty
           ? ' No traps found — nothing exported.'
@@ -874,6 +776,24 @@ class GenerationSessionController extends ChangeNotifier
       trapsOnlyNote: trapsOnlyNote,
       folds: folds,
     );
+  }
+
+  static TrapExtractor _trapExtractorFor(TreeBuildConfig config) =>
+      TrapExtractor(
+        playAsWhite: config.playAsWhite,
+        findabilityPRef: pRefForElo(config.maiaElo),
+      );
+
+  /// The published bundle's trap index, or a fresh extraction when the
+  /// bundle is not this [tree]. Null when extraction fails — a failure here
+  /// costs the trap list, not the build.
+  List<TrapLineInfo>? _trapLinesOf(BuildTree tree, TreeBuildConfig config) {
+    try {
+      return current?.traps.allTraps ?? _trapExtractorFor(config).extract(tree);
+    } catch (e) {
+      log.w('trap extraction failed', name: _logName, error: e);
+      return null;
+    }
   }
 
   /// Compose the extracted lines into a course — chapters cut at branch
@@ -928,36 +848,18 @@ class GenerationSessionController extends ChangeNotifier
     }
   }
 
-  /// Write the model games again as a companion `<repertoire>_model_games.pgn`
-  /// beside the course: real headers, real results, the same annotations, so
-  /// the PGN viewer opens them as a game collection rather than as study
-  /// chapters. The chapter inside the course stays — it is what the
-  /// study/trainer flow reads. A course with no model games removes a stale
-  /// companion from an earlier run so the two never disagree.
+  /// Write the model games as a companion game collection beside the course
+  /// (see [GenerationArtifactStore.writeModelGames]). The chapter inside the
+  /// course stays — it is what the study/trainer flow reads.
   Future<void> _writeModelGamesFile(
     ComposedCourse course,
     String courseFilePath,
   ) async {
-    lastModelGamesPath = null;
-    final path = modelGamesPathFor(courseFilePath);
-    try {
-      if (course.modelGamePgns.isEmpty) {
-        await StorageFactory.instance.deleteFile(path);
-        return;
-      }
-      await StorageFactory.instance.writeFile(path, course.modelGamesPgn());
-      lastModelGamesPath = path;
-      lastModelGameNote =
-          '$lastModelGameNote Model games also saved to '
-          '${p.basename(path)}.';
-    } catch (e) {
-      debugPrint('Model games file not written: $e');
-    }
+    final path = await _artifacts.writeModelGames(course, courseFilePath);
+    if (path == null) return;
+    lastModelGameNote =
+        '$lastModelGameNote Model games also saved to ${p.basename(path)}.';
   }
-
-  /// Companion file path for a course at [courseFilePath].
-  static String modelGamesPathFor(String courseFilePath) =>
-      CourseBuilder.modelGamesPathFor(courseFilePath);
 
   /// Write the side artifacts: serialized tree, run debug dump, trap index,
   /// and the partial-tree file that makes an unfinished build resumable.
@@ -970,18 +872,9 @@ class GenerationSessionController extends ChangeNotifier
     TreeBuildConfig config,
     String filePath,
   ) async {
-    String? treeJson;
-    try {
-      // The build is finished here (no concurrent mutator); the indented
-      // encode of the whole tree runs off the UI isolate.
-      final json = await serializeTreeInIsolate(tree);
-      treeJson = json;
-      final base = p.withoutExtension(filePath);
-      await StorageFactory.instance.writeFile('${base}_tree.json', json);
-    } catch (e) {
-      // Tree JSON save is best-effort — log so isolate/send failures aren't silent.
-      debugPrint('[GenerationController] Failed to save tree JSON: $e');
-    }
+    // The build is finished here (no concurrent mutator); the indented
+    // encode of the whole tree runs off the UI isolate.
+    final treeJson = await _artifacts.writeTree(tree, filePath);
 
     await writeRunDebugDump(
       log: buildService.runLog,
@@ -1002,148 +895,23 @@ class GenerationSessionController extends ChangeNotifier
       },
     );
 
-    // Save trap lines from the bundle's index (always write the file so
-    // the UI can distinguish "never generated" from "no traps found").
-    try {
-      final trapLines =
-          _current?.traps.allTraps ??
-          TrapExtractor(
-            playAsWhite: config.playAsWhite,
-            findabilityPRef: pRefForElo(config.maiaElo),
-          ).extract(tree);
-      await TrapExtractor.saveToFile(trapLines, filePath);
-    } catch (e) {
-      // Best-effort: a failure here costs the trap list, not the build. Logged
-      // because the symptom — a finished repertoire with no traps — is
-      // otherwise indistinguishable from a position that genuinely has none.
-      log.w(
-        'trap extraction failed for $filePath',
-        name: 'GenerationSession',
-        error: e,
-      );
-    }
+    final trapLines = _trapLinesOf(tree, config);
+    if (trapLines != null) await _artifacts.writeTrapIndex(trapLines, filePath);
 
     // A budget/finish-now stop leaves the tree resumable: keep the partial
     // file so the Generate tab offers to continue it.  savePartialTree
     // reads buildService.currentTree, which the skip-build resume path
     // never set — there the on-disk partial already holds this tree.
     if (tree.buildComplete) {
-      await _deletePartialTree(filePath);
+      await _artifacts.deletePartialTree(filePath);
     } else if (identical(buildService.currentTree, tree)) {
       await savePartialTree();
     }
   }
 
-  /// Compose the one-sentence outcome shown on the job tile and status line.
-  void _publishSummary(
-    BuildTree tree,
-    TreeAnalysis analysis,
-    ExtractedLines extracted,
-    TreeBuildConfig config, {
-    required bool finishedEarly,
-  }) {
-    final pruneNote = extracted.wasPruned
-        ? ' (pruned from ${extracted.rawCount})'
-        : '';
-    final elapsedLabel = formatCompactDuration(
-      Duration(milliseconds: _pipelineSw.elapsedMilliseconds),
-    );
-    final duplicateNote = _duplicatesSkipped > 0
-        ? ' $_duplicatesSkipped line${_duplicatesSkipped == 1 ? '' : 's'} '
-              'already in the repertoire ${_duplicatesSkipped == 1 ? 'was' : 'were'} '
-              'not written again.'
-        : '';
-    lastRunSummary =
-        '${tree.buildComplete ? 'Complete' : 'Incomplete search'} in $elapsedLabel: ${tree.totalNodes} nodes, '
-        '${analysis.selectedCount} repertoire moves, '
-        '${extracted.lines.length} lines$pruneNote'
-        '${_courseNote()}.$duplicateNote${extracted.trapsOnlyNote}'
-        '$lastModelGameNote';
-    if (tree.root.historyAware) {
-      lastRunSummary +=
-          ' ${config.isRollingSearch ? 'Fast policy estimate (approximate)' : 'Expected-score estimate'}: ${tree.root.expectimaxValue.toStringAsFixed(4)}; bounds [${tree.root.valueLower.toStringAsFixed(4)}, ${tree.root.valueUpper.toStringAsFixed(4)}].';
-    }
-    if (config.isChessDbBook) {
-      lastRunSummary = '$lastRunSummary ${_bookSourceNote()}';
-    }
-    if (finishedEarly && config.runsVerification) {
-      lastRunSummary =
-          '$lastRunSummary '
-          'Verification skipped (finished early).';
-    }
-    progress.setStatus(lastRunSummary, GenerationPhase.extractingLines);
-  }
-
-  /// How much of a ChessDB book actually came from ChessDB.
-  ///
-  /// A book built mostly by the engine fallback is a different artifact from
-  /// one the database wrote, and the difference is invisible in the PGN — so
-  /// it is said out loud rather than left to be inferred from the node count.
-  String _bookSourceNote() {
-    final stats = buildService.buildStats;
-    final db = stats.bookDbMoveHits;
-    final engine = stats.bookEngineFallbacks;
-    final total = db + engine;
-    if (total == 0) return '';
-    final share = (100 * db / total).round();
-    final dead = stats.bookDeadEnds;
-    return 'ChessDB named $db positions and the engine $engine ($share% '
-        'ChessDB)'
-        '${dead > 0 ? ', $dead lines ended with no move available' : ''}.';
-  }
-
-  /// ` in 7 chapters plus 6 model games`, or empty when the export was flat.
-  String _courseNote() {
-    if (lastCourseOutline.isEmpty) return '';
-    final chapters = lastCourseOutline
-        .where((c) => c.kind == ChapterKind.lines)
-        .length;
-    final games = lastCourseOutline
-        .where((c) => c.kind == ChapterKind.modelGames)
-        .fold(0, (sum, c) => sum + c.entryCount);
-    if (chapters < 2 &&
-        games == 0 &&
-        lastRefutationCount == 0 &&
-        lastAlternativeCount == 0 &&
-        lastImprovementCount == 0) {
-      return '';
-    }
-    return [
-      if (chapters >= 2) ' in $chapters chapters',
-      if (games > 0) '${chapters >= 2 ? ' plus' : ' with'} $games model games',
-      if (lastRefutationCount > 0) ', $lastRefutationCount punished replies',
-      if (lastAlternativeCount > 0)
-        ', $lastAlternativeCount refuted alternatives',
-      if (lastImprovementCount > 0)
-        ', $lastImprovementCount improvements on master games',
-    ].join();
-  }
-
-  /// SAN prefix (from the repertoire root) that exported lines must carry.
-  ///
-  /// Fresh builds use the caller's current move sequence.  Resumed builds
-  /// trust the prefix recorded on the saved tree — the board may have moved
-  /// since the build was paused.  A legacy partial tree without a recorded
-  /// prefix can only resume from the exact position it was built from.
-  List<String> _resolveLinePrefix(GenerationRequest request) {
-    final tree = request.existingTree;
-    if (tree == null) return request.lineMovePrefix;
-    if (tree.startMoves.isNotEmpty) {
-      return tree.startMoves
-          .split(' ')
-          .where((m) => m.isNotEmpty)
-          .toList(growable: false);
-    }
-    if (tree.root.fen == request.buildRootFen) return request.lineMovePrefix;
-    throw StateError(
-      'Cannot resume: the paused build started from a different position. '
-      'Navigate to that position first, or discard the paused build.',
-    );
-  }
-
   /// Seed depth-layer counters so a resumed build doesn't show
   /// "0 / 0 explored" while BFS replays existing nodes toward the frontier.
-  void _seedResumeProgress(BuildTree? existingTree, TreeBuildConfig config) {
+  void _seedResumeProgress(BuildTree? existingTree) {
     progress.nodes = existingTree?.totalNodes ?? 0;
     if (existingTree == null) return;
     final frontierPly = TreeBuildService.minFrontierPly(existingTree.root);
@@ -1151,13 +919,13 @@ class GenerationSessionController extends ChangeNotifier
         frontierPly ??
         (existingTree.maxPlyReached > 0 ? existingTree.maxPlyReached : null);
     if (seedPly == null) return;
-    final layer = TreeBuildProgressTracker.depthLayerStats(
+    final (total, unexplored) = TreeBuildProgressTracker.depthLayerStats(
       existingTree.root,
       seedPly,
     );
     if (frontierPly != null) progress.depth = frontierPly;
-    progress.totalAtDepth = layer.$1;
-    progress.unexploredAtDepth = layer.$2;
+    progress.totalAtDepth = total;
+    progress.unexploredAtDepth = unexplored;
   }
 
   Future<void> _writeFailureDump(TreeBuildConfig config, Object error) async {
@@ -1173,9 +941,7 @@ class GenerationSessionController extends ChangeNotifier
       }
     } catch (e) {
       // Partial tree may be unserializable; dump the log regardless.
-      debugPrint(
-        '[GenerationController] Failed to serialize failed-tree JSON: $e',
-      );
+      log.w('failed-tree serialization failed', name: _logName, error: e);
     }
     await writeRunDebugDump(
       log: buildService.runLog,
@@ -1187,7 +953,7 @@ class GenerationSessionController extends ChangeNotifier
     );
   }
 
-  // ── Partial tree save / delete ───────────────────────────────────────
+  // ── Partial tree save ────────────────────────────────────────────────
 
   /// Persist the in-progress tree to `{repertoire}_partial_tree.json`.
   Future<void> savePartialTree() async {
@@ -1195,31 +961,12 @@ class GenerationSessionController extends ChangeNotifier
     if (tree == null) return;
     final filePath = _repertoireFilePath;
     if (filePath == null || filePath.isEmpty) return;
-    final base = p.withoutExtension(filePath);
-    final path = '${base}_partial_tree.json';
-    try {
-      if (tree.startMoves.isEmpty &&
-          _startMoveSequence.isNotEmpty &&
-          tree.root.fen == _startFen) {
-        tree.startMoves = _startMoveSequence.join(' ');
-      }
-      // Captured synchronously (a consistent snapshot of the live tree),
-      // encoded compactly off the UI isolate: this runs from pause and
-      // cancel, exactly when a multi-second freeze would be felt.
-      final treeJson = await serializeTreeInIsolate(tree, indent: false);
-      await StorageFactory.instance.writeFile(path, treeJson);
-    } catch (e) {
-      debugPrint('[GenerationController] Failed to save partial tree: $e');
+    if (tree.startMoves.isEmpty &&
+        _startMoveSequence.isNotEmpty &&
+        tree.root.fen == _startFen) {
+      tree.startMoves = _startMoveSequence.join(' ');
     }
-  }
-
-  Future<void> _deletePartialTree(String repertoireFilePath) async {
-    final base = p.withoutExtension(repertoireFilePath);
-    try {
-      await StorageFactory.instance.deleteFile('${base}_partial_tree.json');
-    } catch (e) {
-      debugPrint('[GenerationController] Failed to delete partial tree: $e');
-    }
+    await _artifacts.writePartialTree(tree, filePath);
   }
 
   // ── Control methods (callable from anywhere) ────────────────────────
@@ -1275,7 +1022,7 @@ class GenerationSessionController extends ChangeNotifier
     buildService.stopBuild();
     // A run parked on the master-games download has no BFS to stop; without
     // this the cancel would not be felt until the whole download finished.
-    _stopWaitingForMasterGames();
+    _masterWait.stopWaiting();
     progress.status = _discardRequested ? 'Discarding…' : 'Cancelling…';
     progress.flushNotify();
   }
@@ -1311,72 +1058,20 @@ class GenerationSessionController extends ChangeNotifier
 
   // ── Generated tree lifecycle ─────────────────────────────────────────
 
-  /// Publish [tree] as the main tree of the bundle.
-  ///
-  /// [probes] replaces the probe list when given; otherwise the probes
-  /// already loaded stay. A main tree that was itself a probe (see
-  /// [_mainTreeIsProbe]) is demoted to the probe list rather than lost.
+  /// Publish [tree] as the main tree of the bundle and tell listeners.
+  /// See [ExpectimaxDatabase.publish] for how [probes] and [mainIsProbe]
+  /// are folded in.
   void onTreeBuilt(
     BuildTree tree, {
     List<BuildTree>? probes,
     bool mainIsProbe = false,
   }) {
-    if (probes != null) {
-      _probes
-        ..clear()
-        ..addAll(probes);
-    }
-    final previous = _current?.tree;
-    if (_mainTreeIsProbe &&
-        previous != null &&
-        !identical(previous, tree) &&
-        !_probes.contains(previous)) {
-      _probes.insert(0, previous);
-    }
-    _mainTreeIsProbe = mainIsProbe;
-    TreeBuildConfig? config;
-    if (tree.configSnapshot.isNotEmpty) {
-      try {
-        config = TreeBuildConfig.fromJson(
-          tree.configSnapshot,
-          startFen: tree.root.fen,
-        );
-      } catch (e) {
-        debugPrint('[GenerationController] Config parse failed: $e');
-      }
-    }
-    final playAsWhite =
-        config?.playAsWhite ??
-        tree.configSnapshot['play_as_white'] as bool? ??
-        tree.root.isWhiteToMove;
-    // Derive FenMap, eval-tree snapshot, and trap index once, here.
-    //
-    // A probe landing calls this with the build's own tree unchanged and one
-    // more probe. Only the transposition map spans the database, so that case
-    // reuses the snapshot, the metric cache and the trap index instead of
-    // recomputing three identical answers over the whole tree.
-    final previousBundle = _current;
-    if (previousBundle != null &&
-        identical(previousBundle.tree, tree) &&
-        previousBundle.playAsWhite == playAsWhite) {
-      _current = previousBundle.withProbes(_probes);
-    } else {
-      _current = GeneratedRepertoire.fromTree(
-        tree,
-        playAsWhite: playAsWhite,
-        config: config,
-        probes: _probes,
-      );
-    }
+    _database.publish(tree, probes: probes, mainIsProbe: mainIsProbe);
     notifyListeners();
   }
 
   void clearTree() {
-    _current = null;
-    _probes.clear();
-    _mainTreeIsProbe = false;
-    _databasePath = null;
-    _loadSeq++;
+    _database.clear();
     coherenceService.invalidate();
     notifyListeners();
   }
@@ -1395,97 +1090,75 @@ class GenerationSessionController extends ChangeNotifier
   }
 
   /// Load the expectimax database saved beside [repertoireFilePath]: the
-  /// tree the last full build wrote (`_tree.json`) and every probe since
-  /// (`_expectimax.json`). Replaces whatever is loaded; a repertoire with
-  /// neither file ends with no tree.
+  /// tree the last full build wrote and every probe since. Replaces
+  /// whatever is loaded; a repertoire with neither file ends with no tree.
   ///
   /// Idle only — a running build owns the bundle until it finishes.
   Future<void> loadSavedTreeFor(String repertoireFilePath) async {
     if (_isGenerating) return;
-    final seq = ++_loadSeq;
-    final storage = StorageFactory.instance;
-    final base = p.withoutExtension(repertoireFilePath);
-    final treePath = '${base}_tree.json';
-    final probesPath = ExpectimaxProbeStore.pathFor(repertoireFilePath);
-
-    BuildTree? main;
-    var probes = <BuildTree>[];
-    try {
-      if (await storage.fileExists(treePath)) {
-        final json = await storage.readFile(treePath);
-        if (json != null && json.isNotEmpty) {
-          main = await Isolate.run(() => deserializeTree(json));
-        }
-      }
-      if (await storage.fileExists(probesPath)) {
-        final json = await storage.readFile(probesPath);
-        if (json != null && json.isNotEmpty) {
-          probes = await Isolate.run(() => ExpectimaxProbeStore.decode(json));
-        }
-      }
-    } catch (e) {
-      log.w(
-        'expectimax database load failed for $repertoireFilePath',
-        name: 'GenerationSession',
-        error: e,
-      );
+    final outcome = await _database.load(
+      repertoireFilePath,
+      canApply: () => !_isGenerating && !isDisposed,
+    );
+    switch (outcome) {
+      case ExpectimaxLoadOutcome.superseded:
+        return;
+      case ExpectimaxLoadOutcome.loaded:
+        notifyListeners();
+      case ExpectimaxLoadOutcome.empty:
+        coherenceService.invalidate();
+        notifyListeners();
     }
-    // Superseded by a newer load or a build that started meanwhile.
-    if (seq != _loadSeq || _isGenerating || isDisposed) return;
+  }
 
-    _databasePath = repertoireFilePath;
-    if (main != null) {
-      main.sortAllChildren();
-      onTreeBuilt(main, probes: probes);
-    } else if (probes.isNotEmpty) {
-      // No full build yet: the first probe stands in as the main tree.
-      onTreeBuilt(probes.first, probes: probes.sublist(1), mainIsProbe: true);
-    } else {
-      _current = null;
-      _probes.clear();
-      _mainTreeIsProbe = false;
-      coherenceService.invalidate();
-      notifyListeners();
+  /// Make sure the loaded database is [target]'s repertoire, loading it
+  /// when it is not. Returns why the caller must stop, or null to go on.
+  ///
+  /// Generate can be opened immediately after selecting a chapter. Waiting
+  /// for its saved analysis here means a fast click cannot replace a
+  /// database whose background load has not finished yet.
+  Future<String?> _ensureDatabaseFor(ExpectimaxProbeTarget target) async {
+    if (_database.isFor(target.repertoireFilePath)) return null;
+    await loadSavedTreeFor(target.repertoireFilePath);
+    if (isDisposed) return 'Generation was closed.';
+    if (_isGenerating) return 'A generation is already running.';
+    if (!_database.isFor(target.repertoireFilePath)) {
+      return 'The analysis session changed.';
     }
+    return null;
+  }
+
+  /// The position [target] names, or null when its moves cannot be played
+  /// from the repertoire start.
+  static String? _probeRootFen(ExpectimaxProbeTarget target) {
+    final moves = target.moves;
+    final fen = fenAfterMoves(
+      target.repertoireStartFen,
+      moves,
+      moves.length - 1,
+    );
+    final playedPlies = plyFromFen(fen) - plyFromFen(target.repertoireStartFen);
+    return playedPlies == moves.length ? fen : null;
   }
 
   /// Evaluate a single move and persist its engine continuation, without
   /// exploring an opponent-policy tree or manufacturing an expected score.
   Future<String?> computeMovePv(ExpectimaxProbeTarget target) async {
     if (_isGenerating) return 'A calculation is already running.';
-    final moves = [
-      ...target.movesFromStart,
-      if (target.moveSan != null) target.moveSan!,
-    ];
-    final fen = fenAfterMoves(
-      target.repertoireStartFen,
-      moves,
-      moves.length - 1,
-    );
-    if (plyFromFen(fen) - plyFromFen(target.repertoireStartFen) !=
-        moves.length) {
+    final moves = target.moves;
+    final fen = _probeRootFen(target);
+    if (fen == null) {
       return 'The selected move is not legal from this position.';
     }
-    if (_databasePath != target.repertoireFilePath) {
-      await loadSavedTreeFor(target.repertoireFilePath);
-      if (isDisposed ||
-          _isGenerating ||
-          _databasePath != target.repertoireFilePath) {
-        return 'The analysis session changed.';
-      }
-    }
-    final config = TreeBuildConfig.formDefaults(
-      startFen: fen,
-      playAsWhite: target.playAsWhite,
-    ).copyWith(engineThreads: target.engineThreads, verifyFinal: false);
-    final request = GenerationRequest(
+    final refusal = await _ensureDatabaseFor(target);
+    if (refusal != null) return refusal;
+
+    final config = target.movePvConfig(fen);
+    final request = GenerationRequest.expectimaxProbe(
       config: config,
-      repertoireFilePath: target.repertoireFilePath,
+      target: target,
       buildRootFen: fen,
       lineMovePrefix: moves,
-      repertoireStartFen: target.repertoireStartFen,
-      onLinesSaved: (_) {},
-      expectimaxOnly: true,
     );
     _beginRun(request, moves);
     var entered = false;
@@ -1499,11 +1172,12 @@ class GenerationSessionController extends ChangeNotifier
         'Evaluating ${target.moveSan ?? 'position'} · engine depth ${config.evalDepth}',
         GenerationPhase.buildingTree,
       );
+      final whiteToMove = isWhiteToMove(fen);
       final result = await _enginePool.discoverMoves(
         fen: fen,
         depth: config.evalDepth,
         multiPv: 1,
-        isWhiteToMove: fen.split(' ')[1] == 'w',
+        isWhiteToMove: whiteToMove,
       );
       if (_cancelRequested) {
         lastRunSummary = 'Move evaluation cancelled.';
@@ -1513,58 +1187,31 @@ class GenerationSessionController extends ChangeNotifier
         throw StateError('Stockfish returned no continuation');
       }
       final line = result.lines.first;
-      final root = BuildTreeNode(
+      final probe = enginePvProbe(
         fen: fen,
-        moveSan: '',
-        moveUci: '',
-        ply: 0,
-        isWhiteToMove: fen.split(' ')[1] == 'w',
-        nodeId: 0,
+        evalCpWhite: line.effectiveCp * (whiteToMove ? 1 : -1),
+        pv: line.pv,
+        startMoves: moves,
+        config: config,
       );
-      root.engineEvalCp = line.effectiveCp * (root.isWhiteToMove ? 1 : -1);
-      root.enginePv = List.unmodifiable(line.pv);
-      final probe = BuildTree(
-        root: root,
-        startMoves: moves.join(' '),
-        configSnapshot: config.toJson(),
-      )..computeMetadata();
-      final bundle = _current;
-      final at = bundle?.fenMap.getCanonical(fen);
-      final host = at == null ? null : treeOwning(at, bundle!.allTrees);
-      if (host != null && at != null) {
-        // A PV is evidence about this position, never extra policy branches.
-        // Grafting its replies into a searched chance node corrupts Maia mass.
-        at.engineEvalCp = root.engineEvalCp;
-        at.enginePv = root.enginePv;
-        onTreeBuilt(
-          bundle!.tree,
-          probes: List.of(_probes),
-          mainIsProbe: _mainTreeIsProbe,
-        );
-      } else if (bundle == null) {
-        onTreeBuilt(probe, probes: const [], mainIsProbe: true);
-      } else {
-        onTreeBuilt(
-          bundle.tree,
-          probes: [..._probes, probe],
-          mainIsProbe: _mainTreeIsProbe,
-        );
-      }
-      await _persistExpectimaxDatabase(
+      final mainTreeChanged = _database.recordEnginePv(probe);
+      notifyListeners();
+      await _database.persist(
         target.repertoireFilePath,
-        mainTreeChanged: host != null && identical(host, bundle?.tree),
+        mainTreeChanged: mainTreeChanged,
       );
       lastRunSummary =
-          '${target.moveSan ?? 'Position'} evaluated · engine depth ${config.evalDepth} · ${root.enginePv.length} PV moves saved';
+          '${target.moveSan ?? 'Position'} evaluated · engine depth ${config.evalDepth} · ${probe.root.enginePv.length} PV moves saved';
       return null;
     } catch (error) {
       if (_cancelRequested) {
         lastRunSummary = 'Move evaluation cancelled.';
         return null;
       }
-      lastError = 'Move evaluation failed: $error';
-      currentJob?.fail(lastError!);
-      return lastError;
+      final message = 'Move evaluation failed: $error';
+      lastError = message;
+      currentJob?.fail(message);
+      return message;
     } finally {
       await _endRun(
         engineEntered: entered,
@@ -1580,91 +1227,45 @@ class GenerationSessionController extends ChangeNotifier
   ///
   /// The probe borrows the settings of the last build (or the form defaults
   /// when there was none) with everything that is not about scoring the
-  /// position switched off: no line export, no verification, no master-game
-  /// download, no skeleton, and the ChessDB API only when
-  /// [EvalDatabaseSettings.chessDbApiForExpectimax] allows it.
+  /// position switched off — see [ExpectimaxProbeTarget.probeConfig].
   Future<String?> computeExpectimax(ExpectimaxProbeTarget target) async {
     if (_isGenerating) {
       return isExpectimaxProbe
           ? 'An expectimax probe is already running.'
           : 'A build is running — wait for it to finish first.';
     }
-    final moves = [
-      ...target.movesFromStart,
-      if (target.moveSan != null) target.moveSan!,
-    ];
-    final fen = fenAfterMoves(
-      target.repertoireStartFen,
-      moves,
-      moves.length - 1,
-    );
-    final playedPlies = plyFromFen(fen) - plyFromFen(target.repertoireStartFen);
-    if (playedPlies != moves.length) {
+    final moves = target.moves;
+    final fen = _probeRootFen(target);
+    if (fen == null) {
       return 'Could not play ${moves.join(' ')} from the repertoire start.';
     }
-    if (_databasePath == null ||
-        !p.equals(_databasePath!, target.repertoireFilePath)) {
-      // Generate can be opened immediately after selecting a chapter. Wait
-      // for its saved analysis before adding a probe, so a fast click cannot
-      // replace a database whose background load has not finished yet.
-      await loadSavedTreeFor(target.repertoireFilePath);
-      if (isDisposed) return 'Generation was closed.';
-      if (_isGenerating) return 'A generation is already running.';
-      if (_databasePath != target.repertoireFilePath) {
-        return 'The analysis session changed.';
-      }
-    }
+    final refusal = await _ensureDatabaseFor(target);
+    if (refusal != null) return refusal;
 
     final base =
         lastConfig ??
-        _current?.config ??
+        current?.config ??
         TreeBuildConfig.formDefaults(
           startFen: fen,
           playAsWhite: target.playAsWhite,
         );
-    final settings = EvalDatabaseSettings.instance;
-    final config = base.copyWith(
-      startFen: fen,
-      playAsWhite: target.playAsWhite,
-      maxPly: target.plies,
-      boundedDatabase: true,
-      ourMultipv: target.engineMoves.clamp(1, 20),
-      oppMassTarget: target.maiaCoverage.clamp(.01, 1),
-      searchAlgorithm: SearchAlgorithm.pure,
-      // Coverage answers and master extensions belong to line planning.
-      // A position search observes the depth the user asked for.
-      coverMinProb: 0,
-      masterDepthBonusPlies: 0,
-      engineThreads: target.engineThreads == null
-          ? null
-          : clampEngineThreads(target.engineThreads!),
-      timeBudgetMinutes: 0,
-      buildMode: BuildMode.stockfishExpectimax,
-      pgnFilePaths: const [],
-      verifyFinal: false,
-      trapsOnly: false,
-      rootReplyExclude: const [],
-      setupMoves: '',
-      skeletonPlan: const SkeletonPlan(),
-      downloadMasterGamesIfMissing: false,
-      enableChessDbApi: settings.chessDbApiForExpectimax,
+    final config = target.probeConfig(
+      base: base,
+      fen: fen,
+      enableChessDbApi: EvalDatabaseSettings.instance.chessDbApiForExpectimax,
     );
-    final request = GenerationRequest(
+    final request = GenerationRequest.expectimaxProbe(
       config: config,
-      repertoireFilePath: target.repertoireFilePath,
+      target: target,
       buildRootFen: fen,
       lineMovePrefix: List.unmodifiable(moves),
-      repertoireStartFen: target.repertoireStartFen,
-      onLinesSaved: (_) {},
-      expectimaxOnly: true,
     );
     unawaited(startBuild(request));
     return null;
   }
 
-  /// Phase 2 for a probe: graft it where the database already holds its
-  /// root, or keep it as a tree of its own; re-score the tree it landed in;
-  /// republish the bundle and write it to disk.
+  /// Phase 2 for a probe: land it in the database, republish the bundle and
+  /// write it to disk.
   Future<void> _finishExpectimaxProbe(
     BuildTree probe,
     GenerationRequest request,
@@ -1674,83 +1275,33 @@ class GenerationSessionController extends ChangeNotifier
       'Adding to the expectimax database...',
       GenerationPhase.computingExpectimax,
     );
-    if (request.config.boundedDatabase) {
-      // Each probe has its own root history, horizon and truncated policy.
-      // Mixing it into a Pure tree can corrupt normalized chance nodes.
-      final bundle = _current;
-      probe.startMoves = prefix.join(' ');
-      rescoreTree(probe, request.config, FenMap()..populate(probe.root));
-      if (bundle == null) {
-        onTreeBuilt(probe, probes: const [], mainIsProbe: true);
-      } else {
-        final retained = _probes.where(
-          (old) =>
-              old.configSnapshot['bounded_database'] != true ||
-              canonicalizeFen(old.root.fen) != canonicalizeFen(probe.root.fen),
-        );
-        onTreeBuilt(
-          bundle.tree,
-          probes: [...retained, probe],
-          mainIsProbe: _mainTreeIsProbe,
-        );
-      }
-      await _persistExpectimaxDatabase(
+    final config = request.config;
+    if (config.boundedDatabase) {
+      _database.addBoundedProbe(probe, config: config, prefix: prefix);
+      notifyListeners();
+      await _database.persist(
         request.repertoireFilePath,
         mainTreeChanged: false,
       );
       lastRunSummary =
-          '${probe.totalNodes} positions saved · depth ${probe.maxPlyReached}/${request.config.maxPly}';
+          '${probe.totalNodes} positions saved · depth ${probe.maxPlyReached}/${config.maxPly}';
       progress.setStatus(lastRunSummary, GenerationPhase.computingExpectimax);
       return;
     }
-    final bundle = _current;
-    final playAsWhite = request.config.playAsWhite;
-    final existing = <BuildTree>[if (bundle != null) ...bundle.allTrees];
 
-    final at = bundle?.fenMap.getCanonical(probe.root.fen);
-    final host = at == null ? null : treeOwning(at, existing);
-    final int added;
-    final BuildTree landed;
-    if (at != null && host != null) {
-      added = graftProbe(
-        host: host,
-        at: at,
-        probe: probe,
-        playAsWhite: playAsWhite,
-      );
-      landed = host;
-    } else {
-      added = probe.totalNodes;
-      landed = probe;
-      probe.startMoves = prefix.join(' ');
-    }
-
-    // Re-score with a map over the whole database so transposition leaves
-    // resolve across trees.
-    final scoringConfig = identical(landed, probe)
-        ? request.config
-        : (bundle?.config ?? request.config);
-    final fenMap = FenMap();
-    for (final tree in [...existing, if (identical(landed, probe)) probe]) {
-      fenMap.populate(tree.root);
-    }
-    rescoreTree(landed, scoringConfig, fenMap);
-
-    _databasePath = request.repertoireFilePath;
-    if (bundle == null) {
-      onTreeBuilt(probe, probes: const [], mainIsProbe: true);
-    } else {
-      final probes = [..._probes, if (identical(landed, probe)) probe];
-      onTreeBuilt(bundle.tree, probes: probes, mainIsProbe: _mainTreeIsProbe);
-    }
-    await _persistExpectimaxDatabase(
+    final (:added, :mainTreeChanged) = _database.landProbe(
+      probe,
+      config: config,
+      prefix: prefix,
+      repertoireFilePath: request.repertoireFilePath,
+    );
+    notifyListeners();
+    await _database.persist(
       request.repertoireFilePath,
-      mainTreeChanged: bundle != null && identical(landed, bundle.tree),
+      mainTreeChanged: mainTreeChanged,
     );
 
-    final elapsed = formatCompactDuration(
-      Duration(milliseconds: _pipelineSw.elapsedMilliseconds),
-    );
+    final elapsed = formatCompactDuration(_pipelineSw.elapsed);
     final where = prefix.isEmpty
         ? 'the start position'
         : buildNumberedMovetext(prefix);
@@ -1758,44 +1309,6 @@ class GenerationSessionController extends ChangeNotifier
         'Expectimax computed from $where in $elapsed: $added new '
         'position${added == 1 ? '' : 's'} (${probe.totalNodes} explored).';
     progress.setStatus(lastRunSummary, GenerationPhase.computingExpectimax);
-  }
-
-  /// Write the probe trees (and a probe-origin main tree) to
-  /// `_expectimax.json`; rewrite `_tree.json` when a graft changed the
-  /// build's own tree, so the database survives a restart.
-  Future<void> _persistExpectimaxDatabase(
-    String repertoireFilePath, {
-    required bool mainTreeChanged,
-  }) async {
-    final bundle = _current;
-    if (bundle == null) return;
-    final storage = StorageFactory.instance;
-    try {
-      final probeTrees = [if (_mainTreeIsProbe) bundle.tree, ...bundle.probes];
-      final probesPath = ExpectimaxProbeStore.pathFor(repertoireFilePath);
-      if (probeTrees.isEmpty) {
-        if (await storage.fileExists(probesPath)) {
-          await storage.deleteFile(probesPath);
-        }
-      } else {
-        final json = await Isolate.run(
-          () => ExpectimaxProbeStore.encode(probeTrees),
-        );
-        await storage.writeFile(probesPath, json);
-      }
-      if (mainTreeChanged && !_mainTreeIsProbe) {
-        final json = await serializeTreeInIsolate(bundle.tree);
-        final base = p.withoutExtension(repertoireFilePath);
-        await storage.writeFile('${base}_tree.json', json);
-      }
-    } catch (e) {
-      log.w(
-        'expectimax database save failed for $repertoireFilePath',
-        name: 'GenerationSession',
-        error: e,
-      );
-      rethrow;
-    }
   }
 
   @override

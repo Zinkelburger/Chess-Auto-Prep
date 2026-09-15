@@ -1,17 +1,24 @@
-import '../utils/chess_utils.dart' show formatEvalDisplay;
 import '../utils/eval_constants.dart';
 
+/// One engine search result: score, depth and principal variation.
 class EngineEvaluation {
   final int depth;
-  final int? scoreCp; // Centipawns
-  final int? scoreMate; // Mate in N
-  final List<String> pv; // Best line (UCI format)
+
+  /// Centipawns, or null when the score is a mate.
+  final int? scoreCp;
+
+  /// Mate in N, or null when the score is in centipawns.
+  final int? scoreMate;
+
+  /// Best line, in UCI.
+  final List<String> pv;
   final int nodes;
   final int nps;
-  final List<int>?
-  wdl; // Win/Draw/Loss probabilities [wins, draws, losses] per 1000
 
-  EngineEvaluation({
+  /// Win/draw/loss probabilities `[wins, draws, losses]` per 1000.
+  final List<int>? wdl;
+
+  const EngineEvaluation({
     this.depth = 0,
     this.scoreCp,
     this.scoreMate,
@@ -27,10 +34,6 @@ class EngineEvaluation {
   /// Collapse mate / cp into a single comparable centipawn value.
   int get effectiveCp =>
       effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
-
-  /// Human-readable score, `+0.50` / `-1.23` / `#5`.
-  String get scoreString =>
-      formatEvalDisplay(scoreCp: scoreCp, scoreMate: scoreMate, decimals: 2);
 
   EngineEvaluation copyWith({
     int? depth,

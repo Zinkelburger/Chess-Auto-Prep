@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/utils/prose_comment_parser.dart';
-import 'package:chess_auto_prep/utils/pgn_comment_utils.dart';
+import 'package:chess_auto_prep/utils/comment_move_tokens.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 

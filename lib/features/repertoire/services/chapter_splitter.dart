@@ -97,7 +97,7 @@ class ChapterSplitter {
     String chapterPath, {
     required bool isWhite,
   }) async {
-    final document = await _repertoire.readPgnDocument(chapterPath);
+    final document = await _repertoire.files.readPgnDocument(chapterPath);
     if (document == null) {
       throw const ChapterSplitException('That chapter is no longer there.');
     }
@@ -165,7 +165,7 @@ class ChapterSplitter {
         for (var i = 0; i < games.length; i++)
           if (titleByIndex[i] == title) i,
       ];
-      await _repertoire.writePgnDocument(
+      await _repertoire.files.writePgnDocument(
         path,
         preamble: ChapterStore.chapterHeader(
           name: name,
@@ -194,7 +194,7 @@ class ChapterSplitter {
     if (sourceRemoved) {
       await _storage.deleteFile(chapterPath);
     } else {
-      await _repertoire.writePgnDocument(
+      await _repertoire.files.writePgnDocument(
         chapterPath,
         preamble: document.preamble,
         games: remaining,

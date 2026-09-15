@@ -8,6 +8,14 @@ import 'package:path/path.dart' as p;
 import 'chessdb_score.dart';
 import 'db_move_list.dart';
 
+/// Depth reported for every dump answer: the dump carries no per-move depth,
+/// so the C reader this ports treats each as a nominal 20-ply search.
+const int _kDumpDepth = 20;
+
+/// One scored move of a piped response, before ChessDB's score encoding is
+/// decoded. [rank] and [note] exist only in the verbose format.
+typedef _Segment = ({String uci, int rawScore, int? rank, String? note});
+
 /// Every move in a cdbdirect response, best first.
 ///
 /// Two wire formats exist and both appear in real dumps: the verbose
@@ -16,66 +24,118 @@ import 'db_move_list.dart';
 /// yields an empty list — the position is scored but the dump has no move
 /// breakdown for it.
 List<DbMove> parseCdbDirectMoveList(String? response) {
-  if (response == null || response.isEmpty) return const [];
+  if (!_carriesMoves(response)) return const [];
+  return DbMoveList.sorted([
+    for (final segment in _segments(response!)) _decodeSegment(segment),
+  ]);
+}
+
+/// The dump's answer for a position: its raw ChessDB score (see
+/// [mapChessDbRawScoreStm]), a nominal depth and the best move when one is
+/// named. Null on a miss or an unparsable response.
+///
+/// The best move is the lowest-ranked verbose segment, or the first compact
+/// one; an `eval:N` answer scores the position without naming a move.
+({int score, int depth, String? bestMove})? parseCdbDirectResponse(
+  String? response,
+) {
+  if (response == null || _isMissResponse(response)) return null;
+
+  if (_isBareEval(response)) {
+    final score = int.tryParse(response.substring(_evalPrefix.length));
+    if (score == null) return null;
+    return (score: score, depth: _kDumpDepth, bestMove: null);
+  }
+
+  _Segment? best;
+  for (final segment in _segments(response)) {
+    if (best == null || _rankOf(segment) < _rankOf(best)) best = segment;
+  }
+  if (best == null) return null;
+  return (score: best.rawScore, depth: _kDumpDepth, bestMove: best.uci);
+}
+
+const String _evalPrefix = 'eval:';
+const int _unranked = 9999;
+
+int _rankOf(_Segment segment) => segment.rank ?? _unranked;
+
+bool _isMissResponse(String response) {
+  if (response.isEmpty) return true;
   final lower = response.toLowerCase();
-  if (lower == 'unknown' ||
+  return lower == 'unknown' ||
       lower.startsWith('error') ||
-      lower.startsWith('invalid')) {
-    return const [];
-  }
-  if (response.startsWith('eval:') && !response.contains('|')) {
-    return const [];
-  }
+      lower.startsWith('invalid');
+}
 
-  final moves = <DbMove>[];
+/// `eval:42` — a score for the position with no move breakdown.
+bool _isBareEval(String response) =>
+    response.startsWith(_evalPrefix) && !response.contains('|');
+
+bool _carriesMoves(String? response) =>
+    response != null && !_isMissResponse(response) && !_isBareEval(response);
+
+/// The scored moves of a piped response, in wire order.
+///
+/// Bookkeeping segments (`ply:12`) share the compact `key:value` shape, so a
+/// compact segment counts only when its key looks like a UCI move.
+Iterable<_Segment> _segments(String response) sync* {
   for (final raw in response.split('|')) {
-    final seg = raw.trim();
-    if (seg.isEmpty) continue;
-
-    if (seg.contains('move:') || seg.contains('score:')) {
-      String? move;
-      int? score;
-      int? rank;
-      String? note;
-      for (final field in seg.split(',')) {
-        if (field.startsWith('move:')) {
-          move = field.substring(5);
-        } else if (field.startsWith('score:')) {
-          score = int.tryParse(field.substring(6));
-        } else if (field.startsWith('rank:')) {
-          rank = int.tryParse(field.substring(5));
-        } else if (field.startsWith('note:')) {
-          final value = field.substring(5).trim();
-          if (value.isNotEmpty) note = value;
-        }
-      }
-      if (move == null || move.isEmpty || score == null) continue;
-      final mapped = mapChessDbRawScoreStm(score);
-      moves.add(
-        DbMove(
-          uci: move,
-          stmCp: mapped.stmCp,
-          mate: mapped.mate,
-          rank: rank,
-          note: note,
-        ),
-      );
-      continue;
-    }
-
-    // Compact `uci:score` pair.  `ply:12` and other bookkeeping segments use
-    // the same shape, so anything whose key is not move-like is skipped.
-    final colon = seg.indexOf(':');
-    if (colon <= 0) continue;
-    final move = seg.substring(0, colon);
-    if (!_looksLikeUci(move)) continue;
-    final score = int.tryParse(seg.substring(colon + 1));
-    if (score == null) continue;
-    final mapped = mapChessDbRawScoreStm(score);
-    moves.add(DbMove(uci: move, stmCp: mapped.stmCp, mate: mapped.mate));
+    final segment = raw.trim();
+    if (segment.isEmpty) continue;
+    final parsed = segment.contains('move:') || segment.contains('score:')
+        ? _parseVerbose(segment)
+        : _parseCompact(segment);
+    if (parsed != null) yield parsed;
   }
+}
 
-  return DbMoveList.sorted(moves);
+/// `move:e2e4,score:30,rank:0,note:!,winrate:0.515`.
+_Segment? _parseVerbose(String segment) {
+  String? uci;
+  int? score;
+  int? rank;
+  String? note;
+  for (final field in segment.split(',')) {
+    final colon = field.indexOf(':');
+    if (colon < 0) continue;
+    final value = field.substring(colon + 1);
+    switch (field.substring(0, colon)) {
+      case 'move':
+        uci = value;
+      case 'score':
+        score = int.tryParse(value);
+      case 'rank':
+        rank = int.tryParse(value);
+      case 'note':
+        final trimmed = value.trim();
+        if (trimmed.isNotEmpty) note = trimmed;
+    }
+  }
+  if (uci == null || uci.isEmpty || score == null) return null;
+  return (uci: uci, rawScore: score, rank: rank, note: note);
+}
+
+/// `e2e4:30`.
+_Segment? _parseCompact(String segment) {
+  final colon = segment.indexOf(':');
+  if (colon <= 0) return null;
+  final uci = segment.substring(0, colon);
+  if (!_looksLikeUci(uci)) return null;
+  final score = int.tryParse(segment.substring(colon + 1));
+  if (score == null) return null;
+  return (uci: uci, rawScore: score, rank: null, note: null);
+}
+
+DbMove _decodeSegment(_Segment segment) {
+  final decoded = mapChessDbRawScoreStm(segment.rawScore);
+  return DbMove(
+    uci: segment.uci,
+    stmCp: decoded.stmCp,
+    mate: decoded.mate,
+    rank: segment.rank,
+    note: segment.note,
+  );
 }
 
 /// `e2e4`, `e7e8q` — four coordinate characters plus an optional promotion.
@@ -84,70 +144,6 @@ bool _looksLikeUci(String s) {
   bool file(int i) => s.codeUnitAt(i) >= 0x61 && s.codeUnitAt(i) <= 0x68;
   bool rank(int i) => s.codeUnitAt(i) >= 0x31 && s.codeUnitAt(i) <= 0x38;
   return file(0) && rank(1) && file(2) && rank(3);
-}
-
-/// Returns STM-perspective centipawns and optional best move, or null on miss.
-({int cp, int depth, String? bestMove})? parseCdbDirectResponse(
-  String? response,
-) {
-  if (response == null || response.isEmpty) return null;
-  final lower = response.toLowerCase();
-  if (lower == 'unknown' ||
-      lower.startsWith('error') ||
-      lower.startsWith('invalid')) {
-    return null;
-  }
-
-  if (response.startsWith('eval:') && !response.contains('|')) {
-    final cp = int.tryParse(response.substring(5));
-    if (cp == null) return null;
-    return (cp: cp, depth: 20, bestMove: null);
-  }
-
-  final segments = response.split('|');
-  int? bestCp;
-  int bestRank = 9999;
-  String? bestMove;
-
-  for (final raw in segments) {
-    final seg = raw.trim();
-    if (seg.isEmpty) continue;
-
-    if (seg.contains('move:') || seg.contains('score:')) {
-      String? move;
-      int? score;
-      var rank = 9999;
-      for (final field in seg.split(',')) {
-        if (field.startsWith('move:')) {
-          move = field.substring(5);
-        } else if (field.startsWith('score:')) {
-          score = int.tryParse(field.substring(6));
-        } else if (field.startsWith('rank:')) {
-          rank = int.tryParse(field.substring(5)) ?? 9999;
-        }
-      }
-      if (move != null && move.isNotEmpty && score != null) {
-        if (bestCp == null || rank < bestRank) {
-          bestCp = score;
-          bestRank = rank;
-          bestMove = move;
-        }
-      }
-    } else {
-      final colon = seg.indexOf(':');
-      if (colon <= 0) continue;
-      final move = seg.substring(0, colon);
-      final score = int.tryParse(seg.substring(colon + 1));
-      if (score != null && bestCp == null) {
-        bestCp = score;
-        bestMove = move;
-        bestRank = 0;
-      }
-    }
-  }
-
-  if (bestCp == null) return null;
-  return (cp: bestCp, depth: 20, bestMove: bestMove);
 }
 
 /// Result of validating a ChessDB TerarkDB `data/` directory.
@@ -206,9 +202,10 @@ Future<CdbDirectDirValidation> validateCdbDirectDataDirDetailed(
     );
   }
 
-  final missing = <String>[];
-  if (!hasCurrent) missing.add('CURRENT');
-  if (!hasSst) missing.add('.sst files');
+  final missing = <String>[
+    if (!hasCurrent) 'CURRENT',
+    if (!hasSst) '.sst files',
+  ];
   return CdbDirectDirValidation(
     isValid: false,
     message:

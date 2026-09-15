@@ -6,8 +6,8 @@
 /// traps browser) reads from one instance, so they can never disagree about
 /// the tree, its transposition map, or its traps.
 ///
-/// See `docs/REFACTOR_PLAN.md` §1.2 — derived state is computed once, here,
-/// never inside widget lifecycle callbacks.
+/// Derived state is computed once, here, never inside widget lifecycle
+/// callbacks.
 library;
 
 import '../features/eval_tree/adapters/eval_tree_snapshot_adapter.dart';
@@ -15,9 +15,9 @@ import '../features/eval_tree/models/eval_tree_snapshot.dart';
 import '../features/eval_tree/services/eval_tree_line_metrics.dart';
 import '../features/traps/services/trap_index_service.dart';
 import '../models/build_tree_node.dart';
-import 'package:chess_auto_prep/services/generation/fen_map.dart';
-import 'package:chess_auto_prep/services/generation/generation_config.dart';
-import 'package:chess_auto_prep/services/generation/trap_extractor.dart';
+import '../services/generation/fen_map.dart';
+import '../services/generation/generation_config.dart';
+import '../services/generation/trap_extractor.dart';
 import '../utils/findability.dart';
 
 class GeneratedRepertoire {

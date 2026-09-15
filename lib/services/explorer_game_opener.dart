@@ -58,6 +58,10 @@ class ExplorerGameOpener {
   /// The collection every explorer game is written to.
   static const String collectionName = 'explorer-games.pgn';
 
+  /// Games start at a `[Event` tag that follows a blank line (or the file
+  /// start); splitting there keeps each game's headers and moves together.
+  static final RegExp _gameBoundary = RegExp(r'\n\s*\n(?=\[Event )');
+
   final LichessApiClient _client;
   final MasterGamesDb? Function() _localDb;
   final Future<Directory> Function() _collectionsDirectory;
@@ -73,19 +77,10 @@ class ExplorerGameOpener {
   }) async {
     final pgn = await _pgnFor(game);
     if (pgn == null) return null;
-    final normalized = _normalize(pgn);
 
     final dir = await _collectionsDirectory();
     final file = File(p.join(dir.path, collectionName));
-    final existing = await file.exists() ? await file.readAsString() : '';
-    final blocks = _splitGames(existing);
-
-    var index = blocks.indexOf(normalized);
-    if (index < 0) {
-      blocks.add(normalized);
-      index = blocks.length - 1;
-      await writeTextFileAtomically(file, '${blocks.join('\n\n')}\n');
-    }
+    final index = await _indexInCollection(file, _normalize(pgn));
 
     final ply = plyReachingFen(
       extractMainlineSans(pgn),
@@ -100,18 +95,28 @@ class ExplorerGameOpener {
     );
   }
 
-  Future<String?> _pgnFor(ExplorerGame game) async {
-    switch (game.source) {
-      case ExplorerGameSource.twic:
-        final id = int.tryParse(game.id);
-        final db = _localDb();
-        if (id == null || db == null) return null;
-        return db.game(id)?.toPgn();
-      case ExplorerGameSource.masters:
-        return _client.fetchGamePgn(game.id, masters: true);
-      case ExplorerGameSource.lichess:
-        return _client.fetchGamePgn(game.id, masters: false);
-    }
+  Future<String?> _pgnFor(ExplorerGame game) async => switch (game.source) {
+    ExplorerGameSource.twic => _localPgn(game.id),
+    ExplorerGameSource.masters => _client.fetchGamePgn(game.id, masters: true),
+    ExplorerGameSource.lichess => _client.fetchGamePgn(game.id, masters: false),
+  };
+
+  String? _localPgn(String gameId) {
+    final id = int.tryParse(gameId);
+    final db = _localDb();
+    if (id == null || db == null) return null;
+    return db.game(id)?.toPgn();
+  }
+
+  /// The game's index in [file], appending it when it is not there yet.
+  Future<int> _indexInCollection(File file, String normalizedPgn) async {
+    final existing = await file.exists() ? await file.readAsString() : '';
+    final blocks = _splitGames(existing);
+    final found = blocks.indexOf(normalizedPgn);
+    if (found >= 0) return found;
+    blocks.add(normalizedPgn);
+    await writeTextFileAtomically(file, '${blocks.join('\n\n')}\n');
+    return blocks.length - 1;
   }
 
   /// One game per block, as the file stores them, so an existing copy is
@@ -119,10 +124,7 @@ class ExplorerGameOpener {
   static List<String> _splitGames(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return [];
-    // Games start at a `[Event` tag that follows a blank line (or the file
-    // start); splitting there keeps each game's headers and moves together.
-    final parts = trimmed.split(RegExp(r'\n\s*\n(?=\[Event )'));
-    return [for (final part in parts) _normalize(part)];
+    return [for (final part in trimmed.split(_gameBoundary)) _normalize(part)];
   }
 
   static String _normalize(String pgn) => pgn.trim().replaceAll('\r\n', '\n');

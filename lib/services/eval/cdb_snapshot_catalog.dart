@@ -55,13 +55,7 @@ class CdbSnapshot {
   final String id;
   final List<CdbSnapshotFile> files;
 
-  int get totalBytes {
-    var sum = 0;
-    for (final f in files) {
-      sum += f.bytes;
-    }
-    return sum;
-  }
+  int get totalBytes => files.fold(0, (sum, f) => sum + f.bytes);
 
   /// Publication date parsed out of the id, or null if it does not fit.
   DateTime? get date => parseSnapshotDate(id);
@@ -138,6 +132,12 @@ List<Map<String, dynamic>> _decodeEntries(String body) {
 class CdbSnapshotCatalog {
   CdbSnapshotCatalog({http.Client? client}) : _client = client ?? http.Client();
 
+  /// Listing pages followed before a snapshot manifest is considered
+  /// complete; a snapshot has a few hundred files and pages hold 1000.
+  static const int _maxListingPages = 50;
+
+  static const Duration _requestTimeout = Duration(seconds: 30);
+
   final http.Client _client;
 
   /// Snapshot ids, newest first.
@@ -151,7 +151,7 @@ class CdbSnapshotCatalog {
     final files = <CdbSnapshotFile>[];
     Uri? next = Uri.parse('$_kHfTreeApi/$id/data?limit=1000');
     var pages = 0;
-    while (next != null && pages < 50) {
+    while (next != null && pages < _maxListingPages) {
       final resp = await _get(next);
       files.addAll(parseHfTreeFiles(resp.body));
       next = parseHfNextLink(resp.headers['link']);
@@ -176,7 +176,7 @@ class CdbSnapshotCatalog {
   Future<http.Response> _get(Uri url) async {
     final http.Response resp;
     try {
-      resp = await _client.get(url).timeout(const Duration(seconds: 30));
+      resp = await _client.get(url).timeout(_requestTimeout);
     } catch (e) {
       throw CdbCatalogException('Could not reach the snapshot mirror: $e');
     }

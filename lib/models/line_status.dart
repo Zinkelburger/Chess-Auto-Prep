@@ -10,33 +10,27 @@ import 'repertoire_review_entry.dart';
 
 enum LineStatus {
   /// Never trained — what a Learn run works through.
-  untrained,
+  untrained('Untrained', 'Learn'),
 
   /// Trained before and scheduled for today (or overdue) — what a Review
   /// run works through.
-  due,
+  due('Due', 'Review'),
 
   /// Trained and not due yet.
-  learned,
-}
+  learned('Learned', 'Practice');
 
-extension LineStatusLabel on LineStatus {
+  const LineStatus(this.label, this.actionLabel);
+
   /// Noun shown on a line row. Deliberately not "New": a line the user
   /// imported months ago isn't new, it just hasn't been trained.
-  String get label => switch (this) {
-    LineStatus.untrained => 'Untrained',
-    LineStatus.due => 'Due',
-    LineStatus.learned => 'Learned',
-  };
+  final String label;
 
   /// Verb for the button that starts this line.
-  String get actionLabel => switch (this) {
-    LineStatus.untrained => 'Learn',
-    LineStatus.due => 'Review',
-    LineStatus.learned => 'Practice',
-  };
+  final String actionLabel;
 }
 
+/// Where [entry]'s line sits in the training cycle; no entry means never
+/// trained.
 LineStatus lineStatusOf(RepertoireReviewEntry? entry) {
   if (entry == null || entry.isNew) return LineStatus.untrained;
   return entry.isDue ? LineStatus.due : LineStatus.learned;
@@ -52,9 +46,6 @@ class LineCounts {
 
   int get total => untrained + due + learned;
   bool get isEmpty => total == 0;
-
-  /// Share of the set that is trained and not due (0–1) — the progress bar.
-  double get learnedFraction => total == 0 ? 0 : learned / total;
 
   LineCounts operator +(LineCounts other) => LineCounts(
     untrained: untrained + other.untrained,

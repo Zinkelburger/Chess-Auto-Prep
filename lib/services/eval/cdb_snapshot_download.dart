@@ -1,10 +1,10 @@
 /// In-app download of the ChessDB full dump.
 ///
 /// The snapshot is ~1.2 TB across a few hundred files, so the transfer is
-/// built to be interrupted: every file is fetched with an HTTP range request,
-/// a partial file resumes from its own length, and finished files are never
-/// re-fetched. Stopping and starting again — including across app restarts —
-/// carries on where it left off.
+/// built to be interrupted: every file is fetched with an HTTP range request
+/// ([SnapshotFileDownloader]), a partial file resumes from its own length,
+/// and finished files are never re-fetched. Stopping and starting again —
+/// including across app restarts — carries on where it left off.
 ///
 /// The controller owns no UI. It publishes progress, registers a resumable
 /// [RepertoireJob] so the transfer shows up in the Jobs pane like any other
@@ -25,7 +25,10 @@ import '../../utils/safe_change_notifier.dart';
 import '../../utils/time_format.dart';
 import '../jobs/repertoire_job.dart';
 import 'cdb_snapshot_catalog.dart';
+import 'eval_database_job.dart';
+import 'snapshot_file_downloader.dart';
 import 'storage_volumes.dart';
+import 'transfer_rate_meter.dart';
 
 enum CdbDownloadPhase {
   /// Nothing started, or the last attempt was cleared.
@@ -67,26 +70,20 @@ const int kCdbDownloadHeadroomBytes = 2 * 1000 * 1000 * 1000;
 /// download does not leave the volume with nothing to work in.
 const int kCdbRecommendedHeadroomBytes = 20 * 1000 * 1000 * 1000;
 
-/// How much downloaded data may sit in the sink's buffer before the read loop
-/// waits for the disk to catch up.
-///
-/// [IOSink.add] neither blocks nor reports a full buffer, so a loop that only
-/// calls `add` never applies backpressure: on a network faster than the disk
-/// the whole transfer accumulates in memory.  A multi-GB dump fetched by
-/// several workers at once is how that becomes an OOM rather than a slow
-/// download.  Awaiting a flush suspends the enclosing `await for`, which
-/// pauses the HTTP subscription — so this constant is the real cap on how
-/// much of the file is resident, per worker.
-const int _sinkBufferBytes = 8 * 1024 * 1024;
-
 class CdbSnapshotDownloadController extends ChangeNotifier
     with SafeChangeNotifier {
   CdbSnapshotDownloadController({
     CdbSnapshotCatalog? catalog,
     this.concurrency = 4,
     Uri Function(String repoPath)? urlBuilder,
-  }) : _catalog = catalog ?? CdbSnapshotCatalog(),
-       _urlFor = urlBuilder ?? chessDbFileUrl;
+  }) : _catalog = catalog ?? CdbSnapshotCatalog() {
+    _files = SnapshotFileDownloader(
+      http: _http,
+      urlFor: urlBuilder ?? chessDbFileUrl,
+      openSink: _openSnapshotSink,
+      headroomBytes: kCdbDownloadHeadroomBytes,
+    );
+  }
 
   static final CdbSnapshotDownloadController instance =
       CdbSnapshotDownloadController();
@@ -99,13 +96,11 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   final int concurrency;
 
   final CdbSnapshotCatalog _catalog;
-
-  /// Where a manifest path is fetched from. Injectable so the resume logic
-  /// can be exercised against a local server.
-  final Uri Function(String repoPath) _urlFor;
   final HttpClient _http = HttpClient()
     ..connectionTimeout = const Duration(seconds: 30)
     ..idleTimeout = const Duration(seconds: 30);
+  late final SnapshotFileDownloader _files;
+  final TransferRateMeter _rate = TransferRateMeter();
 
   CdbDownloadPhase _phase = CdbDownloadPhase.idle;
   CdbSnapshot? _snapshot;
@@ -115,8 +110,6 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   int _bytesDone = 0;
   int _bytesTotal = 0;
   int _filesDone = 0;
-  double _bytesPerSecond = 0;
-  int _lastSampleBytes = 0;
 
   final Set<String> _activeFiles = <String>{};
   List<CdbFileProblem> _problems = const [];
@@ -139,7 +132,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   int get bytesTotal => _bytesTotal;
   int get filesDone => _filesDone;
   int get filesTotal => _snapshot?.files.length ?? 0;
-  double get bytesPerSecond => _bytesPerSecond;
+  double get bytesPerSecond => _rate.bytesPerSecond;
   List<CdbFileProblem> get problems => _problems;
 
   bool get isRunning =>
@@ -158,14 +151,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   int get bytesRemaining => (_bytesTotal - _bytesDone).clamp(0, _bytesTotal);
 
   /// Time left at the current rate, or null before a rate is known.
-  Duration? get eta {
-    if (_bytesPerSecond <= 0 || bytesRemaining <= 0) return null;
-    final seconds = bytesRemaining / _bytesPerSecond;
-    if (seconds.isInfinite || seconds.isNaN || seconds > 60 * 60 * 24 * 90) {
-      return null;
-    }
-    return Duration(seconds: seconds.round());
-  }
+  Duration? get eta => _rate.eta(bytesRemaining);
 
   /// Files being transferred right now, for the progress line.
   List<String> get activeFiles => _activeFiles.toList()..sort();
@@ -175,8 +161,16 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     final parent = _parentDir;
     final snap = _snapshot;
     if (parent == null || snap == null) return null;
-    return p.join(parent, snap.id, 'data');
+    return _dataDirectoryOf(parent, snap);
   }
+
+  static String _dataDirectoryOf(String parent, CdbSnapshot snap) =>
+      p.join(parent, snap.id, 'data');
+
+  /// The streamed write behind every snapshot file: appended to on resume,
+  /// truncated on a fresh start. Reproducible data, so no journal.
+  static IOSink _openSnapshotSink(File target, {required bool append}) =>
+      target.openWrite(mode: append ? FileMode.append : FileMode.write);
 
   // ── Setup ────────────────────────────────────────────────────────────────
 
@@ -198,9 +192,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
       _parentDir = parent;
       _bytesTotal = snap.totalBytes;
       await _measureLocal();
-      _phase = _bytesDone >= _bytesTotal
-          ? CdbDownloadPhase.complete
-          : CdbDownloadPhase.paused;
+      _phase = _phaseForMeasuredBytes();
       notifyListeners();
     } on CdbCatalogException {
       // Offline at launch: leave the panel showing the plain settings.
@@ -226,11 +218,13 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     await prefs.setString(_keyParentDir, parentDir);
     await prefs.setString(_keySnapshotId, snapshot.id);
 
-    _phase = _bytesDone >= _bytesTotal
-        ? CdbDownloadPhase.complete
-        : CdbDownloadPhase.paused;
+    _phase = _phaseForMeasuredBytes();
     notifyListeners();
   }
+
+  CdbDownloadPhase _phaseForMeasuredBytes() => _bytesDone >= _bytesTotal
+      ? CdbDownloadPhase.complete
+      : CdbDownloadPhase.paused;
 
   // ── Transfer ─────────────────────────────────────────────────────────────
 
@@ -244,7 +238,11 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     _stopRequested = false;
     _error = null;
     _phase = CdbDownloadPhase.downloading;
-    _ensureJob();
+    _job = ensureEvalDatabaseJob(
+      _job,
+      label: 'ChessDB dump — ${snap.id}',
+      onCancel: () => unawaited(pause()),
+    );
     _startTicker();
     notifyListeners();
 
@@ -300,8 +298,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
 
     final found = <CdbFileProblem>[];
     for (final file in snap.files) {
-      final local = File(p.join(parent, file.path));
-      final length = await local.exists() ? await local.length() : -1;
+      final length = await _localLength(parent, file) ?? -1;
       if (length != file.bytes) {
         found.add(
           CdbFileProblem(
@@ -315,16 +312,24 @@ class CdbSnapshotDownloadController extends ChangeNotifier
 
     _problems = found;
     await _measureLocal();
-    _phase = found.isEmpty
-        ? CdbDownloadPhase.complete
-        : (previous == CdbDownloadPhase.complete
-              ? CdbDownloadPhase.paused
-              : previous);
+    if (found.isEmpty) {
+      _phase = CdbDownloadPhase.complete;
+    } else if (previous == CdbDownloadPhase.complete) {
+      _phase = CdbDownloadPhase.paused;
+    } else {
+      _phase = previous;
+    }
     notifyListeners();
     return found;
   }
 
   // ── Internals ────────────────────────────────────────────────────────────
+
+  /// Bytes of [file] on disk, or null when it is absent.
+  static Future<int?> _localLength(String parent, CdbSnapshotFile file) async {
+    final local = File(p.join(parent, file.path));
+    return await local.exists() ? local.length() : null;
+  }
 
   Future<void> _measureLocal() async {
     final snap = _snapshot;
@@ -333,9 +338,8 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     var done = 0;
     var complete = 0;
     for (final file in snap.files) {
-      final local = File(p.join(parent, file.path));
-      if (!await local.exists()) continue;
-      final length = await local.length();
+      final length = await _localLength(parent, file);
+      if (length == null) continue;
       // A file longer than the manifest says is corrupt, not ahead: count
       // nothing for it so the transfer redoes it from zero.
       if (length > file.bytes) continue;
@@ -344,20 +348,18 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     }
     _bytesDone = done;
     _filesDone = complete;
-    _lastSampleBytes = done;
+    _rate.reset(done);
   }
 
   Future<void> _run(CdbSnapshot snap, String parent) async {
     try {
-      await Directory(p.join(parent, snap.id, 'data')).create(recursive: true);
+      await Directory(_dataDirectoryOf(parent, snap)).create(recursive: true);
       await _measureLocal();
       notifyListeners();
 
       final queue = Queue<CdbSnapshotFile>();
       for (final file in snap.files) {
-        final local = File(p.join(parent, file.path));
-        final length = await local.exists() ? await local.length() : 0;
-        if (length == file.bytes) continue;
+        if (await _localLength(parent, file) == file.bytes) continue;
         queue.add(file);
       }
 
@@ -366,24 +368,16 @@ class CdbSnapshotDownloadController extends ChangeNotifier
         return;
       }
 
-      final remaining = _pendingBytes(queue);
-      final space = await freeBytesForPath(p.join(parent, snap.id));
-      if (space != null && space < remaining + kCdbDownloadHeadroomBytes) {
-        // Stop before filling the volume: a disk with no room left takes the
-        // rest of the desktop down with it.
-        throw StateError(
-          '${formatBytes(space)} free where ${formatBytes(remaining)} is still '
-          'to download. Free up space, or point the download at another drive.',
-        );
-      }
+      await _requireRoomFor(queue, p.join(parent, snap.id));
 
       await Future.wait([
         for (var i = 0; i < concurrency; i++) _worker(queue, parent),
       ]);
 
-      if (_error != null) {
+      final error = _error;
+      if (error != null) {
         _phase = CdbDownloadPhase.failed;
-        _job?.fail(_error!);
+        _job?.fail(error);
       } else if (_stopRequested) {
         _phase = CdbDownloadPhase.paused;
         _job?.updateStatus(JobStatus.paused);
@@ -402,12 +396,20 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     }
   }
 
-  int _pendingBytes(Queue<CdbSnapshotFile> queue) {
-    var sum = 0;
-    for (final f in queue) {
-      sum += f.bytes;
+  /// Stop before filling the volume: a disk with no room left takes the rest
+  /// of the desktop down with it.
+  Future<void> _requireRoomFor(
+    Iterable<CdbSnapshotFile> pending,
+    String directory,
+  ) async {
+    final remaining = pending.fold(0, (sum, f) => sum + f.bytes);
+    final space = await freeBytesForPath(directory);
+    if (space != null && space < remaining + kCdbDownloadHeadroomBytes) {
+      throw StateError(
+        '${formatBytes(space)} free where ${formatBytes(remaining)} is still '
+        'to download. Free up space, or point the download at another drive.',
+      );
     }
-    return sum;
   }
 
   Future<void> _finish(CdbSnapshot snap, String parent) async {
@@ -419,7 +421,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     );
     _job?.updateStatus(JobStatus.completed);
 
-    final dataDir = p.join(parent, snap.id, 'data');
+    final dataDir = _dataDirectoryOf(parent, snap);
     await EvalDatabaseSettings.instance.setCdbDirectPath(dataDir);
     await EvalDatabaseSettings.instance.setEnableCdbDirect(true);
   }
@@ -430,8 +432,13 @@ class CdbSnapshotDownloadController extends ChangeNotifier
       _activeFiles.add(file.name);
       notifyListeners();
       try {
-        await _downloadWithRetries(file, parent);
-        if (!_stopRequested) _filesDone++;
+        final outcome = await _files.fetch(
+          file,
+          parent,
+          shouldStop: () => _stopRequested,
+          onBytes: (delta) => _bytesDone += delta,
+        );
+        if (outcome == SnapshotFileOutcome.complete) _filesDone++;
       } catch (e) {
         _error = 'Downloading ${file.name} failed: $e';
       } finally {
@@ -441,138 +448,18 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     }
   }
 
-  Future<void> _downloadWithRetries(CdbSnapshotFile file, String parent) async {
-    const maxAttempts = 5;
-    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
-      if (_stopRequested) return;
-      try {
-        await _downloadFile(file, parent);
-        return;
-      } on _DownloadStopped {
-        return;
-      } catch (e) {
-        if (attempt == maxAttempts) rethrow;
-        await Future<void>.delayed(Duration(seconds: 2 * attempt));
-      }
-    }
-  }
-
-  Future<void> _downloadFile(CdbSnapshotFile file, String parent) async {
-    final target = File(p.join(parent, file.path));
-    await target.parent.create(recursive: true);
-
-    var offset = await target.exists() ? await target.length() : 0;
-    if (offset > file.bytes) {
-      await target.delete();
-      offset = 0;
-    }
-    if (offset == file.bytes) return;
-
-    final free = await freeBytesForPath(target.parent.path);
-    if (free != null &&
-        free < (file.bytes - offset) + kCdbDownloadHeadroomBytes) {
-      throw StateError(
-        'Only ${formatBytes(free)} free — not enough for ${file.name} '
-        '(${formatBytes(file.bytes - offset)} left to fetch).',
-      );
-    }
-
-    final request = await _http.getUrl(_urlFor(file.path));
-    if (offset > 0) {
-      request.headers.set(HttpHeaders.rangeHeader, 'bytes=$offset-');
-    }
-    final response = await request.close();
-
-    if (offset > 0 && response.statusCode != HttpStatus.partialContent) {
-      await response.drain<void>();
-      if (response.statusCode == HttpStatus.ok ||
-          response.statusCode == HttpStatus.requestedRangeNotSatisfiable) {
-        // The mirror ignored the range, or says our offset is past the end:
-        // start the file over rather than appending a second copy of its
-        // head.
-        await target.delete();
-        _bytesDone -= offset;
-        throw StateError('Range request refused (${response.statusCode})');
-      }
-      // Anything else (a 5xx, a 429) says nothing about the range; retry it
-      // with the partial file intact rather than throwing gigabytes away.
-      throw HttpException('HTTP ${response.statusCode} for ${file.name}');
-    }
-    if (offset == 0 && response.statusCode != HttpStatus.ok) {
-      await response.drain<void>();
-      throw HttpException('HTTP ${response.statusCode} for ${file.name}');
-    }
-
-    final sink = target.openWrite(
-      mode: offset > 0 ? FileMode.append : FileMode.write,
-    );
-    var stopped = false;
-    try {
-      var buffered = 0;
-      await for (final chunk in response) {
-        if (_stopRequested) {
-          stopped = true;
-          break;
-        }
-        sink.add(chunk);
-        _bytesDone += chunk.length;
-        buffered += chunk.length;
-        if (buffered >= _sinkBufferBytes) {
-          // Suspends this loop, which pauses the response subscription until
-          // the bytes are on disk.  Without it the sink queues without bound.
-          await sink.flush();
-          buffered = 0;
-        }
-      }
-    } finally {
-      await sink.flush();
-      await sink.close();
-    }
-    if (stopped) throw const _DownloadStopped();
-
-    final written = await target.length();
-    if (written != file.bytes) {
-      throw StateError(
-        'Short read: got ${formatBytes(written)} of ${formatBytes(file.bytes)}',
-      );
-    }
-  }
-
-  void _ensureJob() {
-    final snap = _snapshot;
-    if (snap == null) return;
-    final existing = _job;
-    if (existing != null && existing.isActive) {
-      existing.updateStatus(JobStatus.running);
-      return;
-    }
-    final job = JobManager.instance.createJob(
-      type: JobType.evalDatabase,
-      label: 'ChessDB dump — ${snap.id}',
-    );
-    job.resumable = true;
-    job.onCancel = () => unawaited(pause());
-    job.updateStatus(JobStatus.running);
-    _job = job;
-  }
-
   void _startTicker() {
-    _lastSampleBytes = _bytesDone;
+    _rate.reset(_bytesDone);
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      final delta = _bytesDone - _lastSampleBytes;
-      _lastSampleBytes = _bytesDone;
-      // Exponential moving average: a per-second sample of a multi-hour
-      // transfer is far too jumpy to show as-is.
-      _bytesPerSecond = _bytesPerSecond == 0
-          ? delta.toDouble()
-          : _bytesPerSecond * 0.7 + delta * 0.3;
+      _rate.sample(_bytesDone);
+      final eta = this.eta;
       _job?.updateProgress(
         JobProgress(
           fraction: fraction,
           message:
               '${formatBytes(_bytesDone)} of ${formatBytes(_bytesTotal)}'
-              '${eta == null ? '' : ' — ${formatCoarseDuration(eta!)} left'}',
+              '${eta == null ? '' : ' — ${formatCoarseDuration(eta)} left'}',
           nodesProcessed: _filesDone,
           totalNodes: filesTotal,
         ),
@@ -584,7 +471,7 @@ class CdbSnapshotDownloadController extends ChangeNotifier
   void _stopTicker() {
     _ticker?.cancel();
     _ticker = null;
-    _bytesPerSecond = 0;
+    _rate.reset(_bytesDone);
   }
 
   @override
@@ -593,8 +480,4 @@ class CdbSnapshotDownloadController extends ChangeNotifier
     _http.close(force: true);
     super.dispose();
   }
-}
-
-class _DownloadStopped implements Exception {
-  const _DownloadStopped();
 }

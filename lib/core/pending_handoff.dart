@@ -18,6 +18,8 @@
 /// be delivered exactly once.
 library;
 
+import 'package:path/path.dart' as p;
+
 import 'app_state.dart' show AppMode;
 
 sealed class PendingHandoff {
@@ -32,10 +34,13 @@ sealed class PendingHandoff {
 }
 
 /// File name without directory or `.pgn`, for breadcrumb labels.
+///
+/// Both separators are honoured because a handoff can carry a path written
+/// on another OS (a study exported on Windows, opened here).
 String _displayName(String path) {
   final base = path.split(RegExp(r'[/\\]')).last;
-  return base.toLowerCase().endsWith('.pgn')
-      ? base.substring(0, base.length - 4)
+  return p.extension(base).toLowerCase() == '.pgn'
+      ? p.withoutExtension(base)
       : base;
 }
 

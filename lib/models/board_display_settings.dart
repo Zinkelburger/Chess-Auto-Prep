@@ -31,10 +31,7 @@ enum BoardCoordinates {
   everySquare;
 
   static BoardCoordinates fromStorage(String? value) =>
-      BoardCoordinates.values.firstWhere(
-        (c) => c.name == value,
-        orElse: () => BoardCoordinates.inside,
-      );
+      values.asNameMap()[value] ?? BoardCoordinates.inside;
 }
 
 /// How a piece is written in a move.
@@ -45,8 +42,8 @@ enum PieceNotation {
   /// `♔ ♕ ♖ ♗ ♘`.
   figurines;
 
-  static PieceNotation fromStorage(String? value) => PieceNotation.values
-      .firstWhere((n) => n.name == value, orElse: () => PieceNotation.letters);
+  static PieceNotation fromStorage(String? value) =>
+      values.asNameMap()[value] ?? PieceNotation.letters;
 }
 
 class BoardDisplaySettings extends ChangeNotifier with SafeChangeNotifier {

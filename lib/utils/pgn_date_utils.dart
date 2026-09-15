@@ -32,54 +32,64 @@ const _monthNames = [
 /// headers carry no usable date — callers sort those last, since a game with no
 /// date has no place on a timeline.
 String pgnHeaderSortKey(Map<String, String> headers) {
-  final rawDate = headers['UTCDate'] ?? headers['Date'] ?? '';
-  final dateParts = rawDate.trim().split(RegExp(r'[./-]'));
-  String? pad(int index, int min, int max, int width) {
-    if (index >= dateParts.length) return null;
-    final v = int.tryParse(dateParts[index]);
-    if (v == null || v < min || v > max) return null;
-    return v.toString().padLeft(width, '0');
-  }
-
-  final year = pad(0, 1, 9999, 4);
-  if (year == null) return '';
-  final month = pad(1, 1, 12, 2) ?? '00';
-  final day = pad(2, 1, 31, 2) ?? '00';
+  final date = _PgnDate.parse(headers['UTCDate'] ?? headers['Date']);
+  if (date == null) return '';
+  final year = date.year.toString().padLeft(4, '0');
+  final month = _twoDigits(date.month);
+  final day = _twoDigits(date.day);
 
   // Time is a bonus: same-day games only order correctly when it is present,
   // and a missing one must not disturb the date compare — hence the 00:00:00.
-  final rawTime = (headers['UTCTime'] ?? headers['Time'] ?? '').trim();
-  final timeParts = rawTime.split(':');
-  String field(int index, int max) {
-    if (index >= timeParts.length) return '00';
-    final v = int.tryParse(timeParts[index]);
-    if (v == null || v < 0 || v > max) return '00';
-    return v.toString().padLeft(2, '0');
-  }
-
-  return '$year.$month.$day '
-      '${field(0, 23)}:${field(1, 59)}:${field(2, 59)}';
+  final timeParts = (headers['UTCTime'] ?? headers['Time'] ?? '').trim().split(
+    ':',
+  );
+  final hour = _twoDigits(_boundedField(timeParts, 0, 0, 23));
+  final minute = _twoDigits(_boundedField(timeParts, 1, 0, 59));
+  final second = _twoDigits(_boundedField(timeParts, 2, 0, 59));
+  return '$year.$month.$day $hour:$minute:$second';
 }
 
+/// [raw] as `1983`, `May 1983` or `May 17, 1983`, whichever fields are known.
 String formatPgnDate(String? raw) {
-  if (raw == null) return '';
-  final trimmed = raw.trim();
-  if (trimmed.isEmpty) return '';
-
-  final parts = trimmed.split(RegExp(r'[./-]'));
-  int? fieldAt(int i, int min, int max) {
-    if (i >= parts.length) return null;
-    final v = int.tryParse(parts[i]);
-    if (v == null || v < min || v > max) return null;
-    return v;
-  }
-
-  final year = fieldAt(0, 1, 9999);
-  if (year == null) return '';
-  final month = fieldAt(1, 1, 12);
-  if (month == null) return '$year';
-  final day = fieldAt(2, 1, 31);
+  final date = _PgnDate.parse(raw);
+  if (date == null) return '';
+  final month = date.month;
+  if (month == null) return '${date.year}';
   final monthName = _monthNames[month - 1];
-  if (day == null) return '$monthName $year';
-  return '$monthName $day, $year';
+  final day = date.day;
+  if (day == null) return '$monthName ${date.year}';
+  return '$monthName $day, ${date.year}';
 }
+
+/// The known fields of a `YYYY.MM.DD` header; `??` and out-of-range parts
+/// read as unknown, and a date with no usable year is no date at all.
+class _PgnDate {
+  final int year;
+  final int? month;
+  final int? day;
+
+  const _PgnDate(this.year, this.month, this.day);
+
+  static _PgnDate? parse(String? raw) {
+    final parts = (raw ?? '').trim().split(RegExp(r'[./-]'));
+    final year = _boundedField(parts, 0, 1, 9999);
+    if (year == null) return null;
+    return _PgnDate(
+      year,
+      _boundedField(parts, 1, 1, 12),
+      _boundedField(parts, 2, 1, 31),
+    );
+  }
+}
+
+/// `parts[index]` as an integer in `[min, max]`, or null when absent,
+/// non-numeric (`??`) or out of range.
+int? _boundedField(List<String> parts, int index, int min, int max) {
+  if (index >= parts.length) return null;
+  final value = int.tryParse(parts[index]);
+  if (value == null || value < min || value > max) return null;
+  return value;
+}
+
+/// Zero-padded to two digits; an unknown field reads `00`.
+String _twoDigits(int? value) => (value ?? 0).toString().padLeft(2, '0');

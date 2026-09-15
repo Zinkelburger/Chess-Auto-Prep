@@ -57,7 +57,7 @@ void main() {
       config: baseConfig(),
       cache: cache,
       stats: stats,
-      localEvalProvider: local,
+      localChessDb: local,
       chessDbApi: api,
       stockfishEval: fakeStockfish,
     );
@@ -79,7 +79,7 @@ void main() {
       config: baseConfig(),
       cache: cache,
       stats: stats,
-      localEvalProvider: local,
+      localChessDb: local,
       stockfishEval: fakeStockfish,
     );
 
@@ -124,7 +124,7 @@ void main() {
       config: config,
       cache: cache,
       stats: stats,
-      localEvalProvider: local,
+      localChessDb: local,
       lichessEvals: lichess,
       stockfishEval: fakeStockfish,
     );
@@ -215,7 +215,7 @@ void main() {
       config: baseConfig(),
       cache: cache,
       stats: stats,
-      localEvalProvider: local,
+      localChessDb: local,
       chessDbApi: api,
       stockfishEval: fakeStockfish,
     );

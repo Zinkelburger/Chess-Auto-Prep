@@ -19,11 +19,11 @@ import 'package:flutter/foundation.dart';
 
 import '../../constants/engine_defaults.dart';
 import '../../models/opening_tree.dart';
-import '../../services/opening_tree_builder.dart';
-import '../../services/pgn_parsing_service.dart' as pgn;
-import '../../utils/fen_utils.dart';
-import '../../utils/chess_utils.dart' show recentMoveTrailSquares;
 import '../../models/pgn_game_entry.dart';
+import '../../services/opening_tree_builder.dart';
+import '../../services/pgn_position_replay.dart' as pgn;
+import '../../utils/chess_utils.dart' show recentMoveTrailSquares, tryParseFen;
+import '../../utils/fen_utils.dart';
 
 class ViewerOpeningTree {
   ViewerOpeningTree({
@@ -87,15 +87,9 @@ class ViewerOpeningTree {
   /// path, since a transposition's stored parent can describe another move.
   Set<String> get recentMoveSquares {
     final tree = openingTree;
-    if (tree == null) return const {};
-    try {
-      return recentMoveTrailSquares(
-        Chess.fromSetup(Setup.parseFen(tree.cursorRoot.fen)),
-        tree.currentMovePath,
-      );
-    } catch (_) {
-      return const {};
-    }
+    final root = tree == null ? null : tryParseFen(tree.cursorRoot.fen);
+    if (tree == null || root == null) return const {};
+    return recentMoveTrailSquares(root, tree.currentMovePath);
   }
 
   /// Tree cursor saved when leaving the tree (toggle off, or opening a game
@@ -150,9 +144,10 @@ class ViewerOpeningTree {
   /// [leavingForGame] marks a games-at-position click so the app-bar back
   /// button appears while that game is on screen.
   void snapshotCursor({bool leavingForGame = false}) {
-    if (openingTree == null) return;
-    _savedMoveSequence = openingTree!.currentMovePath;
-    _cursorStartFen = openingTree!.cursorRoot.fen;
+    final tree = openingTree;
+    if (tree == null) return;
+    _savedMoveSequence = tree.currentMovePath;
+    _cursorStartFen = tree.cursorRoot.fen;
     if (leavingForGame) _leftForGame = true;
   }
 
@@ -265,28 +260,28 @@ class ViewerOpeningTree {
   }
 
   void onMoveSelected(String move) {
-    if (openingTree == null) return;
-    if (openingTree!.makeMove(move)) {
-      treeCurrentMoveSequence = openingTree!.currentMovePath;
+    final tree = openingTree;
+    if (tree == null) return;
+    if (tree.makeMove(move)) {
+      treeCurrentMoveSequence = tree.currentMovePath;
       _updatePositionFromTree();
     }
     onChanged();
   }
 
   void goBack() {
-    if (openingTree == null) return;
-    openingTree!.goBack();
-    treeCurrentMoveSequence = openingTree!.currentMovePath;
+    final tree = openingTree;
+    if (tree == null) return;
+    tree.goBack();
+    treeCurrentMoveSequence = tree.currentMovePath;
     _updatePositionFromTree();
     onChanged();
   }
 
   void goForward() {
-    if (openingTree == null) return;
-    final moves = openingTree!.continuations;
-    if (moves.isNotEmpty) {
-      onMoveSelected(moves.first.move);
-    }
+    final moves = openingTree?.continuations;
+    if (moves == null || moves.isEmpty) return;
+    onMoveSelected(moves.first.move);
   }
 
   void resetToStart() {
@@ -346,17 +341,14 @@ class ViewerOpeningTree {
   /// lookup in the aggregate tree. Used on first open, when there is no
   /// saved tree cursor to restore.
   void _syncToCurrentPosition(String? fallbackFen) {
-    if (openingTree == null) return;
-    openingTree!.reset();
-    if (openingTree!.navigateToFen(fallbackFen ?? currentFen())) {
-      treeCurrentMoveSequence = openingTree!.currentMovePath;
-    } else {
+    final tree = openingTree;
+    if (tree == null) return;
+    tree.reset();
+    if (!tree.navigateToFen(fallbackFen ?? currentFen())) {
       final start = gameStartFen?.call();
-      if (start == null || !openingTree!.navigateToFen(start)) {
-        openingTree!.reset();
-      }
-      treeCurrentMoveSequence = openingTree!.currentMovePath;
+      if (start == null || !tree.navigateToFen(start)) tree.reset();
     }
+    treeCurrentMoveSequence = tree.currentMovePath;
     // A missing variation falls back to the root. The board must follow that
     // fallback too, rather than retaining the hidden Game pane's position.
     _updatePositionFromTree();
@@ -365,77 +357,82 @@ class ViewerOpeningTree {
   /// Update the board position from the tree's current FEN (off-book
   /// cursor included).
   void _updatePositionFromTree() {
-    if (openingTree == null) return;
-    _cursorStartFen = openingTree!.cursorRoot.fen;
-    final fen = openingTree!.currentFen;
-    try {
-      applyPosition(Chess.fromSetup(Setup.parseFen(fen)));
-    } catch (_) {
-      // FEN may be invalid in rare cases; ignore.
+    final tree = openingTree;
+    if (tree == null) return;
+    _cursorStartFen = tree.cursorRoot.fen;
+    final position = tryParseFen(tree.currentFen);
+    // An unparsable cursor FEN (rare, from a malformed game) leaves the board
+    // where it was rather than failing the navigation.
+    if (position != null) applyPosition(position);
+  }
+
+  /// Indices into the filtered games of every game that reaches the tree
+  /// cursor's position, cached per position until the games change.
+  List<int> gamesAtTreePosition() {
+    final tree = openingTree;
+    if (tree == null) return [];
+    final fen = normalizeFen(tree.currentFen);
+    return _positionGameCache.putIfAbsent(fen, () {
+      _trimPositionCache();
+      final filtered = filteredGames();
+      final mainlineIndex = _mainlineIndex;
+      if (!includeVariations && mainlineIndex != null) {
+        return _filteredIndicesOf(filtered, {
+          for (final i in mainlineIndex[fen] ?? const <int>[]) _indexedGames[i],
+        });
+      }
+      final fenIndexValue = fenIndex();
+      if (includeVariations && fenIndexValue != null) {
+        return _filteredIndicesFromFenIndex(
+          filtered,
+          fenIndexValue[fen] ?? const [],
+        );
+      }
+      return [
+        for (final (i, game) in filtered.indexed)
+          if (pgn.gamePassesThroughFen(
+            game.headers,
+            game.pgnText,
+            fen,
+            includeVariations: includeVariations,
+          ))
+            i,
+      ];
+    });
+  }
+
+  /// Drop the oldest quarter of the cache once it is full.
+  void _trimPositionCache() {
+    if (_positionGameCache.length < _maxCacheEntries) return;
+    final oldest = _positionGameCache.keys.take(_maxCacheEntries ~/ 4).toList();
+    for (final key in oldest) {
+      _positionGameCache.remove(key);
     }
   }
 
-  List<int> gamesAtTreePosition() {
-    if (openingTree == null) return [];
-    final fen = normalizeFen(openingTree!.currentFen);
-    return _positionGameCache.putIfAbsent(fen, () {
-      if (_positionGameCache.length >= _maxCacheEntries) {
-        final keysToRemove = _positionGameCache.keys
-            .take(_maxCacheEntries ~/ 4)
-            .toList();
-        for (final k in keysToRemove) {
-          _positionGameCache.remove(k);
-        }
-      }
+  static List<int> _filteredIndicesOf(
+    List<PgnGameEntry> filtered,
+    Set<PgnGameEntry> matching,
+  ) => [
+    for (final (i, game) in filtered.indexed)
+      if (matching.contains(game)) i,
+  ];
 
-      final filtered = filteredGames();
-
-      if (!includeVariations && _mainlineIndex != null) {
-        final matching = {
-          for (final i in _mainlineIndex![fen] ?? const <int>[])
-            _indexedGames[i],
-        };
-        return [
-          for (var i = 0; i < filtered.length; i++)
-            if (matching.contains(filtered[i])) i,
-        ];
-      }
-
-      // Fast path: map FEN-index (allGames indices) → filteredGames indices.
-      final fenIndexValue = fenIndex();
-      if (includeVariations && fenIndexValue != null) {
-        final allIndices = fenIndexValue[fen] ?? const [];
-        if (allIndices.isEmpty) return <int>[];
-        final all = allGames();
-        final entryToFiltered = <PgnGameEntry, int>{};
-        for (int fi = 0; fi < filtered.length; fi++) {
-          entryToFiltered[filtered[fi]] = fi;
-        }
-        final results = <int>[];
-        for (final ai in allIndices) {
-          // A persisted `.fenidx` can be stale relative to the current
-          // `allGames` (e.g. reloaded across an edit that changed the game
-          // set), leaving indices that are out of range. Skip those rather
-          // than throwing a RangeError that crashes the tree panel.
-          if (ai < 0 || ai >= all.length) continue;
-          final fi = entryToFiltered[all[ai]];
-          if (fi != null) results.add(fi);
-        }
-        return results;
-      }
-
-      final results = <int>[];
-      for (int i = 0; i < filtered.length; i++) {
-        if (pgn.gamePassesThroughFen(
-          filtered[i].headers,
-          filtered[i].pgnText,
-          fen,
-          includeVariations: includeVariations,
-        )) {
-          results.add(i);
-        }
-      }
-      return results;
-    });
+  /// Map FEN-index hits (indices into all games) onto filtered-list indices,
+  /// keeping the hit order.
+  List<int> _filteredIndicesFromFenIndex(
+    List<PgnGameEntry> filtered,
+    List<int> allIndices,
+  ) {
+    if (allIndices.isEmpty) return const [];
+    final all = allGames();
+    final entryToFiltered = {for (final (i, game) in filtered.indexed) game: i};
+    return [
+      for (final ai in allIndices)
+        // A persisted `.fenidx` can be stale relative to the current games
+        // (reloaded across an edit that changed the game set), leaving
+        // indices out of range. Skip those rather than crash the tree panel.
+        if (ai >= 0 && ai < all.length) ?entryToFiltered[all[ai]],
+    ];
   }
 }

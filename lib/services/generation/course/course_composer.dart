@@ -8,16 +8,6 @@
 /// and line-level statistics are unchanged; only the grouping is new.
 library;
 
-import '../../../constants/chess_constants.dart';
-import '../../../models/repertoire_line.dart'
-    show
-        kModelGameBlackEloTag,
-        kModelGameBlackTag,
-        kModelGameDateTag,
-        kModelGameEventTag,
-        kModelGameResultTag,
-        kModelGameWhiteEloTag,
-        kModelGameWhiteTag;
 import '../../../utils/fen_utils.dart';
 import '../export/move_annotation.dart';
 import '../export/pgn_game_writer.dart';
@@ -28,8 +18,8 @@ import '../line_pruner.dart';
 import 'chapter_planner.dart';
 import 'chapter_titles.dart';
 import 'model_game_selector.dart';
+import 'model_game_writer.dart';
 import 'master_improvements.dart';
-import 'opening_namer.dart' show formatMoveReference;
 import 'refutation_prober.dart';
 
 // ── Output ───────────────────────────────────────────────────────────────
@@ -76,6 +66,7 @@ class ChapterOutline {
   });
 }
 
+/// The finished course: every entry in file order plus its chapter outline.
 class ComposedCourse {
   final String title;
   final List<CourseEntry> entries;
@@ -85,7 +76,7 @@ class ComposedCourse {
   /// headers and the same annotated movetext, for a companion
   /// `<title>_model_games.pgn` a PGN viewer opens as a game collection.
   /// Inside the course they travel as a chapter with study headers (see
-  /// [CourseComposer._modelGameEntry]); this is the other shape.
+  /// [ModelGameWriter.chapterPgn]); this is the other shape.
   final List<String> modelGamePgns;
 
   const ComposedCourse({
@@ -109,6 +100,39 @@ class ComposedCourse {
 
 // ── Composer ─────────────────────────────────────────────────────────────
 
+/// What the post-build passes found, gathered for one [CourseComposer.compose]
+/// call so the entry writers read from one immutable value instead of
+/// composer fields that change between calls.
+class _Enrichments {
+  const _Enrichments({
+    required this.refutations,
+    required this.alternatives,
+    required this.engineTails,
+    required this.improvements,
+    required this.folds,
+  });
+
+  /// Punishing continuations for lines that end on a losing reply, keyed by
+  /// the position they start from.
+  final RefutationMap refutations;
+
+  /// Refuted moves the book leaves out, keyed by the position they are
+  /// played in.
+  final AlternativeMap alternatives;
+
+  /// Engine continuations for lines cut at the ply cap, keyed by leaf FEN.
+  final Map<String, EngineTail> engineTails;
+
+  /// Where the repertoire improves on master practice, keyed by the position
+  /// the improvement is played in.
+  final ImprovementMap improvements;
+
+  /// Lines too close to a kept line to earn an entry, keyed by the entry
+  /// they hang off.
+  final Map<String, List<FoldedLine>> folds;
+}
+
+/// Turns extracted lines and their enrichments into a [ComposedCourse].
 class CourseComposer {
   CourseComposer({
     required this.config,
@@ -130,23 +154,6 @@ class CourseComposer {
 
   final String? repertoireName;
 
-  /// Punishing continuations for lines that end on a losing reply, keyed by
-  /// the position they start from.  Set for the duration of [compose].
-  RefutationMap _refutations = const {};
-  Map<String, EngineTail> _engineTails = const {};
-
-  /// Refuted moves the book leaves out, keyed by the position they are played
-  /// in.  Set for the duration of [compose].
-  AlternativeMap _alternatives = const {};
-
-  /// Where the repertoire improves on master practice, keyed by the position
-  /// the improvement is played in.  Set for the duration of [compose].
-  ImprovementMap _improvements = const {};
-
-  /// Lines too close to a kept line to earn an entry, keyed by the entry
-  /// they hang off.  Set for the duration of [compose].
-  Map<String, List<FoldedLine>> _folds = const {};
-
   ComposedCourse compose({
     required List<ExtractedLine> lines,
     Map<String, List<FoldedLine>> folds = const {},
@@ -156,26 +163,15 @@ class CourseComposer {
     Map<String, EngineTail> engineTails = const {},
     ImprovementMap improvements = const {},
   }) {
-    _refutations = refutations;
-    _folds = folds;
-    _alternatives = alternatives;
-    _engineTails = engineTails;
-    _improvements = improvements;
+    final enrichments = _Enrichments(
+      refutations: refutations,
+      alternatives: alternatives,
+      engineTails: engineTails,
+      improvements: improvements,
+      folds: folds,
+    );
     final title = namer.courseTitle(fallback: repertoireName);
-    final groups = config.organizeIntoChapters
-        ? ChapterPlanner(
-            maxLines: config.maxLinesPerChapter,
-            minLines: config.minLinesPerChapter,
-            // Chapter prefixes are relative to the build root; the ECO book
-            // is keyed from the repertoire file's start position, so the
-            // lookup needs both halves of the path.
-            ecoOf: config.chaptersByEco
-                ? (movesSan) =>
-                      namer.namer.label([...repertoirePrefix, ...movesSan])
-                : null,
-          ).plan(lines)
-        : [ChapterGroup(prefixSan: const [], lines: lines)];
-
+    final groups = _planChapters(lines);
     final titles = namer.nameChapters(groups);
     final entries = <CourseEntry>[];
     final outline = <ChapterOutline>[];
@@ -193,11 +189,11 @@ class CourseComposer {
       for (var i = 0; i < group.lines.length; i++) {
         entries.add(
           _lineEntry(
-            group: group,
-            lineIndex: i,
+            line: group.lines[i],
             chapter: chapter,
             variationName: variationNames[i],
             courseTitle: title,
+            enrichments: enrichments,
           ),
         );
       }
@@ -212,18 +208,34 @@ class CourseComposer {
 
     final modelGamePgns = <String>[];
     if (modelGames.isNotEmpty) {
-      final chapter = ChapterTitle(
-        index: groups.length + 1,
-        name: '${groups.length + 1}. Model games',
-        kind: ChapterKind.modelGames,
+      final chapterName = '${groups.length + 1}. Model games';
+      final writer = ModelGameWriter(
+        config: config,
+        improvements: improvements,
       );
       for (final game in modelGames) {
-        entries.add(_modelGameEntry(game, chapter, title));
-        modelGamePgns.add(_modelGameStandalonePgn(game, title));
+        final variationName = writer.label(game);
+        entries.add(
+          CourseEntry(
+            // "from the repertoire's start position", like every other
+            // entry — the plies before the build root belong to the root,
+            // not the entry.
+            movesSan: game.movesFromRoot,
+            chapterName: chapterName,
+            variationName: variationName,
+            pgn: writer.chapterPgn(
+              game,
+              courseTitle: title,
+              chapterName: chapterName,
+              variationName: variationName,
+            ),
+          ),
+        );
+        modelGamePgns.add(writer.standalonePgn(game, courseTitle: title));
       }
       outline.add(
         ChapterOutline(
-          name: chapter.name,
+          name: chapterName,
           entryCount: modelGames.length,
           kind: ChapterKind.modelGames,
         ),
@@ -238,29 +250,46 @@ class CourseComposer {
     );
   }
 
+  /// Cut [lines] into chapters, or keep them as one flat group when the
+  /// config asks for no chapters.
+  List<ChapterGroup> _planChapters(List<ExtractedLine> lines) {
+    if (!config.organizeIntoChapters) {
+      return [ChapterGroup(prefixSan: const [], lines: lines)];
+    }
+    return ChapterPlanner(
+      maxLines: config.maxLinesPerChapter,
+      minLines: config.minLinesPerChapter,
+      // Chapter prefixes are relative to the build root; the ECO book is
+      // keyed from the repertoire file's start position, so the lookup needs
+      // both halves of the path.
+      ecoOf: config.chaptersByEco
+          ? (movesSan) => namer.namer.label([...repertoirePrefix, ...movesSan])
+          : null,
+    ).plan(lines);
+  }
+
   // ── Entries ────────────────────────────────────────────────────────────
 
   CourseEntry _lineEntry({
-    required ChapterGroup group,
-    required int lineIndex,
+    required ExtractedLine line,
     required ChapterTitle chapter,
     required String variationName,
     required String courseTitle,
+    required _Enrichments enrichments,
   }) {
-    final line = group.lines[lineIndex];
     // The prepared part of the line — what selection and expectimax vouch
     // for. Sidelines index into this, so it has to be computed before the
     // engine tail extends the movetext past it.
     final prepared = [...repertoirePrefix, ...line.movesSan];
-    final tail = line.leafFen == null || line.isTransposition
-        ? null
-        : _engineTails[line.leafFen!];
+    final tail = _engineTailFor(line, enrichments);
     final moves = [...prepared, if (tail != null) ...tail.movesSan];
-    final alternatives = _alternativesFor(line);
-    final improvements = _improvementsFor(line);
+    final alternatives = _alternativesFor(line, enrichments);
+    final improvements = improvementsAlong(line, enrichments.improvements);
+    final refutation = _refutationFor(line, enrichments);
+    final eco = chapter.eco;
 
     return CourseEntry(
-      refutation: _refutationFor(line),
+      refutation: refutation,
       refutedAlternatives: [for (final a in alternatives.values) a.san],
       movesSan: moves,
       chapterName: chapter.name,
@@ -273,7 +302,7 @@ class CourseComposer {
             'Black': variationName,
             'Result': '*',
             'Annotator': 'Chess Auto Prep',
-            if (chapter.eco != null) 'ECO': chapter.eco!,
+            'ECO': ?eco,
             // Read back by RepertoireService as the line's importance.
             if (config.rankLinesByImportance)
               'CumProb': _percent(line.probability),
@@ -297,36 +326,55 @@ class CourseComposer {
           startFen: repertoireStartFen,
           rootWhiteToMove: isWhiteToMove(repertoireStartFen),
           startMoveNumber: namer.startMoveNumber,
-          variations: _sidelines(prepared, line, alternatives, improvements),
+          variations: _sidelines(
+            prepared,
+            line,
+            alternatives: alternatives,
+            improvements: improvements,
+            refutation: refutation,
+            folds: enrichments.folds,
+          ),
         ),
         detail: config.annotationDetail,
       ),
     );
   }
 
+  /// The engine continuation past this line's cut-off, or null when the
+  /// engine had nothing to add or the line ends by transposing elsewhere.
+  static EngineTail? _engineTailFor(
+    ExtractedLine line,
+    _Enrichments enrichments,
+  ) {
+    final fen = line.leafFen;
+    if (fen == null || line.isTransposition) return null;
+    return enrichments.engineTails[fen];
+  }
+
   /// The engine's punishment of the reply this line ends on, or empty.
-  List<String> _refutationFor(ExtractedLine line) {
+  static List<String> _refutationFor(
+    ExtractedLine line,
+    _Enrichments enrichments,
+  ) {
     final fen = line.leafFen;
     if (fen == null) return const [];
-    return _refutations[fen] ?? const [];
+    return enrichments.refutations[fen] ?? const [];
   }
 
   /// Refuted alternatives along [line], keyed by the index of the move they
   /// replace.  A position is only asked about once per line even when the
   /// line returns to it.
-  Map<int, RefutedAlternative> _alternativesFor(ExtractedLine line) {
+  static Map<int, RefutedAlternative> _alternativesFor(
+    ExtractedLine line,
+    _Enrichments enrichments,
+  ) {
     final out = <int, RefutedAlternative>{};
     for (final choice in line.choices) {
-      final found = _alternatives[choice.fenBefore];
+      final found = enrichments.alternatives[choice.fenBefore];
       if (found != null) out[choice.moveIndex] = found;
     }
     return out;
   }
-
-  /// Improvements on master practice along [line], keyed by the index of our
-  /// move that improves.  Shared with the snapshot export.
-  Map<int, MasterImprovement> _improvementsFor(ExtractedLine line) =>
-      improvementsAlong(line, _improvements);
 
   /// Every sideline this line carries, keyed by the mainline move it hangs
   /// off: what the moves we skipped run into, the master move we improve on,
@@ -339,10 +387,12 @@ class CourseComposer {
   /// repertoire ends, so nothing here becomes trainable.
   Map<int, List<PgnSideline>> _sidelines(
     List<String> moves,
-    ExtractedLine line,
-    Map<int, RefutedAlternative> alternatives,
-    Map<int, MasterImprovement> improvements,
-  ) {
+    ExtractedLine line, {
+    required Map<int, RefutedAlternative> alternatives,
+    required Map<int, MasterImprovement> improvements,
+    required List<String> refutation,
+    required Map<String, List<FoldedLine>> folds,
+  }) {
     if (moves.isEmpty) return const {};
     final out = <int, List<PgnSideline>>{};
 
@@ -372,11 +422,10 @@ class CourseComposer {
       );
     }
 
-    for (final entry in _foldedSidelines(line, moves.length).entries) {
+    for (final entry in _foldedSidelines(line, moves.length, folds).entries) {
       (out[entry.key] ??= []).addAll(entry.value);
     }
 
-    final refutation = _refutationFor(line);
     if (refutation.isNotEmpty) {
       (out[moves.length - 1] ??= []).add(
         PgnSideline([moves.last, ...refutation]),
@@ -398,15 +447,16 @@ class CourseComposer {
   ///   so the variation repeats the host's last move and continues from it,
   ///   the same trick [_sidelines] uses for a refutation.
   ///
-  /// Only [prepared] plies are addressable. A fold cannot land on the engine
-  /// tail — it is indexed against the host's own moves — but the bound is
-  /// checked rather than assumed, because an out-of-range key would silently
-  /// attach the sideline to the wrong move.
+  /// Only the first [moveCount] plies (the prepared ones) are addressable. A
+  /// fold cannot land on the engine tail — it is indexed against the host's
+  /// own moves — but the bound is checked rather than assumed, because an
+  /// out-of-range key would silently attach the sideline to the wrong move.
   Map<int, List<PgnSideline>> _foldedSidelines(
     ExtractedLine line,
     int moveCount,
+    Map<String, List<FoldedLine>> folds,
   ) {
-    final folded = _folds[LinePruner.lineKey(line.movesSan)];
+    final folded = folds[LinePruner.lineKey(line.movesSan)];
     if (folded == null || folded.isEmpty) return const {};
 
     final out = <int, List<PgnSideline>>{};
@@ -465,7 +515,7 @@ class CourseComposer {
   /// part of the line — they get trained like any other — but the reader (and
   /// anyone reviewing the file later) should be able to see which of them the
   /// build actually vouched for.
-  List<MoveAnnotation> _tailAnnotations(EngineTail tail) => [
+  static List<MoveAnnotation> _tailAnnotations(EngineTail tail) => [
     MoveAnnotation(
       note:
           'Engine continuation from here at depth ${tail.depth} — best play, '
@@ -481,170 +531,7 @@ class CourseComposer {
       ? '[%loss ${(alternative.lossCp / 100).toStringAsFixed(2)}]'
       : null;
 
-  CourseEntry _modelGameEntry(
-    ModelGame game,
-    ChapterTitle chapter,
-    String courseTitle,
-  ) {
-    final record = game.record;
-    final variationName = _modelGameLabel(game);
-
-    return CourseEntry(
-      // "from the repertoire's start position", like every other entry —
-      // the plies before the build root belong to the root, not the entry.
-      movesSan: game.movesFromRoot,
-      chapterName: chapter.name,
-      variationName: variationName,
-      pgn: _writeModelGame(game, {
-        'Event': courseTitle,
-        'White': chapter.name,
-        'Black': variationName,
-        // A course chapter is study material, not a result-bearing game:
-        // "*" is what keeps header-based chapter detection working.  The
-        // real game data is preserved under unambiguous ModelGame* tags.
-        'Result': '*',
-        'Annotator': 'Chess Auto Prep',
-        'Opening': variationName,
-        kModelGameWhiteTag: record.white,
-        kModelGameBlackTag: record.black,
-        kModelGameResultTag: record.outcome?.pgnToken ?? '*',
-        if (record.event.isNotEmpty) kModelGameEventTag: record.event,
-        if (record.date.isNotEmpty) kModelGameDateTag: record.date,
-        if (record.whiteElo > 0) kModelGameWhiteEloTag: '${record.whiteElo}',
-        if (record.blackElo > 0) kModelGameBlackEloTag: '${record.blackElo}',
-      }, result: '*'),
-    );
-  }
-
-  /// The same game as a real game record for the companion file.
-  String _modelGameStandalonePgn(ModelGame game, String courseTitle) {
-    final record = game.record;
-    final result = record.outcome?.pgnToken ?? '*';
-    return _writeModelGame(game, {
-      'Event': record.event.isEmpty ? '?' : record.event,
-      'Site': '?',
-      'Date': record.date.isEmpty ? '????.??.??' : record.date,
-      'Round': '?',
-      'White': record.white,
-      'Black': record.black,
-      'Result': result,
-      if (record.whiteElo > 0) 'WhiteElo': '${record.whiteElo}',
-      if (record.blackElo > 0) 'BlackElo': '${record.blackElo}',
-      'Annotator': 'Chess Auto Prep',
-      'Repertoire': courseTitle,
-    }, result: result);
-  }
-
-  /// Movetext shared by both shapes of a model game: the game's moves, and
-  /// at the move where it leaves the repertoire, what the repertoire does
-  /// instead — a comment ("Our repertoire: 10...Qb6 — improves on 10...Nf6
-  /// (+0.35)") and our mainline as a variation off that move, or, when the
-  /// opponent left first, the replies we prepare.
-  String _writeModelGame(
-    ModelGame game,
-    Map<String, String> headers, {
-    required String result,
-  }) {
-    final startFen = _modelGameStartFen;
-    final rootWhiteToMove = isWhiteToMove(startFen);
-    final startMoveNumber = fullMoveNumber(startFen);
-    // The movetext has to start where [startFen] does.  A build rooted
-    // mid-opening writes its model games from that root, so the plies the
-    // game spent reaching it are already on the board and must not be
-    // written again — `1. d4` under a Benko FEN header is not a legal game.
-    final movesSan = game.movesFromRoot;
-
-    final annotations = <MoveAnnotation>[];
-    final variations = <int, List<PgnSideline>>{};
-    final d = game.departure;
-    if (d != null && d.index < movesSan.length) {
-      final note = _departureNote(
-        d,
-        rootWhiteToMove: rootWhiteToMove,
-        startMoveNumber: startMoveNumber,
-      );
-      if (note != null) {
-        annotations.addAll(
-          List.filled(d.index, const MoveAnnotation(), growable: true),
-        );
-        annotations.add(MoveAnnotation(note: note));
-      }
-      if (d.kind == DepartureKind.ours && d.repertoireLine.isNotEmpty) {
-        variations[d.index] = [PgnSideline(d.repertoireLine)];
-      }
-    }
-
-    return writePgnGame(
-      PgnGameSpec(
-        headers: headers,
-        movesSan: movesSan,
-        annotations: annotations,
-        variations: variations,
-        startFen: startFen,
-        rootWhiteToMove: rootWhiteToMove,
-        startMoveNumber: startMoveNumber,
-        result: result,
-      ),
-      detail: config.annotationDetail,
-    );
-  }
-
-  String? _departureNote(
-    ModelGameDeparture d, {
-    required bool rootWhiteToMove,
-    required int startMoveNumber,
-  }) {
-    String ref(String san) => formatMoveReference(
-      san,
-      d.index,
-      rootWhiteToMove: rootWhiteToMove,
-      startMoveNumber: startMoveNumber,
-    );
-    switch (d.kind) {
-      case DepartureKind.ours:
-        final ours = d.repertoireSan;
-        if (ours == null) return null;
-        final improvement = _improvements[d.fenBefore];
-        final improves =
-            improvement != null &&
-            improvement.ourSan == ours &&
-            improvement.masterSan == d.gameSan;
-        final b = StringBuffer('Our repertoire: ${ref(ours)}');
-        if (improves) {
-          final pawns = (improvement.gainCp / 100).toStringAsFixed(2);
-          b.write(' — improves on ${ref(d.gameSan)} (+$pawns)');
-        }
-        return b.toString();
-      case DepartureKind.opponent:
-        if (d.preparedReplies.isEmpty) return null;
-        final prepared = d.preparedReplies.map(ref).join(', ');
-        return 'Outside the repertoire — prepared here: $prepared';
-    }
-  }
-
-  /// Retained games are scanned from the *build* root, so that is where their
-  /// movetext starts — not the repertoire root the lines use.  Numbering has
-  /// to follow it too, or a build started mid-game renumbers every model game.
-  late final String _modelGameStartFen = config.startFen.isEmpty
-      ? kStandardStartFen
-      : config.startFen;
-
   // ── Text helpers ───────────────────────────────────────────────────────
-
-  /// `Kasparov, G – Karpov, A, Linares 1993 (1-0)`.
-  String _modelGameLabel(ModelGame game) {
-    final record = game.record;
-    final occasion = [
-      if (record.event.isNotEmpty && record.event != '?') record.event,
-      if (record.year != null) '${record.year}',
-    ].join(' ');
-    final result = record.outcome?.pgnToken;
-    return [
-      record.playersLabel,
-      if (occasion.isNotEmpty) ', $occasion',
-      if (result != null) ' ($result)',
-    ].join();
-  }
 
   static String _percent(double fraction) =>
       '${(fraction * 100).toStringAsFixed(3)}%';

@@ -25,7 +25,7 @@ import '../utils/fen_utils.dart' show plyFromFen;
 import '../utils/movetext_builder.dart' show formatMoveAtPly;
 import 'pgn_parsing_service.dart' as pgn;
 import 'repertoire_line_ids.dart' show RepertoireLineIds;
-import 'repertoire_service.dart' show RepertoireService;
+import 'course_chapter_headers.dart';
 
 /// [pgn] rewritten so that no game has a variation, and how many games it
 /// holds afterwards.
@@ -34,6 +34,23 @@ typedef ExpandedPgn = ({String pgn, int gameCount});
 /// Header written on every expanded sideline: the plies at which it left the
 /// first-child path, space-separated, 0-based from the game's start.
 const String kBranchPliesHeader = 'BranchPlies';
+
+/// The headers [courseChapterHeaderKey] reads off each game's text.
+const List<String> _chapterKeyHeaders = ['Event', 'White', 'Black', 'Result'];
+
+/// Header values the parser names nothing after, plus the synthetic Event
+/// that header-less text is given; never suffixed with a branch label.
+const Set<String> _placeholderTitles = {
+  '',
+  '?',
+  'me',
+  'opponent',
+  'white',
+  'black',
+  'n.n.',
+  'repertoire line',
+  'edited line',
+};
 
 /// Rewrite [pgnContent] with every variation of every game as a separate
 /// game, in reading order: the mainline first, then each sideline where it
@@ -67,66 +84,78 @@ ExpandedPgn expandVariationsIntoLines(String pgnContent) {
   final games = pgn.splitPgnIntoGames(content);
   if (games.isEmpty) return (pgn: pgnContent, gameCount: 0);
 
-  final out = StringBuffer();
-  var count = 0;
-  var expanded = false;
-  // Games are separated by a blank line; a verbatim chunk usually brings its
-  // own, a rewritten one never does.
-  var endsWithBlank = true;
-  void add(String piece) {
-    if (!endsWithBlank) out.write('\n');
-    out.write(piece);
-    if (!piece.endsWith('\n')) out.write('\n');
-    endsWithBlank = piece.endsWith('\n\n');
-  }
-
   // Which player header names the *line* (the one that is not the chapter,
   // in a chapter-titled export) — that is the header a sideline's branch
   // label goes on. Suffixing the chapter header instead gave every sideline
   // a chapter of its own.
   final chapterKey = courseChapterHeaderKey(games);
-  final titleKey = RepertoireService.titleHeaderKeyFor(chapterKey);
+  final titleKey = titleHeaderKeyFor(chapterKey);
 
-  // A line that appears twice with the same title and the same moves is
-  // one line. One course export listed each of its 24 lines under every
-  // one of its 24 chapter titles — 576 games to train, 24 to know.
-  final seen = <String>{};
-  var dropped = false;
-  void keep(String piece) {
-    if (!seen.add(_identity(piece, titleKey))) {
-      dropped = true;
-      return;
-    }
-    add(piece);
-    count++;
-  }
-
+  final out = _GameWriter(titleKey);
+  var expanded = false;
   for (final text in games) {
     final lines = _expandGame(text, titleKey, chapterKey);
     if (lines == null) {
-      keep(text);
+      out.keep(text);
       continue;
     }
     expanded = true;
-    lines.forEach(keep);
+    lines.forEach(out.keep);
   }
-  if (!expanded && !dropped) return (pgn: pgnContent, gameCount: count);
+  if (!expanded && !out.droppedDuplicate) {
+    return (pgn: pgnContent, gameCount: out.count);
+  }
 
   // Text before the first game (the app's own `// Color:` header lines, for
   // one) is not part of any chunk; keep it in front.
   final firstAt = content.indexOf(games.first);
   final preamble = firstAt > 0 ? content.substring(0, firstAt) : '';
-  return (pgn: '$preamble$out', gameCount: count);
+  return (pgn: '$preamble${out.text}', gameCount: out.count);
+}
+
+/// Accumulates games one per block, blank line between them, dropping a
+/// game that repeats an earlier one's title and moves.
+///
+/// A line that appears twice with the same title and the same moves is
+/// one line. One course export listed each of its 24 lines under every
+/// one of its 24 chapter titles — 576 games to train, 24 to know.
+class _GameWriter {
+  _GameWriter(this.titleKey);
+
+  final String titleKey;
+  final StringBuffer _out = StringBuffer();
+  final Set<String> _seen = {};
+
+  /// Games written so far.
+  int count = 0;
+
+  /// Whether any game was dropped as a duplicate.
+  bool droppedDuplicate = false;
+
+  // Games are separated by a blank line; a verbatim chunk usually brings its
+  // own, a rewritten one never does.
+  bool _endsWithBlank = true;
+
+  String get text => _out.toString();
+
+  void keep(String piece) {
+    if (!_seen.add(_identity(piece, titleKey))) {
+      droppedDuplicate = true;
+      return;
+    }
+    if (!_endsWithBlank) _out.write('\n');
+    _out.write(piece);
+    if (!piece.endsWith('\n')) _out.write('\n');
+    _endsWithBlank = piece.endsWith('\n\n');
+    count++;
+  }
 }
 
 /// What makes two games the same line: the title header and the movetext,
 /// whitespace collapsed. Other headers (a chapter title, an id) are what a
 /// duplicate export varies, so they are left out on purpose.
 String _identity(String gameText, String titleKey) {
-  final title = RegExp(
-    '^\\[$titleKey "([^"]*)"\\]',
-    multiLine: true,
-  ).firstMatch(gameText)?.group(1);
+  final title = _headerValue(gameText, titleKey);
   final movetext = gameText
       .replaceAll(RegExp(r'^\[[^\]]*\]\s*$', multiLine: true), '')
       .replaceAll(RegExp(r'\s+'), ' ')
@@ -134,24 +163,22 @@ String _identity(String gameText, String titleKey) {
   return '$title\u0000$movetext';
 }
 
+/// The value of the `[key "..."]` header in [gameText], read off the text.
+String? _headerValue(String gameText, String key) => RegExp(
+  '^\\[$key "([^"]*)"\\]',
+  multiLine: true,
+).firstMatch(gameText)?.group(1);
+
 /// The player header carrying a course export's chapter titles — `White`
 /// or `Black` — or null when [games] do not group by one (see
-/// `RepertoireService.chapterHeaderKey`). Reads the three headers it needs
+/// `RepertoireService.chapterHeaderKey`). Reads the four headers it needs
 /// off each game's text rather than parsing the games.
 String? courseChapterHeaderKey(List<String> games) {
-  final headersPerGame = <Map<String, String>>[];
-  for (final text in games) {
-    final headers = <String, String>{};
-    for (final key in const ['Event', 'White', 'Black', 'Result']) {
-      final m = RegExp(
-        '^\\[$key "([^"]*)"\\]',
-        multiLine: true,
-      ).firstMatch(text);
-      if (m != null) headers[key] = m.group(1)!;
-    }
-    headersPerGame.add(headers);
-  }
-  return RepertoireService().chapterHeaderKey(headersPerGame);
+  final headersPerGame = [
+    for (final text in games)
+      {for (final key in _chapterKeyHeaders) key: ?_headerValue(text, key)},
+  ];
+  return chapterHeaderKey(headersPerGame);
 }
 
 /// The games [text] expands to, or null when it should be copied through.
@@ -160,6 +187,7 @@ List<String>? _expandGame(String text, String titleKey, String? chapterKey) {
   try {
     game = PgnGame.parsePgn(text, initHeaders: PgnGame.emptyHeaders);
   } catch (_) {
+    // Unparseable text is not this function's to judge; it is copied through.
     return null;
   }
   if (!_hasVariation(game.moves)) return null;
@@ -170,6 +198,28 @@ List<String>? _expandGame(String text, String titleKey, String? chapterKey) {
   final fen = game.headers['FEN']?.trim();
   final startPly = fen == null || fen.isEmpty ? 0 : plyFromFen(fen);
 
+  return [
+    for (final (i, path) in _leafPaths(game.moves).indexed)
+      PgnGame<PgnNodeData>(
+        headers: i == 0
+            ? Map.of(game.headers)
+            : _sidelineHeaders(
+                game.headers,
+                path: path,
+                branchPlies: _branchPlies(game.moves, path),
+                startPly: startPly,
+                titleKey: titleKey,
+                chapterKey: chapterKey,
+              ),
+        moves: _singleLine(path),
+        comments: game.comments,
+      ).makePgn(),
+  ];
+}
+
+/// Every root-to-leaf path of [root], in reading order: first children
+/// first, the way the brackets nest.
+List<List<PgnChildNode<PgnNodeData>>> _leafPaths(PgnNode<PgnNodeData> root) {
   final paths = <List<PgnChildNode<PgnNodeData>>>[];
   void walk(PgnNode<PgnNodeData> node, List<PgnChildNode<PgnNodeData>> acc) {
     if (node.children.isEmpty) {
@@ -181,41 +231,55 @@ List<String>? _expandGame(String text, String titleKey, String? chapterKey) {
     }
   }
 
-  walk(game.moves, const []);
+  walk(root, const []);
+  return paths;
+}
 
-  final lines = <String>[];
-  for (var i = 0; i < paths.length; i++) {
-    final path = paths[i];
-    final root = PgnNode<PgnNodeData>();
-    PgnNode<PgnNodeData> tail = root;
-    for (final node in path) {
-      final copy = PgnChildNode<PgnNodeData>(node.data);
-      tail.children.add(copy);
-      tail = copy;
-    }
-    final headers = Map<String, String>.of(game.headers);
-    if (i > 0) {
-      for (final key in RepertoireLineIds.headerKeys) {
-        headers.remove(key);
-      }
-      final label = _branchLabel(game.moves, path, startPly);
-      if (label != null) {
-        _suffixNamingHeaders(headers, label, titleKey, chapterKey);
-      }
-      final branches = _branchPlies(game.moves, path);
-      if (branches.isNotEmpty) {
-        headers[kBranchPliesHeader] = branches.join(' ');
-      }
-    }
-    lines.add(
-      PgnGame<PgnNodeData>(
-        headers: headers,
-        moves: root,
-        comments: game.comments,
-      ).makePgn(),
-    );
+/// A fresh move tree holding only [path], each node's data shared with the
+/// original.
+PgnNode<PgnNodeData> _singleLine(List<PgnChildNode<PgnNodeData>> path) {
+  final root = PgnNode<PgnNodeData>();
+  PgnNode<PgnNodeData> tail = root;
+  for (final node in path) {
+    final copy = PgnChildNode<PgnNodeData>(node.data);
+    tail.children.add(copy);
+    tail = copy;
   }
-  return lines;
+  return root;
+}
+
+/// A sideline's headers: the game's own minus any line id, with the naming
+/// headers suffixed by the move where it last left the mainline and the
+/// [kBranchPliesHeader] recording every branch point.
+Map<String, String> _sidelineHeaders(
+  Map<String, String> gameHeaders, {
+  required List<PgnChildNode<PgnNodeData>> path,
+  required List<int> branchPlies,
+  required int startPly,
+  required String titleKey,
+  required String? chapterKey,
+}) {
+  final headers = Map<String, String>.of(gameHeaders);
+  for (final key in RepertoireLineIds.headerKeys) {
+    headers.remove(key);
+  }
+  if (branchPlies.isEmpty) return headers;
+
+  // The deepest branch is where this line last left the mainline, e.g.
+  // "5...Nf6"; that move is what names it.
+  final branchPly = branchPlies.last;
+  _suffixNamingHeaders(
+    headers,
+    formatMoveAtPly(
+      startPly + branchPly,
+      path[branchPly].data.san,
+      compact: true,
+    ),
+    titleKey,
+    chapterKey,
+  );
+  headers[kBranchPliesHeader] = branchPlies.join(' ');
+  return headers;
 }
 
 bool _hasVariation(PgnNode<PgnNodeData> node) {
@@ -227,28 +291,9 @@ bool _hasVariation(PgnNode<PgnNodeData> node) {
   return false;
 }
 
-/// The deepest move on [path] that is not its parent's first child: where
-/// this line last left the mainline, e.g. "5...Nf6". Null for the mainline.
-String? _branchLabel(
-  PgnNode<PgnNodeData> root,
-  List<PgnChildNode<PgnNodeData>> path,
-  int startPly,
-) {
-  PgnNode<PgnNodeData> parent = root;
-  String? label;
-  for (var ply = 0; ply < path.length; ply++) {
-    final node = path[ply];
-    if (parent.children.first != node) {
-      label = formatMoveAtPly(startPly + ply, node.data.san, compact: true);
-    }
-    parent = node;
-  }
-  return label;
-}
-
 /// Every ply on [path] where it took a move other than its parent's first
-/// child, from the game's start position (not the initial position: a line
-/// from a FEN counts from that FEN, the way [_branchLabel] numbers it).
+/// child, counted from the game's start position (not the initial position:
+/// a line from a FEN counts from that FEN).
 List<int> _branchPlies(
   PgnNode<PgnNodeData> root,
   List<PgnChildNode<PgnNodeData>> path,
@@ -269,24 +314,13 @@ void _suffixNamingHeaders(
   String titleKey,
   String? chapterKey,
 ) {
-  // The placeholders the parser names nothing after, plus the synthetic
-  // Event that header-less text is given.
-  const ignored = {
-    '',
-    '?',
-    'me',
-    'opponent',
-    'white',
-    'black',
-    'n.n.',
-    'repertoire line',
-    'edited line',
-  };
   // Never the chapter header: a suffix there makes every sideline a chapter
   // of its own.
   for (final key in {'Event', 'Opening', titleKey}.difference({chapterKey})) {
     final value = headers[key]?.trim();
-    if (value == null || ignored.contains(value.toLowerCase())) continue;
+    if (value == null || _placeholderTitles.contains(value.toLowerCase())) {
+      continue;
+    }
     headers[key] = '$value — $label';
   }
 }

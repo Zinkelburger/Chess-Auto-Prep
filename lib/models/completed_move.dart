@@ -1,4 +1,5 @@
-/// Rich move object that contains complete information about a move
+/// A move as played on a board: squares, SAN, UCI and the FENs on either
+/// side of it.
 class CompletedMove {
   final String from;
   final String to;
@@ -7,7 +8,7 @@ class CompletedMove {
   final String fenAfter;
   final String uci;
 
-  CompletedMove({
+  const CompletedMove({
     required this.from,
     required this.to,
     required this.san,

@@ -41,10 +41,8 @@ enum GameAuthority {
 /// it with the `INT` country code — `chess.com INT`, `lichess.org INT`,
 /// `FIDE Online Arena INT`, `Tornelo INT`, `tcec-chess.com INT`.  No
 /// over-the-board site in five years of TWIC ends that way.
-bool _isOnlineSite(String site) {
-  final s = site.trimRight();
-  return s.length >= 3 && s.toUpperCase().endsWith('INT');
-}
+bool _isOnlineSite(String site) =>
+    site.trimRight().toUpperCase().endsWith('INT');
 
 /// Speed markers TWIC puts in the event name.
 ///
@@ -73,11 +71,8 @@ const _speedMarkers = [
 ];
 
 bool _isSpeedEvent(String event) {
-  final e = event.toLowerCase();
-  for (final marker in _speedMarkers) {
-    if (e.contains(marker)) return true;
-  }
-  return false;
+  final lower = event.toLowerCase();
+  return _speedMarkers.any(lower.contains);
 }
 
 /// Classify a game from the two headers the database keeps.
@@ -88,14 +83,17 @@ GameAuthority classifyAuthority({required String site, required String event}) {
 }
 
 /// The same rule as SQL, for backfilling an already-imported database without
-/// re-reading a single game.  Returns a `CASE` expression over `site`/`event`
-/// yielding [GameAuthority.code].
-const String kAuthoritySqlExpression = '''
-CASE
-  WHEN upper(rtrim(site)) LIKE '%INT' THEN 2
-  WHEN lower(event) LIKE '%blitz%' OR lower(event) LIKE '%rapid%'
-    OR lower(event) LIKE '%bullet%' OR lower(event) LIKE '%armageddon%'
-    OR lower(event) LIKE '%titled tue%' OR lower(event) LIKE '%esports%'
-    THEN 1
-  ELSE 0
-END''';
+/// re-reading a single game.  A `CASE` expression over `site`/`event`
+/// yielding [GameAuthority.code], built from the same [_speedMarkers] as
+/// [classifyAuthority] so the two cannot drift apart.
+final String kAuthoritySqlExpression = _buildAuthoritySql();
+
+String _buildAuthoritySql() {
+  final speed = _speedMarkers
+      .map((marker) => "lower(event) LIKE '%$marker%'")
+      .join(' OR ');
+  return 'CASE '
+      "WHEN upper(rtrim(site)) LIKE '%INT' THEN ${GameAuthority.online.code} "
+      'WHEN $speed THEN ${GameAuthority.speedOtb.code} '
+      'ELSE ${GameAuthority.classical.code} END';
+}

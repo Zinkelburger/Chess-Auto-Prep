@@ -136,6 +136,9 @@ class PgnFreqMove {
 
 // ── Per-position statistics ──────────────────────────────────────────────
 
+/// Everything recorded at one canonical (4-field) position: how often games
+/// reached it, which moves were played from it, and which retained games
+/// passed through it.
 class PgnFreqPosition {
   final String fenKey;
 
@@ -320,6 +323,8 @@ class TopGamesReservoir {
 
 // ── The map ──────────────────────────────────────────────────────────────
 
+/// Position → move statistics for a whole database, plus the strongest games
+/// kept whole.  Keys are 4-field canonical FENs ([canonicalizeFen4]).
 class PgnFreqMap {
   PgnFreqMap({int gameCapacity = TopGamesReservoir.defaultCapacity})
     : games = TopGamesReservoir(capacity: gameCapacity);
@@ -429,6 +434,8 @@ class PgnFreqMap {
 
 // ── Parse configuration and outcome ──────────────────────────────────────
 
+/// What a database scan counts: from which position ([startFen] plus
+/// [startMoves]), how deep, at what strength, and how many games to keep.
 class PgnFreqConfig {
   final String? startFen;
   final String? startMoves;
@@ -455,6 +462,7 @@ class PgnFreqConfig {
   });
 }
 
+/// Totals reported by a finished scan.
 class PgnFreqStats {
   final int positions;
   final int totalGames;

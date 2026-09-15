@@ -19,7 +19,7 @@ import '../utils/movetext_builder.dart';
 /// `[Event "..."]`, for replacing a line's title in place.
 final RegExp _eventTagRe = RegExp(r'\[Event\s+"[^"]*"\]');
 
-/// A whole line that is nothing but one header.
+/// A whole line that is nothing but one header, capturing the key.
 final RegExp _headerLineRe = RegExp(r'^\[(\w+)\s+"[^"]*"\]$');
 
 /// A header at the start of a line, capturing key and value.
@@ -65,6 +65,26 @@ String withEventTitle(String gameText, String newTitle) =>
     ? gameText.replaceFirst(_eventTagRe, '[Event "$newTitle"]')
     : '[Event "$newTitle"]\n$gameText';
 
+/// The header lines at the top of [game], trimmed, up to the first line that
+/// is not a header. Leading blank lines are skipped; a blank line after the
+/// first header ends the block.
+List<String> _leadingHeaderLines(String game) {
+  final result = <String>[];
+  for (final line in game.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) {
+      if (result.isNotEmpty) break;
+      continue;
+    }
+    if (!_headerLineRe.hasMatch(trimmed)) break;
+    result.add(trimmed);
+  }
+  return result;
+}
+
+/// The tag name of a line [_headerLineRe] matched.
+String _headerKey(String header) => _headerLineRe.firstMatch(header)!.group(1)!;
+
 /// Carry over any header [oldGame] had that [newGame] lacks.
 ///
 /// The PGN editor serializes only the standard headers, so an edited game
@@ -72,34 +92,16 @@ String withEventTitle(String gameText, String newTitle) =>
 /// `LineID` orphans the line: every later lookup by id — rename, autosave,
 /// delete — silently fails against a file that looks fine.
 String mergeMissingHeaders(String oldGame, String newGame) {
-  List<String> headerLines(String game) {
-    final result = <String>[];
-    for (final line in game.split('\n')) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) {
-        if (result.isNotEmpty) break;
-        continue;
-      }
-      if (_headerLineRe.hasMatch(trimmed)) {
-        result.add(trimmed);
-      } else {
-        break;
-      }
-    }
-    return result;
-  }
-
-  String keyOf(String header) => _headerLineRe.firstMatch(header)!.group(1)!;
-
-  final newKeys = headerLines(newGame).map(keyOf).toSet();
-  final missing = headerLines(
-    oldGame,
-  ).where((h) => !newKeys.contains(keyOf(h))).toList();
+  final newKeys = _leadingHeaderLines(newGame).map(_headerKey).toSet();
+  final missing = [
+    for (final header in _leadingHeaderLines(oldGame))
+      if (!newKeys.contains(_headerKey(header))) header,
+  ];
   if (missing.isEmpty) return newGame;
 
   final lines = newGame.split('\n');
   var lastHeader = -1;
-  for (int i = 0; i < lines.length; i++) {
+  for (var i = 0; i < lines.length; i++) {
     final trimmed = lines[i].trim();
     if (_headerLineRe.hasMatch(trimmed)) {
       lastHeader = i;
@@ -133,9 +135,8 @@ String gameWithReviewHeaders(
   var pastHeaders = false;
 
   for (final line in gameText.split('\n')) {
-    final trimmed = line.trim();
-    if (!pastHeaders && _headerPairRe.hasMatch(trimmed)) {
-      final match = _headerPairRe.firstMatch(trimmed)!;
+    final match = pastHeaders ? null : _headerPairRe.firstMatch(line.trim());
+    if (match != null) {
       headers[match.group(1)!] = match.group(2)!;
     } else {
       pastHeaders = true;
@@ -221,12 +222,11 @@ String buildMinimalGamePgn(
     '[White "${isWhiteRepertoire ? 'Me' : 'Opponent'}"]',
     '[Black "${isWhiteRepertoire ? 'Opponent' : 'Me'}"]',
     '[Result "1-0"]',
+    if (startingFen != null && startingFen.trim().isNotEmpty) ...[
+      '[FEN "$startingFen"]',
+      '[SetUp "1"]',
+    ],
   ];
-
-  if (startingFen != null && startingFen.trim().isNotEmpty) {
-    headers.add('[FEN "$startingFen"]');
-    headers.add('[SetUp "1"]');
-  }
 
   return [...headers, '', buildNumberedMovetext(moves)].join('\n');
 }

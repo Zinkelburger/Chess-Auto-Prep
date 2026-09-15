@@ -129,8 +129,8 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
     obj['my_ease'] = node.myEase;
   }
 
-  if (node.pvContinuationMove != null && node.pvContinuationMove!.isNotEmpty) {
-    obj['pv_continuation_move'] = node.pvContinuationMove;
+  if (node.pvContinuationMove case final pv? when pv.isNotEmpty) {
+    obj['pv_continuation_move'] = pv;
   }
   if (node.engineInjected) {
     obj['engine_injected'] = true;
@@ -148,9 +148,7 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   if (node.explored) obj['explored'] = true;
 
   if (node.pruneReason != PruneReason.none) {
-    obj['prune_reason'] = node.pruneReason == PruneReason.evalTooHigh
-        ? 'eval_too_high'
-        : 'eval_too_low';
+    obj['prune_reason'] = node.pruneReason.wireName;
     if (node.pruneEvalCp != null) obj['prune_eval_cp'] = node.pruneEvalCp;
   }
 
@@ -160,6 +158,19 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   }
 
   return obj;
+}
+
+/// The v4 spelling of a prune reason.  [PruneReason.none] is never written.
+extension _PruneReasonWire on PruneReason {
+  String get wireName => switch (this) {
+    PruneReason.evalTooHigh => 'eval_too_high',
+    PruneReason.evalTooLow || PruneReason.none => 'eval_too_low',
+  };
+
+  /// Anything but `eval_too_high` reads as too low, as it always has.
+  static PruneReason parse(String wireName) => wireName == 'eval_too_high'
+      ? PruneReason.evalTooHigh
+      : PruneReason.evalTooLow;
 }
 
 // ── Deserialization ──────────────────────────────────────────────────────
@@ -326,10 +337,7 @@ BuildTreeNode _nodeFromJson(
   node.explored = exploredExplicit ? (obj['explored'] as bool) : false;
 
   if (obj.containsKey('prune_reason')) {
-    final reason = obj['prune_reason'] as String;
-    node.pruneReason = reason == 'eval_too_high'
-        ? PruneReason.evalTooHigh
-        : PruneReason.evalTooLow;
+    node.pruneReason = _PruneReasonWire.parse(obj['prune_reason'] as String);
     if (obj.containsKey('prune_eval_cp')) {
       node.pruneEvalCp = (obj['prune_eval_cp'] as num).toInt();
     }

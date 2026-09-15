@@ -10,7 +10,7 @@ import '../../core/board_editor_controller.dart';
 import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
 import '../../models/pgn_game_entry.dart';
-import '../../services/pgn_parsing_service.dart' as pgn;
+import '../../services/pgn_slice_filter.dart' as pgn;
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
 import '../board_editor/board_editor_panel.dart';

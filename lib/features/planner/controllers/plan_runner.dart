@@ -16,6 +16,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../constants/chess_constants.dart';
 import '../../../core/generation_session_controller.dart';
+import '../../../core/generation_session_types.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../utils/chess_utils.dart';
 import '../../repertoire/services/repertoire_outline_service.dart';

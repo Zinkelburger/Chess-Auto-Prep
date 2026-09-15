@@ -1,15 +1,30 @@
-import 'dart:async';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
+
 import '../models/opening_tree.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import '../utils/fen_utils.dart' show expandFen;
-import 'package:chess_auto_prep/utils/log.dart';
-
+import '../utils/isolate_task.dart';
+import '../utils/log.dart';
 import 'pgn_tree_core.dart';
 
+/// Builds an [OpeningTree] from a player's games or a course's chapters.
+///
+/// [buildTree] does the work in a background isolate; [addGames] and
+/// [addGame] grow a tree the caller already holds, for callers that have
+/// parsed their games once for other purposes.
 class OpeningTreeBuilder {
+  /// Games between progress reports from [buildTree].
+  static const int _progressEvery = 25;
+
+  /// Build a tree from [pgnList] in a background isolate.
+  ///
+  /// Each element of [pgnList] must contain exactly one game (headers +
+  /// moves). Multi-game strings in a single element are **not** expanded —
+  /// only the first game will be parsed. Callers should pre-split if needed.
+  ///
+  /// [onProgress] receives (processed, total) as the batch is folded.
   static Future<OpeningTree> buildTree({
     required List<String> pgnList,
     required String username,
@@ -20,140 +35,50 @@ class OpeningTreeBuilder {
     bool preserveSetupRoots = false,
     void Function(int processed, int total)? onProgress,
   }) async {
-    final transferJson = onProgress == null
-        ? await Isolate.run(() {
-            return _buildTreeSync(
-              pgnList: pgnList,
-              username: username,
-              userIsWhite: userIsWhite,
-              maxDepth: maxDepth,
-              strictPlayerMatching: strictPlayerMatching,
-              includeVariations: includeVariations,
-              preserveSetupRoots: preserveSetupRoots,
-            );
-          })
-        : await _buildTreeWithProgress(
-            pgnList: pgnList,
-            username: username,
-            userIsWhite: userIsWhite,
-            maxDepth: maxDepth,
-            strictPlayerMatching: strictPlayerMatching,
-            includeVariations: includeVariations,
-            preserveSetupRoots: preserveSetupRoots,
-            onProgress: onProgress,
-          );
+    final args = (
+      pgnList: pgnList,
+      username: username,
+      userIsWhite: userIsWhite,
+      maxDepth: maxDepth,
+      strictPlayerMatching: strictPlayerMatching,
+      includeVariations: includeVariations,
+      preserveSetupRoots: preserveSetupRoots,
+      reportProgress: onProgress != null,
+    );
+    final transferJson = await IsolateTask().run<Map<String, dynamic>>(
+      _bindEntry(_buildTreeEntry, args),
+      onProgress: (message) {
+        final progress = message as List;
+        onProgress?.call(progress[0] as int, progress[1] as int);
+      },
+    );
     return OpeningTree.fromTransferJson(transferJson);
   }
 
-  static Future<Map<String, dynamic>> _buildTreeWithProgress({
-    required List<String> pgnList,
-    required String username,
-    required bool? userIsWhite,
-    required int maxDepth,
-    required bool strictPlayerMatching,
-    bool? includeVariations,
-    bool preserveSetupRoots = false,
-    required void Function(int processed, int total) onProgress,
-  }) async {
-    final receivePort = ReceivePort();
-    final isolate =
-        await Isolate.spawn<Map<String, dynamic>>(_buildTreeSyncIsolateEntry, {
-          'sendPort': receivePort.sendPort,
-          'pgnList': pgnList,
-          'username': username,
-          'userIsWhite': userIsWhite,
-          'maxDepth': maxDepth,
-          'strictPlayerMatching': strictPlayerMatching,
-          'includeVariations': includeVariations,
-          'preserveSetupRoots': preserveSetupRoots,
-        });
-
-    final completer = Completer<Map<String, dynamic>>();
-    late final StreamSubscription<dynamic> sub;
-    sub = receivePort.listen((dynamic message) {
-      if (message is! Map) return;
-      final type = message['type'];
-      if (type == 'progress') {
-        final processed = message['processed'] as int? ?? 0;
-        final total = message['total'] as int? ?? 0;
-        onProgress(processed, total);
-      } else if (type == 'result') {
-        final payload = message['payload'];
-        if (!completer.isCompleted && payload is Map) {
-          completer.complete(Map<String, dynamic>.from(payload));
-        }
-      } else if (type == 'error') {
-        if (!completer.isCompleted) {
-          completer.completeError(
-            Exception(message['error'] ?? 'Unknown error'),
-          );
-        }
-      }
-    });
-
-    try {
-      return await completer.future.timeout(const Duration(minutes: 5));
-    } finally {
-      await sub.cancel();
-      receivePort.close();
-      isolate.kill(priority: Isolate.immediate);
-    }
-  }
-
-  static void _buildTreeSyncIsolateEntry(Map<String, dynamic> args) {
-    final sendPort = args['sendPort'] as SendPort;
-    try {
-      final result = _buildTreeSync(
-        pgnList: (args['pgnList'] as List).cast<String>(),
-        username: args['username'] as String,
-        userIsWhite: args['userIsWhite'] as bool?,
-        maxDepth: args['maxDepth'] as int,
-        strictPlayerMatching: args['strictPlayerMatching'] as bool,
-        includeVariations: args['includeVariations'] as bool?,
-        preserveSetupRoots: args['preserveSetupRoots'] as bool,
-        onProgress: (processed, total) {
-          sendPort.send({
-            'type': 'progress',
-            'processed': processed,
-            'total': total,
-          });
-        },
-      );
-      sendPort.send({'type': 'result', 'payload': result});
-    } catch (e) {
-      sendPort.send({'type': 'error', 'error': e.toString()});
-    }
-  }
-
-  /// Build the tree synchronously from a list of individual PGN game strings.
-  ///
-  /// Each element of [pgnList] must contain exactly one game (headers + moves).
-  /// Multi-game strings in a single element are **not** expanded — only the
-  /// first game will be parsed. Callers should pre-split if needed.
-  static Map<String, dynamic> _buildTreeSync({
-    required List<String> pgnList,
-    required String username,
-    required bool? userIsWhite,
-    int maxDepth = 30,
-    bool strictPlayerMatching = true,
-    bool? includeVariations,
-    bool preserveSetupRoots = false,
-    void Function(int processed, int total)? onProgress,
-  }) {
-    final tree = OpeningTree(preserveSetupRoots: preserveSetupRoots);
-    final usernameLower = username.toLowerCase();
-    final total = pgnList.length;
+  /// Isolate entry: builds the tree and streams `[processed, total]` back on
+  /// [progress] when asked to.
+  static Map<String, dynamic> _buildTreeEntry(
+    _BuildArgs args,
+    SendPort progress,
+  ) {
+    final tree = OpeningTree(preserveSetupRoots: args.preserveSetupRoots);
+    final usernameLower = args.username.toLowerCase();
+    final total = args.pgnList.length;
     var processed = 0;
     var skipped = 0;
 
-    if (onProgress != null) onProgress(0, total);
+    void report() {
+      if (args.reportProgress) progress.send([processed, total]);
+    }
+
+    report();
 
     // Chapters go in after the games that reach their start position, so the
     // tree does not depend on the order the collection happens to be sorted
     // in; see [foldGamesIntoTree]. The start position is read from the raw
     // text, so a big collection is still parsed one game at a time.
     foldGamesIntoTree<String>(
-      games: pgnList,
+      games: args.pgnList,
       startPositionOf: _startPositionOfText,
       isReached: (position) => treeReachesPosition(tree, position),
       fold: (pgnText) {
@@ -164,25 +89,27 @@ class OpeningTreeBuilder {
               tree,
               PgnGame.parsePgn(trimmed),
               usernameLower: usernameLower,
-              userIsWhite: userIsWhite,
-              maxDepth: maxDepth,
-              strictPlayerMatching: strictPlayerMatching,
-              includeVariations: includeVariations,
+              userIsWhite: args.userIsWhite,
+              maxDepth: args.maxDepth,
+              strictPlayerMatching: args.strictPlayerMatching,
+              includeVariations: args.includeVariations,
             );
           } catch (_) {
+            // One malformed game must not sink the collection; counted and
+            // logged below.
             skipped++;
           }
         }
         processed++;
-        if (onProgress != null &&
-            (processed == total || processed % 25 == 0 || processed == 1)) {
-          onProgress(processed, total);
+        if (processed == total ||
+            processed == 1 ||
+            processed % _progressEvery == 0) {
+          report();
         }
       },
     );
 
     if (skipped > 0) {
-      // ignore: avoid_print
       log.w(
         '[OpeningTreeBuilder] Skipped $skipped malformed games out of $total',
       );
@@ -248,15 +175,12 @@ class OpeningTreeBuilder {
     required bool strictPlayerMatching,
     bool? includeVariations,
   }) {
-    // 1. Safe Header Access
-    final white = game.headers['White'] ?? '';
-    final black = game.headers['Black'] ?? '';
     final result = (game.headers['Result'] ?? '*').trim();
 
-    // 2. Identify User. Games whose colour can't be determined are skipped.
+    // Games whose colour can't be determined are skipped.
     final isUserWhiteInGame = resolveUserColor(
-      whiteHeader: white,
-      blackHeader: black,
+      whiteHeader: game.headers['White'] ?? '',
+      blackHeader: game.headers['Black'] ?? '',
       usernameLower: usernameLower,
       userIsWhiteFilter: userIsWhite,
       strictPlayerMatching: strictPlayerMatching,
@@ -264,16 +188,16 @@ class OpeningTreeBuilder {
     );
     if (isUserWhiteInGame == null) return;
 
-    // 3. Score. Course / unfinished games (`*`) count toward frequency
-    // without a fake 50% draw bar on the opening tree.
+    // Course / unfinished games (`*`) count toward frequency without a fake
+    // 50% draw bar on the opening tree.
     final userResult = (result.isEmpty || result == '*')
         ? null
         : resultForUser(result, isUserWhiteInGame);
 
-    // 4. Walk the game. Course / repertoire lines (`*`) fold RAVs into the
-    // tree so the viewer Tree tab shows every book continuation, not just
-    // each chapter's mainline. Scored player games stay mainline-only —
-    // their variations are analysis notes, not extra games.
+    // Course / repertoire lines (`*`) fold RAVs into the tree so the viewer
+    // Tree tab shows every book continuation, not just each chapter's
+    // mainline. Scored player games stay mainline-only — their variations
+    // are analysis notes, not extra games.
     //
     // A `[FEN]` chapter starts its walk from that position: replaying its
     // first move from the standard start fails, and the whole chapter used
@@ -316,3 +240,22 @@ class OpeningTreeBuilder {
     return tryParseFen(expandFen(fen));
   }
 }
+
+typedef _BuildArgs = ({
+  List<String> pgnList,
+  String username,
+  bool? userIsWhite,
+  int maxDepth,
+  bool strictPlayerMatching,
+  bool? includeVariations,
+  bool preserveSetupRoots,
+  bool reportProgress,
+});
+
+/// Binds [args] to [entry] in a scope of its own, so the closure handed to
+/// the isolate captures plain data and never the caller's progress callback.
+R Function(SendPort) _bindEntry<R, A>(
+  R Function(A args, SendPort progress) entry,
+  A args,
+) =>
+    (port) => entry(args, port);

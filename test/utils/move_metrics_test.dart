@@ -6,7 +6,9 @@
 /// here, together with the plain English it turns into.
 library;
 
-import 'package:chess_auto_prep/utils/pgn_comment_utils.dart';
+import 'package:chess_auto_prep/services/generation/export/move_annotation.dart'
+    show MoveLikelihoodSource;
+import 'package:chess_auto_prep/utils/move_metrics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

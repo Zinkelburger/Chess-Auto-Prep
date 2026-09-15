@@ -36,6 +36,9 @@ enum PruneReason {
 
 // ── Build tree node ──────────────────────────────────────────────────────
 
+/// One position in a generated repertoire tree, with everything the build
+/// and selection phases learned about it.  Mutable by design: the builder
+/// fills a node in over several passes.
 class BuildTreeNode implements MoveTreeNodeView {
   final String fen;
   final String moveSan;
@@ -196,17 +199,20 @@ class BuildTreeNode implements MoveTreeNodeView {
 
   bool get hasEngineEval => engineEvalCp != null;
 
-  /// Engine eval from our perspective (positive = good for us).
+  /// Engine eval from our perspective (positive = good for us); 0 when the
+  /// node has no eval yet.
   int evalForUs(bool playAsWhite) {
-    if (engineEvalCp == null) return 0;
-    return isWhiteToMove == playAsWhite ? engineEvalCp! : -engineEvalCp!;
+    final eval = engineEvalCp;
+    if (eval == null) return 0;
+    return isWhiteToMove == playAsWhite ? eval : -eval;
   }
 
-  void setLichessStats(int w, int b, int d) {
-    whiteWins = w;
-    blackWins = b;
-    draws = d;
-    totalGames = w + b + d;
+  /// Record the game-database split for this move; [totalGames] follows.
+  void setLichessStats(int whiteWins, int blackWins, int draws) {
+    this.whiteWins = whiteWins;
+    this.blackWins = blackWins;
+    this.draws = draws;
+    totalGames = whiteWins + blackWins + draws;
   }
 
   /// Database score for WHITE: `(whiteWins + draws/2) / totalGames`.
@@ -254,6 +260,7 @@ class BuildTreeNode implements MoveTreeNodeView {
 
 // ── Build tree container ─────────────────────────────────────────────────
 
+/// A generated tree plus its build bookkeeping and node index.
 class BuildTree {
   BuildTreeNode root;
   int totalNodes;
@@ -329,6 +336,7 @@ class BuildTree {
 
 // ── Build progress ───────────────────────────────────────────────────────
 
+/// A snapshot of how far a build has got, for the progress display.
 class BuildProgress {
   final int totalNodes;
   final int maxPlyReached;
@@ -391,6 +399,7 @@ class BuildProgress {
 
 // ── Build stats (accumulated during build) ───────────────────────────────
 
+/// Counters a build accumulates about where its evals and moves came from.
 class BuildStats {
   int lichessQueries = 0;
   int lichessCacheHits = 0;

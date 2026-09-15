@@ -42,8 +42,9 @@ class RepertoireReviewEntry {
   bool get isNew => lastRating.isEmpty;
   bool get isDue {
     if (isNew) return true;
-    if (dueDateUtc == null) return true;
-    return !dueDateUtc!.isAfter(DateTime.now().toUtc());
+    final due = dueDateUtc;
+    if (due == null) return true;
+    return !due.isAfter(DateTime.now().toUtc());
   }
 
   RepertoireReviewEntry copyWith({
@@ -72,7 +73,7 @@ class RepertoireReviewEntry {
     );
   }
 
-  static RepertoireReviewEntry fromCsvRow(String row) {
+  factory RepertoireReviewEntry.fromCsvRow(String row) {
     final hasExclusion = row.endsWith(',true') || row.endsWith(',false');
     final cells = decodeTrainingRow(row, hasExclusion ? 11 : 10);
     if (cells.length != 8 && cells.length != 10 && cells.length != 11) {
@@ -98,22 +99,15 @@ class RepertoireReviewEntry {
   }
 
   String toCsvRow() {
-    final dueStr = dueDateUtc == null
-        ? ''
-        : dueDateUtc!.toUtc().toIso8601String();
-    final reviewedStr = lastReviewedUtc == null
-        ? ''
-        : lastReviewedUtc!.toUtc().toIso8601String();
-
     return encodeTrainingRow([
       repertoireId,
       lineId,
       lineName,
       difficulty.toStringAsFixed(2),
       intervalDays.toStringAsFixed(2),
-      dueStr,
+      dueDateUtc?.toUtc().toIso8601String() ?? '',
       lastRating,
-      reviewedStr,
+      lastReviewedUtc?.toUtc().toIso8601String() ?? '',
       passCount.toString(),
       failCount.toString(),
       excluded.toString(),

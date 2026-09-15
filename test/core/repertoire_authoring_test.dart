@@ -92,6 +92,79 @@ void main() {
       expect(extended.moves, ['e4', 'e5', 'Nf3']);
     });
   });
+
+  group('RepertoireAuthoring.numberedMovetext', () {
+    test('numbers from move one for the standard start', () {
+      expect(
+        authoring.numberedMovetext(const [
+          'e4',
+          'e5',
+          'Nf3',
+        ], startingFen: Chess.initial.fen),
+        '1. e4 e5 2. Nf3',
+      );
+    });
+
+    test('numbers from the starting position, Black to move included', () {
+      expect(
+        authoring.numberedMovetext(
+          const ['c5', 'Nf3'],
+          startingFen:
+              'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+        ),
+        '1... c5 2. Nf3',
+      );
+    });
+
+    test('an empty line is empty and a bad FEN numbers from one', () {
+      expect(authoring.numberedMovetext(const [], startingFen: 'x'), '');
+      expect(
+        authoring.numberedMovetext(const ['e4'], startingFen: 'not a fen'),
+        '1. e4',
+      );
+    });
+  });
+
+  group('RepertoireAuthoring.rebuildLine', () {
+    final old = RepertoireLine(
+      id: 'line-1',
+      sourcePath: '/src.pgn',
+      sourceLineId: 'src-1',
+      name: 'Main line',
+      moves: const ['e4', 'e5'],
+      color: 'white',
+      startPosition: Chess.initial,
+      fullPgn: '1. e4 e5',
+      importance: 0.7,
+      chapter: 'Open games',
+      gameIndex: 3,
+    );
+
+    test('re-reads moves, comments and headers from the new text', () {
+      final rebuilt = authoring.rebuildLine(
+        old,
+        '[Event "Edited"]\n\n1. e4 {best} e5 2. Nf3 { calm } Nc6',
+      );
+
+      expect(rebuilt.moves, ['e4', 'e5', 'Nf3', 'Nc6']);
+      expect(rebuilt.comments, {'0': 'best', '2': 'calm'});
+      expect(rebuilt.headers['Event'], 'Edited');
+      expect(rebuilt.fullPgn, contains('2. Nf3'));
+    });
+
+    test('keeps the line\'s identity and place in the file', () {
+      final rebuilt = authoring.rebuildLine(old, '1. d4 d5');
+
+      expect(rebuilt.id, 'line-1');
+      expect(rebuilt.sourcePath, '/src.pgn');
+      expect(rebuilt.sourceLineId, 'src-1');
+      expect(rebuilt.name, 'Main line');
+      expect(rebuilt.color, 'white');
+      expect(rebuilt.importance, 0.7);
+      expect(rebuilt.chapter, 'Open games');
+      expect(rebuilt.gameIndex, 3, reason: 'edited in place, same game');
+    });
+  });
 }
 
 RepertoireLine _line(String id, List<String> moves, {String pgn = ''}) =>

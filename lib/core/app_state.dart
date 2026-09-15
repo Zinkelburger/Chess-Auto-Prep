@@ -124,6 +124,11 @@ abstract interface class NavigationHistoryRecorder {
 }
 
 class AppState extends ChangeNotifier with SafeChangeNotifier {
+  static const _keyLichessUsername = 'lichess_username';
+  static const _keyChesscomUsername = 'chesscom_username';
+  static const _keyLichessLastFetch = 'lichess_last_fetch_ms';
+  static const _keyChesscomLastFetch = 'chesscom_last_fetch_ms';
+
   // Tactics is the app's home: the unified landing screen — recent games on
   // the left, training on the right.
   AppMode _currentMode = AppMode.tactics;
@@ -359,20 +364,20 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     // date would date the new name's games to a fetch that never happened.
     if (username?.trim() != _lichessUsername?.trim()) {
       _lichessLastFetch = null;
-      unawaited(_saveLastFetch('lichess_last_fetch_ms', null));
+      unawaited(_saveLastFetch(_keyLichessLastFetch, null));
     }
     _lichessUsername = username;
-    unawaited(_saveLichessUsername(username));
+    unawaited(_saveString(_keyLichessUsername, username));
     notifyListeners();
   }
 
   void setChesscomUsername(String? username) {
     if (username?.trim() != _chesscomUsername?.trim()) {
       _chesscomLastFetch = null;
-      unawaited(_saveLastFetch('chesscom_last_fetch_ms', null));
+      unawaited(_saveLastFetch(_keyChesscomLastFetch, null));
     }
     _chesscomUsername = username;
-    unawaited(_saveChesscomUsername(username));
+    unawaited(_saveString(_keyChesscomUsername, username));
     notifyListeners();
   }
 
@@ -382,28 +387,22 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
   /// disagree in the first place.
   void setLichessLastFetch(DateTime? date) {
     _lichessLastFetch = date;
-    unawaited(_saveLastFetch('lichess_last_fetch_ms', date));
+    unawaited(_saveLastFetch(_keyLichessLastFetch, date));
     notifyListeners();
   }
 
   void setChesscomLastFetch(DateTime? date) {
     _chesscomLastFetch = date;
-    unawaited(_saveLastFetch('chesscom_last_fetch_ms', date));
+    unawaited(_saveLastFetch(_keyChesscomLastFetch, date));
     notifyListeners();
   }
 
   Future<void> loadUsernames() async {
     final prefs = await SharedPreferences.getInstance();
-    _lichessUsername = prefs.getString('lichess_username');
-    _chesscomUsername = prefs.getString('chesscom_username');
-    final lichessMs = prefs.getInt('lichess_last_fetch_ms');
-    _lichessLastFetch = lichessMs != null
-        ? DateTime.fromMillisecondsSinceEpoch(lichessMs)
-        : null;
-    final chesscomMs = prefs.getInt('chesscom_last_fetch_ms');
-    _chesscomLastFetch = chesscomMs != null
-        ? DateTime.fromMillisecondsSinceEpoch(chesscomMs)
-        : null;
+    _lichessUsername = prefs.getString(_keyLichessUsername);
+    _chesscomUsername = prefs.getString(_keyChesscomUsername);
+    _lichessLastFetch = _readDate(prefs, _keyLichessLastFetch);
+    _chesscomLastFetch = _readDate(prefs, _keyChesscomLastFetch);
 
     // Flag + notify before the token load: the Games page only needs the
     // usernames, and secure-storage reads can be slow.
@@ -415,21 +414,17 @@ class AppState extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _saveLichessUsername(String? username) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (username != null) {
-      await prefs.setString('lichess_username', username);
-    } else {
-      await prefs.remove('lichess_username');
-    }
+  static DateTime? _readDate(SharedPreferences prefs, String key) {
+    final ms = prefs.getInt(key);
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
   }
 
-  Future<void> _saveChesscomUsername(String? username) async {
+  Future<void> _saveString(String key, String? value) async {
     final prefs = await SharedPreferences.getInstance();
-    if (username != null) {
-      await prefs.setString('chesscom_username', username);
+    if (value != null) {
+      await prefs.setString(key, value);
     } else {
-      await prefs.remove('chesscom_username');
+      await prefs.remove(key);
     }
   }
 

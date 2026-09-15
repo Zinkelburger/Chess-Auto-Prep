@@ -193,6 +193,9 @@ class TransferMatch {
   });
 }
 
+/// The user's skeleton: pinned our-moves, transfer targets and structure
+/// vetoes (see the library comment).  Immutable; an empty plan is the classic
+/// build with no steering.
 class SkeletonPlan {
   /// Our-move decisions, one per our-turn ply in every skeleton line.
   final List<SkeletonNode> nodes;

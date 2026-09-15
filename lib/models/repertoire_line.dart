@@ -234,9 +234,6 @@ class RepertoireLine {
     return _puzzleEndIndex;
   }
 
-  /// Checks if this line trains the specified color
-  bool trainsColor(String colorToTrain) => color == colorToTrain;
-
   @override
   String toString() => 'RepertoireLine($name: ${moves.join(" ")})';
 }

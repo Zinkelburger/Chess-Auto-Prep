@@ -14,13 +14,16 @@ import 'dart:async';
 ///
 /// Items are handed out in order; a lane that finds nothing left returns.
 /// [stop] is polled before each item so a cancelled or finished run stops
-/// handing out work promptly (items already in flight complete).  Errors
-/// propagate after every lane has settled, exactly like `Future.wait`.
+/// handing out work promptly (items already in flight complete).  [pause]
+/// is awaited before each item so a paused run holds every lane at an item
+/// boundary.  Errors propagate after every lane has settled, exactly like
+/// `Future.wait`.
 Future<void> runLanes<T>(
   List<T> items, {
   required int lanes,
   required Future<void> Function(T item) task,
   bool Function()? stop,
+  Future<void> Function()? pause,
 }) async {
   if (items.isEmpty) return;
   var next = 0;
@@ -28,6 +31,11 @@ Future<void> runLanes<T>(
   Future<void> lane() async {
     while (next < items.length) {
       if (stop?.call() ?? false) return;
+      if (pause != null) {
+        await pause();
+        // The other lanes may have drained the list while this one waited.
+        if (next >= items.length) return;
+      }
       await task(items[next++]);
     }
   }

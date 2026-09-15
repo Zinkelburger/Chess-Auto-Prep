@@ -21,13 +21,14 @@
 /// blocking each other.
 library;
 
-import '../storage/schema_guard.dart';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';
 
 import '../../utils/pgn_utils.dart';
 import '../storage/app_paths.dart';
+import '../storage/schema_guard.dart';
 import 'game_authority.dart';
 import 'master_games_query.dart';
 import 'movetext_codec.dart';
@@ -234,6 +235,9 @@ class MasterGamesStats {
   bool get isEmpty => games == 0;
 }
 
+/// One connection to the master-games file.  Reads are synchronous; the
+/// importer and the classical rebuild write through [raw] on their own
+/// connections.
 class MasterGamesDb {
   final Database _db;
   final String path;
@@ -280,11 +284,13 @@ class MasterGamesDb {
   /// `<support>/master_games.db`.
   static Future<String> defaultPath() async {
     final dir = await AppPaths.supportDirectory();
-    return '${dir.path}${Platform.pathSeparator}master_games.db';
+    return p.join(dir.path, 'master_games.db');
   }
 
   void close() => _db.close();
 
+  /// The underlying connection, for the bulk writers and maintenance passes
+  /// that run their own SQL against the schema documented above.
   Database get raw => _db;
 
   static const int _schemaVersion = 4;
@@ -404,16 +410,17 @@ class MasterGamesDb {
     final games = db.select('SELECT COUNT(*) FROM games').first.columnAt(0);
     db.execute('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)', [
       kClassicalCountsKey,
-      games == 0 ? _kComplete : _kIncomplete,
+      (games == 0 ? _completeMarker : _incompleteMarker).codeUnits,
     ]);
   }
 
   /// `meta` key recording whether every book row's classical counts are
-  /// trustworthy: [_kComplete] once a database has been imported entirely
-  /// under v4 or the rebuild pass has finished, [_kIncomplete] otherwise.
+  /// trustworthy: [_completeMarker] once a database has been imported
+  /// entirely under v4 or the rebuild pass has finished,
+  /// [_incompleteMarker] otherwise.
   static const String kClassicalCountsKey = 'classical_counts';
-  static final List<int> _kComplete = 'complete'.codeUnits;
-  static final List<int> _kIncomplete = 'incomplete'.codeUnits;
+  static const String _completeMarker = 'complete';
+  static const String _incompleteMarker = 'incomplete';
 
   /// Whether the classical-only counts cover the whole book.
   ///
@@ -424,11 +431,13 @@ class MasterGamesDb {
   bool get classicalCountsComplete {
     final value = metaBlob(kClassicalCountsKey);
     if (value == null) return true;
-    return String.fromCharCodes(value) == 'complete';
+    return String.fromCharCodes(value) == _completeMarker;
   }
 
-  set classicalCountsComplete(bool complete) =>
-      putMetaBlob(kClassicalCountsKey, complete ? _kComplete : _kIncomplete);
+  set classicalCountsComplete(bool complete) => putMetaBlob(
+    kClassicalCountsKey,
+    (complete ? _completeMarker : _incompleteMarker).codeUnits,
+  );
 
   /// v2 → v3: citation authority.
   ///

@@ -37,10 +37,7 @@ class BulkAnalysisSettings extends ChangeNotifier with SafeChangeNotifier {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    _depth =
-        (prefs.getInt(prefKey) ?? prefs.getInt(legacyPrefKey) ?? defaultDepth)
-            .clamp(minDepth, maxDepth);
+    _depth = _readDepth(await SharedPreferences.getInstance());
     _loaded = true;
     _loading = null;
     notifyListeners();
@@ -58,11 +55,12 @@ class BulkAnalysisSettings extends ChangeNotifier with SafeChangeNotifier {
 
   /// The persisted depth for callers that cannot wait for [ensureLoaded]
   /// (a background run starting before any UI touched this setting).
-  static Future<int> loadSavedDepth() async {
-    final prefs = await SharedPreferences.getInstance();
-    return (prefs.getInt(prefKey) ??
-            prefs.getInt(legacyPrefKey) ??
-            defaultDepth)
-        .clamp(minDepth, maxDepth);
-  }
+  static Future<int> loadSavedDepth() async =>
+      _readDepth(await SharedPreferences.getInstance());
+
+  /// The saved depth (falling back to the pre-rename key, then the default),
+  /// clamped to the valid range.
+  static int _readDepth(SharedPreferences prefs) =>
+      (prefs.getInt(prefKey) ?? prefs.getInt(legacyPrefKey) ?? defaultDepth)
+          .clamp(minDepth, maxDepth);
 }

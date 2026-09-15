@@ -40,6 +40,7 @@ class CrosstableCell {
   bool get isSelf => results.isEmpty && points == 0;
 }
 
+/// One line of the standings table, best first.
 class StandingsRow {
   const StandingsRow({
     required this.rank,
@@ -95,6 +96,7 @@ class StandingsRow {
   }
 }
 
+/// Standings plus the head-to-head grid for one set of games.
 class Crosstable {
   const Crosstable({
     required this.standings,
@@ -114,16 +116,12 @@ class Crosstable {
 
   CrosstableCell? cell(int row, int column) => grid[row]?[column];
 
-  /// Result letter for one game from [perspective]'s side.
-  static String letterFor(GameResult result, {required bool asWhite}) {
-    switch (result) {
-      case GameResult.draw:
-      case GameResult.unfinished:
-        return '=';
-      case GameResult.whiteWins:
-        return asWhite ? '1' : '0';
-      case GameResult.blackWins:
-        return asWhite ? '0' : '1';
-    }
-  }
+  /// Result letter for one game from the side of the player who had White
+  /// when [asWhite], else from Black's side.
+  static String letterFor(GameResult result, {required bool asWhite}) =>
+      switch (result) {
+        GameResult.draw || GameResult.unfinished => '=',
+        GameResult.whiteWins => asWhite ? '1' : '0',
+        GameResult.blackWins => asWhite ? '0' : '1',
+      };
 }

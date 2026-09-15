@@ -8,6 +8,8 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+/// Register the bundled native licenses with Flutter's [LicenseRegistry].
+/// Call once at startup, before the license page can be opened.
 void registerBundledLicenses() {
   LicenseRegistry.addLicense(() async* {
     final text = await rootBundle.loadString(

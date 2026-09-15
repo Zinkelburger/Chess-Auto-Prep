@@ -3,7 +3,11 @@
 library;
 
 import 'dart:collection';
+
+import 'package:dartchess/dartchess.dart' show Position;
+
 import '../../models/build_tree_node.dart';
+import '../../utils/eval_constants.dart';
 import '../maia/maia_factory.dart';
 import 'build_run.dart';
 import 'eca_calculator.dart';
@@ -11,13 +15,34 @@ import 'generation_config.dart';
 import 'lanes.dart';
 import 'pure_position.dart';
 
+/// Builds a Pure (or Fast/rolling) tree over a [BuildRun]: every legal move
+/// at our nodes, Maia's full policy at the opponent's, fixed-depth engine
+/// evaluations at the horizon. Expansions are committed atomically, so a
+/// budget or cancellation never leaves a partial action set.
 class PureTreeBuilder {
   PureTreeBuilder(this.run);
   final BuildRun run;
 
+  /// Recorded in the config snapshot: Pure never consults a game database.
+  static const String _opponentBookSource = 'none';
+
+  /// Horizon leaves are independent; this bounds the batch handed to the
+  /// engines at once, even when every earlier node had a single legal move.
+  static const int _horizonBatchSize = 256;
+
+  /// Configuration keys a resumed Pure build must keep unchanged.
+  static List<String> _resumeInvariantKeys(TreeBuildConfig config) => [
+    'play_as_white',
+    'eval_depth',
+    'max_eval_loss_cp',
+    'maia_elo',
+    'bounded_database',
+    if (config.boundedDatabase) 'our_multipv',
+    if (config.boundedDatabase) 'opp_mass_target',
+  ];
+
   Future<void> build() async {
     final config = run.config;
-    const source = 'none';
     if (config.evalDepth < 1 ||
         config.maxPly < 1 ||
         config.maxPly > 64 ||
@@ -26,64 +51,60 @@ class PureTreeBuilder {
         'Pure requires positive engine depth, 1–64 plies and a nonnegative eval-loss limit.',
       );
     }
-    // Old trees used different action sets and history-free transpositions.
-    // They cannot be completed by merely adding more nodes.
-    if (run.tree.root.children.isNotEmpty && !run.tree.root.historyAware) {
-      throw StateError('This tree predates Pure search. Start a new build.');
-    }
-    if (run.tree.root.children.isNotEmpty) {
-      final previous = run.tree.configSnapshot;
-      if (previous['maia_policy_version'] != 1) {
-        throw StateError('Maia inference has changed. Start a new build.');
-      }
-      if ((previous['search_algorithm'] == 'rolling') !=
-          config.isRollingSearch) {
-        throw StateError(
-          'Cannot switch Pure and Fast on resume. Start a new build.',
-        );
-      }
-      if (run.tree.root.fen != config.startFen ||
-          previous['opponent_book_source'] != source) {
-        throw StateError(
-          'Pure resume requires the same starting position and opponent book source.',
-        );
-      }
-      final current = config.toJson();
-      for (final key in [
-        'play_as_white',
-        'eval_depth',
-        'max_eval_loss_cp',
-        'maia_elo',
-        'bounded_database',
-        if (config.boundedDatabase) 'our_multipv',
-        if (config.boundedDatabase) 'opp_mass_target',
-      ]) {
-        if ((key == 'bounded_database'
-                ? previous[key] ?? false
-                : previous[key]) !=
-            current[key]) {
-          throw StateError(
-            'Pure resume requires unchanged $key; start a new build.',
-          );
-        }
-      }
-      if (config.maxPly < (previous['max_depth'] as int? ?? 0)) {
-        throw StateError(
-          'Cannot shorten the horizon of a saved Pure search. Start a new build.',
-        );
-      }
-    }
+    if (run.tree.root.children.isNotEmpty) _assertResumable(config);
     run.tree.configSnapshot = {
       ...config.toJson(),
       'algorithm_version': 3,
       'maia_policy_version': 1,
       'search_algorithm': config.isRollingSearch ? 'rolling' : 'pure',
-      'opponent_book_source': source,
+      'opponent_book_source': _opponentBookSource,
     };
     run.tree.buildComplete = false;
     run.tree.buildComplete = config.isRollingSearch
         ? await _buildRolling()
         : await _searchWindow(run.tree.root, config.maxPly);
+  }
+
+  /// A saved tree can only continue under the model that built it: same
+  /// root, side, engine settings, opponent rating and search method, with a
+  /// horizon that may grow but never shrink.
+  void _assertResumable(TreeBuildConfig config) {
+    // Old trees used different action sets and history-free transpositions.
+    // They cannot be completed by merely adding more nodes.
+    if (!run.tree.root.historyAware) {
+      throw StateError('This tree predates Pure search. Start a new build.');
+    }
+    final previous = run.tree.configSnapshot;
+    if (previous['maia_policy_version'] != 1) {
+      throw StateError('Maia inference has changed. Start a new build.');
+    }
+    if ((previous['search_algorithm'] == 'rolling') != config.isRollingSearch) {
+      throw StateError(
+        'Cannot switch Pure and Fast on resume. Start a new build.',
+      );
+    }
+    if (run.tree.root.fen != config.startFen ||
+        previous['opponent_book_source'] != _opponentBookSource) {
+      throw StateError(
+        'Pure resume requires the same starting position and opponent book source.',
+      );
+    }
+    final current = config.toJson();
+    for (final key in _resumeInvariantKeys(config)) {
+      final saved = key == 'bounded_database'
+          ? previous[key] ?? false
+          : previous[key];
+      if (saved != current[key]) {
+        throw StateError(
+          'Pure resume requires unchanged $key; start a new build.',
+        );
+      }
+    }
+    if (config.maxPly < (previous['max_depth'] as int? ?? 0)) {
+      throw StateError(
+        'Cannot shorten the horizon of a saved Pure search. Start a new build.',
+      );
+    }
   }
 
   Future<bool> _buildRolling() async {
@@ -94,7 +115,7 @@ class PureTreeBuilder {
       await run.waitIfPaused();
       if (run.isCancelled || run.shouldFinish()) return false;
       final node = queue.removeFirst();
-      final ours = node.isWhiteToMove == config.playAsWhite;
+      final ours = _isOurTurn(node);
       final horizon =
           (node.ply + (ours ? TreeBuildConfig.rollingLookaheadPlies : 1)).clamp(
             0,
@@ -125,37 +146,26 @@ class PureTreeBuilder {
     return true;
   }
 
+  /// Breadth-first expansion below [root] to [horizon]. Returns false when
+  /// the run was cancelled, finished early or ran out of node budget.
   Future<bool> _searchWindow(BuildTreeNode root, int horizon) async {
     final config = run.config;
     final queue = Queue<BuildTreeNode>()..add(root);
     while (queue.isNotEmpty) {
       await run.waitIfPaused();
       if (run.isCancelled || run.shouldFinish()) return false;
-      final node = queue.removeFirst()..historyAware = true;
-      final position = run.positionOrNullOf(node);
-      if (position == null) {
-        throw StateError('Invalid Pure search position: ${node.fen}');
-      }
-      node.terminalValue = pureTerminal(node, position, config.playAsWhite);
+      final node = queue.removeFirst();
+      final position = _enterNode(node);
       if (node.terminalValue != null) {
         run.markExplored(node);
         continue;
       }
       if (node.ply >= horizon) {
-        // Frontier leaves are independent. Bound the queue handed to engines,
-        // including when there is only one legal move at each earlier node.
-        final leaves = <BuildTreeNode>[node];
-        while (queue.isNotEmpty &&
-            queue.first.ply >= horizon &&
-            leaves.length < 256) {
-          final leaf = queue.removeFirst()..historyAware = true;
-          final position = run.positionOrNullOf(leaf);
-          if (position == null) {
-            throw StateError('Invalid Pure search position: ${leaf.fen}');
-          }
-          leaf.terminalValue = pureTerminal(leaf, position, config.playAsWhite);
-          leaves.add(leaf);
-        }
+        final leaves = _drainHorizonLeaves(
+          queue,
+          first: node,
+          horizon: horizon,
+        );
         if (!await _evaluateBatch(leaves)) return false;
         for (final leaf in leaves) {
           run.markExplored(leaf);
@@ -168,41 +178,15 @@ class PureTreeBuilder {
         continue;
       }
       final legal = pureLegalMoves(position);
-      final ours = node.isWhiteToMove == config.playAsWhite;
-      final policy = ours && !config.boundedDatabase
+      final ours = _isOurTurn(node);
+      final probabilities = ours && !config.boundedDatabase
           ? <String, double>{}
           : await _policy(node, legal);
-      final probabilities = policy;
-      final moves = ours
+      final moves = config.boundedDatabase
+          ? await _boundedMoves(node, legal, probabilities)
+          : ours
           ? List<String>.of(legal)
           : legal.where((m) => probabilities[m]! > 0).toList();
-      if (config.boundedDatabase) {
-        final discovery = await run.pool.discoverMoves(
-          fen: node.fen,
-          depth: config.evalDepth,
-          multiPv: config.ourMultipv,
-          isWhiteToMove: node.isWhiteToMove,
-        );
-        if (discovery.lines.isEmpty) {
-          throw StateError('Stockfish returned no legal candidates');
-        }
-        final selected = discovery.lines
-            .take(config.ourMultipv)
-            .map((line) => line.moveUci)
-            .toSet();
-        final likely = legal.where((m) => probabilities[m]! > 0).toList()
-          ..sort((a, b) => probabilities[b]!.compareTo(probabilities[a]!));
-        var mass = 0.0;
-        for (final move in likely) {
-          if (mass >= config.oppMassTarget) break;
-          selected.add(move);
-          mass += probabilities[move]!;
-        }
-        // Every position includes strong rare replies as well as human moves.
-        // Keep actual Maia probabilities (including zero for engine-only moves).
-        moves.clear();
-        moves.addAll(legal.where(selected.contains));
-      }
       // Atomic expansions: a budget never leaves a partially specified
       // probability distribution or a partially enumerated action set.
       if (config.maxNodes > 0 &&
@@ -211,25 +195,7 @@ class PureTreeBuilder {
       }
       final candidates = <BuildTreeNode>[];
       for (final uci in moves) {
-        final played = run.childMove(node, uci)!;
-        final candidate = BuildTreeNode(
-          fen: played.fen,
-          moveSan: played.san,
-          moveUci: uci,
-          ply: node.ply + 1,
-          isWhiteToMove: !node.isWhiteToMove,
-          nodeId: run.nextNodeId++,
-          parent: node,
-          moveProbability: ours ? 1 : probabilities[uci]!,
-          cumulativeProbability:
-              node.cumulativeProbability * (ours ? 1 : probabilities[uci]!),
-        )..historyAware = true;
-        candidate.terminalValue = pureTerminal(
-          candidate,
-          played.after,
-          config.playAsWhite,
-        );
-        candidates.add(candidate);
+        candidates.add(_candidate(node, uci, ours ? 1 : probabilities[uci]!));
         if (run.isCancelled || run.shouldFinish()) return false;
       }
       if (ours) {
@@ -255,6 +221,94 @@ class PureTreeBuilder {
       run.emitNodeProgress(node);
     }
     return true;
+  }
+
+  /// Mark [node] history-aware, parse its position and record whether it is
+  /// an exact terminal.
+  Position _enterNode(BuildTreeNode node) {
+    node.historyAware = true;
+    final position = run.positionOrNullOf(node);
+    if (position == null) {
+      throw StateError('Invalid Pure search position: ${node.fen}');
+    }
+    node.terminalValue = pureTerminal(node, position, run.config.playAsWhite);
+    return position;
+  }
+
+  /// [first] plus the horizon leaves queued directly behind it, up to
+  /// [_horizonBatchSize], each entered like [first] was.
+  List<BuildTreeNode> _drainHorizonLeaves(
+    Queue<BuildTreeNode> queue, {
+    required BuildTreeNode first,
+    required int horizon,
+  }) {
+    final leaves = <BuildTreeNode>[first];
+    while (queue.isNotEmpty &&
+        queue.first.ply >= horizon &&
+        leaves.length < _horizonBatchSize) {
+      final leaf = queue.removeFirst();
+      _enterNode(leaf);
+      leaves.add(leaf);
+    }
+    return leaves;
+  }
+
+  /// Bounded database exploration: the union of the engine's top MultiPV
+  /// candidates and Maia's likeliest replies up to the mass target, in
+  /// legal-move order. Every position includes strong rare replies as well
+  /// as human moves; the caller keeps actual Maia probabilities, including
+  /// zero for engine-only moves.
+  Future<List<String>> _boundedMoves(
+    BuildTreeNode node,
+    List<String> legal,
+    Map<String, double> probabilities,
+  ) async {
+    final config = run.config;
+    final discovery = await run.pool.discoverMoves(
+      fen: node.fen,
+      depth: config.evalDepth,
+      multiPv: config.ourMultipv,
+      isWhiteToMove: node.isWhiteToMove,
+    );
+    if (discovery.lines.isEmpty) {
+      throw StateError('Stockfish returned no legal candidates');
+    }
+    final selected = discovery.lines
+        .take(config.ourMultipv)
+        .map((line) => line.moveUci)
+        .toSet();
+    final likely = legal.where((m) => probabilities[m]! > 0).toList()
+      ..sort((a, b) => probabilities[b]!.compareTo(probabilities[a]!));
+    var mass = 0.0;
+    for (final move in likely) {
+      if (mass >= config.oppMassTarget) break;
+      selected.add(move);
+      mass += probabilities[move]!;
+    }
+    return legal.where(selected.contains).toList();
+  }
+
+  /// A not-yet-attached child of [node] for [uci], with its terminal status
+  /// already known.
+  BuildTreeNode _candidate(BuildTreeNode node, String uci, double probability) {
+    final played = run.childMove(node, uci)!;
+    final candidate = BuildTreeNode(
+      fen: played.fen,
+      moveSan: played.san,
+      moveUci: uci,
+      ply: node.ply + 1,
+      isWhiteToMove: !node.isWhiteToMove,
+      nodeId: run.nextNodeId++,
+      parent: node,
+      moveProbability: probability,
+      cumulativeProbability: node.cumulativeProbability * probability,
+    )..historyAware = true;
+    candidate.terminalValue = pureTerminal(
+      candidate,
+      played.after,
+      run.config.playAsWhite,
+    );
+    return candidate;
   }
 
   /// Workers take the next position as soon as they finish. Only evaluations
@@ -288,11 +342,9 @@ class PureTreeBuilder {
       final ourCp = node.terminalValue == 0.5
           ? 0
           : node.terminalValue == 1
-          ? 10000
-          : -10000;
-      node.engineEvalCp = node.isWhiteToMove == run.config.playAsWhite
-          ? ourCp
-          : -ourCp;
+          ? kMateCpBase
+          : -kMateCpBase;
+      node.engineEvalCp = _isOurTurn(node) ? ourCp : -ourCp;
       return;
     }
     if (node.hasEngineEval) return;
@@ -306,6 +358,8 @@ class PureTreeBuilder {
     run.stats.sfSingleCalls++;
   }
 
+  /// Maia's policy over [legal], normalized to sum to one. Missing Maia or
+  /// an empty policy is an error: Pure never substitutes another source.
   Future<Map<String, double>> _policy(
     BuildTreeNode node,
     List<String> legal,
@@ -328,4 +382,7 @@ class PureTreeBuilder {
     }
     return policy.map((m, p) => MapEntry(m, p / mass));
   }
+
+  bool _isOurTurn(BuildTreeNode node) =>
+      node.isWhiteToMove == run.config.playAsWhite;
 }

@@ -267,6 +267,7 @@ void main() {
         'novelty_weight',
         'off_book_opp_max_children',
         'book_tail_max_ply',
+        'bounded_database',
         'book_engine_fallback',
         'book_tie_break_window_cp',
         'reply_window_cp',

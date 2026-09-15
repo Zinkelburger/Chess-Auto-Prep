@@ -130,11 +130,6 @@ SnapshotExportResult runSnapshotExport(SnapshotExportRequest request) {
   );
 }
 
-/// Extract lines from a post-selection tree and format them as PGN entries.
-/// Mirrors the final pipeline's export loop in [GenerationSessionController].
-/// [engineTails] is keyed by leaf FEN; a line whose leaf is present gets the
-/// continuation hung off its final move. Computed by the caller because it
-/// needs the engine and this function is isolate-pure.
 /// The lines a snapshot exports: extracted, trap-filtered, coverage-pruned
 /// and ranked — everything [extractSnapshotLines] does except turning them
 /// into PGN text.  Split out so a caller that needs the lines themselves
@@ -178,6 +173,13 @@ List<ExtractedLine> snapshotLines({
   return extractedLines;
 }
 
+/// Extract lines from a post-selection tree and format them as PGN entries.
+/// Mirrors the final pipeline's export loop in `GenerationSessionController`.
+///
+/// [engineTails] is keyed by leaf FEN; a line whose leaf is present gets the
+/// continuation hung off its final move. Computed by the caller because it
+/// needs the engine and this function is isolate-pure.
+///
 /// [improvements] attaches the `improves on <game>` notes the master-practice
 /// prober found, keyed by the position our move is played from.  Probing needs
 /// the engine and happens after extraction, so it arrives here rather than on
@@ -200,11 +202,11 @@ List<String> extractSnapshotLines({
 
   final rootFen = prefix.isEmpty ? tree.root.fen : repertoireStartFen;
   return [
-    for (var i = 0; i < extractedLines.length; i++)
+    for (final (i, line) in extractedLines.indexed)
       writeRepertoireLine(
-        movesSan: [...prefix, ...extractedLines[i].movesSan],
+        movesSan: [...prefix, ...line.movesSan],
         title: 'Generated Line ${i + 1}',
-        line: extractedLines[i],
+        line: line,
         isWhiteRepertoire: config.playAsWhite,
         rootFen: rootFen,
         detail: config.annotationDetail,
@@ -213,12 +215,10 @@ List<String> extractSnapshotLines({
         annotations: improvements.isEmpty
             ? null
             : annotationsWithImprovements(
-                extractedLines[i],
-                improvementsAlong(extractedLines[i], improvements),
+                line,
+                improvementsAlong(line, improvements),
               ),
-        engineTail: extractedLines[i].isTransposition
-            ? null
-            : engineTails[extractedLines[i].leafFen],
+        engineTail: line.isTransposition ? null : engineTails[line.leafFen],
       ),
   ];
 }

@@ -23,15 +23,15 @@ import '../services/default_pgn_service.dart';
 import '../services/pgn_document_patch.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
-import '../services/pgn_parsing_service.dart'
-    show movetextStart, extractHeaders;
+import '../services/pgn_mainline_lexer.dart' show movetextStart;
+import '../services/pgn_parsing_service.dart' show extractHeaders;
 import '../services/storage/storage_factory.dart';
+import 'game_sorting.dart';
 import 'pgn/pgn_viewer_handle.dart';
 import 'pgn/solitaire_controller.dart';
 export 'pgn/solitaire_controller.dart'
     show SolitaireController, SolitaireGuess, SolitaireStep;
 export 'pgn/viewer_solitaire_session.dart' show SolitaireSetup;
-import '../utils/pgn_date_utils.dart';
 import '../utils/safe_change_notifier.dart';
 import '../utils/chess_utils.dart';
 
@@ -42,9 +42,12 @@ part 'pgn/pgn_viewer_controller_window.dart';
 /// Board perspective mode persisted as [StudyPerspective] header on first game.
 enum PerspectiveMode { white, black, player }
 
+@immutable
 class Perspective {
   final PerspectiveMode mode;
-  final String playerName; // only meaningful when mode == player
+
+  /// Only meaningful when [mode] is [PerspectiveMode.player].
+  final String playerName;
 
   const Perspective({this.mode = PerspectiveMode.white, this.playerName = ''});
 
@@ -62,6 +65,32 @@ class Perspective {
     if (v == 'black') return const Perspective(mode: PerspectiveMode.black);
     return Perspective(mode: PerspectiveMode.player, playerName: v);
   }
+
+  /// The perspective a freshly loaded collection should open in.
+  ///
+  /// An explicit `StudyPerspective` header wins. Failing that, a collection
+  /// of two or more games that share one protagonist opens from that
+  /// player's side — a single game is left alone, since "the protagonist" of
+  /// one game is just whoever the reader is looking at.
+  static Perspective forCollection(List<PgnGameEntry> entries) {
+    final raw = entries.isNotEmpty
+        ? (entries.first.headers['StudyPerspective'] ?? '')
+        : '';
+    final fromHeader = Perspective.fromHeaderValue(raw);
+    if (raw.trim().isNotEmpty || entries.length < 2) return fromHeader;
+    final protagonist = detectProtagonistFrom(entries);
+    if (protagonist == null) return fromHeader;
+    return Perspective(mode: PerspectiveMode.player, playerName: protagonist);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Perspective &&
+      other.mode == mode &&
+      other.playerName == playerName;
+
+  @override
+  int get hashCode => Object.hash(mode, playerName);
 }
 
 /// Business logic and state for the PGN Viewer screen.
@@ -497,23 +526,6 @@ class PgnViewerController extends ChangeNotifier
     clearEditedGames();
   }
 
-  /// The perspective a freshly loaded collection should open in.
-  ///
-  /// An explicit `StudyPerspective` header wins. Failing that, a collection of
-  /// two or more games that share one protagonist opens from that player's
-  /// side — a single game is left alone, since "the protagonist" of one game
-  /// is just whoever the reader is looking at.
-  Perspective _perspectiveFor(List<PgnGameEntry> entries) {
-    final raw = entries.isNotEmpty
-        ? (entries.first.headers['StudyPerspective'] ?? '')
-        : '';
-    final fromHeader = Perspective.fromHeaderValue(raw);
-    if (raw.trim().isNotEmpty || entries.length < 2) return fromHeader;
-    final protagonist = detectProtagonistFrom(entries);
-    if (protagonist == null) return fromHeader;
-    return Perspective(mode: PerspectiveMode.player, playerName: protagonist);
-  }
-
   /// [restoreSavedSlice] — reapply the slice persisted for this file. Off for
   /// single-game handoffs (Games page "Review"): a leftover slice there only
   /// hides the target game and confuses the count display.
@@ -585,7 +597,7 @@ class PgnViewerController extends ChangeNotifier
       _adoptCollection(
         path: path,
         entries: entries,
-        newPerspective: _perspectiveFor(entries),
+        newPerspective: Perspective.forCollection(entries),
         preamble: pgnCollectionPreamble(content),
       );
       loadedFileModified = modified?.modified;
@@ -682,7 +694,7 @@ class PgnViewerController extends ChangeNotifier
     _adoptCollection(
       path: null,
       entries: entries,
-      newPerspective: _perspectiveFor(entries),
+      newPerspective: Perspective.forCollection(entries),
     );
     pgnInitialFen = initialFen;
     notifyListeners();
@@ -1037,41 +1049,15 @@ class PgnViewerController extends ChangeNotifier
   @override
   void applySortMode() {
     _viewerTree.clearCache();
-    switch (sortMode) {
-      case GameSortMode.fileOrder:
-        if (hasActiveFilters) {
-          final filteredSet = filteredGames.toSet();
-          filteredGames = allGames
-              .where((g) => filteredSet.contains(g))
-              .toList();
-        } else {
-          filteredGames = List.of(allGames);
-        }
-      case GameSortMode.dateDesc:
-        // Undated games sort last rather than clumping at the top: an empty
-        // key would otherwise beat every real date under a plain compare.
-        filteredGames.sort((a, b) {
-          final ka = pgnHeaderSortKey(a.headers);
-          final kb = pgnHeaderSortKey(b.headers);
-          if (ka.isEmpty || kb.isEmpty) {
-            if (ka.isEmpty && kb.isEmpty) return 0;
-            return ka.isEmpty ? 1 : -1;
-          }
-          return kb.compareTo(ka);
-        });
-      case GameSortMode.ratingDesc:
-        filteredGames.sort((a, b) {
-          final aSort = a.studyRating == 0 ? 3 : a.studyRating;
-          final bSort = b.studyRating == 0 ? 3 : b.studyRating;
-          return bSort.compareTo(aSort);
-        });
-      case GameSortMode.ratingAsc:
-        filteredGames.sort((a, b) {
-          final aSort = a.studyRating == 0 ? 3 : a.studyRating;
-          final bSort = b.studyRating == 0 ? 3 : b.studyRating;
-          return aSort.compareTo(bSort);
-        });
+    if (sortMode == GameSortMode.fileOrder) {
+      // File order is the collection's own order, restored from it rather
+      // than sorted for; a slice keeps only its games in that order.
+      filteredGames = hasActiveFilters
+          ? allGames.where(filteredGames.toSet().contains).toList()
+          : List.of(allGames);
+      return;
     }
+    sortGamesInPlace(filteredGames, sortMode);
   }
 
   void onPositionChanged(Position pos) {
@@ -1108,12 +1094,13 @@ class PgnViewerController extends ChangeNotifier
   // mainline navigation at the revealed frontier, so back/forward/home/end
   // can delegate to it directly. clearEphemeralMoves is skipped there — it
   // would wipe the wrong-attempt variations recorded during play.
+  //
+  // Solitaire is checked before the tree throughout: entering solitaire
+  // leaves the tree, but a stale tree flag must never win over a session.
 
   void navigateBack() {
     stopAutoPlay();
-    if (isSolitaireMode) {
-      pgnWidgetController.goBack();
-    } else if (showOpeningTree) {
+    if (!isSolitaireMode && showOpeningTree) {
       _viewerTree.goBack();
     } else {
       pgnWidgetController.goBack();
@@ -1122,9 +1109,7 @@ class PgnViewerController extends ChangeNotifier
 
   void navigateForward() {
     stopAutoPlay();
-    if (isSolitaireMode) {
-      pgnWidgetController.goForward();
-    } else if (showOpeningTree) {
+    if (!isSolitaireMode && showOpeningTree) {
       _viewerTree.goForward();
     } else {
       pgnWidgetController.goForward();

@@ -17,10 +17,9 @@ import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/repertoire_line_expansion.dart';
 import '../services/repertoire_pgn_text.dart';
-import '../services/repertoire_service.dart';
+import '../services/repertoire_file_editor.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/fen_utils.dart';
-import '../utils/movetext_builder.dart';
 import '../utils/san_token_utils.dart';
 import 'move_navigation.dart';
 import 'repertoire_authoring.dart';
@@ -164,7 +163,7 @@ class RepertoireController
   }
 
   /// SAN moves of the saved root position (empty when no root is saved).
-  List<String> get rootMoveSans => _parsePgnMoveText(_rootMoves);
+  List<String> get rootMoveSans => cleanSanTokens(_rootMoves);
 
   /// FEN of the saved root position — the tree's starting position when no
   /// root is saved.  Replayed once per (root moves, starting FEN) pair; it is
@@ -509,26 +508,7 @@ class RepertoireController
   }
 
   /// Get the TreePath for a SAN sequence, assuming it exists in the tree.
-  TreePath _pathForMoveSequence(List<String> moves) {
-    final indices = <int>[];
-    var siblings = _tree.roots;
-    for (final san in moves) {
-      var found = false;
-      for (int i = 0; i < siblings.length; i++) {
-        if (siblings[i].san == san) {
-          indices.add(i);
-          siblings = siblings[i].children;
-          found = true;
-          break;
-        }
-      }
-      if (!found) break;
-    }
-    return TreePath(indices);
-  }
-
-  /// Parses a PGN move text string into SAN moves.
-  List<String> _parsePgnMoveText(String movesStr) => cleanSanTokens(movesStr);
+  TreePath _pathForMoveSequence(List<String> moves) => _tree.pathForSans(moves);
 
   /// If a root position is set, navigate to it so the tree starts there.
   void _navigateToRootPosition() {
@@ -541,34 +521,25 @@ class RepertoireController
     // the path the user was on may no longer mean anything. Both cases are
     // covered by tests in test/core/repertoire_controller_test.dart.
     _path = TreePath.empty;
-    if (_rootMoves.isEmpty) return;
-    final sanMoves = _parsePgnMoveText(_rootMoves);
+    final sanMoves = rootMoveSans;
     if (sanMoves.isEmpty) return;
     _ensureMovesInTree(sanMoves);
     _path = _pathForMoveSequence(sanMoves);
   }
 
-  /// Converts a SAN move list to PGN move text.
-  ///
-  /// Move numbering starts from the tree's starting position, so
-  /// black-to-move / mid-game roots get correct `N...` numbering instead of
-  /// the old (wrong) assumption of White to move at move 1.
-  String _movesToPgnMoveText(List<String> moves) {
-    if (moves.isEmpty) return '';
-    var startMoveNumber = 1;
-    var whiteToMoveFirst = true;
-    try {
-      final setup = Setup.parseFen(_tree.startingFen);
-      startMoveNumber = setup.fullmoves;
-      whiteToMoveFirst = setup.turn == Side.white;
-    } catch (_) {
-      // Unparsable starting FEN — fall back to standard-start numbering.
-    }
-    return buildNumberedMovetext(
-      moves,
-      startMoveNumber: startMoveNumber,
-      whiteToMoveFirst: whiteToMoveFirst,
-    );
+  /// The loaded repertoire's file, or null when there is no repertoire or
+  /// it has no file to write to.
+  String? get _repertoireFilePath {
+    final path = _currentRepertoire?.filePath;
+    return path == null || path.isEmpty ? null : path;
+  }
+
+  /// Forget the selected line and drop the editable tree.
+  void _clearSelectionAndTree() {
+    _selectedPgnLine = null;
+    _annotatedLineLabel = null;
+    _tree = MoveTree(startingFen: _tree.startingFen);
+    _path = TreePath.empty;
   }
 
   // ── PGN line management ──────────────────────────────────────────
@@ -583,20 +554,16 @@ class RepertoireController
 
   /// Deletes a line from the repertoire file and reloads.
   Future<bool> deleteLine(RepertoireLine line) async {
-    if (_currentRepertoire == null) return false;
-    final filePath = _currentRepertoire!.filePath;
-    if (filePath.isEmpty) return false;
+    final filePath = _repertoireFilePath;
+    if (filePath == null) return false;
 
-    final service = RepertoireService();
-    final success = await service.deleteLine(filePath, line.id);
+    final success = await const RepertoireFileEditor().deleteLine(
+      filePath,
+      line.id,
+    );
     if (!success) return false;
 
-    if (_selectedPgnLine?.id == line.id) {
-      _selectedPgnLine = null;
-      _annotatedLineLabel = null;
-      _tree = MoveTree(startingFen: _tree.startingFen);
-      _path = TreePath.empty;
-    }
+    if (_selectedPgnLine?.id == line.id) _clearSelectionAndTree();
 
     await loadRepertoire();
     return true;
@@ -607,9 +574,8 @@ class RepertoireController
   /// Returns how many were removed. Lines with no recorded position in the
   /// file are skipped rather than guessed at by id.
   Future<int> deleteLines(Iterable<RepertoireLine> lines) async {
-    if (_currentRepertoire == null) return 0;
-    final filePath = _currentRepertoire!.filePath;
-    if (filePath.isEmpty) return 0;
+    final filePath = _repertoireFilePath;
+    if (filePath == null) return 0;
 
     final indexes = {
       for (final line in lines)
@@ -617,58 +583,37 @@ class RepertoireController
     };
     if (indexes.isEmpty) return 0;
 
-    final removed = await RepertoireService().deleteLinesAt(filePath, indexes);
+    final removed = await const RepertoireFileEditor().deleteLinesAt(
+      filePath,
+      indexes,
+    );
     if (removed == 0) return 0;
 
-    _selectedPgnLine = null;
-    _annotatedLineLabel = null;
-    _tree = MoveTree(startingFen: _tree.startingFen);
-    _path = TreePath.empty;
+    _clearSelectionAndTree();
     await loadRepertoire();
     return removed;
   }
 
   /// Persist edits made to the currently selected line.
   Future<bool> updateSelectedLineContent(String newPgn) async {
-    if (_selectedPgnLine == null || _currentRepertoire == null) return false;
-    final filePath = _currentRepertoire!.filePath;
-    if (filePath.isEmpty) return false;
+    final selected = _selectedPgnLine;
+    final filePath = _repertoireFilePath;
+    if (selected == null || filePath == null) return false;
 
-    final lineId = _selectedPgnLine!.id;
-    final service = RepertoireService();
-    final success = await service.updateLineContent(filePath, lineId, newPgn);
+    final lineId = selected.id;
+    final success = await const RepertoireFileEditor().updateLineContent(
+      filePath,
+      lineId,
+      newPgn,
+    );
     if (!success) return false;
 
     final idx = _repertoireLines.indexWhere((l) => l.id == lineId);
     if (idx != -1) {
-      final old = _repertoireLines[idx];
-      final parsed = PgnGame.parsePgn(newPgn);
-      final newMoves = parsed.moves.mainline().map((n) => n.san).toList();
-      final comments = <String, String>{};
-      final moveNodes = parsed.moves.mainline().toList();
-      for (int i = 0; i < moveNodes.length; i++) {
-        final node = moveNodes[i];
-        if (node.comments != null && node.comments!.isNotEmpty) {
-          final c = node.comments!.join(' ').trim();
-          if (c.isNotEmpty) comments[i.toString()] = c;
-        }
-      }
       // Swap in a fresh list: consumers (lines browser) rebuild their
       // display/search indexes only when the list identity changes.
       final updated = List.of(_repertoireLines);
-      updated[idx] = RepertoireLine(
-        id: old.id,
-        name: old.name,
-        moves: newMoves,
-        color: old.color,
-        startPosition: service.extractStartPositionFromPgn(newPgn),
-        fullPgn: newPgn,
-        comments: comments,
-        headers: Map<String, String>.from(parsed.headers),
-        importance: old.importance,
-        chapter: old.chapter,
-        isModelGame: old.isModelGame,
-      );
+      updated[idx] = _authoring.rebuildLine(updated[idx], newPgn);
       _repertoireLines = updated;
       _selectedPgnLine = updated[idx];
     }
@@ -940,7 +885,10 @@ class RepertoireController
     final storage = StorageFactory.instance;
     if (!await storage.fileExists(filePath)) return;
 
-    final moveText = _movesToPgnMoveText(currentMoveSequence);
+    final moveText = _authoring.numberedMovetext(
+      currentMoveSequence,
+      startingFen: _tree.startingFen,
+    );
     _rootMoves = moveText;
 
     final existing = await storage.readFile(filePath);

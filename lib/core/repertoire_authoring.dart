@@ -4,17 +4,17 @@
 /// from move lists. It holds no mutable session state — the controller keeps
 /// ownership of state and notification; this class is a stateless collaborator
 /// so the authoring logic can be unit-tested in isolation.
-///
-/// See `docs/REFACTOR_PLAN.md` Phase 3.
 library;
 
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 
 import '../models/repertoire_line.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/repertoire_line_ids.dart';
 import '../services/repertoire_pgn_text.dart';
 import '../services/repertoire_service.dart';
+import '../utils/movetext_builder.dart';
 
 class RepertoireAuthoring {
   final RepertoireService _service;
@@ -73,12 +73,59 @@ class RepertoireAuthoring {
   /// Index of the line whose moves exactly equal [prefix], or null.
   int? findLineIndexForPrefix(List<RepertoireLine> lines, List<String> prefix) {
     for (int i = 0; i < lines.length; i++) {
-      final moves = lines[i].moves;
-      if (moves.length == prefix.length && _listEquals(moves, prefix)) {
-        return i;
-      }
+      if (listEquals(lines[i].moves, prefix)) return i;
     }
     return null;
+  }
+
+  /// [moves] as numbered movetext from [startingFen], so a black-to-move or
+  /// mid-game root gets `N...` numbering rather than starting at `1.`.  An
+  /// unparsable FEN falls back to standard-start numbering.
+  String numberedMovetext(List<String> moves, {required String startingFen}) {
+    if (moves.isEmpty) return '';
+    var startMoveNumber = 1;
+    var whiteToMoveFirst = true;
+    try {
+      final setup = Setup.parseFen(startingFen);
+      startMoveNumber = setup.fullmoves;
+      whiteToMoveFirst = setup.turn == Side.white;
+    } on FenException {
+      // Standard-start numbering.
+    }
+    return buildNumberedMovetext(
+      moves,
+      startMoveNumber: startMoveNumber,
+      whiteToMoveFirst: whiteToMoveFirst,
+    );
+  }
+
+  /// [line] with its game text replaced by [newPgn]: moves, comments,
+  /// headers and start position are re-read from the text; identity, name,
+  /// colour, importance, chapter and file position are kept.
+  RepertoireLine rebuildLine(RepertoireLine line, String newPgn) {
+    final parsed = PgnGame.parsePgn(newPgn);
+    final mainline = parsed.moves.mainline().toList();
+    final comments = <String, String>{};
+    for (final (i, node) in mainline.indexed) {
+      final comment = node.comments?.join(' ').trim() ?? '';
+      if (comment.isNotEmpty) comments['$i'] = comment;
+    }
+    return RepertoireLine(
+      id: line.id,
+      sourcePath: line.sourcePath,
+      sourceLineId: line.sourceLineId,
+      name: line.name,
+      moves: [for (final node in mainline) node.san],
+      color: line.color,
+      startPosition: _service.extractStartPositionFromPgn(newPgn),
+      fullPgn: newPgn,
+      comments: comments,
+      headers: Map<String, String>.from(parsed.headers),
+      importance: line.importance,
+      chapter: line.chapter,
+      isModelGame: line.isModelGame,
+      gameIndex: line.gameIndex,
+    );
   }
 
   /// Construct a brand-new [RepertoireLine] for [moves].
@@ -130,13 +177,5 @@ class RepertoireAuthoring {
       headers: line.headers,
       importance: line.importance,
     );
-  }
-
-  static bool _listEquals(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
   }
 }

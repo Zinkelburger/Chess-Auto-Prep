@@ -7,7 +7,7 @@ class StockfishPackageConnection implements EngineConnection {
   final Stockfish _engine;
   final StreamController<String> _stdoutController =
       StreamController<String>.broadcast();
-  late final StreamSubscription _subscription;
+  late final StreamSubscription<String> _subscription;
   final Completer<void> _done = Completer<void>();
   bool _disposed = false;
 

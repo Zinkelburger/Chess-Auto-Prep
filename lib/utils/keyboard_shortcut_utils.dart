@@ -19,14 +19,6 @@ bool get isPrimaryModifierPressed {
   return keyboard.isControlPressed || keyboard.isMetaPressed;
 }
 
-/// True when no Ctrl/Cmd/Shift/Alt modifiers are held (for bare letter keys).
-bool get hasNoLetterModifiers {
-  final keyboard = HardwareKeyboard.instance;
-  return !isPrimaryModifierPressed &&
-      !keyboard.isShiftPressed &&
-      !keyboard.isAltPressed;
-}
-
 /// One declarative keyboard shortcut: a key plus required modifiers, a
 /// description (self-documentation — keep it in sync with the control's
 /// [ShortcutTooltip]), and an action.
@@ -37,6 +29,7 @@ bool get hasNoLetterModifiers {
 /// single-key shortcuts through Flutter's [Shortcuts]/[CallbackShortcuts]
 /// widgets: those intercept keys before descendant text fields see them
 /// (that bug once made "e" un-typeable in the tactics import form).
+@immutable
 class KeyBinding {
   const KeyBinding(
     this.key,

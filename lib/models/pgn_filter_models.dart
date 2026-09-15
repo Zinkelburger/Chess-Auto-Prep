@@ -22,21 +22,23 @@ List<String> splitPlayerNames(String input) =>
 
 // ── Match mode ───────────────────────────────────────────────────────────────
 
-enum MatchMode { contains, notContains, exact, regex, after, before }
+/// How a header filter's value is compared with the header.
+enum MatchMode {
+  contains,
+  notContains,
+  exact,
+  regex,
 
-String matchModeLabel(MatchMode m, {bool numeric = false}) => switch (m) {
-  MatchMode.contains => 'contains',
-  MatchMode.notContains => 'not contains',
-  MatchMode.exact => 'exact',
-  MatchMode.regex => 'regex',
-  MatchMode.after => numeric ? '≥ (min)' : '≥ (after)',
-  MatchMode.before => numeric ? '≤ (max)' : '≤ (before)',
-};
+  /// `≥`: on or after a date, at least a number.
+  after,
 
-MatchMode matchModeFromName(String name) => MatchMode.values.firstWhere(
-  (m) => m.name == name,
-  orElse: () => MatchMode.contains,
-);
+  /// `≤`: on or before a date, at most a number.
+  before;
+
+  /// The mode persisted under [name], or [contains] for anything unknown.
+  static MatchMode fromName(String name) =>
+      values.asNameMap()[name] ?? MatchMode.contains;
+}
 
 /// Fields where ≥/≤ represent numeric comparison, not temporal.
 bool isNumericField(String field) =>
@@ -65,7 +67,7 @@ class HeaderFilterConfig {
   factory HeaderFilterConfig.fromJson(Map<String, dynamic> j) =>
       HeaderFilterConfig(
         field: j['field'] as String? ?? 'Black',
-        mode: matchModeFromName(j['mode'] as String? ?? 'contains'),
+        mode: MatchMode.fromName(j['mode'] as String? ?? 'contains'),
         value: j['value'] as String? ?? '',
       );
 
@@ -117,7 +119,7 @@ class SliceConfig {
     this.matchAny = false,
     this.headerFilters = const [],
     this.sequencePattern,
-    this.sequenceGap = 4,
+    this.sequenceGap = defaultSequenceGap,
   });
   const SliceConfig.empty()
     : positionInput = null,
@@ -125,24 +127,27 @@ class SliceConfig {
       matchAny = false,
       headerFilters = const [],
       sequencePattern = null,
-      sequenceGap = 4;
+      sequenceGap = defaultSequenceGap;
+
+  /// Gap between pattern moves when the caller does not say.
+  static const int defaultSequenceGap = 4;
 
   bool get isEmpty =>
-      (positionInput == null || positionInput!.trim().isEmpty) &&
+      (positionInput?.trim().isEmpty ?? true) &&
       additionalPositions.every((p) => p.trim().isEmpty) &&
       headerFilters.every((f) => f.value.isEmpty) &&
-      (sequencePattern == null || sequencePattern!.trim().isEmpty);
+      (sequencePattern?.trim().isEmpty ?? true);
 
   String toJsonString() => jsonEncode({
-    if (positionInput != null && positionInput!.isNotEmpty)
-      'positionInput': positionInput,
+    if (positionInput case final position? when position.isNotEmpty)
+      'positionInput': position,
     if (additionalPositions.isNotEmpty)
       'additionalPositions': additionalPositions,
     if (matchAny) 'matchAny': true,
     'headerFilters': headerFilters.map((f) => f.toJson()).toList(),
-    if (sequencePattern != null && sequencePattern!.isNotEmpty)
-      'sequencePattern': sequencePattern,
-    if (sequenceGap != 4) 'sequenceGap': sequenceGap,
+    if (sequencePattern case final pattern? when pattern.isNotEmpty)
+      'sequencePattern': pattern,
+    if (sequenceGap != defaultSequenceGap) 'sequenceGap': sequenceGap,
   });
 
   factory SliceConfig.fromJsonString(String s) {
@@ -162,20 +167,25 @@ class SliceConfig {
                 .toList() ??
             const [],
         sequencePattern: j['sequencePattern'] as String?,
-        sequenceGap: (j['sequenceGap'] as int?) ?? 4,
+        sequenceGap: (j['sequenceGap'] as int?) ?? defaultSequenceGap,
       );
-    } catch (_) {
+    } on FormatException {
+      // Not JSON: a slice saved by a version this one cannot read is no
+      // slice at all, not a crash on opening the source list.
+      return const SliceConfig.empty();
+    } on TypeError {
+      // JSON of the wrong shape, same answer.
       return const SliceConfig.empty();
     }
   }
 
   List<String> get chipLabels => [
-    if (positionInput != null && positionInput!.isNotEmpty)
-      'Pos: ${_truncate(positionInput!, 20)}',
+    if (positionInput case final position? when position.isNotEmpty)
+      'Pos: ${_truncate(position, 20)}',
     for (final position in additionalPositions)
       if (position.isNotEmpty) 'Pos: ${_truncate(position, 20)}',
-    if (sequencePattern != null && sequencePattern!.isNotEmpty)
-      'Seq: ${_truncate(sequencePattern!, 18)} (gap $sequenceGap)',
+    if (sequencePattern case final pattern? when pattern.isNotEmpty)
+      'Seq: ${_truncate(pattern, 18)} (gap $sequenceGap)',
     for (final f in headerFilters)
       if (f.value.isNotEmpty) f.chipLabel,
   ];

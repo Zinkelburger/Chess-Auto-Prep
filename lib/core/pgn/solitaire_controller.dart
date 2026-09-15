@@ -66,6 +66,19 @@ class SolitaireGuess {
 /// Knows nothing about a viewer: the session wires [onStepPending] and
 /// [onStepShown] to move the board.
 class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
+  /// How long correct/incorrect feedback stays up after a guess.
+  static const feedbackDuration = Duration(milliseconds: 1200);
+
+  /// Pause before the opponent's reply auto-plays.
+  static const opponentReplyDelay = Duration(milliseconds: 400);
+
+  /// Pause before a sideline's premise move auto-plays — a little longer than
+  /// a reply, so the detour into a sideline registers.
+  static const premiseDelay = Duration(milliseconds: 700);
+
+  /// Default seconds before Reveal becomes available.
+  static const defaultRevealDelaySec = 60;
+
   bool _active = false;
   bool get active => _active;
 
@@ -169,7 +182,7 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
   final List<String> _pendingWrongAttempts = [];
 
   /// Seconds before Reveal becomes available (0 = always available).
-  int revealDelaySec = 60;
+  int revealDelaySec = defaultRevealDelaySec;
 
   /// Seconds before Hint becomes available — half the reveal delay, so help
   /// escalates (a nudge first, giving up second) instead of arriving at once.
@@ -180,8 +193,9 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
   DateTime? get moveStartTime => _moveStartTime;
 
   int _countdownFrom(int delaySec) {
-    if (_moveStartTime == null || delaySec <= 0) return 0;
-    final elapsed = DateTime.now().difference(_moveStartTime!).inSeconds;
+    final started = _moveStartTime;
+    if (started == null || delaySec <= 0) return 0;
+    final elapsed = DateTime.now().difference(started).inSeconds;
     return (delaySec - elapsed).clamp(0, delaySec);
   }
 
@@ -250,8 +264,8 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Attempt to guess the current move. Returns true if correct.
   bool handleMove(String san) {
-    if (!_active || !waitingForUser) return false;
-    final step = currentStep!;
+    final step = currentStep;
+    if (!_active || !waitingForUser || step == null) return false;
 
     if (_isCorrectMove(san, step.before, step.san)) {
       _totalUserMoves++;
@@ -286,8 +300,8 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Reveal the correct move (give up). Logs it as a revealed guess.
   void revealMove() {
-    if (!_active || !waitingForUser) return;
-    final step = currentStep!;
+    final step = currentStep;
+    if (!_active || !waitingForUser || step == null) return;
     _totalUserMoves++;
     _revealedCount++;
     _guessLog.add(
@@ -310,8 +324,8 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
   /// Highlight the piece that makes the expected move. Counts against a
   /// first-try score but not as a reveal.
   void hintMove() {
-    if (!canHint) return;
-    final step = currentStep!;
+    final step = currentStep;
+    if (!canHint || step == null) return;
     final move = step.before.parseSan(step.san);
     if (move is! NormalMove) return;
     _hintSquare = move.from.name;
@@ -326,10 +340,11 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
     _moveStartTime = null;
     _countdownTimer?.cancel();
     final ply = step.mainlinePly;
+    final node = step.node;
     if (ply != null) {
       if (ply + 1 > _revealedMainlinePly) _revealedMainlinePly = ply + 1;
-    } else {
-      _revealedNodeIds.add(step.node!.id);
+    } else if (node != null) {
+      _revealedNodeIds.add(node.id);
     }
   }
 
@@ -359,7 +374,7 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
 
     _opponentTimer?.cancel();
     _opponentTimer = Timer(
-      Duration(milliseconds: step.isPremise ? 700 : 400),
+      step.isPremise ? premiseDelay : opponentReplyDelay,
       () {
         if (!_active) return;
         _completeStep(step);
@@ -390,7 +405,7 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
 
   void _scheduleFeedbackClear() {
     _feedbackTimer?.cancel();
-    _feedbackTimer = Timer(const Duration(milliseconds: 1200), () {
+    _feedbackTimer = Timer(feedbackDuration, () {
       if (isDisposed) return;
       _feedback = null;
       notifyListeners();
@@ -413,9 +428,11 @@ class SolitaireController extends ChangeNotifier with SafeChangeNotifier {
     }
 
     String normalize(String s) =>
-        s.replaceAll(RegExp(r'[+#?!]'), '').trim().toLowerCase();
+        s.replaceAll(_sanPunctuation, '').trim().toLowerCase();
     return normalize(san) == normalize(expectedSan);
   }
+
+  static final _sanPunctuation = RegExp(r'[+#?!]');
 
   void _cancelTimers() {
     _feedbackTimer?.cancel();

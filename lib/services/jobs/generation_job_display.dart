@@ -169,17 +169,21 @@ double? generationProgressFraction({
 }) {
   if (phase != GenerationPhase.buildingTree) return null;
   if (bestFirst) return priorityProgress?.clamp(0.0, 1.0);
-  if (maxPlyConfig > 0) {
-    if (totalAtDepth > 0) {
-      final explored = totalAtDepth - unexploredAtDepth;
-      final depthBase = (currentDepth / maxPlyConfig).clamp(0.0, 1.0);
-      final layerFrac = explored / totalAtDepth;
-      return ((depthBase * 0.85) + (layerFrac * 0.15)).clamp(0.0, 1.0);
-    }
-    return (currentDepth / maxPlyConfig).clamp(0.0, 1.0);
-  }
-  return null;
+  if (maxPlyConfig <= 0) return null;
+  final depthBase = (currentDepth / maxPlyConfig).clamp(0.0, 1.0);
+  if (totalAtDepth <= 0) return depthBase;
+  final explored = totalAtDepth - unexploredAtDepth;
+  final layerFrac = explored / totalAtDepth;
+  return (depthBase * _fifoDepthWeight + layerFrac * _fifoLayerWeight).clamp(
+    0.0,
+    1.0,
+  );
 }
+
+/// FIFO progress is mostly the depth reached; the current layer's completion
+/// only nudges it, so the bar never jumps backwards between layers.
+const _fifoDepthWeight = 0.85;
+const _fifoLayerWeight = 0.15;
 
 /// Resource chip text for engine-backed builds.
 String? generationResourceLabel(TreeBuildConfig? config, {int? workers}) {

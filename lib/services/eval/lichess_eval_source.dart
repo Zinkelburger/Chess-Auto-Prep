@@ -9,6 +9,8 @@ library;
 
 import 'package:http/http.dart' as http;
 
+import 'lichess_eval_store.dart';
+
 const String kLichessEvalUrl =
     'https://database.lichess.org/lichess_db_eval.jsonl.zst';
 
@@ -20,7 +22,6 @@ const String _kIndexUrl = 'https://database.lichess.org/';
 /// reach the site so the settings panel can still state honest magnitudes.
 const int kLichessEvalFallbackBytes = 21681515630;
 const int kLichessEvalFallbackPositions = 394669566;
-const String kLichessEvalFallbackUpdated = '2026-08-02';
 
 /// The published file as it is right now.
 class LichessEvalSourceInfo {
@@ -48,8 +49,9 @@ class LichessEvalSourceInfo {
   /// False when this is the built-in fallback rather than a live answer.
   final bool probed;
 
-  /// The store this file expands to: one 15-byte record per position.
-  int get storeBytes => positions * 15 + 32;
+  /// The store this file expands to: a fixed record per position (see
+  /// `lichess_eval_store.dart`) behind its header.
+  int get storeBytes => positions * kRecordBytes + kHeaderBytes;
 
   static const LichessEvalSourceInfo fallback = LichessEvalSourceInfo(
     bytes: kLichessEvalFallbackBytes,

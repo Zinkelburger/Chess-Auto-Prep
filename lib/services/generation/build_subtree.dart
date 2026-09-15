@@ -66,30 +66,15 @@ BuildTree extractRebasedSubtree(
       moveProbability: parent == null ? 1.0 : old.moveProbability,
       cumulativeProbability: cumP,
     );
+    copyNodeAnalysis(node, from: old);
+    // TODO(audit): `enginePv` is not carried across a rebase although
+    // `graftProbe` keeps it; decide whether a rebased subtree should too.
     node
       ..historyAware = old.historyAware
       ..terminalValue = old.terminalValue
       ..valueLower = old.valueLower
       ..valueUpper = old.valueUpper
-      ..engineEvalCp = old.engineEvalCp
-      ..explored = old.explored
-      ..pruneReason = old.pruneReason
-      ..pruneEvalCp = old.pruneEvalCp
-      ..openingName = old.openingName
-      ..openingEco = old.openingEco
-      ..maiaFrequency = old.maiaFrequency
-      ..pvContinuationMove = old.pvContinuationMove
-      ..engineInjected = old.engineInjected
-      ..extEvalMode = old.extEvalMode
-      ..isRepertoireMove = old.isRepertoireMove
-      ..ease = old.ease
-      ..localCpl = old.localCpl
-      ..expectimaxValue = old.expectimaxValue
-      ..hasExpectimax = old.hasExpectimax
-      ..opponentEase = old.opponentEase
-      ..trapScore = old.trapScore
-      ..myEase = old.myEase;
-    node.setLichessStats(old.whiteWins, old.blackWins, old.draws);
+      ..isRepertoireMove = old.isRepertoireMove;
     nodeCount++;
 
     for (final child in old.children) {
@@ -104,6 +89,37 @@ BuildTree extractRebasedSubtree(
   final tree = BuildTree(root: root, totalNodes: nodeCount);
   tree.computeMetadata();
   return tree;
+}
+
+/// Copy the per-node analysis results that survive a move between trees:
+/// engine eval, prune state, opening names, Maia frequency, PV hint,
+/// injection and eval-source flags, every phase-2 display value, and the
+/// database win/draw/loss stats.
+///
+/// Structural bookkeeping (`ply`, `nodeId`, `parent`, probabilities), the
+/// history-aware Pure fields, `enginePv` and the repertoire selection are
+/// deliberately left to the caller: each clone decides what those mean in
+/// their new place.
+void copyNodeAnalysis(BuildTreeNode into, {required BuildTreeNode from}) {
+  into
+    ..engineEvalCp = from.engineEvalCp
+    ..explored = from.explored
+    ..pruneReason = from.pruneReason
+    ..pruneEvalCp = from.pruneEvalCp
+    ..openingName = from.openingName
+    ..openingEco = from.openingEco
+    ..maiaFrequency = from.maiaFrequency
+    ..pvContinuationMove = from.pvContinuationMove
+    ..engineInjected = from.engineInjected
+    ..extEvalMode = from.extEvalMode
+    ..ease = from.ease
+    ..localCpl = from.localCpl
+    ..expectimaxValue = from.expectimaxValue
+    ..hasExpectimax = from.hasExpectimax
+    ..opponentEase = from.opponentEase
+    ..trapScore = from.trapScore
+    ..myEase = from.myEase;
+  into.setLichessStats(from.whiteWins, from.blackWins, from.draws);
 }
 
 /// Reset `explored` on childless explored leaves shallower than [belowPly]

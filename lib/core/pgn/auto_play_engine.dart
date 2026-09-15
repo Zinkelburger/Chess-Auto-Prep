@@ -11,6 +11,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 class AutoPlayEngine {
+  /// Pause before the first ply after Play is pressed, so the press itself
+  /// reads as the start rather than an instant jump.
+  static const firstStepDelay = Duration(milliseconds: 300);
+
+  /// Delay between plies when playback starts.
+  static const defaultDelaySec = 1.0;
+
   AutoPlayEngine({
     required this.isActive,
     required this.currentFen,
@@ -45,9 +52,11 @@ class AutoPlayEngine {
   Timer? _timer;
   bool isPlaying = false;
   bool autoNextGame = false;
-  double delaySec = 1.0;
+  double delaySec = defaultDelaySec;
   bool _firstStep = false;
   DateTime? _lastStepTime;
+
+  Duration get _stepDelay => Duration(milliseconds: (delaySec * 1000).round());
 
   void toggle() => isPlaying ? stop() : start();
 
@@ -70,9 +79,9 @@ class AutoPlayEngine {
   void _schedule() {
     _timer?.cancel();
     if (!isPlaying) return;
-    final delayMs = _firstStep ? 300 : (delaySec * 1000).round();
+    final delay = _firstStep ? firstStepDelay : _stepDelay;
     _firstStep = false;
-    _timer = Timer(Duration(milliseconds: delayMs), _step);
+    _timer = Timer(delay, _step);
   }
 
   void _step() {
@@ -98,27 +107,28 @@ class AutoPlayEngine {
       }
     }
 
-    if (schedulePostFrame != null) {
-      schedulePostFrame!(checkAfterForward);
+    final schedule = schedulePostFrame;
+    if (schedule != null) {
+      schedule(checkAfterForward);
     } else {
       checkAfterForward();
     }
   }
 
+  /// Change the delay between plies; a running playback keeps the time the
+  /// current ply has already been on screen and only waits out the rest.
   void setSpeed(double val) {
     delaySec = val;
     onChanged();
-    if (!isPlaying || _lastStepTime == null) return;
+    final lastStep = _lastStepTime;
+    if (!isPlaying || lastStep == null) return;
 
     _timer?.cancel();
-    final elapsedMs = DateTime.now().difference(_lastStepTime!).inMilliseconds;
-    final newDelayMs = (val * 1000).round();
-    final remainingMs = newDelayMs - elapsedMs;
-
-    if (remainingMs <= 0) {
+    final remaining = _stepDelay - DateTime.now().difference(lastStep);
+    if (remaining <= Duration.zero) {
       _step();
     } else {
-      _timer = Timer(Duration(milliseconds: remainingMs), _step);
+      _timer = Timer(remaining, _step);
     }
   }
 

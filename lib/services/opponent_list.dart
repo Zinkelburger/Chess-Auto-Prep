@@ -58,6 +58,24 @@ class OpponentEntry {
     this.note,
   });
 
+  /// One row of the wire format, or null when it has no usable `name`.
+  /// Snake-case and camel-case spellings of every optional key are accepted.
+  static OpponentEntry? fromRow(Map<Object?, Object?> row) {
+    final name = _string(row['name']);
+    if (name == null) return null;
+    return OpponentEntry(
+      name: name,
+      chesscom: _string(row['chesscom'] ?? row['chesscom_username']),
+      lichess: _string(row['lichess'] ?? row['lichess_username']),
+      rating: _int(row['rating']),
+      title: _string(row['title']),
+      uscfId: _string(row['uscf_id'] ?? row['uscfId'] ?? row['uscf']),
+      pairingProb: _double(row['pairing_prob'] ?? row['pairingProb']),
+      mostLikelyRound: _int(row['most_likely_round'] ?? row['mostLikelyRound']),
+      note: _string(row['note']),
+    );
+  }
+
   List<PlayerAccount> get accounts => [
     for (final name in accountNames(chesscom)) PlayerAccount('chesscom', name),
     for (final name in accountNames(lichess)) PlayerAccount('lichess', name),
@@ -93,16 +111,31 @@ class OpponentEntry {
   );
 
   /// One-line summary for lists: rating, odds, round.
-  String get summary {
-    final parts = <String>[
-      if (title != null && title!.isNotEmpty) title!,
-      if (rating != null) '$rating',
-      if (pairingProb != null)
-        '${(pairingProb! * 100).toStringAsFixed(0)}% to face',
-      if (mostLikelyRound != null) 'likely round $mostLikelyRound',
-    ];
-    return parts.join(' · ');
+  String get summary => [
+    if (title case final title? when title.isNotEmpty) title,
+    if (rating != null) '$rating',
+    if (pairingProb case final prob?)
+      '${(prob * 100).toStringAsFixed(0)}% to face',
+    if (mostLikelyRound != null) 'likely round $mostLikelyRound',
+  ].join(' · ');
+
+  static String? _string(Object? v) {
+    if (v == null) return null;
+    final s = v.toString().trim();
+    return s.isEmpty ? null : s;
   }
+
+  static int? _int(Object? v) => switch (v) {
+    num() => v.toInt(),
+    String() => int.tryParse(v.trim()),
+    _ => null,
+  };
+
+  static double? _double(Object? v) => switch (v) {
+    num() => v.toDouble(),
+    String() => double.tryParse(v.trim()),
+    _ => null,
+  };
 }
 
 /// A parsed opponent list plus anything the parser had to skip.
@@ -138,34 +171,7 @@ class OpponentList {
     } on FormatException catch (e) {
       throw FormatException('Not valid JSON: ${e.message}');
     }
-
-    String? event;
-    final List<Object?> rows;
-    if (decoded is Map) {
-      final format = decoded['format'];
-      if (format is String &&
-          format.isNotEmpty &&
-          format != kOpponentListFormat) {
-        throw FormatException(
-          'Unknown format "$format" (expected $kOpponentListFormat).',
-        );
-      }
-      event = (decoded['event'] as String?)?.trim();
-      if (event != null && event.isEmpty) event = null;
-      final list = decoded['opponents'];
-      if (list is! List) {
-        throw const FormatException(
-          'Expected an "opponents" array (or a bare JSON array).',
-        );
-      }
-      rows = list;
-    } else if (decoded is List) {
-      rows = decoded;
-    } else {
-      throw const FormatException(
-        'Expected an object with an "opponents" array, or a JSON array.',
-      );
-    }
+    final (:event, :rows) = _envelope(decoded);
 
     final opponents = <OpponentEntry>[];
     final warnings = <String>[];
@@ -177,31 +183,19 @@ class OpponentList {
         warnings.add('Row ${i + 1}: not an object — skipped.');
         continue;
       }
-      final name = _string(row['name']);
-      if (name == null) {
+      final entry = OpponentEntry.fromRow(row);
+      if (entry == null) {
         warnings.add('Row ${i + 1}: missing "name" — skipped.');
         continue;
       }
-      final entry = OpponentEntry(
-        name: name,
-        chesscom: _string(row['chesscom'] ?? row['chesscom_username']),
-        lichess: _string(row['lichess'] ?? row['lichess_username']),
-        rating: _int(row['rating']),
-        title: _string(row['title']),
-        uscfId: _string(row['uscf_id'] ?? row['uscfId'] ?? row['uscf']),
-        pairingProb: _double(row['pairing_prob'] ?? row['pairingProb']),
-        mostLikelyRound: _int(
-          row['most_likely_round'] ?? row['mostLikelyRound'],
-        ),
-        note: _string(row['note']),
-      );
       if (!entry.hasAccount && !keepAccountless) {
-        warnings.add('$name: no chess.com or lichess account — skipped.');
+        warnings.add(
+          '${entry.name}: no chess.com or lichess account — skipped.',
+        );
         continue;
       }
-      final key = entry.playerName.toLowerCase();
-      if (!seen.add(key)) {
-        warnings.add('$name: listed twice — second row ignored.');
+      if (!seen.add(entry.playerName.toLowerCase())) {
+        warnings.add('${entry.name}: listed twice — second row ignored.');
         continue;
       }
       opponents.add(entry);
@@ -213,21 +207,30 @@ class OpponentList {
     return OpponentList(event: event, opponents: opponents, warnings: warnings);
   }
 
-  static String? _string(Object? v) {
-    if (v == null) return null;
-    final s = v.toString().trim();
-    return s.isEmpty ? null : s;
-  }
-
-  static int? _int(Object? v) {
-    if (v is num) return v.toInt();
-    if (v is String) return int.tryParse(v.trim());
-    return null;
-  }
-
-  static double? _double(Object? v) {
-    if (v is num) return v.toDouble();
-    if (v is String) return double.tryParse(v.trim());
-    return null;
+  /// The event name and opponent rows of a decoded document: either the
+  /// `{format, event, opponents}` envelope or a bare array of rows.
+  static ({String? event, List<Object?> rows}) _envelope(Object? decoded) {
+    if (decoded is List) return (event: null, rows: decoded);
+    if (decoded is! Map) {
+      throw const FormatException(
+        'Expected an object with an "opponents" array, or a JSON array.',
+      );
+    }
+    final format = decoded['format'];
+    if (format is String &&
+        format.isNotEmpty &&
+        format != kOpponentListFormat) {
+      throw FormatException(
+        'Unknown format "$format" (expected $kOpponentListFormat).',
+      );
+    }
+    final rows = decoded['opponents'];
+    if (rows is! List) {
+      throw const FormatException(
+        'Expected an "opponents" array (or a bare JSON array).',
+      );
+    }
+    final event = (decoded['event'] as String?)?.trim();
+    return (event: event == null || event.isEmpty ? null : event, rows: rows);
   }
 }

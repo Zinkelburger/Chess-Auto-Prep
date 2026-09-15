@@ -1,7 +1,22 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:chess_auto_prep/utils/chessable_comment_format.dart';
+import 'package:chess_auto_prep/utils/comment_move_tokens.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart';
 
 void main() {
+  group('hasEmbeddedFen', () {
+    test('finds a six-field FEN inside prose', () {
+      expect(
+        hasEmbeddedFen(
+          'After rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1 '
+          'Black is fine.',
+        ),
+        isTrue,
+      );
+      expect(hasEmbeddedFen('Just a line with e4 e5 Nf3.'), isFalse);
+    });
+  });
+
   group('hasChessableFormatting', () {
     test('detects @@ markers', () {
       expect(hasChessableFormatting('@@HeaderStart@@Title@@HeaderEnd@@'), true);

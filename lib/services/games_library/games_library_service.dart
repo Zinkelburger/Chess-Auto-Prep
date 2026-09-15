@@ -12,8 +12,6 @@
 /// that already exists ([AnalysisGamesService] for Chess.com).
 library;
 
-import '../pgn_document_patch.dart';
-
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -21,10 +19,11 @@ import 'package:path/path.dart' as p;
 import '../../utils/atomic_file.dart';
 import '../analysis_games_service.dart';
 import '../chess_api_urls.dart';
-import '../lichess_api_client.dart';
-import '../pgn_parsing_service.dart' show splitPgnIntoGames, extractHeaders;
 import '../game_store/game_store.dart';
 import '../game_store/game_store_service.dart';
+import '../lichess_api_client.dart';
+import '../pgn_document_patch.dart';
+import '../pgn_parsing_service.dart' show splitPgnIntoGames, extractHeaders;
 import '../storage/app_paths.dart';
 import 'game_filter.dart';
 

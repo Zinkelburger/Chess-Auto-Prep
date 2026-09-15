@@ -39,14 +39,15 @@ String figurineSan(String san) {
   return out;
 }
 
+bool _usesFigurines(BuildContext context) =>
+    BoardDisplaySettings.of(context).pieceNotation == PieceNotation.figurines;
+
 /// [san] under the piece-notation preference in effect for [context].
 String displaySan(BuildContext context, String san) =>
-    BoardDisplaySettings.of(context).pieceNotation == PieceNotation.figurines
-    ? figurineSan(san)
-    : san;
+    _usesFigurines(context) ? figurineSan(san) : san;
 
 /// Every move of [sanMoves] through [displaySan].
 List<String> displaySanList(BuildContext context, List<String> sanMoves) =>
-    BoardDisplaySettings.of(context).pieceNotation == PieceNotation.figurines
+    _usesFigurines(context)
     ? [for (final san in sanMoves) figurineSan(san)]
     : sanMoves;

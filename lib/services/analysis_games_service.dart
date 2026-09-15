@@ -1,17 +1,18 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
-import 'dart:io';
-import 'dart:convert';
 
 import '../models/analysis_player_info.dart';
+import '../utils/atomic_file.dart';
+import 'analysis/player_corpus_store.dart';
 import 'chess_api_urls.dart';
+import 'games_library/game_filter.dart';
 import 'lichess_api_client.dart';
 import 'pgn_parsing_service.dart';
-import '../utils/atomic_file.dart';
 import 'storage/app_paths.dart';
 import 'storage/storage_factory.dart';
-import 'analysis/player_corpus_store.dart';
-import 'games_library/game_filter.dart';
 
 /// Service for downloading and managing games for position analysis.
 ///
@@ -20,6 +21,25 @@ import 'games_library/game_filter.dart';
 /// retained generation containing its PGN, metadata and derived caches.
 /// Legacy flat files are retained during migration; SQLite is a derived index.
 class AnalysisGamesService {
+  /// Gap between Chess.com archive requests, to be polite to the API.
+  static const Duration _chesscomRequestGap = Duration(milliseconds: 300);
+
+  /// Derived caches kept next to a player's PGN.
+  static const String _engineEvalsFile = 'engine_evals.json';
+  static const List<String> _derivedCacheFiles = [
+    'white_analysis.json',
+    'black_analysis.json',
+    'holes_white.json',
+    'holes_black.json',
+    'tricks_white.json',
+    'tricks_black.json',
+    _engineEvalsFile,
+  ];
+
+  /// Layout version of [_engineEvalsFile]; a file with another version or
+  /// another corpus fingerprint is ignored.
+  static const int _engineEvalsVersion = 1;
+
   final PlayerCorpusStore _corpora = PlayerCorpusStore();
   String? storageWarning;
 
@@ -30,11 +50,21 @@ class AnalysisGamesService {
   /// Returns the URLs in chronological order (oldest first), or an empty
   /// list if the player has no archives.
   Future<List<String>> _fetchChesscomArchives(String username) async {
-    final url = chesscomArchivesUrl(username);
-    final response = await http.get(url);
+    final response = await http.get(chesscomArchivesUrl(username));
     if (response.statusCode != 200) return [];
     final data = json.decode(response.body) as Map<String, dynamic>;
-    return List<String>.from(data['archives'] as List);
+    return (data['archives'] as List).cast<String>();
+  }
+
+  /// The month a Chess.com archive URL (`.../games/YYYY/MM`) covers, or null
+  /// when the URL does not end that way.
+  static DateTime? _archiveMonth(String archiveUrl) {
+    final parts = archiveUrl.split('/');
+    if (parts.length < 2) return null;
+    final year = int.tryParse(parts[parts.length - 2]);
+    final month = int.tryParse(parts[parts.length - 1]);
+    if (year == null || month == null) return null;
+    return DateTime(year, month);
   }
 
   /// Download games from Chess.com, keeping only the time controls in
@@ -65,48 +95,38 @@ class AnalysisGamesService {
       return '';
     }
 
-    final now = DateTime.now();
     final allGames = <String>[];
 
-    // In months mode, compute the earliest allowed archive date.
+    // In months mode, the earliest archive month still wanted.
     // E.g. monthsBack=6 and now=2026-02 → cutoff = 2025-09.
-    DateTime? cutoff;
-    if (monthsBack != null) {
-      cutoff = DateTime(now.year, now.month - monthsBack + 1);
-    }
-
+    final now = DateTime.now();
+    final cutoff = monthsBack == null
+        ? null
+        : DateTime(now.year, now.month - monthsBack + 1);
     final isDateMode = cutoff != null;
+    bool haveEnough() => !isDateMode && allGames.length >= maxGames;
 
     // Walk backwards from the most recent archive.
-    for (int i = archives.length - 1; i >= 0; i--) {
-      // In game-count mode, stop once we have enough.
-      if (!isDateMode && allGames.length >= maxGames) break;
+    for (final archive in archives.reversed) {
+      if (haveEnough()) break;
 
-      // In date-based modes, skip archives outside the requested range.
+      // In months mode, stop at the first archive before the cutoff.
       if (cutoff != null) {
-        final parts = archives[i].split('/');
-        if (parts.length >= 2) {
-          final year = int.tryParse(parts[parts.length - 2]);
-          final month = int.tryParse(parts[parts.length - 1]);
-          if (year != null && month != null) {
-            if (DateTime(year, month).isBefore(cutoff)) break;
-          }
-        }
+        final month = _archiveMonth(archive);
+        if (month != null && month.isBefore(cutoff)) break;
       }
 
-      if (isDateMode) {
-        onProgress?.call('${allGames.length} games downloaded so far…');
-      } else {
-        onProgress?.call(
-          '${allGames.length} / $maxGames games downloaded so far…',
-        );
-      }
+      onProgress?.call(
+        isDateMode
+            ? '${allGames.length} games downloaded so far…'
+            : '${allGames.length} / $maxGames games downloaded so far…',
+      );
 
       try {
-        final response = await http.get(Uri.parse('${archives[i]}/pgn'));
+        final response = await http.get(Uri.parse('$archive/pgn'));
         if (response.statusCode == 200 && response.body.isNotEmpty) {
           for (final game in splitPgnIntoGames(stripBom(response.body))) {
-            if (!isDateMode && allGames.length >= maxGames) break;
+            if (haveEnough()) break;
             if (keepsGameSpeed(game, speeds)) allGames.add(game);
           }
         }
@@ -114,8 +134,7 @@ class AnalysisGamesService {
         onProgress?.call('Error fetching archive: $e');
       }
 
-      // Be polite to the API.
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future<void>.delayed(_chesscomRequestGap);
     }
 
     onProgress?.call('${allGames.length} games downloaded');
@@ -152,19 +171,17 @@ class AnalysisGamesService {
     };
 
     if (monthsBack != null) {
-      final since = DateTime.now()
-          .subtract(Duration(days: monthsBack * 30))
-          .millisecondsSinceEpoch;
-      params['since'] = since.toString();
+      // The API takes a timestamp, so a month is 30 days here; the
+      // Chess.com path can only stop at whole archive months.
+      final since = DateTime.now().subtract(Duration(days: monthsBack * 30));
+      params['since'] = since.millisecondsSinceEpoch.toString();
     } else {
       params['max'] = maxGames.toString();
     }
 
-    final uri = lichessUserGamesUrl(username, params);
-
     final response = await LichessApiClient.instance.get(
-      uri,
-      extraHeaders: {'Accept': 'application/x-chess-pgn'},
+      lichessUserGamesUrl(username, params),
+      extraHeaders: const {'Accept': 'application/x-chess-pgn'},
     );
 
     if (response == null) {
@@ -321,20 +338,15 @@ class AnalysisGamesService {
     String platform,
     String username,
     bool isWhite,
-  ) => _cachePath(
-    platform,
-    username,
-    '${isWhite ? 'white' : 'black'}_analysis.json',
-  );
+  ) => _cachePath(platform, username, '${_colorName(isWhite)}_analysis.json');
+
   Future<String> holesReportPath(
     String platform,
     String username,
     bool isWhite,
-  ) => _cachePath(
-    platform,
-    username,
-    'holes_${isWhite ? 'white' : 'black'}.json',
-  );
+  ) => _cachePath(platform, username, 'holes_${_colorName(isWhite)}.json');
+
+  static String _colorName(bool isWhite) => isWhite ? 'white' : 'black';
 
   Future<void> deletePlayerData(String platform, String username) =>
       _corpora.tombstone(platform, username);
@@ -342,15 +354,7 @@ class AnalysisGamesService {
   Future<void> clearCachedAnalysis(String platform, String username) async {
     final corpus = await _corpora.load(platform, username, reconcile: false);
     if (corpus == null) return;
-    for (final name in [
-      'white_analysis.json',
-      'black_analysis.json',
-      'holes_white.json',
-      'holes_black.json',
-      'tricks_white.json',
-      'tricks_black.json',
-      'engine_evals.json',
-    ]) {
+    for (final name in _derivedCacheFiles) {
       await StorageFactory.instance.deleteFile(corpus.cachePath(name));
     }
   }
@@ -370,9 +374,9 @@ class AnalysisGamesService {
       );
     }
     await writeTextFileAtomically(
-      File(corpus.cachePath('engine_evals.json')),
+      File(corpus.cachePath(_engineEvalsFile)),
       jsonEncode({
-        'version': 1,
+        'version': _engineEvalsVersion,
         'fingerprint': corpus.fingerprint,
         'evals': evals,
       }),
@@ -386,13 +390,13 @@ class AnalysisGamesService {
     final corpus = await _corpora.load(platform, username);
     if (corpus == null) return null;
     final raw = await readTextFileSafely(
-      File(corpus.cachePath('engine_evals.json')),
+      File(corpus.cachePath(_engineEvalsFile)),
     );
     if (raw == null) return null;
     try {
       final data = jsonDecode(raw);
       if (data is! Map ||
-          data['version'] != 1 ||
+          data['version'] != _engineEvalsVersion ||
           data['fingerprint'] != corpus.fingerprint) {
         return null;
       }
@@ -409,10 +413,11 @@ class AnalysisGamesService {
 /// header at all is kept: a filter should never throw away what it cannot
 /// read, and Chess.com's Daily games are the usual case.
 bool keepsGameSpeed(String pgn, Set<GameSpeed> speeds) {
-  final match = RegExp(r'\[TimeControl "([^"]*)"\]').firstMatch(pgn);
-  final speed = classifySpeed(match?.group(1));
+  final speed = classifySpeed(_timeControlHeader.firstMatch(pgn)?.group(1));
   return speed == GameSpeed.unknown || speeds.contains(speed);
 }
+
+final RegExp _timeControlHeader = RegExp(r'\[TimeControl "([^"]*)"\]');
 
 /// The `perfType` value the Lichess games export takes for [speeds], in the
 /// API's own spelling and order.

@@ -1,11 +1,11 @@
 /// Generic external evaluation lookup interface for the 3-phase eval chain.
 library;
 
-import '../../utils/eval_constants.dart';
-
 /// A qualifying evaluation from an external source.
 ///
-/// [cp] is always white-normalized centipawns (same convention as [EvalCache]).
+/// [cp] is always white-normalized centipawns (same convention as `EvalCache`),
+/// with a forced mate packed through `mateToCp`. [mate], when present, is the
+/// distance in the source's own units from the side to move's point of view.
 class EvalHit {
   final int cp;
   final int? mate;
@@ -20,47 +20,55 @@ class EvalHit {
   });
 }
 
-/// Outcome of a single provider lookup (hit, miss, shallow, or hard miss).
-class EvalLookupResult {
-  final EvalHit? hit;
-  final bool shallow;
-  final bool hardMiss;
+/// Outcome of a single provider lookup.
+///
+/// The four cases mean different things to the eval chain: a [hardMiss] says
+/// the source has never seen the position (so its subtree is unlikely to be
+/// known either), a plain miss says nothing, and [shallow] means the source
+/// answered but below the depth the caller asked for.
+sealed class EvalLookupResult {
+  const EvalLookupResult();
 
-  const EvalLookupResult._({
-    this.hit,
-    this.shallow = false,
-    this.hardMiss = false,
-  });
+  const factory EvalLookupResult.found(EvalHit hit) = EvalLookupHit;
 
-  const EvalLookupResult.miss() : this._();
+  /// The source could not answer, for a reason unrelated to the position.
+  const factory EvalLookupResult.miss() = EvalLookupMiss;
 
-  const EvalLookupResult.shallow() : this._(shallow: true);
+  /// The source knows the position, but not deep enough.
+  const factory EvalLookupResult.shallow() = EvalLookupShallow;
 
-  const EvalLookupResult.hardMiss() : this._(hardMiss: true);
+  /// The source does not know the position at all.
+  const factory EvalLookupResult.hardMiss() = EvalLookupHardMiss;
 
-  const EvalLookupResult.found(EvalHit value)
-    : this._(hit: value, shallow: false, hardMiss: false);
+  /// The evaluation, when this is a hit.
+  EvalHit? get hit => null;
 
-  bool get isHit => hit != null;
+  bool get isHit => this is EvalLookupHit;
+  bool get shallow => this is EvalLookupShallow;
+  bool get hardMiss => this is EvalLookupHardMiss;
 }
 
-/// Maps raw SQLite cp/mate columns to white-normalized centipawns.
-///
-/// [isWhiteToMove] is the side to move in the position being evaluated.
-/// Returns null when neither cp nor mate is present.
-int? mapSqliteScoreToWhiteCp({
-  required int? cp,
-  required int? mate,
-  required bool isWhiteToMove,
-}) {
-  if (mate != null) {
-    final stmCp = mate > 0 ? (kMateCpBase - mate) : (-kMateCpBase - mate);
-    return isWhiteToMove ? stmCp : -stmCp;
-  }
-  if (cp != null) {
-    return isWhiteToMove ? cp : -cp;
-  }
-  return null;
+/// The source answered at or above the requested depth.
+final class EvalLookupHit extends EvalLookupResult {
+  const EvalLookupHit(this.hit);
+
+  @override
+  final EvalHit hit;
+}
+
+/// The source could not answer (closed, offline, over quota, or it threw).
+final class EvalLookupMiss extends EvalLookupResult {
+  const EvalLookupMiss();
+}
+
+/// The source knows the position, but below the requested depth.
+final class EvalLookupShallow extends EvalLookupResult {
+  const EvalLookupShallow();
+}
+
+/// The source has no record of the position.
+final class EvalLookupHardMiss extends EvalLookupResult {
+  const EvalLookupHardMiss();
 }
 
 abstract class ExternalEvalProvider {

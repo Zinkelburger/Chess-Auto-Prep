@@ -10,7 +10,8 @@
 /// during the run and unmarked the next time the game was opened.
 library;
 
-import 'package:chess_auto_prep/services/game_analysis_controller.dart';
+import 'package:chess_auto_prep/services/game_eval_annotations.dart';
+import 'package:chess_auto_prep/services/move_eval.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 String _game(String movetext) =>

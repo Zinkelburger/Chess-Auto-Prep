@@ -46,14 +46,14 @@ void main() {
       });
 
       final winning = await provider.lookup(_whiteToMove, minDepth: 0);
-      final viaApi = mapChessDbApiScore(29995, isWhiteToMove: true)!;
-      expect(winning.hit!.cp, viaApi.$1);
-      expect(winning.hit!.mate, viaApi.$2);
+      final viaApi = mapChessDbApiScore(29995, isWhiteToMove: true);
+      expect(winning.hit!.cp, viaApi.whiteCp);
+      expect(winning.hit!.mate, viaApi.mate);
       expect(winning.hit!.mate, 5);
 
       final losing = await provider.lookup(_blackToMove, minDepth: 0);
-      final losingViaApi = mapChessDbApiScore(-29997, isWhiteToMove: false)!;
-      expect(losing.hit!.cp, losingViaApi.$1);
+      final losingViaApi = mapChessDbApiScore(-29997, isWhiteToMove: false);
+      expect(losing.hit!.cp, losingViaApi.whiteCp);
       expect(losing.hit!.cp, greaterThan(0), reason: 'Black is being mated');
       expect(losing.hit!.mate, -3);
 
@@ -108,11 +108,9 @@ void main() {
     });
 
     test('a bookkeeping segment is never mistaken for the best move', () async {
-      // BUG: parseCdbDirectResponse (cdbdirect_parse.dart) takes any
-      // `key:number` pair as a move in the compact format, unlike
-      // parseCdbDirectMoveList, which checks the key looks like UCI.  A
-      // response that leads with `ply:12` is therefore scored 12 with best
-      // move "ply", and a later `move:…,rank:0` cannot displace it.
+      // The compact `key:number` shape is shared by bookkeeping segments
+      // such as `ply:12`; only keys that look like UCI are moves, exactly as
+      // parseCdbDirectMoveList already treats them.
       final provider = providerFor({
         canonicalizeFen4(_whiteToMove): 'ply:12|move:e2e4,score:30,rank:0',
         canonicalizeFen4(_blackToMove): 'ply:12|eval:abc',
@@ -122,7 +120,7 @@ void main() {
       expect(hit.cp, 30);
       final miss = await provider.lookup(_blackToMove, minDepth: 0);
       expect(miss.hardMiss, isTrue);
-    }, skip: 'documents bug: compact-format parser accepts non-UCI keys');
+    });
 
     test('a lookup that throws is a soft miss, not an exception', () async {
       final provider = CdbDirectEvalProvider(

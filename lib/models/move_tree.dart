@@ -6,13 +6,14 @@
 /// post-move FEN so position derivation is O(1).
 library;
 
-import '../utils/pgn_nags.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../constants/chess_constants.dart';
 import '../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
-import 'move_tree_node_view.dart';
 import '../utils/fen_utils.dart';
+import '../utils/pgn_nags.dart';
+import 'move_tree_node_view.dart';
+import 'move_tree_pgn.dart';
 
 // ---------------------------------------------------------------------------
 // TreePath
@@ -117,7 +118,6 @@ class MoveNode implements MoveTreeNodeView {
   /// hand-built test fixture) parse it lazily on first use.  Either way a
   /// second read is free, so navigation, legal-move lookups and move
   /// derivation never re-parse a FEN the tree already holds.
-  /// The board after this move, parsed at most once.
   ///
   /// Substitutes the initial board when [fen] does not parse, so display code
   /// always has *a* board to draw.  Anything that derives new state from it —
@@ -376,21 +376,6 @@ class MoveTree {
   bool get isEmpty => roots.isEmpty;
   bool get isNotEmpty => roots.isNotEmpty;
 
-  /// Collect all FENs in the tree (position part only, first 4 fields).
-  /// Useful for transposition detection.
-  Set<String> collectFenPrefixes() {
-    final fens = <String>{};
-    void walk(List<MoveNode> nodes) {
-      for (final node in nodes) {
-        fens.add(normalizeFen(node.fen));
-        walk(node.children);
-      }
-    }
-
-    walk(roots);
-    return fens;
-  }
-
   /// Whether [path] points to a valid node.
   bool isValidPath(TreePath path) {
     if (path.isEmpty) return true;
@@ -527,19 +512,21 @@ class MoveTree {
 
     try {
       final game = PgnGame.parsePgn(pgn);
-
-      final fenHeader = game.headers['FEN'];
-      final effectiveFen = startingFen ?? fenHeader ?? kStandardStartFen;
-
+      final effectiveFen =
+          startingFen ?? game.headers['FEN'] ?? kStandardStartFen;
       final rootPos = tryParseFen(effectiveFen) ?? Chess.initial;
-      final roots = _convertDartchessNodes(game.moves.children, rootPos);
-
       return MoveTree(
         startingFen: effectiveFen,
-        roots: roots,
-        rootComment: _joinComments(game.comments),
+        roots: MoveTreePgnCodec.nodesFromDartchess(
+          game.moves.children,
+          rootPos,
+        ),
+        rootComment: MoveTreePgnCodec.joinComments(game.comments),
       );
     } catch (_) {
+      // dartchess has no single parse-error type: malformed movetext can
+      // surface as a FormatException, a RangeError or a StateError.  An
+      // unparsable game is an empty tree, which is what every caller wants.
       return MoveTree(startingFen: startingFen);
     }
   }
@@ -564,20 +551,13 @@ class MoveTree {
 
   /// Serialize this tree to PGN move text (no headers).
   String toPgnMoveText() {
-    final buffer = StringBuffer();
-    if (_rootComment != null) {
-      buffer.write('{${_sanitizeComment(_rootComment!)}} ');
-    }
-    if (roots.isEmpty) return buffer.toString().trim();
     final (startMoveNumber, startIsWhite) = moveNumberFromFen(startingFen);
-    _writeNodes(
-      buffer,
-      roots,
-      startMoveNumber,
-      startIsWhite,
-      isFirstMove: true,
+    return MoveTreePgnCodec.moveText(
+      roots: roots,
+      startMoveNumber: startMoveNumber,
+      startIsWhite: startIsWhite,
+      rootComment: _rootComment,
     );
-    return buffer.toString().trim();
   }
 
   /// Serialize to full PGN including headers.
@@ -599,131 +579,7 @@ class MoveTree {
     return [...headers, '', moveText].join('\n');
   }
 
-  // ── Private helpers ────────────────────────────────────────────────
-
-  static List<MoveNode> _convertDartchessNodes(
-    List<PgnChildNode<PgnNodeData>> nodes,
-    Position parentPosition,
-  ) {
-    final result = <MoveNode>[];
-    for (final node in nodes) {
-      final san = node.data.san;
-      final afterPos = playSanOrNullMove(parentPosition, san);
-      if (afterPos == null) continue;
-      final comment = node.data.comments?.join(' ');
-      final startingComment = node.data.startingComments?.join(' ');
-      final nags = node.data.nags?.toList();
-      result.add(
-        MoveNode(
-          san: san,
-          fen: afterPos.fen,
-          position: afterPos,
-          comment: (comment != null && comment.trim().isNotEmpty)
-              ? comment.trim()
-              : null,
-          startingComment:
-              (startingComment != null && startingComment.trim().isNotEmpty)
-              ? startingComment.trim()
-              : null,
-          nags: nags,
-          children: _convertDartchessNodes(node.children, afterPos),
-        ),
-      );
-    }
-    return result;
-  }
-
   /// Extract move number and side-to-move from a FEN string.
   static (int moveNumber, bool isWhite) moveNumberFromFen(String fen) =>
       (fullMoveNumber(fen), isWhiteToMove(fen));
-
-  static void _writeNodes(
-    StringBuffer buffer,
-    List<MoveNode> siblings,
-    int moveNumber,
-    bool isWhite, {
-    bool isFirstMove = false,
-  }) {
-    if (siblings.isEmpty) return;
-
-    final main = siblings[0];
-
-    _writeStartingComment(buffer, main);
-    if (isWhite) {
-      buffer.write('$moveNumber. ');
-    } else if (isFirstMove) {
-      buffer.write('$moveNumber... ');
-    }
-
-    buffer.write('${main.san} ');
-    _writeNags(buffer, main);
-    if (main.comment != null && main.comment!.isNotEmpty) {
-      buffer.write('{${_sanitizeComment(main.comment!)}} ');
-    }
-
-    for (int i = 1; i < siblings.length; i++) {
-      buffer.write('(');
-      _writeStartingComment(buffer, siblings[i]);
-      if (isWhite) {
-        buffer.write('$moveNumber. ');
-      } else {
-        buffer.write('$moveNumber... ');
-      }
-
-      final variant = siblings[i];
-      buffer.write('${variant.san} ');
-      _writeNags(buffer, variant);
-      if (variant.comment != null && variant.comment!.isNotEmpty) {
-        buffer.write('{${_sanitizeComment(variant.comment!)}} ');
-      }
-
-      _writeNodes(
-        buffer,
-        variant.children,
-        isWhite ? moveNumber : moveNumber + 1,
-        !isWhite,
-      );
-
-      buffer.write(') ');
-    }
-
-    _writeNodes(
-      buffer,
-      main.children,
-      isWhite ? moveNumber : moveNumber + 1,
-      !isWhite,
-    );
-  }
-
-  /// Write the note that belongs *before* a move, brace and all. A move that
-  /// has none writes nothing, so the movetext is unchanged for the common
-  /// case.
-  static void _writeStartingComment(StringBuffer buffer, MoveNode node) {
-    final starting = node.startingComment;
-    if (starting == null || starting.isEmpty) return;
-    buffer.write('{${_sanitizeComment(starting)}} ');
-  }
-
-  /// Write `$N` NAG tokens (PGN standard) so annotations survive a round-trip.
-  static void _writeNags(StringBuffer buffer, MoveNode node) {
-    final nags = node.nags;
-    if (nags == null) return;
-    for (final nag in nags) {
-      buffer.write('\$$nag ');
-    }
-  }
-
-  static String _sanitizeComment(String comment) =>
-      comment.replaceAll('{', '').replaceAll('}', '');
-
-  /// The `{}` blocks of one move as a single trimmed string, or null when
-  /// there is nothing in them.
-  static String? _joinComments(List<String>? comments) {
-    if (comments == null) return null;
-    final joined = comments
-        .map((c) => c.trim())
-        .where((c) => c.isNotEmpty)
-        .join(' ');
-    return joined.isEmpty ? null : joined;
-  }
 }

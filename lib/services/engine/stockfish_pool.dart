@@ -14,8 +14,8 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/analysis/discovery_result.dart';
 import '../../models/engine_settings.dart';
-import 'engine_interrupt.dart';
 import 'engine_connection.dart';
+import 'engine_interrupt.dart';
 import 'eval_worker.dart';
 import 'stockfish_connection_factory.dart';
 import 'package:chess_auto_prep/utils/log.dart';
@@ -24,7 +24,6 @@ export 'eval_worker.dart' show EvalResult, EvalWorker;
 export '../../models/analysis/discovery_result.dart';
 
 class StockfishPool {
-  // ── Singleton ───────────────────────────────────────────────────────────
   /// Application-wide shared instance.
   static final StockfishPool instance = StockfishPool._();
 
@@ -35,12 +34,20 @@ class StockfishPool {
 
   StockfishPool._() : _createConnection = StockfishConnectionFactory.create;
 
+  static const _workerStartupTimeout = Duration(seconds: 15);
+  static const _defaultAcquireTimeout = Duration(seconds: 60);
+  static const _stopPollInterval = Duration(milliseconds: 20);
+
   final Future<EngineConnection?> Function() _createConnection;
+
+  /// Serializes [ensureWorkers] calls; never fails, so one failed
+  /// provisioning cannot poison the next.
   Future<void> _provisioning = Future.value();
+
+  /// Bumped by [_disposeAllWorkers] so in-flight spawns discard their result.
   int _generation = 0;
   final Set<EvalWorker> _starting = {};
 
-  // ── State ───────────────────────────────────────────────────────────────
   final List<EvalWorker> _workers = [];
   final Set<EvalWorker> _free = {};
   final Set<EvalWorker> _busy = {};
@@ -108,20 +115,13 @@ class StockfishPool {
     );
     _targetCount = target;
     while (_workers.length < target) {
-      final w = await _spawnOne(_workers.length);
-      if (w == null) break;
+      final worker = await _spawnOne(_workers.length);
+      if (worker == null) break;
       if (generation != _generation) {
-        w.dispose();
+        worker.dispose();
         return;
       }
-      _watchWorker(w);
-      _workers.add(w);
-      if (_waiters.isNotEmpty) {
-        _busy.add(w);
-        _waiters.removeAt(0).complete(w);
-      } else {
-        _free.add(w);
-      }
+      _adopt(worker);
     }
 
     if (generation != _generation) return;
@@ -145,6 +145,19 @@ class StockfishPool {
         '(${EngineSettings.instance.hashMb} MB hash, '
         '$_threadsPerWorker thread(s) each)',
       );
+    }
+  }
+
+  /// Register a freshly started worker: the oldest waiter takes it at once,
+  /// otherwise it joins the free set.
+  void _adopt(EvalWorker worker) {
+    _watchWorker(worker);
+    _workers.add(worker);
+    if (_waiters.isNotEmpty) {
+      _busy.add(worker);
+      _waiters.removeAt(0).complete(worker);
+    } else {
+      _free.add(worker);
     }
   }
 
@@ -210,7 +223,7 @@ class StockfishPool {
             hashMb: EngineSettings.instance.hashMb,
             threads: _threadsPerWorker,
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(_workerStartupTimeout);
       return worker;
     } catch (e) {
       worker?.dispose();
@@ -221,27 +234,13 @@ class StockfishPool {
     }
   }
 
-  /// Warm up all workers with a quick depth-10 eval of the start position.
-  Future<void> warmUp() async {
-    await ensureWorkers();
-    if (_workers.isEmpty) return;
-    const startpos = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    try {
-      await Future.wait([
-        for (final w in _workers) w.evaluateFen(startpos, 10),
-      ]);
-    } catch (e) {
-      debugPrint('[StockfishPool] Warmup eval failed: $e');
-    }
-  }
-
   // ── Acquire / release ───────────────────────────────────────────────────
 
   /// Acquire exclusive use of a worker.  Queues if all are busy.
   ///
   /// Times out after [timeout] (default 60 s) to prevent deadlocks when a
   /// worker hangs.
-  Future<EvalWorker> acquire({Duration timeout = const Duration(seconds: 60)}) {
+  Future<EvalWorker> acquire({Duration timeout = _defaultAcquireTimeout}) {
     if (_workers.isEmpty) {
       return Future.error(StateError('No workers available'));
     }
@@ -287,15 +286,12 @@ class StockfishPool {
     }
   }
 
-  /// Evaluate multiple FENs, up to [workerCount] at a time, results in
+  /// Evaluate multiple FENs, up to [concurrencyLimit] at a time, results in
   /// input order.
   ///
   /// Runs on [forEachParallel]: one worker acquisition per lane, held for
-  /// the whole batch.  The previous `Future.wait(fens.map(evaluateFen))`
-  /// parked every FEN as a waiter on [acquire] at once, and [acquire]'s
-  /// 60 s timeout is counted from that moment — so on a one-worker pool any
-  /// batch longer than ~15 depth-20 evals threw `TimeoutException` for its
-  /// tail, which the verifier then reported as a failed pass.
+  /// the whole batch, so no position ever sits as an [acquire] waiter
+  /// counting down the 60 s timeout behind a long batch.
   ///
   /// Throws [StateError] if a worker died mid-batch and left a slot empty.
   Future<List<EvalResult>> evaluateMany(List<String> fens, int depth) async {
@@ -330,7 +326,7 @@ class StockfishPool {
     final concurrency = concurrencyLimit.clamp(1, items.length);
     var nextIndex = 0;
 
-    Future<void> loop() async {
+    Future<void> lane() async {
       final EvalWorker worker;
       try {
         worker = await acquire();
@@ -361,7 +357,7 @@ class StockfishPool {
       }
     }
 
-    await Future.wait([for (var i = 0; i < concurrency; i++) loop()]);
+    await Future.wait([for (var i = 0; i < concurrency; i++) lane()]);
   }
 
   Future<void> _awaitUntilStopped(
@@ -369,7 +365,7 @@ class StockfishPool {
     Future<void> future,
     bool Function() stopWhen,
   ) async {
-    final poller = Timer.periodic(const Duration(milliseconds: 20), (_) {
+    final poller = Timer.periodic(_stopPollInterval, (_) {
       if (stopWhen()) worker.stop();
     });
     try {
@@ -406,27 +402,21 @@ class StockfishPool {
     }
   }
 
-  // ── Stop / suspend / dispose ────────────────────────────────────────────
+  // ── Stop / dispose ──────────────────────────────────────────────────────
 
   /// Cancel callers and request stop. Workers retain CPU admission until bestmove.
   void stopAll() {
     for (final w in List.of(_workers)) {
       w.stop();
     }
-    // Reject any pending acquires.
     for (final c in _waiters) {
-      if (!c.isCompleted) c.completeError(StateError('Pool stopped'));
+      if (!c.isCompleted) c.completeError(EnginePoolStoppedError());
     }
     _waiters.clear();
   }
 
-  /// Kill all Stockfish processes to free RAM (e.g. DB-only generation).
-  void suspend() {
-    stopAll();
-    _disposeAllWorkers();
-  }
-
-  /// Dispose everything.
+  /// Stop every search and kill every Stockfish process. The pool can be
+  /// provisioned again afterwards with [ensureWorkers].
   void dispose() {
     stopAll();
     _disposeAllWorkers();
@@ -439,15 +429,10 @@ class StockfishPool {
   }
 
   Future<void> _retireAndReplace(EvalWorker dead) async {
-    if (!_workers.contains(dead)) return;
-    _workers.remove(dead);
+    if (!_workers.remove(dead)) return;
     _busy.remove(dead);
     _free.remove(dead);
-    try {
-      dead.dispose();
-    } catch (_) {
-      /* already gone */
-    }
+    dead.dispose();
     if (kDebugMode) {
       log.e('[Pool] Worker died; respawning');
     }

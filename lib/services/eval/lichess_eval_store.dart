@@ -27,6 +27,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
+
 import '../../utils/atomic_file.dart';
 import 'lichess_eval_line.dart';
 
@@ -69,7 +71,7 @@ const int _signBit = -9223372036854775808; // 0x8000000000000000
 /// Top byte of [key], 0-255 — the bucket it sorts into.
 int bucketOf(int key) => (key >> 56) & 0xff;
 
-/// How many buckets [LichessEvalWriter] spreads records over.
+/// How many bucket files the importer spreads records over before merging.
 const int kBucketCount = 256;
 
 /// What a lookup found.
@@ -99,13 +101,12 @@ class LichessEvalStorePaths {
 
   final String directory;
 
-  String get dataFile => '$directory${Platform.pathSeparator}evals.bin';
-  String get indexFile => '$directory${Platform.pathSeparator}evals.idx';
-  String get manifestFile => '$directory${Platform.pathSeparator}evals.json';
+  String get dataFile => p.join(directory, 'evals.bin');
+  String get indexFile => p.join(directory, 'evals.idx');
+  String get manifestFile => p.join(directory, 'evals.json');
 
   /// Scratch directory for the bucket files a build writes before sorting.
-  String get bucketDirectory =>
-      '$directory${Platform.pathSeparator}build-buckets';
+  String get bucketDirectory => p.join(directory, 'build-buckets');
 }
 
 /// What a finished (or half-finished) store says about itself.
@@ -222,14 +223,7 @@ class LichessEvalStore {
     final handle = await data.open();
     try {
       final header = await handle.read(kHeaderBytes);
-      final version = ByteData.sublistView(header).getInt32(8, Endian.little);
-      for (var i = 0; i < kStoreMagic.length; i++) {
-        if (header[i] != kStoreMagic[i]) {
-          await handle.close();
-          return null;
-        }
-      }
-      if (version != kStoreFormatVersion) {
+      if (!_headerIsCurrent(header)) {
         await handle.close();
         return null;
       }
@@ -245,9 +239,22 @@ class LichessEvalStore {
         manifest.stride,
       );
     } catch (_) {
+      // A truncated header or unreadable index: the store is unusable, and
+      // the caller treats null as "rebuild".
       await handle.close();
       return null;
     }
+  }
+
+  /// Whether [header] carries the magic and the format version this reader
+  /// understands.
+  static bool _headerIsCurrent(Uint8List header) {
+    if (header.length < kHeaderBytes) return false;
+    for (var i = 0; i < kStoreMagic.length; i++) {
+      if (header[i] != kStoreMagic[i]) return false;
+    }
+    final version = ByteData.sublistView(header).getInt32(8, Endian.little);
+    return version == kStoreFormatVersion;
   }
 
   /// The eval stored for [key], or null.
@@ -294,12 +301,12 @@ class LichessEvalStore {
   }
 
   static StoredEval _decode(ByteData view, int at) {
-    final mate = view.getInt16(at + 10, Endian.little);
+    final record = decodeRecord(view, at);
     return StoredEval(
-      cp: view.getInt16(at + 8, Endian.little),
-      mate: mate == 0 ? null : mate,
-      depth: view.getUint8(at + 12),
-      move: unpackUci(view.getUint16(at + 13, Endian.little)),
+      cp: record.cp,
+      mate: record.mate == 0 ? null : record.mate,
+      depth: record.depth,
+      move: unpackUci(record.move),
     );
   }
 
@@ -308,23 +315,28 @@ class LichessEvalStore {
 
 // ── Writing ──────────────────────────────────────────────────────────────
 
+/// Mate distances are clamped to this, which keeps the field 16-bit.
+const int _kMaxStoredMate = 32767;
+
 /// Encode one record into [target] at [at].
+///
+/// Layout: `pos` int64 at 0, `cp` int16 at 8, `mate` int16 at 10 (0 = none),
+/// `depth` uint8 at 12, packed `move` uint16 at 13. Persistent — every
+/// existing `evals.bin` depends on it.
 void encodeRecord(ByteData target, int at, LichessEvalRow row) {
-  final mate = row.mate ?? 0;
-  var cp = row.cp ?? 0;
-  if (cp > kMaxStoredCp) cp = kMaxStoredCp;
-  if (cp < -kMaxStoredCp) cp = -kMaxStoredCp;
-  var mateOut = mate;
-  if (mateOut > 32767) mateOut = 32767;
-  if (mateOut < -32767) mateOut = -32767;
   target
     ..setInt64(at, row.pos, Endian.little)
-    ..setInt16(at + 8, cp, Endian.little)
-    ..setInt16(at + 10, mateOut, Endian.little)
-    ..setUint8(
-      at + 12,
-      row.depth > kMaxStoredDepth ? kMaxStoredDepth : row.depth,
+    ..setInt16(
+      at + 8,
+      (row.cp ?? 0).clamp(-kMaxStoredCp, kMaxStoredCp),
+      Endian.little,
     )
+    ..setInt16(
+      at + 10,
+      (row.mate ?? 0).clamp(-_kMaxStoredMate, _kMaxStoredMate),
+      Endian.little,
+    )
+    ..setUint8(at + 12, row.depth.clamp(0, kMaxStoredDepth))
     ..setUint16(at + 13, row.move, Endian.little);
 }
 

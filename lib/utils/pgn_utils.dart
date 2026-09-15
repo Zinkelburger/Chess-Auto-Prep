@@ -60,30 +60,26 @@ String extractEventTitle(String pgn) {
 }
 
 /// Whether [line] starts with [currentMoves] (prefix match).
-bool lineMatchesPosition(RepertoireLine line, List<String> currentMoves) {
-  if (currentMoves.isEmpty) return true;
-  if (currentMoves.length > line.moves.length) return false;
-
-  for (int i = 0; i < currentMoves.length; i++) {
-    if (line.moves[i] != currentMoves[i]) {
-      return false;
-    }
-  }
-  return true;
-}
+bool lineMatchesPosition(RepertoireLine line, List<String> currentMoves) =>
+    isMovesPrefix(currentMoves, line.moves);
 
 /// How many leading moves of [currentMoves] match [line].
-int getPositionMatchDepth(RepertoireLine line, List<String> currentMoves) {
-  int depth = 0;
-  for (int i = 0; i < currentMoves.length && i < line.moves.length; i++) {
-    if (line.moves[i] == currentMoves[i]) {
-      depth++;
-    } else {
-      break;
-    }
+int getPositionMatchDepth(RepertoireLine line, List<String> currentMoves) =>
+    commonPrefixLength(line.moves, currentMoves);
+
+/// How many leading moves [a] and [b] share.
+int commonPrefixLength(List<String> a, List<String> b) {
+  var i = 0;
+  while (i < a.length && i < b.length && a[i] == b[i]) {
+    i++;
   }
-  return depth;
+  return i;
 }
+
+/// Whether [list] starts with every move of [prefix].
+bool isMovesPrefix(List<String> prefix, List<String> list) =>
+    prefix.length <= list.length &&
+    commonPrefixLength(prefix, list) == prefix.length;
 
 /// Format a move list with move numbers optimised for substring search.
 String formatMovesForSearch(List<String> moves) =>

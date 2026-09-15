@@ -21,7 +21,6 @@ import 'package:path/path.dart' as p;
 
 import '../../../services/storage/file_mutation_service.dart';
 import '../../../utils/atomic_file.dart';
-import '../../../models/game_outcome.dart';
 import '../models/bughouse_history.dart';
 import '../models/bughouse_state.dart';
 import '../models/bughouse_tournament.dart';

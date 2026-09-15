@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:chess_auto_prep/services/generation/pgn_freq_map.dart';
 import 'package:chess_auto_prep/services/generation/pgn_freq_parser.dart';
+import 'package:chess_auto_prep/services/generation/pgn_lexer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The frequency scanner streams a file in fixed chunks instead of decoding

@@ -456,6 +456,7 @@ class StudyImportController extends ChangeNotifier with SafeChangeNotifier {
       final content = await file.readAsString();
       return content.trim().isEmpty ? null : content;
     } catch (_) {
+      // An unreadable cache entry is a miss: the game is fetched again.
       return null;
     }
   }

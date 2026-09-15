@@ -53,7 +53,7 @@ void main() {
     test('the single-eval parser still answers the same responses', () {
       // The move list is additive: nothing about the eval path moved.
       final r = parseCdbDirectResponse('e2e4:30|d2d4:25');
-      expect(r?.cp, 30);
+      expect(r?.score, 30);
       expect(r?.bestMove, 'e2e4');
     });
   });
@@ -116,8 +116,8 @@ void main() {
 
     test('agrees with the white-normalizing wrapper', () {
       final mapped = mapChessDbApiScore(29996, isWhiteToMove: false);
-      expect(mapped!.$1, -(kMateCpBase - 4));
-      expect(mapped.$2, 4);
+      expect(mapped.whiteCp, -(kMateCpBase - 4));
+      expect(mapped.mate, 4);
     });
   });
 

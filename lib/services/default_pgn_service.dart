@@ -10,7 +10,7 @@ import 'storage/app_paths.dart';
 /// Extracts bundled PGN game collections from Flutter assets into the app's
 /// documents directory on first launch, giving the PGN Viewer a default
 /// library of classic player games to browse.
-class DefaultPgnService {
+abstract final class DefaultPgnService {
   static const _extractedKey = 'pgn_collections_extracted';
   static const _directoryName = AppPaths.pgnCollectionsDirectoryName;
 
@@ -40,25 +40,10 @@ class DefaultPgnService {
     final dir = await AppPaths.pgnCollectionsDirectory(create: true);
 
     var hadExtractionFailure = false;
-
     for (final name in bundledFiles) {
       final target = File(p.join(dir.path, name));
       if (await target.exists()) continue;
-
-      try {
-        final byteData = await rootBundle.load('assets/$_directoryName/$name');
-        final data = decodeTextBytes(
-          byteData.buffer.asUint8List(
-            byteData.offsetInBytes,
-            byteData.lengthInBytes,
-          ),
-        );
-        await writeTextFileAtomically(target, data, createOnly: true);
-      } catch (e) {
-        // Asset missing from bundle (e.g. stripped for size) — skip silently.
-        debugPrint('Could not extract bundled PGN $name: $e');
-        hadExtractionFailure = true;
-      }
+      if (!await _extractAsset(name, target)) hadExtractionFailure = true;
     }
 
     // Only mark extraction complete if this pass succeeded fully.
@@ -67,14 +52,34 @@ class DefaultPgnService {
     }
   }
 
-  /// Lists PGN files currently in the collections directory.
+  /// Copy one bundled collection to [target]. False when the asset could not
+  /// be read (e.g. stripped from the bundle for size) or written.
+  static Future<bool> _extractAsset(String name, File target) async {
+    try {
+      final byteData = await rootBundle.load('assets/$_directoryName/$name');
+      final data = decodeTextBytes(
+        byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        ),
+      );
+      await writeTextFileAtomically(target, data, createOnly: true);
+      return true;
+    } catch (e) {
+      debugPrint('Could not extract bundled PGN $name: $e');
+      return false;
+    }
+  }
+
+  /// Lists PGN files currently in the collections directory, sorted by
+  /// case-insensitive file name.
   static Future<List<File>> listCollections() async {
     final dir = await AppPaths.pgnCollectionsDirectory();
     if (!await dir.exists()) return [];
 
     final files = await dir
         .list()
-        .where((e) => e is File && e.path.toLowerCase().endsWith('.pgn'))
+        .where((e) => e is File && p.extension(e.path).toLowerCase() == '.pgn')
         .cast<File>()
         .toList();
 

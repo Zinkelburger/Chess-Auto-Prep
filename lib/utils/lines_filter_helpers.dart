@@ -1,7 +1,10 @@
+/// Filtering, searching and sorting for the repertoire lines browser.
+library;
+
+import '../features/coverage/services/coverage_service.dart';
 import '../models/repertoire_line.dart';
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
+import '../services/line_metrics_helpers.dart';
 import 'coverage_helpers.dart';
-import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import 'pgn_utils.dart' as pgn_utils;
 
 /// Coverage category filter for the lines browser.
@@ -87,6 +90,28 @@ Map<String, LineDisplayData> buildLineDisplayIndex(
   return index;
 }
 
+bool _passesCoverageFilter(LineCoverageInfo info, CoverageFilter filter) =>
+    switch (filter) {
+      CoverageFilter.all => true,
+      CoverageFilter.covered => info.leaf?.category == LeafCategory.covered,
+      CoverageFilter.tooShallow =>
+        info.leaf?.category == LeafCategory.tooShallow,
+      CoverageFilter.tooDeep => info.leaf?.category == LeafCategory.tooDeep,
+      CoverageFilter.unaccounted => info.unaccountedMoves.isNotEmpty,
+    };
+
+bool _passesMetricsFilter(LineQualityInfo metrics, LineMetricsFilter filter) {
+  final bottleneck = metrics.bottleneckQuality;
+  final coherence = metrics.coherence;
+  return switch (filter) {
+    LineMetricsFilter.hardMoves =>
+      bottleneck != null && bottleneck < hardMoveEaseThreshold,
+    LineMetricsFilter.trappy => metrics.trapCount > 0,
+    LineMetricsFilter.lowCoherence =>
+      coherence != null && coherence < lowCoherenceThreshold,
+  };
+}
+
 /// Rank for coverage sorting: best (covered) first, unanalyzed last.
 int? coverageSortRank(LineCoverageInfo? info) {
   final category = info?.leaf?.category;
@@ -126,50 +151,22 @@ List<RepertoireLine> filterAndSortLines({
     }
 
     if (normalizedSearch.isNotEmpty) {
-      final searchText =
-          displayIndex?[line.id]?.searchText ??
-          [
-            line.name,
-            pgn_utils.extractEventTitle(line.fullPgn),
-            line.moves.join(' '),
-            pgn_utils.formatMovesForSearch(line.moves),
-          ].join('\n').toLowerCase();
-      if (!searchText.contains(normalizedSearch)) {
-        return false;
-      }
+      final display = displayIndex?[line.id] ?? LineDisplayData.of(line);
+      if (!display.searchText.contains(normalizedSearch)) return false;
     }
 
     if (coverageFilter != CoverageFilter.all && coverageResult != null) {
       final info = lineCoverage[line.id];
-      if (info == null) return false;
-
-      switch (coverageFilter) {
-        case CoverageFilter.covered:
-          if (info.leaf?.category != LeafCategory.covered) return false;
-        case CoverageFilter.tooShallow:
-          if (info.leaf?.category != LeafCategory.tooShallow) return false;
-        case CoverageFilter.tooDeep:
-          if (info.leaf?.category != LeafCategory.tooDeep) return false;
-        case CoverageFilter.unaccounted:
-          if (info.unaccountedMoves.isEmpty) return false;
-        case CoverageFilter.all:
-          break;
+      if (info == null || !_passesCoverageFilter(info, coverageFilter)) {
+        return false;
       }
     }
 
     if (metricsFilters.isNotEmpty) {
-      final m = lineMetrics[line.id];
-      if (m == null) return false;
-      for (final filter in metricsFilters) {
-        final passes = switch (filter) {
-          LineMetricsFilter.hardMoves =>
-            m.bottleneckQuality != null &&
-                m.bottleneckQuality! < hardMoveEaseThreshold,
-          LineMetricsFilter.trappy => m.trapCount > 0,
-          LineMetricsFilter.lowCoherence =>
-            m.coherence != null && m.coherence! < lowCoherenceThreshold,
-        };
-        if (!passes) return false;
+      final metrics = lineMetrics[line.id];
+      if (metrics == null) return false;
+      if (!metricsFilters.every((f) => _passesMetricsFilter(metrics, f))) {
+        return false;
       }
     }
 

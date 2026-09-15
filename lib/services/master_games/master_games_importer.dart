@@ -12,15 +12,14 @@
 /// dictionary from its own games and stores it in `meta`.
 library;
 
-import 'package:dartchess/dartchess.dart';
+import 'package:sqlite3/sqlite3.dart';
 
-import '../generation/pgn_freq_parser.dart'
-    show isResultToken, splitPgnGames, tokenToSan, tokenizeMovetext;
+import '../../utils/movetext_builder.dart';
+import '../generation/pgn_lexer.dart' show splitPgnGames;
+import 'book_replay.dart';
 import 'game_authority.dart';
 import 'master_games_db.dart';
 import 'movetext_codec.dart';
-import 'position_key.dart';
-import '../../utils/movetext_builder.dart';
 
 class MasterGamesImportRequest {
   final String dbPath;
@@ -42,7 +41,12 @@ class MasterGamesImportRequest {
 
 class MasterGamesImportResult {
   final int gamesImported;
+
+  /// Games in the PGN with no moves, which are not stored.
   final int gamesSkipped;
+
+  /// The issue was already in the database and [MasterGamesImportRequest.replace]
+  /// was not set, so nothing was read.
   final bool alreadyImported;
 
   const MasterGamesImportResult({
@@ -64,56 +68,78 @@ MasterGamesImportResult importPgnIntoMasterGames(
   }
 }
 
-/// One parsed game, ready to insert.
+/// One parsed game with its headers decoded into the columns `games` keeps.
 class _ParsedGame {
-  final Map<String, String> headers;
+  final String event;
+  final String site;
+  final String date;
+  final String round;
+  final String white;
+  final String black;
+
+  /// `1-0`, `0-1`, `1/2-1/2` or `*`.
+  final String result;
+  final int? whiteElo;
+  final int? blackElo;
+  final int? whiteFideId;
+  final int? blackFideId;
+  final String eco;
+
+  /// Year of the game (or of the event when the game's own date is missing),
+  /// 0 when neither is known.
+  final int year;
+  final GameAuthority authority;
   final List<String> sans;
+
+  /// `1. d4 Nf6 2. c4 …` — numbered SAN, one space between tokens.
   final String movetext;
-  _ParsedGame(this.headers, this.sans) : movetext = _compactMovetext(sans);
+
+  _ParsedGame(Map<String, String> headers, this.sans)
+    : event = headers['Event'] ?? '',
+      site = headers['Site'] ?? '',
+      date = headers['Date'] ?? '',
+      round = headers['Round'] ?? '',
+      white = headers['White'] ?? '',
+      black = headers['Black'] ?? '',
+      result = _normalizeResult(headers['Result']),
+      whiteElo = _int(headers['WhiteElo']),
+      blackElo = _int(headers['BlackElo']),
+      whiteFideId = _int(headers['WhiteFideId']),
+      blackFideId = _int(headers['BlackFideId']),
+      eco = headers['ECO'] ?? '',
+      year = _year(headers['Date']) ?? _year(headers['EventDate']) ?? 0,
+      authority = classifyAuthority(
+        site: headers['Site'] ?? '',
+        event: headers['Event'] ?? '',
+      ),
+      movetext = buildNumberedMovetext(sans);
+
+  int get plyCount => sans.length;
 }
 
-MasterGamesImportResult _import(
-  MasterGamesDb store,
-  MasterGamesImportRequest req,
-) {
-  final db = store.raw;
-  final issue = req.twicIssue;
-  if (issue != null) {
-    final already = db.select('SELECT 1 FROM twic_issues WHERE issue = ?', [
-      issue,
-    ]).isNotEmpty;
-    if (already && !req.replace) {
-      return const MasterGamesImportResult(
-        gamesImported: 0,
-        gamesSkipped: 0,
-        alreadyImported: true,
-      );
-    }
-  }
-
+/// Split [pgnText] into games with at least one move; the count of moveless
+/// games comes back as `skipped`.
+({List<_ParsedGame> games, int skipped}) _parseGames(String pgnText) {
   var skipped = 0;
   final games = <_ParsedGame>[];
-  for (final g in splitPgnGames(req.pgnText)) {
-    final sans = <String>[];
-    for (final t in tokenizeMovetext(g.movetext)) {
-      if (isResultToken(t)) break;
-      final san = tokenToSan(t);
-      if (san != null) sans.add(san);
-    }
+  for (final g in splitPgnGames(pgnText)) {
+    final sans = movetextSans(g.movetext);
     if (sans.isEmpty) {
       skipped++;
       continue;
     }
     games.add(_ParsedGame(g.headers, sans));
   }
+  return (games: games, skipped: skipped);
+}
 
-  final insertGame = db.prepare(
+const String _insertGameSql =
     'INSERT INTO games(twic, event, site, date, round, white, black, result, '
     'white_elo, black_elo, white_fide, black_fide, eco, ply_count, movetext, '
     'authority) '
-    'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-  );
-  final upsertBook = db.prepare('''
+    'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)';
+
+const String _upsertBookSql = '''
     INSERT INTO book(pos, move, ply, games, white_wins, draws, black_wins,
                      elo_sum, elo_n, max_elo, last_year, top_game, recent_game,
                      top_classical_game, classical_max_elo,
@@ -148,7 +174,27 @@ MasterGamesImportResult _import(
       classical_black_wins = classical_black_wins
                              + excluded.classical_black_wins,
       ply = MIN(ply, excluded.ply)
-  ''');
+  ''';
+
+MasterGamesImportResult _import(
+  MasterGamesDb store,
+  MasterGamesImportRequest req,
+) {
+  final db = store.raw;
+  final issue = req.twicIssue;
+  if (issue != null && !req.replace && _isIssueImported(db, issue)) {
+    return const MasterGamesImportResult(
+      gamesImported: 0,
+      gamesSkipped: 0,
+      alreadyImported: true,
+    );
+  }
+
+  final parsed = _parseGames(req.pgnText);
+  final games = parsed.games;
+
+  final insertGame = db.prepare(_insertGameSql);
+  final upsertBook = db.prepare(_upsertBookSql);
 
   var imported = 0;
   // IMMEDIATE: the body reads (the movetext dictionary, the issue check)
@@ -174,87 +220,9 @@ MasterGamesImportResult _import(
       db.execute('DELETE FROM games WHERE twic = ?', [issue]);
     }
 
-    for (final g in games) {
-      final h = g.headers;
-      final sans = g.sans;
-
-      final result = _normalizeResult(h['Result']);
-      final whiteElo = _int(h['WhiteElo']);
-      final blackElo = _int(h['BlackElo']);
-      final year = _year(h['Date']) ?? _year(h['EventDate']) ?? 0;
-
-      final authority = classifyAuthority(
-        site: h['Site'] ?? '',
-        event: h['Event'] ?? '',
-      );
-      insertGame.execute([
-        issue,
-        h['Event'] ?? '',
-        h['Site'] ?? '',
-        h['Date'] ?? '',
-        h['Round'] ?? '',
-        h['White'] ?? '',
-        h['Black'] ?? '',
-        result,
-        whiteElo,
-        blackElo,
-        _int(h['WhiteFideId']),
-        _int(h['BlackFideId']),
-        h['ECO'] ?? '',
-        sans.length,
-        codec.encode(g.movetext),
-        authority.code,
-      ]);
-      final gameId = db.lastInsertRowId;
-
-      // Book: replay the opening and aggregate per (position, move).
-      final ww = result == '1-0' ? 1 : 0;
-      final dd = result == '1/2-1/2' ? 1 : 0;
-      final bw = result == '0-1' ? 1 : 0;
-      final eloSum = (whiteElo ?? 0) + (blackElo ?? 0);
-      final eloN = (whiteElo == null ? 0 : 1) + (blackElo == null ? 0 : 1);
-      final maxElo = [
-        whiteElo ?? 0,
-        blackElo ?? 0,
-      ].reduce((a, b) => a > b ? a : b);
-
-      Position pos = Chess.initial;
-      final limit = sans.length < kBookMaxPly ? sans.length : kBookMaxPly;
-      for (var ply = 0; ply < limit; ply++) {
-        final Move move;
-        try {
-          final parsed = pos.parseSan(sans[ply]);
-          if (parsed == null) break;
-          move = parsed;
-        } catch (_) {
-          break; // corrupt movetext: keep what we replayed
-        }
-        upsertBook.execute([
-          positionKey(pos.fen),
-          move.uci,
-          ply,
-          ww,
-          dd,
-          bw,
-          eloSum,
-          eloN,
-          maxElo,
-          year,
-          gameId,
-          gameId,
-          // Only a citable game claims the classical slot; everything else
-          // leaves it at 0 and falls back to `top_game`.
-          authority.isCitable ? gameId : 0,
-          authority.isCitable ? maxElo : 0,
-          // The classical-only split, kept per row so an explorer can show
-          // over-the-board practice without the online half.
-          authority.isCitable ? 1 : 0,
-          authority.isCitable ? ww : 0,
-          authority.isCitable ? dd : 0,
-          authority.isCitable ? bw : 0,
-        ]);
-        pos = pos.play(move);
-      }
+    for (final game in games) {
+      _insertGame(insertGame, game, issue: issue, codec: codec);
+      _indexBook(upsertBook, game, gameId: db.lastInsertRowId);
       imported++;
     }
 
@@ -266,7 +234,7 @@ MasterGamesImportResult _import(
       );
     }
     db.execute('COMMIT');
-  } catch (e) {
+  } catch (_) {
     db.execute('ROLLBACK');
     rethrow;
   } finally {
@@ -275,21 +243,92 @@ MasterGamesImportResult _import(
   }
   // Fold the WAL back into the file now rather than leaving a
   // database-sized journal for the next import to trip over.  Best effort:
-  // a reader mid-query makes this a partial checkpoint, which is fine.
+  // a reader mid-query makes this a partial checkpoint, which is fine, and a
+  // checkpoint that cannot run at all costs nothing but disk space.
   try {
     db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
-  } catch (_) {}
+  } on SqliteException {
+    // Deliberately ignored: see above.
+  }
 
   return MasterGamesImportResult(
     gamesImported: imported,
-    gamesSkipped: skipped,
+    gamesSkipped: parsed.skipped,
   );
 }
 
-String _normalizeResult(String? r) => switch (r) {
-  '1-0' || '0-1' || '1/2-1/2' => r!,
-  _ => '*',
-};
+bool _isIssueImported(Database db, int issue) =>
+    db.select('SELECT 1 FROM twic_issues WHERE issue = ?', [issue]).isNotEmpty;
+
+void _insertGame(
+  PreparedStatement insertGame,
+  _ParsedGame game, {
+  required int? issue,
+  required MovetextCodec codec,
+}) {
+  insertGame.execute([
+    issue,
+    game.event,
+    game.site,
+    game.date,
+    game.round,
+    game.white,
+    game.black,
+    game.result,
+    game.whiteElo,
+    game.blackElo,
+    game.whiteFideId,
+    game.blackFideId,
+    game.eco,
+    game.plyCount,
+    codec.encode(game.movetext),
+    game.authority.code,
+  ]);
+}
+
+/// Replay the opening and aggregate one `book` row per (position, move).
+void _indexBook(
+  PreparedStatement upsertBook,
+  _ParsedGame game, {
+  required int gameId,
+}) {
+  final tally = resultTally(game.result);
+  final eloSum = (game.whiteElo ?? 0) + (game.blackElo ?? 0);
+  final eloN =
+      (game.whiteElo == null ? 0 : 1) + (game.blackElo == null ? 0 : 1);
+  final maxElo = strongerElo(game.whiteElo, game.blackElo);
+  // Only a citable game claims the classical slot and the classical-only
+  // counts; everything else leaves them at 0 and falls back to `top_game`.
+  final citable = game.authority.isCitable;
+
+  for (final ref in replayBookMoves(game.sans)) {
+    upsertBook.execute([
+      ref.positionKey,
+      ref.uci,
+      ref.ply,
+      tally.whiteWins,
+      tally.draws,
+      tally.blackWins,
+      eloSum,
+      eloN,
+      maxElo,
+      game.year,
+      gameId,
+      gameId,
+      citable ? gameId : 0,
+      citable ? maxElo : 0,
+      citable ? 1 : 0,
+      citable ? tally.whiteWins : 0,
+      citable ? tally.draws : 0,
+      citable ? tally.blackWins : 0,
+    ]);
+  }
+}
+
+const _decidedResults = {'1-0', '0-1', '1/2-1/2'};
+
+String _normalizeResult(String? r) =>
+    r != null && _decidedResults.contains(r) ? r : '*';
 
 int? _int(String? s) => s == null ? null : int.tryParse(s.trim());
 
@@ -298,6 +337,3 @@ int? _year(String? date) {
   final y = int.tryParse(date.substring(0, 4));
   return (y == null || y < 1000) ? null : y;
 }
-
-/// `1. d4 Nf6 2. c4 …` — numbered SAN, one space between tokens.
-String _compactMovetext(List<String> sans) => buildNumberedMovetext(sans);

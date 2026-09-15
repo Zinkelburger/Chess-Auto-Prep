@@ -11,7 +11,6 @@ import '../services/tournament_game_positions.dart';
 import '../../../constants/chess_constants.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
-import '../../../models/game_outcome.dart';
 import '../../../utils/app_messages.dart';
 import '../../../widgets/common/static_board_thumbnail.dart';
 import '../controllers/engine_tournament_controller.dart';

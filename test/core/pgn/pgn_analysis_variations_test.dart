@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_analysis_variations.dart';
-import 'package:chess_auto_prep/services/game_analysis_controller.dart';
+import 'package:chess_auto_prep/services/game_eval_annotations.dart';
 
 const _review =
     '1. e4 {[%eval 0]} e5 {[%eval 0]} '

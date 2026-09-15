@@ -1,9 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_collection_helpers.dart';
+import 'package:chess_auto_prep/models/pgn_filter_models.dart';
+import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/services/pgn_parsing_service.dart'
     show splitPgnIntoGames;
 
 void main() {
+  _headerHelperTests();
   test('Game and Train agree on indented CRLF course boundaries', () {
     const course =
         '[Event "?"]\r\n[White "Introduction"]\r\n\r\n1. d4 *\r\n'
@@ -190,6 +193,124 @@ void main() {
       final entries = parseMultiGamePgn(pgn);
       expect(entries, hasLength(1));
       expect(entries[0].headers['EventDate'], '1907.??.??');
+    });
+  });
+}
+
+void _headerHelperTests() {
+  group('upsertPgnHeader / removePgnHeader', () {
+    const pgn = '[Event "?"]\n[White "A"]\n\n1. e4 *\n';
+
+    test('inserts a missing header after the first line', () {
+      expect(
+        upsertPgnHeader(pgn, 'StudyRating', '3'),
+        '[Event "?"]\n[StudyRating "3"]\n[White "A"]\n\n1. e4 *\n',
+      );
+    });
+
+    test('replaces an existing header in place', () {
+      final rated = upsertPgnHeader(pgn, 'StudyRating', '3');
+      expect(
+        upsertPgnHeader(rated, 'StudyRating', '5'),
+        '[Event "?"]\n[StudyRating "5"]\n[White "A"]\n\n1. e4 *\n',
+      );
+    });
+
+    test('leaves a single-line text alone and removes whole lines', () {
+      expect(upsertPgnHeader('1. e4 *', 'StudyRating', '3'), '1. e4 *');
+      final rated = upsertPgnHeader(pgn, 'StudyRating', '3');
+      expect(removePgnHeader(rated, 'StudyRating'), pgn);
+      expect(removePgnHeader(pgn, 'StudyRating'), pgn);
+    });
+  });
+
+  group('buildMetadataOutput', () {
+    const pgn = '[Event "?"]\n[StudyRating "2"]\n[StudySummary "old"]\n\n*\n';
+
+    test('writes the rating and a quote-safe summary', () {
+      final out = buildMetadataOutput([
+        (pgn: pgn, rating: 4, summary: 'say "hi"'),
+      ]).single;
+      expect(out, contains('[StudyRating "4"]'));
+      expect(out, contains('[StudySummary "say \'hi\'"]'));
+    });
+
+    test('clears both headers when the game has neither', () {
+      final out = buildMetadataOutput([(pgn: pgn, rating: 0, summary: '')]);
+      expect(out.single, '[Event "?"]\n\n*\n');
+    });
+  });
+
+  group('sliceConfigWithoutChip', () {
+    const white = HeaderFilterConfig(
+      field: 'White',
+      mode: MatchMode.contains,
+      value: 'Carlsen',
+    );
+    const blank = HeaderFilterConfig(
+      field: 'Black',
+      mode: MatchMode.contains,
+      value: '',
+    );
+    const config = SliceConfig(
+      positionInput: 'p0',
+      additionalPositions: ['', 'p1', 'p2'],
+      matchAny: false,
+      headerFilters: [blank, white],
+      sequencePattern: 'e4 e5',
+      sequenceGap: 2,
+    );
+
+    test('chips are removed in chipLabels order', () {
+      expect(config.chipLabels, hasLength(5));
+
+      final noPosition = sliceConfigWithoutChip(config, 0)!;
+      expect(noPosition.positionInput, isNull);
+      expect(noPosition.additionalPositions, ['', 'p1', 'p2']);
+
+      // The blank additional position has no chip; chip 1 is p1.
+      final noP1 = sliceConfigWithoutChip(config, 1)!;
+      expect(noP1.additionalPositions, ['', 'p2']);
+      expect(noP1.positionInput, 'p0');
+
+      final noSequence = sliceConfigWithoutChip(config, 3)!;
+      expect(noSequence.sequencePattern, isNull);
+      expect(noSequence.sequenceGap, 2);
+
+      final noHeader = sliceConfigWithoutChip(config, 4)!;
+      expect(noHeader.headerFilters, [blank]);
+      expect(noHeader.sequencePattern, 'e4 e5');
+    });
+
+    test('an index past the chips is refused', () {
+      expect(sliceConfigWithoutChip(config, 5), isNull);
+      expect(sliceConfigWithoutChip(config, -1), isNull);
+    });
+  });
+
+  group('player detection', () {
+    PgnGameEntry game(String white, String black) => PgnGameEntry(
+      headers: {'White': white, 'Black': black},
+      pgnText: '',
+      studyRating: 0,
+      studySummary: '',
+    );
+
+    test('detectProtagonistFrom names the player in every sampled game', () {
+      expect(
+        detectProtagonistFrom([game('A', 'B'), game('C', 'A'), game('A', '?')]),
+        'A',
+      );
+      expect(detectProtagonistFrom([game('A', 'B'), game('C', 'D')]), isNull);
+      expect(detectProtagonistFrom([game('A', 'B')]), isNull);
+    });
+
+    test('detectBothPlayersFrom lists the more frequent White first', () {
+      expect(
+        detectBothPlayersFrom([game('A', 'B'), game('A', 'B'), game('B', 'A')]),
+        (player1: 'A', player2: 'B'),
+      );
+      expect(detectBothPlayersFrom([game('A', 'B'), game('A', 'C')]), isNull);
     });
   });
 }

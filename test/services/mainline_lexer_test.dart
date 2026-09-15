@@ -6,7 +6,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
+import 'package:chess_auto_prep/services/pgn_mainline_lexer.dart';
 
 List<String> _dartchessMainline(String pgn) =>
     PgnGame.parsePgn(pgn).moves.mainline().map((n) => n.san).toList();

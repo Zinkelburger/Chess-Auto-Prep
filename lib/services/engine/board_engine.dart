@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import '../../models/engine_settings.dart';
 import '../../models/analysis/discovery_result.dart';
+import '../../models/engine_settings.dart';
 import 'engine_connection.dart';
-import 'engine_worker_slot.dart';
-import 'eval_worker.dart';
 import 'engine_search_budget.dart';
 import 'engine_serial_queue.dart';
+import 'engine_worker_slot.dart';
+import 'eval_worker.dart';
 
 /// One process for interactive boards. Pausing retains its configured threads,
 /// hash and network; only leaving all boards or suspending releases the process.
@@ -27,15 +27,24 @@ class BoardEngine {
   BoardEngineSession createSession() => BoardEngineSession._(this);
 
   final EngineWorkerSlot _slot;
+
+  /// Sessions currently attached (prepared and not yet detached).
   final Set<BoardEngineSession> _clients = {};
   var _queue = EngineSerialQueue();
+
+  /// Sessions sharing the current search and its live progress.
   final Set<BoardEngineSession> _searchClients = {};
   final Map<BoardEngineSession, void Function(DiscoveryResult)> _progress = {};
-  Object? _discoveryKey;
+  _DiscoveryKey? _discoveryKey;
   Future<DiscoveryResult?>? _discovery;
   int _discoveryRequest = -1;
   DiscoveryResult? _latestProgress;
+
+  /// Bumped whenever a newer search, pause or release supersedes the current
+  /// one; every queued step re-checks it before touching the worker.
   int _request = 0;
+
+  /// Bumped on release so a queued [resume] does not revive a newer lifetime.
   int _lifetime = 0;
   bool _suspended = false;
 
@@ -49,10 +58,10 @@ class BoardEngine {
   );
 
   /// Prepare the real configuration before the first toggle, without searching.
-  Future<void> _prepare(BoardEngineSession client) {
+  Future<void> _prepare(BoardEngineSession client) async {
     _clients.add(client);
-    if (_suspended) return Future.value();
-    return _ensure().then((_) {});
+    if (_suspended) return;
+    await _ensure();
   }
 
   void _detach(BoardEngineSession client) {
@@ -114,55 +123,64 @@ class BoardEngine {
   }) {
     if (!_clients.contains(owner) || _suspended) return Future.value();
     final key = (
-      fen,
-      depth,
-      multiPv,
-      whiteToMove,
-      EngineSettings.instance.cores,
-      EngineSettings.instance.hashMb,
+      fen: fen,
+      depth: depth,
+      multiPv: multiPv,
+      whiteToMove: whiteToMove,
+      cores: EngineSettings.instance.cores,
+      hashMb: EngineSettings.instance.hashMb,
     );
-    if (_discovery == null ||
-        _discoveryKey != key ||
-        _discoveryRequest != _request) {
-      _latestProgress = null;
-      _discovery = _run(
-        owner,
-        (worker) => worker.runDiscovery(
-          fen,
-          depth,
-          multiPv,
-          whiteToMove,
-          onProgress: (result) {
-            _latestProgress = result;
-            for (final entry in Map.of(_progress).entries) {
-              if (_searchClients.contains(entry.key)) entry.value(result);
-            }
-          },
-        ),
-      );
-      final pending = _discovery!;
-      // A failed search must not become a cached failure for this position.
-      unawaited(
-        pending.then<void>(
-          (_) {},
-          onError: (Object _, StackTrace _) {
-            if (identical(_discovery, pending)) _discovery = null;
-          },
-        ),
-      );
-      _discoveryKey = key;
-      _discoveryRequest = _request;
-    }
+    final discovery =
+        _discovery == null ||
+            _discoveryKey != key ||
+            _discoveryRequest != _request
+        ? _startDiscovery(owner, key)
+        : _discovery!;
     _searchClients.add(owner);
     if (onProgress != null) {
       _progress[owner] = onProgress;
-      if (_latestProgress != null) onProgress(_latestProgress!);
+      final latest = _latestProgress;
+      if (latest != null) onProgress(latest);
     }
     final request = _request;
-    return _discovery!.then(
+    return discovery.then(
       (result) =>
           request == _request && _searchClients.contains(owner) ? result : null,
     );
+  }
+
+  Future<DiscoveryResult?> _startDiscovery(
+    BoardEngineSession owner,
+    _DiscoveryKey key,
+  ) {
+    _latestProgress = null;
+    final pending = _discovery = _run(
+      owner,
+      (worker) => worker.runDiscovery(
+        key.fen,
+        key.depth,
+        key.multiPv,
+        key.whiteToMove,
+        onProgress: (result) {
+          _latestProgress = result;
+          for (final entry in Map.of(_progress).entries) {
+            if (_searchClients.contains(entry.key)) entry.value(result);
+          }
+        },
+      ),
+    );
+    // A failed search must not become a cached failure for this position.
+    unawaited(
+      pending.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {
+          if (identical(_discovery, pending)) _discovery = null;
+        },
+      ),
+    );
+    _discoveryKey = key;
+    _discoveryRequest = _request;
+    return pending;
   }
 
   void _pause(BoardEngineSession owner) {
@@ -172,23 +190,24 @@ class BoardEngine {
     _slot.stop();
   }
 
-  void _release() {
-    _lifetime++;
+  /// Supersede every search and forget the shared discovery.
+  void _abandonSearches() {
     _request++;
     _searchClients.clear();
     _progress.clear();
     _discovery = null;
     _latestProgress = null;
+  }
+
+  void _release() {
+    _lifetime++;
+    _abandonSearches();
     _slot.release();
   }
 
   /// Stop all board searches while retaining the configured idle process.
   void pauseAll() {
-    _request++;
-    _searchClients.clear();
-    _progress.clear();
-    _discovery = null;
-    _latestProgress = null;
+    _abandonSearches();
     _slot.stop();
   }
 
@@ -215,6 +234,16 @@ class BoardEngine {
   }
 }
 
+/// What makes two board discoveries the same search.
+typedef _DiscoveryKey = ({
+  String fen,
+  int depth,
+  int multiPv,
+  bool whiteToMove,
+  int cores,
+  int hashMb,
+});
+
 /// A pane's attachment and search ownership are the same typed handle.
 /// Detach is reversible (hidden tabs); dispose is terminal (widget teardown).
 class BoardEngineSession {
@@ -223,7 +252,7 @@ class BoardEngineSession {
   bool _disposed = false;
 
   Future<void> prepare() {
-    if (_disposed) return Future.error(StateError('Board session disposed'));
+    if (_disposed) return Future.error(_disposedError());
     return _engine._prepare(this);
   }
 
@@ -234,7 +263,7 @@ class BoardEngineSession {
     required bool whiteToMove,
     void Function(DiscoveryResult)? onProgress,
   }) {
-    if (_disposed) return Future.error(StateError('Board session disposed'));
+    if (_disposed) return Future.error(_disposedError());
     return _engine._discover(
       this,
       fen: fen,
@@ -246,7 +275,7 @@ class BoardEngineSession {
   }
 
   Future<EvalResult?> evaluate(String fen, int depth) {
-    if (_disposed) return Future.error(StateError('Board session disposed'));
+    if (_disposed) return Future.error(_disposedError());
     return _engine._run(this, (worker) => worker.evaluateFen(fen, depth));
   }
 
@@ -257,4 +286,6 @@ class BoardEngineSession {
     _disposed = true;
     detach();
   }
+
+  static StateError _disposedError() => StateError('Board session disposed');
 }

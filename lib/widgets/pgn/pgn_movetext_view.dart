@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 import '../../core/pgn/mainline_positions.dart';
 import '../../core/pgn/solitaire_reveal.dart';
 import '../../models/move_tree.dart';
-import '../../services/game_analysis_controller.dart'
+import '../../services/move_eval.dart'
     show MoveClassification, classifyMove, cpToWinningChance, initialWinChance;
 import '../../theme/app_colors.dart';
 import '../../theme/pgn_text_styles.dart';
@@ -26,28 +26,28 @@ import 'pgn_reading_passage.dart';
 import 'movetext_primitives.dart' show MoveChip, PgnMoveDecorations;
 import '../../utils/chess_utils.dart'
     show coordsAtPly, formatEvalDisplay, isNullMoveSan;
+import '../../utils/chessable_comment_format.dart'
+    show RichSegment, RichSegmentType, hasChessableFormatting, parseRichComment;
+import '../../utils/comment_move_tokens.dart'
+    show
+        CommentDiagram,
+        CommentMove,
+        CommentProse,
+        CommentToken,
+        kSanCorePattern,
+        parseCommentTokens;
+import '../../utils/move_metrics.dart' show MoveMetrics;
 import '../../utils/pgn_comment_utils.dart'
     show
         commentProse,
         filterDisplayComment,
-        hasChessableFormatting,
-        parseRichComment,
-        parseCommentTokens,
+        joinComments,
+        kMaxUnevaluatedPlies,
         parseEvalComment,
         parseMaiaComment,
         parsePvComment,
         stripEngineTokens,
-        stripPgnTokens,
-        joinComments,
-        kMaxUnevaluatedPlies,
-        CommentToken,
-        CommentProse,
-        CommentDiagram,
-        CommentMove,
-        MoveMetrics,
-        RichSegment,
-        RichSegmentType,
-        kSanCorePattern;
+        stripPgnTokens;
 
 part 'pgn_movetext_prose_scan.dart';
 part 'pgn_movetext_comments.dart';

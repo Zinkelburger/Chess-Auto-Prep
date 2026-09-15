@@ -25,12 +25,21 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
+
 import 'lichess_eval_line.dart';
 import 'lichess_eval_store.dart';
 import 'zstd_stream.dart';
 
 /// What the isolate is doing.
 enum LichessImportPhase { scanning, merging, done, failed }
+
+/// Sent to the isolate's control port to ask the import to stop at its next
+/// checkpoint.
+const String kLichessImportCancelMessage = 'cancel';
+
+/// Lines between manifest checkpoints when the caller does not say.
+const int kLichessImportCheckpointLines = 2000000;
 
 /// A progress tick sent back to the controller.
 class LichessImportProgress {
@@ -63,7 +72,7 @@ class LichessImportRequest {
     this.sourceLastModified,
     this.sourceBytes,
     this.backend,
-    this.checkpointEvery = 2000000,
+    this.checkpointEvery = kLichessImportCheckpointLines,
   });
 
   final String archivePath;
@@ -79,7 +88,8 @@ class LichessImportRequest {
   final int checkpointEvery;
 }
 
-/// Cooperative cancellation: the controller sends `true` on this port.
+/// Cooperative cancellation flag, raised when the controller sends
+/// [kLichessImportCancelMessage]; the scan and merge poll it at checkpoints.
 class LichessImportControl {
   LichessImportControl();
   bool cancelled = false;
@@ -91,7 +101,7 @@ Future<void> runLichessImportIsolate(LichessImportRequest request) async {
   final receive = ReceivePort();
   request.sendPort.send(receive.sendPort);
   receive.listen((message) {
-    if (message == 'cancel') control.cancelled = true;
+    if (message == kLichessImportCancelMessage) control.cancelled = true;
   });
   try {
     await importLichessEvals(request, control);
@@ -176,6 +186,17 @@ Future<void> importLichessEvals(
     );
   }
 
+  // Counts every line, parses only those past the resume point.
+  void consume(String line) {
+    linesRead++;
+    if (linesRead <= linesToSkip) return;
+    final row = parseLichessEvalLine(line);
+    if (row != null) {
+      writer.add(row);
+      rowsWritten++;
+    }
+  }
+
   try {
     final splitter = _LineSplitter();
     final stream = openStream != null
@@ -185,13 +206,7 @@ Future<void> importLichessEvals(
     await for (final chunk in stream) {
       compressedRead += chunk.length;
       for (final line in splitter.add(chunk)) {
-        linesRead++;
-        if (linesRead <= linesToSkip) continue;
-        final row = parseLichessEvalLine(line);
-        if (row != null) {
-          writer.add(row);
-          rowsWritten++;
-        }
+        consume(line);
         if (linesRead - lastCheckpoint >= request.checkpointEvery) {
           lastCheckpoint = linesRead;
           await checkpoint();
@@ -201,17 +216,7 @@ Future<void> importLichessEvals(
       }
       if (control.cancelled) break;
     }
-    if (!control.cancelled) {
-      for (final line in splitter.finish()) {
-        linesRead++;
-        if (linesRead <= linesToSkip) continue;
-        final row = parseLichessEvalLine(line);
-        if (row != null) {
-          writer.add(row);
-          rowsWritten++;
-        }
-      }
-    }
+    if (!control.cancelled) splitter.finish().forEach(consume);
     await checkpoint();
     if (control.cancelled) {
       report(LichessImportPhase.scanning);
@@ -347,11 +352,10 @@ Uint8List sortBucket(Uint8List bytes) {
 }
 
 String _bucketPath(String directory, int bucket) =>
-    '$directory${Platform.pathSeparator}'
-    'b${bucket.toString().padLeft(3, '0')}.bin';
+    p.join(directory, 'b${bucket.toString().padLeft(3, '0')}.bin');
 
 String _bucketLengthsPath(LichessEvalStorePaths paths) =>
-    '${paths.bucketDirectory}${Platform.pathSeparator}lengths.bin';
+    p.join(paths.bucketDirectory, 'lengths.bin');
 
 Future<List<int>?> _readBucketLengths(LichessEvalStorePaths paths) async {
   final file = File(_bucketLengthsPath(paths));

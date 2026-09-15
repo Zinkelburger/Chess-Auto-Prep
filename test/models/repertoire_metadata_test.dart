@@ -3,34 +3,6 @@ import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 
 void main() {
   group('RepertoireMetadata', () {
-    test('toMap and fromMap round-trip', () {
-      final now = DateTime(2025, 6, 15, 12, 0);
-      final original = RepertoireMetadata(
-        filePath: '/data/sicilian.pgn',
-        name: 'Sicilian Defense',
-        gameCount: 42,
-        lastModified: now,
-      );
-
-      final map = original.toMap();
-      final restored = RepertoireMetadata.fromMap(map);
-
-      expect(restored.filePath, original.filePath);
-      expect(restored.name, original.name);
-      expect(restored.gameCount, original.gameCount);
-      expect(restored.lastModified, original.lastModified);
-    });
-
-    test('fromMap uses defaults for missing optional fields', () {
-      final meta = RepertoireMetadata.fromMap({
-        'filePath': '/test.pgn',
-        'name': 'Test',
-      });
-
-      expect(meta.gameCount, 0);
-      expect(meta.lastModified, isA<DateTime>());
-    });
-
     test('equality based on filePath', () {
       final a = RepertoireMetadata(
         filePath: '/data/test.pgn',

@@ -141,7 +141,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await pumpFrames(tester);
     // The pane detaches a borrowed service but leaves its notifier usable.
-    expect(second.poolStatus.value.phase, 'idle');
+    expect(second.poolStatus.value.phase, PoolPhase.idle);
     expect(connection.disposed, isTrue);
   });
 

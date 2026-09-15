@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/core/repertoire_writer.dart';
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
-import 'package:chess_auto_prep/services/repertoire_service.dart';
+import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 
 void main() {
   group('RepertoireWriter', () {
@@ -85,8 +85,7 @@ void main() {
     test(
       'appendMoveAtPath creates new game when no exact prefix match',
       () async {
-        final service = RepertoireService();
-        final result = await service.appendMoveAtPath(
+        final result = await const RepertoireFileEditor().appendMoveAtPath(
           filePath,
           ['e4', 'c5'],
           'Nf3',

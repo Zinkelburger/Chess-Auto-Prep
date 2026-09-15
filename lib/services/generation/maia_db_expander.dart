@@ -2,6 +2,9 @@ part of 'node_expander.dart';
 
 // ── Maia + DB our-move expansion ─────────────────────────────────────────
 
+/// `BuildMode.maiaDbExplore`: our candidates are Maia's most likely moves,
+/// admitted only when a database source can score the resulting position,
+/// and kept within the eval-loss window of the node's own eval.
 class MaiaDbExpander extends NodeExpander {
   MaiaDbExpander(super.run);
 
@@ -11,7 +14,8 @@ class MaiaDbExpander extends NodeExpander {
     FrontierQueue queue, {
     bool coverageOnly = false,
   }) async {
-    if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
+    final maia = MaiaFactory.instance;
+    if (!MaiaFactory.isAvailable || maia == null) {
       run.log('Maia unavailable — cannot run maiaDbExplore mode');
       return;
     }
@@ -23,10 +27,7 @@ class MaiaDbExpander extends NodeExpander {
     final sw = Stopwatch()..start();
     final MaiaResult maiaResult;
     try {
-      maiaResult = await MaiaFactory.instance!.evaluate(
-        node.fen,
-        config.maiaElo,
-      );
+      maiaResult = await maia.evaluate(node.fen, config.maiaElo);
     } catch (e) {
       run.log('Maia eval failed @ ${node.fen}: $e');
       return;
@@ -46,7 +47,7 @@ class MaiaDbExpander extends NodeExpander {
         ? (node.isWhiteToMove ? node.engineEvalCp! : -node.engineEvalCp!)
         : null;
 
-    int added = 0;
+    var added = 0;
     for (final entry
         in windowStop ? const <MapEntry<String, double>>[] : sortedMoves) {
       if (added >= maxCandidates) break;
@@ -63,8 +64,7 @@ class MaiaDbExpander extends NodeExpander {
         config,
       );
       if (childEval == null) continue;
-
-      final childCpWhite = childEval.$1;
+      final (childCpWhite, _) = childEval;
 
       // Both numbers are White-POV, so the loss reads the other way round
       // when Black is choosing — the same expression as [StockfishExpander]
@@ -76,20 +76,9 @@ class MaiaDbExpander extends NodeExpander {
         if (evalLoss > config.maxEvalLossCp) continue;
       }
 
-      final child = run.makeChild(
-        parent: node,
-        fen: played.fen,
-        san: played.san,
-        uci: uci,
-        position: played.after,
-      );
+      final child = _attachOurMove(node, played, uci: uci, maiaProb: prob);
       if (child == null) continue;
-
-      child.moveProbability = 1.0;
-      child.cumulativeProbability = node.cumulativeProbability;
-      child.maiaFrequency = prob;
-      child.engineEvalCp = child.isWhiteToMove ? childCpWhite : -childCpWhite;
-      run.evalResolver.cacheEvalWhite(played.fen, childCpWhite, childEval.$2);
+      _recordDbEval(child, played.fen, childEval);
 
       added++;
       run.emitNodeProgress(child);
@@ -129,31 +118,52 @@ class MaiaDbExpander extends NodeExpander {
       final played = run.childMove(node, entry.key);
       if (played == null) continue;
 
-      final child = run.makeChild(
-        parent: node,
-        fen: played.fen,
-        san: played.san,
+      final child = _attachOurMove(
+        node,
+        played,
         uci: entry.key,
-        position: played.after,
+        maiaProb: entry.value,
       );
       if (child == null) continue;
-
-      child.moveProbability = 1.0;
-      child.cumulativeProbability = node.cumulativeProbability;
-      child.maiaFrequency = entry.value;
 
       final childEval = await run.evalResolver.lookupDbEvalWhite(
         played.fen,
         config,
       );
-      if (childEval != null) {
-        final childCpWhite = childEval.$1;
-        child.engineEvalCp = child.isWhiteToMove ? childCpWhite : -childCpWhite;
-        run.evalResolver.cacheEvalWhite(played.fen, childCpWhite, childEval.$2);
-      }
+      if (childEval != null) _recordDbEval(child, played.fen, childEval);
 
       run.emitNodeProgress(child);
       return;
     }
+  }
+
+  /// Attach [played] as an our-move child of [node]: certain to be played
+  /// from our side, so it inherits the node's reach unchanged.
+  BuildTreeNode? _attachOurMove(
+    BuildTreeNode node,
+    ChildMove played, {
+    required String uci,
+    required double maiaProb,
+  }) {
+    final child = run.makeChild(
+      parent: node,
+      fen: played.fen,
+      san: played.san,
+      uci: uci,
+      position: played.after,
+    );
+    if (child == null) return null;
+    child.moveProbability = 1.0;
+    child.cumulativeProbability = node.cumulativeProbability;
+    child.maiaFrequency = maiaProb;
+    return child;
+  }
+
+  /// Store a White-POV database eval on [child] (side-to-move relative) and
+  /// in the eval cache.
+  void _recordDbEval(BuildTreeNode child, String fen, (int, int) eval) {
+    final (cpWhite, depth) = eval;
+    child.engineEvalCp = child.isWhiteToMove ? cpWhite : -cpWhite;
+    run.evalResolver.cacheEvalWhite(fen, cpWhite, depth);
   }
 }

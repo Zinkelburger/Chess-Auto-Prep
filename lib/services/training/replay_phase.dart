@@ -65,7 +65,7 @@ class ReplayPhase {
       _s.waitingForUser = false;
       _s.emitChange();
       _s.replayIndex++;
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(replayStepDelay);
       if (generation != _s.lineGeneration) return;
       setupPosition();
     } else {

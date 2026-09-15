@@ -6,7 +6,7 @@
 // mode: default | tuned
 import 'dart:io' as io;
 
-import 'package:chess_auto_prep/services/generation/pgn_freq_parser.dart'
+import 'package:chess_auto_prep/services/generation/pgn_lexer.dart'
     show isResultToken, splitPgnGames, tokenToSan, tokenizeMovetext;
 import 'package:chess_auto_prep/services/master_games/position_key.dart';
 import 'package:dartchess/dartchess.dart';

@@ -1,7 +1,4 @@
 /// Value types passed into and out of the generation session controller.
-///
-/// Split out of `generation_session_controller.dart` by pure code motion;
-/// re-exported from there so existing importers are unaffected.
 library;
 
 import '../models/build_tree_node.dart';
@@ -75,9 +72,48 @@ class GenerationRequest {
     this.expectimaxOnly = false,
   });
 
+  /// A probe into [target]'s repertoire database, rooted at [buildRootFen]
+  /// after [lineMovePrefix]: nothing is exported, so no lines are reported.
+  GenerationRequest.expectimaxProbe({
+    required this.config,
+    required ExpectimaxProbeTarget target,
+    required this.buildRootFen,
+    required this.lineMovePrefix,
+  }) : repertoireFilePath = target.repertoireFilePath,
+       repertoireStartFen = target.repertoireStartFen,
+       onLinesSaved = _ignoreLines,
+       existingTree = null,
+       existingLineKeys = const {},
+       expectimaxOnly = true;
+
+  static void _ignoreLines(List<GeneratedLineExport> lines) {}
+
   /// The identity of a line for duplicate detection: its SAN moves from the
   /// repertoire start, space-joined.
   static String lineKey(List<String> moves) => moves.join(' ');
+
+  /// SAN prefix (from the repertoire root) that exported lines must carry.
+  ///
+  /// A fresh build uses [lineMovePrefix].  A resumed build trusts the prefix
+  /// recorded on the saved tree — the board may have moved since the build
+  /// was paused.  A legacy partial tree without a recorded prefix can only
+  /// resume from the exact position it was built from; throws [StateError]
+  /// otherwise.
+  List<String> resolveLinePrefix() {
+    final tree = existingTree;
+    if (tree == null) return lineMovePrefix;
+    if (tree.startMoves.isNotEmpty) {
+      return tree.startMoves
+          .split(' ')
+          .where((m) => m.isNotEmpty)
+          .toList(growable: false);
+    }
+    if (tree.root.fen == buildRootFen) return lineMovePrefix;
+    throw StateError(
+      'Cannot resume: the paused build started from a different position. '
+      'Navigate to that position first, or discard the paused build.',
+    );
+  }
 }
 
 /// What Phase 2 produces: the scored tree's derived structures plus the
@@ -121,13 +157,9 @@ class ExtractedLines {
   /// Sentence fragment appended to the run summary when "only traps" ran.
   final String trapsOnlyNote;
 
-  /// True when extraction hit its line cap and branches were dropped.
-  final bool truncated;
-
   const ExtractedLines({
     required this.lines,
     required this.rawCount,
-    this.truncated = false,
     required this.trapsOnlyNote,
     this.folds = const {},
   });
@@ -167,4 +199,51 @@ class ExpectimaxProbeTarget {
   final int? engineThreads;
   final int engineMoves;
   final double maiaCoverage;
+
+  /// The moves from the repertoire start to the probe root, [moveSan]
+  /// included.
+  List<String> get moves => [...movesFromStart, ?moveSan];
+
+  /// Settings for evaluating the single position at [fen]: the form
+  /// defaults with the requested cores and no verification.
+  TreeBuildConfig movePvConfig(String fen) => TreeBuildConfig.formDefaults(
+    startFen: fen,
+    playAsWhite: playAsWhite,
+  ).copyWith(engineThreads: engineThreads, verifyFinal: false);
+
+  /// Settings for a probe rooted at [fen], derived from [base] (the last
+  /// build's config, or the form defaults) with everything that is not about
+  /// scoring the position switched off: no line export, no verification, no
+  /// master-game download, no skeleton, and the ChessDB API only when
+  /// [enableChessDbApi] allows it.
+  TreeBuildConfig probeConfig({
+    required TreeBuildConfig base,
+    required String fen,
+    required bool enableChessDbApi,
+  }) => base.copyWith(
+    startFen: fen,
+    playAsWhite: playAsWhite,
+    maxPly: plies,
+    boundedDatabase: true,
+    ourMultipv: engineMoves.clamp(1, 20),
+    oppMassTarget: maiaCoverage.clamp(.01, 1),
+    searchAlgorithm: SearchAlgorithm.pure,
+    // Coverage answers and master extensions belong to line planning.
+    // A position search observes the depth the user asked for.
+    coverMinProb: 0,
+    masterDepthBonusPlies: 0,
+    engineThreads: engineThreads == null
+        ? null
+        : clampEngineThreads(engineThreads!),
+    timeBudgetMinutes: 0,
+    buildMode: BuildMode.stockfishExpectimax,
+    pgnFilePaths: const [],
+    verifyFinal: false,
+    trapsOnly: false,
+    rootReplyExclude: const [],
+    setupMoves: '',
+    skeletonPlan: const SkeletonPlan(),
+    downloadMasterGamesIfMissing: false,
+    enableChessDbApi: enableChessDbApi,
+  );
 }

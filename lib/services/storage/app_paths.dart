@@ -15,13 +15,11 @@ class AppPaths {
   static const String engineTournamentsDirectoryName = 'engine_tournaments';
   static const String opponentsDirectoryName = 'opponents';
 
-  static Future<Directory> documentsDirectory() async {
-    return getApplicationDocumentsDirectory();
-  }
+  static Future<Directory> documentsDirectory() =>
+      getApplicationDocumentsDirectory();
 
-  static Future<Directory> supportDirectory() async {
-    return getApplicationSupportDirectory();
-  }
+  static Future<Directory> supportDirectory() =>
+      getApplicationSupportDirectory();
 
   /// Disposable downloads belong in local cache (not Windows roaming data).
   static Future<Directory> cacheDirectory() => getApplicationCacheDirectory();
@@ -31,65 +29,63 @@ class AppPaths {
     return File(p.join(docs.path, relativePath));
   }
 
-  static Future<Directory> repertoiresDirectory({bool create = false}) async {
-    final docs = await documentsDirectory();
-    final dir = Directory(p.join(docs.path, repertoiresDirectoryName));
+  /// `<base>/<name>`, created (with parents) when [create] is set.
+  static Future<Directory> _subdirectory(
+    Future<Directory> base,
+    String name, {
+    required bool create,
+  }) async {
+    final dir = Directory(p.join((await base).path, name));
     if (create && !await dir.exists()) {
       await dir.create(recursive: true);
     }
     return dir;
   }
+
+  static Future<Directory> repertoiresDirectory({bool create = false}) =>
+      _subdirectory(
+        documentsDirectory(),
+        repertoiresDirectoryName,
+        create: create,
+      );
 
   /// Local studies (one multi-chapter PGN per study).
-  static Future<Directory> studiesDirectory({bool create = false}) async {
-    final docs = await documentsDirectory();
-    final dir = Directory(p.join(docs.path, studiesDirectoryName));
-    if (create && !await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
+  static Future<Directory> studiesDirectory({bool create = false}) =>
+      _subdirectory(documentsDirectory(), studiesDirectoryName, create: create);
 
-  /// Named tactics puzzle sets (one CSV per set).
-  static Future<Directory> tacticsSetsDirectory({bool create = false}) async {
-    final docs = await documentsDirectory();
-    final dir = Directory(p.join(docs.path, tacticsSetsDirectoryName));
-    if (create && !await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
+  /// Named tactics puzzle sets (one PGN per set; legacy installs still hold
+  /// `.csv` sets until the database converts them).
+  static Future<Directory> tacticsSetsDirectory({bool create = false}) =>
+      _subdirectory(
+        documentsDirectory(),
+        tacticsSetsDirectoryName,
+        create: create,
+      );
 
   /// The opponents directory and tournaments (`people.json`,
   /// `tournaments/*.json`) — see `features/opponents`.
-  static Future<Directory> opponentsDirectory({bool create = false}) async {
-    final docs = await documentsDirectory();
-    final dir = Directory(p.join(docs.path, opponentsDirectoryName));
-    if (create && !await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
+  static Future<Directory> opponentsDirectory({bool create = false}) =>
+      _subdirectory(
+        documentsDirectory(),
+        opponentsDirectoryName,
+        create: create,
+      );
 
-  static Future<Directory> analysisGamesDirectory({bool create = false}) async {
-    final docs = await documentsDirectory();
-    final dir = Directory(p.join(docs.path, analysisGamesDirectoryName));
-    if (create && !await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
+  static Future<Directory> analysisGamesDirectory({bool create = false}) =>
+      _subdirectory(
+        documentsDirectory(),
+        analysisGamesDirectoryName,
+        create: create,
+      );
 
   /// Shared raw-games cache used by the unified Games library (tactics,
   /// weakness finder, repertoire builder all read from here).
-  static Future<Directory> gamesLibraryDirectory({bool create = false}) async {
-    final docs = await documentsDirectory();
-    final dir = Directory(p.join(docs.path, gamesLibraryDirectoryName));
-    if (create && !await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
+  static Future<Directory> gamesLibraryDirectory({bool create = false}) =>
+      _subdirectory(
+        documentsDirectory(),
+        gamesLibraryDirectoryName,
+        create: create,
+      );
 
   /// Per-game PGN cache for chessgames.com collection downloads.
   ///
@@ -97,38 +93,26 @@ class AppPaths {
   /// collection is paced at ~22 s per game, so caching every game is what
   /// makes a cancelled or crashed download resumable instead of a restart
   /// from zero.
-  static Future<Directory> chessgamesCacheDirectory({
-    bool create = false,
-  }) async {
-    final support = await supportDirectory();
-    final dir = Directory(p.join(support.path, chessgamesCacheDirectoryName));
-    if (create && !await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
+  static Future<Directory> chessgamesCacheDirectory({bool create = false}) =>
+      _subdirectory(
+        supportDirectory(),
+        chessgamesCacheDirectoryName,
+        create: create,
+      );
 
   /// Engine-vs-engine tournaments: one sub-directory each, plus the
   /// registry of user-supplied UCI binaries (`engines.json`).
-  static Future<Directory> engineTournamentsDirectory({
-    bool create = false,
-  }) async {
-    final docs = await documentsDirectory();
-    final dir = Directory(p.join(docs.path, engineTournamentsDirectoryName));
-    if (create && !await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
+  static Future<Directory> engineTournamentsDirectory({bool create = false}) =>
+      _subdirectory(
+        documentsDirectory(),
+        engineTournamentsDirectoryName,
+        create: create,
+      );
 
-  static Future<Directory> pgnCollectionsDirectory({
-    bool create = false,
-  }) async {
-    final docs = await documentsDirectory();
-    final dir = Directory(p.join(docs.path, pgnCollectionsDirectoryName));
-    if (create && !await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    return dir;
-  }
+  static Future<Directory> pgnCollectionsDirectory({bool create = false}) =>
+      _subdirectory(
+        documentsDirectory(),
+        pgnCollectionsDirectoryName,
+        create: create,
+      );
 }

@@ -4,6 +4,8 @@ library;
 import 'eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
+/// Answers from a map of four-field FENs, honouring the depth gate like a
+/// real source so the eval chain's shallow/hard-miss paths can be exercised.
 class InMemoryEvalProvider implements ExternalEvalProvider {
   final Map<String, EvalHit> _data;
 

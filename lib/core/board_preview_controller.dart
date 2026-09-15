@@ -17,6 +17,10 @@ import '../utils/safe_change_notifier.dart';
 enum BoardPreviewTarget { mainBoard, floating }
 
 class BoardPreviewController extends ChangeNotifier with SafeChangeNotifier {
+  /// Hover settles before a preview appears, so sweeping the pointer across
+  /// a list does not flash every row's position.
+  static const Duration previewDelay = Duration(milliseconds: 80);
+
   String? _previewFen;
   List<String>? _previewMoves;
   BoardPreviewTarget _target = BoardPreviewTarget.mainBoard;
@@ -52,7 +56,7 @@ class BoardPreviewController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
   }
 
-  /// Request a board preview. Debounced at 80ms.
+  /// Request a board preview. Debounced by [previewDelay].
   ///
   /// [ownerTag] identifies which pane triggered the preview so only its
   /// [FloatingBoardPreview] renders the overlay.
@@ -67,7 +71,7 @@ class BoardPreviewController extends ChangeNotifier with SafeChangeNotifier {
     if (anchorGlobal != null) _anchorGlobal = anchorGlobal;
 
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 80), () {
+    _debounce = Timer(previewDelay, () {
       if (isDisposed) return;
       _previewFen = fen;
       _previewMoves = moves;

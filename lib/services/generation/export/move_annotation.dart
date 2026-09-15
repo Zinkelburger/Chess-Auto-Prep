@@ -95,20 +95,25 @@ class MoveAnnotationDetail {
       (explanations ? 8 : 0) |
       (extraMetrics ? 16 : 0);
 
-  String get name => this == none
-      ? 'none'
-      : this == likelihood
-      ? 'likelihood'
-      : this == full
-      ? 'full'
-      : 'custom:$_mask';
+  /// Prefix of the saved name for a selection that matches no preset.
+  static const String _customPrefix = 'custom:';
 
+  /// The saved name: a preset's name, or `custom:<mask>` for any other
+  /// selection.  [parse] reads it back.
+  String get name {
+    if (this == none) return 'none';
+    if (this == likelihood) return 'likelihood';
+    if (this == full) return 'full';
+    return '$_customPrefix$_mask';
+  }
+
+  /// The selection saved under [name]; anything unrecognised reads as [none].
   static MoveAnnotationDetail parse(String? name) {
     for (final preset in values) {
       if (preset.name == name) return preset;
     }
-    final mask = name != null && name.startsWith('custom:')
-        ? int.tryParse(name.substring(7))
+    final mask = name != null && name.startsWith(_customPrefix)
+        ? int.tryParse(name.substring(_customPrefix.length))
         : null;
     if (mask == null || mask < 0 || mask > 31) return none;
     return MoveAnnotationDetail(
@@ -144,6 +149,9 @@ class MoveAnnotationDetail {
   int get hashCode => _mask.hashCode;
 }
 
+/// Everything the exporter can say about one move of a line.
+///
+/// Immutable; the `with…` builders return adjusted copies.
 class MoveAnnotation {
   /// Probability the side to move plays this move, in [0, 1].  Only
   /// meaningful for opponent moves — we choose ours.
@@ -339,55 +347,14 @@ class MoveAnnotation {
   /// in `<game>`"), everything else unchanged.  A note already present is kept
   /// and the new one follows it: the extractor's transposition note and the
   /// composer's improvement note can land on the same move.
-  MoveAnnotation withNote(String note) => MoveAnnotation(
-    likelihood: likelihood,
-    likelihoodSource: likelihoodSource,
-    gameCount: gameCount,
-    practicalScore: practicalScore,
-    evalCp: evalCp,
-    expectimaxValue: expectimaxValue,
-    opponentEase: opponentEase,
-    myEase: myEase,
-    isOnlyMove: isOnlyMove,
-    onlyMoveLeadCp: onlyMoveLeadCp,
-    humanFrequency: humanFrequency,
-    naturalAlternativeSan: naturalAlternativeSan,
-    naturalAlternativeLossCp: naturalAlternativeLossCp,
-    mistakeCp: mistakeCp,
-    betterMoveSan: betterMoveSan,
-    lastBookMove: lastBookMove,
-    postBook: postBook,
-    lastPlayedYear: lastPlayedYear,
-    transposesTo: transposesTo,
-    note: this.note == null || this.note!.isEmpty ? note : '${this.note} $note',
-  );
+  MoveAnnotation withNote(String note) => _copy(note: (value: _appended(note)));
 
   /// This annotation marked as the end of a line that transposes into
   /// [ownerMoves]' position, with [note] added for the reader.
   MoveAnnotation withTransposition(List<String> ownerMoves, String note) =>
-      MoveAnnotation(
-        likelihood: likelihood,
-        likelihoodSource: likelihoodSource,
-        gameCount: gameCount,
-        practicalScore: practicalScore,
-        evalCp: evalCp,
-        expectimaxValue: expectimaxValue,
-        opponentEase: opponentEase,
-        myEase: myEase,
-        isOnlyMove: isOnlyMove,
-        onlyMoveLeadCp: onlyMoveLeadCp,
-        humanFrequency: humanFrequency,
-        naturalAlternativeSan: naturalAlternativeSan,
-        naturalAlternativeLossCp: naturalAlternativeLossCp,
-        mistakeCp: mistakeCp,
-        betterMoveSan: betterMoveSan,
-        lastBookMove: lastBookMove,
-        postBook: postBook,
-        lastPlayedYear: lastPlayedYear,
-        transposesTo: List.unmodifiable(ownerMoves),
-        note: this.note == null || this.note!.isEmpty
-            ? note
-            : '${this.note} $note',
+      _copy(
+        note: (value: _appended(note)),
+        transposesTo: (value: List.unmodifiable(ownerMoves)),
       );
 
   /// This annotation with its transposition marker undone — the exact inverse
@@ -409,53 +376,55 @@ class MoveAnnotation {
       // structured marker.
       restored = current;
     }
-    return MoveAnnotation(
-      likelihood: likelihood,
-      likelihoodSource: likelihoodSource,
-      gameCount: gameCount,
-      practicalScore: practicalScore,
-      evalCp: evalCp,
-      expectimaxValue: expectimaxValue,
-      opponentEase: opponentEase,
-      myEase: myEase,
-      isOnlyMove: isOnlyMove,
-      onlyMoveLeadCp: onlyMoveLeadCp,
-      humanFrequency: humanFrequency,
-      naturalAlternativeSan: naturalAlternativeSan,
-      naturalAlternativeLossCp: naturalAlternativeLossCp,
-      mistakeCp: mistakeCp,
-      betterMoveSan: betterMoveSan,
-      lastBookMove: lastBookMove,
-      postBook: postBook,
-      lastPlayedYear: lastPlayedYear,
-      note: restored != null && restored.isEmpty ? null : restored,
+    return _copy(
+      note: (value: restored != null && restored.isEmpty ? null : restored),
+      transposesTo: (value: null),
     );
   }
 
   /// This annotation flagged as the line's last move in master practice.
   MoveAnnotation withLastBookMove(PostBookContinuation continuation) =>
-      MoveAnnotation(
-        likelihood: likelihood,
-        likelihoodSource: likelihoodSource,
-        gameCount: gameCount,
-        practicalScore: practicalScore,
-        evalCp: evalCp,
-        expectimaxValue: expectimaxValue,
-        opponentEase: opponentEase,
-        myEase: myEase,
-        isOnlyMove: isOnlyMove,
-        onlyMoveLeadCp: onlyMoveLeadCp,
-        humanFrequency: humanFrequency,
-        naturalAlternativeSan: naturalAlternativeSan,
-        naturalAlternativeLossCp: naturalAlternativeLossCp,
-        mistakeCp: mistakeCp,
-        betterMoveSan: betterMoveSan,
-        lastBookMove: true,
-        postBook: continuation,
-        lastPlayedYear: lastPlayedYear,
-        transposesTo: transposesTo,
-        note: note,
-      );
+      _copy(lastBookMove: true, postBook: continuation);
+
+  /// [note] after any prose already here, separated by a space.
+  String _appended(String note) {
+    final current = this.note;
+    return current == null || current.isEmpty ? note : '$current $note';
+  }
+
+  /// A copy with only the fields the `with…` builders change; every other
+  /// field is carried over unchanged.
+  ///
+  /// [note] and [transposesTo] are wrapped because null is a meaningful
+  /// value for both: an absent wrapper keeps the current value, a wrapper
+  /// holding null clears it.
+  MoveAnnotation _copy({
+    ({String? value})? note,
+    ({List<String>? value})? transposesTo,
+    bool? lastBookMove,
+    PostBookContinuation? postBook,
+  }) => MoveAnnotation(
+    likelihood: likelihood,
+    likelihoodSource: likelihoodSource,
+    gameCount: gameCount,
+    practicalScore: practicalScore,
+    evalCp: evalCp,
+    expectimaxValue: expectimaxValue,
+    opponentEase: opponentEase,
+    myEase: myEase,
+    isOnlyMove: isOnlyMove,
+    onlyMoveLeadCp: onlyMoveLeadCp,
+    humanFrequency: humanFrequency,
+    naturalAlternativeSan: naturalAlternativeSan,
+    naturalAlternativeLossCp: naturalAlternativeLossCp,
+    mistakeCp: mistakeCp,
+    betterMoveSan: betterMoveSan,
+    lastBookMove: lastBookMove ?? this.lastBookMove,
+    postBook: postBook ?? this.postBook,
+    lastPlayedYear: lastPlayedYear,
+    note: note == null ? this.note : note.value,
+    transposesTo: transposesTo == null ? this.transposesTo : transposesTo.value,
+  );
 
   bool get isEmpty =>
       note == null &&

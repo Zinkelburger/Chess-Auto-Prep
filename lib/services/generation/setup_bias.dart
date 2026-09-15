@@ -27,7 +27,7 @@ String normalizeSetupSan(String san) =>
 Set<String> parseSetupMoves(String raw) {
   if (raw.trim().isEmpty) return const {};
   return {
-    for (final tok in raw.split(RegExp(r'[,\s]+')))
-      if (normalizeSetupSan(tok).isNotEmpty) normalizeSetupSan(tok),
+    for (final token in raw.split(RegExp(r'[,\s]+')))
+      if (normalizeSetupSan(token) case final san when san.isNotEmpty) san,
   };
 }

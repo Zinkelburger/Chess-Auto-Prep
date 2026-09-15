@@ -10,8 +10,7 @@ library;
 
 import '../../models/build_tree_node.dart';
 import '../generation/pgn_freq_map.dart';
-import '../generation/pgn_freq_parser.dart'
-    show isResultToken, tokenToSan, tokenizeMovetext;
+import 'book_replay.dart';
 import 'master_games_db.dart';
 
 /// Games from [db] that played the repertoire's moves, as
@@ -37,6 +36,9 @@ List<PgnGameRecord> masterGameCandidates(
         try {
           moves = db.bookMoves(node.fen);
         } catch (_) {
+          // A position the database cannot answer (an unparsable FEN in the
+          // tree, a closed or damaged file) costs that node its candidates,
+          // never the whole selection.
           continue;
         }
         for (final m in moves) {
@@ -75,13 +77,10 @@ List<PgnGameRecord> masterGameCandidates(
 }
 
 PgnGameRecord _record(MasterGame g) {
-  final sans = <String>[];
-  for (final t in tokenizeMovetext(g.movetext)) {
-    if (isResultToken(t)) break;
-    final san = tokenToSan(t);
-    if (san != null) sans.add(san);
-    if (sans.length >= PgnGameRecord.maxRetainedPlies) break;
-  }
+  final sans = movetextSans(
+    g.movetext,
+    maxPlies: PgnGameRecord.maxRetainedPlies,
+  );
   final where = g.site.trim();
   return PgnGameRecord(
     white: g.white,

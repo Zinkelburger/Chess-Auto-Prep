@@ -2,422 +2,34 @@
 /// and collects per-move evaluations for charting and move classification.
 ///
 /// Uses the [StockfishPool] to evaluate multiple positions in parallel,
-/// significantly speeding up full-game analysis.
-///
-/// Uses Lichess-style winning-chance model for move classification:
-/// - Blunder (??): winning chance swing >= 0.30
-/// - Mistake (?):  winning chance swing >= 0.20
-/// - Inaccuracy (?!): winning chance swing >= 0.10
-///
-/// Persists analysis results as standard `[%eval]` comments in PGN, matching
-/// the Lichess export format. On subsequent loads, analysis is restored from
-/// these annotations without re-running the engine.
+/// significantly speeding up full-game analysis. Scores are classified with
+/// the winning-chance model in `move_eval.dart` and persisted as standard
+/// `[%eval]` comments through `game_eval_annotations.dart`; on later loads
+/// the series is restored from those annotations without the engine.
 library;
 
 import 'dart:async';
-import '../core/pgn/pgn_dummy_mainline.dart';
-import '../core/pgn/pgn_analysis_variations.dart';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../constants/chess_constants.dart';
+import '../core/pgn/pgn_dummy_mainline.dart';
 import '../models/bulk_analysis_settings.dart';
 import '../utils/chess_utils.dart'
-    show
-        uciPvToSan,
-        uciToSan,
-        toStandardUci,
-        isNullMoveSan,
-        playSanOrNullMove,
-        formatEvalDisplay;
-import '../utils/ease_utils.dart' show winningChanceFromCp;
-import '../utils/eval_constants.dart';
-import '../utils/pgn_comment_utils.dart';
+    show uciPvToSan, uciToSan, toStandardUci, isNullMoveSan;
+import '../utils/fen_utils.dart';
+import '../utils/safe_change_notifier.dart';
 import 'engine/engine_lifecycle.dart';
+import 'engine/eval_worker.dart';
 import 'engine/stockfish_pool.dart';
 import 'eval_cache.dart';
+import 'game_eval_annotations.dart';
 import 'maia/maia_factory.dart';
-import '../utils/safe_change_notifier.dart';
-import '../utils/fen_utils.dart';
+import 'move_eval.dart';
 
-// ---------------------------------------------------------------------------
-// Data models
-// ---------------------------------------------------------------------------
-
-/// Eval at a single ply (after the move is played).
-class MoveEval {
-  final int ply; // 1-based mainline index, including null moves
-  final String san;
-  final String fenBefore;
-  final String fenAfter;
-  final int? scoreCp; // White-normalized centipawns
-  final int? scoreMate; // White-normalized mate-in-N
-  final double winningChance; // White's winning chance in [-1, 1]
-  final MoveClassification classification;
-  final double? maiaProb; // MAIA's predicted probability of this move (0-1)
-  final String? maiaTopMove; // Most likely move according to MAIA (SAN)
-  final double? maiaTopProb; // Probability of the most likely MAIA move
-  final List<String> bestLine; // Engine's preferred continuation (SAN)
-  final int? depth; // Analysis depth
-
-  /// This move checkmated the opponent. The eval is not an engine score
-  /// (there is no position left to search — mate-0 sign is ambiguous), so
-  /// [scoreCp]/[scoreMate] stay null and [winningChance] is exactly ±1.
-  final bool deliversCheckmate;
-
-  const MoveEval({
-    required this.ply,
-    required this.san,
-    required this.fenBefore,
-    required this.fenAfter,
-    this.scoreCp,
-    this.scoreMate,
-    required this.winningChance,
-    this.classification = MoveClassification.normal,
-    this.maiaProb,
-    this.maiaTopMove,
-    this.maiaTopProb,
-    this.bestLine = const [],
-    this.depth,
-    this.deliversCheckmate = false,
-  });
-
-  bool get isWhiteMove => isWhiteToMove(fenBefore);
-
-  /// A move worth a card or an inline mark that has no engine line to offer
-  /// with it — the `[%pv]` was never stored (a review pass from before lines
-  /// were kept, or a score served from the eval cache, which keeps none).
-  bool get needsBestLine =>
-      classification != MoveClassification.normal &&
-      !deliversCheckmate &&
-      bestLine.isEmpty;
-
-  MoveEval withBestLine(List<String> line) => MoveEval(
-    ply: ply,
-    san: san,
-    fenBefore: fenBefore,
-    fenAfter: fenAfter,
-    scoreCp: scoreCp,
-    scoreMate: scoreMate,
-    winningChance: winningChance,
-    classification: classification,
-    maiaProb: maiaProb,
-    maiaTopMove: maiaTopMove,
-    maiaTopProb: maiaTopProb,
-    bestLine: line,
-    depth: depth,
-    deliversCheckmate: deliversCheckmate,
-  );
-
-  int get effectiveCp {
-    if (deliversCheckmate) {
-      return winningChance >= 0 ? kMateCpBase : -kMateCpBase;
-    }
-    return effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
-  }
-
-  /// Human-readable score for a tooltip or a move row: `+1.3`, `-0.5`, `#3`.
-  ///
-  /// A mating move gets a bare `#`. It carries no engine score — there is no
-  /// position left to search — so the plain formatter would render the move
-  /// that won the game as `--`, which is what the chart's tooltip used to do
-  /// while the move list beside it said `#`.
-  String get evalDisplay => deliversCheckmate
-      ? '#'
-      : formatEvalDisplay(scoreCp: scoreCp, scoreMate: scoreMate);
-
-  /// Format as a Lichess-compatible `[%eval]` comment value, with optional
-  /// depth suffix (e.g. `1.23,18` or `#3,20`).
-  String toEvalComment() => formatEvalCommentValue(
-    scoreCp: scoreCp,
-    scoreMate: scoreMate,
-    depth: depth,
-  );
-}
-
-enum MoveClassification {
-  normal,
-  interesting,
-  inaccuracy,
-  mistake,
-  blunder;
-
-  /// Standard PGN move-quality glyph, shared by display and saved analysis.
-  int? get nag => switch (this) {
-    normal => null,
-    interesting => 5,
-    inaccuracy => 6,
-    mistake => 2,
-    blunder => 4,
-  };
-
-  /// Fill an absent verdict without duplicating or replacing an annotator's
-  /// own move-quality glyph. Positional NAGs remain alongside the verdict.
-  List<int>? annotateNags(List<int>? existing) {
-    final id = nag;
-    if (id == null ||
-        (existing ?? const <int>[]).any((n) => n >= 1 && n <= 6)) {
-      return existing;
-    }
-    return [id, ...?existing];
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Winning-chance model (Lichess logistic)
-// ---------------------------------------------------------------------------
-
-/// Lichess-style centipawn-to-winning-chance conversion.
-///
-/// Maps mate scores to pseudo-CP, then delegates to the shared
-/// [winningChanceFromCp] curve (the same `kWinProbK` logistic used by the
-/// ease/expectimax pipeline). See [winningChanceFromCp] for why the input is
-/// clamped to ±1000 cp here rather than saturated at mate scores.
-double cpToWinningChance(int? cp, int? mate) =>
-    winningChanceFromCp(effectiveCpFromScores(scoreCp: cp, scoreMate: mate));
-
-/// Winning chance the first move's swing is measured against.
-///
-/// An even game. Nothing writes the engine's score for a game's *starting*
-/// position to disk — a review pass persists movetext, and `[%eval]` lives on
-/// moves — so no reader can recover one. Every path that classifies moves must
-/// therefore start its chain here, or the same game reads differently
-/// depending on who is looking: the live pass, [parseCachedEvals], and the
-/// movetext's own marker pass all begin from this value.
-double initialWinChance() => cpToWinningChance(0, null);
-
-/// Classify by winning-chance loss, then mark rare sound Maia moves interesting.
-MoveClassification classifyMove(double delta, {double? maiaProb}) {
-  if (delta >= 0.30) return MoveClassification.blunder;
-  if (delta >= 0.20) return MoveClassification.mistake;
-  if (delta >= 0.10) return MoveClassification.inaccuracy;
-  if (maiaProb != null && maiaProb < 0.05) {
-    return MoveClassification.interesting;
-  }
-  return MoveClassification.normal;
-}
-
-// ---------------------------------------------------------------------------
-// Isolate-safe top-level parser for cached evals (used by compute())
-// ---------------------------------------------------------------------------
-
-/// Restore per-move evals from a game's stored `[%eval]` comments, or null
-/// when the game does not count as analyzed (more than
-/// [kMaxUnevaluatedPlies] plies lack an eval).
-/// Public because the games list derives its review summaries from the same
-/// parse (see `features/games/services/game_review_summary.dart`).
-typedef CachedGameAnalysis = ({
-  List<MoveEval> evals,
-  double startWinChance,
-  int totalMoves,
-});
-
-CachedGameAnalysis? parseCachedEvals(String pgnText) {
-  final parsed = PgnGame.parsePgn(pgnText);
-  promoteNullMoveDummyMainline(parsed.moves);
-  return _parseGameEvals(parsed);
-}
-
-CachedGameAnalysis? _parseGameEvals(PgnGame<PgnNodeData> parsed) {
-  final mainline = parsed.moves.mainline().toList();
-  if (mainline.isEmpty) return null;
-
-  final setupFlag = parsed.headers['SetUp'] ?? parsed.headers['Setup'] ?? '';
-  final fenHeader = parsed.headers['FEN'] ?? '';
-  Position pos;
-  if (setupFlag == '1' && fenHeader.isNotEmpty) {
-    pos = Chess.fromSetup(Setup.parseFen(fenHeader));
-  } else {
-    pos = Chess.initial;
-  }
-
-  final results = <MoveEval>[];
-  int missingCount = 0;
-
-  var realPlies = 0;
-  for (int i = 0; i < mainline.length; i++) {
-    final moveData = mainline[i];
-    if (isNullMoveSan(moveData.san)) {
-      final next = playSanOrNullMove(pos, moveData.san);
-      if (next == null) break;
-      pos = next;
-      continue;
-    }
-    realPlies++;
-    final fenBefore = pos.fen;
-    final move = pos.parseSan(moveData.san);
-    if (move == null) break;
-    pos = pos.play(move);
-    final fenAfter = pos.fen;
-
-    ({int? cp, int? mate, int? depth})? evalData;
-    double? maiaProb;
-    List<String> bestLine = const [];
-    ({String move, double prob})? maiaTop;
-    if (moveData.comments != null) {
-      for (final c in moveData.comments!) {
-        evalData ??= parseEvalComment(c);
-        maiaProb ??= parseMaiaComment(c);
-        maiaTop ??= parseMaiaTopComment(c);
-        if (bestLine.isEmpty) {
-          final pv = parsePvComment(c);
-          if (pv.isNotEmpty) bestLine = pv;
-        }
-      }
-    }
-
-    if (pos.isCheckmate) {
-      // Mate delivered on the board: the result is a fact of the position,
-      // not an engine score. Any stored [%eval] here is ignored — a mate-0
-      // engine score has no sign, so trusting it misclassifies the winner's
-      // mating move as a blunder.
-      final whiteWon = pos.turn == Side.black;
-      results.add(
-        MoveEval(
-          ply: i + 1,
-          san: moveData.san,
-          fenBefore: fenBefore,
-          fenAfter: fenAfter,
-          winningChance: whiteWon ? 1.0 : -1.0,
-          deliversCheckmate: true,
-          maiaProb: maiaProb,
-          maiaTopMove: maiaTop?.move,
-          maiaTopProb: maiaTop?.prob,
-        ),
-      );
-      continue;
-    }
-
-    if (evalData == null) {
-      missingCount++;
-      if (missingCount > kMaxUnevaluatedPlies) return null;
-      continue;
-    }
-
-    final winChance = cpToWinningChance(evalData.cp, evalData.mate);
-    results.add(
-      MoveEval(
-        ply: i + 1,
-        san: moveData.san,
-        fenBefore: fenBefore,
-        fenAfter: fenAfter,
-        scoreCp: evalData.cp,
-        scoreMate: evalData.mate,
-        winningChance: winChance,
-        maiaProb: maiaProb,
-        maiaTopMove: maiaTop?.move,
-        maiaTopProb: maiaTop?.prob,
-        bestLine: bestLine,
-        depth: evalData.depth,
-      ),
-    );
-  }
-
-  if (results.length < realPlies - kMaxUnevaluatedPlies) return null;
-
-  final startWinChance = initialWinChance();
-  double prevWinChance = startWinChance;
-
-  final classified = <MoveEval>[];
-  for (final e in results) {
-    final delta = e.isWhiteMove
-        ? (prevWinChance - e.winningChance)
-        : (e.winningChance - prevWinChance);
-    final classification = classifyMove(
-      delta.clamp(0.0, 1.0),
-      maiaProb: e.maiaProb,
-    );
-
-    classified.add(
-      MoveEval(
-        ply: e.ply,
-        san: e.san,
-        fenBefore: e.fenBefore,
-        fenAfter: e.fenAfter,
-        scoreCp: e.scoreCp,
-        scoreMate: e.scoreMate,
-        winningChance: e.winningChance,
-        maiaProb: e.maiaProb,
-        maiaTopMove: e.maiaTopMove,
-        maiaTopProb: e.maiaTopProb,
-        bestLine: e.bestLine,
-        depth: e.depth,
-        deliversCheckmate: e.deliversCheckmate,
-        classification: classification,
-      ),
-    );
-    prevWinChance = e.winningChance;
-  }
-
-  return (
-    evals: classified,
-    startWinChance: startWinChance,
-    totalMoves: realPlies,
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Controller
-// ---------------------------------------------------------------------------
-
-/// [pgnText]'s movetext with a `[%pv]` written onto each mainline move named
-/// in [linesByPly] (1-based ply → SAN line from the position before it),
-/// alongside whatever comment the move already carries. Classified lines are
-/// then stored as standard RAVs with a `[%bestline]` path reference. Null when
-/// the game does not parse or names no such ply.
-String? injectBestLines(String pgnText, Map<int, List<String>> linesByPly) {
-  if (linesByPly.isEmpty) return null;
-  final PgnGame parsed;
-  try {
-    parsed = PgnGame.parsePgn(pgnText);
-  } catch (_) {
-    return null;
-  }
-  final mainline = parsed.moves.mainline().toList();
-  var written = false;
-  for (final entry in linesByPly.entries) {
-    final index = entry.key - 1;
-    if (index < 0 || index >= mainline.length || entry.value.isEmpty) continue;
-    final node = mainline[index];
-    final comments = node.comments;
-    if (comments != null && comments.isNotEmpty) {
-      comments[0] = setPvInComment(comments[0], entry.value);
-    } else {
-      node.comments = ['[%pv ${entry.value.join(',')}]'];
-    }
-    written = true;
-  }
-  if (!written) return null;
-  annotateGameMoveQuality(parsed);
-  // The whole tree, not `mainline`: this text replaces the game in the
-  // reader's file, so the sidelines and the game's opening comment it also
-  // parsed have to come back out with it.
-  return buildGameMovetext(
-    moves: parsed.moves,
-    comments: parsed.comments,
-    fen: parsed.headers['FEN'],
-    result: parsed.headers['Result'],
-  );
-}
-
-/// Add standard quality NAGs to an analyzed game's mainline using the same
-/// classifications as cached review. Existing author glyphs and sidelines stay
-/// intact; classified PVs become standard RAVs with a best-line path reference.
-/// Games without enough stored evaluations are left untouched. Returns whether
-/// any PV payload was converted, so editable readers can persist migration.
-bool annotateGameMoveQuality(PgnGame<PgnNodeData> game) {
-  final analysis = _parseGameEvals(game);
-  if (analysis == null) return false;
-  final moves = game.moves.mainline().toList();
-  for (final eval in analysis.evals) {
-    final move = moves[eval.ply - 1];
-    move.nags = eval.classification.annotateNags(move.nags);
-  }
-  return materializeAnalysisVariations(game, {
-    for (final eval in analysis.evals)
-      if (eval.classification != MoveClassification.normal) eval.ply - 1,
-  });
-}
+/// Elo assumed for a player whose header carries none, for Maia.
+const int _kDefaultElo = 2200;
 
 class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   GameAnalysisController({
@@ -456,14 +68,18 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   /// for one game ([fillMissingBestLines]) cannot land on the next.
   int _generation = 0;
 
-  // ── Loading cached analysis from PGN ────────────────────────────────────
-
-  Future<bool> tryLoadFromPgn(String pgnText) async {
-    final generation = ++_generation;
+  void _resetSeries() {
     _evals = [];
     _totalMoves = 0;
     _analyzedMoves = 0;
     _startWinChance = 0;
+  }
+
+  // ── Loading cached analysis from PGN ────────────────────────────────────
+
+  Future<bool> tryLoadFromPgn(String pgnText) async {
+    final generation = ++_generation;
+    _resetSeries();
 
     try {
       final result = await _cachedAnalysisLoader(pgnText);
@@ -538,14 +154,17 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
     final linesByPly = <int, List<String>>{};
     for (var i = 0; i < missing.length; i++) {
-      final line = _uciPvToSan(missing[i].fenBefore, results[i].pv);
+      final line = uciPvToSan(missing[i].fenBefore, results[i].pv);
       if (line.isNotEmpty) linesByPly[missing[i].ply] = line;
     }
     if (linesByPly.isEmpty) return;
 
     _evals = [
       for (final e in _evals)
-        linesByPly.containsKey(e.ply) ? e.withBestLine(linesByPly[e.ply]!) : e,
+        switch (linesByPly[e.ply]) {
+          final line? => e.copyWith(bestLine: line),
+          null => e,
+        },
     ];
     notifyListeners();
 
@@ -557,10 +176,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   void clearEvals() {
     _generation++;
     _isAnalyzing = false;
-    _evals = [];
-    _totalMoves = 0;
-    _analyzedMoves = 0;
-    _startWinChance = 0.0;
+    _resetSeries();
     _activeDepth = null;
     notifyListeners();
   }
@@ -578,17 +194,13 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     if (_isAnalyzing) cancel();
 
     final generation = ++_generation;
-    _evals = [];
-    _totalMoves = 0;
-    _analyzedMoves = 0;
-    _startWinChance = 0;
+    _resetSeries();
     _isAnalyzing = true;
     _isCancelled = false;
     notifyListeners();
 
-    final useDepth = analysisDepth ?? BulkAnalysisSettings.instance.depth;
-    _activeDepth = useDepth;
-    final pool = StockfishPool.instance;
+    final depth = analysisDepth ?? BulkAnalysisSettings.instance.depth;
+    _activeDepth = depth;
     bool runIsCurrent() =>
         !isDisposed && !_isCancelled && generation == _generation;
 
@@ -598,85 +210,36 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       final mainline = parsed.moves.mainline().toList();
       _totalMoves = mainline.where((move) => !isNullMoveSan(move.san)).length;
       notifyListeners();
+      if (mainline.isEmpty) return;
 
-      if (mainline.isEmpty) {
-        return;
-      }
-
+      final pool = StockfishPool.instance;
       await pool.ensureWorkers();
       if (!runIsCurrent()) return;
-
       final workerCount = pool.workerCount;
-      if (workerCount == 0) {
-        return;
-      }
+      if (workerCount == 0) return;
 
-      final setupFlag =
-          parsed.headers['SetUp'] ?? parsed.headers['Setup'] ?? '';
-      final fenHeader = parsed.headers['FEN'] ?? '';
-      Position pos;
-      if (setupFlag == '1' && fenHeader.isNotEmpty) {
-        pos = Chess.fromSetup(Setup.parseFen(fenHeader));
-      } else {
-        pos = Chess.initial;
-      }
-      final positions =
-          <
-            ({
-              String fenBefore,
-              String fenAfter,
-              bool isWhiteToMove,
-              PgnNodeData moveData,
-              String moveUci,
-              int ply,
-            })
-          >[];
-      var plyIndex = 0;
-      for (final moveData in mainline) {
-        if (isNullMoveSan(moveData.san)) {
-          final next = playSanOrNullMove(pos, moveData.san);
-          if (next == null) break;
-          pos = next;
-          plyIndex++;
-          continue;
-        }
-        final fenBefore = pos.fen;
-        final move = pos.parseSan(moveData.san);
-        if (move == null) break;
-        // Use standard UCI (king→destination for castling) so Maia policy
-        // lookups match the vocabulary convention.
-        final uci = move is NormalMove
-            ? toStandardUci(pos, move.from, move.to)
-            : move.uci;
-        pos = pos.play(move);
-        positions.add((
-          fenBefore: fenBefore,
-          fenAfter: pos.fen,
-          isWhiteToMove: pos.turn == Side.white,
-          moveData: moveData,
-          moveUci: uci,
-          ply: plyIndex + 1,
-        ));
-        plyIndex++;
-      }
-
+      final startFen = setupFenOf(parsed.headers) ?? kStandardStartFen;
+      final replay = replayMainline(
+        gameStartPosition(parsed.headers),
+        mainline,
+      );
+      final plies = replay.plies;
       // A game ending in mate or stalemate has no position left to search
       // after its final move — asking the engine yields a sign-ambiguous
       // mate-0 score, so the result is read off the board instead.
-      final lastIsCheckmate = positions.isNotEmpty && pos.isCheckmate;
-      final lastIsStalemate =
-          positions.isNotEmpty && !lastIsCheckmate && pos.isStalemate;
+      final endsInCheckmate = plies.isNotEmpty && replay.end.isCheckmate;
+      final endsInStalemate =
+          plies.isNotEmpty && !endsInCheckmate && replay.end.isStalemate;
+      bool isTerminal(int index) =>
+          index == plies.length - 1 && (endsInCheckmate || endsInStalemate);
 
-      final startFen = (setupFlag == '1' && fenHeader.isNotEmpty)
-          ? fenHeader
-          : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-      final startResult = await pool.evaluateFen(startFen, useDepth);
+      final startResult = await pool.evaluateFen(startFen, depth);
       if (!runIsCurrent()) return;
       _shareEval(
         startFen,
         startResult,
         sideToMoveIsWhite: isWhiteToMove(startFen),
-        depth: useDepth,
+        depth: depth,
       );
       // The anchor the FIRST move's swing is measured against — and it has to
       // be the same one every reader will use. This pass persists movetext
@@ -692,169 +255,108 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       // instead" line.
       _startWinChance = initialWinChance();
 
-      // Initialize MAIA
-      final maia = MaiaFactory.instance;
-      bool maiaReady = false;
-      if (maia != null) {
-        try {
-          await maia.initialize();
-          if (!runIsCurrent()) return;
-          maiaReady = true;
-        } catch (e) {
-          if (kDebugMode) debugPrint('[GameAnalysis] MAIA init failed: $e');
-        }
-      }
+      final maia = await _initializedMaia();
+      if (!runIsCurrent()) return;
+      final whiteElo = _eloOf(parsed.headers['WhiteElo']);
+      final blackElo = _eloOf(parsed.headers['BlackElo']);
 
-      final whiteElo = int.tryParse(parsed.headers['WhiteElo'] ?? '') ?? 2200;
-      final blackElo = int.tryParse(parsed.headers['BlackElo'] ?? '') ?? 2200;
+      // The chain carries the previous ply's winning chance and the engine
+      // line from the position *before* the current move, so a mistake can
+      // show "what should have been played" rather than the continuation
+      // after it.
+      var prevWinChance = _startWinChance;
+      var prevBeforePv = startResult.pv;
+      var prevBeforeFen = startFen;
 
-      double prevWinChance = _startWinChance;
-      // Track the PV from the *before* position so we can show "what should
-      // have been played" rather than the continuation after a blunder.
-      List<String> prevBeforePv = startResult.pv;
-      String prevBeforeFen = startFen;
-
-      // Process in parallel batches — classify incrementally
-      final batchSize = workerCount;
+      // Process in parallel batches — classify incrementally.
       for (
-        int batchStart = 0;
-        batchStart < positions.length;
-        batchStart += batchSize
+        var batchStart = 0;
+        batchStart < plies.length;
+        batchStart += workerCount
       ) {
         if (!runIsCurrent()) return;
-
-        final batchEnd = (batchStart + batchSize).clamp(0, positions.length);
-        final batch = positions.sublist(batchStart, batchEnd);
+        final batchEnd = (batchStart + workerCount).clamp(0, plies.length);
+        final batch = plies.sublist(batchStart, batchEnd);
 
         // Fire off Stockfish evals concurrently. The terminal move of a
         // mated/stalemated game gets a placeholder result: its eval is
         // synthesized from the board below, never searched.
-        final futures = <Future<EvalResult>>[];
-        for (int j = 0; j < batch.length; j++) {
-          final isTerminal =
-              batchStart + j == positions.length - 1 &&
-              (lastIsCheckmate || lastIsStalemate);
-          futures.add(
-            isTerminal
-                ? Future.value(EvalResult(depth: useDepth))
-                : pool.evaluateFen(batch[j].fenAfter, useDepth),
-          );
-        }
-
-        final results = await Future.wait(futures);
+        final results = await Future.wait([
+          for (var j = 0; j < batch.length; j++)
+            isTerminal(batchStart + j)
+                ? Future.value(EvalResult(depth: depth))
+                : pool.evaluateFen(batch[j].after.fen, depth),
+        ]);
         if (!runIsCurrent()) return;
 
-        for (int j = 0; j < results.length; j++) {
+        for (var j = 0; j < results.length; j++) {
           if (!runIsCurrent()) return;
-          final p = batch[j];
+          final ply = batch[j];
           final result = results[j];
-          final globalIdx = batchStart + j;
-          final ply = p.ply;
-
-          final isTerminal =
-              globalIdx == positions.length - 1 &&
-              (lastIsCheckmate || lastIsStalemate);
-          final int? whiteNormCp;
-          final int? whiteNormMate;
-          final double winChance;
-          if (isTerminal && lastIsCheckmate) {
-            // p.isWhiteToMove is the side to move in fenAfter — the side
-            // that got mated.
-            whiteNormCp = null;
-            whiteNormMate = null;
-            winChance = p.isWhiteToMove ? -1.0 : 1.0;
-          } else if (isTerminal) {
-            whiteNormCp = 0;
-            whiteNormMate = null;
-            winChance = cpToWinningChance(0, null);
-          } else {
-            whiteNormCp = p.isWhiteToMove
-                ? result.scoreCp
-                : _negateCp(result.scoreCp);
-            whiteNormMate = p.isWhiteToMove
-                ? result.scoreMate
-                : _negateMate(result.scoreMate);
-            winChance = cpToWinningChance(whiteNormCp, whiteNormMate);
+          final terminal = isTerminal(batchStart + j);
+          final score = _whiteNormalizedScore(
+            ply,
+            result,
+            terminalCheckmate: terminal && endsInCheckmate,
+            terminalStalemate: terminal && endsInStalemate,
+          );
+          if (!terminal) {
             _shareEval(
-              p.fenAfter,
+              ply.after.fen,
               result,
-              sideToMoveIsWhite: p.isWhiteToMove,
-              depth: useDepth,
+              sideToMoveIsWhite: ply.after.turn == Side.white,
+              depth: depth,
             );
           }
 
           // Measure the loss from the side that played the move.
-          final isWhiteMove = !p.isWhiteToMove;
-          final delta = isWhiteMove
-              ? (prevWinChance - winChance)
-              : (winChance - prevWinChance);
-
-          // Run MAIA before choosing the best line, so "interesting" moves
-          // (reclassified from normal) also get the pre-move engine line.
-          double? maiaProb;
-          String? maiaTopMove;
-          double? maiaTopProb;
-          if (maiaReady) {
-            try {
-              final elo = isWhiteMove ? whiteElo : blackElo;
-              final maiaResult = await maia!.evaluate(p.fenBefore, elo);
-              if (!runIsCurrent()) return;
-              maiaProb = maiaResult.policy[p.moveUci] ?? 0.0;
-              _injectMaiaComment(p.moveData, maiaProb);
-
-              // Find the most likely MAIA move
-              if (maiaResult.policy.isNotEmpty) {
-                String topUci = maiaResult.policy.keys.first;
-                double topP = maiaResult.policy.values.first;
-                for (final entry in maiaResult.policy.entries) {
-                  if (entry.value > topP) {
-                    topUci = entry.key;
-                    topP = entry.value;
-                  }
-                }
-                maiaTopProb = topP;
-                maiaTopMove = _uciMoveToSan(p.fenBefore, topUci);
-              }
-            } catch (e) {
-              if (kDebugMode) debugPrint('[GameAnalysis] MAIA eval failed: $e');
-            }
-          }
-
-          final classification = classifyMove(
-            delta.clamp(0.0, 1.0),
-            maiaProb: maiaProb,
+          final isWhiteMove = ply.before.turn == Side.white;
+          final loss = winningChanceLoss(
+            isWhiteMove: isWhiteMove,
+            before: prevWinChance,
+            after: score.winChance,
           );
 
-          // The engine's line from the position *before* the move — what to
-          // have played instead. One convention for every move, the same one
-          // the review pass writes and every `[%pv]` reader assumes; the
-          // continuation after a move is the next ply's before-line anyway.
-          final bestLine = _uciPvToSan(prevBeforeFen, prevBeforePv);
+          // Run Maia before choosing the best line, so "interesting" moves
+          // (reclassified from normal) also get the pre-move engine line.
+          final maiaVerdict = maia == null
+              ? null
+              : await _maiaVerdict(
+                  maia,
+                  ply,
+                  isWhiteMove ? whiteElo : blackElo,
+                );
+          if (!runIsCurrent()) return;
 
           final eval = MoveEval(
-            ply: ply,
-            san: p.moveData.san,
-            fenBefore: p.fenBefore,
-            fenAfter: p.fenAfter,
-            scoreCp: whiteNormCp,
-            scoreMate: whiteNormMate,
-            winningChance: winChance,
-            bestLine: bestLine,
-            classification: classification,
-            maiaProb: maiaProb,
-            maiaTopMove: maiaTopMove,
-            maiaTopProb: maiaTopProb,
-            depth: useDepth,
-            deliversCheckmate: isTerminal && lastIsCheckmate,
+            ply: ply.ply,
+            san: ply.node.san,
+            fenBefore: ply.before.fen,
+            fenAfter: ply.after.fen,
+            scoreCp: score.cp,
+            scoreMate: score.mate,
+            winningChance: score.winChance,
+            // The engine's line from the position *before* the move — what
+            // to have played instead. One convention for every move, the
+            // same one the review pass writes and every `[%pv]` reader
+            // assumes; the continuation after a move is the next ply's
+            // before-line anyway.
+            bestLine: uciPvToSan(prevBeforeFen, prevBeforePv),
+            classification: classifyMove(loss, maiaProb: maiaVerdict?.prob),
+            maiaProb: maiaVerdict?.prob,
+            maiaTopMove: maiaVerdict?.topMove,
+            maiaTopProb: maiaVerdict?.topProb,
+            depth: depth,
+            deliversCheckmate: terminal && endsInCheckmate,
           );
           _evals.add(eval);
           // No [%eval] on the mating move: mate-on-board has no sign-safe
           // encoding, and the cached-restore parser derives it from the
           // board anyway.
-          if (!eval.deliversCheckmate) _injectEvalComment(p.moveData, eval);
-          prevWinChance = winChance;
+          if (!eval.deliversCheckmate) writeEvalComment(ply.node, eval);
+          prevWinChance = score.winChance;
           prevBeforePv = result.pv;
-          prevBeforeFen = p.fenAfter;
+          prevBeforeFen = ply.after.fen;
         }
 
         _analyzedMoves = _evals.length;
@@ -862,7 +364,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       }
 
       if (runIsCurrent() && onAnnotatedMovetext != null) {
-        onAnnotatedMovetext(_rebuildMovetext(parsed));
+        onAnnotatedMovetext(buildAnalyzedMovetext(parsed));
       }
       if (runIsCurrent()) onComplete?.call();
     } catch (e, st) {
@@ -875,6 +377,84 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
         _isAnalyzing = false;
         notifyListeners();
       }
+    }
+  }
+
+  /// [result] for the position after [ply], White-normalized. A terminal
+  /// move is read off the board: mate is ±1 with no engine score, stalemate
+  /// an even game.
+  static ({int? cp, int? mate, double winChance}) _whiteNormalizedScore(
+    MainlinePly ply,
+    EvalResult result, {
+    required bool terminalCheckmate,
+    required bool terminalStalemate,
+  }) {
+    if (terminalCheckmate) {
+      // The side to move in the final position is the side that got mated.
+      final whiteMated = ply.after.turn == Side.white;
+      return (cp: null, mate: null, winChance: whiteMated ? -1.0 : 1.0);
+    }
+    if (terminalStalemate) {
+      return (cp: 0, mate: null, winChance: cpToWinningChance(0, null));
+    }
+    final whiteToMove = ply.after.turn == Side.white;
+    final cp = whiteToMove ? result.scoreCp : _negated(result.scoreCp);
+    final mate = whiteToMove ? result.scoreMate : _negated(result.scoreMate);
+    return (cp: cp, mate: mate, winChance: cpToWinningChance(cp, mate));
+  }
+
+  static int? _negated(int? value) => value == null ? null : -value;
+
+  static int _eloOf(String? header) =>
+      int.tryParse(header ?? '') ?? _kDefaultElo;
+
+  /// The Maia evaluator once it has loaded, or null when there is none or
+  /// it failed to start (logged; the pass runs without human-likelihood).
+  Future<MaiaEvaluator?> _initializedMaia() async {
+    final maia = MaiaFactory.instance;
+    if (maia == null) return null;
+    try {
+      await maia.initialize();
+      return maia;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[GameAnalysis] MAIA init failed: $e');
+      return null;
+    }
+  }
+
+  /// Maia's probability for the move [ply] played (written onto the move as
+  /// `[%maia]`) and its most likely move; null when the evaluation failed.
+  Future<({double prob, String? topMove, double? topProb})?> _maiaVerdict(
+    MaiaEvaluator maia,
+    MainlinePly ply,
+    int elo,
+  ) async {
+    try {
+      final fenBefore = ply.before.fen;
+      final maiaResult = await maia.evaluate(fenBefore, elo);
+      // Standard UCI (king→destination for castling), which is the
+      // vocabulary convention the policy keys use.
+      final move = ply.move;
+      final uci = move is NormalMove
+          ? toStandardUci(ply.before, move.from, move.to)
+          : move.uci;
+      final prob = maiaResult.policy[uci] ?? 0.0;
+      writeMaiaComment(ply.node, prob);
+
+      final policy = maiaResult.policy;
+      if (policy.isEmpty) return (prob: prob, topMove: null, topProb: null);
+      var top = policy.entries.first;
+      for (final entry in policy.entries) {
+        if (entry.value > top.value) top = entry;
+      }
+      return (
+        prob: prob,
+        topMove: uciToSan(fenBefore, top.key),
+        topProb: top.value,
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('[GameAnalysis] MAIA eval failed: $e');
+      return null;
     }
   }
 
@@ -897,64 +477,6 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     );
   }
 
-  void _injectEvalComment(PgnNodeData moveData, MoveEval eval) {
-    final evalValue = eval.toEvalComment();
-    if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-      var comment = moveData.comments!.first;
-      comment = setEvalInComment(comment, evalValue);
-      if (eval.bestLine.isNotEmpty) {
-        comment = setPvInComment(comment, eval.bestLine);
-      }
-      if (eval.maiaTopMove != null && eval.maiaTopProb != null) {
-        comment = setMaiaTopInComment(
-          comment,
-          eval.maiaTopMove!,
-          eval.maiaTopProb!,
-        );
-      }
-      moveData.comments![0] = comment;
-    } else {
-      var comment = '[%eval $evalValue]';
-      if (eval.bestLine.isNotEmpty) {
-        comment = '$comment [%pv ${eval.bestLine.join(',')}]';
-      }
-      if (eval.maiaTopMove != null && eval.maiaTopProb != null) {
-        comment = setMaiaTopInComment(
-          comment,
-          eval.maiaTopMove!,
-          eval.maiaTopProb!,
-        );
-      }
-      moveData.comments = [comment];
-    }
-  }
-
-  void _injectMaiaComment(PgnNodeData moveData, double prob) {
-    if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-      moveData.comments![0] = setMaiaInComment(moveData.comments!.first, prob);
-    } else {
-      moveData.comments = ['[%maia ${prob.toStringAsFixed(3)}]'];
-    }
-  }
-
-  /// The analyzed game as movetext, for the caller to store.
-  ///
-  /// [game] itself, not its mainline: the pass writes `[%eval]`/`[%pv]` onto
-  /// the tree's own nodes, and this text goes on to *replace* the game in the
-  /// reader's file (`PgnViewerController.persistMoveCommentsFor`). Serializing
-  /// the mainline alone deleted every variation and the game's opening
-  /// comment from that file. Same writer as the comment editor's
-  /// `ViewerGameModel.buildAnnotatedMovetext`, which lands in the same slot.
-  String _rebuildMovetext(PgnGame<PgnNodeData> game) {
-    annotateGameMoveQuality(game);
-    return buildGameMovetext(
-      moves: game.moves,
-      comments: game.comments,
-      fen: game.headers['FEN'],
-      result: game.headers['Result'],
-    );
-  }
-
   void cancel() {
     _generation++;
     _isCancelled = true;
@@ -962,14 +484,6 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     StockfishPool.instance.stopAll();
     notifyListeners();
   }
-
-  List<String> _uciPvToSan(String fen, List<String> uciMoves) =>
-      uciPvToSan(fen, uciMoves);
-
-  String? _uciMoveToSan(String fen, String uci) => uciToSan(fen, uci);
-
-  int? _negateCp(int? cp) => cp != null ? -cp : null;
-  int? _negateMate(int? mate) => mate != null ? -mate : null;
 
   @override
   void dispose() {

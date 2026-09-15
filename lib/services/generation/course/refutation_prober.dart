@@ -66,6 +66,9 @@ class RefutedAlternative {
 /// are played in, which is what lines sharing a prefix share.
 typedef AlternativeMap = Map<String, RefutedAlternative>;
 
+/// Asks the engine to punish losing replies and refute the natural moves the
+/// book leaves out.  Best-effort: every failure costs one variation, never
+/// the export.
 class RefutationProber {
   RefutationProber({
     required this.config,
@@ -245,13 +248,16 @@ class RefutationProber {
   /// Maia's policy at [fen], most likely first, or null when Maia is not
   /// available or has nothing to say.
   Future<List<MapEntry<String, double>>?> _maiaPolicy(String fen) async {
-    if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) return null;
+    if (!MaiaFactory.isAvailable) return null;
+    final maia = MaiaFactory.instance;
+    if (maia == null) return null;
     try {
-      final result = await MaiaFactory.instance!.evaluate(fen, config.maiaElo);
+      final result = await maia.evaluate(fen, config.maiaElo);
       if (result.policy.isEmpty) return null;
       return result.policy.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
     } catch (_) {
+      // Maia failing on one position falls through to the database source.
       return null;
     }
   }
@@ -273,6 +279,8 @@ class RefutationProber {
     try {
       book = lookup(site.fenBefore);
     } catch (_) {
+      // A book that cannot answer costs this one site; the pass is
+      // best-effort by contract.
       return const [];
     }
     final total = book.fold(0, (sum, m) => sum + m.games);

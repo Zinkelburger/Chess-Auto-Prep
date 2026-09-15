@@ -12,10 +12,11 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
+import '../../utils/file_text_reader.dart';
 import '../storage/app_paths.dart';
 import '../storage/sqlite_recovery.dart';
-import '../../utils/file_text_reader.dart';
 import 'game_store.dart';
 
 class GameStoreService {
@@ -120,9 +121,7 @@ class GameStoreService {
   Future<void> _migrateLegacyTacticsArchive(GameStore store) async {
     try {
       final docs = await AppPaths.documentsDirectory();
-      final file = File(
-        '${docs.path}${Platform.pathSeparator}$legacyTacticsArchiveName',
-      );
+      final file = File(p.join(docs.path, legacyTacticsArchiveName));
       if (!await file.exists()) return;
       if (store.count(GameCollections.tactics) > 0) {
         // Already migrated but the file came back (restored backup?): leave

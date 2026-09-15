@@ -11,10 +11,11 @@ import '../line_extractor.dart';
 import 'chapter_planner.dart';
 import 'opening_namer.dart';
 
-/// Where the chapter sits in the exported file.
+/// Where a chapter sits in the exported file: the repertoire lines, or the
+/// trailing model-games chapter.
 enum ChapterKind { lines, modelGames }
 
-/// A named chapter, ready to be stamped into PGN headers.
+/// A named line chapter, ready to be stamped into PGN headers.
 class ChapterTitle {
   /// One-based position in the course.
   final int index;
@@ -25,14 +26,7 @@ class ChapterTitle {
   /// ECO code of the chapter's defining position, when the book knows one.
   final String? eco;
 
-  final ChapterKind kind;
-
-  const ChapterTitle({
-    required this.index,
-    required this.name,
-    this.eco,
-    this.kind = ChapterKind.lines,
-  });
+  const ChapterTitle({required this.index, required this.name, this.eco});
 }
 
 /// Names a planned course: the course title, every chapter, and each line's

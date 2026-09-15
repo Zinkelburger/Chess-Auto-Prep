@@ -26,6 +26,15 @@ class AppHistoryEntry {
   /// Restores live screen state captured immediately before leaving.
   final VoidCallback? restore;
   final int visitId;
+
+  /// The same crumb with a fresh [restore] capture.
+  AppHistoryEntry withRestore(VoidCallback? restore) => AppHistoryEntry(
+    mode: mode,
+    label: label,
+    handoff: handoff,
+    restore: restore,
+    visitId: visitId,
+  );
 }
 
 class AppHistory extends ChangeNotifier
@@ -74,13 +83,7 @@ class AppHistory extends ChangeNotifier
     final entry = _entries.last;
     final capture = _captures[entry.mode];
     if (capture == null) return;
-    _entries[_entries.length - 1] = AppHistoryEntry(
-      mode: entry.mode,
-      label: entry.label,
-      handoff: entry.handoff,
-      restore: capture(),
-      visitId: entry.visitId,
-    );
+    _entries[_entries.length - 1] = entry.withRestore(capture());
   }
 
   /// Trail depth cap; oldest crumbs drop off. Deep trails are unreadable
