@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline tests for agent admission, isolation and cleanup; no Flutter jobs."""
 import contextlib
+import argparse
 import importlib.util
 import json
 import multiprocessing as mp
@@ -100,6 +101,54 @@ class JobTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'missing'):
                 with jobs.display({'DISPLAY': ':0'}, True):
                     self.fail('must not fall back to real display')
+
+    def test_headless_runtime_is_private_per_job_and_drops_desktop_bus(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'RUNTIME_ROOT', Path(directory)):
+            original = {'XDG_RUNTIME_DIR': directory, 'DBUS_SESSION_BUS_ADDRESS': 'desktop-bus',
+                        'DBUS_SESSION_BUS_PID': '1', 'DBUS_STARTER_ADDRESS': 'desktop-bus',
+                        'DBUS_STARTER_BUS_TYPE': 'session', 'SESSION_MANAGER': 'desktop-session'}
+            runtimes = []
+            for name in ('chess-prep-job-first', 'chess-prep-job-second'):
+                runtime = Path(directory) / name
+                runtime.mkdir(mode=0o700)
+                with patch.object(jobs, 'current_cgroup', return_value=f'/chessprep.slice/{name}.service'):
+                    env = jobs.headless_env(original)
+                self.assertEqual(env, {'XDG_RUNTIME_DIR': str(runtime)})
+                runtimes.append(env['XDG_RUNTIME_DIR'])
+            self.assertNotEqual(*runtimes)
+            self.assertEqual(original['XDG_RUNTIME_DIR'], directory)
+            self.assertEqual(original['DBUS_SESSION_BUS_ADDRESS'], 'desktop-bus')
+
+    def test_missing_or_unsafe_runtime_never_falls_back_to_desktop(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(jobs, 'RUNTIME_ROOT', Path(directory)), \
+                patch.object(jobs, 'current_cgroup', return_value='/chessprep.slice/chess-prep-job-test.service'):
+            env = {'XDG_RUNTIME_DIR': directory}
+            runtime = Path(directory) / 'chess-prep-job-test'
+            with self.assertRaisesRegex(RuntimeError, 'missing'):
+                jobs.headless_env(env)
+            runtime.mkdir(mode=0o755)
+            with self.assertRaisesRegex(RuntimeError, '0700'):
+                jobs.headless_env(env)
+            runtime.rmdir()
+            runtime.symlink_to(directory, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, '0700'):
+                jobs.headless_env(env)
+
+    def test_runtime_lifetime_is_owned_by_headless_service_only(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(jobs, 'STATE', Path(directory)), \
+                patch.object(jobs, 'setup'), patch.object(jobs, 'xvfb_binary'), \
+                patch.object(jobs.subprocess, 'run'), patch.object(jobs.subprocess, 'Popen') as spawn:
+            spawn.return_value.poll.return_value = 0
+            spawn.return_value.returncode = 0
+            for headless in (False, True):
+                self.assertEqual(jobs.run(argparse.Namespace(
+                    headless=headless, wait_seconds=10, command=['true'])), 0)
+                command = spawn.call_args.args[0]
+                unit = command[command.index('--unit') + 1]
+                self.assertEqual(f'RuntimeDirectory={unit}' in command, headless)
+                self.assertEqual('RuntimeDirectoryMode=0700' in command, headless)
+                self.assertIn('KillMode=control-group', command)
 
     def test_owner_exit_cancels_job(self):
         with patch.object(jobs, 'process_token', return_value='gone'):
