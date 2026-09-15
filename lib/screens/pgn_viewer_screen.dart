@@ -33,7 +33,7 @@ import '../core/pgn/pgn_copy.dart';
 import '../core/pgn/solitaire_controller.dart';
 import '../features/games/services/game_deviation_service.dart';
 import '../features/games/services/opening_review.dart' show deviationVerdict;
-import '../features/games/services/game_moves.dart';
+import '../services/pgn_mainline_lexer.dart' show mainlineSansOf;
 import '../features/games/services/my_repertoire_settings.dart';
 import '../features/games/widgets/repertoire_line_panel.dart';
 import '../services/games_library/game_filter.dart' show dedupKeyForHeaders;
@@ -1028,7 +1028,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final meWhite = _myColorIn(entry.headers);
     if (meWhite == null) return;
     final report = await GameDeviationService.instance.analyzeGame(
-      gameSans: extractMainlineSans(entry.pgnText),
+      gameSans: mainlineSansOf(entry.pgnText),
       meWhite: meWhite,
     );
     if (!mounted || key != _deviationKey) return;
@@ -1087,7 +1087,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         '${_controller.filePath}#${entry.label}#${entry.pgnText.length}';
     if (key != _lineSansKey) {
       _lineSansKey = key;
-      _lineSans = extractMainlineSans(entry.pgnText);
+      _lineSans = mainlineSansOf(entry.pgnText);
     }
     return _lineSans;
   }

@@ -9,7 +9,7 @@ import '../../../services/games_library/games_library_service.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../models/recent_game.dart';
 import '../services/game_deviation_service.dart';
-import '../services/game_moves.dart';
+import '../../../services/pgn_mainline_lexer.dart' show mainlineSansOfBatch;
 import '../services/game_preview.dart';
 import '../services/game_review_summary.dart';
 import '../services/games_window.dart';
@@ -384,7 +384,7 @@ class RecentGamesController extends ChangeNotifier with SafeChangeNotifier {
     );
     final cachePath = await _library.cacheFilePath(platform, username);
     final sides = [for (final r in records) _sideFor(r, username)];
-    final sansBatch = await compute(extractMainlineSansBatch, [
+    final sansBatch = await compute(mainlineSansOfBatch, [
       for (final r in records) r.pgn,
     ]);
     final summaries = await compute(computeReviewSummariesBatch, [

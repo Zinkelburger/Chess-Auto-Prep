@@ -16,11 +16,11 @@ import 'dart:io';
 import 'package:dartchess/dartchess.dart' show Chess;
 import 'package:path/path.dart' as p;
 
-import '../features/games/services/game_moves.dart' show extractMainlineSans;
 import '../models/explorer_response.dart';
 import '../utils/atomic_file.dart';
 import '../utils/chess_utils.dart' show plyReachingFen;
 import 'lichess_api_client.dart';
+import 'pgn_mainline_lexer.dart' show mainlineSansOf;
 import 'master_games/master_games_db.dart';
 import 'master_games/master_games_service.dart';
 import 'storage/app_paths.dart';
@@ -83,7 +83,7 @@ class ExplorerGameOpener {
     final index = await _indexInCollection(file, _normalize(pgn));
 
     final ply = plyReachingFen(
-      extractMainlineSans(pgn),
+      mainlineSansOf(pgn),
       fen,
       startFen: Chess.initial.fen,
     );

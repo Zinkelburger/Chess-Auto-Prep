@@ -49,7 +49,7 @@ void main() {
       // and has to be negated to reach White-normalized cp.
       pool.stmCpByFen[afterE4] = -30;
 
-      final (cp, hits, misses) = await evalAfterMoveCached(
+      final (whiteCp: cp, :hits, :misses) = await evalAfterMoveCached(
         pool,
         EvalCache.instance,
         start,
@@ -65,7 +65,7 @@ void main() {
     test('Black to move after the move negates the engine sign', () async {
       pool.stmCpByFen[afterNc6] = 25;
 
-      final (cp, _, _) = await evalAfterMoveCached(
+      final (whiteCp: cp, hits: _, misses: _) = await evalAfterMoveCached(
         pool,
         EvalCache.instance,
         blackToMove,
@@ -80,7 +80,7 @@ void main() {
       pool.stmCpByFen[afterE4] = -30;
 
       await evalAfterMoveCached(pool, EvalCache.instance, start, 'e2e4', 20);
-      final (cp, hits, misses) = await evalAfterMoveCached(
+      final (whiteCp: cp, :hits, :misses) = await evalAfterMoveCached(
         pool,
         EvalCache.instance,
         start,
@@ -104,7 +104,7 @@ void main() {
       // After 1.e4 it is Black to move; Black mating in 3 is White losing.
       pool.stmMateByFen[afterE4] = 3;
 
-      final (cp, _, _) = await evalAfterMoveCached(
+      final (whiteCp: cp, hits: _, misses: _) = await evalAfterMoveCached(
         pool,
         EvalCache.instance,
         start,
@@ -126,7 +126,7 @@ void main() {
       // Black to move and getting mated in 2 → White is winning.
       pool.stmMateByFen[afterE4] = -2;
 
-      final (cp, _, _) = await evalAfterMoveCached(
+      final (whiteCp: cp, hits: _, misses: _) = await evalAfterMoveCached(
         pool,
         EvalCache.instance,
         start,
@@ -142,7 +142,7 @@ void main() {
       // 1...Nc6 leaves White to move; White mating in 4 is White-positive.
       pool.stmMateByFen[afterNc6] = 4;
 
-      final (cp, _, _) = await evalAfterMoveCached(
+      final (whiteCp: cp, hits: _, misses: _) = await evalAfterMoveCached(
         pool,
         EvalCache.instance,
         blackToMove,
@@ -177,7 +177,7 @@ void main() {
 
   group('unusable input', () {
     test('an illegal move yields no eval and no engine call', () async {
-      final (cp, hits, misses) = await evalAfterMoveCached(
+      final (whiteCp: cp, :hits, :misses) = await evalAfterMoveCached(
         pool,
         EvalCache.instance,
         start,
@@ -192,7 +192,7 @@ void main() {
     });
 
     test('an unparsable move yields no eval', () async {
-      final (cp, _, _) = await evalAfterMoveCached(
+      final (whiteCp: cp, hits: _, misses: _) = await evalAfterMoveCached(
         pool,
         EvalCache.instance,
         start,
@@ -204,7 +204,7 @@ void main() {
     });
 
     test('an unparsable FEN yields no eval', () async {
-      final (cp, _, _) = await evalAfterMoveCached(
+      final (whiteCp: cp, hits: _, misses: _) = await evalAfterMoveCached(
         pool,
         EvalCache.instance,
         'not a fen',

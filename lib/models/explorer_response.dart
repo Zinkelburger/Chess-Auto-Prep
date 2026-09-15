@@ -40,6 +40,14 @@ class ExplorerMove {
       '{Move probability: ${playRate.toStringAsFixed(1)}%}';
 }
 
+/// Which database an opening explorer asks.
+///
+/// Three are Lichess's ([lichess], [masters], [player]); [twic] is the
+/// master-games database on this machine, which only the live explorer
+/// panel offers — the generation pipeline reads it through its own
+/// `BookLookup`.
+enum LichessDatabase { lichess, masters, player, twic }
+
 /// Where an explorer answer came from, which is also where one of its games
 /// can be fetched from.
 enum ExplorerGameSource {

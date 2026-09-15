@@ -30,16 +30,8 @@ import 'package:flutter/foundation.dart';
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/eval_cache.dart';
-import '../../../services/expectimax_line_service.dart';
-import '../../../services/generation/eca_calculator.dart';
-import '../../../services/generation/fen_map.dart';
-import '../../../services/generation/generation_config.dart';
-import '../../../services/generation/tree_ease.dart';
-import '../../../services/maia/maia_factory.dart';
 import '../../../services/run_control.dart';
-import '../../../services/tree_build_service.dart';
 import '../../../utils/chess_utils.dart' as chess_utils;
-import '../../../utils/ease_utils.dart';
 import '../../../utils/fen_utils.dart';
 import '../../audit/models/audit_finding.dart';
 import '../../audit/models/audit_result.dart';
@@ -48,6 +40,7 @@ import '../../audit/services/exploit_ranking.dart';
 import '../../audit/services/repertoire_walk.dart';
 import 'hole_hunt_config.dart';
 import 'hole_scoring.dart';
+import 'trick_probe.dart';
 
 enum HoleHuntPhase { walking, leaves, probing }
 
@@ -89,26 +82,24 @@ class HoleHuntProgress {
 }
 
 class HoleHuntService {
-  HoleHuntService({StockfishPool? pool, EvalCache? evalCache})
-    : _probe = EnginePositionProbe(pool: pool, evalCache: evalCache);
+  HoleHuntService({
+    StockfishPool? pool,
+    EvalCache? evalCache,
+    this.probeTreeBuilder,
+  }) : _probe = EnginePositionProbe(pool: pool, evalCache: evalCache);
+
+  /// Where the trick probes get their expectimax trees. Null means a real
+  /// [TrickProbe] default, i.e. a `TreeBuildService` run.
+  final ProbeTreeBuilder? probeTreeBuilder;
 
   /// At most this many trick candidates per position enter the probe pool,
   /// so one hot position cannot eat the whole probe budget. An in-tree move
   /// inside the window is always kept in addition.
   static const int _maxCandidatesPerNode = 3;
 
-  /// Wall-clock budget per probe build; enforced via the build's own
-  /// isCancelled hook so the builder unwinds cleanly instead of being
-  /// orphaned by a thrown timeout.
-  static const Duration _probeTimeout = Duration(seconds: 60);
-
   /// An uncovered attacker move worth at least this much is critical; one
   /// that at least holds the balance is a warning; the rest are notes.
   static const int _criticalAttackerCp = 100;
-
-  /// A trick netting at least this multiple of the reporting floor is
-  /// critical.
-  static const int _criticalNetGainMultiple = 2;
 
   final EnginePositionProbe _probe;
 
@@ -205,7 +196,7 @@ class HoleHuntService {
     if (wantTricks && trickWork.hasWork && !_control.isCancelled) {
       // Every probe is a Maia expectimax build, so settle the model before
       // spending any more engine time.
-      if (!await _ensureMaia()) {
+      if (!await TrickProbe.maiaIsReady()) {
         _probesSkipped = true;
       } else {
         await _discoverLeaves(
@@ -217,14 +208,23 @@ class HoleHuntService {
         );
         _lastCandidateCount = trickWork.candidates.length;
         if (!_control.isCancelled) {
-          await _probePass(
-            trickWork.candidates,
+          await TrickProbe(
             tree: tree,
-            attackerIsWhite: attackerIsWhite,
             config: config,
-            findingsCount: () => findings.length,
-            onProgress: onProgress,
+            attackerIsWhite: attackerIsWhite,
+            control: _control,
+            buildTree: probeTreeBuilder,
+          ).run(
+            trickWork.candidates,
             emit: emit,
+            onProgress: (done, total) => onProgress?.call(
+              HoleHuntProgress(
+                phase: HoleHuntPhase.probing,
+                done: done,
+                total: total,
+                findingsCount: findings.length,
+              ),
+            ),
           );
         }
       }
@@ -447,222 +447,6 @@ class HoleHuntService {
           debugPrint('[HoleHunt] Leaf discovery failed at ${target.fen}: $e');
         }
       }
-    }
-  }
-
-  // ── Probe pass: expectimax the best candidates ─────────────────────────
-
-  Future<void> _probePass(
-    List<TrickCandidate> candidates, {
-    required OpeningTree tree,
-    required bool attackerIsWhite,
-    required HoleHuntConfig config,
-    required int Function() findingsCount,
-    required HoleHuntProgressCallback? onProgress,
-    required void Function(AuditFinding) emit,
-  }) async {
-    final selected = selectProbeCandidates(
-      candidates,
-      budget: config.probeBudget,
-      windowCp: config.candidateWindowCp,
-    );
-    if (selected.isEmpty) return;
-
-    final buildService = TreeBuildService();
-
-    for (var i = 0; i < selected.length; i++) {
-      onProgress?.call(
-        HoleHuntProgress(
-          phase: HoleHuntPhase.probing,
-          done: i,
-          total: selected.length,
-          findingsCount: findingsCount(),
-        ),
-      );
-      if (!await _control.checkpoint()) return;
-
-      final candidate = selected[i];
-      try {
-        final finding = await _probeCandidate(
-          candidate,
-          buildService: buildService,
-          tree: tree,
-          attackerIsWhite: attackerIsWhite,
-          config: config,
-        );
-        if (_control.isCancelled) return;
-        if (finding != null) emit(finding);
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[HoleHunt] Probe failed after ${candidate.san}: $e');
-        }
-      }
-    }
-
-    onProgress?.call(
-      HoleHuntProgress(
-        phase: HoleHuntPhase.probing,
-        done: selected.length,
-        total: selected.length,
-        findingsCount: findingsCount(),
-      ),
-    );
-  }
-
-  /// Build a short Maia expectimax tree after [candidate] and report it as
-  /// a trick when its practical value beats the engine-best move's raw eval
-  /// by [HoleHuntConfig.minNetGainCp]. Null when it does not, when the
-  /// build produced nothing, or when the run was cancelled meanwhile.
-  Future<AuditFinding?> _probeCandidate(
-    TrickCandidate candidate, {
-    required TreeBuildService buildService,
-    required OpeningTree tree,
-    required bool attackerIsWhite,
-    required HoleHuntConfig config,
-  }) async {
-    final postFen = chess_utils.playUciMove(
-      candidate.target.fen,
-      candidate.uci,
-    );
-    if (postFen == null) return null;
-
-    final buildConfig = _probeBuildConfig(
-      postFen,
-      attackerIsWhite: attackerIsWhite,
-      config: config,
-    );
-    final buildClock = Stopwatch()..start();
-    final probeTree = await buildService.build(
-      config: buildConfig,
-      isCancelled: () =>
-          _control.isCancelled || buildClock.elapsed > _probeTimeout,
-      onProgress: (_) {},
-    );
-    if (_control.isCancelled) return null;
-    if (probeTree.root.children.isEmpty) return null;
-
-    final fenMap = FenMap()..populate(probeTree.root);
-    final eca = ExpectimaxCalculator(config: buildConfig, fenMap: fenMap);
-    eca.calculate(probeTree);
-    calculateTreeEase(probeTree);
-
-    final lines = generateExpectimaxLines(
-      probeTree.root,
-      buildConfig,
-      eca,
-      topLines: 1,
-      maxPlies: config.probePly,
-      fenMap: fenMap,
-    );
-
-    // Practical value from the probe ROOT: probability-weighted over all
-    // opponent replies plus the uncovered-mass tail — the top line alone
-    // reflects only the most probable reply and overstates tricks whose
-    // punished reply is the popular one.
-    final int probeExpectedCp;
-    if (probeTree.root.hasExpectimax) {
-      probeExpectedCp = expectedCpFromWinProb(probeTree.root.expectimaxValue);
-    } else if (lines.isNotEmpty) {
-      probeExpectedCp = lines.first.expectedEvalCp;
-    } else {
-      return null;
-    }
-
-    final metrics = candidate.metrics;
-    final netGain = metrics.netGainCp(probeExpectedCp);
-    if (netGain < config.minNetGainCp) return null;
-
-    return AuditFinding(
-      type: AuditFindingType.trickyMove,
-      severity: netGain >= config.minNetGainCp * _criticalNetGainMultiple
-          ? AuditSeverity.critical
-          : AuditSeverity.warning,
-      movePath: candidate.target.movePath,
-      fen: candidate.target.fen,
-      ourMove: candidate.san,
-      // Only novelties get missingMove: it is what enables the ephemeral
-      // board preview of a move the tree does not have.
-      missingMove: candidate.isNovelty ? candidate.san : null,
-      bestMove: candidate.bestSan,
-      evalLossCp: math.max(0, metrics.objectiveCostCp),
-      positionEvalCp: _toWhite(metrics.candidateRawCp, attackerIsWhite),
-      bestMoveEvalCp: _toWhite(metrics.bestRawCp, attackerIsWhite),
-      expectedEvalCp: probeExpectedCp,
-      practicalGapCp: metrics.practicalGapCp(probeExpectedCp),
-      netGainCp: netGain,
-      oppEase: probeTree.root.ease,
-      isNovelty: candidate.isNovelty,
-      exploitLine: [
-        candidate.san,
-        if (lines.isNotEmpty) ...lines.first.movesSan,
-      ],
-      cumulativeProbability: candidate.target.reach,
-      transposesIntoRepertoire:
-          candidate.isNovelty &&
-          tree.doesMoveTranspose(candidate.target.fen, candidate.san),
-      exploitScore: exploitScoreOf(
-        cumProb: candidate.target.reach,
-        gainCp: netGain,
-      ),
-    );
-  }
-
-  /// The mini expectimax build behind one probe: a few plies deep on a tight
-  /// node budget, modelling the owner with Maia at the configured rating.
-  static TreeBuildConfig _probeBuildConfig(
-    String postFen, {
-    required bool attackerIsWhite,
-    required HoleHuntConfig config,
-  }) => TreeBuildConfig(
-    startFen: postFen,
-    playAsWhite: attackerIsWhite,
-    maxPly: config.probePly,
-    maxNodes: _probeNodesPerPly * config.probePly,
-    buildMode: BuildMode.stockfishExpectimax,
-    // 1 UCI thread per worker: parallelism comes from pool workers, and >1
-    // would reconfigure workers other features rely on.
-    engineThreads: 1,
-    minProbability: _probeMinReplyProbability,
-    evalDepth: config.probeEvalDepth,
-    maiaElo: config.maiaElo,
-    ourMultipv: _probeBranching,
-    oppMaxChildren: _probeBranching,
-    oppMassTarget: _probeReplyMassTarget,
-    // Tight node budget: keep it on depth, not opening breadth.
-    openingWidthPlies: 0,
-    verifyFinal: false,
-    // The defaults (0..200, root-anchored) prune attacker follow-ups that
-    // merely hold the raw eval — exactly the moves a trick's punishment is
-    // made of. Widen; still root-anchored via relativeEval.
-    minEvalCp: _probeMinEvalCp,
-    maxEvalCp: _probeMaxEvalCp,
-  );
-
-  static const int _probeNodesPerPly = 800;
-  static const double _probeMinReplyProbability = 0.02;
-  static const int _probeBranching = 4;
-  static const double _probeReplyMassTarget = 0.80;
-  static const int _probeMinEvalCp = -200;
-  static const int _probeMaxEvalCp = 400;
-
-  // ── Helpers ────────────────────────────────────────────────────────────
-
-  /// Attacker-perspective cp back to White-normalized (its own inverse).
-  static int _toWhite(int attackerCp, bool attackerIsWhite) =>
-      attackerIsWhite ? attackerCp : -attackerCp;
-
-  Future<bool> _ensureMaia() async {
-    final maia = MaiaFactory.isAvailable ? MaiaFactory.instance : null;
-    if (maia == null) {
-      debugPrint('[HoleHunt] Trick probes skipped — Maia unavailable');
-      return false;
-    }
-    try {
-      await maia.initialize();
-      return true;
-    } catch (e) {
-      debugPrint('[HoleHunt] Trick probes skipped — Maia init failed: $e');
-      return false;
     }
   }
 }

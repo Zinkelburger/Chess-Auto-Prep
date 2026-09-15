@@ -95,5 +95,56 @@ void main() {
       expect(mainlineSansOf(pgn), ['e4', 'e5']);
       expect(mainlineSansOf(pgn), viaDartchess(pgn));
     });
+
+    // The Games feature used to lex downloaded games with a regex of its
+    // own; these are the shapes that extractor was written for.
+    test('plain movetext with numbers and result', () {
+      expect(mainlineSansOf('[Event "x"]\n\n1. e4 e5 2. Nf3 Nc6 1-0'), [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+      ]);
+    });
+
+    test('strips clock/eval comments and NAGs', () {
+      const pgn =
+          '1. e4 { [%clk 0:03:00] } 1... c5 { [%eval 0.3] } 2. Nf3 \$2 d6 *';
+      expect(mainlineSansOf(pgn), ['e4', 'c5', 'Nf3', 'd6']);
+      expect(mainlineSansOf(pgn), viaDartchess(pgn));
+    });
+
+    test('skips nested variations entirely', () {
+      const pgn = '1. d4 d5 (1... Nf6 2. c4 (2. Bg5)) 2. c4 e6 *';
+      expect(mainlineSansOf(pgn), ['d4', 'd5', 'c4', 'e6']);
+      expect(mainlineSansOf(pgn), viaDartchess(pgn));
+    });
+
+    test('handles glued move numbers and black continuations', () {
+      expect(mainlineSansOf('1.e4 e5 2.Nf3 2...Nc6 *'), [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+      ]);
+    });
+
+    test('keeps check and mate suffixes on the SAN', () {
+      expect(mainlineSansOf('1. e4 f6 2. Qh5+ g6 3. Qxg6#'), [
+        'e4',
+        'f6',
+        'Qh5+',
+        'g6',
+        'Qxg6#',
+      ]);
+    });
+
+    test('the batch form lexes each game independently', () {
+      expect(mainlineSansOfBatch(['1. e4 e5 *', '1. d4 *', '']), [
+        ['e4', 'e5'],
+        ['d4'],
+        <String>[],
+      ]);
+    });
   });
 }

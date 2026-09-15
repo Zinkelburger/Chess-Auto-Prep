@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart'
-    show LichessDatabase;
 import 'package:chess_auto_prep/models/explorer_response.dart';
 import 'package:chess_auto_prep/services/lichess_api_client.dart';
 import 'package:chess_auto_prep/services/live_explorer_service.dart';

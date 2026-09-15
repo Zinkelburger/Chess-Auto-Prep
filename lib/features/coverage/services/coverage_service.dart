@@ -16,14 +16,6 @@ import '../../../services/master_games/master_games_db.dart'
 import '../../../utils/chess_utils.dart';
 import '../../../utils/fen_utils.dart';
 
-/// Which database an opening explorer asks.
-///
-/// Three are Lichess's ([lichess], [masters], [player]); [twic] is the
-/// master-games database on this machine, which only the live explorer
-/// panel offers — the generation pipeline reads it through its own
-/// `BookLookup`.
-enum LichessDatabase { lichess, masters, player, twic }
-
 /// Leaf classification for coverage analysis.
 enum LeafCategory { covered, tooShallow, tooDeep }
 

@@ -122,16 +122,16 @@ class EnginePositionProbe {
     for (final line in lines) {
       if (line.uci == moveUci) return line.whiteCp;
     }
-    final (whiteCp, hits, misses) = await evalAfterMoveCached(
+    final eval = await evalAfterMoveCached(
       _pool,
       _evalCache,
       fen,
       moveUci,
       depth,
     );
-    stats.hits += hits;
-    stats.misses += misses;
-    return whiteCp;
+    stats.hits += eval.hits;
+    stats.misses += eval.misses;
+    return eval.whiteCp;
   }
 
   /// Deep single-PV search of [fen], cached at [depth].

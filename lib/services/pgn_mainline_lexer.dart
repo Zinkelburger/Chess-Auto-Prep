@@ -94,6 +94,11 @@ List<String> mainlineSansOf(String gameText) {
   return sans;
 }
 
+/// Batch form for `compute`: one SAN list per input game.
+List<List<String>> mainlineSansOfBatch(List<String> gameTexts) => [
+  for (final text in gameTexts) mainlineSansOf(text),
+];
+
 /// A NAG (`$12`) or an annotation glyph (`!`, `?!`).
 bool _isGlyphOrNag(String token) {
   final first = token.codeUnitAt(0);

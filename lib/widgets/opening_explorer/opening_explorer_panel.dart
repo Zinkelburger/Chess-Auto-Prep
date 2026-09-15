@@ -17,8 +17,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../features/coverage/services/coverage_service.dart'
-    show LichessDatabase;
 import '../../models/explorer_response.dart';
 import '../../services/lichess_auth_service.dart';
 import '../../services/live_explorer_service.dart';

@@ -32,8 +32,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../features/coverage/services/coverage_service.dart'
-    show LichessDatabase;
 import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show uciToSan;
 import '../utils/fen_utils.dart';

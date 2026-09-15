@@ -1176,7 +1176,7 @@ Used by:
 | `engine_weakness_result.dart` | Weak square / position analysis output |
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
 | `board_display_settings.dart` | `BoardDisplaySettings` — global board and move preferences: `BoardCoordinates` (none / inside / outside / every square) `PieceNotation` (letters / figurines), and opt-in legal-move dots (off by default; explicit feature hints such as bughouse drop targets remain available). Persisted; reached through `BoardDisplaySettings.of(context)`, which rebuilds the caller when a `DisplaySettingsScope` (planted above `MaterialApp`) is present and falls back to the singleton in bare widget tests |
-| `explorer_response.dart` | Opening explorer answer shape: moves with counts, plus the games a source lists for the position (`ExplorerGame`, tagged with the `ExplorerGameSource` it can be fetched from — Lichess, masters or the local TWIC database) |
+| `explorer_response.dart` | Opening explorer answer shape: `LichessDatabase` (which database is being asked), moves with counts, plus the games a source lists for the position (`ExplorerGame`, tagged with the `ExplorerGameSource` it can be fetched from — Lichess, masters or the local TWIC database) |
 | `move_tree.dart` | Editable PGN move tree (`MoveNode`, `TreePath`, `MoveTree`). FEN cached per node. PGN round-trip via `fromPgn`/`toPgn`, delegating movetext parsing/writing to `move_tree_pgn.dart` (`MoveTreePgnCodec`). Used by `RepertoireController` as the single source of truth for the move cursor. |
 | `move_tree_pgn.dart` | `MoveTreePgnCodec` — dartchess game tree → `MoveNode`s, and `MoveNode`s → PGN movetext (variations, starting comments, NAGs) |
 | `legal_destination_cache.dart` | `LegalDestinationCache` — bounded LRU of legal moves and their destination FENs per position, behind the opening tree's one-ply transposition scan |
@@ -1386,7 +1386,8 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | File | Purpose |
 |------|---------|
 | **services/hole_hunt_config.dart** | `HoleHuntConfig` — walk thresholds plus the trick-probe knobs (window, budget, ply, eval depth, net-gain floor, Maia rating) |
-| **services/hole_hunt_service.dart** | Adversarial walker on the audit's `RepertoireWalk` and `EnginePositionProbe`: attacker-side BFS, Stockfish refutation verification, post-walk leaf discovery, expectimax probes for tricks; `HoleHuntProgress` with walking/leaves/probing phases |
+| **services/hole_hunt_service.dart** | Adversarial walker on the audit's `RepertoireWalk` and `EnginePositionProbe`: attacker-side BFS, Stockfish refutation verification, post-walk leaf discovery, then the probe pass via `TrickProbe`; `HoleHuntProgress` with walking/leaves/probing phases |
+| **services/trick_probe.dart** | The probe pass: `TrickProbe` builds a short Maia expectimax tree per candidate and reports a `trickyMove` when the root's practical value beats the engine-best move's raw eval by the net-gain floor. Its builds come from an injectable `ProbeTreeBuilder`, and it owns the Maia readiness gate |
 | **services/hole_scoring.dart** | Pure helpers: `TrickTarget` and top-by-reach selection, `TrickCandidateMetrics` (the White-to-attacker sign flip), candidate windowing, probe prescreen; engine/widget-free for unit tests (reach propagation lives in the audit's `repertoire_walk.dart`) |
 | **services/hole_hunt_persistence.dart** | `HoleHuntSnapshot` JSON save/load at a caller-supplied path via the audit's `HuntReportStore`; no resume state — cancels save partial reports |
 | **widgets/hole_hunt_config_dialog.dart** | Config dialog; pops with a `HoleHuntConfig`, the host screen owns the hunt lifecycle |
@@ -1799,6 +1800,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `test/features/holes/hole_finding_json_test.dart` | Hole and trick finding JSON round-trip; a retired finding type drops without losing the report |
 | `test/features/holes/hole_hunt_service_test.dart` | The hunt against a scripted engine: walk shape, uncovered moves, refutations, ranking, the Maia gate, leaf discovery order and budget, one discovery feeding both the uncovered check and the candidate pool |
 | `test/features/holes/hole_scoring_test.dart` | Sign conventions, candidate windowing, prescreen and probe selection |
+| `test/features/holes/trick_probe_test.dart` | The probe pass against a stubbed tree builder: the net-gain gate and severity, the build config a probe asks for, budget and reach order, cancellation and a failing build |
 | `test/features/holes/exploit_ranking_test.dart` | Exploit-score ranking, top-by-reach target selection |
 | `test/features/holes/hole_walk_probability_test.dart` | Reach-probability propagation in the attacker walk |
 | `test/features/audit/repertoire_walk_test.dart` | The shared BFS: visit order and paths, ply limit, progress cadence, attenuation for either side, cancel and pause |
