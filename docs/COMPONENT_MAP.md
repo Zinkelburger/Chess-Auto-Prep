@@ -306,6 +306,26 @@ not modes. These are ownership decisions; the remaining work is tracked in
 
 #### Repertoire library and shared creation
 
+The catalog now lives in `lib/features/repertoires/`: `models/`, `controllers/`,
+`repositories/` and `widgets/`. `AppDependencies` in `lib/app/` injects the
+`RepertoireCatalogRepository` contract, using the explicit
+`LegacyRepertoireCatalogRepository` adapter in `lib/infrastructure/repertoires/`.
+The adapter is the catalog's only storage/creation caller. The manual Riverpod
+controller owns immutable list/action state, rejects overlapping commands,
+coalesces refresh, ignores stale reads, and keeps a submitted commit alive
+when its last listener leaves. Failed reloads retain the last good snapshot;
+a reload failure after a confirmed write is not reported as a failed write.
+The list and create/import/paste forms submit domain requests. Form controllers
+and search text remain widget-local. Catalog tests override the domain contract;
+real-file adapter tests preserve the existing PGN and recovery semantics.
+
+The older singular `features/repertoire/` still owns the chapter organizer,
+document editing and generation. Existing theme, picker and codec helpers are
+retained until their owning renewal slice migrates. Boundary checks in local
+lint prevent migrated catalog code from importing storage/infrastructure or
+accessing global singletons. This is a partial first slice; remaining renewal
+gates are tracked in [the execution record](ARCHITECTURE_RENEWAL.md#catalog-boundary-checkpoint--first-slice-in-progress).
+
 `RepertoireLibraryScreen` is available under **Library → Repertoires**. It
 reuses `RepertoireListBody` for search, direct file/paste imports and repertoire
 rename/delete. Opening a repertoire shows `RepertoireOutlinePanel` with its
@@ -514,7 +534,8 @@ Actions menu groups view operations; the trailing gear opens `screens/settings_s
 
 ```
 RepertoireListBody (embedded inline or in RepertoireSelectionScreen)
-  → StorageService.listRepertoireFiles() → List<RepertoireMetadata>
+  → RepertoireCatalogController → RepertoireCatalogRepository.listRepertoires()
+  → injected legacy storage adapter → List<RepertoireMetadata>
   → user picks RepertoireMetadata → onSelected callback → setRepertoire / loadRepertoire
   → RepertoireController (MoveTree + TreePath, OpeningTree, RepertoireLine list; loadError on failure)
   → InteractivePgnEditor (pure view: tree + path props, action callbacks; memoized move widgets; context-menu path highlighting)
@@ -1633,7 +1654,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
 | `layout/empty_state_placeholder.dart` | Shared empty states |
-| `repertoire_list_body.dart` | Embeddable repertoire list with import/rename/delete; the standard dark Open PGN file… action (matching the PGN viewer label) opens the native file picker immediately, saves under a safe unique filename-derived name, and opens the imported chapter. The trainer also offers Create new repertoire, which switches to the repertoire builder. A quieter Paste PGN action accepts text without setup; naming stays on the library cards and training side/settings remain available in Train. `features/repertoire/widgets/repertoire_import_dialog.dart` owns both flows; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
+| `repertoire_list_body.dart` | Embeddable repertoire list with import/rename/delete; the standard dark Open PGN file… action (matching the PGN viewer label) opens the native file picker immediately, saves under a safe unique filename-derived name, and opens the imported chapter. Create new repertoire opens the shared creation form and returns to its caller. A quieter Paste PGN action accepts text without setup; naming stays on the library cards and training side/settings remain available in Train. `features/repertoires/widgets/repertoire_import_dialog.dart` owns both flows; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push; optional `onStudySelected` adds a "Studies — custom tactics" section (trainer only; study management stays in Study mode) |
 | `layout/responsive_split_layout.dart` | Generic split helper |
 
 #### Repertoire-specific

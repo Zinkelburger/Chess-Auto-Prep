@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../constants/chess_constants.dart';
 import '../../../models/build_tree_node.dart';
-import '../../../models/repertoire_metadata.dart';
+import '../../repertoires/models/repertoire_metadata.dart';
 import '../services/eval_tree_file_loader.dart';
 import '../../../services/generation/tree_serialization.dart';
 import '../../../theme/app_colors.dart';

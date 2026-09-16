@@ -20,7 +20,7 @@ import 'package:flutter/material.dart';
 
 import 'common/item_title.dart';
 
-import '../models/repertoire_metadata.dart';
+import '../features/repertoires/models/repertoire_metadata.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';

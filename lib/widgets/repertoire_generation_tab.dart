@@ -15,7 +15,7 @@ import 'package:path/path.dart' as p;
 import '../core/generation_session_controller.dart';
 import '../core/generation_session_types.dart';
 import '../models/build_tree_node.dart';
-import '../models/repertoire_metadata.dart';
+import '../features/repertoires/models/repertoire_metadata.dart';
 import '../services/generation/generation_config.dart';
 import 'generation/training_plan_card.dart';
 import '../services/generation/fen_map.dart';

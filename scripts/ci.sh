@@ -34,6 +34,12 @@ run_step() {
       if grep -rnE "fontSize: (9|10|10\.5|11|11\.5)[,)]" lib | grep -v board_coordinates; then
         echo "lint: fontSize below the 12px floor"; bad=1
       fi
+      if ! python3 scripts/test_architecture_boundaries.py; then
+        bad=1
+      fi
+      if ! python3 scripts/check_architecture_boundaries.py; then
+        bad=1
+      fi
       if ! python3 scripts/check_file_mutations.py; then
         bad=1
       fi

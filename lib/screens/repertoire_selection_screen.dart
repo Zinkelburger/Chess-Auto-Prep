@@ -7,7 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../widgets/chapter_list_body.dart' show ChapterPick;
-import '../widgets/repertoire_list_body.dart';
+import '../features/repertoires/widgets/repertoire_list_body.dart';
 
 class RepertoireSelectionScreen extends StatelessWidget {
   const RepertoireSelectionScreen({super.key});

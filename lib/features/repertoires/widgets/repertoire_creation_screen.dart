@@ -1,17 +1,22 @@
+import '../models/repertoire_creation.dart';
 import 'package:flutter/material.dart';
 
-import '../services/pgn_mainline_lexer.dart' as pgn;
-import '../services/pgn_parsing_service.dart' as pgn;
-import '../services/repertoire_creation.dart';
-import '../services/storage/storage_factory.dart';
-import '../theme/app_text_styles.dart';
-import '../utils/safe_file_name.dart';
-import '../widgets/pgn_import_dialog.dart';
+import '../../../services/pgn_mainline_lexer.dart' as pgn;
+import '../../../services/pgn_parsing_service.dart' as pgn;
+import '../../../theme/app_text_styles.dart';
+import '../../../utils/safe_file_name.dart';
+import '../../../widgets/pgn_import_dialog.dart';
 
 /// Shared material creation. Returns the new files to the caller; it never
 /// changes app mode or touches the builder's current document.
 class RepertoireCreationScreen extends StatefulWidget {
-  const RepertoireCreationScreen({super.key, this.pickPgn = pickPgnImport});
+  const RepertoireCreationScreen({
+    super.key,
+    required this.create,
+    this.pickPgn = pickPgnImport,
+  });
+
+  final Future<RepertoireCreationResult> Function(CreateRepertoire) create;
 
   final Future<PickedPgnImport?> Function() pickPgn;
 
@@ -78,14 +83,12 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
     });
     try {
       final name = _name.text.trim();
-      final existing = await StorageFactory.instance.listRepertoires();
-      if (existing.any((r) => r.name.toLowerCase() == name.toLowerCase())) {
-        throw RepertoireExistsException(name);
-      }
-      final created = await createRepertoire(
-        name: name,
-        color: _color,
-        pgnContent: _empty ? null : content,
+      final created = await widget.create(
+        CreateRepertoire(
+          name: name,
+          color: _color,
+          pgnContent: _empty ? null : content,
+        ),
       );
       if (mounted) Navigator.of(context).pop(created);
     } catch (e) {

@@ -1,11 +1,12 @@
+import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'dart:io';
 
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/screens/repertoire_chapters_screen.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/widgets/pgn_import_dialog.dart';
-import 'package:chess_auto_prep/widgets/repertoire_list_body.dart';
+import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_list_body.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -32,7 +33,8 @@ void main() {
         '${game('Quickstarter', 'Classical', '1. d4 Nf6 2. c4 g6')}'
         '${game('Quickstarter', 'Fianchetto', '1. d4 Nf6 2. Nf3 g6')}';
     RepertoireMetadata? selected;
-    await tester.pumpWidget(
+    await pumpCatalogWidget(
+      tester,
       MaterialApp(
         home: Scaffold(
           body: RepertoireListBody(
@@ -80,6 +82,9 @@ void main() {
     expect(selected?.filePath, endsWith('Quickstarter.pgn'));
     expect(selected?.name, 'Quickstarter');
     expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpCatalogWidget(tester, const SizedBox.shrink());
   });
 }
+
+Future<void> pumpCatalogWidget(WidgetTester tester, Widget child) =>
+    tester.pumpWidget(AppDependencies(child: child));

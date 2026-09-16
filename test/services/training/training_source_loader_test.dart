@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
 import 'package:chess_auto_prep/services/asked_questions_store.dart';
 import 'package:chess_auto_prep/services/training/training_source_loader.dart';

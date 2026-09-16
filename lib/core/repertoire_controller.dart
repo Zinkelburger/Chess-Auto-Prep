@@ -14,7 +14,7 @@ import '../constants/chess_constants.dart';
 import '../models/move_tree.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
-import '../models/repertoire_metadata.dart';
+import '../features/repertoires/models/repertoire_metadata.dart';
 import '../services/repertoire_line_expansion.dart';
 import '../services/repertoire_service.dart';
 import '../services/repertoire_pgn_text.dart';

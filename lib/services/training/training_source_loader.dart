@@ -25,7 +25,7 @@ import 'package:flutter/foundation.dart' show debugPrint, listEquals;
 import 'package:path/path.dart' as p;
 
 import '../../models/repertoire_line.dart';
-import '../../models/repertoire_metadata.dart';
+import '../../features/repertoires/models/repertoire_metadata.dart';
 import '../../models/repertoire_move_progress.dart';
 import '../../models/repertoire_review_entry.dart' show RepertoireReviewEntry;
 import '../asked_questions_store.dart';

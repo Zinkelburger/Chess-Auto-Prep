@@ -15,7 +15,7 @@ library;
 import 'package:path/path.dart' as p;
 
 import '../../../models/repertoire_line.dart';
-import '../../../models/repertoire_metadata.dart';
+import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../services/repertoire_review_service.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../../models/repertoire_metadata.dart';
+import '../../features/repertoires/models/repertoire_metadata.dart';
 import '../../models/tactics_set_metadata.dart';
 
 /// Abstract interface for storage operations.

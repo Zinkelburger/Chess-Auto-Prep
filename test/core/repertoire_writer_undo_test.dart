@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/core/repertoire_writer.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 

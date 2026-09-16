@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';

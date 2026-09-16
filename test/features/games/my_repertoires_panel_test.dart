@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/features/games/services/my_repertoire_settings.dart';
 import 'package:chess_auto_prep/features/games/widgets/my_repertoires_panel.dart';
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:chess_auto_prep/widgets/pgn_import_dialog.dart';

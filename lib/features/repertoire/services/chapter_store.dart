@@ -9,7 +9,7 @@ library;
 
 import 'package:path/path.dart' as p;
 
-import '../../../models/repertoire_metadata.dart';
+import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
 

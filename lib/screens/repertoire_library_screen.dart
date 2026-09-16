@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 import '../features/repertoire/controllers/repertoire_outline_controller.dart';
 import '../features/repertoire/widgets/repertoire_outline_panel.dart';
-import '../models/repertoire_metadata.dart';
+import '../features/repertoires/models/repertoire_metadata.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../theme/app_text_styles.dart';
@@ -16,7 +16,7 @@ import '../widgets/app_breadcrumb_trail.dart';
 import '../widgets/app_mode_switcher.dart';
 import '../widgets/app_overflow_menu.dart';
 import '../widgets/app_settings_button.dart';
-import '../widgets/repertoire_list_body.dart';
+import '../features/repertoires/widgets/repertoire_list_body.dart';
 
 /// Material management independent of an editor, engine or training session.
 /// Structural edits use the same controller and Undo as the builder outline.

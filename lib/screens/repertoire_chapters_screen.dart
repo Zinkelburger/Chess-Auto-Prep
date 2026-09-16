@@ -7,7 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../models/repertoire_metadata.dart';
+import '../features/repertoires/models/repertoire_metadata.dart';
 import '../widgets/chapter_list_body.dart';
 import '../widgets/common/item_title.dart';
 

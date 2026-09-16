@@ -2,16 +2,21 @@
 
 ## Placement and dependencies
 
-- Feature-owned code belongs in `lib/features/<name>/` under `controllers/`,
-  `models/`, `services/` or `widgets/`.
-- Cross-cutting code used by three or more features/screens belongs in the
-  shared `lib/core/`, `models/`, `services/` or `widgets/` layer. Preserve
-  storage-owned metadata types and generation pipeline code in their shared
-  layer even when a feature consumes them.
+- Migrated features use `lib/features/<name>/{models,controllers,repositories,widgets}`.
+  Repertoire catalog code lives in `features/repertoires/`; the older singular
+  `features/repertoire/` still owns unmigrated document/generation workflows.
+- `lib/app/` constructs dependencies. `lib/infrastructure/` adapts external
+  systems to injected feature contracts. Controllers never import storage,
+  infrastructure or widgets. Domain models/repository contracts stay pure Dart.
+  See [the renewal dependency rules](../ARCHITECTURE_RENEWAL.md#target-layout-and-dependency-rules).
+- Unmigrated code retains its existing `core/`, `models/`, `services/` and
+  `widgets/` locations until its owning workflow migrates. Do not add new
+  catch-all shared layers or move files without changing ownership.
 - Choose one canonical type path; move it and fix imports instead of adding
   re-export shims.
 - Non-UI layers must not import `widgets/` or `screens/`, including within
-  features. `scripts/ci.sh lint` enforces this; keep its allowlist empty.
+  features. `scripts/ci.sh lint` also enforces the migrated catalog and
+  infrastructure boundaries using `scripts/check_architecture_boundaries.py`.
 
 ## State and lifecycle
 

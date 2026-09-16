@@ -4,33 +4,36 @@
 /// in screens that need a repertoire before they can function (Builder, Trainer).
 library;
 
-import 'common/name_entry_dialog.dart';
 import 'dart:async';
+
+import '../models/repertoire_creation.dart';
+
+import '../../../widgets/common/name_entry_dialog.dart';
 
 import 'package:path/path.dart' as p;
 
 import 'package:flutter/material.dart';
 
-import 'common/item_title.dart';
+import '../../../widgets/common/item_title.dart';
 
 import '../models/repertoire_metadata.dart';
-import '../screens/repertoire_chapters_screen.dart';
-import '../screens/repertoire_creation_screen.dart';
-import '../services/repertoire_creation.dart';
-import '../features/repertoire/widgets/repertoire_import_dialog.dart';
-import '../services/storage/storage_factory.dart';
-import 'pgn_import_dialog.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
-import '../utils/app_messages.dart';
-import '../utils/safe_file_name.dart';
-import '../utils/time_format.dart';
-import 'common/confirm_dialog.dart';
-import 'common/list_search_field.dart';
-import 'layout/empty_state_placeholder.dart';
-import 'chapter_list_body.dart' show ChapterPick;
+import '../../../screens/repertoire_chapters_screen.dart';
+import 'repertoire_creation_screen.dart';
+import 'repertoire_import_dialog.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../controllers/repertoire_catalog_controller.dart';
+import '../../../widgets/pgn_import_dialog.dart';
+import '../../../theme/app_colors.dart';
+import '../../../theme/app_text_styles.dart';
+import '../../../utils/app_messages.dart';
+import '../../../utils/safe_file_name.dart';
+import '../../../utils/time_format.dart';
+import '../../../widgets/common/confirm_dialog.dart';
+import '../../../widgets/common/list_search_field.dart';
+import '../../../widgets/layout/empty_state_placeholder.dart';
+import '../../../widgets/chapter_list_body.dart' show ChapterPick;
 
-class RepertoireListBody extends StatefulWidget {
+class RepertoireListBody extends ConsumerStatefulWidget {
   /// Called with the chosen *chapter*'s metadata (a `.pgn` file path). A
   /// repertoire is a folder; tapping one opens its chapter list, and the
   /// selected chapter is what the builder / trainer actually load.
@@ -62,60 +65,37 @@ class RepertoireListBody extends StatefulWidget {
   });
 
   @override
-  State<RepertoireListBody> createState() => _RepertoireListBodyState();
+  ConsumerState<RepertoireListBody> createState() => _RepertoireListBodyState();
 }
 
-class _RepertoireListBodyState extends State<RepertoireListBody> {
-  List<RepertoireMetadata> _repertoires = [];
-  List<RepertoireMetadata> _studies = [];
-  bool _isLoading = true;
-  String? _loadError;
+class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
   String _search = '';
   bool _importing = false;
   bool _pasting = false;
 
+  bool get _includeStudies => widget.onStudySelected != null;
+  RepertoireCatalogController get _controller =>
+      ref.read(repertoireCatalogProvider(_includeStudies).notifier);
+  List<RepertoireMetadata> get _repertoires =>
+      ref.read(repertoireCatalogProvider(_includeStudies)).repertoires;
+  List<RepertoireMetadata> get _studies =>
+      ref.read(repertoireCatalogProvider(_includeStudies)).studies;
+  bool get _busy => ref.read(repertoireCatalogProvider(_includeStudies)).busy;
   List<RepertoireMetadata> get _visibleRepertoires =>
       _repertoires.where((r) => matchesSearch(_search, r.name)).toList();
-
   List<RepertoireMetadata> get _visibleStudies =>
       _studies.where((s) => matchesSearch(_search, s.name)).toList();
+
+  Future<void> _loadRepertoires() => _controller.refresh();
 
   @override
   void initState() {
     super.initState();
-    unawaited(_loadRepertoires());
-  }
-
-  Future<void> _loadRepertoires() async {
-    setState(() {
-      _isLoading = true;
-      _loadError = null;
+    // A legacy host recreates this widget on re-entry/Refresh. The provider
+    // may still be alive in another selector; refresh that shared owner too.
+    scheduleMicrotask(() {
+      if (mounted) unawaited(_controller.refresh());
     });
-
-    try {
-      final repertoires = await StorageFactory.instance.listRepertoires();
-      repertoires.sort((a, b) => b.lastModified.compareTo(a.lastModified));
-      final studies = widget.onStudySelected == null
-          ? <RepertoireMetadata>[]
-          : await StorageFactory.instance.listStudyFiles();
-      studies.sort((a, b) => b.lastModified.compareTo(a.lastModified));
-
-      if (!mounted) return;
-      setState(() {
-        _repertoires = repertoires;
-        _studies = studies;
-        _isLoading = false;
-        _loadError = null;
-      });
-    } catch (e) {
-      debugPrint('Load repertoires failed: $e');
-      if (!mounted) return;
-      setState(() {
-        _repertoires = [];
-        _isLoading = false;
-        _loadError = 'Could not load repertoires.\n$e';
-      });
-    }
   }
 
   @override
@@ -128,11 +108,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   );
 
   Widget _buildContents(BuildContext context) {
-    if (_isLoading) {
+    final catalog = ref.watch(repertoireCatalogProvider(_includeStudies));
+    if (catalog.loading && _repertoires.isEmpty && _studies.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_loadError != null) {
+    if (catalog.loadError != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -145,7 +126,10 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                 color: AppColors.danger,
               ),
               const SizedBox(height: 16),
-              Text(_loadError!, textAlign: TextAlign.center),
+              const Text(
+                'Could not load repertoires. Please try again.',
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _loadRepertoires,
@@ -226,7 +210,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               FilledButton.icon(
-                onPressed: _importing ? null : _importRepertoire,
+                onPressed: (_importing || _busy) ? null : _importRepertoire,
                 icon: importingFile
                     ? const SizedBox(
                         width: 18,
@@ -237,12 +221,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                 label: Text(importingFile ? 'Importing…' : 'Open PGN file…'),
               ),
               OutlinedButton.icon(
-                onPressed: _importing ? null : _createRepertoire,
+                onPressed: (_importing || _busy) ? null : _createRepertoire,
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Create new repertoire'),
               ),
               TextButton.icon(
-                onPressed: _importing
+                onPressed: (_importing || _busy)
                     ? null
                     : () => _importRepertoire(paste: true),
                 icon: const Icon(Icons.content_paste, size: 18),
@@ -364,12 +348,12 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 18),
             tooltip: 'Rename repertoire',
-            onPressed: () => _renameRepertoire(repertoire),
+            onPressed: _busy ? null : () => _renameRepertoire(repertoire),
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline, size: 18),
             tooltip: 'Delete repertoire',
-            onPressed: () => _deleteRepertoire(repertoire),
+            onPressed: _busy ? null : () => _deleteRepertoire(repertoire),
           ),
         ],
       ),
@@ -403,7 +387,10 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   Future<void> _createRepertoire() async {
     final created = await Navigator.of(context).push<RepertoireCreationResult>(
       MaterialPageRoute(
-        builder: (_) => RepertoireCreationScreen(pickPgn: widget.pickPgn),
+        builder: (_) => RepertoireCreationScreen(
+          pickPgn: widget.pickPgn,
+          create: _controller.create,
+        ),
       ),
     );
     if (!mounted || created == null) return;
@@ -450,10 +437,15 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     try {
       final names = _repertoires.map((r) => r.name).toList();
       final created = paste
-          ? await showRepertoirePasteDialog(context, existingNames: names)
+          ? await showRepertoirePasteDialog(
+              context,
+              existingNames: names,
+              create: _controller.create,
+            )
           : await showRepertoireImportDialog(
               context,
               existingNames: names,
+              create: _controller.create,
               pickPgn: widget.pickPgn,
             );
       if (created == null || !mounted) return;
@@ -477,12 +469,9 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       confirmLabel: 'Delete',
     );
 
-    if (confirmed) {
+    if (confirmed && mounted) {
       try {
-        await StorageFactory.instance.deleteRepertoireDirectory(
-          repertoire.filePath,
-        );
-        await _loadRepertoires();
+        await _controller.moveToRecovery(repertoire);
       } catch (e) {
         debugPrint('Delete repertoire failed: $e');
         if (mounted) {
@@ -515,11 +504,9 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
               : null),
     );
 
-    if (result != null && result.isNotEmpty) {
+    if (mounted && result != null && result.isNotEmpty) {
       try {
-        final storage = StorageFactory.instance;
-        await storage.renameRepertoireDirectory(repertoire.filePath, result);
-        await _loadRepertoires();
+        await _controller.rename(repertoire, result);
       } catch (e) {
         debugPrint('Rename repertoire failed: $e');
         if (mounted) {

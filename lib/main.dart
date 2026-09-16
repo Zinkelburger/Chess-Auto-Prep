@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'app/app_dependencies.dart';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -160,64 +162,66 @@ class ChessAutoPrepApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) {
-            final appState = AppState();
-            unawaited(appState.loadUsernames());
-            return appState;
-          },
-        ),
-        // Not lazy: the history must exist from the first frame or early
-        // handoffs would go unrecorded and the trail would lie.
-        ChangeNotifierProvider<AppHistory>(
-          lazy: false,
-          create: (ctx) => AppHistory(ctx.read<AppState>()),
-        ),
-        // App-scoped singletons exposed through Provider so widgets/tests can
-        // depend on them via context (instead of global `.instance` access) and
-        // inject fakes in tests. `.value` because these are process singletons
-        // (`.instance`) that must not be disposed by the provider.
-        ChangeNotifierProvider<EngineSettings>.value(
-          value: EngineSettings.instance,
-        ),
-        ChangeNotifierProvider<EvalDatabaseSettings>.value(
-          value: EvalDatabaseSettings.instance,
-        ),
-        ChangeNotifierProvider<EngineLifecycle>.value(
-          value: EngineLifecycle.instance,
-        ),
-        ChangeNotifierProvider<MasterGamesService>.value(
-          value: MasterGamesService.instance,
-        ),
-        // App-scoped (not study-mode-scoped) so other modes can add chapters
-        // ("Add line to study" in the PGN viewer) through the same document
-        // the study screen edits.
-        ChangeNotifierProvider<StudyController>(
-          create: (_) => StudyController(),
-        ),
-      ],
-      // Boards and move lists read the Display preferences through this scope
-      // so a change in Settings repaints them in place.
-      child: DisplaySettingsScope(
-        settings: BoardDisplaySettings.instance,
-        child: MaterialApp(
-          title: 'Chess Auto Prep',
-          theme: AppTheme.dark(),
-          // Keep the semantics tree empty unless explicitly enabled —
-          // GNOME's accessibility bus can enable Flutter's semantics tree
-          // and then assert every frame on our recognizer-per-span movetext
-          // (flutter/flutter#169214). Pass --dart-define=ENABLE_SEMANTICS=true
-          // to re-enable when testing a Flutter pin that includes the fix.
-          builder: (context, child) {
-            final wrapped = EscapeToPopScope(child: child!);
-            const enableSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
-            if (enableSemantics) return wrapped;
-            return ExcludeSemantics(child: wrapped);
-          },
-          home: const AppUpdateHost(child: MainScreen()),
-          debugShowCheckedModeBanner: false,
+    return AppDependencies(
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (_) {
+              final appState = AppState();
+              unawaited(appState.loadUsernames());
+              return appState;
+            },
+          ),
+          // Not lazy: the history must exist from the first frame or early
+          // handoffs would go unrecorded and the trail would lie.
+          ChangeNotifierProvider<AppHistory>(
+            lazy: false,
+            create: (ctx) => AppHistory(ctx.read<AppState>()),
+          ),
+          // App-scoped singletons exposed through Provider so widgets/tests can
+          // depend on them via context (instead of global `.instance` access) and
+          // inject fakes in tests. `.value` because these are process singletons
+          // (`.instance`) that must not be disposed by the provider.
+          ChangeNotifierProvider<EngineSettings>.value(
+            value: EngineSettings.instance,
+          ),
+          ChangeNotifierProvider<EvalDatabaseSettings>.value(
+            value: EvalDatabaseSettings.instance,
+          ),
+          ChangeNotifierProvider<EngineLifecycle>.value(
+            value: EngineLifecycle.instance,
+          ),
+          ChangeNotifierProvider<MasterGamesService>.value(
+            value: MasterGamesService.instance,
+          ),
+          // App-scoped (not study-mode-scoped) so other modes can add chapters
+          // ("Add line to study" in the PGN viewer) through the same document
+          // the study screen edits.
+          ChangeNotifierProvider<StudyController>(
+            create: (_) => StudyController(),
+          ),
+        ],
+        // Boards and move lists read the Display preferences through this scope
+        // so a change in Settings repaints them in place.
+        child: DisplaySettingsScope(
+          settings: BoardDisplaySettings.instance,
+          child: MaterialApp(
+            title: 'Chess Auto Prep',
+            theme: AppTheme.dark(),
+            // Keep the semantics tree empty unless explicitly enabled —
+            // GNOME's accessibility bus can enable Flutter's semantics tree
+            // and then assert every frame on our recognizer-per-span movetext
+            // (flutter/flutter#169214). Pass --dart-define=ENABLE_SEMANTICS=true
+            // to re-enable when testing a Flutter pin that includes the fix.
+            builder: (context, child) {
+              final wrapped = EscapeToPopScope(child: child!);
+              const enableSemantics = bool.fromEnvironment('ENABLE_SEMANTICS');
+              if (enableSemantics) return wrapped;
+              return ExcludeSemantics(child: wrapped);
+            },
+            home: const AppUpdateHost(child: MainScreen()),
+            debugShowCheckedModeBanner: false,
+          ),
         ),
       ),
     );

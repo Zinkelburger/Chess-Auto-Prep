@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../models/repertoire_metadata.dart';
+import '../../features/repertoires/models/repertoire_metadata.dart';
 import '../../models/tactics_set_metadata.dart';
 import '../../utils/atomic_file.dart';
 import '../../utils/file_text_reader.dart';

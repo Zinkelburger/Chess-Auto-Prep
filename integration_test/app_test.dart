@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
-import 'package:chess_auto_prep/screens/repertoire_creation_screen.dart';
+import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_creation_screen.dart';
 import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/services/analysis_games_service.dart';

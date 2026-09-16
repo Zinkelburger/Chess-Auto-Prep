@@ -4,8 +4,8 @@
 /// should refuse in the UI before showing a config dialog.
 library;
 
-import '../engine/engine_lifecycle.dart';
-import '../engine/stockfish_pool.dart';
+import 'engine_lifecycle.dart';
+import 'stockfish_pool.dart';
 
 class GenerationLease {
   GenerationLease._();

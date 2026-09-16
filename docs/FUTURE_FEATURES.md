@@ -17,8 +17,10 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 ## Architecture renewal and eventual replacement
 
 **Status: Partial.** The current-code save/undo safety prerequisite is
-implemented and tested on Linux; the replacement architecture has not yet migrated a
-feature slice. The staged rewrite, shared PGN mutation API, UI design
+implemented and tested on Linux. The first replacement slice is partial:
+repertoire catalog actions now use injected repository/controller boundaries
+and the new hierarchy; design, shared storage/settings and full slice gates
+remain unfinished. The staged rewrite, shared PGN mutation API, UI design
 principles, storage preservation gates and milestone sequence live in
 [ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). That document is the canonical
 implementation plan; this file retains the feature backlog. Update milestone

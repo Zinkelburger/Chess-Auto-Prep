@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/eval_tree/controllers/eval_tree_controller.dart';
 import 'package:chess_auto_prep/features/eval_tree/widgets/eval_tree_tab.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 
 import 'eval_tree_test_helpers.dart';
 

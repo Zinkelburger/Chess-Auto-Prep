@@ -1,8 +1,9 @@
+import '../../repertoires/models/repertoire_creation.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../models/repertoire_metadata.dart';
+import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/repertoire_creation.dart';
 import '../../../services/storage/storage_factory.dart';

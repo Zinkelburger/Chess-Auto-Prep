@@ -1,16 +1,18 @@
+import 'package:chess_auto_prep/app/app_dependencies.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_creation.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/features/repertoire/widgets/repertoire_import_dialog.dart';
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
-import 'package:chess_auto_prep/screens/repertoire_creation_screen.dart';
-import 'package:chess_auto_prep/services/repertoire_creation.dart';
+import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_import_dialog.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_creation_screen.dart';
+import 'package:chess_auto_prep/infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:chess_auto_prep/widgets/pgn_import_dialog.dart';
-import 'package:chess_auto_prep/widgets/repertoire_list_body.dart';
+import 'package:chess_auto_prep/features/repertoires/widgets/repertoire_list_body.dart';
 
 const _pgn = '[Event "Caro-Kann"]\n\n1. e4 c6 2. d4 d5 (2... d6) *';
 const _picked = PickedPgnImport(
@@ -68,7 +70,8 @@ void main() {
     Future<PickedPgnImport?> Function()? picker,
     List<String> existingNames = const [],
   }) async {
-    await tester.pumpWidget(
+    await pumpCatalogWidget(
+      tester,
       MaterialApp(
         home: Builder(
           builder: (context) => Scaffold(
@@ -77,6 +80,7 @@ void main() {
                 result = await showRepertoireImportDialog(
                   context,
                   existingNames: existingNames,
+                  create: LegacyRepertoireCatalogRepository(storage).create,
                   pickPgn: picker ?? () async => _picked,
                 );
               },
@@ -161,7 +165,7 @@ void main() {
   ) async {
     final pending = Completer<PickedPgnImport?>();
     await open(tester, picker: () => pending.future);
-    await tester.pumpWidget(const SizedBox());
+    await pumpCatalogWidget(tester, const SizedBox());
     pending.complete(_picked);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -190,7 +194,8 @@ void main() {
       final pending = Completer<PickedPgnImport?>();
       var calls = 0;
       RepertoireMetadata? selected;
-      await tester.pumpWidget(
+      await pumpCatalogWidget(
+        tester,
         MaterialApp(
           home: Scaffold(
             body: RepertoireListBody(
@@ -224,7 +229,8 @@ void main() {
     'secondary paste action validates moves and imports without naming',
     (tester) async {
       RepertoireMetadata? selected;
-      await tester.pumpWidget(
+      await pumpCatalogWidget(
+        tester,
         MaterialApp(
           home: Scaffold(
             body: RepertoireListBody(onSelected: (value) => selected = value),
@@ -253,7 +259,8 @@ void main() {
     },
   );
   Future<void> openCreation(WidgetTester tester) async {
-    await tester.pumpWidget(
+    await pumpCatalogWidget(
+      tester,
       MaterialApp(
         home: Scaffold(body: RepertoireListBody(onSelected: (_) {})),
       ),
@@ -289,7 +296,8 @@ void main() {
     tester,
   ) async {
     RepertoireMetadata? selected;
-    await tester.pumpWidget(
+    await pumpCatalogWidget(
+      tester,
       MaterialApp(
         home: Scaffold(
           body: RepertoireListBody(onSelected: (value) => selected = value),
@@ -375,3 +383,6 @@ void main() {
     },
   );
 }
+
+Future<void> pumpCatalogWidget(WidgetTester tester, Widget child) =>
+    tester.pumpWidget(AppDependencies(child: child));

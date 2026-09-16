@@ -9,6 +9,7 @@
 /// write exactly the same thing. Hence one function instead of two copies.
 library;
 
+import '../features/repertoires/models/repertoire_creation.dart';
 import 'dart:io';
 
 import '../features/repertoire/services/chapter_splitter.dart';
@@ -16,43 +17,6 @@ import 'pgn_parsing_service.dart' as pgn;
 import 'repertoire_line_expansion.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
-
-/// Where a newly created repertoire landed.
-class RepertoireCreationResult {
-  const RepertoireCreationResult({
-    required this.directoryPath,
-    required this.chapterPath,
-    required this.gameCount,
-    List<String>? chapterPaths,
-  }) : chapterPaths = chapterPaths ?? const [];
-
-  /// The repertoire folder — what [MyRepertoireSettings] designates.
-  final String directoryPath;
-
-  /// Its first chapter — what an editor opens. A course export is split
-  /// into one file per course chapter (see [createRepertoire]); this is then
-  /// the first of them, in the course's order.
-  final String chapterPath;
-
-  /// Every chapter file written, in order; one entry unless the import was
-  /// a course export with chapters of its own.
-  final List<String> chapterPaths;
-
-  /// Lines the chapter holds after import, every variation counted as its
-  /// own line; 0 for an empty repertoire.
-  final int gameCount;
-}
-
-/// A repertoire could not be created because its first chapter is already on
-/// disk. Thrown rather than silently overwriting it.
-class RepertoireExistsException implements Exception {
-  const RepertoireExistsException(this.name);
-
-  final String name;
-
-  @override
-  String toString() => 'A repertoire named "$name" already exists.';
-}
 
 /// Create the folder for [name] with one chapter marked for [color]
 /// ('White' or 'Black'), optionally seeded with [pgnContent].

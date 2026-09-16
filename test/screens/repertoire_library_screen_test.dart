@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/core/app_state.dart';
@@ -35,7 +36,8 @@ void main() {
         root.deleteSync(recursive: true);
         app.dispose();
       });
-      await tester.pumpWidget(
+      await pumpCatalogWidget(
+        tester,
         ChangeNotifierProvider.value(
           value: app,
           child: const MaterialApp(home: RepertoireLibraryScreen()),
@@ -79,8 +81,11 @@ void main() {
       final build = app.takeHandoff<OpenBuilder>()!;
       expect(build.repertoirePath, chapter.path);
       expect(build.reloadFromDisk, isTrue);
-      await tester.pumpWidget(const SizedBox());
+      await pumpCatalogWidget(tester, const SizedBox());
       expect(tester.takeException(), isNull);
     },
   );
 }
+
+Future<void> pumpCatalogWidget(WidgetTester tester, Widget child) =>
+    tester.pumpWidget(AppDependencies(child: child));

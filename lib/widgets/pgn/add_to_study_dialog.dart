@@ -6,7 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../models/repertoire_metadata.dart';
+import '../../features/repertoires/models/repertoire_metadata.dart';
 import '../../services/storage/storage_factory.dart';
 import '../../theme/app_colors.dart';
 import '../common/name_entry_dialog.dart';

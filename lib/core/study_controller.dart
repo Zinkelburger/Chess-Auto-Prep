@@ -15,7 +15,7 @@ import 'package:path/path.dart' as p;
 
 import '../models/move_tree.dart';
 import 'move_navigation.dart';
-import '../models/repertoire_metadata.dart';
+import '../features/repertoires/models/repertoire_metadata.dart';
 import '../models/study_document.dart';
 import '../services/pgn_parsing_service.dart'
     show splitPgnIntoGames, extractHeaders, stripBom, countPgnGames;

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../models/repertoire_line.dart';
-import '../../../models/repertoire_metadata.dart';
+import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../widgets/common/choice_field.dart';
 import '../../../widgets/common/list_search_field.dart';

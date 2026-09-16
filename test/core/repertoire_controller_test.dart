@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
-import 'package:chess_auto_prep/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 
 /// Replay [moves] from [startingFen] (or standard start) and return the FEN.
 String fenAfterMoves(List<String> moves, {String? startingFen}) {

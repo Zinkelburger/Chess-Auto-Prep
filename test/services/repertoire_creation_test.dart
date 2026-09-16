@@ -2,6 +2,7 @@
 /// My-repertoires panel cannot write two different headers.
 library;
 
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_creation.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';

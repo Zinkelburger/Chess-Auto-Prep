@@ -1,9 +1,9 @@
+import '../models/repertoire_creation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../services/pgn_mainline_lexer.dart' as pgn;
 import '../../../services/pgn_parsing_service.dart' as pgn;
-import '../../../services/repertoire_creation.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
 import '../../../utils/safe_file_name.dart';
@@ -14,6 +14,7 @@ import '../../../widgets/pgn_import_dialog.dart';
 Future<RepertoireCreationResult?> showRepertoireImportDialog(
   BuildContext context, {
   required List<String> existingNames,
+  required Future<RepertoireCreationResult> Function(CreateRepertoire) create,
   Future<PickedPgnImport?> Function() pickPgn = pickPgnImport,
 }) async {
   try {
@@ -42,11 +43,13 @@ Future<RepertoireCreationResult?> showRepertoireImportDialog(
           p.basenameWithoutExtension(source.fileName ?? 'Imported repertoire'),
       existingNames,
     );
-    return await createRepertoire(
-      name: name,
-      color: picked.suggestedColor ?? 'White',
-      pgnContent: source.pgnContent,
-      gameCount: source.gameCount,
+    return await create(
+      CreateRepertoire(
+        name: name,
+        color: picked.suggestedColor ?? 'White',
+        pgnContent: source.pgnContent,
+        gameCount: source.gameCount,
+      ),
     );
   } catch (e) {
     debugPrint('Import repertoire failed: $e');
@@ -80,13 +83,20 @@ String _availableName(String suggested, List<String> existingNames) {
 Future<RepertoireCreationResult?> showRepertoirePasteDialog(
   BuildContext context, {
   required List<String> existingNames,
+  required Future<RepertoireCreationResult> Function(CreateRepertoire) create,
 }) => showDialog<RepertoireCreationResult>(
   context: context,
-  builder: (_) => _RepertoirePasteDialog(existingNames: existingNames),
+  builder: (_) =>
+      _RepertoirePasteDialog(existingNames: existingNames, create: create),
 );
 
 class _RepertoirePasteDialog extends StatefulWidget {
-  const _RepertoirePasteDialog({required this.existingNames});
+  const _RepertoirePasteDialog({
+    required this.existingNames,
+    required this.create,
+  });
+
+  final Future<RepertoireCreationResult> Function(CreateRepertoire) create;
 
   final List<String> existingNames;
 
@@ -119,11 +129,13 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
     try {
       final color = await inferImportColor(content);
       if (!mounted) return;
-      final created = await createRepertoire(
-        name: _availableName('Pasted repertoire', widget.existingNames),
-        color: color ?? 'White',
-        pgnContent: content,
-        gameCount: count,
+      final created = await widget.create(
+        CreateRepertoire(
+          name: _availableName('Pasted repertoire', widget.existingNames),
+          color: color ?? 'White',
+          pgnContent: content,
+          gameCount: count,
+        ),
       );
       if (mounted) Navigator.of(context).pop(created);
     } catch (e) {

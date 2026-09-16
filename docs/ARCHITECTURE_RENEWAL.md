@@ -1,6 +1,6 @@
 # Architecture renewal
 
-**Status: Partial — S0 implemented and verified on Linux; replacement slices pending.** Planning baseline: 2026-09-16. This is the canonical
+**Status: Partial — S0 verified on Linux; first replacement slice in progress.** Planning baseline: 2026-09-16. This is the canonical
 rewrite plan. [FUTURE_FEATURES.md](FUTURE_FEATURES.md) tracks feature backlog;
 [COMPONENT_MAP.md](COMPONENT_MAP.md) describes implemented behavior. Update
 milestone evidence and selected decisions here as work proceeds.
@@ -153,8 +153,90 @@ PROC-02 lifecycle gates. The preview was stopped before final checks.
 
 **Next required increment:** complete milestone 0's missing inventory and
 measured baselines, then implement and validate the first repertoire slice.
-Milestones 1–7 and PLAN-02 have not been completed; no new design direction,
-Riverpod migration, shared native-revision store or vault migration is claimed.
+Milestones 1–7 and PLAN-02 have not been completed. The catalog boundary
+checkpoint below starts the Riverpod migration; no new design direction,
+shared native-revision store or vault migration is claimed.
+
+### Catalog boundary checkpoint — first slice in progress
+
+The renewed full-rewrite instruction retains the original scope. The prior
+status-only turn did not implement architecture; this checkpoint changes the
+production ownership. The first-slice budget remains 8 active hours, midpoint
+4 hours, with 1 hour validation reserve and 30-minute package spikes. This
+checkpoint starts that budget; it does not graduate milestone 0 or the full
+first slice. The outstanding schema/reference/host inventory and measured
+performance/restore baselines remain required before later slices expand.
+
+Implemented paths:
+
+- `lib/app/app_dependencies.dart`: app-owned dependency composition and scoped
+  overrides; no implicit Riverpod retry.
+- `lib/features/repertoires/models/`: canonical metadata, immutable creation
+  results/requests and catalog snapshots. All callers use the new canonical
+  metadata/result imports; the old files do not re-export them.
+- `lib/features/repertoires/repositories/`: pure Dart catalog contract.
+- `lib/features/repertoires/controllers/`: manual Riverpod presentation owner
+  for load/create/rename/recoverable delete, with explicit command rejection,
+  coalesced refresh, stale-read suppression and in-flight commit retention.
+- `lib/features/repertoires/widgets/`: the production list, creation route and
+  import/paste interaction. These no longer call global storage or the legacy
+  creation service; forms submit injected domain requests.
+- `lib/infrastructure/repertoires/`: injected compatibility adapter to the
+  current storage/creation implementation. It preserves existing formats,
+  chapter splitting, rename history handling and quarantine behavior.
+
+The singular `features/repertoire/` remains the owner of unmigrated document,
+outline and generation workflows, not a duplicate catalog. Its retirement is
+milestones 3/5. The catalog storage adapter and legacy creation function remain
+until the shared document/directory mutation contracts pass milestone 2/3;
+non-catalog My-repertoires designation still calls that function. The existing
+Provider app owners remain until their respective slices migrate; they do not
+own catalog state. Picker/PGN codec helpers, shared theme/controls and the
+chapter organizer are still legacy dependencies, with replacement in 1/2–3.
+
+First-slice persisted-reference ledger (source inspection; not a restore pass):
+
+| Authority | Format/key and owner | Required preservation / remaining evidence |
+|-----------|----------------------|---------------------------------------------|
+| Repertoire contents | `Documents/repertoires/<folder>/<chapter>.pgn`, `IOStorageService` and creation/chapter-split services | Catalog migration retains path, headers and bytes; native revision and multi-file creation transactions remain pending. |
+| Recovery content | `Documents/.chess_auto_prep_trash/repertoires/`, `FileMutationService` | Delete moves directories without overwrite; native journey verifies recovered bytes. User-facing restore and interrupted-restore rehearsal remain pending. |
+| Attempt history | `repertoire_move_attempts.jsonl`, `MoveAttemptStore` | Current directory rename calls `repoint`; full history/reference restore remains to test. |
+| Designated opening books | SharedPreferences `my_repertoire_white_paths`, `my_repertoire_black_paths`, `MyRepertoireSettings` | These are folder paths. Current storage rename does not update these keys; the first-slice settings/rename transaction must address that existing gap before DATA-06/SET-01 pass. |
+| Catalog UI state | Scoped controller snapshots; widget-local search and draft text | No new persistent schema/key. Persisted navigation/search restoration belongs to the shell work still pending. |
+
+Package spike: stable `flutter_riverpod`/`riverpod` **3.4.3**, Flutter **3.47.2**,
+Dart **3.13.2**, committed lockfile. Manual `NotifierProvider` and repository
+provider overrides are used; no generation or experimental mutation API.
+Transitive additions are `listen` (BSD-3-Clause) and `state_notifier` (MIT);
+`flutter_riverpod` and `riverpod` are MIT. Licenses were inspected in the resolved
+package cache. No second state owner
+was created for a migrated action. Riverpod owns presentation only, and the
+repository can be constructed/tested without a provider container. Native
+plugin dependencies are unchanged. Package lifecycle/disposal/retry checks
+exercise the locked version, following the [Riverpod 3 migration guidance](https://riverpod.dev/docs/3.0_migration).
+
+Checkpoint verification (the source is the catalog-boundary checkpoint commit;
+these are scoped results, not complete first-slice gates):
+
+| ID | Scope/host | Check | Result | Remaining limitation |
+|----|------------|-------|--------|----------------------|
+| ARCH-01 | Migrated catalog / Dart | `scripts/check_architecture_boundaries.py`, its five regression cases, analyze/lint | Pass: widget/controller storage bypass rejected; pure models/contracts and injected infrastructure enforced | Legacy organizer/picker/codec bridges remain documented above. |
+| STATE-01 | Catalog controller / locked Riverpod | `test/features/repertoires/repertoire_catalog_controller_test.dart` | Pass: ten cases covering overlapping actions, stale reads, immutable projections, synchronous/asynchronous read failure, explicit retry, write failure, disposal and offscreen commit | Document/jobs and whole-app ownership remain pending. |
+| DATA-02, TEST-01 | Existing storage adapter / Linux | `test/features/repertoires/repertoire_catalog_repository_test.dart` | Pass: four real-filesystem cases for concurrent create, invalid input, rename collision and byte-preserving recoverable deletion | Native identity/durability and multi-file transaction gates are not proven. |
+| TEST-01 | Catalog consumers / Flutter | Focused catalog, import/paste, course navigation, library, builder, creation, metadata and My-repertoires panel tests | Pass: 60 cases; the final synchronous-retry correction adds one case and reruns all ten controller cases | Not the full release suite. |
+| TEST-01, UI-02 | Linux native app | `integration_test/repertoire_catalog_test.dart`, `integration_test/app_test.dart`, `integration_test/repertoire_mutation_test.dart` | Pass: nine journeys, including new create/search/rename/open/app-recreation/delete recovery and prior draft/conflict regression | App recreation is not a forced process-kill test; the existing engine Worker-unavailable warning on recreation remains outside this catalog gate. |
+| UI-04 | Linux private headless preview | Inspected 1280×720 [catalog screenshot](images/architecture-renewal-catalog.png) after reload | Pass for existing catalog rendering, readable rows/actions and no overflow | No new appearance selected; product-owner design review and broader usability gates remain pending. |
+
+Initial native test attempts failed because the reused disposable profile had
+multiple rows, a prior run's name already existed, and the destructive confirm
+uses a text button. The test now creates a unique name, targets its own row,
+and locates the dialog action independently of button styling. These fixture
+errors were corrected and the native sequence passed. Analysis/lint passes with
+nine pre-existing informational lints and no warnings/errors. The final retry
+fix also receives its focused native catalog rerun. No native file-identity,
+full backup/restore, new design/ARB/Widgetbook, shared settings, persistent-shell
+or Windows/macOS gate is implied. PLAN-02 stays pending until the complete
+first-slice evidence exists.
 
 ### Initial parity and ownership inventory (milestone 0, partial)
 
@@ -1388,7 +1470,8 @@ a process does not simulate lost hardware caches.
 
 S0 is **complete for the scoped Linux cases** and milestone 0 has a
 **partial inventory** above.
-Milestones 1–7 are **Not started**. Each row yields a reviewable result; later
+Milestone 1/2 is **Partial** (catalog boundary checkpoint below); milestones
+3–7 are **Not started**. Each row yields a reviewable result; later
 rows depend on the contracts established earlier, not on an unbounded framework
 build. Reorder later feature slices after the dependency inventory, with a
 recorded reason. No current mode is silently dropped.

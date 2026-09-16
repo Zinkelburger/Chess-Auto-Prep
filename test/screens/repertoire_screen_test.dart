@@ -11,6 +11,8 @@
 /// way the rest of the app does: an [AppState] handoff.
 library;
 
+import 'package:chess_auto_prep/app/app_dependencies.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'package:chess_auto_prep/widgets/pgn_with_analysis_pane.dart';
@@ -108,7 +110,8 @@ Future<AppState> _pumpScreen(
 
   final appState = AppState();
   addTearDown(appState.dispose);
-  await tester.pumpWidget(
+  await pumpCatalogWidget(
+    tester,
     ChangeNotifierProvider<AppState>.value(
       value: appState,
       child: const MaterialApp(home: RepertoireScreen()),
@@ -397,3 +400,6 @@ void main() {
     controller.debugBeforeRepertoireApply = null;
   });
 }
+
+Future<void> pumpCatalogWidget(WidgetTester tester, Widget child) =>
+    tester.pumpWidget(AppDependencies(child: child));

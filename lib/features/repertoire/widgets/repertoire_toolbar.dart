@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../models/repertoire_metadata.dart';
+import '../../repertoires/models/repertoire_metadata.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/app_breadcrumb_trail.dart';
