@@ -170,6 +170,9 @@ class FileMutationService {
     Directory source,
     Directory destination, {
     required Directory allowedRoot,
+    Future<void> Function()? beforeMove,
+    Future<void> Function()? afterMove,
+    Future<void> Function()? installNoReplace,
   }) async {
     if (p.equals(source.path, destination.path)) return;
     if (p.isWithin(source.path, destination.path)) {
@@ -192,8 +195,23 @@ class FileMutationService {
           destination.path,
         );
       }
-      await source.rename(destination.path);
+      await beforeMove?.call();
+      if (installNoReplace == null) {
+        await source.rename(destination.path);
+      } else {
+        await installNoReplace();
+      }
+      await afterMove?.call();
     });
+  }
+
+  /// Validates both live and absent journal paths before reference recovery.
+  Future<void> validateManagedDirectoryPath(
+    Directory directory, {
+    required Directory allowedRoot,
+  }) async {
+    await _requireSafeTarget(directory, allowedRoot: allowedRoot);
+    await _requireSafeDirectoryTree(directory, allowedRoot: allowedRoot);
   }
 
   Future<void> _requireSafeTarget(

@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import '../models/repertoire_creation.dart';
+import '../models/repertoire_recovery_required.dart';
 
 import '../../../widgets/common/name_entry_dialog.dart';
 
@@ -113,7 +114,11 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (catalog.loadError != null) {
+    final recoveryError = catalog.actionError is RepertoireRecoveryRequired
+        ? catalog.actionError
+        : null;
+    final error = catalog.loadError ?? recoveryError;
+    if (error != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -126,15 +131,21 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
                 color: AppColors.danger,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Could not load repertoires. Please try again.',
+              Text(
+                error is RepertoireRecoveryRequired
+                    ? error.toString()
+                    : 'Could not load repertoires. Please try again.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _loadRepertoires,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+                label: Text(
+                  error is RepertoireRecoveryRequired
+                      ? 'Recover library'
+                      : 'Retry',
+                ),
               ),
             ],
           ),
@@ -509,7 +520,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
         await _controller.rename(repertoire, result);
       } catch (e) {
         debugPrint('Rename repertoire failed: $e');
-        if (mounted) {
+        if (mounted && e is! RepertoireRecoveryRequired) {
           showAppSnackBar(
             context,
             AppMessages.renameRepertoireFailed,

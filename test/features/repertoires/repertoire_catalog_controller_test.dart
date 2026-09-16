@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_recovery_required.dart';
 
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_catalog_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_creation.dart';
@@ -87,6 +88,32 @@ void main() {
     await container.read(provider.notifier).refresh();
     return container.read(provider.notifier);
   }
+
+  test(
+    'recovery refresh clears its error only after a confirmed read and never repeats rename',
+    () async {
+      final controller = await ready();
+      repository.write = () async =>
+          throw const RepertoireRecoveryRequired('operation', 'interrupted');
+      await expectLater(
+        controller.rename(repository.entries.first, 'Renamed'),
+        throwsA(isA<RepertoireRecoveryRequired>()),
+      );
+      repository.read = () async =>
+          throw const RepertoireRecoveryRequired('operation', 'still pending');
+      await controller.refresh();
+      expect(
+        container.read(provider).actionError,
+        isA<RepertoireRecoveryRequired>(),
+      );
+      repository.read = () async => [entry('Renamed')];
+      await controller.refresh();
+      expect(container.read(provider).actionError, isNull);
+      expect(container.read(provider).loadError, isNull);
+      expect(container.read(provider).repertoires.single.name, 'Renamed');
+      expect(repository.writes, 1);
+    },
+  );
 
   test(
     'sorts copies, exposes immutable lists, and omits unused study IO',

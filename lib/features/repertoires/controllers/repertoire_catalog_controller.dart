@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/repertoire_catalog_state.dart';
 import '../models/repertoire_creation.dart';
 import '../models/repertoire_metadata.dart';
+import '../models/repertoire_recovery_required.dart';
 import '../repositories/repertoire_catalog_repository.dart';
 
 /// App startup must supply the implementation. Tests override the same boundary.
@@ -79,7 +80,9 @@ class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
       state = RepertoireCatalogState(
         repertoires: sorted(results.first),
         studies: includeStudies ? sorted(results.last) : const [],
-        actionError: state.actionError,
+        actionError: state.actionError is RepertoireRecoveryRequired
+            ? null
+            : state.actionError,
       );
     } catch (error) {
       if (!ref.mounted || generation != _generation) return;

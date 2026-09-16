@@ -68,6 +68,25 @@ revision checking is still planned, not provided by these decoded-text guards. R
 
 **Chess logic:** `dartchess` for rules/FEN; `flutter_chess_board` for display.
 
+### Recoverable repertoire folder renames (Linux)
+
+`RepertoireDirectoryMutations` owns a durable intent/completion journal in
+Support `repertoire-mutations/`. Linux `renameat2(RENAME_NOREPLACE)` refuses
+racing destination creation. Native directory identity gates replay; ambiguous
+paths retain the journal and surface **Recover library** in the catalog.
+`RepertoireReferenceMigration` atomically rewrites the latest review schedules,
+review history, move progress and mistake log, retaining prior text under
+Documents `.cap-reference-history/`, then updates the shared book selections.
+Reference failures resume from the journal without repeating the namespace move.
+
+`IOStorageService` routes Linux repertoire/nested-folder moves through this
+owner and supplies the same domain lock to managed file operations and the
+native PGN store. Directory creation/deletion is serialized too, but deletion
+still uses its existing quarantine format; there is no new trash restore UI.
+Single-file/chapter rename remains legacy. Windows/macOS retain their prior
+folder-move adapter pending native verification. A revisionless legacy write
+can still recreate a stale path after a move; full writer migration is pending.
+
 ### Typed settings ownership (first section)
 
 `features/settings/{models,repositories,controllers}` provides the injected
@@ -83,8 +102,8 @@ change, so saving/error transitions do not rerun game analysis.
 The My books panel shows pending/failure state, keeps confirmed choices visible,
 and retries designation without recreating an already imported repertoire.
 The relocation operation maps path components and can retry a partial two-key
-update; filesystem rename/restore is **not yet wired to it** pending a durable
-coordination journal. Engine, display, training and credentials remain with
+update. Linux folder rename now invokes it through the directory journal below;
+trash restore remains unfinished. Engine, display, training and credentials remain with
 their legacy owners. There is no cross-process preference transaction claim.
 Startup wraps legacy Linux/Windows preference backends in
 `FreshDesktopPreferencesStore`: serialized requests use fresh backend instances,

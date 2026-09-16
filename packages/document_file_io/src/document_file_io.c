@@ -1,4 +1,7 @@
 #ifndef _WIN32
+#if defined(__linux__)
+#define _GNU_SOURCE
+#endif
 #define _POSIX_C_SOURCE 200809L
 #else
 #ifndef _WIN32_WINNT
@@ -21,6 +24,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sys/syscall.h>
+#include <linux/fs.h>
+#endif
 #define CAP_EXPORT __attribute__((visibility("default")))
 #endif
 
@@ -143,6 +150,59 @@ CAP_EXPORT void cap_snapshot_free(cap_snapshot *value) {
   if (value) { free(value->bytes); free(value); }
 }
 
+/* A directory move preserves native identity. Do not infer completion from a
+ * path existing: a different directory may have appeared after interruption. */
+CAP_EXPORT cap_snapshot *cap_directory_identity(const char *path) {
+  cap_snapshot *out = calloc(1, sizeof(cap_snapshot));
+  if (!out) return NULL;
+  out->status = 2;
+#ifdef _WIN32
+  wchar_t *wide = wide_path(path);
+  if (!wide) { out->error = ERROR_INVALID_NAME; return out; }
+  HANDLE fd = CreateFileW(wide, FILE_READ_ATTRIBUTES,
+    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
+    FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+  free(wide);
+  if (fd == INVALID_HANDLE_VALUE) {
+    out->error = GetLastError();
+    if (out->error == ERROR_FILE_NOT_FOUND || out->error == ERROR_PATH_NOT_FOUND) out->status = 1;
+    return out;
+  }
+  FILE_ID_INFO identity;
+  BY_HANDLE_FILE_INFORMATION info;
+  if (!GetFileInformationByHandleEx(fd, FileIdInfo, &identity, sizeof(identity)) ||
+      !GetFileInformationByHandle(fd, &info)) out->error = GetLastError();
+  else if (!(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+           (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) out->status = 4;
+  else {
+    out->volume = identity.VolumeSerialNumber;
+    memcpy(&out->id_low, identity.FileId.Identifier, 8);
+    memcpy(&out->id_high, identity.FileId.Identifier + 8, 8);
+    out->status = 0;
+  }
+  CloseHandle(fd);
+#else
+  int fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_DIRECTORY);
+  if (fd < 0) {
+    out->error = errno;
+    if (errno == ENOENT) out->status = 1;
+    if (errno == ELOOP || errno == ENOTDIR) out->status = 4;
+    return out;
+  }
+  struct stat identity, binding;
+  if (fstat(fd, &identity)) out->error = errno;
+  else if (lstat(path, &binding) || !S_ISDIR(binding.st_mode) ||
+           binding.st_dev != identity.st_dev || binding.st_ino != identity.st_ino) out->status = 3;
+  else {
+    out->volume = (uint64_t)identity.st_dev;
+    out->id_low = (uint64_t)identity.st_ino;
+    out->status = 0;
+  }
+  close(fd);
+#endif
+  return out;
+}
+
 /* Publish an already flushed same-directory temporary file without replacing
  * an existing name. link/unlink makes the POSIX name claim exclusive even
  * against non-cooperating creators. Returns the OS error, zero on success.
@@ -174,5 +234,21 @@ CAP_EXPORT int32_t cap_sync_directory(const char *path) {
   int error = result < 0 ? errno : 0;
   close(fd);
   return error;
+#endif
+}
+
+/* Linux namespace claim is exclusive even when an external creator races
+ * the last validation. Other hosts must pass their own adoption gates. */
+CAP_EXPORT int32_t cap_move_directory_new(const char *source, const char *destination) {
+#if defined(__linux__)
+  return syscall(SYS_renameat2, AT_FDCWD, source, AT_FDCWD, destination,
+                 RENAME_NOREPLACE) == 0 ? 0 : errno;
+#elif defined(_WIN32)
+  wchar_t *from = wide_path(source), *to = wide_path(destination);
+  if (!from || !to) { free(from); free(to); return ERROR_INVALID_NAME; }
+  int32_t error = MoveFileExW(from, to, MOVEFILE_WRITE_THROUGH) ? 0 : GetLastError();
+  free(from); free(to); return error;
+#else
+  return ENOTSUP;
 #endif
 }

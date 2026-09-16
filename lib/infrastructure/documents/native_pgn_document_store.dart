@@ -19,6 +19,7 @@ import '../../utils/pgn_compression.dart';
 /// last validation and rename: this is not filesystem compare-and-swap.
 class NativePgnDocumentStore implements PgnDocumentStore {
   NativePgnDocumentStore({
+    this.guardOperation,
     AtomicFileWriter? writer,
     Future<NativeFileObservation> Function(String)? observe,
     Future<void> Function(String)? flushDirectory,
@@ -26,6 +27,10 @@ class NativePgnDocumentStore implements PgnDocumentStore {
        _observe = observe ?? observeFile,
        _flushDirectory = flushDirectory ?? syncDirectory;
 
+  final Future<T> Function<T>(String path, Future<T> Function() action)?
+  guardOperation;
+  Future<T> _guard<T>(String path, Future<T> Function() action) =>
+      guardOperation?.call(path, action) ?? action();
   final AtomicFileWriter _writer;
   final Future<NativeFileObservation> Function(String) _observe;
   final Future<void> Function(String) _flushDirectory;
@@ -106,6 +111,14 @@ class NativePgnDocumentStore implements PgnDocumentStore {
   @override
   Future<PgnOpenResult> open(String path) async {
     try {
+      return await _guard(path, () => _openGuarded(path));
+    } catch (error) {
+      return PgnReadFailed(error);
+    }
+  }
+
+  Future<PgnOpenResult> _openGuarded(String path) async {
+    try {
       final canonical = await _path(path);
       return await _writer.transaction(File(canonical), (_) async {
         final value = await _observe(canonical);
@@ -126,6 +139,18 @@ class NativePgnDocumentStore implements PgnDocumentStore {
       _write(baseline.path, baseline, content);
 
   Future<PgnWriteResult> _write(
+    String path,
+    PgnSnapshot? baseline,
+    String content,
+  ) async {
+    try {
+      return await _guard(path, () => _writeGuarded(path, baseline, content));
+    } catch (error) {
+      return PgnWriteFailed(error);
+    }
+  }
+
+  Future<PgnWriteResult> _writeGuarded(
     String path,
     PgnSnapshot? baseline,
     String content,

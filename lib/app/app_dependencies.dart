@@ -8,6 +8,7 @@ import '../features/repertoires/controllers/repertoire_catalog_controller.dart';
 import '../features/repertoires/repositories/repertoire_catalog_repository.dart';
 import '../infrastructure/repertoires/legacy_repertoire_catalog_repository.dart';
 import '../services/storage/storage_factory.dart';
+import '../services/storage/io_storage_service.dart';
 import '../features/settings/controllers/settings_providers.dart';
 import '../features/settings/repositories/app_settings_repository.dart';
 import '../infrastructure/settings/shared_preferences_app_settings_repository.dart';
@@ -55,5 +56,12 @@ class _AppDependenciesState extends State<AppDependencies> {
 
 /// Adopt only on the verified host; the remaining native commit protocols
 /// keep their documented legacy adapter until their platform gates pass.
-PgnDocumentStore? createPlatformDocumentStore() =>
-    Platform.isLinux ? NativePgnDocumentStore() : null;
+PgnDocumentStore? createPlatformDocumentStore() {
+  if (!Platform.isLinux) return null;
+  final storage = StorageFactory.instance;
+  return NativePgnDocumentStore(
+    guardOperation: storage is IOStorageService
+        ? storage.guardDocumentOperation
+        : null,
+  );
+}

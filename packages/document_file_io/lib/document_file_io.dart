@@ -24,10 +24,18 @@ final class _Snapshot extends Struct {
 
 @Native<Pointer<_Snapshot> Function(Pointer<Utf8>)>(symbol: 'cap_snapshot_read')
 external Pointer<_Snapshot> _read(Pointer<Utf8> path);
+@Native<Pointer<_Snapshot> Function(Pointer<Utf8>)>(
+  symbol: 'cap_directory_identity',
+)
+external Pointer<_Snapshot> _directoryIdentity(Pointer<Utf8> path);
 @Native<Void Function(Pointer<_Snapshot>)>(symbol: 'cap_snapshot_free')
 external void _free(Pointer<_Snapshot> value);
 @Native<Int32 Function(Pointer<Utf8>, Pointer<Utf8>)>(symbol: 'cap_install_new')
 external int _installNew(Pointer<Utf8> from, Pointer<Utf8> to);
+@Native<Int32 Function(Pointer<Utf8>, Pointer<Utf8>)>(
+  symbol: 'cap_move_directory_new',
+)
+external int _moveDirectoryNew(Pointer<Utf8> from, Pointer<Utf8> to);
 @Native<Int32 Function(Pointer<Utf8>)>(symbol: 'cap_sync_directory')
 external int _syncDirectory(Pointer<Utf8> path);
 
@@ -81,6 +89,29 @@ class NativeNameCollision implements Exception {
   final String path;
 }
 
+/// Native object identity for a directory, without following its final link.
+/// Missing is status 1; every other nonzero status must fail closed.
+Future<({int status, String? identity})> observeDirectory(String path) =>
+    Isolate.run(() {
+      _checkPath(path);
+      final nativePath = path.toNativeUtf8();
+      Pointer<_Snapshot> result = nullptr;
+      try {
+        result = _directoryIdentity(nativePath);
+        if (result == nullptr) throw const OutOfMemoryError();
+        final value = result.ref;
+        return (
+          status: value.status,
+          identity: value.status == 0
+              ? '${value.volume}:${value.high}:${value.low}'
+              : null,
+        );
+      } finally {
+        if (result != nullptr) _free(result);
+        malloc.free(nativePath);
+      }
+    });
+
 Future<void> installNewFile(String source, String destination) =>
     Isolate.run(() {
       _checkPath(source);
@@ -121,6 +152,30 @@ Future<void> syncDirectory(String path) => Isolate.run(() {
     malloc.free(value);
   }
 });
+
+Future<void> moveDirectoryNew(String source, String destination) =>
+    Isolate.run(() {
+      _checkPath(source);
+      _checkPath(destination);
+      final from = source.toNativeUtf8(), to = destination.toNativeUtf8();
+      try {
+        final error = _moveDirectoryNew(from, to);
+        if (error == (Platform.isWindows ? 80 : 17) ||
+            (Platform.isWindows && error == 183)) {
+          throw NativeNameCollision(destination);
+        }
+        if (error != 0) {
+          throw FileSystemException(
+            'Exclusive directory move failed',
+            destination,
+            OSError('Native move', error),
+          );
+        }
+      } finally {
+        malloc.free(from);
+        malloc.free(to);
+      }
+    });
 
 void _checkPath(String path) {
   if (path.contains('\u0000')) {

@@ -368,6 +368,66 @@ not a cross-process transaction, power-loss guarantee or completion of the
 remaining settings migrations. The initially green injected-failure test alone
 was insufficient; the real read-only-file regression now covers the defect.
 
+### Directory rename checkpoint — Linux reference recovery
+
+After settings checkpoint `c4835559`, Linux repertoire folder renames and nested
+folder moves go through `infrastructure/repertoires/RepertoireDirectoryMutations`.
+It records a versioned intent under Support `repertoire-mutations/` before the
+namespace change. Native directory identity is device/inode; Linux publication
+uses `renameat2(RENAME_NOREPLACE)`, so even an external creator racing the last
+check cannot have its destination replaced. Unsupported native operations fail
+closed. Namespace and journal directory flushes precede acknowledgement.
+
+A pending journal is replayable only when the source is absent and the exact
+recorded directory is at the destination. A preparation with the original still
+at its source and no destination is cancelled rather than executed on startup.
+Replaced destinations, reused source names, unreadable identities and malformed
+journals block recovery and retain all evidence. Completed/cancelled receipts
+are retained; no automatic retention policy is introduced.
+
+Reference migration updates review schedules, review history, per-move progress,
+mistake JSONL and both designated book lists. It reads the latest training file
+under its existing lock, preserves other rows/unknown values, and retains the
+first pre-migration text in Documents `.cap-reference-history/<operation>/`.
+A partial failure can replay without double-moving already migrated paths. The
+settings owner performs its existing verified field updates. This is a journaled
+multi-step operation, not a filesystem/database/preferences atomic transaction.
+
+Managed storage read/write/update/create/delete and the injected native PGN
+store share a repertoire domain mutex with these directory moves; a staged PGN
+save finishes before a waiting folder move. The domain mutex is derived from the canonical repertoire root and is separate
+from namespace/file locks, avoiding recursive lock acquisition. Storage fixtures
+with only a Documents override now derive their support/repertoire roots from
+that fixture, instead of consulting the real user profile.
+
+The catalog displays a persistent **Recover library** action for an incomplete
+move and clears it only after a successful recovery read. It does not resend the
+original rename. The Linux desktop journey exercises rename, injected
+interruption, recovery through that action, retained PGN comments, training and
+book references, and fresh catalog/settings owners.
+
+Evidence: 89 distinct focused cases across directory/native-document/storage/
+training/catalog tests; two Linux desktop journeys (the new recovery flow and
+the existing create/search/rename/open/delete/reopen flow); strict C11 compilation,
+app/package analysis and lint. Four step hooks cover preparation, move,
+reference completion and journal completion. These are deterministic exception
+and reconstructed-owner tests, **not** evidence of OS kill/power-loss durability.
+Final headless screenshots show an ambiguous pending move blocking the catalog,
+then successful recovery after the disposable ambiguity is removed. The
+recovered PGN is present and its journal is completed. The preview is stopped
+before final checks. App analysis/lint passes with nine existing informational
+findings; package analysis and strict C compilation are clean.
+
+Remaining: journaled trash restore and its catalog UI; multi-file course
+publication; single-chapter/file rename migration; permanent logical document
+IDs and stale training-session writes after a move; recovery/version retention;
+external writers that do not participate in the domain mutex; lock/performance
+budgets; and Windows/macOS native adoption. Legacy writers without a baseline
+can still recreate a stale absent path after a completed move; migrating them
+to the revision-required API remains necessary. Native pre/post identity checks
+are not an atomic compare-and-swap against arbitrary external source replacement.
+The first-slice data gates and full rewrite remain partial.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
