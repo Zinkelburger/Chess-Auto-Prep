@@ -9,7 +9,7 @@ class BoundariesTest(unittest.TestCase):
     def test_models_and_contracts_stay_pure(self):
         for area in ('models', 'repositories'):
             path = f'lib/features/repertoires/{area}/example.dart'
-            for uri in ('dart:io', 'package:flutter/widgets.dart', 'package:flutter_riverpod/flutter_riverpod.dart'):
+            for uri in ('dart:io', 'package:flutter/widgets.dart', 'package:flutter_riverpod/flutter_riverpod.dart', 'dart:ffi', 'package:document_file_io/document_file_io.dart'):
                 with self.subTest(area=area, uri=uri):
                     self.assertTrue(violations(path, f"import '{uri}';"))
 

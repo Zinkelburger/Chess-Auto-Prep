@@ -163,6 +163,7 @@ class ChessAutoPrepApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppDependencies(
+      documentStore: createPlatformDocumentStore(),
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider(

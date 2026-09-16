@@ -253,6 +253,16 @@ void main() {
         await storage.written.future.timeout(const Duration(seconds: 10));
       });
       await tester.pumpAndSettle();
+      // Disk completion precedes controller refresh and Navigator completion.
+      // Wait for the user-visible handoff, rather than assuming the write's
+      // completer also means that the route has returned its result.
+      for (var i = 0; i < 50 && selected == null; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pumpAndSettle();
+      }
+      expect(selected, isNotNull);
       expect(selected!.filePath, '/repertoires/Pasted repertoire/Main.pgn');
       expect(selected!.gameCount, 2);
       expect(tester.takeException(), isNull);

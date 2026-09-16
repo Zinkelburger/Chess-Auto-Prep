@@ -349,6 +349,23 @@ The outline supports moving chapters **into folders** and reordering **lines**;
 arbitrary sibling chapter ordering and cross-repertoire drag/drop are not added
 by this extraction.
 
+#### Typed PGN document persistence
+
+`features/documents/` defines `PgnDocumentStore`, snapshots/revisions and typed
+saved/conflict/collision/failure/uncertain results. Its native implementation in
+`infrastructure/documents/` shares `AtomicFileWriter.transaction` and the existing
+cross-process mutex with legacy writers. Revisions combine canonical document
+path, native identity and SHA-256 of exact stored bytes; decoding does not erase
+BOM/line-ending changes from conflict checks. The native package
+`packages/document_file_io/` is bundled through Dart code-asset hooks. Reads,
+hashes and codecs run off the UI isolate. Prior bytes are retained under each
+parent's `.cap-pgn-history/`; post-install failures require reconciliation.
+
+Linux catalog creation uses the new exclusive publication path; the remaining
+chapter/editor/generation APIs and other operating systems retain their documented
+legacy adapters. This is partial adoption, not a repository-wide migration.
+See [native-store evidence and limits](ARCHITECTURE_RENEWAL.md#native-document-store-checkpoint--linux-adoption-started).
+
 #### App bar conventions (unified June 2026)
 
 Every mode screen uses `Scaffold` + `AppBar` with consistent conventions:

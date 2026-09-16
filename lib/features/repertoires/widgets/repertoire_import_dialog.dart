@@ -56,7 +56,9 @@ Future<RepertoireCreationResult?> showRepertoireImportDialog(
     if (context.mounted) {
       showAppSnackBar(
         context,
-        'Could not import the repertoire. Please try again.',
+        e is RepertoireCreationUncertain
+            ? e.toString()
+            : 'Could not import the repertoire. Please try again.',
         isError: true,
       );
     }
@@ -143,7 +145,9 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = 'Could not import. Your PGN is still here; try again.';
+          _error = e is RepertoireCreationUncertain
+              ? e.toString()
+              : 'Could not import. Your PGN is still here; try again.';
         });
       }
     }

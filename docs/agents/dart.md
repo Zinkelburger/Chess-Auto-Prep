@@ -3,7 +3,8 @@
 ## Placement and dependencies
 
 - Migrated features use `lib/features/<name>/{models,controllers,repositories,widgets}`.
-  Repertoire catalog code lives in `features/repertoires/`; the older singular
+  Repertoire catalog code lives in `features/repertoires/`; public PGN document
+  contracts live in `features/documents/`; the older singular
   `features/repertoire/` still owns unmigrated document/generation workflows.
 - `lib/app/` constructs dependencies. `lib/infrastructure/` adapts external
   systems to injected feature contracts. Controllers never import storage,

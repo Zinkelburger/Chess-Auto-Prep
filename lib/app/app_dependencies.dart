@@ -1,3 +1,6 @@
+import 'dart:io';
+import '../infrastructure/documents/native_pgn_document_store.dart';
+import '../features/documents/repositories/pgn_document_store.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,10 +16,12 @@ class AppDependencies extends StatefulWidget {
     super.key,
     required this.child,
     this.repertoireCatalog,
+    this.documentStore,
   });
 
   final Widget child;
   final RepertoireCatalogRepository? repertoireCatalog;
+  final PgnDocumentStore? documentStore;
 
   @override
   State<AppDependencies> createState() => _AppDependenciesState();
@@ -25,6 +30,7 @@ class AppDependencies extends StatefulWidget {
 class _AppDependenciesState extends State<AppDependencies> {
   late final _defaultCatalog = LegacyRepertoireCatalogRepository(
     StorageFactory.instance,
+    documents: widget.documentStore,
   );
 
   @override
@@ -38,3 +44,8 @@ class _AppDependenciesState extends State<AppDependencies> {
     child: widget.child,
   );
 }
+
+/// Adopt only on the verified host; the remaining native commit protocols
+/// keep their documented legacy adapter until their platform gates pass.
+PgnDocumentStore? createPlatformDocumentStore() =>
+    Platform.isLinux ? NativePgnDocumentStore() : null;

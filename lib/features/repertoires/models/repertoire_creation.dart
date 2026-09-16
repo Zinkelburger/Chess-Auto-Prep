@@ -53,3 +53,12 @@ class CreateRepertoire {
   final String chapterName;
   final bool splitChapters;
 }
+
+/// Namespace installation may have completed; retain the draft and inspect the
+/// library before issuing another creation request. Never retry automatically.
+class RepertoireCreationUncertain implements Exception {
+  const RepertoireCreationUncertain();
+  @override
+  String toString() =>
+      'The file may already be saved. Keep this draft and reload the library before retrying.';
+}

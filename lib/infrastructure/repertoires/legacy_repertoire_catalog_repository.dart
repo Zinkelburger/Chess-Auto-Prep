@@ -1,3 +1,5 @@
+import '../../features/documents/models/pgn_document.dart';
+import '../../features/documents/repositories/pgn_document_store.dart';
 import '../../features/repertoires/models/repertoire_creation.dart';
 import '../../features/repertoires/models/repertoire_metadata.dart';
 import '../../features/repertoires/repositories/repertoire_catalog_repository.dart';
@@ -9,7 +11,9 @@ import '../../utils/safe_file_name.dart';
 /// document store and recoverable directory transactions replace StorageService
 /// in renewal milestones 2/3. All dependencies are supplied by app startup.
 class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
-  LegacyRepertoireCatalogRepository(this._storage);
+  LegacyRepertoireCatalogRepository(this._storage, {this.documents});
+
+  final PgnDocumentStore? documents;
 
   final StorageService _storage;
 
@@ -34,6 +38,7 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
     }
     // This preflight supplies a friendly error; createOnly at the storage
     // boundary remains responsible for refusing a competing file creation.
+    final documents = this.documents;
     return createRepertoire(
       storage: _storage,
       name: request.name,
@@ -42,6 +47,25 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
       gameCount: request.gameCount,
       chapterName: request.chapterName,
       splitChapters: request.splitChapters,
+      createDocument: documents == null
+          ? null
+          : (path, content) async {
+              final result = await documents.create(path, content);
+              switch (result) {
+                case PgnSaved():
+                  return;
+                case PgnNameCollision():
+                  throw RepertoireExistsException(request.name);
+                case PgnWriteFailed(:final error):
+                  throw error;
+                case PgnWriteUncertain():
+                  throw const RepertoireCreationUncertain();
+                case PgnConflict():
+                  throw StateError(
+                    'Document destination changed; reload the library.',
+                  );
+              }
+            },
     );
   }
 

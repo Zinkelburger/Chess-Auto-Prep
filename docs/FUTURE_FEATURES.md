@@ -19,7 +19,8 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 **Status: Partial.** The current-code save/undo safety prerequisite is
 implemented and tested on Linux. The first replacement slice is partial:
 repertoire catalog actions now use injected repository/controller boundaries
-and the new hierarchy; design, shared storage/settings and full slice gates
+and the new hierarchy. Linux catalog creation now uses the typed native-identity
+PGN store; adoption by remaining writers, design, settings and full slice gates
 remain unfinished. The staged rewrite, shared PGN mutation API, UI design
 principles, storage preservation gates and milestone sequence live in
 [ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). That document is the canonical

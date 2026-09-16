@@ -95,7 +95,8 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = e is RepertoireExistsException
+          _error =
+              e is RepertoireExistsException || e is RepertoireCreationUncertain
               ? e.toString()
               : 'Could not create the repertoire. Your input is still here; try again.';
         });

@@ -54,6 +54,7 @@ Future<RepertoireCreationResult> createRepertoire({
   DateTime? createdAt,
   StorageService? storage,
   bool splitChapters = true,
+  Future<void> Function(String path, String content)? createDocument,
 }) async {
   final store = storage ?? StorageFactory.instance;
   final dirPath = await store.repertoireDirectoryPath(name);
@@ -65,7 +66,8 @@ Future<RepertoireCreationResult> createRepertoire({
       '// Created on $stamp\n\n';
 
   if (pgnContent == null) {
-    await _createChapter(store, chapterPath, header, name);
+    await (createDocument?.call(chapterPath, header) ??
+        _createChapter(store, chapterPath, header, name));
     return RepertoireCreationResult(
       directoryPath: dirPath,
       chapterPath: chapterPath,
@@ -77,7 +79,9 @@ Future<RepertoireCreationResult> createRepertoire({
   // the widget tests that drive an import pump fake time, which an isolate's
   // result would never arrive under.
   final expanded = expandVariationsIntoLines(pgnContent);
-  await _createChapter(store, chapterPath, '$header${expanded.pgn}\n', name);
+  final imported = '$header${expanded.pgn}\n';
+  await (createDocument?.call(chapterPath, imported) ??
+      _createChapter(store, chapterPath, imported, name));
   final count = expanded.gameCount > 0 ? expanded.gameCount : gameCount;
 
   final isCourse =

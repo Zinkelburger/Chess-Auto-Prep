@@ -1,6 +1,6 @@
 # Architecture renewal
 
-**Status: Partial — S0 verified on Linux; first replacement slice in progress.** Planning baseline: 2026-09-16. This is the canonical
+**Status: Partial — S0 verified on Linux; first replacement slice and native document store in progress.** Planning baseline: 2026-09-16. This is the canonical
 rewrite plan. [FUTURE_FEATURES.md](FUTURE_FEATURES.md) tracks feature backlog;
 [COMPONENT_MAP.md](COMPONENT_MAP.md) describes implemented behavior. Update
 milestone evidence and selected decisions here as work proceeds.
@@ -237,6 +237,81 @@ fix also receives its focused native catalog rerun. No native file-identity,
 full backup/restore, new design/ARB/Widgetbook, shared settings, persistent-shell
 or Windows/macOS gate is implied. PLAN-02 stays pending until the complete
 first-slice evidence exists.
+
+### Native document-store checkpoint — Linux adoption started
+
+The preceding catalog checkpoint is integrated as `1c7dd833`. This increment
+implements the native-identity feasibility spike and the first production
+consumer of the typed document boundary. The complete rewrite and first-slice
+exit gates remain active; it does not graduate milestones 0, 1/2 or PLAN-02.
+
+`features/documents/models/` and `repositories/` now own the cross-feature
+`PgnDocumentStore` contract: open, exclusive create and revision-required save.
+`infrastructure/documents/NativePgnDocumentStore` implements it using the existing
+atomic writer's scoped transaction and the existing SQLite mutex. The writer
+retains its lock until every started write completes, including a write that a
+callback forgot to await. Legacy writers retain their existing API and behavior.
+
+The private `packages/document_file_io/` C/Dart package reads bytes and identity
+from one native handle, checks metadata and path binding, and hashes the exact
+bytes before decoding. POSIX identity is device/inode; Windows source uses volume
+serial plus 128-bit FileIdInfo. The code asset builds with the already-resolved
+Dart native toolchain and is bundled in the Linux desktop app. Package license
+is the repository's AGPL-3.0; no native binary download or extra runtime package
+version upgrade was introduced. Native calls, hashing, text decoding and
+compression run in isolates, not synchronous UI callbacks. See the
+[package contract](../packages/document_file_io/README.md) and
+[Dart's build-hook guidance](https://dart.dev/tools/hooks).
+
+Production Linux catalog creation/import now receives this store through
+`AppDependencies`; it no longer depends solely on the legacy check/rename create
+path. POSIX exclusive publication uses link/unlink of the flushed staging file,
+which cannot replace a competing destination. A save requires the captured
+canonical-path document identity, native identity and SHA-256 revision; only a
+confirmed committed receipt advances a baseline. After staging, the destination
+is rechecked while the shared mutex remains held. Final symlinks, hardlinks,
+non-regular objects, embedded-NUL paths and files over 512 MiB fail closed;
+parent aliases are canonicalized. An external editor can still race validation
+and rename: this is explicitly not filesystem compare-and-swap.
+
+Before replacement the store retains exact prior bytes under
+`.cap-pgn-history/<digest>.bytes`. Compressed PGNs remain compressed. Directory
+flush and post-install observation precede acknowledgement. A post-install
+failure returns `PgnWriteUncertain`, preserving the observed result, baseline
+and recovery path rather than inviting a blind append retry. The creation and
+import interfaces show explicit uncertainty copy and retain form/PGN drafts.
+Recovery versions are never automatically pruned; user-facing restore/indexing,
+retention policy and consistent database/document backup remain unfinished.
+
+Evidence for this checkpoint (source: the commit containing this record):
+
+| ID | Scope/host | Evidence | Result | Remaining limit |
+|----|------------|----------|--------|-----------------|
+| ARCH-01 | Typed document boundary | Architecture lint now covers `features/documents/` and prohibits native/FFI access in migrated feature layers | Pass | Existing editor/chapter/generation writers still need migration. |
+| DATA-02, DATA-04 | Native store / Linux x64 | `test/infrastructure/documents/native_pgn_document_store_test.dart` | Pass: 18 cases, including same-byte replacement, BOM-only change, aliases, missing/unavailable identity, two writers/isolate contention, exclusive native publication, gzip preservation, transaction lifetime and injected commit failures | Other hosts unverified; full rename/delete lifecycle and stable identity/reference migration are pending. |
+| DATA-05 | Recovery/error semantics / Linux | Exact baseline-byte recovery and post-install flush failure cases; existing atomic recovery suite | Pass for tested cases | Lock wait/hold measurements, large-file budgets, power-loss/remote-provider protocol, kill-at-each-step and Windows retry gates remain unverified. |
+| TEST-01 | Native package and consumers | 61 focused Flutter cases across document, atomic, catalog, import and creation tests; strict C11 compile with `-Wall -Wextra -Werror`; app analysis/lint and package analysis | Pass (final checks recorded at integration) | Not a full release suite. |
+| TEST-01, UI-04 | Linux packaged desktop | `integration_test/document_store_test.dart`, `repertoire_catalog_test.dart`, `repertoire_mutation_test.dart` | Pass: three journeys; uncertainty retains draft and a retry cannot replace the installed file | Existing inline-engine warning on app recreation is not a process-lifecycle pass. |
+
+Initial work caught and corrected a package dependency constraint mismatch,
+binding/type compilation errors, and a widget test that equated completion of
+its fake disk write with completion of the controller/navigation handoff. The
+final test waits for that actual handoff. These failures are not omitted from
+the record, and the final relevant checks pass.
+
+Final app analysis/lint passed with nine existing informational findings;
+the native package analysis reported no issues. The private headless preview
+was inspected: a duplicate name displays its error while retaining the name
+and creation choices. The preview was stopped before the final source checks.
+
+**Remaining first-slice work:** shared save-status/conflict/copy UI; route all
+chapter/editor/import/generation mutations through the store; directory-mutation
+coordination and multi-file course publication; preserve designated-book and
+training references during rename/restore; typed settings; measured baselines
+and consistent backup/restore; design-system/ARB/Widgetbook and persistent shell.
+Windows replacement/ACL/backups/transient sharing and macOS full-sync require
+native host evidence. Production adoption therefore remains Linux-only; other
+hosts keep the documented legacy adapter, not an inferred native safety pass.
 
 ### Initial parity and ownership inventory (milestone 0, partial)
 

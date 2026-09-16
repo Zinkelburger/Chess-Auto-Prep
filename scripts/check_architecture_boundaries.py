@@ -10,12 +10,12 @@ DIRECTIVE = re.compile(r"^\s*(?:import|export)\s+['\"]([^'\"]+)['\"]", re.M)
 
 def violations(relative: str, source: str) -> list[str]:
     path = Path(relative)
-    feature = relative.startswith('lib/features/repertoires/')
+    feature = relative.startswith(('lib/features/repertoires/', 'lib/features/documents/'))
     infrastructure = relative.startswith('lib/infrastructure/')
     if not (feature or infrastructure):
         return []
-    pure = feature and path.parent.name in ('models', 'repositories')
-    controller = feature and path.parent.name == 'controllers'
+    pure = feature and any(part in ('models', 'repositories') for part in path.parts[3:-1])
+    controller = feature and 'controllers' in path.parts[3:-1]
     errors = []
     for uri in DIRECTIVE.findall(source):
         if uri.startswith('package:chess_auto_prep/'):
@@ -26,8 +26,8 @@ def violations(relative: str, source: str) -> list[str]:
             target = None
         local = target.relative_to(ROOT).as_posix() if target and target.is_relative_to(ROOT) else ''
         forbidden = (
-            pure and (uri.startswith(('dart:io', 'dart:isolate', 'package:flutter', 'package:riverpod')) or local.startswith(('lib/services/', 'lib/infrastructure/', 'lib/app/')))
-            or feature and (uri == 'dart:io' or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
+            pure and (uri.startswith(('dart:io', 'dart:isolate', 'dart:ffi', 'package:flutter', 'package:riverpod')) or local.startswith(('lib/services/', 'lib/infrastructure/', 'lib/app/')))
+            or feature and (uri.startswith(('dart:io', 'dart:ffi', 'package:document_file_io/')) or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
             or controller and ('/widgets/' in local or '/screens/' in local or local.startswith('lib/services/'))
             or infrastructure and ('/widgets/' in local or '/screens/' in local or '/controllers/' in local or local.startswith('lib/app/'))
         )
@@ -40,14 +40,14 @@ def violations(relative: str, source: str) -> list[str]:
 
 def main() -> int:
     errors = []
-    for folder in ('lib/features/repertoires', 'lib/infrastructure'):
+    for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/infrastructure'):
         for path in (ROOT / folder).rglob('*.dart'):
             errors.extend(violations(path.relative_to(ROOT).as_posix(), path.read_text()))
     for error in errors:
         print(error, file=sys.stderr)
     if errors:
         return 1
-    print('Renewal architecture boundaries: OK (repertoire catalog and infrastructure)')
+    print('Renewal architecture boundaries: OK (catalog, documents and infrastructure)')
     return 0
 
 
