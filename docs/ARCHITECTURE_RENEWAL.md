@@ -18,12 +18,14 @@ existing policy. These constraints apply throughout the plan.
 
 - [Principles](#engineering-principles-and-useful-abstraction),
   [boundaries](#target-layout-and-dependency-rules),
-  [packages](#package-decisions) and [runtime state](#runtime-state-and-large-documents).
+  [packages](#package-decisions), [settings](#settings-and-credentials) and
+  [runtime state](#runtime-state-and-large-documents).
 - [Desktop foundations](#early-desktop-foundations) and
   [engine supervision](#worker-and-engine-supervision).
 - [Human factors](#frontend-principles-human-factors-as-acceptance-criteria),
-  [dark UI](#visual-direction-a-calm-responsive-dark-workspace) and
-  [UI experiments](#presentation-experiments-without-data-model-churn).
+  [dark UI](#visual-direction-a-calm-responsive-dark-workspace),
+  [UI experiments](#presentation-experiments-without-data-model-churn) and
+  [shell and panels](#persistent-shell-and-reusable-panels).
 - [Data coexistence](#data-preservation-and-coexistence),
   [shared PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction),
   [overwrite gates](#storage-baseline-and-overwrite-prevention-gate) and
@@ -181,6 +183,9 @@ maintenance status, code-generation cost and a focused validation result.
 | Files | Consider package:file inside adapters for deterministic tests. Retain real OS tests for locks, symlinks, atomic replacement and interrupted recovery. |
 | Network | Evaluate Dio behind API-specific clients; preserve rate limits, streaming and authentication behavior. One retry policy per operation; never retry a mutation blindly. Keep http if it already meets the contract more simply. |
 | Navigation | Evaluate go_router with go_router_builder for typed internal navigation against retained document sessions, Back behavior, external PGN opening and deep links. External URLs and missing/deleted IDs still need runtime validation. A route identifies a destination; it does not own an engine job. |
+| Credentials | Evaluate flutter_secure_storage behind a CredentialStore; require native desktop setup and restart-safe migration before migrating Accounts. See the settings contract below. |
+| Resizable workspace | Trial flutter_resizable_container behind one shared SplitPane component; adoption requires constraint, keyboard, semantics and restoration tests. |
+| Stream shaping | Prefer a focused transformer or stream_transform for bounded presentation updates; use RxDart if its wider operators justify it. Verify operator semantics instead of adding a package for its name. |
 | Diagnostics/testing | Standardize logging behind one interface; consider clock and mocktail where useful. Use structured run IDs, stages and error causes, with token redaction and bounded log retention. |
 
 Do not run Provider, Riverpod and Bloc as competing permanent choices. Riverpod
@@ -193,6 +198,49 @@ generation pipeline and the readability benefit justifies its build cost;
 manual typed providers are also supported. Record one convention for migrated
 code. Generated auto-disposal is a default, not proof of correct lifetime:
 explicitly test screen departure, retained documents, active jobs and disposal.
+
+## Settings and credentials
+
+Introduce one injected `AppSettingsRepository` entry point with typed engine,
+eval-database, training and display sections. Separate sections are useful;
+duplicate ownership of the same setting is the problem. Each persisted key has
+one writer, validation/default rules and an observable committed value. Retain
+existing keys through adapters until each section migrates; legacy and new
+callers must reach that same owner. Avoid a giant mutable settings object and
+whole-app rebuilds: callers observe only the section they use. Keep account
+secrets out of settings snapshots, serialization and diagnostic exports.
+
+Define loading, draft, saving and failed states; do not show a failed write as
+saved. Serialize updates or apply field-level changes against the latest state
+so two open panels cannot overwrite unrelated values. Engine jobs capture a
+validated effective configuration at start. Changing a preference during a job
+must follow an explicit apply-now, queue or next-run rule; distinguish pending
+preferences from the active job's configuration. Test conflicting panel edits,
+load failure, invalid/legacy keys, save failure/retry, restart and a preference
+change during a job. Establish the owner in milestone 1; prove the settings
+used by the first slice in milestone 2 and migrate the rest with their features.
+
+Use a separate `CredentialStore` for OAuth/PAT secrets. Evaluate
+[flutter_secure_storage](https://pub.dev/packages/flutter_secure_storage) on
+Linux, Windows and macOS, including Linux libsecret/keyring availability,
+macOS Keychain configuration and the actual packaged Windows application.
+Mobile platform support does not establish desktop readiness. Test a locked or
+unavailable vault; keep offline features usable and show an actionable account
+state. Do not silently fall back to plaintext for new credentials.
+
+Before migrating the Accounts UI, implement an idempotent per-account migration:
+read existing preferences, write and read back the vault entry, then remove
+legacy secret keys only after verification. Persist progress without secrets;
+restart after any step must neither lose the account nor restore a stale token
+over a newer vault value. Serialize migration with login, refresh and disconnect;
+disconnect clears both locations and any migration state so old tokens cannot
+reappear. A failed transfer preserves the original for explicit retry rather
+than pretending migration succeeded. Use synthetic credentials to test every
+failure boundary and native restart. Exclude secrets from logs, Widgetbook and
+ordinary settings backups. Define legacy-backup cleanup and old-app behavior
+explicitly; migration cannot erase already-created external backups. Evaluate
+the vault in milestone 1 and complete its migration gate before Accounts work,
+even if the full settings/accounts UI remains in milestone 6.
 
 ## Runtime state and large documents
 
@@ -214,6 +262,25 @@ an async gap, validate the notifier's `ref.mounted` and captured session/request
 identity before updating presentation. Persisted writes independently validate
 the document revision. A liveness check alone does not reject a stale request
 within the same still-mounted controller.
+
+Shape engine presentation updates before they reach presentation state, after
+protocol parsing and authoritative job-state updates. Keep completion, errors,
+`bestmove`, cancellation and persistence events lossless and prompt. For a
+continuous analysis stream, publish the latest accumulated analysis snapshot
+on a bounded cadence (start by measuring approximately 200 ms), with immediate
+terminal delivery and no delayed timer able to overwrite terminal state. A
+snapshot must retain the latest relevant MultiPV lines, not just the last raw
+protocol message. Clear pending output on position/job changes and reject stale
+IDs. This limits UI notifications without slowing engine protocol consumption.
+
+Pure trailing [debounceTime](https://pub.dev/documentation/rxdart/latest/rx/DebounceExtensions/debounceTime.html)
+waits for a quiet interval and can starve updates during continuous search;
+reserve that behavior for inputs such as search text. Evaluate a tested
+[stream_transform](https://pub.dev/packages/stream_transform) audit/sampling
+operator or a small equivalent against the required leading/trailing behavior.
+Use fake time to test an endless burst, sparse output, final output, errors,
+position switches, cancellation and re-subscription. Assert bounded buffering
+and periodic progress; widgets should not each implement their own timer.
 
 Riverpod 3 filters updates using equality. For every large document state,
 record the cost of copying, equality and selector evaluation. Prefer a private
@@ -334,6 +401,16 @@ terminate only that disposable app during analysis, then verify within a bounded
 deadline that its engines stop and that restart recovers documents/locks. Never
 kill unrelated engines by name. Native host availability remains explicit.
 
+Give every worker, `ReceivePort`, subscription and timer a named owner and an
+idempotent shutdown path for success, failure, cancellation and partial startup.
+Use a lifecycle table to distinguish view subscriptions, document-session
+resources and app-owned jobs. Widget disposal releases view resources; it must
+not kill a shared worker or continuing job. Job/session/app shutdown cancels
+work cooperatively, escalates if needed, observes worker exit and closes ports
+and subscriptions in an order that still permits shutdown acknowledgement.
+Repeated open/close, failed startup and cancelled-job tests must return resource
+counts to baseline, while route changes preserve deliberately continuing jobs.
+
 Measure worker startup, input serialization, transfer and output costs before
 moving large trees between isolates. `TransferableTypedData` makes transfer
 cheap but constructing the buffer still costs proportional to its size;
@@ -407,6 +484,20 @@ the direction in milestone 1 before rolling it across feature migrations.
 | Motion and delight | Use short transitions to connect actions with outcomes: selection changes, opening a panel, dropping a piece, completing a training step. Reuse AppMotion timings as a starting point and tune through interaction tests. Respect reduced motion and keep repeated training input responsive. |
 | Pleasant details | Give a valid drop a clear landing response; make a completed exercise feel resolved; show a compact copy acknowledgement; reveal useful previews without changing the committed position. Avoid repeated modal praise, compulsory sound or decorative motion that interrupts concentration. |
 
+Implement custom theme roles with a typed
+[ThemeExtension](https://api.flutter.dev/flutter/material/ThemeExtension-class.html),
+registered in every production/catalog theme with `copyWith` and `lerp`.
+Keep standard roles in `ColorScheme` and `TextTheme`; extend only app-specific
+roles such as evaluation colors and workspace surfaces. Supply explicit light
+and dark values: the extension does not choose accessible colors automatically.
+A shared accessor resolves the current theme instead of reading a global color
+constant. Keep invariant spacing in shared tokens without forcing it into an
+extension. Migrate each component completely and retire its obsolete constants;
+new migrated code must not introduce screen-local colors or text sizes. Maintain
+a shrinking legacy exception list with owners. Widgetbook and focused checks
+cover theme switching, contrast, interpolation and enlarged text using the same
+production widgets; token types alone do not prove visual consistency.
+
 Dark appearance is a design preference, not a universal claim of reduced eye
 strain. Inspect the actual app on ordinary displays in both dim and bright
 rooms, with platform scaling and larger text. Large bright surfaces and dense
@@ -447,6 +538,42 @@ selected from author/publisher descriptions and publicly available material.
   free dark-appearance and implementation references. Use semantic colors,
   legible assets and tested surface contrast; preserve desktop platform
   conventions without mechanically copying another platform's visual effects.
+
+## Persistent shell and reusable panels
+
+Keep Actions/View/Settings and the owning mode context available while opening
+repertoire/chapter pickers or generation planning within that mode. Compose
+these destinations under a persistent shell; compare a body switch/nested
+Navigator with [go_router ShellRoute](https://pub.dev/documentation/go_router/latest/go_router/ShellRoute-class.html)
+in the routing trial. Deliberate modal tasks may cover the shell, but ordinary
+navigation should not discard it. Route retention alone does not preserve a
+document: sessions own board position, drafts, selection and history, while
+features own scroll/filter state with an explicit restore policy. Define Back,
+picker cancel/results, deep links, focus return and unsaved-work handling once.
+Test opening a picker, cancelling it, switching modes and returning with the
+same position/draft; toolbar commands must target the visible destination.
+Include the persistent shell in milestone 2 and full workspace restoration in
+milestone 3. Hidden branches still follow the job/visibility policies above.
+
+Create one reusable `SplitPane` with named panel slots, minimum usable sizes,
+resize commands, focus/semantics and an optional layout-change callback. Evaluate
+[flutter_resizable_container](https://pub.dev/packages/flutter_resizable_container)
+behind that boundary so feature widgets do not depend on its controller/types.
+It provides sizing constraints and programmatic resizing; keyboard behavior
+and accessibility must be demonstrated by the shared component. Allow arrow-key
+adjustment with visible focus, an announced value and a discoverable reset;
+respect text-field shortcut scope. Prevent accidental zero-width panels and
+support deliberate collapse with a clear reopen action where useful.
+
+When minimum sizes no longer fit, reflow/collapse/scroll deliberately rather
+than forcing a four-column layout at a fixed breakpoint. Restore validated
+layout preferences by workspace and available size, clamping stale values when
+monitors or text scale change. Persist at resize completion or a bounded cadence,
+not on every pointer event. Catalog/test nested splits, long labels, RTL,
+keyboard-only resizing, pointer drags, cancellation, small/ultrawide windows,
+200% text and saved-layout recovery. Prototype the control in milestone 1 and
+prove the chosen workspace arrangement in milestone 3; keep panel composition
+flexible for later UX experiments.
 
 ## Presentation experiments without data-model churn
 
@@ -708,12 +835,12 @@ entries and visual approval are not evidence that data safety has been tested.
 | Milestone | Deliverable | Exit gate |
 |-----------|-------------|-----------|
 | 0. Inventory and baseline | Workflow/parity matrix, persisted-format ownership map, dependency/native-runtime map, desktop build/signing prerequisites, diagnostic coverage matrix, representative fixtures, known-bug decisions, performance and usability scenarios. | Every current mode/support capability has an owner, migration disposition and observable acceptance scenarios. Known bugs are separated from behavior to preserve; unavailable host/credential checks are explicit. |
-| 1. Design foundation | Widgetbook with production search/choice/stepper/stat/dialog components; typography, spacing, focus, error and progress examples; localization-ready copy and a small theme/component cleanup. | Catalog runs headlessly without user data or real jobs; controls work with keyboard, long/pseudo-localized text, RTL and scaling; approved visual baselines and behavior checks pass. |
-| 2. First complete slice | Repertoires: list/search, create, rename, open and recoverably delete, using injected repository contracts and an explicit presentation-state owner. Keep current storage formats. Rehearse desktop packages, native execution and failure diagnostics. | Shared writer and overwrite gates pass, including process contention and unavailable/synced-file cases; user completes the task; duplicate implementation removed. Provider retry/visibility and forced-parent-exit tests pass on available native hosts. Record outstanding host checks and the continuation decision. |
-| 3. Document workspace | PGN viewing/editing, study/chapter management and board/move navigation; shared document sessions and reusable workspace components. | Annotated PGNs round-trip; unsaved edits survive failures; undo, external conflicts and context restoration pass. Large/deep document edit, equality, allocation and frame-time benchmarks meet the agreed baseline budgets. |
+| 1. Design foundation | Widgetbook with production search/choice/stepper/stat/dialog components; typography, spacing, focus, error and progress examples; localization-ready copy, typed theme tokens, a split-pane trial, settings ownership and a desktop vault feasibility check. | Catalog runs headlessly without user data or real jobs; controls work with keyboard, long/pseudo-localized text, RTL and scaling; approved visual baselines, theme and splitter behavior checks pass. Settings ownership is mapped; vault host gaps are recorded. |
+| 2. First complete slice | Repertoires: list/search, create, rename, open and recoverably delete, using injected repository contracts and an explicit presentation-state owner. Keep current storage formats. Retain the mode shell and prove settings used by this slice. Rehearse desktop packages, native execution and failure diagnostics. | Shared writer and overwrite gates pass, including process contention and unavailable/synced-file cases; user completes the task with context restored; settings failure/restart tests pass; duplicate implementation removed. Provider retry/visibility and forced-parent-exit tests pass on available native hosts. Record outstanding host checks and the continuation decision. |
+| 3. Document workspace | PGN viewing/editing, study/chapter management and board/move navigation; shared document sessions and reusable workspace components. | Annotated PGNs round-trip; unsaved edits survive failures; undo, external conflicts, context restoration and accessible split-panel resizing pass. Large/deep document edit, equality, allocation and frame-time benchmarks meet the agreed baseline budgets. |
 | 4. Training | Repertoire training, tactics, review scheduling/history and game-review handoffs on stable document/line identities. Trial a progress-storage migration only as a separate increment. | Historic progress fixtures migrate without loss; time-dependent scheduling and cancelled sessions are deterministic; complete training/resume scenarios pass. |
-| 5. Analysis and long jobs | Interactive analysis, generation/planning, audit/holes/traps, player analysis and database ingestion use explicit job ownership and resource policies. | Deterministic core invariants and differential fixtures pass; stale results cannot publish; pause/cancel/restart and engine crash cleanup pass; realistic throughput/memory budgets hold. |
-| 6. Remaining workflows and platform surface | Players & prep, engine tournaments, bughouse, accounts/settings, external tools, asset discovery, packaging and updates complete the parity matrix. | Each mode has functional parity or a separately agreed redesign; shared-file tool contracts and Linux/Windows/macOS native checks pass. Missing optional assets remain handled. |
+| 5. Analysis and long jobs | Interactive analysis, generation/planning, audit/holes/traps, player analysis and database ingestion use explicit job ownership and resource policies. | Deterministic core invariants and differential fixtures pass; stale results cannot publish; pause/cancel/restart, port/worker cleanup and engine crash cleanup pass; burst-output tests preserve terminal events and periodic progress; realistic throughput/memory budgets hold. |
+| 6. Remaining workflows and platform surface | Players & prep, engine tournaments, bughouse, accounts/settings, external tools, asset discovery, packaging and updates complete the parity matrix. | Each mode has functional parity or a separately agreed redesign; shared-file tool contracts and Linux/Windows/macOS native checks pass. Credential migration/restart/disconnect gates pass before the new Accounts UI ships. Missing optional assets remain handled. |
 | 7. Retirement and release readiness | Remove legacy bridges, unused controllers/widgets, duplicate dependencies and obsolete schemas/readers where compatibility policy permits; update current-state docs. | No production route falls back to legacy code; all retained data is readable and recovery is tested; full release gates pass. Publishing remains a separate user-requested action. |
 
 A module is not considered migrated because it moved folders. Each completed
