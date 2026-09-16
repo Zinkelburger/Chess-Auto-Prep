@@ -191,6 +191,73 @@ cannot substitute for observing a person. Set numerical targets after measuring
 the baseline; do not invent improvement percentages or count clicks as the
 only measure of usability.
 
+### Visual direction: a calm, responsive dark workspace
+
+**Status: Not started.** The rewrite should feel clean, modern, minimal and
+pleasant to operate. Treat these as reviewable product qualities alongside
+correctness. Preserve information needed for chess decisions and visible
+affordances when simplifying a screen. Removing decoration should not require
+users to memorize hidden commands or open menus for every common action.
+
+The proposed direction is a quiet charcoal workspace with clearly separated
+surfaces, comfortable typography, restrained accent color and crisp feedback.
+The board, moves and user's current task receive visual priority. Establish
+the direction in milestone 1 before rolling it across feature migrations.
+
+| Concern | Proposed design contract |
+|---------|--------------------------|
+| Dark surfaces | Give workspace, panel, input and floating surface explicit semantic roles. Tune a small set of neutral tones together; use tonal separation and selective outlines where shadows are insufficient. Start from existing AppColors/ColorScheme rather than inventing screen-local palettes. |
+| Readability | Use legible foreground and secondary text on every actual surface. Test ordinary text at at least 4.5:1 contrast, with stronger contrast for small text where practical. Muted labels remain readable; opacity stacking must not silently erase contrast. |
+| Accent and meaning | Choose one principal interaction accent after comparing prototypes. Keep error/success/warning and chess evaluation colors semantically separate. Selected, hovered, focused and disabled controls need distinct treatments beyond hue alone. |
+| Composition | Use a consistent spacing scale and alignment. Prefer grouping and whitespace to repeated card-inside-card borders. Keep forms at readable widths and let analytical workspaces use available space. Avoid making every number, chip and action equally prominent. |
+| Typography and symbols | Retain a compact type hierarchy and one icon family. Align numerical columns and use tabular figures; moves/FEN use the shared mono style. Keep important actions labelled and make tooltips supplementary. |
+| Board and data | Validate both piece colors on both square colors, coordinates, last-move highlights, arrows, selection and evaluation graphics against the surrounding dark UI. Check user-selected board themes and dense tables, not just empty mockups. |
+| Interaction feel | Every actionable component has designed rest, hover, pressed, keyboard-focus, disabled and busy states. Provide immediate acknowledgement, stable geometry and predictable focus return. Loading indicators must describe actual work and never imply that an uncommitted save succeeded. |
+| Motion and delight | Use short transitions to connect actions with outcomes: selection changes, opening a panel, dropping a piece, completing a training step. Reuse AppMotion timings as a starting point and tune through interaction tests. Respect reduced motion and keep repeated training input responsive. |
+| Pleasant details | Give a valid drop a clear landing response; make a completed exercise feel resolved; show a compact copy acknowledgement; reveal useful previews without changing the committed position. Avoid repeated modal praise, compulsory sound or decorative motion that interrupts concentration. |
+
+Dark appearance is a design preference, not a universal claim of reduced eye
+strain. Inspect the actual app on ordinary displays in both dim and bright
+rooms, with platform scaling and larger text. Large bright surfaces and dense
+low-contrast gray text both need deliberate review. Ensure diagrams and images
+remain legible; do not invert chess piece assets or illustrations automatically.
+
+Milestone 1 should include this visual-design loop:
+
+1. Build two restrained visual treatments of the same repertoire task using
+   real-looking long names, counts, selection and error states. Compare density,
+   surface separation and accent treatment without changing the task itself.
+2. Review the alternatives with the user in a clickable prototype, including
+   keyboard use. Choose one direction and record the decision here before
+   migrating its appearance across the app.
+3. Encode the selected values in the production theme and reusable components.
+   Include interactive examples for the state combinations above in Widgetbook.
+   The catalog consumes production code; it must not maintain prettier copies.
+4. For each migrated screen, review an actual workflow with representative data,
+   a narrow window, enlarged text, failed/slow work and repeated clicks. Check
+   task clarity and interaction feel as well as screenshots. Record usability
+   findings and fix shared causes in the component/theme owner.
+
+Use these references for complementary purposes. The reading shortlist is
+based on author/publisher descriptions and publicly available material; book
+recommendations do not imply that their complete paid texts have been reviewed.
+
+- **[Refactoring UI — Adam Wathan and Steve Schoger](https://refactoringui.com/):**
+  primary practical visual-design reference for hierarchy, spacing, typography
+  and finishing details. Its web examples need adaptation to desktop chess
+  workflows; it is not a dark-mode-specific standard.
+- **[Don't Make Me Think, Revisited — Steve Krug](https://sensible.com/dont-make-me-think/):**
+  usability companion for understandable navigation and evaluating whether
+  people can identify and complete the next action.
+- **[Microinteractions — Dan Saffer](https://www.oreilly.com/library/view/microinteractions/9781449342760/):**
+  reference for the small interactions that make controls feel responsive and
+  satisfying, complementing whole-workflow usability evaluation.
+- **[Apple Human Interface Guidelines: Dark Mode](https://developer.apple.com/design/human-interface-guidelines/dark-mode)**
+  and **[Flutter ColorScheme](https://api.flutter.dev/flutter/material/ColorScheme-class.html):**
+  free dark-appearance and implementation references. Use semantic colors,
+  legible assets and tested surface contrast; preserve desktop platform
+  conventions without mechanically copying another platform's visual effects.
+
 ### Data preservation and coexistence
 
 Use [DATA_INTEGRITY.md](DATA_INTEGRITY.md) as the starting safety contract.
