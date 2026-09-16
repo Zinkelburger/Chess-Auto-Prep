@@ -844,7 +844,10 @@ on a charcoal plot background so both sides remain distinct. Its full-game horiz
 extent and fixed ±8-pawn vertical scale remain stable while scores stream in;
 new offscreen evaluations neither animate old points nor reset scrolling.
 Navigation scrolls only when the selected move leaves the visible area. Sparse
-saved evaluations use their actual ply for tooltips and selection.
+saved evaluations use their actual ply for tooltips and selection. Tactics review
+also scores the final position when the opponent moves last, and records terminal
+draws directly, so its saved graph covers the whole game. The graph opens without
+a saved-position-count banner or a separate “Analyze full game” prompt.
 
 **Filter games** opens a normal **Filter** tab beside the board. It starts with
 one blank Field / Rule / Value row and a 40px **+ Add filter** control. Field and

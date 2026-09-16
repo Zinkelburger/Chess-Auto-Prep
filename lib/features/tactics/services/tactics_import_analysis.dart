@@ -184,8 +184,8 @@ class TacticsGameAnalyzer {
     // batch tail at each game's end left the rest of the pool idle and cost
     // more than the warmer hash saved.
     await pool.forEachParallel<int>(
-      [for (var i = 0; i < pass.sites.length; i++) i],
-      pass.evaluateSite,
+      [for (var i = 0; i < pass.workCount; i++) i],
+      pass.evaluateWork,
       stopWhen: shouldAbort,
     );
 
@@ -240,6 +240,11 @@ class _GamePass {
   /// disjoint pattern as [plyEvals], one index later.
   late final List<List<String>?> plyPvs;
 
+  // The opponent's final move has no following user site to score it.
+  Position? _opponentFinalPosition;
+
+  int get workCount => sites.length + (_opponentFinalPosition == null ? 0 : 1);
+
   int _sitesDone = 0;
 
   int get _depth => analyzer.depth;
@@ -271,6 +276,9 @@ class _GamePass {
       }
     }
     lastPlyIsCheckmate = replayComplete && pos.isCheckmate;
+    if (replayComplete && game.moves.isNotEmpty && pos.turn == game.userColor) {
+      _opponentFinalPosition = pos;
+    }
   }
 
   Future<EvalResult> _evaluate(EvalWorker worker, String fen) =>
@@ -280,13 +288,42 @@ class _GamePass {
   void _finishSite(int i, _SiteResult result) {
     results[i] = result;
     _sitesDone++;
-    onSiteProgress?.call(_sitesDone, sites.length);
+    onSiteProgress?.call(_sitesDone, workCount);
   }
 
   /// Record the line the engine would play from the position before
   /// [plyIndex], when that ply exists.
   void _recordPv(int plyIndex, String fen, List<String> uciPv) {
     if (plyIndex < plyPvs.length) plyPvs[plyIndex] = uciPvToSan(fen, uciPv);
+  }
+
+  /// Include the final opponent position in the same worker pass, without
+  /// treating their move as a user decision to mine for puzzles.
+  Future<void> evaluateWork(EvalWorker worker, int i) async {
+    if (i < sites.length) return evaluateSite(worker, i);
+    if (analyzer._aborted) return;
+    final pos = _opponentFinalPosition!;
+    if (pos.isGameOver) {
+      if (!pos.isCheckmate) {
+        plyEvals[game.moves.length - 1] = PlyEval(cp: 0, depth: _depth);
+      }
+    } else {
+      final result = await _evaluate(worker, pos.fen);
+      if (analyzer._aborted) return;
+      plyEvals[game.moves.length - 1] = _whiteNormalizedEval(
+        result,
+        sideToMoveIsWhite: pos.turn == Side.white,
+      );
+      unawaited(
+        _putSharedEval(
+          pos.fen,
+          result,
+          sideToMoveIsWhite: pos.turn == Side.white,
+        ),
+      );
+    }
+    _sitesDone++;
+    onSiteProgress?.call(_sitesDone, workCount);
   }
 
   /// Evaluate site [i] on [worker]. Leaves `results[i]` null when the run is
@@ -315,10 +352,11 @@ class _GamePass {
     final wcBefore = winningChanceFromCp(evalBefore.effectiveCp);
 
     if (site.endsGame) {
-      // No after-position score: the game is over there. When it ended in
-      // mate the reader derives the result from the board, and a stalemate
-      // or resignation leaves one ply unscored — inside the budget
-      // [annotateMovetextWithEvals] enforces.
+      // Mate is restored from the board; terminal draws have an exact score.
+      final after = Chess.fromSetup(Setup.parseFen(site.fenAfter));
+      if (!after.isCheckmate) {
+        plyEvals[site.plyIndex] = PlyEval(cp: 0, depth: _depth);
+      }
       _finishSite(i, _SiteResult(wcBefore: wcBefore));
       return;
     }
