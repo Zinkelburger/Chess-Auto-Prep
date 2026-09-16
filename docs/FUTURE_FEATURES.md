@@ -344,6 +344,38 @@ recommendations do not imply that their complete paid texts have been reviewed.
   legible assets and tested surface contrast; preserve desktop platform
   conventions without mechanically copying another platform's visual effects.
 
+### Presentation experiments without data-model churn
+
+**Status: Not started.** Revisit how expectimax, generated lines, chapters,
+saved analysis and training sources are explained and arranged. Their present
+labels, tabs and folder-shaped navigation are not a product specification for
+the rewrite. Test alternative task flows before committing to terminology or
+layout; retain accurate score meaning, source identity and save behavior.
+
+- Keep domain operations and data identities stable while changing their
+  presentation. A chapter's display name, panel location or UI grouping must
+  not become its persistent identity. Renaming a concept on screen must not
+  implicitly rename files, rewrite PGN tags or move training progress.
+- Give UI collaborators immutable presentation models and narrow commands such
+  as preview, start analysis, cancel, save a selected result and open a document.
+  They must not infer storage operations from label text, tab indexes or paths.
+- Provide Widgetbook/full-workflow fixtures for empty, existing, running,
+  completed, stale, failed and conflicted data. Multiple visual prototypes
+  consume the same fixtures and command contracts with fake repositories.
+- Lower-cost models can explore copy, layout and interactions within that
+  sandbox. Persistence, concurrency, score interpretation and migrations remain
+  separately reviewed engineering work. Any prototype command wiring receives
+  real integration checks before it becomes production UI.
+- Compare at least two representations of the same task, such as inspecting a
+  suggested continuation and saving it into a chapter. Show the user clickable
+  alternatives and assess comprehension, effort and recoverability. Record the
+  selected direction and retire rejected prototypes; avoid permanent duplicate
+  navigation modes or configurable layouts without a demonstrated need.
+
+This expands milestone 1's prototype work and milestone 5's analysis UX. A
+visual redesign can be substantial while the repository/storage contracts stay
+unchanged. UI experimentation does not authorize changes to persisted data.
+
 ### Data preservation and coexistence
 
 Use [DATA_INTEGRITY.md](DATA_INTEGRITY.md) as the starting safety contract.
@@ -371,12 +403,86 @@ test fixture.
   unsupported schema. Restoring an old snapshot alone loses new work and is
   not an acceptable rollback procedure.
 
+### Storage baseline and overwrite-prevention gate
+
+**Status: Not started.** The following is a code-inspection baseline from
+2026-09-16, not a completed safety audit or a claim that the identified paths
+have been repaired. This planning pass did not open the user's databases,
+modify PGNs or run application safety tests. Build the full ownership inventory
+in milestone 0 and reproduce/fix the relevant risks before each slice graduates.
+
+| Data | Current representation and ownership evidence | Rewrite requirement |
+|------|-----------------------------------------------|---------------------|
+| Repertoires and chapters | Documents `repertoires/` folders with chapter PGNs; `ChapterStore` creates files with `createOnly`. Studies use multi-chapter PGNs in Documents `studies/`. | Keep user-authored text, annotations and stable references; separate user-visible grouping from physical storage decisions. |
+| User/source games | Support `app_games.db`, with collection-scoped games and position indexes. Some tactics source games have no remaining standalone PGN copy. Player-analysis PGN generations also have an authoritative manifest. | Classify authority per collection; never treat the whole database or Support directory as disposable merely because some indexes can be rebuilt. |
+| Analysis/build artifacts | Chapter-adjacent tree, partial-tree, expectimax and trap JSON, plus a model-games PGN companion, are owned by `GenerationArtifactStore`. | Track document revision, run/config identity and publication state. Expensive saved analyses and resumable work need an explicit retention policy; user edits to a companion PGN cannot be silently discarded as cache. |
+| Training state | Review/progress/history CSV files and their document/line references are covered by existing migration and concurrency protections. | Preserve scheduling/history and reference identity through chapter rename, move, split and import. Inventory all newer stores as well as legacy CSVs. |
+| Recovery and upgrades | Atomic-write journals/backups, quarantined files, PGN recovery snapshots, SQL `game_trash`, and schema-upgrade backups serve different recovery purposes. | Define retention, restore and user-export behavior for each; do not equate temporary atomic replacement with a permanent version history. |
+
+The shared atomic writer already supports exclusive creation, expected-content
+checks, locked read/modify/write, and interrupted-write recovery. Those protect
+only callers that use the correct operation. An atomic replacement can still
+atomically install stale content over a newer edit.
+
+Specific call sites to reproduce and resolve in the implementation phase:
+
+| Inspection finding | Failure scenario to test | Required behavior |
+|--------------------|--------------------------|-------------------|
+| `RepertoireController.setRepertoireColor`, `setRootPosition` and `importPgnContent` read content then call `writeFile` without `expectedContent`. | Another writer commits between the read and replacement. | Apply a narrowly scoped change to current content under the storage transaction, or reject a stale revision without replacing the newer document. |
+| `RepertoireWriter.undo` removes its undo entry and writes a previous whole-document snapshot without an expected revision. | A later annotation/import changed the file, or writing the undo fails. | Bind undo to document/session identity and the revision it reverses; preserve unrelated edits or report conflict. Keep recoverable undo state until the write commits. |
+| Generation artifacts include a replaceable `_model_games.pgn` companion and independently written analysis files. | Regeneration encounters an edited companion, or a crash/stale run leaves artifacts from different revisions. | Distinguish generated ownership from user edits, validate run/document identity at commit, and expose recoverable or stale output rather than replacing newer work. |
+
+These are observable code patterns and plausible failure cases; they are not
+proof of which incident the user previously experienced. Review exports, Save
+As, study saves, generation completion, chapter moves and database imports too;
+the three examples are not an exhaustive inventory.
+
+Before accepting a replacement storage path, require disposable-fixture tests
+for: concurrent creation of the same name; stale editor save; two app writers;
+failed decode; interrupted replacement/rollback; undo after another edit; queued
+save after switching chapters; generation finishing after its source changes;
+destination collisions; and failed migration or database/file publication.
+Assert preservation of original and newer content, comments/variations/unknown
+headers, stable IDs and progress, with truthful unsaved/conflict state. Test
+both semantic round-trips and exact text preservation where the contract needs
+it. Only a committed save may clear dirty state or announce completion.
+
+Stage derived results separately from source documents. Default generated output
+to a new owned artifact; replacing an existing user document must be an explicit
+operation checked against its current revision, with a recoverable prior version.
+Audit generic overwrite APIs so migrated document callers must select create,
+revision-checked replace or atomic update. UI prototypes cannot bypass them.
+
+Backup and restore are part of this gate: test a consistent SQLite snapshot
+including committed WAL data, the associated authoritative PGNs/manifests and
+references, then restore into an empty disposable profile. A database transaction
+does not commit filesystem changes, and app locks cannot force arbitrary external
+editors to cooperate. Preserve revisions/recovery copies and document those
+limits rather than promise that atomic writes alone eliminate every loss mode.
+
+Implementation evidence lives in [DATA_INTEGRITY.md](DATA_INTEGRITY.md). Starting
+code references: [storage operations](../lib/services/storage/io_storage_service.dart),
+[atomic writer](../lib/utils/atomic_file.dart),
+[repertoire controller](../lib/core/repertoire_controller.dart),
+[undo writer](../lib/core/repertoire_writer.dart),
+[chapter creation](../lib/features/repertoire/services/chapter_store.dart),
+[game store](../lib/services/game_store/game_store.dart),
+[generation artifacts](../lib/core/generation_artifacts.dart) and
+[schema guards/backups](../lib/services/storage/schema_guard.dart).
+
 ### Milestones and exit gates
 
 All milestones are **Not started**. Each row yields a reviewable result; later
 rows depend on the contracts established earlier, not on an unbounded framework
 build. Reorder later feature slices after the dependency inventory, with a
 recorded reason. No current mode is silently dropped.
+
+The implementing agent must revisit the storage baseline against the code at
+the time of implementation, turn the overwrite-prevention cases above into
+passing regression evidence, and report any unresolved cases explicitly. This
+is a required acceptance gate for every slice that writes user data, including
+UI work that introduces or changes save/import/generate/undo commands. Planning
+entries and visual approval are not evidence that data safety has been tested.
 
 | Milestone | Deliverable | Exit gate |
 |-----------|-------------|-----------|
