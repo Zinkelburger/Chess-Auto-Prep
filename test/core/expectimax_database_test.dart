@@ -88,10 +88,32 @@ void main() {
       db.publish(tree);
       final before = db.current!;
 
-      db.publish(tree, probes: [_tree(_afterE4C5, childFen: 'c')]);
+      db.publish(
+        tree,
+        probes: [_tree(_afterE4C5, childFen: 'c')],
+        mainTreeChanged: false,
+      );
 
       expect(db.current!.snapshot, same(before.snapshot));
       expect(db.current!.probes.length, 1);
+    });
+
+    test('starting a full build retains the probe-origin tree', () async {
+      final probe = _tree(_afterD4);
+      db.publish(probe, mainIsProbe: true);
+
+      db.dropTree();
+      db.publish(_tree(kStandardStartFen));
+      await db.persist('/r/x.pgn', mainTreeChanged: true);
+
+      expect(db.probes, [same(probe)]);
+      expect(db.mainTreeIsProbe, isFalse);
+      expect(
+        ExpectimaxProbeStore.decode(
+          storage.files['/r/x_expectimax.json']!,
+        ).single.root.fen,
+        _afterD4,
+      );
     });
 
     test('clear drops everything and forgets the path', () async {
@@ -135,6 +157,52 @@ void main() {
       expect(db.mainTreeIsProbe, isTrue);
     });
 
+    test('switching repertoires cannot carry a previous probe along', () async {
+      storage.files['/r/a_expectimax.json'] = ExpectimaxProbeStore.encode([
+        _tree(_afterD4),
+      ]);
+      storage.files['/r/b_tree.json'] = serializeTree(_tree(kStandardStartFen));
+      await db.load('/r/a.pgn', canApply: () => true);
+
+      await db.load('/r/b.pgn', canApply: () => true);
+      await db.persist('/r/b.pgn', mainTreeChanged: false);
+
+      expect(db.probes, isEmpty);
+      expect(db.current!.fenMap.getCanonical(_afterD4), isNull);
+      expect(storage.files.containsKey('/r/b_expectimax.json'), isFalse);
+    });
+
+    test(
+      'reloading a probe-only repertoire does not duplicate probes',
+      () async {
+        storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+          _tree(_afterD4),
+        ]);
+        await db.load('/r/x.pgn', canApply: () => true);
+        await db.load('/r/x.pgn', canApply: () => true);
+
+        expect(db.current!.allTrees, hasLength(1));
+        expect(db.mainTreeIsProbe, isTrue);
+      },
+    );
+
+    test(
+      'a load cannot replace a full build that finished meanwhile',
+      () async {
+        storage.files['/r/x_tree.json'] = serializeTree(_tree(_afterD4));
+        final release = Completer<void>();
+        storage.beforeExists = (_) => release.future;
+        final loading = db.load('/r/x.pgn', canApply: () => true);
+        db.dropTree();
+        final built = _tree(kStandardStartFen);
+        db.publish(built);
+        release.complete();
+
+        expect(await loading, ExpectimaxLoadOutcome.superseded);
+        expect(db.current!.tree, same(built));
+      },
+    );
+
     test('nothing saved empties the bundle', () async {
       db.publish(_tree(kStandardStartFen));
 
@@ -173,6 +241,22 @@ void main() {
     });
   });
 
+  test('engine PV scores retain White perspective for either side to move', () {
+    for (final fen in [kStandardStartFen, _afterE4]) {
+      for (final cp in [-31, 31]) {
+        final probe = enginePvProbe(
+          fen: fen,
+          evalCpWhite: cp,
+          pv: const [],
+          startMoves: const [],
+          config: _config,
+        );
+        expect(probe.root.evalForUs(true), cp);
+        expect(probe.root.evalForUs(false), -cp);
+      }
+    }
+  });
+
   group('recordEnginePv', () {
     test('a known position gets the eval and PV in place', () {
       final tree = _tree(kStandardStartFen);
@@ -188,8 +272,9 @@ void main() {
       final mainTreeChanged = db.recordEnginePv(probe);
 
       expect(mainTreeChanged, isTrue);
-      expect(tree.root.children.single.engineEvalCp, 31);
+      expect(tree.root.children.single.engineEvalCp, -31);
       expect(tree.root.children.single.enginePv, ['e7e5', 'g1f3']);
+      expect(db.current!.snapshot.node(2).evalForUsCp, 31);
       expect(db.probes, isEmpty, reason: 'nothing grafted, nothing added');
     });
 
@@ -282,6 +367,10 @@ void main() {
 
       expect(landing.mainTreeChanged, isTrue);
       expect(landing.added, 1);
+      expect(
+        db.current!.snapshot.nodesById.values.map((node) => node.fen),
+        contains(_afterE4C5),
+      );
       expect(db.probes, isEmpty);
       expect(db.current!.fenMap.getCanonical(_afterE4C5), isNotNull);
     });

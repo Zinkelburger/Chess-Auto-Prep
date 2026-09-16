@@ -99,6 +99,16 @@ void main() {
     expect(saved.probes, isEmpty);
   });
 
+  test('a corrupt tree file does not hide good probes', () async {
+    await store.writeDatabase('/r/x.pgn', probeTrees: [_tree(_afterE4)]);
+    storage.files['/r/x_tree.json'] = 'not json';
+
+    final saved = await store.readDatabase('/r/x.pgn');
+
+    expect(saved.tree, isNull);
+    expect(saved.probes.single.root.fen, _afterE4);
+  });
+
   group('writeDatabase', () {
     test('writes probes and, when asked, the main tree', () async {
       await store.writeDatabase(

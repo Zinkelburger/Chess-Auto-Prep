@@ -65,15 +65,10 @@ class GeneratedRepertoire {
 
   /// The same repertoire with a different probe set.
   ///
-  /// [snapshot], [metricsCache] and [traps] describe [tree] alone — probes are
-  /// deliberately not part of the graph or the trap index (see [probes]) — so
-  /// a probe landing cannot invalidate them. Only [fenMap] spans the whole
-  /// database.
-  ///
-  /// Going back through [fromTree] for this, which is what the probe path used
-  /// to do, redid all four: a full flatten of the build's own tree, the metric
-  /// pass over that snapshot, and a full trap extraction, every time a probe
-  /// was added — none of which could produce a different answer.
+  /// [snapshot], [metricsCache] and [traps] describe [tree] alone, so only
+  /// [fenMap] needs rebuilding when the separate probes change. The caller
+  /// must use [fromTree] instead if it changed the main tree's evals or
+  /// grafted new children into it.
   GeneratedRepertoire withProbes(List<BuildTree> newProbes) {
     return GeneratedRepertoire(
       tree: tree,

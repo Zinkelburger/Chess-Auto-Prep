@@ -111,8 +111,8 @@ class GenerationArtifactStore {
 
   /// Read the expectimax database saved beside [repertoireFilePath]: the
   /// last full build's tree and every probe since. Either may be absent. A
-  /// read or decode failure is logged and yields whatever was read before
-  /// it, so a corrupt probe file cannot hide a good tree.
+  /// read or decode failure is logged independently, so a corrupt file
+  /// cannot hide the other file's valid analysis.
   Future<SavedExpectimaxDatabase> readDatabase(
     String repertoireFilePath,
   ) async {
@@ -127,6 +127,14 @@ class GenerationArtifactStore {
       if (treeJson != null) {
         tree = await Isolate.run(() => deserializeTree(treeJson));
       }
+    } catch (e) {
+      log.w(
+        'tree load failed for $repertoireFilePath',
+        name: _logName,
+        error: e,
+      );
+    }
+    try {
       final probesJson = await _readIfPresent(
         storage,
         probesPathFor(repertoireFilePath),
@@ -138,7 +146,7 @@ class GenerationArtifactStore {
       }
     } catch (e) {
       log.w(
-        'expectimax database load failed for $repertoireFilePath',
+        'probe load failed for $repertoireFilePath',
         name: _logName,
         error: e,
       );

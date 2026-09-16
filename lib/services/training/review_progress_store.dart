@@ -194,14 +194,12 @@ class ReviewProgressStore {
     required bool hadMistake,
     required String sessionType,
   }) async {
-    await reviewService.saveAll(
-      byLine.values.toList(),
-      repertoireId: sourcePath,
-    );
-    await reviewService.saveMoveProgress(
-      moveProgress.values.toList(),
-      repertoireId: sourcePath,
-    );
+    // Both writes belong to the source that completed the line. A source
+    // switch can replace these maps while the first write is in flight.
+    final savedReviews = byLine.values.toList();
+    final savedMoves = moveProgress.values.toList();
+    await reviewService.saveAll(savedReviews, repertoireId: sourcePath);
+    await reviewService.saveMoveProgress(savedMoves, repertoireId: sourcePath);
     await reviewService.appendHistory([
       RepertoireReviewHistoryEntry(
         repertoireId: sourcePath,

@@ -82,10 +82,13 @@ class ExpectimaxDatabase {
   /// [probes] replaces the probe list when given; otherwise the probes
   /// already loaded stay. A main tree that was itself a probe (see
   /// [mainTreeIsProbe]) is demoted to the probe list rather than lost.
+  /// Set [mainTreeChanged] to false only when the main tree is unchanged
+  /// and just the probe set changed, so its derived artifacts can be reused.
   void publish(
     BuildTree tree, {
     List<BuildTree>? probes,
     bool mainIsProbe = false,
+    bool mainTreeChanged = true,
   }) {
     if (probes != null) {
       _probes
@@ -110,7 +113,8 @@ class ExpectimaxDatabase {
     // reuses the snapshot, the metric cache and the trap index instead of
     // recomputing three identical answers over the whole tree.
     final previousBundle = _current;
-    if (previousBundle != null &&
+    if (!mainTreeChanged &&
+        previousBundle != null &&
         identical(previousBundle.tree, tree) &&
         previousBundle.playAsWhite == playAsWhite) {
       _current = previousBundle.withProbes(_probes);
@@ -127,7 +131,13 @@ class ExpectimaxDatabase {
   /// Drop the published tree ahead of a full build, keeping the probes: the
   /// build replaces the tree, and the probes rejoin it when it is published.
   void dropTree() {
+    final previous = _current?.tree;
+    if (_mainTreeIsProbe && previous != null && !_probes.contains(previous)) {
+      _probes.insert(0, previous);
+    }
     _current = null;
+    _mainTreeIsProbe = false;
+    _loadSeq++;
   }
 
   /// Drop the bundle. A load still in flight is superseded.
@@ -154,6 +164,9 @@ class ExpectimaxDatabase {
     if (seq != _loadSeq || !canApply()) {
       return ExpectimaxLoadOutcome.superseded;
     }
+    // Loading replaces the whole database, including a previous probe-origin
+    // main tree. It must not be demoted into the newly loaded repertoire.
+    clear();
     _path = repertoireFilePath;
     final tree = saved.tree;
     if (tree != null) {
@@ -203,6 +216,7 @@ class ExpectimaxDatabase {
       bundle.tree,
       probes: [...retained, probe],
       mainIsProbe: _mainTreeIsProbe,
+      mainTreeChanged: false,
     );
   }
 
@@ -253,6 +267,7 @@ class ExpectimaxDatabase {
         bundle.tree,
         probes: [..._probes, if (landedIsProbe) probe],
         mainIsProbe: _mainTreeIsProbe,
+        mainTreeChanged: identical(landed, bundle.tree),
       );
     }
     return (
@@ -280,6 +295,7 @@ class ExpectimaxDatabase {
         bundle!.tree,
         probes: List.of(_probes),
         mainIsProbe: _mainTreeIsProbe,
+        mainTreeChanged: identical(host, bundle.tree),
       );
       return identical(host, bundle.tree);
     }
@@ -290,6 +306,7 @@ class ExpectimaxDatabase {
         bundle.tree,
         probes: [..._probes, probe],
         mainIsProbe: _mainTreeIsProbe,
+        mainTreeChanged: false,
       );
     }
     return false;
@@ -348,7 +365,7 @@ BuildTree enginePvProbe({
     isWhiteToMove: isWhiteToMove(fen),
     nodeId: 0,
   );
-  root.engineEvalCp = evalCpWhite;
+  root.engineEvalCp = root.isWhiteToMove ? evalCpWhite : -evalCpWhite;
   root.enginePv = List.unmodifiable(pv);
   return BuildTree(
     root: root,
