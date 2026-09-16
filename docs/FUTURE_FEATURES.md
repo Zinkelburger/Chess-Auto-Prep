@@ -20,7 +20,10 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 principles, storage preservation gates and milestone sequence live in
 [ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). That document is the canonical
 implementation plan; this file retains the feature backlog. Update milestone
-status there and feature status here when implementation changes.
+status there and feature status here when implementation changes. Start with
+[the independent current-code safety prerequisite](ARCHITECTURE_RENEWAL.md#safety-prerequisite-on-current-code)
+and inventory; follow the plan's default/fallback decisions and requirement IDs.
+Design components are built on demand inside the first complete slice.
 
 ---
 

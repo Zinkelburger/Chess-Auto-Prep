@@ -14,6 +14,61 @@ buying services, and replacing all storage formats at once. Product/data
 behavior changes remain explicit; release publication follows the repository's
 existing policy. These constraints apply throughout the plan.
 
+## Execution contract and evidence
+
+This is a plan, not an implementation kickoff. At kickoff, record the scope
+actually authorized by the product owner (the person directing this project).
+The recommended first increment is safety prerequisite S0 plus inventory 0;
+produce their evidence and bounded estimates before expanding the rewrite.
+Existing explicit authorization takes precedence; do not invent another approval
+step for routine work already in scope. End users are the people using the app;
+the product owner selects UX direction and scope. Sessions with unfamiliar chess
+players are valuable **when feasible**, not a mandatory dependency for graduation.
+
+The implementing agent owns technical decisions and evidence for its increment.
+Apply the defaults below without a new package-selection discussion. A failing
+rejection check triggers the stated fallback and a recorded reason; changes to
+product behavior, compatibility or scope go to the product owner. Time-box spikes
+using the milestone 0 budget; do not keep evaluating equivalent packages.
+
+The following stable IDs are the acceptance register. Detailed contracts in the
+linked sections define their test cases; principles and references explain the
+rationale. Cite IDs in tests/check results and milestone evidence rather than
+copying slightly different versions into each feature. Add or amend the owning
+ID when a requirement changes. IDs stay stable if milestones are rearranged.
+
+| ID | Required outcome and evidence | Owning contract |
+|----|-------------------------------|-----------------|
+| PLAN-01 | Record authorized scope, parity inventory, named owners, defaults and bounded time/performance budgets before widening implementation. | [Working method](#working-method-checks-and-sizing) |
+| PLAN-02 | After the first slice, record continue, bounded repair or stop against the baseline; unresolved gates are not passes. | [Continuation](#continuation-decision-after-milestone-2) |
+| ARCH-01 | Migrated widgets/controllers cannot bypass injected domain boundaries; legacy singleton access is confined to injected bridge adapters. Verify import boundaries and feature wiring. | [Dependencies](#target-layout-and-dependency-rules) |
+| DATA-01 | Reproduce each reported overwrite/undo race on current code; independently fix confirmed cases and retain regressions before rewrite-dependent writes. | [Safety prerequisite](#safety-prerequisite-on-current-code) |
+| DATA-02 | Create never replaces; every save/update validates its baseline through the shared mutation boundary. Exercise concurrent creation, stale saves and competing writers. | [PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction) |
+| DATA-03 | Snapshot undo requires the post-edit revision; mismatch preserves the current file and undo receipt, with snapshot-as-copy recovery. Test conflict and failed commit. | [PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction) |
+| DATA-04 | Revision checks distinguish raw bytes and observed file identity; identity change/unavailability never silently authorizes replacement. Test BOM, aliases and replacement. | [Filesystem contracts](#filesystem-and-cross-process-contracts) |
+| DATA-05 | Measure lock wait/hold times; interrupted and synced-file operations preserve recoverable content with bounded retries and explicit durability limits. | [Filesystem contracts](#filesystem-and-cross-process-contracts) |
+| DATA-06 | Restore a consistent database/document backup into a disposable profile; migration preserves new work and stable references. | [Coexistence](#data-preservation-and-coexistence) |
+| DATA-07 | Generation commits only against its source/run identity and preserves edited artifacts. Exercise stale completion and interrupted publication. | [Storage gate](#storage-baseline-and-overwrite-prevention-gate) |
+| STATE-01 | One action-state owner implements reject/coalesce/queue; retries, offscreen listeners and stale callbacks cannot duplicate jobs or publish stale state. | [Runtime state](#runtime-state-and-large-documents) |
+| STATE-02 | Large projections are immutable, cheaply comparable and scoped to their dependencies; measured edits/rebuilds meet the baseline budgets. | [Runtime state](#runtime-state-and-large-documents) |
+| STATE-03 | Continuous analysis produces bounded periodic UI updates without losing terminal events; verify with fake-time burst tests. | [Runtime state](#runtime-state-and-large-documents) |
+| SET-01 | One writer per settings key; failed saves stay visible and active-job configuration is explicit. Test concurrent panels and restart. | [Settings](#settings-and-credentials) |
+| SEC-01 | Before migrating Accounts, verify native vault migration, restart and disconnect with synthetic secrets; no silent plaintext fallback. | [Credentials](#settings-and-credentials) |
+| PROC-01 | Owned workers/ports/processes terminate on the specified cancellation/shutdown paths; test failed startup and return to resource baseline. | [Supervision](#worker-and-engine-supervision) |
+| PROC-02 | Containment is established before engine execution; forced app death cleans up the supported descendant tree on each verified host. | [Supervision](#worker-and-engine-supervision) |
+| UI-01 | Slice controls share production tokens, ARB copy and Widgetbook fixtures; keyboard, contrast, long text and scaling checks pass. | [Visual direction](#visual-direction-a-calm-responsive-dark-workspace) |
+| UI-02 | Ordinary navigation retains shell/context; Back, picker cancellation and focus return preserve the document session. | [Shell](#persistent-shell-and-reusable-panels) |
+| UI-03 | Shared split panels respect size bounds, keyboard adjustment and saved-layout recovery; test narrow and wide windows. | [Panels](#persistent-shell-and-reusable-panels) |
+| UI-04 | Complete the representative user task and record usability findings; product-owner visual review is distinguished from optional unfamiliar-player studies. | [Human factors](#frontend-principles-human-factors-as-acceptance-criteria) |
+| OPS-01 | Diagnose root, worker and engine failures with redacted local evidence; record unavailable native coverage. | [Desktop foundations](#early-desktop-foundations) |
+| OPS-02 | Native packaging/licensing and platform checks match the supported hosts; release gates pass before user-requested publication. | [Desktop foundations](#early-desktop-foundations) |
+| TEST-01 | Slice-specific contract, failure, algorithm and integration checks pass; changed formats have fixtures and legacy removal has parity evidence. | [Working method](#working-method-checks-and-sizing) |
+
+For each exit gate record `requirement ID | scope/host | check or test path |
+result | commit | remaining limitation`. Results are pass, fail or unverified;
+mark genuinely inapplicable requirements with a reason. No test coverage or
+implementation is implied by this empty evidence template.
+
 ## Reading map
 
 - [Principles](#engineering-principles-and-useful-abstraction),
@@ -140,6 +195,9 @@ Dependencies follow these rules:
 
 1. App startup constructs infrastructure, repositories and state owners and
    injects them. Singleton access is confined to the temporary legacy bridge.
+   For unmigrated services, startup injects adapters wrapping their existing
+   singleton; a new feature never reaches `.instance` directly. Each adapter
+   records callers and a removal milestone and passes the same contract tests.
 2. Feature widgets use their controllers, models and the design system. Shared
    design-system widgets receive values/callbacks, never feature repositories.
 3. Controllers call repository contracts or substantial workflow collaborators.
@@ -169,35 +227,31 @@ SQL execution and isolate/process supervision belong behind those boundaries.
 
 ## Package decisions
 
-Resolve stable, SDK-compatible versions at implementation time. Every adoption
-records the code it replaces, desktop support, transitive dependencies, license,
-maintenance status, code-generation cost and a focused validation result.
+Use these defaults for the first slice. Resolve SDK-compatible versions only
+when needed, recording desktop support, license, transitive dependencies and
+code removed. Retain already-working dependencies outside the migrated slice.
+The implementing agent owns each technical check and fallback under PLAN-01.
 
-| Decision | Proposed choice and acceptance condition |
-|----------|-------------------------------------------|
-| Component catalog | Widgetbook first; production theme and controls, isolated fixtures, no engine/network/account initialization. Local development use does not require cloud hosting. |
-| Visual checks | Flutter widget/golden tests; trial Alchemist for scenario organization. Use readable text with bundled fonts on a pinned Linux baseline, plus native platform checks. Obscured-text goldens alone cannot validate typography. |
-| State and dependency composition | Riverpod is the preferred candidate for migrated presentation state. Prove disposal, test overrides, retry behavior and app-owned jobs in one slice before committing to broad conversion. Keep domain/repository contracts framework-independent. |
-| Database | Trial Drift for ordinary structured metadata/progress, with migration fixtures and measured large-data behavior. Existing SQLite schemas and specialized master/eval stores remain authoritative until separately migrated. |
-| Models | Freezed and json_serializable where they remove substantial boilerplate; plain Dart sealed classes/records for small types. Generated code never replaces input validation or format versioning. |
-| Files | Consider package:file inside adapters for deterministic tests. Retain real OS tests for locks, symlinks, atomic replacement and interrupted recovery. |
-| Network | Evaluate Dio behind API-specific clients; preserve rate limits, streaming and authentication behavior. One retry policy per operation; never retry a mutation blindly. Keep http if it already meets the contract more simply. |
-| Navigation | Evaluate go_router with go_router_builder for typed internal navigation against retained document sessions, Back behavior, external PGN opening and deep links. External URLs and missing/deleted IDs still need runtime validation. A route identifies a destination; it does not own an engine job. |
-| Credentials | Evaluate flutter_secure_storage behind a CredentialStore; require native desktop setup and restart-safe migration before migrating Accounts. See the settings contract below. |
-| Resizable workspace | Trial flutter_resizable_container behind one shared SplitPane component; adoption requires constraint, keyboard, semantics and restoration tests. |
-| Stream shaping | Prefer a focused transformer or stream_transform for bounded presentation updates; use RxDart if its wider operators justify it. Verify operator semantics instead of adding a package for its name. |
-| Diagnostics/testing | Standardize logging behind one interface; consider clock and mocktail where useful. Use structured run IDs, stages and error causes, with token redaction and bounded log retention. |
+| Decision | Default | Rejection check | Fallback / revisit trigger |
+|----------|---------|-----------------|----------------------------|
+| Catalog | Widgetbook with only first-slice production controls and fixtures. | Cannot run isolated/headless on the pinned SDK within the spike budget. | Use an isolated Flutter catalog harness temporarily; record the blocker and keep Widgetbook as the target. |
+| Visual checks | Native Flutter widget/golden tests with readable bundled fonts. | Fixtures become costly to maintain or miss required scenarios. | Add Alchemist only if the same scenarios are simpler; retain native host checks. |
+| State/DI | Manual Riverpod providers/notifiers, one presentation action state per operation. | First-slice lifecycle/retry/override tests fail or integration exceeds its budget. | Retain injected current controllers for that slice; record why, with no second competing state library. |
+| Database | Existing SQLite adapters, schemas and migrations; defer Drift. | A scoped new store or replacement demonstrably needs safer typed queries/migrations. | Evaluate Drift for that ownership boundary only, with one schema/migration owner and migration/performance fixtures. |
+| Models/codegen | Plain immutable Dart values/sealed classes and manual providers; retain existing codecs. Flutter ARB generation is allowed. | Boilerplate produces evidenced defects or excessive maintenance cost. | Introduce only the relevant Freezed or JSON generator after a timed clean/incremental build check; no blanket codegen stack. |
+| Files | Retain atomic writer; inject narrow filesystem adapters with deterministic fakes and real OS tests. | Failure injection needs extensive ad hoc fake filesystem behavior. | Add package:file inside adapters; keep the native contract suite. |
+| Network | Keep http behind existing API clients with one retry owner. | A concrete cancellation/streaming/auth contract cannot be met economically. | Trial Dio on that client with the same fixtures; no global replacement. |
+| Navigation | App-owned typed destinations using existing Navigator under a persistent shell. | Back, deep-link/file-open or restoration fixtures require substantial custom routing machinery. | Evaluate go_router against the same session fixtures. It is not inherently incompatible with explicit session ownership. |
+| Credentials | flutter_secure_storage behind CredentialStore when Accounts migration starts. | Native vault/restart/packaging tests fail on a supported host. | Preserve unmigrated credentials for recovery; defer that Accounts migration or implement a native adapter. Never downgrade new secrets to plaintext. |
+| Panels | Defer splitting until workspace 3; then trial flutter_resizable_container behind SplitPane. | Bounds, keyboard, semantics or restoration checks fail within the spike budget. | Keep accessible fixed/reflowing panels; implement a narrow splitter only if the actual workspace needs it. |
+| Stream shaping | stream_transform for periodic latest snapshots when analysis migrates. | Burst/terminal/cancellation tests fail or required semantics need awkward workarounds. | Small tested transformer; RxDart only for demonstrated wider needs. |
+| Diagnostics/testing | Existing logging through a narrow interface, injected clock and hand-written boundary fakes. | Deterministic time or useful fake behavior requires excess plumbing. | Add clock/mocktail for that need; remote reporting and leak tooling remain separately justified. |
 
-Do not run Provider, Riverpod and Bloc as competing permanent choices. Riverpod
-3's experimental persistence/mutation APIs are not the foundation for durable
-user data. Native isolates and engine processes remain explicit infrastructure;
-do not introduce mobile background schedulers for desktop analysis work.
-
-Prefer Riverpod generation if the slice already uses a validated Freezed/JSON
-generation pipeline and the readability benefit justifies its build cost;
-manual typed providers are also supported. Record one convention for migrated
-code. Generated auto-disposal is a default, not proof of correct lifetime:
-explicitly test screen departure, retained documents, active jobs and disposal.
+Do not combine Provider, Riverpod and Bloc as permanent parallel choices.
+Riverpod experimental persistence/mutations do not own durable data. No
+riverpod_generator or go_router_builder is needed for the first slice. A future
+codegen exception records iteration cost and generated-file policy; it does not
+change resource ownership or input validation.
 
 ## Settings and credentials
 
@@ -239,13 +293,13 @@ than pretending migration succeeded. Use synthetic credentials to test every
 failure boundary and native restart. Exclude secrets from logs, Widgetbook and
 ordinary settings backups. Define legacy-backup cleanup and old-app behavior
 explicitly; migration cannot erase already-created external backups. Evaluate
-the vault in milestone 1 and complete its migration gate before Accounts work,
+the vault immediately before Accounts migration and complete its gate first,
 even if the full settings/accounts UI remains in milestone 6.
 
 ## Runtime state and large documents
 
 If Riverpod is selected, disable implicit provider retry at the composition
-root (`retry: (_, _) => null`); opt in only for bounded idempotent reads with
+root (`retry: (retryCount, error) => null`); opt in only for bounded idempotent reads with
 one retry owner. Provider computations must not start jobs or perform document
 mutations. A dependency provider can expose an explicitly owned service, but
 visibility, rebuilds and listener counts must not own its active work.
@@ -254,10 +308,12 @@ job starts once and continues or stops according to its declared policy.
 Observe paused/offscreen subscriptions under `TickerMode`, then return and
 verify the latest job state without duplicated work or unbounded buffering.
 
-Use a shared async Command abstraction for UI-triggered operations, carrying
-running/result/failure state and an explicit repeated-execution policy (reject,
-coalesce or queue). Domain-specific results remain typed; long jobs expose a
-job handle and progress rather than making widget lifetime their owner. After
+Use the feature notifier/controller as the sole UI action-state owner, with
+an explicit repeated-execution policy (reject, coalesce or queue). Use typed
+operation state within it, or AsyncValue for a simple load; do not wrap the same
+operation in an independently mutable Command state machine. Shared helpers may
+implement execution policy without owning a second copy of state. Domain
+results remain typed; long jobs expose a job handle and progress. After
 an async gap, validate the notifier's `ref.mounted` and captured session/request
 identity before updating presentation. Persisted writes independently validate
 the document revision. A liveness check alone does not reject a stale request
@@ -289,7 +345,12 @@ for the first workspace experiment; structural sharing is an alternative to
 benchmark. Neither design may expose an old "snapshot" that changes later via
 an aliased mutable tree. Keep immutable values for small configuration/state.
 Do not deep-copy or structurally compare a whole move tree for every hover or
-cursor change. A local session ID/revision identifies UI updates; the storage
+cursor change. Emit a new immutable projection when its observed data changes;
+equality uses session ID, projection kind/key and its relevant revision, never
+tree structure. A document revision alone is insufficient for cursor/filter-only
+changes: use a separate view revision or small selection value. Different
+projections from one document revision must not compare equal accidentally.
+Never place an aliased mutable tree inside a Freezed value. The storage
 baseline is a separate content-sensitive revision used at commit.
 
 Milestone 3 must benchmark annotated PGNs with tens of thousands of nodes,
@@ -303,8 +364,8 @@ actually fixed-height rows; preserve variable movetext and text-scale layouts.
 
 ## Early desktop foundations
 
-These requirements extend milestones 0-2; they must not wait until the final
-platform sweep.
+Inventory these requirements in milestone 0 and prove those used by the first
+slice in combined milestones 1/2; defer unrelated foundations to their feature.
 
 **Localization readiness (milestone 1).** Start with Flutter's standard
 `flutter_localizations` and `gen_l10n`/ARB workflow unless a measured requirement
@@ -312,8 +373,10 @@ justifies an alternative. English is the initial source locale; translating
 other languages is separately scoped. Migrated user-facing copy, validation,
 tooltips and accessibility labels use localized messages with typed placeholders
 and plural rules. Design-system controls accept resolved labels from callers.
-Use locale-aware UI numbers/dates and directional layout; exercise expanded
-pseudo-localized text and RTL in the catalog. Keep PGN/FEN, engine protocols,
+Use locale-aware UI numbers/dates and directional layout. Keep inexpensive
+long-label and text-scaling checks in the first slice; full pseudo-localization
+and RTL catalog matrices wait until another/RTL locale is scoped. Keep PGN/FEN,
+engine protocols,
 stored IDs and canonical formats locale-independent, and preserve the chess
 board's explicit orientation rather than mirroring its rules with UI direction.
 
@@ -391,15 +454,42 @@ do not assume all UCI implementations exit promptly. Keep stdout and stderr
 drained even with no visible UI, retaining bounded ring buffers and dropping
 diagnostic excess. Test a chatty fake engine so output cannot deadlock search.
 
-Evaluate Windows Job Objects with kill-on-last-handle-close and platform
-launcher/watchdog mechanisms where EOF is insufficient. Establish containment
-before useful work starts, prevent inherited handles from defeating cleanup,
-and handle descendants. A Linux parent-death signal needs a correctly designed
-launcher and parent-race handling; it is not portable Dart configuration.
-Scope tests to the test app's tracked process tree. In milestone 2, forcibly
-terminate only that disposable app during analysis, then verify within a bounded
-deadline that its engines stop and that restart recovers documents/locks. Never
-kill unrelated engines by name. Native host availability remains explicit.
+Default Windows design: a native engine-launch adapter creates children inside
+a kill-on-close Job Object before execution, using a creation-time job list
+on supported Windows versions or suspended creation, assignment and resume.
+Keep the owning job handle non-inheritable. A failed assignment must terminate
+the still-suspended child, not run it uncontained. Exercise nested-job and
+launcher constraints. This avoids attaching the entire app (including external
+openers/updaters) to an engine job or killing the app when its job handle closes.
+App-level membership is an alternative only after those lifecycle effects are
+accepted. [Microsoft's creation-time job design](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812)
+is a native alternative to the race in start-then-assign wrappers.
+
+Default Linux/macOS design: a small persistent supervisor launches the engine
+in a separate process group and monitors a dedicated parent-liveness pipe.
+Only the app owns the write end; engines/descendants must not inherit it. EOF
+triggers group TERM, bounded wait, then KILL and reaping. The supervisor must
+remain alive outside the killed group; it cannot exec into the engine and
+still watch the pipe. Test startup handshakes, parent death before launch,
+normal shutdown and inherited-descriptor leaks. Linux
+[parent-death signals](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)
+are thread-parent-sensitive and are only a supplemental mechanism.
+
+Process groups do not contain descendants that escape via a new session/group.
+Linux [subreaper mode](https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html)
+helps adopt/reap orphans; it does not automatically signal all escaped children
+and is not a macOS API. Default supported engines must remain in the supervised
+group. Explicitly test any engine requiring stronger containment and withhold
+support until its tracked-descendant strategy passes. Package/sign the helper
+on macOS and exercise Flatpak engine permissions. Keep engines inside the
+sandbox by default; host spawning needs a separately justified support policy.
+
+Scope forced-exit tests to the disposable app's tracked process tree. Establish
+containment before useful work, then kill the app during idle and active search;
+verify the bounded cleanup deadline and document/lock recovery on restart.
+If a host mechanism fails its acceptance tests, retain an already-proven backend
+or mark that backend unavailable; never silently launch without containment.
+Record native checks not yet run as unverified, and never kill by process name.
 
 Give every worker, `ReceivePort`, subscription and timer a named owner and an
 idempotent shutdown path for success, failure, cancellation and partial startup.
@@ -452,7 +542,7 @@ type floor and prefer comfortable body text above it. Check actual target
 spacing, contrast and platform scaling. Historical HTML wireframes are
 inspiration, not a second authority for production fonts or tokens.
 
-Evaluate representative scenarios with the user and, when feasible, chess
+Evaluate representative scenarios with the product owner and, when feasible, chess
 players unfamiliar with the app. Record completion, assistance, mistakes,
 recovery, time and perceived effort. Scripted UI tests and heuristic review
 cannot substitute for observing a person. Set numerical targets after measuring
@@ -504,12 +594,15 @@ rooms, with platform scaling and larger text. Large bright surfaces and dense
 low-contrast gray text both need deliberate review. Ensure diagrams and images
 remain legible; do not invert chess piece assets or illustrations automatically.
 
-Milestone 1 should include this visual-design loop:
+Milestone 1 is the design work inside the first slice, not a separate framework
+phase. Build/catalog only controls used by that slice. Keep the following visual
+loop within its estimate; defer unused widgets, vault and split-pane spikes:
 
-1. Build two restrained visual treatments of the same repertoire task using
+1. Start with one restrained visual treatment; compare a second only if a
+   concrete usability/style question remains. Use the same repertoire task with
    real-looking long names, counts, selection and error states. Compare density,
    surface separation and accent treatment without changing the task itself.
-2. Review the alternatives with the user in a clickable prototype, including
+2. Review the working slice or unresolved alternatives with the product owner, including
    keyboard use. Choose one direction and record the decision here before
    migrating its appearance across the app.
 3. Encode the selected values in the production theme and reusable components.
@@ -544,8 +637,9 @@ selected from author/publisher descriptions and publicly available material.
 Keep Actions/View/Settings and the owning mode context available while opening
 repertoire/chapter pickers or generation planning within that mode. Compose
 these destinations under a persistent shell; compare a body switch/nested
-Navigator with [go_router ShellRoute](https://pub.dev/documentation/go_router/latest/go_router/ShellRoute-class.html)
-in the routing trial. Deliberate modal tasks may cover the shell, but ordinary
+Navigator by default. Use the package-decision rejection checks before a
+[go_router ShellRoute](https://pub.dev/documentation/go_router/latest/go_router/ShellRoute-class.html)
+trial. Deliberate modal tasks may cover the shell, but ordinary
 navigation should not discard it. Route retention alone does not preserve a
 document: sessions own board position, drafts, selection and history, while
 features own scroll/filter state with an explicit restore policy. Define Back,
@@ -569,10 +663,10 @@ When minimum sizes no longer fit, reflow/collapse/scroll deliberately rather
 than forcing a four-column layout at a fixed breakpoint. Restore validated
 layout preferences by workspace and available size, clamping stale values when
 monitors or text scale change. Persist at resize completion or a bounded cadence,
-not on every pointer event. Catalog/test nested splits, long labels, RTL,
+not on every pointer event. Catalog/test nested splits and long labels,
 keyboard-only resizing, pointer drags, cancellation, small/ultrawide windows,
-200% text and saved-layout recovery. Prototype the control in milestone 1 and
-prove the chosen workspace arrangement in milestone 3; keep panel composition
+200% text and saved-layout recovery; add RTL when scoped. Prototype and prove
+the control with the workspace in milestone 3; keep panel composition
 flexible for later UX experiments.
 
 ## Presentation experiments without data-model churn
@@ -660,15 +754,16 @@ the first slice, not implemented method signatures:
 | Open a document | Return a snapshot containing document identity, revision and content. Distinguish absence from unreadable or malformed content. |
 | Create a document or save a copy | Exclusively create at the requested destination; return a name collision without replacing anything. |
 | Save an edited snapshot | Require the loaded identity/revision; reject replacement if the persisted baseline changed. There is no optional revision or default overwrite flag. |
-| Append/import games or apply an edit | Run the bounded PGN transformation against the current document inside its mutation transaction. Check any source-game/line preconditions; preserve unrelated text and annotations. |
-| Undo a committed edit | Accept a receipt bound to the document and the revision being reversed; reject a conflict, preserve recovery state and consume undo only after committing. |
+| Append/import games or apply an edit | Use a bounded locked transformation or prepare from a snapshot and validate its revision inside the commit transaction. Check source-game/line preconditions; preserve unrelated text and annotations. |
+| Undo a committed edit | V1 snapshot undo requires current revision to equal the receipt's post-edit revision. On mismatch, reject, retain the receipt and offer the snapshot as a new copy. Consume undo only after commit; no implicit three-way merge or operational inverse. |
 | Rename, move or recoverably delete | Use the same document ownership boundary, with collision checks and an explicit protocol for associated references/artifacts. Coordinate with saves so a queued edit cannot recreate or target the wrong chapter. |
 
 The store owns validation, serialization against other app mutations, commit
 checks, recoverable prior versions, failure propagation and committed revision
-receipts. A read/modify/write transaction must protect the whole transformation,
-not merely the final file replacement. CPU-heavy parsing may be prepared outside
-the critical section with revision revalidation before commit. Do not claim
+receipts. Protect the read-to-commit baseline through either a locked bounded
+transformation or optimistic preparation with commit-time revision validation.
+Parse/transform large snapshots outside the critical section; reject a changed
+baseline or recompute against a fresh one under the operation's bounded policy. Do not claim
 that in-app locks exclude arbitrary external editors.
 
 Expose distinct outcomes such as saved, conflict, name collision, invalid
@@ -705,10 +800,28 @@ atomic-write algorithm or its entire suite into every feature. Milestone 2
 establishes this boundary and shared interaction; subsequent document-writing
 slices must adopt it before their old writer is retired.
 
+## Safety prerequisite on current code
+
+**S0 — Not started; independent of the rewrite.** Recheck the findings below on
+current code. Reproduce all three controller actions and snapshot undo with
+interleaved writes and failure injection; record any finding already fixed with
+its regression evidence. Fix confirmed lost updates using the existing locked
+update/expected-content API. Verify conflicts propagate and preserve drafts;
+for undo, verify the post-edit baseline and consume its receipt only after a
+successful commit. Adding an expected-content argument without checking the
+outcome at callers is insufficient. Keep existing formats and dependencies.
+
+Deliver this as a focused maintenance increment on local main with its backup,
+before any rewrite slice changes document writes. It does not depend on new
+providers, a byte-revision FFI adapter or a design system. Publishing remains
+user-requested. Scope/estimate comes from reproduction, not an assumption that
+all fixes are small. Broader inventory can proceed independently; no runtime
+fix or test execution is authorized by this planning-document edit.
+
 ## Storage baseline and overwrite-prevention gate
 
 The following is a code-inspection baseline from 2026-09-16. The findings need
-reproduction and resolution during implementation. Build the full ownership
+reproduction and resolution in S0 for the controller/undo paths. Build the full ownership
 inventory in milestone 0; retain evidence for each migrated writer.
 
 | Data | Current representation and ownership evidence | Rewrite requirement |
@@ -724,12 +837,12 @@ checks, locked read/modify/write, and interrupted-write recovery. Those protect
 only callers that use the correct operation. An atomic replacement can still
 atomically install stale content over a newer edit.
 
-Specific call sites to reproduce and resolve in the implementation phase:
+Specific call sites to reproduce in S0 or the indicated artifact inventory:
 
 | Inspection finding | Failure scenario to test | Required behavior |
 |--------------------|--------------------------|-------------------|
 | `RepertoireController.setRepertoireColor`, `setRootPosition` and `importPgnContent` read content then call `writeFile` without `expectedContent`. | Another writer commits between the read and replacement. | Apply a narrowly scoped change to current content under the storage transaction, or reject a stale revision without replacing the newer document. |
-| `RepertoireWriter.undo` removes its undo entry and writes a previous whole-document snapshot without an expected revision. | A later annotation/import changed the file, or writing the undo fails. | Bind undo to document/session identity and the revision it reverses; preserve unrelated edits or report conflict. Keep recoverable undo state until the write commits. |
+| `RepertoireWriter.undo` removes its undo entry and writes a previous whole-document snapshot without an expected revision. | A later annotation/import changed the file, or writing the undo fails. | Apply DATA-03: on revision mismatch reject snapshot undo, retain its receipt and offer a copy; on write failure keep recoverable undo state. Never replace later edits. |
 | Generation artifacts include a replaceable `_model_games.pgn` companion and independently written analysis files. | Regeneration encounters an edited companion, or a crash/stale run leaves artifacts from different revisions. | Distinguish generated ownership from user edits, validate run/document identity at commit, and expose recoverable or stale output rather than replacing newer work. |
 
 These are observable code patterns and plausible failure cases; they are not
@@ -781,6 +894,17 @@ replace them with an in-memory lock or POSIX record lock without equivalent
 tests. Tools documented as read-only keep read-only connections. Define bounded
 contention handling, lock identity/order and supported filesystems for writers.
 
+Measure lock wait and hold time separately with large PGNs and delayed I/O;
+set budgets in milestone 0. The existing mutex is per normalized directory,
+not the application data database: unrelated directories need not wait behind
+one global lock. Prepare decoding/transforms and unique staged output outside
+the lock when safe, then validate current bytes/identity, publish and record
+recovery state within the transaction. Keep validation-to-replace serialized;
+don't release a lock on timeout while its I/O can still complete. Budget digest,
+flush and rename costs too; never skip validation to meet a latency target.
+A one-app-per-profile policy is deferred unless the product owner selects it;
+it cannot replace contracts for tools, external editors or multiple isolates.
+
 Treat Documents and external PGNs as potentially synced, remote or redirected.
 Test unavailable/delayed placeholder reads, interrupted hydration, disk-full
 errors, Windows sharing violations and independently created conflict copies.
@@ -797,26 +921,52 @@ cross-process locks; a folder called Support is not proof of that property if
 the user/system redirects it. Existing locations need a separate copy/verify/
 switch migration if unsuitable. Do not run WAL on unsupported shared-network
 storage. Specify busy handling, transaction duration, long-reader/checkpoint
-behavior and background query ownership. Drift trials include background
-execution and schema-snapshot/migration tests. Backup through SQLite's snapshot
+behavior and background query ownership. Any later Drift trial must retain a
+single schema/migration owner and pass background-query and migration fixtures.
+Backup through SQLite's snapshot
 facilities; copying a live db/WAL/SHM file set is not a consistent backup protocol.
 
-Distinguish UI revisions from persisted content identity. Never use mtime/size
-alone for overwrite validation. Use exact baseline content or a specified
-collision-resistant digest with document identity and deletion/recreation
-semantics; if hashing bytes, define compression/encoding behavior. The current
-`expectedContent` parameter compares decoded text and does not accept a hash.
-Introduce a typed revision API rather than silently changing that parameter.
+Distinguish UI revisions from persisted content identity. For the new typed
+revision API, default to SHA-256 over exact stored PGN bytes (including BOM and
+line endings, before decoding), together with the observed native file identity
+and the app's document identity. Use device/inode on POSIX and volume serial plus
+128-bit [FileIdInfo](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info)
+on Windows. [Dart FileStat](https://api.dart.dev/dart-io/FileStat-class.html)
+does not expose those IDs; implement the probe in an infrastructure native
+adapter. Read bytes and identity from the same open object and revalidate the
+path binding before commit. A mismatch, disappearance or unavailable identity
+requires conflict/re-verification or save-as-copy; it never grants overwrite.
 
-The baseline durability target is recoverability from app/worker termination
-on supported local filesystems. Power-loss durability is a separate design
-decision: document SQLite synchronous/checkpoint settings and filesystem flush,
-rename and directory-metadata requirements before making that stronger promise.
-Current WAL/NORMAL settings do not guarantee retention of every latest commit
-after power loss. A successful atomic rename alone is not a durability proof.
-Use deterministic crash-point tests first, then seeded process-termination
-stress tests with reproducible failure records for save/move/import. A process
-kill test does not simulate lost hardware caches or establish power-loss safety.
+Native identity is an observation, not a permanent app document ID: replacement
+and sync hydration can change it, and IDs can be reused after deletion. Test
+same-byte replacement, symlink/hardlink aliases, BOM changes and unavailable
+identity; define unsupported cases rather than promise detection of every
+historical delete/recreate. Track cooperating app deletion/recreation using the
+document lifecycle. External editors can still race between validation and
+replacement; native IDs do not turn an ordinary rename into filesystem CAS.
+Capture the new revision after each successful app replacement. The current
+`expectedContent` compares decoded text; S0 uses that existing contract, never
+passes a digest in its place, and does not wait for this native adapter.
+
+Baseline durability remains recovery from app/worker termination, with a
+specific flush protocol for the new adapter rather than an implied power-loss
+promise. Preserve recovery artifacts until outcome is known:
+
+| Platform | Planned commit protocol and validation |
+|----------|----------------------------------------|
+| POSIX local filesystems | Same-filesystem temp, write, fsync temp, validated rename, fsync parent directory; include both affected directories for moves. Use native support where Dart lacks directory flush. Inject failures at each step, including unsupported directory sync. [fsync reference](https://man7.org/linux/man-pages/man2/fsync.2.html). |
+| macOS | Same recovery/namespace protocol; measure and explicitly select fsync versus F_FULLFSYNC for the data flush. Default full-sync for committed user-document saves where supported; exclude rebuildable caches. Record unsupported cases and latency before broad adoption. [Apple flush semantics](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html). |
+| Windows | Flush the staged file, use same-volume ReplaceFileW for replacement with tested backup/ACL behavior, and a separate exclusive-create path. Reconcile documented partial-failure states before retry. REPLACEFILE_WRITE_THROUGH is unsupported; MoveFileExW WRITE_THROUGH documents copy/delete flushing and is not by itself a same-volume namespace durability proof. [ReplaceFileW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew), [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw). |
+
+A flush failure after replacement may mean content was installed but durability
+is uncertain. Reconcile the actual file and preserve recovery data; don't report
+an ordinary pre-commit failure and blindly retry an append. Classify Windows
+sharing/lock violations separately from permanent access denial, with bounded
+retry and renewed revision checks. Filesystem/device/remote-cache guarantees
+remain explicit. Current SQLite WAL/NORMAL settings can lose latest commits
+after power loss; any stronger guarantee needs a separate measured policy.
+Use deterministic crash points and seeded process-termination tests; killing
+a process does not simulate lost hardware caches.
 
 ## Milestones and exit gates
 
@@ -832,16 +982,24 @@ is a required acceptance gate for every slice that writes user data, including
 UI work that introduces or changes save/import/generate/undo commands. Planning
 entries and visual approval are not evidence that data safety has been tested.
 
-| Milestone | Deliverable | Exit gate |
-|-----------|-------------|-----------|
-| 0. Inventory and baseline | Workflow/parity matrix, persisted-format ownership map, dependency/native-runtime map, desktop build/signing prerequisites, diagnostic coverage matrix, representative fixtures, known-bug decisions, performance and usability scenarios. | Every current mode/support capability has an owner, migration disposition and observable acceptance scenarios. Known bugs are separated from behavior to preserve; unavailable host/credential checks are explicit. |
-| 1. Design foundation | Widgetbook with production search/choice/stepper/stat/dialog components; typography, spacing, focus, error and progress examples; localization-ready copy, typed theme tokens, a split-pane trial, settings ownership and a desktop vault feasibility check. | Catalog runs headlessly without user data or real jobs; controls work with keyboard, long/pseudo-localized text, RTL and scaling; approved visual baselines, theme and splitter behavior checks pass. Settings ownership is mapped; vault host gaps are recorded. |
-| 2. First complete slice | Repertoires: list/search, create, rename, open and recoverably delete, using injected repository contracts and an explicit presentation-state owner. Keep current storage formats. Retain the mode shell and prove settings used by this slice. Rehearse desktop packages, native execution and failure diagnostics. | Shared writer and overwrite gates pass, including process contention and unavailable/synced-file cases; user completes the task with context restored; settings failure/restart tests pass; duplicate implementation removed. Provider retry/visibility and forced-parent-exit tests pass on available native hosts. Record outstanding host checks and the continuation decision. |
-| 3. Document workspace | PGN viewing/editing, study/chapter management and board/move navigation; shared document sessions and reusable workspace components. | Annotated PGNs round-trip; unsaved edits survive failures; undo, external conflicts, context restoration and accessible split-panel resizing pass. Large/deep document edit, equality, allocation and frame-time benchmarks meet the agreed baseline budgets. |
-| 4. Training | Repertoire training, tactics, review scheduling/history and game-review handoffs on stable document/line identities. Trial a progress-storage migration only as a separate increment. | Historic progress fixtures migrate without loss; time-dependent scheduling and cancelled sessions are deterministic; complete training/resume scenarios pass. |
-| 5. Analysis and long jobs | Interactive analysis, generation/planning, audit/holes/traps, player analysis and database ingestion use explicit job ownership and resource policies. | Deterministic core invariants and differential fixtures pass; stale results cannot publish; pause/cancel/restart, port/worker cleanup and engine crash cleanup pass; burst-output tests preserve terminal events and periodic progress; realistic throughput/memory budgets hold. |
-| 6. Remaining workflows and platform surface | Players & prep, engine tournaments, bughouse, accounts/settings, external tools, asset discovery, packaging and updates complete the parity matrix. | Each mode has functional parity or a separately agreed redesign; shared-file tool contracts and Linux/Windows/macOS native checks pass. Credential migration/restart/disconnect gates pass before the new Accounts UI ships. Missing optional assets remain handled. |
-| 7. Retirement and release readiness | Remove legacy bridges, unused controllers/widgets, duplicate dependencies and obsolete schemas/readers where compatibility policy permits; update current-state docs. | No production route falls back to legacy code; all retained data is readable and recovery is tested; full release gates pass. Publishing remains a separate user-requested action. |
+| Milestone | Deliverable | Exit gate / evidence IDs |
+|-----------|-------------|--------------------------|
+| S0. Current-code safety prerequisite | Reproduce controller and undo findings; fix confirmed races independently using existing storage primitives. | DATA-01, DATA-03, TEST-01: regressions and caller failure handling pass; unresolved cases explicit; integrated/backed up without waiting for rewrite. |
+| 0. Inventory and baseline | Parity/data/owner maps, host prerequisites, authorized scope, default decisions, first-slice estimate and performance/usability budgets. | PLAN-01: evidence report and bounded next increment; record platform gaps under OPS-01/OPS-02. S0 may proceed independently. |
+| 1/2. First complete slice with its design foundation | Repertoire list/search/create/rename/open/recoverable delete, persistent shell, injected contracts and only the theme, ARB, settings and catalog components this workflow uses. Retain formats; rehearse the desktop/native paths it invokes. | ARCH-01; DATA-01 through DATA-06 for paths used; STATE-01; SET-01; PROC-01/PROC-02 on applicable hosts; UI-01/UI-02/UI-04; OPS-01/OPS-02; TEST-01. Product-owner visual review recorded, duplicated slice code retired, PLAN-02 continuation decision recorded. |
+| 3. Document workspace | PGN editing/studies/chapters, board navigation, retained sessions and shared resizable panels built on demand. | ARCH-01; DATA-02 through DATA-06; STATE-02; UI-01 through UI-04; TEST-01: round-trip, undo/conflict, context and large-document budget evidence. |
+| 4. Training | Training/tactics/scheduling/history on stable identities; a storage migration only if separately justified. | ARCH-01; DATA-06; SET-01; UI-01/UI-04; TEST-01: preserved history and deterministic scheduling, cancellation and resume. |
+| 5. Analysis and long jobs | Analysis/generation/audit/ingestion through owned jobs and bounded presentation updates. | ARCH-01; DATA-02/DATA-05/DATA-07; STATE-01 through STATE-03; PROC-01/PROC-02; UI-01/UI-04; OPS-01; TEST-01: stale-result, burst, cleanup and resource-budget checks. |
+| 6. Remaining workflows and platform surface | Remaining modes, accounts/settings, tools, assets and distribution complete the inventory. Perform vault feasibility/migration before Accounts. | PLAN-01; ARCH-01; SET-01; SEC-01; OPS-01/OPS-02; TEST-01, plus applicable data/process/UI IDs from the inventory. Every retained capability has evidence or an explicit scope decision. |
+| 7. Retirement and release readiness | Retire bridges/duplicate dependencies and obsolete readers where compatible; update current-state docs. | PLAN-01; ARCH-01; DATA-06; OPS-02; TEST-01: parity and recovery evidence complete, no production fallback to legacy, full release gates pass before requested publication. |
+
+Milestone numbers are retained for existing references: “milestone 1” now means
+the on-demand design work within milestone 2, not a separate foundation project.
+All applicable IDs remain binding on later slices; the table highlights checks
+introduced there. In milestone 0 enumerate inherited IDs per workflow/host;
+use explicit ID rows in evidence rather than leaving ranges unexpanded.
+Unfamiliar-player studies are optional when feasible under UI-04; record whether
+the product owner or another end user completed the representative task.
 
 A module is not considered migrated because it moved folders. Each completed
 slice must demonstrate the new ownership, tests, UX behavior and removal of its
@@ -899,8 +1057,8 @@ update/vulnerability-review process and a clear owner. Check existing bundled
 license registration and distribution/source obligations during native packaging
 changes; license UI alone is not the complete release obligation. No new
 dependency, scanner, schedule or platform plugin is required solely because it
-appeared in external review. Evaluate an app-owned typed destination stack
-alongside go_router's retained-shell approach using the same navigation fixtures.
+appeared in external review. Apply the package defaults and record deviations
+against their rejection checks.
 
 Use layered evidence: pure algorithm tests; repository contract/failure tests;
 real filesystem and schema-migration fixtures; deterministic engine doubles;
@@ -964,4 +1122,4 @@ results rather than generated code volume or number of new classes.
   [Alchemist](https://pub.dev/packages/alchemist),
   [Riverpod 3 behavior](https://riverpod.dev/docs/whats_new) and
   [Drift migrations](https://drift.simonbinder.eu/migrations/):
-  primary documentation for the initial package evaluations.
+  primary documentation for selected defaults and deferred alternatives.
