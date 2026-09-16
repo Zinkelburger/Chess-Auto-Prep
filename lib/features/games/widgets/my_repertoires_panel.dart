@@ -1,5 +1,8 @@
 import '../../repertoires/models/repertoire_creation.dart';
 import 'dart:async';
+import 'package:path/path.dart' as paths;
+import '../../settings/models/repertoire_books.dart';
+import '../../settings/models/settings_state.dart';
 
 import 'package:flutter/material.dart';
 
@@ -32,7 +35,13 @@ import '../services/my_repertoire_settings.dart';
 /// designation being two screens away from the games it explains was the
 /// reason the deviation column read "—" for people who never found it.
 class MyRepertoiresPanel extends StatefulWidget {
-  const MyRepertoiresPanel({super.key, this.pickPgn = pickPgnImport});
+  const MyRepertoiresPanel({
+    super.key,
+    this.pickPgn = pickPgnImport,
+    this.settings,
+  });
+
+  final MyRepertoireSettings? settings;
 
   /// Opens the file picker and reads the chosen PGN. Injectable for tests;
   /// the default is the app's real picker.
@@ -79,7 +88,7 @@ Future<void> showMyRepertoiresDialog(BuildContext context) {
 }
 
 class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
-  final _settings = MyRepertoireSettings.instance;
+  late final _settings = widget.settings ?? MyRepertoireSettings.instance;
 
   /// Every repertoire in the app, for the "Add existing" menus. Reloaded
   /// whenever the designations change, which is also whenever this panel
@@ -98,7 +107,11 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
   void initState() {
     super.initState();
     _settings.addListener(_onDesignationsChanged);
-    unawaited(_settings.ensureLoaded().then((_) => _refresh()));
+    unawaited(
+      _settings.ensureLoaded().then((_) => _refresh()).catchError((Object _) {
+        // The repository supplies the failed state and explicit retry below.
+      }),
+    );
   }
 
   @override
@@ -259,7 +272,16 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
         pgnContent: pgnContent,
         gameCount: gameCount,
       );
-      await _settings.addPath(white: white, path: created.directoryPath);
+      try {
+        await _settings.addPath(white: white, path: created.directoryPath);
+      } catch (_) {
+        _say(
+          'Repertoire created. Retry the book selection below.',
+          isError: true,
+        );
+        await _refresh();
+        return;
+      }
       // The count after import, not the file's: a study's variations are
       // written as lines of their own.
       _say(done(created.gameCount));
@@ -278,40 +300,88 @@ class _MyRepertoiresPanelState extends State<MyRepertoiresPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _settings,
+    return StreamBuilder<SettingsState<RepertoireBooks>>(
+      stream: _settings.repository.changes,
+      initialData: _settings.state,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _ColorDesignation(
-            label: 'As White',
-            paths: _settings.whitePaths,
-            candidates: _candidatesFor(white: true),
-            mismatchFor: (path) =>
-                _colorMismatches[_mismatchKey(white: true, path: path)],
-            onImport: () => _importFromDisk(white: true),
-            onDesignate: (r) =>
-                _settings.addPath(white: true, path: r.filePath),
-            onCreateEmpty: () => _createEmpty(white: true),
-            onRemove: (path) => _settings.removePath(white: true, path: path),
-          ),
-          const SizedBox(height: 16),
-          _ColorDesignation(
-            label: 'As Black',
-            paths: _settings.blackPaths,
-            candidates: _candidatesFor(white: false),
-            mismatchFor: (path) =>
-                _colorMismatches[_mismatchKey(white: false, path: path)],
-            onImport: () => _importFromDisk(white: false),
-            onDesignate: (r) =>
-                _settings.addPath(white: false, path: r.filePath),
-            onCreateEmpty: () => _createEmpty(white: false),
-            onRemove: (path) => _settings.removePath(white: false, path: path),
+          if (_settings.state.busy)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('Saving or loading book selections…'),
+            ),
+          if (_settings.state.phase == SettingsPhase.failed) ...[
+            const Text(
+              'Book selections could not be confirmed. The last confirmed choices are shown below.',
+            ),
+            if (_settings.state.draft case final draft?)
+              Text(
+                'Pending — White: ${draft.white.map(paths.basename).join(', ')}; Black: ${draft.black.map(paths.basename).join(', ')}',
+              ),
+            TextButton(
+              onPressed: () => _save(_settings.retry),
+              child: const Text('Retry book selections'),
+            ),
+          ],
+          ExcludeFocus(
+            excluding: _settings.state.busy,
+            child: IgnorePointer(
+              ignoring: _settings.state.busy,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ColorDesignation(
+                    label: 'As White',
+                    paths: _settings.whitePaths,
+                    candidates: _candidatesFor(white: true),
+                    mismatchFor: (path) =>
+                        _colorMismatches[_mismatchKey(white: true, path: path)],
+                    onImport: () => _importFromDisk(white: true),
+                    onDesignate: (r) => _save(
+                      () => _settings.addPath(white: true, path: r.filePath),
+                    ),
+                    onCreateEmpty: () => _createEmpty(white: true),
+                    onRemove: (path) => _save(
+                      () => _settings.removePath(white: true, path: path),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _ColorDesignation(
+                    label: 'As Black',
+                    paths: _settings.blackPaths,
+                    candidates: _candidatesFor(white: false),
+                    mismatchFor: (path) =>
+                        _colorMismatches[_mismatchKey(
+                          white: false,
+                          path: path,
+                        )],
+                    onImport: () => _importFromDisk(white: false),
+                    onDesignate: (r) => _save(
+                      () => _settings.addPath(white: false, path: r.filePath),
+                    ),
+                    onCreateEmpty: () => _createEmpty(white: false),
+                    onRemove: (path) => _save(
+                      () => _settings.removePath(white: false, path: path),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _save(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (_) {
+      // The repository retains the failed draft for the retry control.
+    }
   }
 }
 

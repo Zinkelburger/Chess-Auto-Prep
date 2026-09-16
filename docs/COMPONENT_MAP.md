@@ -68,6 +68,30 @@ revision checking is still planned, not provided by these decoded-text guards. R
 
 **Chess logic:** `dartchess` for rules/FEN; `flutter_chess_board` for display.
 
+### Typed settings ownership (first section)
+
+`features/settings/{models,repositories,controllers}` provides the injected
+`AppSettingsRepository`, immutable committed/draft state and a section-scoped
+Riverpod subscription. `infrastructure/settings/` owns the two existing
+`my_repertoire_*_paths` keys. It serializes field changes, reads the latest
+platform values, verifies writes by rereading, and keeps failed drafts for
+explicit retry. Games' `MyRepertoireSettings` is a temporary ChangeNotifier
+adapter to this same owner; it no longer reads/writes preferences or publishes
+optimistic saved values. Its listeners fire only when confirmed selections
+change, so saving/error transitions do not rerun game analysis.
+
+The My books panel shows pending/failure state, keeps confirmed choices visible,
+and retries designation without recreating an already imported repertoire.
+The relocation operation maps path components and can retry a partial two-key
+update; filesystem rename/restore is **not yet wired to it** pending a durable
+coordination journal. Engine, display, training and credentials remain with
+their legacy owners. There is no cross-process preference transaction claim.
+Startup wraps legacy Linux/Windows preference backends in
+`FreshDesktopPreferencesStore`: serialized requests use fresh backend instances,
+so the plugin's second cache cannot confirm an unsaved value or flush a failed
+draft during an unrelated write. Keys/file format remain unchanged. Linux has
+real disk-failure coverage; Windows native verification remains outstanding.
+
 ### Bughouse analysis and editing
 
 `features/bughouse/widgets/bughouse_screen.dart` keeps Board 1 and Board 2

@@ -1,3 +1,4 @@
+import 'infrastructure/settings/fresh_desktop_preferences_store.dart';
 import 'dart:async';
 
 import 'app/app_dependencies.dart';
@@ -32,6 +33,7 @@ void main() {
     runZonedGuarded(
       () async {
         WidgetsFlutterBinding.ensureInitialized();
+        installFreshDesktopPreferencesStore();
         registerBundledLicenses();
         // No-op unless --dart-define=AGENT_DRIVER=true in a debug build.
         installAgentDriver();

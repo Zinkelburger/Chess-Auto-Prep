@@ -20,8 +20,9 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 implemented and tested on Linux. The first replacement slice is partial:
 repertoire catalog actions now use injected repository/controller boundaries
 and the new hierarchy. Linux catalog creation now uses the typed native-identity
-PGN store; adoption by remaining writers, design, settings and full slice gates
-remain unfinished. The staged rewrite, shared PGN mutation API, UI design
+PGN store. Book selections have one typed settings owner and explicit failed
+write/retry states; remaining settings, writer adoption, directory/reference
+recovery, design and full slice gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design
 principles, storage preservation gates and milestone sequence live in
 [ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). That document is the canonical
 implementation plan; this file retains the feature backlog. Update milestone

@@ -313,6 +313,61 @@ Windows replacement/ACL/backups/transient sharing and macOS full-sync require
 native host evidence. Production adoption therefore remains Linux-only; other
 hosts keep the documented legacy adapter, not an inferred native safety pass.
 
+### Settings ownership checkpoint — book selections
+
+Following native-store checkpoint `96ef8935`, the first typed settings section
+lives under `features/settings/{models,repositories,controllers}`. App startup
+injects `AppSettingsRepository`; the SharedPreferences implementation owns the
+existing White/Black book keys. `MyRepertoireSettings` now adapts the same owner
+for unmigrated Games consumers and has no independent persisted state. Its
+process singleton is a temporary composition bridge, not a second writer.
+
+Book edits serialize against a fresh read. Add/remove operations apply to the
+latest state, inputs are captured/validated, and confirmed values are immutable.
+Saving and failed states retain a distinct draft. Each write checks platform
+success and reads back the value; a platform error after commit is reobserved
+rather than rolled back. Explicit retry reapplies the operation to current
+values. Legacy data with a wrong type or invalid path fails visibly and is not
+silently overwritten. Successful reads deduplicate path lists without writing
+on load. Only confirmed selection changes notify old analysis listeners.
+
+My books now shows a retry action and pending choices on failure. If import
+creates the repertoire but designation fails, retry only saves the designation.
+The repository has a component-aware path relocation operation with partial
+commit/retry evidence, but filesystem rename is **not yet connected**. The next
+required step is a durable directory/reference coordination protocol, including
+training references and restart recovery. Simply repointing settings after a
+rename would retain the existing partial-commit failure; it is not presented as
+completion. Engine/eval/training/display sections and credentials are still
+unmigrated, and the first-slice SET-01 gate remains partial.
+
+Verification: 70 focused repository/platform/Games tests and two Linux desktop
+cases pass, including a real read-only preferences file and UI failure/retry
+followed by a fresh-owner load. Analysis/lint passed with nine existing informational findings and six
+boundary tests. Private headless screenshots were inspected for a real
+read-only-file failure and its successful retry; the draft was absent from
+confirmed books until retry, and the final JSON contained the chosen path.
+The preview profile permissions were restored and the preview stopped. The initial widget run exposed a retained completed queue future
+crossing the test clock boundary; idle queues now discard that future, and
+widget tests inject a fresh owner and await the confirmed handoff. The failed
+run was stopped through its own identified job service after the assertion
+left the shared test owner pending. No other job was stopped.
+
+The manual read-only-file preview exposed a separate platform-cache defect:
+Linux's locked `shared_preferences_linux` 2.4.1 mutates a second cache before a
+failed write and serves it even after `SharedPreferences.reload()`. Startup now
+installs `FreshDesktopPreferencesStore` for the legacy Linux/Windows plugins:
+it serializes every platform operation and creates a fresh plugin backend for
+each, preserving existing keys, prefixes, filters and file format. This prevents
+an unrelated legacy setting from flushing a failed book draft later. The three
+platform/interface dependencies were promoted from transitive to direct at
+their already-locked versions; no dependency version changed. Linux native
+failure and retry are verified; equivalent Windows source is wired but has no
+native host evidence yet. macOS keeps its native preference backend. This is
+not a cross-process transaction, power-loss guarantee or completion of the
+remaining settings migrations. The initially green injected-failure test alone
+was insufficient; the real read-only-file regression now covers the defect.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

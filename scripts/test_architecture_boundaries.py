@@ -20,6 +20,9 @@ class BoundariesTest(unittest.TestCase):
                 self.assertTrue(violations(path, f"import '{uri}';"))
         self.assertTrue(violations(path, 'final store = StorageFactory.instance;'))
 
+    def test_settings_cannot_access_preferences_directly(self):
+        self.assertTrue(violations('lib/features/settings/repositories/settings.dart', "import 'package:shared_preferences/shared_preferences.dart';"))
+
     def test_export_is_not_a_backdoor(self):
         self.assertTrue(violations('lib/features/repertoires/models/example.dart', "export 'dart:io';"))
 

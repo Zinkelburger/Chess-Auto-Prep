@@ -87,20 +87,20 @@ void main() {
 
   late Directory dir;
   late _TempStorage storage;
+  late MyRepertoireSettings settings;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     dir = Directory.systemTemp.createTempSync('my_reps_panel_test');
     storage = _TempStorage(dir.path);
     StorageFactory.instanceForTest = storage;
-    // The panel edits the singleton; clear it between cases.
-    await MyRepertoireSettings.instance.ensureLoaded();
-    await MyRepertoireSettings.instance.setPaths(white: true, paths: const []);
-    await MyRepertoireSettings.instance.setPaths(white: false, paths: const []);
+    settings = MyRepertoireSettings.forTest();
+    await settings.ensureLoaded();
   });
 
   tearDown(() {
     StorageFactory.instanceForTest = null;
+    settings.dispose();
     dir.deleteSync(recursive: true);
   });
 
@@ -112,7 +112,10 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
-            child: MyRepertoiresPanel(pickPgn: pickPgn ?? pickPgnImport),
+            child: MyRepertoiresPanel(
+              settings: settings,
+              pickPgn: pickPgn ?? pickPgnImport,
+            ),
           ),
         ),
       ),
@@ -153,6 +156,9 @@ void main() {
       'London System',
     );
     await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    for (var i = 0; i < 30 && settings.whitePaths.isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 20));
+    }
     await tester.pumpAndSettle();
 
     // The folder exists, its Main chapter carries the colour of the section
@@ -161,10 +167,8 @@ void main() {
     expect(chapter.existsSync(), isTrue);
     expect(chapter.readAsStringSync(), contains('// Color: White'));
     // …and it is designated, without a second trip through a picker.
-    expect(MyRepertoireSettings.instance.whitePaths, [
-      p.join(dir.path, 'London System'),
-    ]);
-    expect(MyRepertoireSettings.instance.blackPaths, isEmpty);
+    expect(settings.whitePaths, [p.join(dir.path, 'London System')]);
+    expect(settings.blackPaths, isEmpty);
     expect(find.text('London System'), findsOneWidget);
   });
 
@@ -191,7 +195,7 @@ void main() {
       findsOneWidget,
       reason: 'the form stays open and says so',
     );
-    expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
+    expect(settings.whitePaths, isEmpty);
   });
 
   testWidgets('Add existing filters the shared searchable picker', (
@@ -217,9 +221,7 @@ void main() {
     expect(find.text('Caro-Kann'), findsNothing);
     await tester.tap(find.text('Ruy Lopez'));
     await tester.pumpAndSettle();
-    expect(MyRepertoireSettings.instance.blackPaths, [
-      p.join(dir.path, 'Ruy Lopez'),
-    ]);
+    expect(settings.blackPaths, [p.join(dir.path, 'Ruy Lopez')]);
   });
 
   testWidgets('an existing repertoire is one menu click', (tester) async {
@@ -236,10 +238,8 @@ void main() {
     await tester.tap(find.text('Caro-Kann').last);
     await tester.pumpAndSettle();
 
-    expect(MyRepertoireSettings.instance.blackPaths, [
-      p.join(dir.path, 'Caro-Kann'),
-    ]);
-    expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
+    expect(settings.blackPaths, [p.join(dir.path, 'Caro-Kann')]);
+    expect(settings.whitePaths, isEmpty);
     // Now designated for Black, it is no longer offered there.
     await openAddExisting(tester, white: false);
   });
@@ -273,10 +273,8 @@ void main() {
       final content = chapter.readAsStringSync();
       expect(content, contains('// Color: Black'));
       expect(content, contains('3. e5 Bf5'));
-      expect(MyRepertoireSettings.instance.blackPaths, [
-        p.join(dir.path, 'Caro-Kann'),
-      ]);
-      expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
+      expect(settings.blackPaths, [p.join(dir.path, 'Caro-Kann')]);
+      expect(settings.whitePaths, isEmpty);
       expect(
         find.byType(SnackBar),
         findsNothing,
@@ -303,9 +301,7 @@ void main() {
       File(p.join(dir.path, 'Caro-Kann 2', 'Caro-Kann 2.pgn')).existsSync(),
       isTrue,
     );
-    expect(MyRepertoireSettings.instance.blackPaths, [
-      p.join(dir.path, 'Caro-Kann 2'),
-    ]);
+    expect(settings.blackPaths, [p.join(dir.path, 'Caro-Kann 2')]);
   });
 
   testWidgets('a file that reads as the other colour asks once', (
@@ -322,16 +318,14 @@ void main() {
 
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    expect(MyRepertoireSettings.instance.blackPaths, isEmpty);
+    expect(settings.blackPaths, isEmpty);
     expect(Directory(p.join(dir.path, 'Caro-Kann')).existsSync(), isFalse);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Add as Black'));
     await tester.pumpAndSettle();
-    expect(MyRepertoireSettings.instance.blackPaths, [
-      p.join(dir.path, 'Caro-Kann'),
-    ]);
+    expect(settings.blackPaths, [p.join(dir.path, 'Caro-Kann')]);
     expect(
       File(p.join(dir.path, 'Caro-Kann', 'Caro-Kann.pgn')).readAsStringSync(),
       contains('// Color: Black'),
@@ -347,13 +341,13 @@ void main() {
 
     await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').first);
     await tester.pumpAndSettle();
-    expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
+    expect(settings.whitePaths, isEmpty);
 
     next = const PickedPgnImport(error: 'No lines found in empty.pgn.');
     await tester.tap(find.widgetWithText(FilledButton, 'Import PGN…').first);
     await tester.pumpAndSettle();
     expect(find.text('No lines found in empty.pgn.'), findsOneWidget);
-    expect(MyRepertoireSettings.instance.whitePaths, isEmpty);
+    expect(settings.whitePaths, isEmpty);
     expect(dir.listSync(), isEmpty);
   });
 }

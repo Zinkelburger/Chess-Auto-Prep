@@ -34,6 +34,9 @@ dependencies:
   share_plus: ^13.3.0
 
   shared_preferences: ^2.5.3
+  shared_preferences_linux: ^2.4.1
+  shared_preferences_windows: ^2.4.1
+  shared_preferences_platform_interface: ^2.4.2
   stockfish: ^1.7.1
   onnxruntime: ^1.4.1
   ffi: ^2.1.0
