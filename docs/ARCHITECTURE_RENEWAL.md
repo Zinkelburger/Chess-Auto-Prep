@@ -44,7 +44,7 @@ ID when a requirement changes. IDs stay stable if milestones are rearranged.
 | ARCH-01 | Migrated widgets/controllers cannot bypass injected domain boundaries; legacy singleton access is confined to injected bridge adapters. Verify import boundaries and feature wiring. | [Dependencies](#target-layout-and-dependency-rules) |
 | DATA-01 | Reproduce each reported overwrite/undo race on current code; independently fix confirmed cases and retain regressions before rewrite-dependent writes. | [Safety prerequisite](#safety-prerequisite-on-current-code) |
 | DATA-02 | Create never replaces; every save/update validates its baseline through the shared mutation boundary. Exercise concurrent creation, stale saves and competing writers. | [PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction) |
-| DATA-03 | Snapshot undo requires the post-edit revision; mismatch preserves the current file and undo receipt, with snapshot-as-copy recovery. Test conflict and failed commit. | [PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction) |
+| DATA-03 | Undo snapshots come from the validated mutation baseline; only a proven history chain may advance its expected revision after undo. Preserve external edits and per-move/successive undo; test conflicts and failures. | [Undo receipts](#undo-receipt-provenance-and-history) |
 | DATA-04 | Revision checks distinguish raw bytes and observed file identity; identity change/unavailability never silently authorizes replacement. Test BOM, aliases and replacement. | [Filesystem contracts](#filesystem-and-cross-process-contracts) |
 | DATA-05 | Measure lock wait/hold times; interrupted and synced-file operations preserve recoverable content with bounded retries and explicit durability limits. | [Filesystem contracts](#filesystem-and-cross-process-contracts) |
 | DATA-06 | Restore a consistent database/document backup into a disposable profile; migration and adapter rollback preserve new work and stable references. | [Coexistence](#data-preservation-and-coexistence) |
@@ -908,7 +908,7 @@ database/cache responsibilities.
 Feature action / editor / import / generated result
                 -> PgnDocumentStore
                    -> atomic filesystem adapter
-                <- typed save outcome and committed revision
+                <- typed outcome, validated before-content and committed revision
                 -> shared save status / conflict interaction
 ```
 
@@ -920,8 +920,8 @@ the first slice, not implemented method signatures:
 | Open a document | Return a snapshot containing document identity, revision and content. Distinguish absence from unreadable or malformed content. |
 | Create a document or save a copy | Exclusively create at the requested destination; return a name collision without replacing anything. |
 | Save an edited snapshot | Require the loaded identity/revision; reject replacement if the persisted baseline changed. There is no optional revision or default overwrite flag. |
-| Append/import games or apply an edit | Use a bounded locked transformation or prepare from a snapshot and validate its revision inside the commit transaction. Check source-game/line preconditions; preserve unrelated text and annotations. |
-| Undo a committed edit | V1 snapshot undo requires current revision to equal the receipt's post-edit revision. On mismatch, reject, retain the receipt and offer the snapshot as a new copy. Consume undo only after commit; no implicit three-way merge or operational inverse. |
+| Append/import games or apply an edit | Use a bounded locked transformation or validate a prepared snapshot at commit. Return its validated before-content/baseline and committed content/revision together; never derive undo from stale controller memory. Check source-game/line preconditions and preserve unrelated text. |
+| Undo a committed edit | Validate current storage against the history head's expected revision, initially the mutation's committed revision. On mismatch reject, retain history and offer a copy. After a confirmed commit, consume the entry and advance only a proven predecessor using the returned revision (DATA-03). No implicit merge or operational inverse. |
 | Rename, move or recoverably delete | Use the same document ownership boundary, with collision checks and an explicit protocol for associated references/artifacts. Coordinate with saves so a queued edit cannot recreate or target the wrong chapter. |
 
 The store owns validation, serialization against other app mutations, commit
@@ -966,6 +966,81 @@ atomic-write algorithm or its entire suite into every feature. Milestone 2
 establishes this boundary and shared interaction; subsequent document-writing
 slices must adopt it before their old writer is retired.
 
+## Undo receipt provenance and history
+
+DATA-03 has two separate guarantees: a valid expected revision prevents undoing
+over later work, and a valid before-snapshot prevents undo itself from deleting
+work that preceded the mutation. Require both at the shared mutation boundary.
+
+A successful undoable mutation returns one storage-produced receipt containing
+operation/document identity, the actual validated before-content and baseline,
+committed content/revision, and any ordered logical step snapshots. Produce
+these from the same accepted transformation/commit, including when preparation
+occurs outside the lock. If validation causes a recompute, replace the receipt's
+before-content and steps too. Do not reread after the operation to manufacture
+a receipt from a different writer's content, or fill missing before-content from
+controller memory. S0 uses exact decoded content under the existing storage
+contract; the later native revision adapter preserves exact bytes/identity as
+specified by DATA-04. An in-memory-only document instead uses its session's
+validated state; it must never supply a fallback for a file-backed mutation.
+
+Keep immutable mutation provenance separate from the undo history's current
+expected-storage revision. Link a new receipt to the prior history head only
+when its validated before-baseline matches that head's expected revision and
+its before-content matches the predecessor's logical after-content. Record that
+link when accepting the mutation. An intervening external edit or unrelated
+mutation breaks the link; equal-looking content alone cannot repair it.
+
+Example: edits produce A -> B -> C, and the current storage revision is rC.
+Undo C validates rC and restores its actual before-snapshot B, returning rB2
+because atomic replacement may change file identity. After confirmed success,
+consume C and set B's undo expectation to rB2 only if the recorded predecessor
+link and restored content prove B is the next logical state. Keep B's original
+commit revision as provenance. The next undo validates rB2 inside the storage
+mutation; an intervening write still conflicts. Never rebase an expectation by
+reading arbitrary current disk content or attaching a fresh revision to old
+snapshots. If C started from an external edit E instead of B, undo C restores E
+and cannot re-arm the older B entry, even though C's own undo succeeded.
+
+For a batched suggestion, the storage transformation creates logical states
+S0 -> S1 -> ... -> Sn from the validated S0, but commits only Sn. Only the top
+undo entry initially expects that commit revision; intermediate steps have
+logical identities, not invented native file revisions. Each successful undo
+commits the preceding logical snapshot and arms its proven predecessor with
+the newly returned storage revision. Preserve one undo per actual added move;
+duplicates/no-ops create no invented history. Validate complete ordered step
+metadata before publishing the batch. Missing/short metadata must not silently
+fall back to stale memory or leave a partially installed history; reject before
+commit, or explicitly reconcile an already-committed result as a recoverable
+contract failure. Preserve non-file-backed behavior through a separate session
+contract rather than fabricating disk receipts.
+
+Serialize mutation, undo and history publication in the owning document session.
+A definite write failure/conflict neither pops entries nor advances expectations.
+Reconcile an uncertain commit before changing history or replaying work. Once
+a commit is confirmed, a later UI refresh failure must not replay the undo:
+retain the committed outcome and recover presentation from it. Publish receipt
+and stack changes coherently before accepting another session action.
+
+Required DATA-03 regressions (S0 with content guards; later repeat with native
+identity changes and shared-store fixtures):
+
+| Scenario | Required observation |
+|----------|----------------------|
+| Controller loads A; external annotation produces E; single append produces C; undo | Restore E, including the annotation, on disk and in the session; never restore stale A. |
+| External edit before a multi-move suggestion; undo every added move | All intermediate undos retain the external content and the final undo returns to validated E; no extra per-ply forward disk commits. |
+| A -> B -> C; undo twice, changing native identity on every replace | Return to B then A without a false conflict; expect each actual returned commit revision. |
+| External edit after append or between successive undos | Reject the affected undo, preserve external content and history; do not refresh its expectation to bypass conflict. |
+| Local edit, external edit, append, then two undo attempts | Undo only the append to its validated baseline; do not bridge the external edit into older snapshot history. |
+| Failed/uncertain undo, failed batch, duplicate add or malformed receipt | No false success, phantom entry or unsafe revision advance; retry/reconciliation preserves the actual commit outcome. |
+
+Extend [the existing writer undo tests](../test/core/repertoire_writer_undo_test.dart)
+without losing successive undo, bounded history, per-move suggestion undo or
+load/reset behavior. Adapt the missing-snapshot fixture to the explicit receipt
+failure contract rather than preserving its unsafe memory fallback. Also audit
+all pushUndo callers, including deletes, for the same baseline provenance.
+These are required future tests, not claims of reproduced runtime failures.
+
 ## Safety prerequisite on current code
 
 **S0 — Not started; independent of the rewrite.** Recheck the findings below on
@@ -973,9 +1048,12 @@ current code. Reproduce all three controller actions and snapshot undo with
 interleaved writes and failure injection; record any finding already fixed with
 its regression evidence. Fix confirmed lost updates using the existing locked
 update/expected-content API. Verify conflicts propagate and preserve drafts;
-for undo, verify the post-edit baseline and consume its receipt only after a
-successful commit. Adding an expected-content argument without checking the
-outcome at callers is insufficient. Keep existing formats and dependencies.
+for undo, implement DATA-03's storage-derived before-snapshots, verified history
+links and successive/per-move expectation advancement. Include external edit
+before append, as well as after append and between undos. Return the validated
+before-content and committed baseline together through the existing editor API;
+consume history only after a confirmed commit. Adding expectedContent alone
+cannot fix a stale before-snapshot. Keep existing formats and dependencies.
 
 Deliver this as a focused maintenance increment on local main with its backup,
 before any rewrite slice changes document writes. It does not depend on new
@@ -1008,13 +1086,14 @@ Specific call sites to reproduce in S0 or the indicated artifact inventory:
 | Inspection finding | Failure scenario to test | Required behavior |
 |--------------------|--------------------------|-------------------|
 | `RepertoireController.setRepertoireColor`, `setRootPosition` and `importPgnContent` read content then call `writeFile` without `expectedContent`. | Another writer commits between the read and replacement. | Apply a narrowly scoped change to current content under the storage transaction, or reject a stale revision without replacing the newer document. |
-| `RepertoireWriter.undo` removes its undo entry and writes a previous whole-document snapshot without an expected revision. | A later annotation/import changed the file, or writing the undo fails. | Apply DATA-03: on revision mismatch reject snapshot undo, retain its receipt and offer a copy; on write failure keep recoverable undo state. Never replace later edits. |
+| `RepertoireWriter.addMoveAtPosition` and the first batch snapshot use controller-memory previousPgn, while the editor appends to freshly read disk content. | An external annotation precedes append; undo restores the older controller snapshot even if a post-append guard passes. | DATA-03: return validated before-content and committed baseline together from the mutation; derive every batch step from that baseline. |
+| `RepertoireWriter.undo` removes its entry and writes an unguarded snapshot; the planned native revision adds identity changes on replacement. | A later annotation is overwritten, a failed write consumes history, or successive/per-move undo falsely conflicts under the proposed identity checks. | DATA-03: preserve receipts on failure, validate the history head and advance only proven predecessor expectations after a confirmed commit. |
 | Generation artifacts include a replaceable `_model_games.pgn` companion and independently written analysis files. | Regeneration encounters an edited companion, or a crash/stale run leaves artifacts from different revisions. | Distinguish generated ownership from user edits, validate run/document identity at commit, and expose recoverable or stale output rather than replacing newer work. |
 
 These are observable code patterns and plausible failure cases; they are not
 proof of which incident the user previously experienced. Review exports, Save
 As, study saves, generation completion, chapter moves and database imports too;
-the three examples are not an exhaustive inventory.
+these examples are not an exhaustive inventory.
 
 Before accepting a replacement storage path, require disposable-fixture tests
 for: concurrent creation of the same name; stale editor save; two app writers;
@@ -1171,7 +1250,7 @@ entries and visual approval are not evidence that data safety has been tested.
 
 | Milestone | Deliverable | Exit gate / evidence IDs |
 |-----------|-------------|--------------------------|
-| S0. Current-code safety prerequisite | Reproduce controller and undo findings; fix confirmed races independently using existing storage primitives. | DATA-01, DATA-03, TEST-01: regressions and caller failure handling pass; unresolved cases explicit; integrated/backed up without waiting for rewrite. |
+| S0. Current-code safety prerequisite | Reproduce controller and undo findings; fix confirmed races independently using existing storage primitives. | DATA-01, DATA-03, TEST-01: external-before-append, successive/per-move undo and caller failure regressions pass; unresolved cases explicit; integrated/backed up without waiting for rewrite. |
 | 0. Inventory and baseline | Parity/data/owner maps, host prerequisites, authorized scope, default decisions, first-slice effort/spike caps, validation reserve, midpoint checkpoint and performance/usability budgets. | PLAN-01: evidence report and bounded next increment; record platform gaps under OPS-01/OPS-02. S0 may proceed independently. |
 | 1/2. First complete slice with its design foundation | Repertoire list/search/create/rename/open/recoverable delete, persistent shell, injected contracts and only the theme, ARB, settings and catalog components this workflow uses. Retain formats; rehearse the desktop/native paths it invokes. | ARCH-01; DATA-01 through DATA-06 for paths used; STATE-01; SET-01; PROC-01/PROC-02 on applicable hosts; UI-01/UI-02/UI-04; OPS-01/OPS-02; TEST-01. Product-owner visual review recorded, duplicated slice code retired, PLAN-02 continuation decision recorded. |
 | 3. Document workspace | PGN editing/studies/chapters, board navigation, retained sessions and shared resizable panels built on demand. | ARCH-01; DATA-02 through DATA-06; STATE-02; UI-01 through UI-04; TEST-01: round-trip, undo/conflict, context and large-document budget evidence. |
