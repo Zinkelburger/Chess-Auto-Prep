@@ -206,7 +206,13 @@ Dependencies follow these rules:
    Concrete infrastructure implementations are selected at app startup.
    Cross-feature workflows use explicit public contracts; dependency cycles
    and imports of another feature's private controller state are rejected.
-5. Chess core and domain values do not depend on Flutter, Riverpod or concrete
+5. Pure Dart services, repositories and infrastructure receive dependencies
+   explicitly through constructors; factories may assemble them. They do not
+   accept `Ref`/`ProviderContainer` or look up dependencies globally. Provider
+   declarations wire dependencies at the app boundary; feature notifiers and
+   widgets may use Riverpod for presentation. Test domain classes without a
+   provider container so hidden service-location cannot creep in.
+6. Chess core and domain values do not depend on Flutter, Riverpod or concrete
    I/O. File-format codecs and transport models stay at their boundaries unless
    their representation is itself a domain concept.
 
@@ -310,8 +316,13 @@ even if the full settings/accounts UI remains in milestone 6.
 ## Runtime state and large documents
 
 If Riverpod is selected, disable implicit provider retry at the composition
-root (`retry: (retryCount, error) => null`); opt in only for bounded idempotent reads with
-one retry owner. Provider computations must not start jobs or perform document
+root (`retry: (retryCount, error) => null`); opt in only for bounded idempotent
+reads with one retry owner. Riverpod supports both
+[scope/container and per-provider policies](https://riverpod.dev/docs/concepts2/retry).
+The callback returning null disables retries; merely passing `retry: null` does
+not specify that policy. Test provider overrides too. This controls failed
+provider computations, not arbitrary commands or retries inside an adapter.
+Provider computations must not start jobs or perform document
 mutations. A dependency provider can expose an explicitly owned service, but
 visibility, rebuilds and listener counts must not own its active work.
 Test a failed observation, repeated clicks and route departure: one requested
@@ -340,6 +351,18 @@ snapshot must retain the latest relevant MultiPV lines, not just the last raw
 protocol message. Clear pending output on position/job changes and reject stale
 IDs. This limits UI notifications without slowing engine protocol consumption.
 
+For a backend already running in a worker, aggregate presentation snapshots
+in that worker before `SendPort` delivery. Do not send every raw engine line
+only to discard it on the UI isolate. Keep protocol completion/errors and
+explicit job results on a lossless control path; presentation messages carry
+job/position/revision IDs and bounded payloads. Test send counts/bytes, slow
+consumers and pending-message bounds as well as UI rebuilds. A cadence alone
+does not bound queues when the receiver stalls: allow one in-flight snapshot
+and coalesce the next until acknowledged, or prove an equivalent bounded design.
+For direct async subprocess adapters, apply shaping at their producer boundary;
+move parsing into a worker when profiling warrants it, not solely to add an
+isolate. STATE-03 covers both backends and preserves terminal-event ordering.
+
 Pure trailing [debounceTime](https://pub.dev/documentation/rxdart/latest/rx/DebounceExtensions/debounceTime.html)
 waits for a quiet interval and can starve updates during continuous search;
 reserve that behavior for inputs such as search text. Evaluate a tested
@@ -364,6 +387,15 @@ projections from one document revision must not compare equal accidentally.
 Never place an aliased mutable tree inside a Freezed value. The storage
 baseline is a separate content-sensitive revision used at commit.
 
+Mutations enter through explicit session methods; the mutable core is never
+exposed as provider/UI state. After an accepted change, build the immutable
+projection and assign it to notifier `state` (or `AsyncData(projection)` for
+async state). State assignment and the equality contract drive notification;
+do not mutate an exposed object and compensate with manual `ref.notifyListeners()`
+or introduce a second ChangeNotifier around the same state. STATE-02 checks
+edit/cursor updates, unchanged projections and old snapshots: meaningful changes
+notify, old snapshots remain unchanged, and unrelated projections stay stable.
+
 Include receive-side decoding, object construction, projection building and
 garbage collection in STATE-02 measurements, not just message-send time. For
 large documents, the session may own its heavy mutable tree through a persistent
@@ -385,8 +417,20 @@ allocations, retained memory and frame timings against milestone 0 budgets.
 Choose data structures from those results; no collection package, rope or
 piece table is mandated without a measured need. Profile rebuild/repaint scope:
 watch small projections, isolate expensive board/graph repainting where it
-helps, and virtualize long lists. Fixed item extents are appropriate only for
-actually fixed-height rows; preserve variable movetext and text-scale layouts.
+helps, and virtualize long lists with lazy builders/slivers and stable keys.
+Use `itemExtent` or `prototypeItem` only for uniformly sized rows. Wrapped PGN
+comments, variations and enlarged text need variable-height layout; fixed
+extents are not a blanket performance requirement. Test scrolling and selecting
+across those cases without truncation or eager construction of the full list.
+
+Profile image memory alongside STATE-02's tree benchmarks. Flutter's
+[ImageCache](https://api.flutter.dev/flutter/painting/ImageCache-class.html) already
+has entry/byte limits; its live-image references and total process/GPU memory
+need separate measurement. Retain defaults until representative piece sets,
+textures and avatars justify a different budget. Decode near display size,
+bound prefetch and release owned listeners/resources; tune maximumSize and
+maximumSizeBytes at startup only with evidence, not as a substitute for fixing
+retained images. Test repeated asset/theme changes for memory growth.
 
 ## Early desktop foundations
 
@@ -432,6 +476,12 @@ release symbols/build IDs and prove a deliberately induced failure is useful
 to diagnose. Provide bounded local diagnostics and user-controlled export;
 remote reporting requires an explicit product/privacy decision, redaction,
 retention limits and offline behavior.
+
+Use structured diagnostic records (JSON Lines or typed key/value events) with
+schema version, timestamp, severity, event name, operation/run ID and error cause.
+Keep human-readable messages alongside stable fields; tools must not parse them
+with regex to discover state. Redact secrets and sensitive user content before
+writing/export, bound record size and test malformed/truncated log handling.
 
 Wire framework errors through `FlutterError.onError`, uncaught root-isolate
 errors through the SDK-compatible `PlatformDispatcher.onError`/zone setup, and
@@ -575,6 +625,19 @@ cannot substitute for observing a person. Set numerical targets after measuring
 the baseline; do not invent improvement percentages or count clicks as the
 only measure of usability.
 
+Under UI-01/UI-03, exercise the migrated workflow with NVDA on Windows,
+VoiceOver on macOS and Orca on Linux before declaring that host verified. Record
+OS/Flutter/reader versions, keyboard operation, focus and announcements; missing
+host access remains unverified. For the board, expose square, piece, selection
+and available actions (for example, “e4, white pawn, selected”); for splitters,
+expose label, value and increase/decrease actions. Use Flutter
+[Semantics](https://api.flutter.dev/flutter/widgets/Semantics-class.html) and
+appropriate actions or render-object semantics. Do not merge a board or several
+independent controls into one node: [MergeSemantics](https://api.flutter.dev/flutter/widgets/MergeSemantics-class.html)
+is for content representing one semantic control. Widget semantics tests
+complement real-reader checks; neither a class name nor default labels establish
+usability. Preserve a keyboard-accessible path for custom pointer interactions.
+
 ## Visual direction: a calm, responsive dark workspace
 
 The rewrite should feel clean, modern, minimal and
@@ -613,6 +676,14 @@ new migrated code must not introduce screen-local colors or text sizes. Maintain
 a shrinking legacy exception list with owners. Widgetbook and focused checks
 cover theme switching, contrast, interpolation and enlarged text using the same
 production widgets; token types alone do not prove visual consistency.
+
+Wire the shared appearance preference to `MaterialApp.theme`, `darkTheme` and
+[themeMode](https://api.flutter.dev/flutter/material/MaterialApp/themeMode.html).
+System mode follows OS brightness; explicit light/dark choices remain stable
+when the OS changes. Preserve the product's chosen default. Widgets read the
+resolved theme rather than each subscribing to platformDispatcher. Test OS
+brightness changes, explicit overrides and restart, with the same ThemeExtension
+roles present in both themes and no loss of focus or document state.
 
 Dark appearance is a design preference, not a universal claim of reduced eye
 strain. Inspect the actual app on ordinary displays in both dim and bright
@@ -685,6 +756,13 @@ board draft across a mode round trip, then separately test disposal/recreation
 from the session. Bound retained-branch memory and keep hidden interactive
 resources subject to visibility policy. The current Navigator-based default
 must satisfy the same tests without adopting a router merely for its name.
+
+In milestones 2/3, profile navigation with DevTools frame/rebuild evidence
+under STATE-02/UI-02, using the selected Navigator or router. Keep dependencies
+scoped to the panels that need them and use const constructors where useful.
+The goal is bounded work and preserved state, not zero shell builds: theme or
+layout changes legitimately rebuild it. Auto-dispose follows resource ownership;
+it is not a remedy for rebuilds and must not discard retained sessions/jobs.
 
 Create one reusable `SplitPane` with named panel slots, minimum usable sizes,
 resize commands, focus/semantics and an optional layout-change callback. Evaluate
@@ -1021,8 +1099,14 @@ promise. Preserve recovery artifacts until outcome is known:
 A flush failure after replacement may mean content was installed but durability
 is uncertain. Reconcile the actual file and preserve recovery data; don't report
 an ordinary pre-commit failure and blindly retry an append. Classify Windows
-sharing/lock violations separately from permanent access denial, with bounded
-retry and renewed revision checks. Filesystem/device/remote-cache guarantees
+sharing/lock violations separately from permanent access denial. For retryable
+replacement failures, use cancellable capped exponential backoff with a total
+attempt/time budget and renewed revision checks; inject time in tests. A unique
+same-directory temp avoids naming collisions/cross-volume publication, but does
+not remove destination sharing violations. Test transient recovery, exhausted
+retries and a destination edit during backoff. Reconcile uncertain commits before
+retrying; never repeat the entire logical append blindly.
+Filesystem/device/remote-cache guarantees
 remain explicit. Current SQLite WAL/NORMAL settings can lose latest commits
 after power loss; any stronger guarantee needs a separate measured policy.
 Use deterministic crash points and seeded process-termination tests; killing
@@ -1121,11 +1205,32 @@ Prefer an analyzer-based import/export check if regex guards cannot express
 the boundary reliably. Verify the actual rules and SDK compatibility of any
 Riverpod lint/plugin; linting does not prove async lifetime correctness. Choose
 one generated-file policy and validate regeneration in the existing bounded
-checks/release pipeline; do not wait for hypothetical future codegen features.
-Evaluate leak tracking for owned controllers/subscriptions alongside explicit
-lifecycle tests. Property-generated PGN round-trips and differential chess
-fixtures are useful additions when variant, null-move and FEN normalization
-conventions are aligned; retain failing seeds as regression cases.
+checks/release pipeline. When generators are actually adopted, run their pinned
+commands in a clean disposable check worktree (including gen_l10n where used),
+then reject modified, deleted or newly untracked expected generated files.
+`git diff --exit-code` alone misses untracked output. Use build_runner only when
+needed; `--delete-conflicting-outputs` belongs only in that disposable check,
+never as a cleanup shortcut on a shared dirty checkout. Do not regenerate/rewrite
+approved golden images during verification or add branch-triggered CI here.
+
+Use the existing bounded headless Linux environment for golden verification;
+pin SDK, fonts, locale, scale, renderer and assets. Containerization is optional,
+not proof of deterministic rendering. If native Windows/macOS goldens are added,
+keep separate host baselines and enforce them on their configured hosts; missing
+hosts are unverified rather than silently passing. Alchemist normalization does
+not replace readable-text baselines or real interaction/semantics checks.
+
+Under TEST-01, changes to chess codecs/rules need bounded seeded property tests
+alongside explicit regressions. Generate legal move sequences and annotated
+PGNs, verify agreed semantic round-trips and undo/invariants, then separately
+mutate inputs to test invalid/truncated data. Align variant, en-passant, castling,
+promotion, null-move and FEN normalization policies; exact-byte preservation is
+required only by the relevant storage contract. Retain/minimize failing seeds
+and inputs and keep independent reference fixtures so matching encoder/decoder
+bugs cannot validate each other. Choose a generator/shrinker only if useful;
+package:checks is an assertion API, not a property-input generator
+([package documentation](https://pub.dev/packages/checks)). Evaluate leak tracking
+for owned controllers/subscriptions alongside explicit lifecycle tests.
 
 Retain the lockfile and native asset manifest, with a deliberate dependency
 update/vulnerability-review process and a clear owner. Check existing bundled
