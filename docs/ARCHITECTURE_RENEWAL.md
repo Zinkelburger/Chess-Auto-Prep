@@ -47,10 +47,10 @@ ID when a requirement changes. IDs stay stable if milestones are rearranged.
 | DATA-03 | Snapshot undo requires the post-edit revision; mismatch preserves the current file and undo receipt, with snapshot-as-copy recovery. Test conflict and failed commit. | [PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction) |
 | DATA-04 | Revision checks distinguish raw bytes and observed file identity; identity change/unavailability never silently authorizes replacement. Test BOM, aliases and replacement. | [Filesystem contracts](#filesystem-and-cross-process-contracts) |
 | DATA-05 | Measure lock wait/hold times; interrupted and synced-file operations preserve recoverable content with bounded retries and explicit durability limits. | [Filesystem contracts](#filesystem-and-cross-process-contracts) |
-| DATA-06 | Restore a consistent database/document backup into a disposable profile; migration preserves new work and stable references. | [Coexistence](#data-preservation-and-coexistence) |
+| DATA-06 | Restore a consistent database/document backup into a disposable profile; migration and adapter rollback preserve new work and stable references. | [Coexistence](#data-preservation-and-coexistence) |
 | DATA-07 | Generation commits only against its source/run identity and preserves edited artifacts. Exercise stale completion and interrupted publication. | [Storage gate](#storage-baseline-and-overwrite-prevention-gate) |
 | STATE-01 | One action-state owner implements reject/coalesce/queue; retries, offscreen listeners and stale callbacks cannot duplicate jobs or publish stale state. | [Runtime state](#runtime-state-and-large-documents) |
-| STATE-02 | Large projections are immutable, cheaply comparable and scoped to their dependencies; measured edits/rebuilds meet the baseline budgets. | [Runtime state](#runtime-state-and-large-documents) |
+| STATE-02 | Large projections are immutable, cheaply comparable and scoped to their dependencies; receive-side decoding and measured edits/rebuilds meet the baseline budgets. | [Runtime state](#runtime-state-and-large-documents) |
 | STATE-03 | Continuous analysis produces bounded periodic UI updates without losing terminal events; verify with fake-time burst tests. | [Runtime state](#runtime-state-and-large-documents) |
 | SET-01 | One writer per settings key; failed saves stay visible and active-job configuration is explicit. Test concurrent panels and restart. | [Settings](#settings-and-credentials) |
 | SEC-01 | Before migrating Accounts, verify native vault migration, restart and disconnect with synthetic secrets; no silent plaintext fallback. | [Credentials](#settings-and-credentials) |
@@ -236,7 +236,7 @@ The implementing agent owns each technical check and fallback under PLAN-01.
 |----------|---------|-----------------|----------------------------|
 | Catalog | Widgetbook with only first-slice production controls and fixtures. | Cannot run isolated/headless on the pinned SDK within the spike budget. | Use an isolated Flutter catalog harness temporarily; record the blocker and keep Widgetbook as the target. |
 | Visual checks | Native Flutter widget/golden tests with readable bundled fonts. | Fixtures become costly to maintain or miss required scenarios. | Add Alchemist only if the same scenarios are simpler; retain native host checks. |
-| State/DI | Manual Riverpod providers/notifiers, one presentation action state per operation. | First-slice lifecycle/retry/override tests fail or integration exceeds its budget. | Retain injected current controllers for that slice; record why, with no second competing state library. |
+| State/DI | Stable Riverpod 3 public APIs with manual providers/notifiers, one presentation action state per operation. | First-slice lifecycle/retry/override tests fail or integration exceeds its budget. | Retain injected current controllers for that slice; record why, with no second competing state library. |
 | Database | Existing SQLite adapters, schemas and migrations; defer Drift. | A scoped new store or replacement demonstrably needs safer typed queries/migrations. | Evaluate Drift for that ownership boundary only, with one schema/migration owner and migration/performance fixtures. |
 | Models/codegen | Plain immutable Dart values/sealed classes and manual providers; retain existing codecs. Flutter ARB generation is allowed. | Boilerplate produces evidenced defects or excessive maintenance cost. | Introduce only the relevant Freezed or JSON generator after a timed clean/incremental build check; no blanket codegen stack. |
 | Files | Retain atomic writer; inject narrow filesystem adapters with deterministic fakes and real OS tests. | Failure injection needs extensive ad hoc fake filesystem behavior. | Add package:file inside adapters; keep the native contract suite. |
@@ -248,10 +248,21 @@ The implementing agent owns each technical check and fallback under PLAN-01.
 | Diagnostics/testing | Existing logging through a narrow interface, injected clock and hand-written boundary fakes. | Deterministic time or useful fake behavior requires excess plumbing. | Add clock/mocktail for that need; remote reporting and leak tooling remain separately justified. |
 
 Do not combine Provider, Riverpod and Bloc as permanent parallel choices.
-Riverpod experimental persistence/mutations do not own durable data. No
-riverpod_generator or go_router_builder is needed for the first slice. A future
+Experimental Riverpod mutation/persistence APIs are excluded from migrated
+production code. No riverpod_generator or go_router_builder is needed for the
+first slice. A future
 codegen exception records iteration cost and generated-file policy; it does not
 change resource ownership or input validation.
+
+Riverpod 3 is a released major version; the
+[package release listing](https://pub.dev/packages/flutter_riverpod) and
+[Riverpod documentation](https://riverpod.dev/docs/whats_new) distinguish stable
+public APIs from opt-in experimental features. At adoption, record the tested
+Flutter/Dart SDK alongside the committed package lockfile; no prerelease,
+git-branch dependency or automatic major upgrade is part of this plan. Test
+retry, disposal, pausing and equality on that exact combination under STATE-01.
+Use the existing-controller fallback if it fails; choose v2 only for a concrete
+compatibility constraint, not because v3 is assumed unreleased.
 
 ## Settings and credentials
 
@@ -352,6 +363,21 @@ changes: use a separate view revision or small selection value. Different
 projections from one document revision must not compare equal accidentally.
 Never place an aliased mutable tree inside a Freezed value. The storage
 baseline is a separate content-sensitive revision used at commit.
+
+Include receive-side decoding, object construction, projection building and
+garbage collection in STATE-02 measurements, not just message-send time. For
+large documents, the session may own its heavy mutable tree through a persistent
+worker; keep parsing, indexing and expensive traversal there and request bounded
+visible-node/ancestor projections by stable IDs. Do not reconstruct the entire
+tree on the UI isolate after every worker response. Add paging and bounded
+prefetch for expansion/search, ordered edit commands, revision-tagged responses
+and stale-response rejection. The UI holds immutable projections and small
+interaction state; the worker is not a second independent document authority.
+Choose worker residency when the profile shows UI decoding/traversal exceeds the
+budget; retain the simpler session-local implementation for small documents if
+it passes. Test rapid navigation, edits during pending requests, worker restart
+and rehydration from committed data plus explicitly retained unsaved commands;
+a worker restart must not silently discard a draft.
 
 Milestone 3 must benchmark annotated PGNs with tens of thousands of nodes,
 wide/deep variations and repeated edits/undo/navigation. Capture per-edit time,
@@ -649,6 +675,17 @@ same position/draft; toolbar commands must target the visible destination.
 Include the persistent shell in milestone 2 and full workspace restoration in
 milestone 3. Hidden branches still follow the job/visibility policies above.
 
+If the routing fallback adopts go_router, distinguish shell chrome from branch
+history. [StatefulShellRoute](https://pub.dev/documentation/go_router/latest/go_router/StatefulShellRoute-class.html)
+provides independent branch navigators; prefer its indexed-stack form when
+modes need retained nested stacks. A plain ShellRoute alone is not evidence of
+that retention, and retained widgets do not replace session ownership or restart
+restoration. Under UI-02, test a nested destination, scroll/filter selection and
+board draft across a mode round trip, then separately test disposal/recreation
+from the session. Bound retained-branch memory and keep hidden interactive
+resources subject to visibility policy. The current Navigator-based default
+must satisfy the same tests without adopting a router merely for its name.
+
 Create one reusable `SplitPane` with named panel slots, minimum usable sizes,
 resize commands, focus/semantics and an optional layout-change callback. Evaluate
 [flutter_resizable_container](https://pub.dev/packages/flutter_resizable_container)
@@ -727,6 +764,29 @@ test fixture.
   implement a tested reverse/export path or make the old reader refuse the
   unsupported schema. Restoring an old snapshot alone loses new work and is
   not an acceptable rollback procedure.
+
+**Adapter cutover and rollback (DATA-06).** Drift is deferred, so the first slice
+has no Drift/legacy production cutover. Any later adoption must first rehearse
+this procedure on disposable database copies. Share one connection owner and
+migration authority for the file; don't run independent old/new writer pools
+or migration hooks. Coordinated SQLite connections are not inherently invalid,
+but busy handling and cache invalidation must be explicit. Drift documents that
+[independent instances do not synchronize stream queries](https://drift.simonbinder.eu/isolates/);
+external/legacy writes therefore need a tested refresh path if allowed.
+
+On repeated contention or a failed cutover, stop admitting mutations for that
+store, retain pending intents/drafts, and let tracked transactions finish or
+roll back before closing the replacement connections. Verify the actual schema
+and latest committed data. Reopen through the previous adapter only if it is
+compatible with that current schema, then reconcile pending operation IDs before
+retry so committed work is not duplicated. Never delete live WAL/SHM files to
+clear a lock or switch adapters while the old pool still owns transactions.
+If quiescence or compatibility cannot be established, keep that store in a
+recoverable unavailable/read-only state; use the tested reverse migration/export
+path or a forward repair. Do not restore a pre-cutover backup over newer commits.
+Inject held-reader/writer contention, failures during switching, process restart
+and post-cutover writes, and verify recovered records and subscription freshness
+before enabling this migration in a normal profile.
 
 ## One safe PGN mutation API and shared save interaction
 
@@ -985,7 +1045,7 @@ entries and visual approval are not evidence that data safety has been tested.
 | Milestone | Deliverable | Exit gate / evidence IDs |
 |-----------|-------------|--------------------------|
 | S0. Current-code safety prerequisite | Reproduce controller and undo findings; fix confirmed races independently using existing storage primitives. | DATA-01, DATA-03, TEST-01: regressions and caller failure handling pass; unresolved cases explicit; integrated/backed up without waiting for rewrite. |
-| 0. Inventory and baseline | Parity/data/owner maps, host prerequisites, authorized scope, default decisions, first-slice estimate and performance/usability budgets. | PLAN-01: evidence report and bounded next increment; record platform gaps under OPS-01/OPS-02. S0 may proceed independently. |
+| 0. Inventory and baseline | Parity/data/owner maps, host prerequisites, authorized scope, default decisions, first-slice effort/spike caps, validation reserve, midpoint checkpoint and performance/usability budgets. | PLAN-01: evidence report and bounded next increment; record platform gaps under OPS-01/OPS-02. S0 may proceed independently. |
 | 1/2. First complete slice with its design foundation | Repertoire list/search/create/rename/open/recoverable delete, persistent shell, injected contracts and only the theme, ARB, settings and catalog components this workflow uses. Retain formats; rehearse the desktop/native paths it invokes. | ARCH-01; DATA-01 through DATA-06 for paths used; STATE-01; SET-01; PROC-01/PROC-02 on applicable hosts; UI-01/UI-02/UI-04; OPS-01/OPS-02; TEST-01. Product-owner visual review recorded, duplicated slice code retired, PLAN-02 continuation decision recorded. |
 | 3. Document workspace | PGN editing/studies/chapters, board navigation, retained sessions and shared resizable panels built on demand. | ARCH-01; DATA-02 through DATA-06; STATE-02; UI-01 through UI-04; TEST-01: round-trip, undo/conflict, context and large-document budget evidence. |
 | 4. Training | Training/tactics/scheduling/history on stable identities; a storage migration only if separately justified. | ARCH-01; DATA-06; SET-01; UI-01/UI-04; TEST-01: preserved history and deterministic scheduling, cancellation and resume. |
@@ -1007,6 +1067,21 @@ superseded code. Keep the old module only when a documented compatibility need
 requires it, with a removal condition and owning milestone.
 
 ## Continuation decision after milestone 2
+
+PLAN-01 requires a filled budget record before combined milestones 1/2 start:
+implementation-effort cap in hours, a separate cap for each spike, validation
+reserve, owner and a midpoint checkpoint. Milestone 0 supplies the numbers from
+scope and baseline evidence; a missing cap fails readiness rather than implying
+unlimited time. Record active effort separately from queued tools or unavailable
+host checks. Count design experiments and framework integration within the cap.
+
+At the midpoint, compare completed acceptance scenarios with remaining effort
+and narrow optional work if needed. At the cap, stop expanding implementation,
+complete a safe checkpoint with drafts/data preserved, and record PLAN-02's
+continue-with-revised-scope, bounded repair or stop decision. An extension must
+state the added budget, scope and reason within the product owner's authorized
+scope; it cannot be silently renewed. Never cut safety gates or interrupt a
+storage commit to meet a timebox. This is an effort limit, not a calendar promise.
 
 Compare the first complete slice with its baseline: task success/effort,
 save/recovery reliability, feature-test setup, implementation effort, amount of
