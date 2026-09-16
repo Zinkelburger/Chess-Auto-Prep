@@ -403,6 +403,77 @@ test fixture.
   unsupported schema. Restoring an old snapshot alone loses new work and is
   not an acceptable rollback procedure.
 
+### One safe PGN mutation API and shared save interaction
+
+**Status: Not started.** Centralization is the intended solution to the PGN
+overwrite concern. Callers should not need to remember a checklist of locking,
+existence, revision, backup and error-handling steps. Implement one injectable
+`PgnDocumentStore` (working name) as the domain-facing boundary for every
+user-document PGN mutation. It delegates to the tested atomic filesystem
+adapter; it does not duplicate its low-level implementation or absorb unrelated
+database/cache responsibilities.
+
+```text
+Feature action / editor / import / generated result
+                -> PgnDocumentStore
+                   -> atomic filesystem adapter
+                <- typed save outcome and committed revision
+                -> shared save status / conflict interaction
+```
+
+The public API expresses intent. These are proposed operations to refine with
+the first slice, not implemented method signatures:
+
+| Intent | Safe contract |
+|--------|---------------|
+| Open a document | Return a snapshot containing document identity, revision and content. Distinguish absence from unreadable or malformed content. |
+| Create a document or save a copy | Exclusively create at the requested destination; return a name collision without replacing anything. |
+| Save an edited snapshot | Require the loaded identity/revision; reject replacement if the persisted baseline changed. There is no optional revision or default overwrite flag. |
+| Append/import games or apply an edit | Run the bounded PGN transformation against the current document inside its mutation transaction. Check any source-game/line preconditions; preserve unrelated text and annotations. |
+| Undo a committed edit | Accept a receipt bound to the document and the revision being reversed; reject a conflict, preserve recovery state and consume undo only after committing. |
+| Rename, move or recoverably delete | Use the same document ownership boundary, with collision checks and an explicit protocol for associated references/artifacts. Coordinate with saves so a queued edit cannot recreate or target the wrong chapter. |
+
+The store owns validation, serialization against other app mutations, commit
+checks, recoverable prior versions, failure propagation and committed revision
+receipts. A read/modify/write transaction must protect the whole transformation,
+not merely the final file replacement. CPU-heavy parsing may be prepared outside
+the critical section with revision revalidation before commit. Do not claim
+that in-app locks exclude arbitrary external editors.
+
+Expose distinct outcomes such as saved, conflict, name collision, invalid
+document and I/O failure, including enough information to preserve the user's
+draft and offer recovery. Only a saved outcome advances the session's baseline
+or clears dirty state. Features receive the store via repository/session
+dependencies; raw `writeFile`, `File.writeAsString` and generic overwrite APIs
+are unavailable to migrated PGN callers. Enforce this with import/API checks
+and route legacy entry points through a temporary adapter during migration.
+
+Build a reusable save-status component and conflict/collision interaction on
+top of these outcomes. They show consistent saving/saved/unsaved states and
+appropriate actions such as keep editing, save a copy, or inspect/reload the
+newer document. Reload must preserve or explicitly resolve the dirty draft.
+Any user-requested replacement is an explicit command checked against the
+latest revision; dismissing a dialog never grants overwrite permission.
+The UI receives state and callbacks and performs no disk operations itself,
+so its appearance can be changed freely in Widgetbook. Background jobs consume
+the same outcomes and surface them through job state without opening dialogs.
+
+Test the central contract once thoroughly, then test that each feature calls
+it correctly. The shared contract suite covers exclusive creation, stale saves,
+concurrent append, lossless edits, conflicting undo, rename/delete versus queued
+saves, interrupted commit/recovery and disk/read failure using disposable real
+files and deterministic failure injection. Run relevant cases on native desktop
+platforms. Fakes make feature tests fast but do not establish filesystem safety.
+Separately test the reusable widget's actions, draft preservation, keyboard
+focus and failure states with scripted outcomes; expose them in Widgetbook.
+
+Add focused feature wiring tests for editor save, import, generation, undo and
+chapter operations. They must prove that the correct captured document/revision
+reaches the store and that failure is not reported as success. Do not copy the
+atomic-write algorithm or its entire suite into every feature. Milestone 2
+establishes this boundary and shared interaction; subsequent document-writing
+slices must adopt it before their old writer is retired.
+
 ### Storage baseline and overwrite-prevention gate
 
 **Status: Not started.** The following is a code-inspection baseline from
