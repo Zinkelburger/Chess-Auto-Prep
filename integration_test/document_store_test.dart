@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/app/app_dependencies.dart';
@@ -34,6 +35,8 @@ void main() {
         AppDependencies(
           repertoireCatalog: repository,
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             theme: AppTheme.dark(),
             home: Scaffold(body: RepertoireListBody(onSelected: (_) {})),
           ),
@@ -84,6 +87,8 @@ void main() {
         AppDependencies(
           repertoireCatalog: repository,
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             theme: AppTheme.dark(),
             home: Scaffold(body: RepertoireListBody(onSelected: (_) {})),
           ),

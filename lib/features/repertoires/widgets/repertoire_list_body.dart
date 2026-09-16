@@ -4,6 +4,9 @@
 /// in screens that need a repertoire before they can function (Builder, Trainer).
 library;
 
+import '../../../l10n/generated/app_localizations.dart';
+import 'repertoire_messages.dart';
+
 import 'dart:async';
 
 import '../models/repertoire_creation.dart';
@@ -28,8 +31,7 @@ import '../../../widgets/pgn_import_dialog.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
-import '../../../utils/safe_file_name.dart';
-import '../../../utils/time_format.dart';
+import '../../../l10n/localized_time.dart';
 import '../../../widgets/common/confirm_dialog.dart';
 import '../../../widgets/common/list_search_field.dart';
 import '../../../widgets/layout/empty_state_placeholder.dart';
@@ -71,6 +73,8 @@ class RepertoireListBody extends ConsumerStatefulWidget {
 }
 
 class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
+  AppLocalizations get l10n => AppLocalizations.of(context);
+
   String _search = '';
   bool _showRecovery = false;
   bool _importing = false;
@@ -135,8 +139,8 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
               const SizedBox(height: 16),
               Text(
                 error is RepertoireRecoveryRequired
-                    ? error.toString()
-                    : 'Could not load repertoires. Please try again.',
+                    ? l10n.recoveryRequired
+                    : l10n.catalogLoadFailed,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -145,8 +149,8 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
                 icon: const Icon(Icons.refresh),
                 label: Text(
                   error is RepertoireRecoveryRequired
-                      ? 'Recover library'
-                      : 'Retry',
+                      ? l10n.recoverLibrary
+                      : l10n.retry,
                 ),
               ),
             ],
@@ -161,20 +165,19 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
           _buildToolbar(),
           const Divider(height: 1),
           if (catalog.actionError != null)
-            const Padding(
-              padding: EdgeInsets.all(12),
+            Padding(
+              padding: const EdgeInsets.all(12),
               child: Text(
-                'Restore failed. Your recovery files are retained. '
-                'Refresh the list or choose another name.',
-                style: TextStyle(color: AppColors.danger),
+                l10n.restoreFailed,
+                style: const TextStyle(color: AppColors.danger),
               ),
             ),
           Expanded(
             child: catalog.recovery.isEmpty
-                ? const EmptyStatePlaceholder(
+                ? EmptyStatePlaceholder(
                     icon: Icons.restore_from_trash,
-                    title: 'Recovery is empty',
-                    subtitle: 'Deleted repertoires will appear here.',
+                    title: l10n.recoveryEmpty,
+                    subtitle: l10n.recoveryEmptyHelp,
                   )
                 : ListView(
                     children: [
@@ -183,15 +186,20 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
                           title: Text(item.name),
                           subtitle: Text(
                             item.available
-                                ? 'Deleted ${formatTimeAgo(item.deletedAt)}'
-                                : 'Recovery files are missing or changed',
+                                ? l10n.deletedAt(
+                                    formatLocalizedTimeAgo(
+                                      l10n,
+                                      item.deletedAt,
+                                    ),
+                                  )
+                                : l10n.recoveryFilesChanged,
                           ),
                           trailing: TextButton.icon(
                             onPressed: _busy || !item.available
                                 ? null
                                 : () => _restore(item),
                             icon: const Icon(Icons.restore),
-                            label: const Text('Restore'),
+                            label: Text(l10n.restore),
                           ),
                         ),
                     ],
@@ -207,12 +215,11 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
         children: [
           _buildToolbar(),
           const Divider(height: 1, thickness: 1),
-          const Expanded(
+          Expanded(
             child: EmptyStatePlaceholder(
               icon: Icons.library_books,
-              title: 'No repertoires yet',
-              subtitle:
-                  'Open a PGN file or create a repertoire to get started.',
+              title: l10n.catalogEmpty,
+              subtitle: l10n.catalogEmptyHelp,
             ),
           ),
         ],
@@ -232,7 +239,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
           child: nothingMatched
               ? Center(
                   child: Text(
-                    'Nothing matches "$_search".',
+                    l10n.nothingMatches(_search),
                     style: const TextStyle(color: AppColors.onSurfaceMuted),
                   ),
                 )
@@ -240,11 +247,11 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                   children: [
                     if (showSections && repertoires.isNotEmpty)
-                      _buildSectionHeader('Repertoires'),
+                      _buildSectionHeader(l10n.repertoires),
                     for (final repertoire in repertoires)
                       _buildRepertoireCard(repertoire),
                     if (showSections && studies.isNotEmpty) ...[
-                      _buildSectionHeader('Studies — custom tactics'),
+                      _buildSectionHeader(l10n.studiesTactics),
                       for (final study in studies) _buildStudyCard(study),
                     ],
                   ],
@@ -262,7 +269,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            _showRecovery ? 'Repertoire recovery' : 'Your repertoires',
+            _showRecovery ? l10n.repertoireRecovery : l10n.yourRepertoires,
             style: AppTextStyles.title,
           ),
           const SizedBox(height: 16),
@@ -282,13 +289,15 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
                   icon: Icon(
                     _showRecovery ? Icons.arrow_back : Icons.restore_from_trash,
                   ),
-                  label: Text(_showRecovery ? 'Back to library' : 'Recovery'),
+                  label: Text(
+                    _showRecovery ? l10n.backToLibrary : l10n.recovery,
+                  ),
                 ),
               if (_showRecovery)
                 TextButton.icon(
                   onPressed: _busy ? null : _loadRepertoires,
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Refresh'),
+                  label: Text(l10n.refresh),
                 ),
               if (!_showRecovery) ...[
                 FilledButton.icon(
@@ -300,19 +309,21 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.folder_open, size: 20),
-                  label: Text(importingFile ? 'Importing…' : 'Open PGN file…'),
+                  label: Text(
+                    importingFile ? l10n.importing : l10n.openPgnFile,
+                  ),
                 ),
                 OutlinedButton.icon(
                   onPressed: (_importing || _busy) ? null : _createRepertoire,
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Create new repertoire'),
+                  label: Text(l10n.createNewRepertoire),
                 ),
                 TextButton.icon(
                   onPressed: (_importing || _busy)
                       ? null
                       : () => _importRepertoire(paste: true),
                   icon: const Icon(Icons.content_paste, size: 18),
-                  label: const Text('Paste PGN'),
+                  label: Text(l10n.pastePgn),
                 ),
               ],
             ],
@@ -321,7 +332,8 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
               (_repertoires.isNotEmpty || _studies.isNotEmpty)) ...[
             const SizedBox(height: 16),
             ListSearchField(
-              hintText: 'Search repertoires',
+              hintText: l10n.searchRepertoires,
+              clearLabel: l10n.clearSearch,
               onChanged: (value) {
                 if (!mounted) return;
                 setState(() => _search = value);
@@ -386,7 +398,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$chapterCount chapter${chapterCount == 1 ? '' : 's'}',
+                      l10n.chapterCount(chapterCount),
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppColors.onSurfaceMuted,
@@ -407,7 +419,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
     final chapterCount = repertoire.gameCount;
     final lastModified = repertoire.lastModified;
 
-    final timeAgo = formatTimeAgo(lastModified);
+    final timeAgo = formatLocalizedTimeAgo(l10n, lastModified);
 
     return ListTile(
       dense: true,
@@ -415,7 +427,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       leading: const Icon(Icons.library_books_outlined, size: 22),
       title: ItemTitle(name, style: AppTextStyles.bodyStrong),
       subtitle: Text(
-        '$chapterCount chapter${chapterCount == 1 ? '' : 's'} · Modified $timeAgo',
+        l10n.repertoireDetails(l10n.chapterCount(chapterCount), timeAgo),
         style: AppTextStyles.caption,
       ),
       onTap: () => widget.onRepertoireSelected != null
@@ -426,17 +438,17 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
         children: [
           IconButton(
             icon: const Icon(Icons.list_alt, size: 18),
-            tooltip: 'Browse chapters',
+            tooltip: l10n.browseChapters,
             onPressed: () => _openRepertoire(repertoire),
           ),
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 18),
-            tooltip: 'Rename repertoire',
+            tooltip: l10n.renameRepertoire,
             onPressed: _busy ? null : () => _renameRepertoire(repertoire),
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline, size: 18),
-            tooltip: 'Delete repertoire',
+            tooltip: l10n.deleteRepertoire,
             onPressed: _busy ? null : () => _deleteRepertoire(repertoire),
           ),
         ],
@@ -483,7 +495,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
     if (created.gameCount == 0) {
       showAppSnackBar(
         context,
-        'Created “${p.basename(created.directoryPath)}”. Add moves before training.',
+        l10n.createdRepertoire(p.basename(created.directoryPath)),
       );
       return;
     }
@@ -535,8 +547,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       if (created == null || !mounted) return;
       showAppSnackBar(
         context,
-        'Imported “${p.basename(created.directoryPath)}”. '
-        'Rename it from your repertoire list.',
+        l10n.importedRepertoire(p.basename(created.directoryPath)),
       );
       await _openCreated(created);
       if (mounted) await _loadRepertoires();
@@ -548,14 +559,16 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
   Future<void> _restore(RepertoireRecoveryEntry entry) async {
     final name = await showNameEntryDialog(
       context,
-      title: 'Restore repertoire',
-      prompt: 'Choose a name for the restored repertoire:',
-      fieldLabel: 'Repertoire Name',
-      confirmLabel: 'Restore',
+      title: l10n.restoreRepertoire,
+      prompt: l10n.restoreNamePrompt,
+      fieldLabel: l10n.repertoireName,
+      cancelLabel: l10n.cancel,
+      emptyNameMessage: l10n.nameRequired,
+      confirmLabel: l10n.restore,
       allowUnchanged: true,
       initialValue: entry.name,
       validate: (name) =>
-          validateSafeFileName(name) ??
+          repertoireNameProblem(l10n, name) ??
           (_repertoires.any(
                 (r) =>
                     p.equals(
@@ -564,7 +577,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
                     ) &&
                     r.name.toLowerCase() == name.toLowerCase(),
               )
-              ? 'A repertoire with this name already exists.'
+              ? l10n.duplicateRepertoireName
               : null),
     );
     if (name == null || !mounted) return;
@@ -578,11 +591,12 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
   Future<void> _deleteRepertoire(RepertoireMetadata repertoire) async {
     final confirmed = await confirmAction(
       context,
-      title: 'Delete repertoire "${repertoire.name}"?',
+      title: l10n.deleteRepertoirePrompt(repertoire.name),
       message: _controller.supportsRecovery
-          ? 'Its files and training history will be kept. Restore it from Recovery in the library.'
-          : 'Its files will be moved to Chess Auto Prep recovery trash.',
-      confirmLabel: 'Delete',
+          ? l10n.deleteRepertoireHelp
+          : l10n.deleteLegacyRepertoireHelp,
+      confirmLabel: l10n.delete,
+      cancelLabel: l10n.cancel,
     );
 
     if (confirmed && mounted) {
@@ -591,11 +605,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       } catch (e) {
         debugPrint('Delete repertoire failed: $e');
         if (mounted && e is! RepertoireRecoveryRequired) {
-          showAppSnackBar(
-            context,
-            AppMessages.deleteRepertoireFailed,
-            isError: true,
-          );
+          showAppSnackBar(context, l10n.deleteRepertoireFailed, isError: true);
         }
       }
     }
@@ -604,19 +614,21 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
   Future<void> _renameRepertoire(RepertoireMetadata repertoire) async {
     final result = await showNameEntryDialog(
       context,
-      title: 'Rename Repertoire',
-      prompt: 'Enter new name for the repertoire:',
-      fieldLabel: 'Repertoire Name',
-      confirmLabel: 'Rename',
+      title: l10n.renameRepertoire,
+      prompt: l10n.renameRepertoirePrompt,
+      fieldLabel: l10n.repertoireName,
+      cancelLabel: l10n.cancel,
+      emptyNameMessage: l10n.nameRequired,
+      confirmLabel: l10n.rename,
       initialValue: repertoire.name,
       validate: (name) =>
-          validateSafeFileName(name) ??
+          repertoireNameProblem(l10n, name) ??
           (_repertoires.any(
                 (r) =>
                     r.name.toLowerCase() == name.toLowerCase() &&
                     r.filePath != repertoire.filePath,
               )
-              ? 'A repertoire named "$name" already exists'
+              ? l10n.repertoireExists(name)
               : null),
     );
 
@@ -626,11 +638,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       } catch (e) {
         debugPrint('Rename repertoire failed: $e');
         if (mounted && e is! RepertoireRecoveryRequired) {
-          showAppSnackBar(
-            context,
-            AppMessages.renameRepertoireFailed,
-            isError: true,
-          );
+          showAppSnackBar(context, l10n.renameRepertoireFailed, isError: true);
         }
       }
     }

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'dart:io';
 
@@ -36,6 +37,8 @@ void main() {
     await pumpCatalogWidget(
       tester,
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: RepertoireListBody(
             onSelected: (value) => selected = value,
@@ -65,7 +68,19 @@ void main() {
     }
 
     await until(() => find.text('Open PGN file…').evaluate().isNotEmpty);
-    await tester.tap(find.text('Open PGN file…'));
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Open PGN file…'));
+      for (
+        var i = 0;
+        i < 200 &&
+            !File(
+              '${root.path}/repertoires/Course/Quickstarter.pgn',
+            ).existsSync();
+        i++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
     await until(() => find.text('Quickstarter').evaluate().isNotEmpty);
     expect(find.byType(RepertoireChaptersScreen), findsOneWidget);
     expect(find.text('Introduction'), findsOneWidget);

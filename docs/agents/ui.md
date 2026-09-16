@@ -55,6 +55,23 @@ headings or sentences when a concise label or operator (`≥`, `≤`) suffices.
 Collapse optional controls and reuse the Tree game list for PGN filter results.
 Reserve the strongest filled action for applying or completing the task.
 
+## Localized copy in migrated UI
+
+Catalog copy lives in `lib/l10n/app_en.arb`; use generated `AppLocalizations`
+accessors in migrated widgets. Resolve typed failures and validation at the UI
+boundary. Keep localization out of domain models/controllers/infrastructure and
+pass resolved labels to shared controls. English is the initial locale; other
+languages are not implicitly in scope. Keep PGN/FEN, IDs and stored side values
+canonical. Use typed placeholders/plurals and locale-aware numbers/dates rather
+than assembling English fragments.
+
+Edit ARB source, never generated accessors. The bounded check runner regenerates
+messages before analyze/test/integration; for generation alone use
+`scripts/ci.sh with -- flutter gen-l10n` and commit the generated Dart output.
+Standalone widget hosts need `AppLocalizations.localizationsDelegates` and
+`supportedLocales`, as the main app does. Use the expanded-label/text fixtures
+in `test/l10n/` when changing catalog layouts.
+
 ## Keyboard shortcuts
 
 A control with a keyboard binding in its screen/panel must show that binding

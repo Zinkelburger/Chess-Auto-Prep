@@ -1,5 +1,6 @@
+import '../../../l10n/generated/app_localizations.dart';
+import 'repertoire_messages.dart';
 import '../models/repertoire_creation.dart';
-import '../models/repertoire_recovery_required.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -18,25 +19,18 @@ Future<RepertoireCreationResult?> showRepertoireImportDialog(
   required Future<RepertoireCreationResult> Function(CreateRepertoire) create,
   Future<PickedPgnImport?> Function() pickPgn = pickPgnImport,
 }) async {
+  final l10n = AppLocalizations.of(context);
   try {
     final picked = await pickPgn();
     if (!context.mounted || picked == null) return null;
     final source = picked.result;
     if (picked.error != null || source == null) {
-      showAppSnackBar(
-        context,
-        picked.error ?? 'Could not read that file.',
-        isError: true,
-      );
+      showAppSnackBar(context, l10n.fileReadFailed, isError: true);
       return null;
     }
     if (source.gameCount == 0 ||
         pgn.mainlineSansOf(source.pgnContent).isEmpty) {
-      showAppSnackBar(
-        context,
-        'That PGN has no moves to train.',
-        isError: true,
-      );
+      showAppSnackBar(context, l10n.importNeedsMoves, isError: true);
       return null;
     }
     final name = _availableName(
@@ -57,11 +51,7 @@ Future<RepertoireCreationResult?> showRepertoireImportDialog(
     if (context.mounted) {
       showAppSnackBar(
         context,
-        (e is RepertoireCreationUncertain ||
-                e is RepertoirePreparationFailed ||
-                e is RepertoireRecoveryRequired)
-            ? e.toString()
-            : 'Could not import the repertoire. Please try again.',
+        repertoireFailureMessage(l10n, e, fallback: l10n.importFailed),
         isError: true,
       );
     }
@@ -110,6 +100,8 @@ class _RepertoirePasteDialog extends StatefulWidget {
 }
 
 class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
+  AppLocalizations get l10n => AppLocalizations.of(context);
+
   final _paste = TextEditingController();
   bool _saving = false;
   String? _error;
@@ -124,7 +116,7 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
     final content = _paste.text.trim();
     final count = pgn.countPgnGames(content);
     if (count == 0 || pgn.mainlineSansOf(content).isEmpty) {
-      setState(() => _error = 'Paste PGN with moves to train.');
+      setState(() => _error = l10n.pasteNeedsMoves);
       return;
     }
     setState(() {
@@ -148,12 +140,11 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error =
-              (e is RepertoireCreationUncertain ||
-                  e is RepertoirePreparationFailed ||
-                  e is RepertoireRecoveryRequired)
-              ? e.toString()
-              : 'Could not import. Your PGN is still here; try again.';
+          _error = repertoireFailureMessage(
+            l10n,
+            e,
+            fallback: l10n.pasteFailed,
+          );
         });
       }
     }
@@ -163,7 +154,7 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_saving,
     child: AlertDialog(
-      title: const Text('Paste PGN', style: AppTextStyles.title),
+      title: Text(l10n.pastePgn, style: AppTextStyles.title),
       scrollable: true,
       content: SizedBox(
         width: 460,
@@ -171,10 +162,7 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Add your moves now. You can rename the repertoire later.',
-              style: AppTextStyles.muted,
-            ),
+            Text(l10n.pasteHelp, style: AppTextStyles.muted),
             const SizedBox(height: 16),
             TextField(
               key: const ValueKey('repertoire-import-pgn'),
@@ -185,9 +173,7 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
               maxLines: 10,
               style: AppTextStyles.mono,
               decoration: InputDecoration(
-                hintText: '1. e4 e5 2. Nf3 Nc6…',
-                errorText: _error,
-                errorMaxLines: 3,
+                hintText: l10n.pgnExample,
                 border: const OutlineInputBorder(),
               ),
               onChanged: (_) {
@@ -195,17 +181,27 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
                 setState(() => _error = null);
               },
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            ],
           ],
         ),
       ),
       actions: [
         TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           onPressed: _saving || _paste.text.trim().isEmpty ? null : _import,
-          child: Text(_saving ? 'Importing…' : 'Import'),
+          child: Text(_saving ? l10n.importing : l10n.importAction),
         ),
       ],
     ),

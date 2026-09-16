@@ -1,0 +1,399 @@
+{
+  "@@locale": "en",
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Repertoire catalog: cancel"
+  },
+  "retry": "Retry",
+  "@retry": {
+    "description": "Repertoire catalog: retry"
+  },
+  "refresh": "Refresh",
+  "@refresh": {
+    "description": "Repertoire catalog: refresh"
+  },
+  "restore": "Restore",
+  "@restore": {
+    "description": "Repertoire catalog: restore"
+  },
+  "delete": "Delete",
+  "@delete": {
+    "description": "Repertoire catalog: delete"
+  },
+  "rename": "Rename",
+  "@rename": {
+    "description": "Repertoire catalog: rename"
+  },
+  "importPgn": "Import PGN",
+  "@importPgn": {
+    "description": "Repertoire catalog: importPgn"
+  },
+  "importAction": "Import",
+  "@importAction": {
+    "description": "Repertoire catalog: importAction"
+  },
+  "importing": "Importing…",
+  "@importing": {
+    "description": "Repertoire catalog: importing"
+  },
+  "working": "Working…",
+  "@working": {
+    "description": "Repertoire catalog: working"
+  },
+  "white": "White",
+  "@white": {
+    "description": "Visible label for the White side; stored PGN values remain canonical."
+  },
+  "black": "Black",
+  "@black": {
+    "description": "Visible label for the Black side; stored PGN values remain canonical."
+  },
+  "openPgnFile": "Open PGN file…",
+  "@openPgnFile": {
+    "description": "Repertoire catalog: openPgnFile"
+  },
+  "pastePgn": "Paste PGN",
+  "@pastePgn": {
+    "description": "Repertoire catalog: pastePgn"
+  },
+  "clearSearch": "Clear search",
+  "@clearSearch": {
+    "description": "Repertoire catalog: clearSearch"
+  },
+  "createRepertoire": "Create repertoire",
+  "@createRepertoire": {
+    "description": "Repertoire catalog: createRepertoire"
+  },
+  "createNewRepertoire": "Create new repertoire",
+  "@createNewRepertoire": {
+    "description": "Repertoire catalog: createNewRepertoire"
+  },
+  "creationHeading": "Bring your lines. Start training.",
+  "@creationHeading": {
+    "description": "Repertoire catalog: creationHeading"
+  },
+  "repertoireName": "Repertoire name",
+  "@repertoireName": {
+    "description": "Repertoire catalog: repertoireName"
+  },
+  "repertoireNameHint": "My Sicilian",
+  "@repertoireNameHint": {
+    "description": "Repertoire catalog: repertoireNameHint"
+  },
+  "playingSide": "Playing side",
+  "@playingSide": {
+    "description": "Repertoire catalog: playingSide"
+  },
+  "emptyRepertoire": "Empty repertoire",
+  "@emptyRepertoire": {
+    "description": "Repertoire catalog: emptyRepertoire"
+  },
+  "emptyRepertoireHelp": "Create a place for chapters and lines. Add moves before training.",
+  "@emptyRepertoireHelp": {
+    "description": "Repertoire catalog: emptyRepertoireHelp"
+  },
+  "pgnMoves": "PGN moves",
+  "@pgnMoves": {
+    "description": "Repertoire catalog: pgnMoves"
+  },
+  "pgnPasteHint": "Paste your PGN here",
+  "@pgnPasteHint": {
+    "description": "Repertoire catalog: pgnPasteHint"
+  },
+  "pgnExample": "1. e4 e5 2. Nf3 Nc6…",
+  "@pgnExample": {
+    "description": "PGN example; preserve canonical SAN notation and moves."
+  },
+  "pasteHelp": "Add your moves now. You can rename the repertoire later.",
+  "@pasteHelp": {
+    "description": "Repertoire catalog: pasteHelp"
+  },
+  "fileReadFailed": "Could not read that file.",
+  "@fileReadFailed": {
+    "description": "Repertoire catalog: fileReadFailed"
+  },
+  "fileOpenFailed": "Could not open that file. Try again.",
+  "@fileOpenFailed": {
+    "description": "Repertoire catalog: fileOpenFailed"
+  },
+  "creationNeedsMoves": "Open or paste a PGN with moves to train.",
+  "@creationNeedsMoves": {
+    "description": "Repertoire catalog: creationNeedsMoves"
+  },
+  "importNeedsMoves": "That PGN has no moves to train.",
+  "@importNeedsMoves": {
+    "description": "Repertoire catalog: importNeedsMoves"
+  },
+  "pasteNeedsMoves": "Paste PGN with moves to train.",
+  "@pasteNeedsMoves": {
+    "description": "Repertoire catalog: pasteNeedsMoves"
+  },
+  "creationFailed": "Could not create the repertoire. Your input is still here; try again.",
+  "@creationFailed": {
+    "description": "Repertoire catalog: creationFailed"
+  },
+  "importFailed": "Could not import the repertoire. Please try again.",
+  "@importFailed": {
+    "description": "Repertoire catalog: importFailed"
+  },
+  "pasteFailed": "Could not import. Your PGN is still here; try again.",
+  "@pasteFailed": {
+    "description": "Repertoire catalog: pasteFailed"
+  },
+  "repertoireExists": "A repertoire named \"{name}\" already exists.",
+  "@repertoireExists": {
+    "description": "Repertoire catalog: repertoireExists",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "creationUncertain": "The file may already be saved. Keep this draft and reload the library before retrying.",
+  "@creationUncertain": {
+    "description": "Repertoire catalog: creationUncertain"
+  },
+  "preparationFailed": "Import preparation failed. No repertoire was published. Keep this draft and retry.",
+  "@preparationFailed": {
+    "description": "Repertoire catalog: preparationFailed"
+  },
+  "recoveryRequired": "The folder may have moved, but its references could not be confirmed. Reload the library to recover this operation before making another change.",
+  "@recoveryRequired": {
+    "description": "Repertoire catalog: recoveryRequired"
+  },
+  "catalogLoadFailed": "Could not load repertoires. Please try again.",
+  "@catalogLoadFailed": {
+    "description": "Repertoire catalog: catalogLoadFailed"
+  },
+  "recoverLibrary": "Recover library",
+  "@recoverLibrary": {
+    "description": "Repertoire catalog: recoverLibrary"
+  },
+  "restoreFailed": "Restore failed. Your recovery files are retained. Refresh the list or choose another name.",
+  "@restoreFailed": {
+    "description": "Repertoire catalog: restoreFailed"
+  },
+  "recoveryEmpty": "Recovery is empty",
+  "@recoveryEmpty": {
+    "description": "Repertoire catalog: recoveryEmpty"
+  },
+  "recoveryEmptyHelp": "Deleted repertoires will appear here.",
+  "@recoveryEmptyHelp": {
+    "description": "Repertoire catalog: recoveryEmptyHelp"
+  },
+  "recoveryFilesChanged": "Recovery files are missing or changed",
+  "@recoveryFilesChanged": {
+    "description": "Repertoire catalog: recoveryFilesChanged"
+  },
+  "deletedAt": "Deleted {time}",
+  "@deletedAt": {
+    "description": "Repertoire catalog: deletedAt",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "catalogEmpty": "No repertoires yet",
+  "@catalogEmpty": {
+    "description": "Repertoire catalog: catalogEmpty"
+  },
+  "catalogEmptyHelp": "Open a PGN file or create a repertoire to get started.",
+  "@catalogEmptyHelp": {
+    "description": "Repertoire catalog: catalogEmptyHelp"
+  },
+  "nothingMatches": "Nothing matches \"{query}\".",
+  "@nothingMatches": {
+    "description": "Repertoire catalog: nothingMatches",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "repertoires": "Repertoires",
+  "@repertoires": {
+    "description": "Repertoire catalog: repertoires"
+  },
+  "studiesTactics": "Studies — custom tactics",
+  "@studiesTactics": {
+    "description": "Repertoire catalog: studiesTactics"
+  },
+  "repertoireRecovery": "Repertoire recovery",
+  "@repertoireRecovery": {
+    "description": "Repertoire catalog: repertoireRecovery"
+  },
+  "yourRepertoires": "Your repertoires",
+  "@yourRepertoires": {
+    "description": "Repertoire catalog: yourRepertoires"
+  },
+  "backToLibrary": "Back to library",
+  "@backToLibrary": {
+    "description": "Repertoire catalog: backToLibrary"
+  },
+  "recovery": "Recovery",
+  "@recovery": {
+    "description": "Repertoire catalog: recovery"
+  },
+  "searchRepertoires": "Search repertoires",
+  "@searchRepertoires": {
+    "description": "Repertoire catalog: searchRepertoires"
+  },
+  "chapterCount": "{count, plural, =1{1 chapter} other{{count} chapters}}",
+  "@chapterCount": {
+    "description": "Repertoire catalog: chapterCount",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "repertoireDetails": "{chapters} · Modified {time}",
+  "@repertoireDetails": {
+    "description": "Repertoire catalog: repertoireDetails",
+    "placeholders": {
+      "chapters": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "browseChapters": "Browse chapters",
+  "@browseChapters": {
+    "description": "Repertoire catalog: browseChapters"
+  },
+  "renameRepertoire": "Rename repertoire",
+  "@renameRepertoire": {
+    "description": "Repertoire catalog: renameRepertoire"
+  },
+  "deleteRepertoire": "Delete repertoire",
+  "@deleteRepertoire": {
+    "description": "Repertoire catalog: deleteRepertoire"
+  },
+  "createdRepertoire": "Created “{name}”. Add moves before training.",
+  "@createdRepertoire": {
+    "description": "Repertoire catalog: createdRepertoire",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "importedRepertoire": "Imported “{name}”. Rename it from your repertoire list.",
+  "@importedRepertoire": {
+    "description": "Repertoire catalog: importedRepertoire",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "restoreRepertoire": "Restore repertoire",
+  "@restoreRepertoire": {
+    "description": "Repertoire catalog: restoreRepertoire"
+  },
+  "restoreNamePrompt": "Choose a name for the restored repertoire:",
+  "@restoreNamePrompt": {
+    "description": "Repertoire catalog: restoreNamePrompt"
+  },
+  "duplicateRepertoireName": "A repertoire with this name already exists.",
+  "@duplicateRepertoireName": {
+    "description": "Repertoire catalog: duplicateRepertoireName"
+  },
+  "deleteRepertoirePrompt": "Delete repertoire \"{name}\"?",
+  "@deleteRepertoirePrompt": {
+    "description": "Repertoire catalog: deleteRepertoirePrompt",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteRepertoireHelp": "Its files and training history will be kept. Restore it from Recovery in the library.",
+  "@deleteRepertoireHelp": {
+    "description": "Repertoire catalog: deleteRepertoireHelp"
+  },
+  "deleteLegacyRepertoireHelp": "Its files will be moved to Chess Auto Prep recovery trash.",
+  "@deleteLegacyRepertoireHelp": {
+    "description": "Repertoire catalog: deleteLegacyRepertoireHelp"
+  },
+  "deleteRepertoireFailed": "Could not delete repertoire.",
+  "@deleteRepertoireFailed": {
+    "description": "Repertoire catalog: deleteRepertoireFailed"
+  },
+  "renameRepertoirePrompt": "Enter new name for the repertoire:",
+  "@renameRepertoirePrompt": {
+    "description": "Repertoire catalog: renameRepertoirePrompt"
+  },
+  "renameRepertoireFailed": "Could not rename repertoire.",
+  "@renameRepertoireFailed": {
+    "description": "Repertoire catalog: renameRepertoireFailed"
+  },
+  "nameRequired": "Please enter a name.",
+  "@nameRequired": {
+    "description": "Repertoire catalog: nameRequired"
+  },
+  "nameTrailingDotOrSpace": "Names cannot end with a dot or space.",
+  "@nameTrailingDotOrSpace": {
+    "description": "Repertoire catalog: nameTrailingDotOrSpace"
+  },
+  "nameReserved": "That name is reserved.",
+  "@nameReserved": {
+    "description": "Repertoire catalog: nameReserved"
+  },
+  "nameIllegalCharacters": "Names cannot contain < > : \" / \\ | ? * or control characters.",
+  "@nameIllegalCharacters": {
+    "description": "Repertoire catalog: nameIllegalCharacters"
+  },
+  "nameSystemReserved": "That name is reserved by the operating system.",
+  "@nameSystemReserved": {
+    "description": "Repertoire catalog: nameSystemReserved"
+  },
+  "nameTooLong": "Names must be {maxLength} characters or fewer.",
+  "@nameTooLong": {
+    "description": "Repertoire catalog: nameTooLong",
+    "placeholders": {
+      "maxLength": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "justNow": "just now",
+  "@justNow": {
+    "description": "Repertoire catalog: justNow"
+  },
+  "minutesAgo": "{count}m ago",
+  "@minutesAgo": {
+    "description": "Repertoire catalog: minutesAgo",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "hoursAgo": "{count}h ago",
+  "@hoursAgo": {
+    "description": "Repertoire catalog: hoursAgo",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  },
+  "daysAgo": "{count}d ago",
+  "@daysAgo": {
+    "description": "Repertoire catalog: daysAgo",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "format": "decimalPattern"
+      }
+    }
+  }
+}

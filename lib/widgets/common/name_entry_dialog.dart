@@ -46,6 +46,7 @@ Future<String?> showNameEntryDialog(
   String? prompt,
   String initialValue = '',
   String cancelLabel = 'Cancel',
+  String emptyNameMessage = 'Please enter a name',
   bool allowUnchanged = false,
   String? Function(String name)? validate,
 }) => showDialog<String>(
@@ -57,6 +58,7 @@ Future<String?> showNameEntryDialog(
     prompt: prompt,
     initialValue: initialValue,
     cancelLabel: cancelLabel,
+    emptyNameMessage: emptyNameMessage,
     allowUnchanged: allowUnchanged,
     validate: validate,
   ),
@@ -70,6 +72,7 @@ class _NameEntryDialog extends StatefulWidget {
     required this.prompt,
     required this.initialValue,
     required this.cancelLabel,
+    required this.emptyNameMessage,
     required this.allowUnchanged,
     required this.validate,
   });
@@ -80,6 +83,7 @@ class _NameEntryDialog extends StatefulWidget {
   final String? prompt;
   final String initialValue;
   final String cancelLabel;
+  final String emptyNameMessage;
   final bool allowUnchanged;
   final String? Function(String name)? validate;
 
@@ -106,7 +110,7 @@ class _NameEntryDialogState extends State<_NameEntryDialog> {
   void _submit() {
     final value = _controller.text.trim();
     if (value.isEmpty) {
-      setState(() => _error = 'Please enter a name');
+      setState(() => _error = widget.emptyNameMessage);
       return;
     }
     if (!widget.allowUnchanged && value == widget.initialValue) {
@@ -125,6 +129,7 @@ class _NameEntryDialogState extends State<_NameEntryDialog> {
   Widget build(BuildContext context) {
     final prompt = widget.prompt;
     return AlertDialog(
+      scrollable: true,
       title: Text(widget.title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -136,6 +141,7 @@ class _NameEntryDialogState extends State<_NameEntryDialog> {
             decoration: InputDecoration(
               labelText: widget.fieldLabel,
               errorText: _error,
+              errorMaxLines: 3,
             ),
             onChanged: (_) {
               if (_error != null) setState(() => _error = null);

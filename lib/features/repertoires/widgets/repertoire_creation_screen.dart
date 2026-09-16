@@ -1,11 +1,11 @@
+import '../../../l10n/generated/app_localizations.dart';
+import 'repertoire_messages.dart';
 import '../models/repertoire_creation.dart';
-import '../models/repertoire_recovery_required.dart';
 import 'package:flutter/material.dart';
 
 import '../../../services/pgn_mainline_lexer.dart' as pgn;
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../theme/app_text_styles.dart';
-import '../../../utils/safe_file_name.dart';
 import '../../../widgets/pgn_import_dialog.dart';
 
 /// Shared material creation. Returns the new files to the caller; it never
@@ -27,6 +27,8 @@ class RepertoireCreationScreen extends StatefulWidget {
 }
 
 class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
+  AppLocalizations get l10n => AppLocalizations.of(context);
+
   final _name = TextEditingController();
   final _pgn = TextEditingController();
   final _form = GlobalKey<FormState>();
@@ -52,7 +54,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
       if (!mounted || picked == null) return;
       final source = picked.result;
       if (source == null) {
-        setState(() => _error = picked.error ?? 'Could not read that file.');
+        setState(() => _error = l10n.fileReadFailed);
         return;
       }
       setState(() {
@@ -62,7 +64,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
       });
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Could not open that file. Try again.');
+        setState(() => _error = l10n.fileOpenFailed);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -75,7 +77,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
     if (!_empty &&
         (pgn.countPgnGames(content) == 0 ||
             pgn.mainlineSansOf(content).isEmpty)) {
-      setState(() => _error = 'Open or paste a PGN with moves to train.');
+      setState(() => _error = l10n.creationNeedsMoves);
       return;
     }
     setState(() {
@@ -96,13 +98,11 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error =
-              e is RepertoireExistsException ||
-                  (e is RepertoireCreationUncertain ||
-                      e is RepertoirePreparationFailed ||
-                      e is RepertoireRecoveryRequired)
-              ? e.toString()
-              : 'Could not create the repertoire. Your input is still here; try again.';
+          _error = repertoireFailureMessage(
+            l10n,
+            e,
+            fallback: l10n.creationFailed,
+          );
         });
       }
     }
@@ -112,7 +112,7 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_busy,
     child: Scaffold(
-      appBar: AppBar(titleSpacing: 16, title: const Text('Create repertoire')),
+      appBar: AppBar(titleSpacing: 16, title: Text(l10n.createRepertoire)),
       bottomNavigationBar: SafeArea(
         child: Align(
           heightFactor: 1,
@@ -125,27 +125,34 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_error != null) ...[
-                    Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
                   ],
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  OverflowBar(
+                    alignment: MainAxisAlignment.end,
+                    overflowAlignment: OverflowBarAlignment.end,
+                    spacing: 12,
+                    overflowSpacing: 8,
                     children: [
                       TextButton(
                         onPressed: _busy
                             ? null
                             : () => Navigator.of(context).pop(),
-                        child: const Text('Cancel'),
+                        child: Text(l10n.cancel),
                       ),
-                      const SizedBox(width: 12),
                       FilledButton(
                         onPressed: _busy ? null : _create,
-                        child: Text(_busy ? 'Working…' : 'Create repertoire'),
+                        child: Text(
+                          _busy ? l10n.working : l10n.createRepertoire,
+                        ),
                       ),
                     ],
                   ),
@@ -166,31 +173,29 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Bring your lines. Start training.',
-                    style: AppTextStyles.title,
-                  ),
+                  Text(l10n.creationHeading, style: AppTextStyles.title),
                   const SizedBox(height: 20),
                   TextFormField(
                     key: const ValueKey('repertoire-create-name'),
                     controller: _name,
                     autofocus: true,
                     enabled: !_busy,
-                    decoration: const InputDecoration(
-                      labelText: 'Repertoire name',
-                      hintText: 'My Sicilian',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l10n.repertoireName,
+                      hintText: l10n.repertoireNameHint,
+                      errorMaxLines: 3,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (value) =>
-                        validateSafeFileName(value?.trim() ?? ''),
+                        repertoireNameProblem(l10n, value?.trim() ?? ''),
                   ),
                   const SizedBox(height: 20),
-                  const Text('Playing side', style: AppTextStyles.bodyStrong),
+                  Text(l10n.playingSide, style: AppTextStyles.bodyStrong),
                   const SizedBox(height: 8),
                   SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'White', label: Text('White')),
-                      ButtonSegment(value: 'Black', label: Text('Black')),
+                    segments: [
+                      ButtonSegment(value: 'White', label: Text(l10n.white)),
+                      ButtonSegment(value: 'Black', label: Text(l10n.black)),
                     ],
                     selected: {_color},
                     onSelectionChanged: _busy
@@ -202,16 +207,16 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                   ),
                   const SizedBox(height: 20),
                   SegmentedButton<bool>(
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: false,
-                        label: Text('Import PGN'),
-                        icon: Icon(Icons.file_open_outlined),
+                        label: Text(l10n.importPgn),
+                        icon: const Icon(Icons.file_open_outlined),
                       ),
                       ButtonSegment(
                         value: true,
-                        label: Text('Empty repertoire'),
-                        icon: Icon(Icons.add),
+                        label: Text(l10n.emptyRepertoire),
+                        icon: const Icon(Icons.add),
                       ),
                     ],
                     selected: {_empty},
@@ -228,11 +233,11 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                   const SizedBox(height: 16),
                   if (!_empty) ...[
                     Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: OutlinedButton.icon(
                         onPressed: _busy ? null : _pickFile,
                         icon: const Icon(Icons.folder_open),
-                        label: const Text('Open PGN file…'),
+                        label: Text(l10n.openPgnFile),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -243,17 +248,14 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
                       minLines: 7,
                       maxLines: 12,
                       style: AppTextStyles.mono,
-                      decoration: const InputDecoration(
-                        labelText: 'PGN moves',
-                        hintText: 'Paste your PGN here',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.pgnMoves,
+                        hintText: l10n.pgnPasteHint,
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                   ] else
-                    const Text(
-                      'Create a place for chapters and lines. Add moves before training.',
-                      style: AppTextStyles.muted,
-                    ),
+                    Text(l10n.emptyRepertoireHelp, style: AppTextStyles.muted),
                   const SizedBox(height: 24),
                 ],
               ),

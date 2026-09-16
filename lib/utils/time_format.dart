@@ -25,13 +25,25 @@ library;
 /// [now] is a parameter so tests do not have to run at a particular instant.
 /// A [when] in the future (a clock skew, a file written by another machine)
 /// reads as `just now` rather than a negative count.
-String formatTimeAgo(DateTime when, {DateTime? now}) {
+String formatTimeAgo(DateTime when, {DateTime? now}) =>
+    switch (timeAgoValue(when, now: now)) {
+      (TimeAgoUnit.now, _) => 'just now',
+      (TimeAgoUnit.minutes, final count) => '${count}m ago',
+      (TimeAgoUnit.hours, final count) => '${count}h ago',
+      (TimeAgoUnit.days, final count) => '${count}d ago',
+      (TimeAgoUnit.date, _) => '${when.month}/${when.day}',
+    };
+
+enum TimeAgoUnit { now, minutes, hours, days, date }
+
+/// Shared thresholds, independent of presentation and locale.
+(TimeAgoUnit, int) timeAgoValue(DateTime when, {DateTime? now}) {
   final diff = (now ?? DateTime.now()).difference(when);
-  if (diff.inMinutes < 1) return 'just now';
-  if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-  if (diff.inDays < 1) return '${diff.inHours}h ago';
-  if (diff.inDays < 7) return '${diff.inDays}d ago';
-  return '${when.month}/${when.day}';
+  if (diff.inMinutes < 1) return (TimeAgoUnit.now, 0);
+  if (diff.inHours < 1) return (TimeAgoUnit.minutes, diff.inMinutes);
+  if (diff.inDays < 1) return (TimeAgoUnit.hours, diff.inHours);
+  if (diff.inDays < 7) return (TimeAgoUnit.days, diff.inDays);
+  return (TimeAgoUnit.date, 0);
 }
 
 /// How long until [when]: `now`, `in 12m`, `in 5h`, `in 3d`, and then a bare

@@ -29,6 +29,16 @@ class BoundariesTest(unittest.TestCase):
     def test_infrastructure_cannot_own_presentation(self):
         self.assertTrue(violations('lib/infrastructure/repertoires/store.dart', "import '../../features/repertoires/controllers/editor.dart';"))
 
+    def test_localization_stays_in_presentation(self):
+        for path in (
+            'lib/features/repertoires/models/state.dart',
+            'lib/features/repertoires/controllers/catalog.dart',
+            'lib/infrastructure/repertoires/store.dart',
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(violations(path, "import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';"))
+        self.assertFalse(violations('lib/features/repertoires/widgets/catalog.dart', "import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';"))
+
     def test_injected_domain_dependencies_are_allowed(self):
         self.assertFalse(violations('lib/features/repertoires/controllers/example.dart', "import '../repositories/repertoire_catalog_repository.dart';"))
         self.assertFalse(violations('lib/infrastructure/repertoires/store.dart', "import '../../features/repertoires/repositories/repertoire_catalog_repository.dart';"))

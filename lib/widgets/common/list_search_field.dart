@@ -15,6 +15,7 @@ class ListSearchField extends StatefulWidget {
     required this.hintText,
     required this.onChanged,
     this.autofocus = false,
+    this.clearLabel = 'Clear search',
     this.onSubmitted,
     this.fillColor,
   });
@@ -24,6 +25,7 @@ class ListSearchField extends StatefulWidget {
   final String hintText;
   final ValueChanged<String> onChanged;
   final bool autofocus;
+  final String clearLabel;
   final Color? fillColor;
 
   /// Enter pressed in the box. Lists that can act on the top hit (a picker
@@ -93,7 +95,7 @@ class _ListSearchFieldState extends State<ListSearchField> {
           child: hasText
               ? IconButton(
                   icon: const Icon(Icons.close, size: 14),
-                  tooltip: 'Clear search',
+                  tooltip: widget.clearLabel,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(

@@ -1,3 +1,4 @@
+import 'l10n/generated/app_localizations.dart';
 import 'infrastructure/settings/fresh_desktop_preferences_store.dart';
 import 'dart:async';
 
@@ -119,6 +120,8 @@ class StartupErrorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       theme: AppTheme.dark(),
       home: Scaffold(
         body: SafeArea(
@@ -209,6 +212,8 @@ class ChessAutoPrepApp extends StatelessWidget {
         child: DisplaySettingsScope(
           settings: BoardDisplaySettings.instance,
           child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             title: 'Chess Auto Prep',
             theme: AppTheme.dark(),
             // Keep the semantics tree empty unless explicitly enabled —

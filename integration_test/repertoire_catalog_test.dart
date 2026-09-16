@@ -29,6 +29,9 @@ void main() {
   testWidgets('catalog create, search, rename, restart and recoverable delete', (
     tester,
   ) async {
+    // The production app resolves an unsupported desktop locale to English.
+    tester.platformDispatcher.localeTestValue = const Locale('fr', 'FR');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
     final suffix = DateTime.now().microsecondsSinceEpoch;
     final originalName = 'Renewal catalog $suffix';
     final renamedName = 'Renewed catalog $suffix';

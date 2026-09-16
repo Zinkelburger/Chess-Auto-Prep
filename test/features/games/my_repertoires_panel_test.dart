@@ -3,6 +3,7 @@
 /// what is already in the app, with "New empty repertoire…" at its foot.
 library;
 
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -110,6 +111,8 @@ void main() {
   }) async {
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SingleChildScrollView(
             child: MyRepertoiresPanel(

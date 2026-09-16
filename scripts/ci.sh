@@ -49,15 +49,18 @@ run_step() {
       return $bad
       ;;
     analyze)
+      "${JOB[@]}" run -- "$FLUTTER" gen-l10n || return $?
       "${JOB[@]}" run -- "$FLUTTER" analyze lib test integration_test --no-fatal-infos
       ;;
     test)
+      "${JOB[@]}" run -- "$FLUTTER" gen-l10n || return $?
       "${JOB[@]}" run -- "$FLUTTER" test --concurrency=2 "$@"
       ;;
     tools)
       "${JOB[@]}" run -- bash scripts/test_tools.sh
       ;;
     integration)
+      "${JOB[@]}" run -- "$FLUTTER" gen-l10n || return $?
       local targets=("$@")
       [[ ${#targets[@]} -gt 0 ]] || targets=(integration_test/app_test.dart)
       # Each executable gets its own display/bus. Reusing one Flutter device

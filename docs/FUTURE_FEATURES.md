@@ -25,8 +25,11 @@ write/retry states. Linux folder rename has journaled training/book-reference
 recovery. Linux journaled deletion and its Recovery/Restore UI now preserve
 files and training/book references, including interrupted restore. New Linux
 repertoires now publish complete staged chapter sets with verified manifests.
+The migrated catalog now has English ARB localization, typed message presentation,
+plural/date formatting and enlarged-label/text layout checks.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional
-splitting of existing chapters, design and full slice gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design
+splitting of existing chapters, remaining localization, design and full slice
+gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design
 principles, storage preservation gates and milestone sequence live in
 [ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). That document is the canonical
 implementation plan; this file retains the feature backlog. Update milestone

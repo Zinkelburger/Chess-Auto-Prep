@@ -13,6 +13,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
+
   # Chess functionality
   dartchess: ^0.13.1
 
@@ -68,6 +72,7 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.8
 
 flutter:
+  generate: true
   uses-material-design: true
 
   assets:

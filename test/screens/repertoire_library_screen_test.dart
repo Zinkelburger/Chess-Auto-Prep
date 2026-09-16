@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'dart:io';
 
@@ -40,7 +41,11 @@ void main() {
         tester,
         ChangeNotifierProvider.value(
           value: app,
-          child: const MaterialApp(home: RepertoireLibraryScreen()),
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: RepertoireLibraryScreen(),
+          ),
         ),
       );
       Future<void> until(bool Function() ready) async {

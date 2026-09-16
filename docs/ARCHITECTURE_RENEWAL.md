@@ -554,6 +554,57 @@ external editors. New-directory atomic publication does not prove the separate
 existing-document transaction gates. The first slice and full rewrite remain
 partial, with PLAN-02 still pending.
 
+### Localization checkpoint — migrated catalog presentation
+
+After publication checkpoint `2bc97d9f`, the first slice adopts Flutter's
+standard `flutter_localizations`, `intl` and `gen_l10n` workflow. English ARB
+source and generated typed accessors live in `lib/l10n/`; both production app
+roots register delegates and supported locales. This follows the plan's default
+and [Flutter's localization workflow](https://docs.flutter.dev/ui/internationalization).
+Only the SDK localization package and its pinned `intl` dependency were added.
+English is the sole supported locale; unsupported device locales resolve to it.
+
+UI-01/ARCH-01: migrated catalog labels, tooltips, validation, empty/error states,
+rename/delete/restore prompts and creation/import/paste messages use typed
+accessors. Plurals and formatted numbers are ARB messages; dates older than a
+week use locale month names and include the year. Relative-time thresholds stay
+shared with legacy callers. Pure `FileNameProblem` validation and typed repertoire
+failures are mapped to messages in presentation. Architecture lint rejects
+localization imports in migrated domain, controller and infrastructure layers.
+Shared controls accept resolved labels. PGN tags, stored IDs and canonical
+formats stay locale-independent; legacy UI localization remains with its owner.
+
+Expanded English labels at 100%/200% text exposed an overflowing creation action
+row. `OverflowBar` now stacks the actions when needed. Name dialogs scroll;
+paste errors no longer have a three-line truncation cap. Creation/paste errors
+are live regions. These checks cover the inexpensive expansion/scaling gate;
+full pseudo-localization/RTL matrices and other-language translations are not
+claimed. Existing theme/components remain until the design foundation migrates.
+
+The check runner now generates messages before analysis, Flutter tests and
+native integration checks. A direct test after an ARB edit had used stale
+accessors, so regeneration is an enforced check prerequisite rather than a
+manual memory requirement. Generated accessors are committed with their ARB.
+The real-I/O course-import widget fixture starts its action outside Flutter's
+fake-time zone so the native publication planner can complete; product code
+contains no test-specific shortcut.
+
+Verification: 57 focused tests and eight Linux desktop journeys pass. Analysis/
+lint passes with nine pre-existing informational findings, including seven
+architecture-boundary regression tests. The production catalog journey runs
+with an unsupported French device locale and verifies English fallback through
+create/search/rename/restart/delete/restore; the other native cases cover course
+imports, failed/uncertain publication, reference recovery and settings failures.
+Headless screenshots of [creation](images/architecture-renewal-localization-creation.png)
+and [paste validation](images/architecture-renewal-localization-paste-validation.png)
+were inspected. The private preview was stopped. Documentation links and shell
+syntax/whitespace checks pass. No Windows/macOS, full release or screen-reader
+certification is claimed.
+This checkpoint advances UI-01 and ARCH-01, but does not complete either the
+first slice or PLAN-02. Remaining first-slice work includes shared save/conflict
+interaction, persistent shell, design-system/Widgetbook, complete settings and
+native/recovery/performance gates. Milestones 3–7 retain their full scope.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
@@ -603,7 +654,7 @@ Host matrix: Linux local development/runtime is available. Windows/macOS native
 packaging, signing, reader accessibility, vault and forced-parent-death checks
 are **unverified**, not inferred from Linux. Remote crash reporting, telemetry
 and cloud sync remain outside scope. No package or runtime version has changed
-in S0. Riverpod 3/Widgetbook/ARB remain planned defaults for the first slice;
+in S0. Riverpod 3 and catalog ARB are now adopted; Widgetbook remains planned;
 SQLite remains the storage default and Drift remains deferred.
 
 Before starting 1/2, finish the missing inventory and record measured baseline

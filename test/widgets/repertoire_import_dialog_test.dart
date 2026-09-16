@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_creation.dart';
 import 'dart:async';
@@ -73,6 +74,8 @@ void main() {
     await pumpCatalogWidget(
       tester,
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
@@ -197,6 +200,8 @@ void main() {
       await pumpCatalogWidget(
         tester,
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: RepertoireListBody(
               pickPgn: () {
@@ -232,6 +237,8 @@ void main() {
       await pumpCatalogWidget(
         tester,
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: RepertoireListBody(onSelected: (value) => selected = value),
           ),
@@ -274,6 +281,8 @@ void main() {
     await pumpCatalogWidget(
       tester,
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: RepertoireListBody(onSelected: (_) {})),
       ),
     );
@@ -311,6 +320,8 @@ void main() {
     await pumpCatalogWidget(
       tester,
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: RepertoireListBody(onSelected: (value) => selected = value),
         ),
