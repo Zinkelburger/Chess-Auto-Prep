@@ -55,7 +55,7 @@ ID when a requirement changes. IDs stay stable if milestones are rearranged.
 | SET-01 | One writer per settings key; failed saves stay visible and active-job configuration is explicit. Test concurrent panels and restart. | [Settings](#settings-and-credentials) |
 | SEC-01 | Before migrating Accounts, verify native vault migration, restart and disconnect with synthetic secrets; no silent plaintext fallback. | [Credentials](#settings-and-credentials) |
 | PROC-01 | Owned workers/ports/processes terminate on the specified cancellation/shutdown paths; test failed startup and return to resource baseline. | [Supervision](#worker-and-engine-supervision) |
-| PROC-02 | Containment is established before engine execution; forced app death cleans up the supported descendant tree on each verified host. | [Supervision](#worker-and-engine-supervision) |
+| PROC-02 | A verified containment or parent-liveness mechanism is active before engine work; forced app death cleans up the supported descendant tree on each verified host. | [Supervision](#worker-and-engine-supervision) |
 | UI-01 | Slice controls share production tokens, ARB copy and Widgetbook fixtures; keyboard, contrast, long text and scaling checks pass. | [Visual direction](#visual-direction-a-calm-responsive-dark-workspace) |
 | UI-02 | Ordinary navigation retains shell/context; Back, picker cancellation and focus return preserve the document session. | [Shell](#persistent-shell-and-reusable-panels) |
 | UI-03 | Shared split panels respect size bounds, keyboard adjustment and saved-layout recovery; test narrow and wide windows. | [Panels](#persistent-shell-and-reusable-panels) |
@@ -252,6 +252,19 @@ The implementing agent owns each technical check and fallback under PLAN-01.
 | Panels | Defer splitting until workspace 3; then trial flutter_resizable_container behind SplitPane. | Bounds, keyboard, semantics or restoration checks fail within the spike budget. | Keep accessible fixed/reflowing panels; implement a narrow splitter only if the actual workspace needs it. |
 | Stream shaping | stream_transform for periodic latest snapshots when analysis migrates. | Burst/terminal/cancellation tests fail or required semantics need awkward workarounds. | Small tested transformer; RxDart only for demonstrated wider needs. |
 | Diagnostics/testing | Existing logging through a narrow interface, injected clock and hand-written boundary fakes. | Deterministic time or useful fake behavior requires excess plumbing. | Add clock/mocktail for that need; remote reporting and leak tooling remain separately justified. |
+
+Retaining an adapter is not permission to write a routing framework, ORM or
+code generator. In milestone 0, compare actual first-slice needs against these
+rejection checks; include a bounded Drift query/migration spike only if that
+slice needs a database change. Keep existing schema ownership otherwise. If
+navigation starts accumulating generic URL parsing, restoration or branch-stack
+machinery, trigger the go_router comparison before expanding the wrapper.
+[Router restoration still needs explicit configuration](https://pub.dev/documentation/go_router/latest/topics/State%20restoration-topic.html)
+and cannot restore arbitrary document/engine state for the app.
+[Riverpod generation is optional](https://riverpod.dev/docs/concepts/about_code_generation);
+measure its benefit/cost on this checkout rather than assuming either manual
+code or generation is always cheaper. Apply the recorded default until evidence
+triggers a change; external reviews alone do not restart package selection.
 
 Do not combine Provider, Riverpod and Bloc as permanent parallel choices.
 Experimental Riverpod mutation/persistence APIs are excluded from migrated
@@ -530,7 +543,21 @@ do not assume all UCI implementations exit promptly. Keep stdout and stderr
 drained even with no visible UI, retaining bounded ring buffers and dropping
 diagnostic excess. Test a chatty fake engine so output cannot deadlock search.
 
-Default Windows design: a native engine-launch adapter creates children inside
+Before adding a native launcher, run a bounded PROC-02 spike against the
+existing Dart Process/engine-lifecycle path and supported engine versions.
+Test forced parent termination during startup, idle and search, stdin EOF,
+descendants and redirected-output handling on available hosts. Reuse that path
+where it passes; reuse a maintained adapter/helper where it meets the same
+contract before writing new native code. A cleanup callback in the app cannot
+run after the app is killed, so orderly `dispose`/Process.kill tests alone are
+not enough. Record exact engine/host coverage, gaps and spike effort under
+PLAN-01; no fixed multiweek native project is implied by this plan.
+
+If existing mechanisms fail, the following are fallback designs for the affected
+backend, not a prerequisite to unrelated first-slice UI work. A helper is scoped
+to launching/supervising an engine; it is not an installed background daemon.
+
+Windows fallback: a native engine-launch adapter creates children inside
 a kill-on-close Job Object before execution, using a creation-time job list
 on supported Windows versions or suspended creation, assignment and resume.
 Keep the owning job handle non-inheritable. A failed assignment must terminate
@@ -541,7 +568,7 @@ App-level membership is an alternative only after those lifecycle effects are
 accepted. [Microsoft's creation-time job design](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812)
 is a native alternative to the race in start-then-assign wrappers.
 
-Default Linux/macOS design: a small persistent supervisor launches the engine
+Linux/macOS fallback: a small persistent supervisor launches the engine
 in a separate process group and monitors a dedicated parent-liveness pipe.
 Only the app owns the write end; engines/descendants must not inherit it. EOF
 triggers group TERM, bounded wait, then KILL and reaping. The supervisor must
@@ -554,17 +581,18 @@ are thread-parent-sensitive and are only a supplemental mechanism.
 Process groups do not contain descendants that escape via a new session/group.
 Linux [subreaper mode](https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html)
 helps adopt/reap orphans; it does not automatically signal all escaped children
-and is not a macOS API. Default supported engines must remain in the supervised
-group. Explicitly test any engine requiring stronger containment and withhold
-support until its tracked-descendant strategy passes. Package/sign the helper
+and is not a macOS API. Engines using this fallback must remain in its
+supervised group. Explicitly test engines requiring stronger containment and
+withhold support until their tracked-descendant strategy passes. Package/sign the helper
 on macOS and exercise Flatpak engine permissions. Keep engines inside the
 sandbox by default; host spawning needs a separately justified support policy.
 
 Scope forced-exit tests to the disposable app's tracked process tree. Establish
-containment before useful work, then kill the app during idle and active search;
-verify the bounded cleanup deadline and document/lock recovery on restart.
+the verified containment or parent-liveness mechanism before useful work, then
+kill the app during idle and active search; verify the bounded cleanup deadline and document/lock recovery on restart.
 If a host mechanism fails its acceptance tests, retain an already-proven backend
-or mark that backend unavailable; never silently launch without containment.
+or mark that backend unavailable; never claim cleanup coverage without the
+verified mechanism. Failed checks stay explicit while unrelated work proceeds.
 Record native checks not yet run as unverified, and never kill by process name.
 
 Give every worker, `ReceivePort`, subscription and timer a named owner and an
@@ -1043,6 +1071,21 @@ flush and rename costs too; never skip validation to meet a latency target.
 A one-app-per-profile policy is deferred unless the product owner selects it;
 it cannot replace contracts for tools, external editors or multiple isolates.
 
+V1 does not implement CFAPI/NSFileProvider hydration handlers or a cloud-sync
+engine. Use normal [asynchronous file I/O](https://api.dart.dev/dart-io/File-class.html),
+truthful pending/error state and the preservation contract below; waiting for
+remote data is not by itself synchronous UI-isolate blocking. Keep outstanding
+I/O bounded: a UI timeout may abandon a result but does not necessarily cancel
+the underlying operation. Reject late results and do not launch unbounded retries.
+
+Known sync-folder/capability hints may support actionable guidance to make a
+file available offline or save a copy locally; path-name heuristics are not
+reliable detection and cannot replace commit checks. Do not ban or relocate
+user PGNs automatically. Live SQLite remains subject to the separate local-store
+policy below. Native placeholder cases may use fault-injected fixtures plus
+manual host checks; provider-specific APIs require a demonstrated requirement
+and a separately budgeted increment. A warning does not make a failed save safe.
+
 Treat Documents and external PGNs as potentially synced, remote or redirected.
 Test unavailable/delayed placeholder reads, interrupted hydration, disk-full
 errors, Windows sharing violations and independently created conflict copies.
@@ -1185,15 +1228,40 @@ acceptance budgets before implementing the slice, then report actual results.
 
 ## Working method, checks and sizing
 
-For each slice, produce a short contract before coding: user task, current
-entry points, state owner, repository methods, failure/cancellation semantics,
-fixtures, UI examples and the old files to remove. Implement the smallest
-end-to-end case, exercise failure paths, inspect it, and then widen coverage.
+For each slice, keep a compact execution brief with its milestone evidence in
+this document; do not duplicate the whole plan into a new prompt. The brief is:
+
+- Exact starting commit and authorized user-visible outcome; explicit non-goals.
+- Required IDs and links to their owning sections, current entry points,
+  state/storage owners, interfaces and legacy files to retire.
+- Ordered smallest end-to-end change, failure cases, fixtures/UI examples,
+  exact bounded check commands and required hosts.
+- Effort/spike caps, unresolved decisions, stop conditions and compatibility plan.
+- Handoff checkpoint: commit, files changed, checks/results and next action.
+
+Refresh the brief when the code or accepted scope changes. An agent resuming work
+reads it, the linked contracts and applicable repository guidance, then verifies
+the checkout; a stale prompt cannot override current code/evidence. Present a
+reviewable diff and evidence at each milestone, identifying native or data-safety
+uncertainties for review. Product-owner UX/scope decisions follow the existing
+gates; routine already-authorized work needs no extra per-edit approval.
+Implement the smallest end-to-end case, exercise failure paths, inspect it, and
+then widen coverage.
+
 Record substantial choices with status, alternatives, evidence and consequences
 beside their owning section. Create a short ADR only when a cross-cutting choice
 has actually been selected and needs its own history; do not predeclare every
 candidate package as an accepted ADR. Update the component map only when a
 change actually exists.
+
+Estimate test work from a reuse inventory under PLAN-01: existing ci.sh checks,
+headless driver, integration_test, storage fixtures and engine doubles first;
+list only missing tests/harness changes for the slice. Separate feature, test,
+packaging and host-validation effort within the cap and keep a validation reserve.
+Do not mandate a 40–50% split without evidence or require every candidate tool
+before the first workflow. Widgetbook grows with its controls; Alchemist and new
+runners remain conditional. Reduce optional scope if validation does not fit;
+never drop preservation or lifecycle checks to meet the budget.
 
 Enforce architecture with import checks and analyzer rules: no widget I/O, no
 domain-to-UI dependencies, no new singleton access in migrated code and no
