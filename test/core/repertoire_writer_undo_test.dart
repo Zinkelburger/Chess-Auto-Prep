@@ -181,37 +181,28 @@ void main() {
       expect(writer.canUndo, isFalse);
     });
 
-    // Per-ply undo snapshots come from the service, which only produces them
-    // when there is a document to snapshot.  Indexing them unconditionally
-    // threw part-way through the add, leaving the tree extended and the undo
-    // stack half-built.
-    test('a multi-move add still works with no document to snapshot', () async {
-      controller.loadMoveHistory(['e4', 'e5']);
-      final noSnapshots = RepertoireWriter(
-        controller,
-        service: _NoSnapshotService(),
-      );
-
-      final path = await noSnapshots.addMovesAtPosition(
-        pathFromRoot: ['e4', 'e5'],
-        sans: ['Nf3', 'Nc6', 'Bb5'],
-      );
-
-      expect(path, ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']);
-      expect(controller.repertoireLines.first.moves, [
-        'e4',
-        'e5',
-        'Nf3',
-        'Nc6',
-        'Bb5',
-      ]);
-      // One undo entry per ply, as with a snapshotting service.
-      expect(await noSnapshots.undo(), isTrue);
-      expect(await noSnapshots.undo(), isTrue);
-      expect(await noSnapshots.undo(), isTrue);
-      expect(noSnapshots.canUndo, isFalse);
-      expect(controller.repertoireLines.first.moves, ['e4', 'e5']);
-    });
+    test(
+      'a file-backed malformed receipt never invents undo from memory',
+      () async {
+        controller.loadMoveHistory(['e4', 'e5']);
+        final noSnapshots = RepertoireWriter(
+          controller,
+          service: _NoSnapshotService(),
+        );
+        await expectLater(
+          noSnapshots.addMovesAtPosition(
+            pathFromRoot: ['e4', 'e5'],
+            sans: ['Nf3', 'Nc6', 'Bb5'],
+          ),
+          throwsStateError,
+        );
+        expect(noSnapshots.canUndo, isFalse);
+        // The deliberately broken adapter committed already. Keep its result
+        // on disk for recovery, without claiming the stale session can undo it.
+        expect(await File(filePath).readAsString(), contains('Bb5'));
+        expect(controller.repertoireLines.first.moves, ['e4', 'e5']);
+      },
+    );
   });
 }
 
@@ -241,10 +232,11 @@ class _NoSnapshotEditor extends RepertoireFileEditor {
       startingFen: startingFen,
       isWhiteRepertoire: isWhiteRepertoire,
     );
-    return (
+    return AppendMovesResult(
       success: real.success,
+      previousContent: real.previousContent,
       updatedContent: real.updatedContent,
-      snapshots: const <String>[],
+      steps: const [],
     );
   }
 }

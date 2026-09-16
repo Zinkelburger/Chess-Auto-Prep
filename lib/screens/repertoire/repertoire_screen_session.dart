@@ -411,14 +411,20 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
   /// same act with two sources, so they belong in one window rather than as
   /// two menu items that make the user commit before they see either.
   Future<void> _importPgn() async {
+    final destination = _controller.currentRepertoire;
+    var added = 0;
     final result = await showPgnImportDialog(
       context,
       confirmLabel: 'Add to repertoire',
+      onConfirm: (result) async {
+        if (!mounted ||
+            !identical(_controller.currentRepertoire, destination)) {
+          throw StateError('The selected chapter changed.');
+        }
+        added = await _controller.importPgnContent(result.pgnContent);
+      },
     );
     if (result == null || !mounted) return;
-
-    final added = await _controller.importPgnContent(result.pgnContent);
-    if (!mounted) return;
 
     showAppSnackBar(
       context,

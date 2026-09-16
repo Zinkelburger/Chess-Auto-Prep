@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Focused local checks. Full batch checks run in .github/workflows/ci.yml.
-# ci.sh [analyze|lint|format|test [FILES/OPTIONS...]|tools|integration|full]
+# ci.sh [analyze|lint|format|test [FILES/OPTIONS...]|tools|integration [FILES...]|full]
 # ci.sh with -- COMMAND... runs any heavy command under the same limits.
 set -uo pipefail
 CALLER_PWD=$PWD
@@ -52,7 +52,14 @@ run_step() {
       "${JOB[@]}" run -- bash scripts/test_tools.sh
       ;;
     integration)
-      "${JOB[@]}" run --headless -- "$FLUTTER" test integration_test/app_test.dart -d linux
+      local targets=("$@")
+      [[ ${#targets[@]} -gt 0 ]] || targets=(integration_test/app_test.dart)
+      # Each executable gets its own display/bus. Reusing one Flutter device
+      # session for multiple native test files can retain its debug connection.
+      local target
+      for target in "${targets[@]}"; do
+        "${JOB[@]}" run --headless -- "$FLUTTER" test "$target" -d linux || return $?
+      done
       ;;
     *) echo "ci.sh: unknown step '$step'" >&2; return 2 ;;
   esac
@@ -75,10 +82,10 @@ esac
 
 # A test followed by paths/options is a focused run; otherwise accept the
 # familiar list of named steps (e.g. analyze test lint).
-if [[ $1 == test && $# -gt 1 ]]; then
+if [[ ( $1 == test || $1 == integration ) && $# -gt 1 ]]; then
   case "$2" in
     format|analyze|test|tools|lint|integration) ;;
-    *) shift; run_step test "$@"; exit $? ;;
+    *) step=$1; shift; run_step "$step" "$@"; exit $? ;;
   esac
 fi
 for step in "$@"; do

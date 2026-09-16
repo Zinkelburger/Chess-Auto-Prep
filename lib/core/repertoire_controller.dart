@@ -16,6 +16,7 @@ import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/repertoire_line_expansion.dart';
+import '../services/repertoire_service.dart';
 import '../services/repertoire_pgn_text.dart';
 import '../services/repertoire_file_editor.dart';
 import '../services/storage/storage_factory.dart';
@@ -32,7 +33,14 @@ import '../utils/chess_utils.dart';
 /// All UI components should derive their chess position from this class.
 class RepertoireController
     with ChangeNotifier, MoveNavigation, SafeChangeNotifier {
-  late final RepertoireWriter writer = RepertoireWriter(this);
+  RepertoireController({RepertoireService? repertoireService})
+    : _repertoireService = repertoireService ?? RepertoireService();
+
+  final RepertoireService _repertoireService;
+  late final RepertoireWriter writer = RepertoireWriter(
+    this,
+    service: _repertoireService,
+  );
 
   /// Pure PGN-authoring collaborator (game/line construction).
   final RepertoireAuthoring _authoring = RepertoireAuthoring();
@@ -410,25 +418,27 @@ class RepertoireController
   // ── Tree mutation (for PGN editor actions) ───────────────────────
 
   /// Delete the subtree at [path] and adjust cursor.
-  /// Pushes an undo snapshot so the deletion can be reverted with Ctrl+Z.
+  /// Records a draft-only undo; this action does not write the chapter file.
   void deleteAtPath(TreePath target) {
     if (!_tree.isValidPath(target)) return;
 
-    final previousPgn = _repertoirePgn ?? '';
-    final movePath = _tree.sanSequenceAt(target);
-    writer.pushUndo(
-      UndoOperation(
-        previousPgn: previousPgn,
-        treePathBeforeAdd: movePath.isEmpty
-            ? []
-            : movePath.sublist(0, movePath.length - 1),
-        moveAdded: movePath.isNotEmpty ? movePath.last : '',
-      ),
-    );
-
+    final before = _tree.toPgnMoveText();
+    final startingFen = _tree.startingFen;
+    final oldCursor = _path;
+    final generation = _loadGeneration;
     final newCursor = target.parent;
     _tree.deleteAt(target);
     _path = _tree.isValidPath(newCursor) ? newCursor : TreePath.empty;
+    final after = _tree.toPgnMoveText();
+    writer.recordDraftUndo(
+      isCurrent: () =>
+          _loadGeneration == generation && _tree.toPgnMoveText() == after,
+      restore: () {
+        _tree = MoveTree.fromPgn(before, startingFen: startingFen);
+        _path = _tree.isValidPath(oldCursor) ? oldCursor : TreePath.empty;
+        _notifyStructureChanged();
+      },
+    );
     _notifyStructureChanged();
   }
 
@@ -944,14 +954,20 @@ class RepertoireController
   Future<void> setRepertoireColor(bool isWhite) async {
     if (_currentRepertoire == null) return;
     final filePath = _currentRepertoire!.filePath;
+    final generation = _loadGeneration;
     final storage = StorageFactory.instance;
-    if (!await storage.fileExists(filePath)) return;
 
     final colorLabel = isWhite ? 'White' : 'Black';
     final existing = await storage.readFile(filePath);
-    if (existing == null) return;
+    if (existing == null) {
+      throw StateError('The selected chapter is unavailable.');
+    }
     final updated = upsertMetadataComment(existing, '// Color:', colorLabel);
-    await storage.writeFile(filePath, updated);
+    await storage.writeFile(filePath, updated, expectedContent: existing);
+    if (_loadGeneration != generation ||
+        _currentRepertoire?.filePath != filePath) {
+      return;
+    }
     _needsColorSelection = false;
     await loadRepertoire();
   }
@@ -960,19 +976,24 @@ class RepertoireController
   Future<void> setRootPosition() async {
     if (_currentRepertoire == null) return;
     final filePath = _currentRepertoire!.filePath;
+    final generation = _loadGeneration;
     final storage = StorageFactory.instance;
-    if (!await storage.fileExists(filePath)) return;
 
     final moveText = _authoring.numberedMovetext(
       currentMoveSequence,
       startingFen: _tree.startingFen,
     );
-    _rootMoves = moveText;
-
     final existing = await storage.readFile(filePath);
-    if (existing == null) return;
+    if (existing == null) {
+      throw StateError('The selected chapter is unavailable.');
+    }
     final updated = upsertMetadataComment(existing, '// Root:', moveText);
-    await storage.writeFile(filePath, updated);
+    await storage.writeFile(filePath, updated, expectedContent: existing);
+    if (_loadGeneration != generation ||
+        _currentRepertoire?.filePath != filePath) {
+      return;
+    }
+    _rootMoves = moveText;
     _notifyStructureChanged();
   }
 
@@ -981,8 +1002,8 @@ class RepertoireController
     if (_currentRepertoire == null) return 0;
 
     final filePath = _currentRepertoire!.filePath;
+    final generation = _loadGeneration;
     final storage = StorageFactory.instance;
-    if (!await storage.fileExists(filePath)) return 0;
 
     // One game per line, the same way a new repertoire is seeded: a pasted
     // study's variations become lines of their own, or the trainer and this
@@ -991,15 +1012,24 @@ class RepertoireController
     final gameCount = expanded.gameCount;
 
     final existing = await storage.readFile(filePath);
-    if (existing == null) return 0;
+    if (existing == null) {
+      throw StateError('The selected chapter is unavailable.');
+    }
     final separator = existing.endsWith('\n\n')
         ? ''
         : existing.endsWith('\n')
         ? '\n'
         : '\n\n';
-    await storage.writeFile(filePath, '$existing$separator${expanded.pgn}\n');
+    await storage.writeFile(
+      filePath,
+      '$existing$separator${expanded.pgn}\n',
+      expectedContent: existing,
+    );
 
-    await loadRepertoire();
+    if (_loadGeneration == generation &&
+        _currentRepertoire?.filePath == filePath) {
+      await loadRepertoire();
+    }
 
     return gameCount > 0 ? gameCount : 1;
   }

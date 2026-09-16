@@ -925,13 +925,26 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       ),
     );
     if (isWhite != null && mounted) {
-      await _controller.setRepertoireColor(isWhite);
+      await _setRepertoireSide(isWhite);
       // The flip is chosen when a repertoire is opened, which for a file
       // with no colour happens before the colour is known. Re-apply it now
       // rather than leaving a Black repertoire looking at White's side.
       if (mounted) {
         setState(() => _boardFlipped = !_controller.isRepertoireWhite);
       }
+    }
+  }
+
+  Future<void> _setRepertoireSide(bool isWhite) async {
+    try {
+      await _controller.setRepertoireColor(isWhite);
+    } catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        'Playing side was not saved: $error',
+        isError: true,
+      );
     }
   }
 
@@ -1088,7 +1101,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           repertoireSettingsBuilder: (_) => RepertoireSettingsBody(
             isWhiteRepertoire: _controller.isRepertoireWhite,
             sideChangeEnabled: !_generationController.isGenerating,
-            onSideChanged: (isWhite) => _controller.setRepertoireColor(isWhite),
+            onSideChanged: _setRepertoireSide,
             boardSize: _layout.boardSize,
             onBoardSizeChanged: _layout.setBoardSize,
           ),

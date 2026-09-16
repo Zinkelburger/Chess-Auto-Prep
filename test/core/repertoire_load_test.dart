@@ -11,7 +11,6 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
-import 'package:chess_auto_prep/core/repertoire_writer.dart';
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
@@ -212,13 +211,7 @@ void main() {
     test('a load drops the undo stack', () async {
       storage.files['/a.pgn'] = _whitePgn;
       final controller = RepertoireController();
-      controller.writer.pushUndo(
-        const UndoOperation(
-          previousPgn: 'x',
-          treePathBeforeAdd: [],
-          moveAdded: 'e4',
-        ),
-      );
+      controller.writer.recordDraftUndo(isCurrent: () => true, restore: () {});
       expect(controller.writer.canUndo, isTrue);
 
       await controller.setRepertoire(_meta('/a.pgn'));
@@ -362,15 +355,21 @@ void main() {
       expect(controller.repertoireLines.single.color, 'black');
     });
 
-    test('setRepertoireColor on a missing file is a no-op', () async {
-      final controller = RepertoireController();
-      await controller.setRepertoire(_meta('/gone.pgn'));
+    test(
+      'setRepertoireColor reports a missing file without changing state',
+      () async {
+        final controller = RepertoireController();
+        await controller.setRepertoire(_meta('/gone.pgn'));
 
-      await controller.setRepertoireColor(false);
+        await expectLater(
+          controller.setRepertoireColor(false),
+          throwsStateError,
+        );
 
-      expect(controller.isRepertoireWhite, isTrue);
-      expect(storage.files, isEmpty);
-    });
+        expect(controller.isRepertoireWhite, isTrue);
+        expect(storage.files, isEmpty);
+      },
+    );
   });
 
   group('importPgnContent', () {
@@ -418,15 +417,19 @@ void main() {
       expect(storage.files['/a.pgn'], contains('1. e4 *\n\n[Event "C"]'));
     });
 
-    test('returns 0 and writes nothing when the file is missing', () async {
-      final controller = RepertoireController();
-      await controller.setRepertoire(_meta('/gone.pgn'));
+    test(
+      'reports failure and writes nothing when the file is missing',
+      () async {
+        final controller = RepertoireController();
+        await controller.setRepertoire(_meta('/gone.pgn'));
 
-      final added = await controller.importPgnContent('1. e4 *');
-
-      expect(added, 0);
-      expect(storage.files, isEmpty);
-    });
+        await expectLater(
+          controller.importPgnContent('1. e4 *'),
+          throwsStateError,
+        );
+        expect(storage.files, isEmpty);
+      },
+    );
   });
 
   group('a superseded load applies nothing', () {

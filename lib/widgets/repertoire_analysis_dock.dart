@@ -20,6 +20,7 @@ import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
+import '../utils/app_messages.dart' show showAppSnackBar;
 import '../utils/chess_utils.dart'
     show formatEvalDisplay, formatPackedEval, uciToSan;
 import '../utils/ease_utils.dart' show expectedCpFromWinProb;
@@ -258,9 +259,19 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       },
       onSetRoot: widget.controller.rootMoves.isEmpty
           ? () async {
-              await widget.controller.setRootPosition();
-              EngineSettings.instance.probabilityStartMoves =
-                  widget.controller.rootMoves;
+              try {
+                await widget.controller.setRootPosition();
+                if (!mounted) return;
+                EngineSettings.instance.probabilityStartMoves =
+                    widget.controller.rootMoves;
+              } catch (error) {
+                if (!mounted) return;
+                showAppSnackBar(
+                  context,
+                  'Root position was not saved: $error',
+                  isError: true,
+                );
+              }
             }
           : null,
     );

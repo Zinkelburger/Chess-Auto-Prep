@@ -32,13 +32,67 @@ typedef RepertoirePgnDocument = ({
   String originalContent,
 });
 
-/// The result of appending moves to a chapter: the document as written, and
-/// how it stood after each ply (the last snapshot is [updatedContent]).
-typedef AppendMovesResult = ({
-  bool success,
-  String updatedContent,
-  List<String> snapshots,
-});
+/// Storage-derived logical step. Intermediate steps are not disk commits.
+class AppendMoveStep {
+  AppendMoveStep({
+    required List<String> pathBefore,
+    required this.san,
+    required this.content,
+  }) : pathBefore = List.unmodifiable(pathBefore);
+
+  final List<String> pathBefore;
+  final String san;
+  final String content;
+}
+
+/// The before-content and logical steps of the same validated commit.
+/// A successful empty step list represents a no-op, never an undo entry.
+class AppendMovesResult {
+  AppendMovesResult({
+    required this.success,
+    required this.previousContent,
+    required this.updatedContent,
+    required List<AppendMoveStep> steps,
+  }) : steps = List.unmodifiable(steps);
+
+  final bool success;
+  final String previousContent;
+  final String updatedContent;
+  final List<AppendMoveStep> steps;
+
+  /// Validate before writing and again at the session boundary. A broken
+  /// adapter must not install partial history or invent memory-based receipts.
+  void validate({required List<String> requestedPath}) {
+    var previous = previousContent;
+    for (var i = 0; i < steps.length; i++) {
+      final step = steps[i];
+      if (!listEquals([
+            ...step.pathBefore,
+            step.san,
+          ], requestedPath.take(step.pathBefore.length + 1).toList()) ||
+          step.content == previous ||
+          step.san.isEmpty ||
+          (i > 0 &&
+              !listEquals(step.pathBefore, [
+                ...steps[i - 1].pathBefore,
+                steps[i - 1].san,
+              ]))) {
+        throw StateError('Invalid ordered PGN mutation receipt');
+      }
+      previous = step.content;
+    }
+    if (previous != updatedContent ||
+        (steps.isNotEmpty &&
+            !listEquals([
+              ...steps.last.pathBefore,
+              steps.last.san,
+            ], requestedPath))) {
+      throw StateError(
+        'Incomplete PGN mutation receipt; keep the saved document for recovery',
+      );
+    }
+  }
+}
 
 /// Splits a PGN document into its `//` preamble and its games, exactly as
 /// [pgn.splitPgnIntoGames] indexes them.
@@ -630,7 +684,7 @@ class RepertoireFileEditor {
 
   /// Appends [san] after [pathFromRoot] in the best-matching game, or adds a
   /// new game when no exact prefix match exists.
-  Future<({bool success, String updatedContent})> appendMoveAtPath(
+  Future<AppendMovesResult> appendMoveAtPath(
     String filePath,
     List<String> pathFromRoot,
     String san, {
@@ -644,7 +698,7 @@ class RepertoireFileEditor {
       startingFen: startingFen,
       isWhiteRepertoire: isWhiteRepertoire,
     );
-    return (success: result.success, updatedContent: result.updatedContent);
+    return result;
   }
 
   /// Appends [newSans] after [pathFromRoot]: onto the game whose mainline is
@@ -655,7 +709,7 @@ class RepertoireFileEditor {
   ///
   /// Equivalent to calling [appendMoveAtPath] once per ply: after the first
   /// append the game's mainline is the extended prefix, so every later ply
-  /// lands on the same game.  [AppendMovesResult.snapshots] holds the
+  /// lands on the same game.  [AppendMovesResult.steps] holds the
   /// document as it would have stood after each ply, so a caller keeping
   /// per-ply undo history has the same states the per-ply writes produced —
   /// assembled in memory, never written.
@@ -666,54 +720,87 @@ class RepertoireFileEditor {
     String? startingFen,
     bool isWhiteRepertoire = true,
   }) async {
-    final file = io.File(filePath);
-    if (!await file.exists()) {
-      return (success: false, updatedContent: '', snapshots: const <String>[]);
-    }
-
-    final content = await readTextFile(file);
-    if (newSans.isEmpty) {
-      return (
-        success: true,
-        updatedContent: content,
-        snapshots: const <String>[],
+    final content = await readTextFileSafely(io.File(filePath));
+    if (content == null) {
+      return AppendMovesResult(
+        success: false,
+        previousContent: '',
+        updatedContent: '',
+        steps: const [],
       );
     }
-    final document = splitRepertoireDocument(content);
-    final games = List<String>.from(document.games);
-
-    // The mainline is all that decides a match, and lexing it is a fraction
-    // of building each game's move tree.
-    final exactMatchIndex = games.indexWhere(
-      (game) => listEquals(pgn.mainlineSansOf(game), pathFromRoot),
+    final result = prepareAppendMoves(
+      content,
+      pathFromRoot,
+      newSans,
+      startingFen: startingFen,
+      isWhiteRepertoire: isWhiteRepertoire,
     );
-
-    final snapshots = <String>[];
-    var prefix = pathFromRoot;
-    for (final san in newSans) {
-      if (exactMatchIndex >= 0) {
-        games[exactMatchIndex] = appendSanToGamePgn(
-          games[exactMatchIndex],
-          prefix,
-          san,
-        );
-      } else if (prefix.length == pathFromRoot.length) {
-        games.add(
-          buildMinimalGamePgn(
-            [...pathFromRoot, san],
-            startingFen: startingFen,
-            isWhiteRepertoire: isWhiteRepertoire,
-          ),
-        );
-      } else {
-        games[games.length - 1] = appendSanToGamePgn(games.last, prefix, san);
-      }
-      prefix = [...prefix, san];
-      snapshots.add(reassemblePgnDocument(document.preamble, games));
+    result.validate(requestedPath: [...pathFromRoot, ...newSans]);
+    if (result.steps.isNotEmpty) {
+      await writeTextFileAtomically(
+        io.File(filePath),
+        result.updatedContent,
+        expectedContent: content,
+      );
     }
-
-    final updated = snapshots.last;
-    await writeTextFileAtomically(file, updated, expectedContent: content);
-    return (success: true, updatedContent: updated, snapshots: snapshots);
+    return result;
   }
+}
+
+/// Pure preparation shared with sessions which have no backing file. Disk
+/// callers must validate [AppendMovesResult.previousContent] at commit.
+AppendMovesResult prepareAppendMoves(
+  String content,
+  List<String> pathFromRoot,
+  List<String> newSans, {
+  String? startingFen,
+  bool isWhiteRepertoire = true,
+}) {
+  final document = splitRepertoireDocument(content);
+  final games = List<String>.from(document.games);
+  final mainlines = games.map(pgn.mainlineSansOf).toList();
+  final steps = <AppendMoveStep>[];
+  var prefix = List<String>.of(pathFromRoot);
+  for (final san in newSans) {
+    final next = [...prefix, san];
+    // The disk baseline may already include a move absent from controller
+    // memory. Do not create a duplicate game or phantom undo in that case.
+    if (mainlines.any(
+      (line) =>
+          line.length >= next.length &&
+          listEquals(line.take(next.length).toList(), next),
+    )) {
+      prefix = next;
+      continue;
+    }
+    final match = mainlines.indexWhere((line) => listEquals(line, prefix));
+    if (match >= 0) {
+      games[match] = appendSanToGamePgn(games[match], prefix, san);
+      mainlines[match] = next;
+    } else {
+      games.add(
+        buildMinimalGamePgn(
+          next,
+          startingFen: startingFen,
+          isWhiteRepertoire: isWhiteRepertoire,
+        ),
+      );
+      mainlines.add(next);
+    }
+    steps.add(
+      AppendMoveStep(
+        pathBefore: prefix,
+        san: san,
+        content: reassemblePgnDocument(document.preamble, games),
+      ),
+    );
+    prefix = next;
+  }
+  return AppendMovesResult(
+    success: true,
+    previousContent: content,
+    updatedContent: steps.isEmpty ? content : steps.last.content,
+    steps: steps,
+  );
 }

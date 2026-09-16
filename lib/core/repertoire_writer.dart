@@ -1,244 +1,289 @@
-/// Atomic repertoire mutations (one-click browse add, suggestion accept).
+/// Serialized repertoire mutations and storage-derived undo history.
 library;
 
 import 'package:dartchess/dartchess.dart';
 
 import '../features/coverage/services/coverage_suggestion_service.dart';
+import '../services/repertoire_file_editor.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
+import '../utils/atomic_file.dart';
 import '../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
 import 'repertoire_controller.dart';
 
-/// Snapshot captured before a single browse/suggestion add for undo.
-class UndoOperation {
-  const UndoOperation({
-    required this.previousPgn,
-    required this.treePathBeforeAdd,
-    required this.moveAdded,
+sealed class _UndoEntry {}
+
+/// Immutable provenance is separate from the expectation advanced by undo.
+class _SavedUndo extends _UndoEntry {
+  _SavedUndo({
+    required this.before,
+    required this.after,
+    required this.path,
+    required this.filePath,
+    required this.id,
+    required this.predecessorId,
   });
 
-  /// Full repertoire PGN before the add.
-  final String previousPgn;
-
-  /// Opening-tree path (prefix) at the position where the move was added.
-  final List<String> treePathBeforeAdd;
-
-  /// SAN move that was appended.
-  final String moveAdded;
+  final String before;
+  final String after;
+  final List<String> path;
+  final String? filePath;
+  final int id;
+  final int? predecessorId;
+  String? expectedContent;
 }
 
-/// Serialised writer for PGN + in-memory repertoire updates.
+/// A scratch-tree edit never authorizes replacing a file-backed document.
+class _DraftUndo extends _UndoEntry {
+  _DraftUndo(this.isCurrent, this.restore);
+  final bool Function() isCurrent;
+  final void Function() restore;
+}
+
 class RepertoireWriter {
-  static const int _maxUndoOperations = 20;
-
-  final RepertoireController _controller;
-  final RepertoireService _service;
-
-  Future<void> _queueTail = Future.value();
-  final List<UndoOperation> _undoStack = [];
-
   RepertoireWriter(this._controller, {RepertoireService? service})
     : _service = service ?? RepertoireService();
 
+  static const int _maxUndoOperations = 20;
+  final RepertoireController _controller;
+  final RepertoireService _service;
+  Future<void> _queueTail = Future.value();
+  final List<_UndoEntry> _undoStack = [];
+  int _session = 0;
+  int _nextUndoId = 0;
+
   bool get canUndo => _undoStack.isNotEmpty;
 
-  void clearUndoStack() => _undoStack.clear();
-
-  /// Push an undo snapshot (used internally and by controller for delete ops).
-  void pushUndo(UndoOperation operation) {
-    _undoStack.add(operation);
-    if (_undoStack.length > _maxUndoOperations) {
-      _undoStack.removeAt(0);
-    }
+  void clearUndoStack() {
+    _session++;
+    _undoStack.clear();
   }
 
-  Future<T> _serialExec<T>(Future<T> Function() fn) async {
+  void recordDraftUndo({
+    required bool Function() isCurrent,
+    required void Function() restore,
+  }) => _push(_DraftUndo(isCurrent, restore));
+
+  void _push(_UndoEntry entry) {
+    _undoStack.add(entry);
+    if (_undoStack.length > _maxUndoOperations) _undoStack.removeAt(0);
+  }
+
+  Future<T> _serialExec<T>(Future<T> Function() fn) {
     final result = _queueTail.then((_) => fn());
     _queueTail = result.then((_) {}, onError: (_) {});
     return result;
   }
 
-  /// Add [san] at [fen] along [pathFromRoot]. No-op if already in repertoire.
-  ///
-  /// Returns the move path after the add (including [san]).
+  /// Invocations capture the document session before joining the queue.
+  /// A load/reset invalidates queued actions, even for an A -> B -> A switch.
   Future<List<String>> addMoveAtPosition({
     required String fen,
     required String san,
     required List<String> pathFromRoot,
-  }) {
-    return _serialExec(() async {
-      final tree = _controller.openingTree;
-      if (tree != null && tree.hasMove(fen, san)) {
-        return [...pathFromRoot, san];
-      }
+  }) => addMovesAtPosition(pathFromRoot: pathFromRoot, sans: [san]);
 
-      final previousPgn = _controller.repertoirePgn ?? '';
-      final newPath = [...pathFromRoot, san];
-      final filePath = _controller.currentRepertoire?.filePath;
-
-      String? updatedPgn;
-      if (filePath != null && filePath.isNotEmpty) {
-        final result = await _service.files.appendMoveAtPath(
-          filePath,
-          pathFromRoot,
-          san,
-          startingFen: _controller.startingFen,
-          isWhiteRepertoire: _controller.isRepertoireWhite,
-        );
-        if (!result.success) {
-          throw StateError('Failed to append move to repertoire PGN');
-        }
-        updatedPgn = result.updatedContent;
-      }
-
-      _controller.appendMoveToExistingLine(
-        pathFromRoot,
-        san,
-        updatedPgnContent: updatedPgn,
-      );
-
-      pushUndo(
-        UndoOperation(
-          previousPgn: previousPgn,
-          treePathBeforeAdd: List<String>.from(pathFromRoot),
-          moveAdded: san,
-        ),
-      );
-
-      return newPath;
-    });
-  }
-
-  /// Reverts the last [addMoveAtPosition] / [acceptSuggestion] add.
-  ///
-  /// Returns `true` when an operation was undone.
-  Future<bool> undo() {
-    return _serialExec(() async {
-      if (_undoStack.isEmpty) return false;
-
-      final op = _undoStack.removeLast();
-      final filePath = _controller.currentRepertoire?.filePath;
-      if (filePath != null && filePath.isNotEmpty) {
-        await StorageFactory.instance.writeFile(filePath, op.previousPgn);
-      }
-
-      await _controller.restoreRepertoireFromPgn(
-        op.previousPgn,
-        syncPath: op.treePathBeforeAdd,
-      );
-      return true;
-    });
-  }
-
-  /// Add [sans] one after another at the end of [pathFromRoot], skipping the
-  /// leading plies the repertoire already has.  The plies that are new are
-  /// written to disk in **one** read/lex/write ([RepertoireService
-  /// .appendMovesAtPath]) instead of one per ply, then folded into the
-  /// in-memory lines and tree.
-  ///
-  /// Returns the move path after the add (the full line).  Undo history is
-  /// still one entry per ply — the service hands back the document as it
-  /// stood after each — so undoing a suggestion peels moves off one at a
-  /// time, as it always has.
   Future<List<String>> addMovesAtPosition({
     required List<String> pathFromRoot,
     required List<String> sans,
   }) {
-    if (sans.isEmpty) return Future.value(List<String>.from(pathFromRoot));
+    final prefix = List<String>.unmodifiable(pathFromRoot);
+    final moves = List<String>.unmodifiable(sans);
+    final session = _session;
+    final filePath = _filePath;
+    final startingFen = _controller.startingFen;
+    final isWhite = _controller.isRepertoireWhite;
     return _serialExec(() async {
-      final tree = _controller.openingTree;
-      var position = _positionAtPath(pathFromRoot);
-      var path = List<String>.from(pathFromRoot);
-
-      // Skip the prefix that is already book; the first unknown ply and
-      // everything after it is what gets written.
+      _requireSession(session);
+      if (moves.isEmpty) return List<String>.of(prefix);
+      // Keep the repertoire's existing transposition semantics: moves already
+      // known at this position are no-ops, even through another SAN path.
+      var position = _positionAtPath(prefix);
       var firstNew = 0;
-      while (firstNew < sans.length &&
-          tree != null &&
-          tree.hasMove(position.fen, sans[firstNew])) {
-        final next = playSanOrNullMove(position, sans[firstNew]);
+      while (firstNew < moves.length &&
+          (_controller.openingTree?.hasMove(position.fen, moves[firstNew]) ??
+              false)) {
+        final next = playSanOrNullMove(position, moves[firstNew]);
         if (next == null) break;
         position = next;
-        path.add(sans[firstNew]);
         firstNew++;
       }
-      final newSans = sans.sublist(firstNew);
-      if (newSans.isEmpty) return path;
-
-      final previousPgn = _controller.repertoirePgn ?? '';
-      final prefix = List<String>.from(path);
-      final filePath = _controller.currentRepertoire?.filePath;
-
-      String? updatedPgn;
-      var snapshots = const <String>[];
-      if (filePath != null && filePath.isNotEmpty) {
-        final result = await _service.files.appendMovesAtPath(
-          filePath,
-          prefix,
-          newSans,
-          startingFen: _controller.startingFen,
-          isWhiteRepertoire: _controller.isRepertoireWhite,
-        );
-        if (!result.success) {
-          throw StateError('Failed to append moves to repertoire PGN');
+      if (firstNew == moves.length) return [...prefix, ...moves];
+      final appendPrefix = [...prefix, ...moves.take(firstNew)];
+      final newMoves = moves.sublist(firstNew);
+      final result = filePath == null
+          ? prepareAppendMoves(
+              _controller.repertoirePgn ?? '',
+              appendPrefix,
+              newMoves,
+              startingFen: startingFen,
+              isWhiteRepertoire: isWhite,
+            )
+          : await _service.files.appendMovesAtPath(
+              filePath,
+              appendPrefix,
+              newMoves,
+              startingFen: startingFen,
+              isWhiteRepertoire: isWhite,
+            );
+      if (!result.success) throw StateError('The repertoire is unavailable.');
+      // The adapter already validates before commit. Defensively reject broken
+      // receipts here without inventing undo from stale controller memory.
+      result.validate(requestedPath: [...prefix, ...moves]);
+      _requireSession(
+        session,
+        committed: filePath != null && result.steps.isNotEmpty,
+      );
+      _acceptReceipt(result, filePath);
+      if (result.previousContent == _controller.repertoirePgn) {
+        // Preserve the existing incremental presentation path when the
+        // session really owns the validated baseline. External changes need
+        // a full refresh so their annotations/games also reach the UI.
+        for (final step in result.steps) {
+          if (session != _session) break;
+          _controller.appendMoveToExistingLine(
+            step.pathBefore,
+            step.san,
+            updatedPgnContent: step.content,
+          );
         }
-        updatedPgn = result.updatedContent;
-        snapshots = result.snapshots;
-      }
-
-      // The controller extends its lines and tree one ply at a time; the
-      // file content is handed over with the last ply, once the in-memory
-      // line already holds the earlier ones, so the two stay consistent.
-      for (var i = 0; i < newSans.length; i++) {
-        // Snapshots only exist for a file-backed repertoire; an in-memory one
-        // has no per-ply document, so every ply undoes to the state before
-        // the whole add — which is what one-ply-at-a-time adds recorded too.
-        // The bound is checked rather than assumed: a short snapshot list
-        // must degrade to that same fallback, not throw mid-add.
-        final snapshot = i > 0 && i - 1 < snapshots.length
-            ? snapshots[i - 1]
-            : previousPgn;
-        pushUndo(
-          UndoOperation(
-            previousPgn: snapshot,
-            treePathBeforeAdd: List<String>.from(path),
-            moveAdded: newSans[i],
-          ),
+      } else {
+        await _controller.restoreRepertoireFromPgn(
+          result.updatedContent,
+          syncPath: _controller.currentMoveSequence,
         );
-        _controller.appendMoveToExistingLine(
-          path,
-          newSans[i],
-          updatedPgnContent: i == newSans.length - 1 ? updatedPgn : null,
-        );
-        path = [...path, newSans[i]];
       }
-
-      return path;
+      _requireSession(
+        session,
+        committed: filePath != null && result.steps.isNotEmpty,
+      );
+      return [...prefix, ...moves];
     });
   }
 
-  /// Apply [suggestion.newMoves] after the existing prefix in [suggestion.fullMoves].
+  String? get _filePath {
+    final path = _controller.currentRepertoire?.filePath;
+    return path == null || path.isEmpty ? null : path;
+  }
+
+  void _requireSession(int session, {bool committed = false}) {
+    if (session != _session) {
+      throw StateError('The repertoire changed before the action could run.');
+    }
+  }
+
+  void _acceptReceipt(AppendMovesResult receipt, String? filePath) {
+    if (receipt.steps.isEmpty) return;
+    final head = _undoStack.lastOrNull;
+    int? predecessorId;
+    if (head is _SavedUndo &&
+        head.filePath == filePath &&
+        head.expectedContent == receipt.previousContent &&
+        head.after == receipt.previousContent) {
+      predecessorId = head.id;
+    }
+    // An unrelated edit breaks the chain permanently. Even a later undo
+    // restoring equal-looking content must not re-arm the old history.
+    if (head is _SavedUndo) head.expectedContent = null;
+    var before = receipt.previousContent;
+    for (final step in receipt.steps) {
+      final entry = _SavedUndo(
+        before: before,
+        after: step.content,
+        path: step.pathBefore,
+        filePath: filePath,
+        id: _nextUndoId++,
+        predecessorId: predecessorId,
+      );
+      _push(entry);
+      predecessorId = entry.id;
+      before = step.content;
+    }
+    (_undoStack.last as _SavedUndo).expectedContent = receipt.updatedContent;
+  }
+
+  /// Only a confirmed commit consumes history. Failures and conflicts retain
+  /// the entry; the compare-and-swap never uses freshly read arbitrary content
+  /// to refresh an old entry's expectation.
+  Future<bool> undo() {
+    final session = _session;
+    return _serialExec(() async {
+      _requireSession(session);
+      if (_undoStack.isEmpty) return false;
+      final entry = _undoStack.last;
+      if (entry is _DraftUndo) {
+        if (!entry.isCurrent()) {
+          throw StateError(
+            'The draft changed after this edit; undo is unavailable.',
+          );
+        }
+        entry.restore();
+        _undoStack.removeLast();
+        return true;
+      }
+      final op = entry as _SavedUndo;
+      final expected = op.expectedContent;
+      if (expected == null) throw AtomicWriteConflict(op.filePath ?? 'draft');
+      final filePath = op.filePath;
+      if (filePath != null) {
+        final storage = StorageFactory.instance;
+        try {
+          await storage.writeFile(
+            filePath,
+            op.before,
+            expectedContent: expected,
+          );
+        } on AtomicWriteConflict {
+          rethrow;
+        } catch (_) {
+          // A transport/finalization error may follow installation. Under
+          // S0's decoded-content contract, reconcile only this attempted
+          // result, never a different current value or a fresh expectation.
+          final actual = await storage.readFile(filePath);
+          if (actual != op.before) rethrow;
+        }
+      } else if (_controller.repertoirePgn != expected) {
+        throw const AtomicWriteConflict('draft');
+      }
+      if (session != _session) return true;
+      if (!identical(_undoStack.lastOrNull, op)) {
+        // A synchronous scratch edit arrived while storage was committing.
+        // Consume only this confirmed undo and preserve the newer draft.
+        _undoStack.remove(op);
+        return true;
+      }
+      _undoStack.removeLast();
+      final predecessor = _undoStack.lastOrNull;
+      if (predecessor is _SavedUndo &&
+          predecessor.id == op.predecessorId &&
+          predecessor.after == op.before) {
+        predecessor.expectedContent = op.before;
+      }
+      // Publish history before refreshing UI: a failed refresh must never
+      // replay an already committed undo on retry.
+      await _controller.restoreRepertoireFromPgn(op.before, syncPath: op.path);
+      return true;
+    });
+  }
+
+  Position _positionAtPath(List<String> moves) {
+    final start = _controller.startingFen;
+    var position = start == null
+        ? Chess.initial
+        : tryParseFen(start) ?? Chess.initial;
+    for (final san in moves) {
+      final next = playSanOrNullMove(position, san);
+      if (next == null) break;
+      position = next;
+    }
+    return position;
+  }
+
   Future<List<String>> acceptSuggestion(SuggestedLine suggestion) {
-    if (suggestion.newMoves.isEmpty) return Future.value(suggestion.fullMoves);
     final prefixLen = suggestion.fullMoves.length - suggestion.newMoves.length;
     return addMovesAtPosition(
       pathFromRoot: suggestion.fullMoves.sublist(0, prefixLen),
       sans: suggestion.newMoves,
     );
-  }
-
-  /// The board after [moves] from the repertoire's start position, replayed
-  /// once; an illegal move ends the replay where it stands.
-  Position _positionAtPath(List<String> moves) {
-    final startingFen = _controller.startingFen;
-    var pos = startingFen == null
-        ? Chess.initial
-        : tryParseFen(startingFen) ?? Chess.initial;
-    for (final san in moves) {
-      final next = playSanOrNullMove(pos, san);
-      if (next == null) break;
-      pos = next;
-    }
-    return pos;
   }
 }
