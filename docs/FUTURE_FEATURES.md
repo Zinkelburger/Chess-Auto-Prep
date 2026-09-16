@@ -92,6 +92,7 @@ implementation starts. Until then, current placement rules remain in force.
 lib/
   app/                    # startup, dependency wiring, routes, app lifetime
   design_system/          # theme, design values, controls, layout primitives
+  diagnostics/            # narrow logging/failure contracts, no vendor SDK
   chess_core/             # pure Dart chess concepts and algorithms
   infrastructure/         # filesystem, SQLite, HTTP, engine-process adapters
   features/
@@ -110,6 +111,13 @@ test/                     # mirrors ownership; shared contract fixtures
 Start with directories, not a separate package for every feature. Extract a
 pure Dart package only when shared CLI use or enforceable isolation warrants
 it. Do not create a new catch-all `core` or `utils` directory.
+
+A separate internal Flutter package for the design system is an option after
+the first catalog proves its API. Its dependency graph must exclude the app and
+features; package boundaries still need import enforcement. Keep contracts near
+the concept they serve: repository contracts with their domain, diagnostic
+contracts in `diagnostics/`. Add a common result type only when callers share
+its semantics, rather than creating a miscellaneous directory of interfaces.
 
 Dependencies follow these rules:
 
@@ -136,6 +144,12 @@ interactive engine. Define cancellation, progress, resource limits, shutdown
 and stale-result rejection for each job type. Reuse existing lifecycle and
 RunControl behavior until the replacement passes its contract tests.
 
+Riverpod may compose dependencies and expose repository streams as well as own
+presentation state. It is never a second durable source of truth: repositories
+own persistence through the appropriate document, database or preference adapter.
+Controllers translate user intent into repository/workflow calls; JSON parsing,
+SQL execution and isolate/process supervision belong behind those boundaries.
+
 ### Package decisions
 
 Resolve stable, SDK-compatible versions at implementation time. Every adoption
@@ -151,13 +165,85 @@ maintenance status, code-generation cost and a focused validation result.
 | Models | Freezed and json_serializable where they remove substantial boilerplate; plain Dart sealed classes/records for small types. Generated code never replaces input validation or format versioning. |
 | Files | Consider package:file inside adapters for deterministic tests. Retain real OS tests for locks, symlinks, atomic replacement and interrupted recovery. |
 | Network | Evaluate Dio behind API-specific clients; preserve rate limits, streaming and authentication behavior. One retry policy per operation; never retry a mutation blindly. Keep http if it already meets the contract more simply. |
-| Navigation | Evaluate go_router against retained document sessions, Back behavior, external PGN opening and deep links. A route identifies a destination; it does not own an engine job. |
+| Navigation | Evaluate go_router with go_router_builder for typed internal navigation against retained document sessions, Back behavior, external PGN opening and deep links. External URLs and missing/deleted IDs still need runtime validation. A route identifies a destination; it does not own an engine job. |
 | Diagnostics/testing | Standardize logging behind one interface; consider clock and mocktail where useful. Use structured run IDs, stages and error causes, with token redaction and bounded log retention. |
 
 Do not run Provider, Riverpod and Bloc as competing permanent choices. Riverpod
 3's experimental persistence/mutation APIs are not the foundation for durable
 user data. Native isolates and engine processes remain explicit infrastructure;
 do not introduce mobile background schedulers for desktop analysis work.
+
+Prefer Riverpod generation if the slice already uses a validated Freezed/JSON
+generation pipeline and the readability benefit justifies its build cost;
+manual typed providers are also supported. Record one convention for migrated
+code. Generated auto-disposal is a default, not proof of correct lifetime:
+explicitly test screen departure, retained documents, active jobs and disposal.
+
+### Early desktop foundations
+
+These requirements extend milestones 0-2; they must not wait until the final
+platform sweep. They are planned work, not claims that signing, telemetry or
+translation support already exists.
+
+**Localization readiness (milestone 1).** Start with Flutter's standard
+`flutter_localizations` and `gen_l10n`/ARB workflow unless a measured requirement
+justifies an alternative. English is the initial source locale; translating
+other languages is separately scoped. Migrated user-facing copy, validation,
+tooltips and accessibility labels use localized messages with typed placeholders
+and plural rules. Design-system controls accept resolved labels from callers.
+Use locale-aware UI numbers/dates and directional layout; exercise expanded
+pseudo-localized text and RTL in the catalog. Keep PGN/FEN, engine protocols,
+stored IDs and canonical formats locale-independent, and preserve the chess
+board's explicit orientation rather than mirroring its rules with UI direction.
+
+**Native execution contracts (milestones 0 and 2).** Inventory each engine,
+FFI library and native plugin, including architecture/ABI, packaging, memory
+ownership, thread affinity, callbacks, initialization, shutdown and license.
+Generated bindings and process wrappers live in `infrastructure/`; an adapter
+owns handles, buffers and disposal. Use worker isolates or appropriate native
+workers for blocking/CPU-heavy calls, respecting library threading constraints.
+An asynchronous `Process.start` wrapper does not inherently need a Dart worker:
+the executable already runs separately. Bound stdout/stderr buffering and move
+expensive protocol parsing off the UI isolate when measurements warrant it.
+An isolate cannot contain a fatal in-process native crash. Prefer existing
+subprocess engine boundaries when crash isolation matters. Specify cooperative
+cancel, graceful stop, timeout escalation and disposal for every backend; do
+not report cancellation as complete while native work still owns resources.
+
+**Failure diagnostics (milestones 0 and 2).** Define a vendor-neutral reporting
+contract and a per-platform coverage matrix for Flutter errors, unhandled Dart
+errors, worker-isolate failures, app-native crashes and child-engine exits.
+Forward worker errors explicitly; retain engine identity, job ID, exit status
+and bounded diagnostic output in the supervisor. Sentry is a candidate, subject
+to verifying native support and symbolication on each actual desktop target.
+Installing its Flutter SDK does not automatically produce native crash dumps
+for independently launched Stockfish or other executables. Retain matching
+release symbols/build IDs and prove a deliberately induced failure is useful
+to diagnose. Provide bounded local diagnostics and user-controlled export;
+remote reporting requires an explicit product/privacy decision, redaction,
+retention limits and offline behavior. Do not enable a remote service as part
+of a dependency-only change.
+
+**Build and distribution rehearsal (milestones 0 and 2).** Inventory host
+builders, native dependencies, certificates/accounts and release artifacts in
+milestone 0. Build/package the first new slice on Linux, Windows and macOS and
+smoke-test a small real-engine job with disposable data, cancellation and restart.
+Exercise install/launch/update and native-library loading early. For the intended
+signed macOS distribution, plan Developer ID signing, appropriate entitlements,
+notarization and stapling, including embedded native code. For Windows, select
+a suitable trusted signing route; an EV certificate is not a universal app
+requirement or a guarantee of no SmartScreen warning. Keep credentials out of
+source and ordinary test jobs. Mark unavailable host/signing checks explicitly
+unverified, and complete actual signed-artifact checks before the corresponding
+release. Preserve release-tag-only GitHub CI and user-requested publication;
+rehearsing builds does not authorize publishing or buying signing credentials.
+
+Keep existing `integration_test` and headless driver coverage, and extend real
+desktop journeys rather than assuming a new runner is necessary. Native OS
+dialogs, signing and installers need host-specific checks beyond Flutter widget
+automation. Patrol can be evaluated for a supported target, but its currently
+listed targets do not include Linux or Windows, so it is not the default
+three-desktop test harness.
 
 ### Frontend principles: human factors as acceptance criteria
 
@@ -294,9 +380,9 @@ recorded reason. No current mode is silently dropped.
 
 | Milestone | Deliverable | Exit gate |
 |-----------|-------------|-----------|
-| 0. Inventory and baseline | Workflow/parity matrix, persisted-format ownership map, dependency map, representative fixtures, known-bug decisions, performance and usability scenarios. | Every current mode/support capability has an owner, migration disposition and observable acceptance scenarios. Known bugs are separated from behavior to preserve. |
-| 1. Design foundation | Widgetbook with production search/choice/stepper/stat/dialog components; typography, spacing, focus, error and progress examples; a small theme/component cleanup. | Catalog runs headlessly without user data or real jobs; relevant controls work with keyboard, long content and scaling; approved visual baselines and behavior checks pass. |
-| 2. First complete slice | Repertoires: list/search, create, rename, open and recoverably delete, using injected repository contracts and an explicit presentation-state owner. Keep current storage formats. | Old/new entry points share one writer; conflict, failure, restart and navigation tests pass; user can complete the task; duplicate implementation removed. Record Riverpod/abstraction decisions from evidence. |
+| 0. Inventory and baseline | Workflow/parity matrix, persisted-format ownership map, dependency/native-runtime map, desktop build/signing prerequisites, diagnostic coverage matrix, representative fixtures, known-bug decisions, performance and usability scenarios. | Every current mode/support capability has an owner, migration disposition and observable acceptance scenarios. Known bugs are separated from behavior to preserve; unavailable host/credential checks are explicit. |
+| 1. Design foundation | Widgetbook with production search/choice/stepper/stat/dialog components; typography, spacing, focus, error and progress examples; localization-ready copy and a small theme/component cleanup. | Catalog runs headlessly without user data or real jobs; controls work with keyboard, long/pseudo-localized text, RTL and scaling; approved visual baselines and behavior checks pass. |
+| 2. First complete slice | Repertoires: list/search, create, rename, open and recoverably delete, using injected repository contracts and an explicit presentation-state owner. Keep current storage formats. Rehearse desktop packages, native execution and failure diagnostics. | Old/new entry points share one writer; conflict, failure, restart and navigation tests pass; user can complete the task; duplicate implementation removed. Record Riverpod/abstraction decisions and host/diagnostic verification from evidence. |
 | 3. Document workspace | PGN viewing/editing, study/chapter management and board/move navigation; shared document sessions and reusable workspace components. | Representative annotated PGNs round-trip; unsaved edits survive failures; undo, external-file conflict, Back/context restoration and large-document performance pass. |
 | 4. Training | Repertoire training, tactics, review scheduling/history and game-review handoffs on stable document/line identities. Trial a progress-storage migration only as a separate increment. | Historic progress fixtures migrate without loss; time-dependent scheduling and cancelled sessions are deterministic; complete training/resume scenarios pass. |
 | 5. Analysis and long jobs | Interactive analysis, generation/planning, audit/holes/traps, player analysis and database ingestion use explicit job ownership and resource policies. | Deterministic core invariants and differential fixtures pass; stale results cannot publish; pause/cancel/restart and engine crash cleanup pass; realistic throughput/memory budgets hold. |
@@ -348,6 +434,15 @@ results rather than generated code volume or number of new classes.
 
 ### Design references
 
+- [Flutter internationalization](https://docs.flutter.dev/ui/internationalization),
+  [Riverpod generation](https://riverpod.dev/docs/concepts/about_code_generation),
+  [typed routing](https://pub.dev/packages/go_router_builder),
+  [Dart subprocesses](https://api.dart.dev/dart-io/Process/start.html),
+  [Sentry Flutter](https://pub.dev/packages/sentry_flutter),
+  [Patrol targets](https://pub.dev/packages/patrol),
+  [Windows signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)
+  and [macOS notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution):
+  primary references used to qualify external architecture feedback on 2026-09-16.
 - [Knuth: Literate Programming](https://cs.stanford.edu/~knuth/lp.html):
   human-readable program explanation and algorithmic reasoning.
 - [Flutter architecture recommendations](https://docs.flutter.dev/app-architecture/recommendations):
