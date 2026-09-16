@@ -17,6 +17,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/board_engine_fixture.dart';
 
+// The reader starts real file/isolate work from frame callbacks. One fixed
+// runAsync delay before pumpAndSettle cannot finish work that the next frame
+// starts. Alternate real event-loop turns with frames until loading settles.
+Future<void> _settleReader(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 350));
+  for (var i = 0; i < 100; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    if (!tester.binding.hasScheduledFrame) return;
+  }
+  fail('The reader did not settle after file and filter work.');
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
@@ -66,7 +81,7 @@ void main() {
       final history = AppHistory(app);
       addTearDown(app.dispose);
       addTearDown(history.dispose);
-      app.setMode(AppMode.pgnViewer);
+      app.pushMode(AppMode.pgnViewer, historyLabel: 'Game viewer');
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -76,42 +91,42 @@ void main() {
           child: const MaterialApp(home: PgnViewerScreen()),
         ),
       );
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       final reader = tester
           .widget<PgnViewerWidget>(find.byType(PgnViewerWidget))
           .controller!;
       expect(reader.mainLineIndex, 1);
       final previousFen = reader.currentFen;
 
-      app.setMode(AppMode.tactics);
-      await tester.pumpAndSettle();
-      app.setMode(AppMode.pgnViewer);
-      await tester.pumpAndSettle();
+      app.pushMode(AppMode.tactics, historyLabel: 'Tactics');
+      await _settleReader(tester);
+      app.pushMode(AppMode.pgnViewer, historyLabel: 'Game viewer');
+      await _settleReader(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(reader.mainLineIndex, 2);
 
       await tester.runAsync(() async {
         history.popTo(1);
         await Future<void>.delayed(const Duration(milliseconds: 300));
       });
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
 
       expect(reader.mainLineIndex, 1);
       expect(reader.currentFen, previousFen);
       expect(history.length, 2);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
     },
   );
 
@@ -128,29 +143,29 @@ void main() {
           child: const MaterialApp(home: PgnViewerScreen()),
         ),
       );
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 500)),
       );
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.byType(PgnOpeningLabel), findsNothing);
       expect(find.text('Edit PGN'), findsNothing);
       expect(find.text('PGN'), findsNothing);
       expect(find.text('Main line'), findsNothing);
       await tester.tap(find.text('Actions'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.text('Filter games'), findsWidgets);
       await tester.tap(find.text('Turn autosave off'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.textContaining('Autosave on'), findsNothing);
       await tester.tap(find.text('Actions'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.text('Turn autosave on'), findsOneWidget);
       await tester.tap(find.text('Filter games').last);
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       final filters = tester
           .widget<HeaderFilters>(find.byType(HeaderFilters))
           .controller;
@@ -160,27 +175,27 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 300)),
       );
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       final results = tester.widget<PgnTreeGamesList>(
         find.byType(PgnTreeGamesList),
       );
       results.onGameSelected(0);
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.byKey(const ValueKey('return-to-filters')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('return-to-filters')));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(
         tester.widget<HeaderFilters>(find.byType(HeaderFilters)).controller,
         same(filters),
       );
       expect(filters.headerRows.single.value, 'A');
       await tester.tap(find.byKey(const ValueKey('apply-game-filters')));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.byKey(const ValueKey('return-to-filters')), findsNothing);
       final appliedChip = find.byKey(const ValueKey(('applied-filter', 0)));
       expect(appliedChip, findsOneWidget);
       await tester.tap(appliedChip);
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.byType(HeaderFilters).hitTestable(), findsOneWidget);
       expect(filters.headerRows.single.value, 'A');
       filters.addHeaderRow(field: 'Black');
@@ -191,9 +206,9 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 300)),
       );
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       await tester.tap(find.byKey(const ValueKey('apply-game-filters')));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       final secondTile = find.byKey(const ValueKey(('applied-filter', 1)));
       final thirdTile = find.byKey(const ValueKey(('applied-filter', 2)));
       expect(tester.getSize(appliedChip), tester.getSize(secondTile));
@@ -204,15 +219,15 @@ void main() {
         findsOneWidget,
       );
       await tester.tap(thirdTile);
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(filters.headerRows.last.value, 'Orthodox Variation');
       await tester.tap(find.byKey(const ValueKey('apply-game-filters')));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       await tester.tap(find.byTooltip('Remove White name contains A'));
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 300)),
       );
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(thirdTile, findsNothing);
       expect(
         find.descendant(of: appliedChip, matching: find.text('B')),
@@ -223,9 +238,9 @@ void main() {
         findsOneWidget,
       );
       await tester.tap(find.text('Actions'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       await tester.tap(find.text('Show opening'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(
         find.text('King’s Indian Defense: Orthodox Variation (ECO E94)'),
         findsOneWidget,
@@ -237,18 +252,18 @@ void main() {
         isTrue,
       );
       await tester.tap(find.text('Actions'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       await tester.tap(find.text('Hide opening'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.byType(PgnOpeningLabel), findsNothing);
       await tester.tap(find.text('Actions'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       await tester.tap(find.text('Edit'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.byType(PgnAnnotationPanel), findsOneWidget);
       expect(find.text('Comment:'), findsOneWidget);
       await tester.tap(find.text('Done'));
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.byType(PgnAnnotationPanel), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -257,7 +272,7 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 200)),
       );
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
     },
   );
 }

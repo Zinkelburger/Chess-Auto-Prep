@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/app_theme.dart';
 import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
@@ -143,12 +146,16 @@ void main() {
   );
 
   testWidgets(
-    'rendered engine settings labels and inputs contrast with their raised panel',
+    'rendered engine settings labels and inputs contrast with the settings page',
     (tester) async {
+      SharedPreferences.setMockInitialValues({});
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.dark(),
-          home: const Scaffold(body: InlineEngineSettings()),
+        ChangeNotifierProvider(
+          create: (_) => AppState(),
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: const Scaffold(body: InlineEngineSettings()),
+          ),
         ),
       );
       await tester.tap(find.byTooltip('Engine settings'));
@@ -156,7 +163,6 @@ void main() {
       final settings = find.byType(StockfishSettingsBody);
       expect(settings, findsOneWidget);
       final panel = panelFor(tester, settings);
-      expectRaised(panel);
       final labels = find.descendant(of: settings, matching: find.byType(Text));
       expect(labels, findsWidgets);
       for (final label in labels.evaluate()) {

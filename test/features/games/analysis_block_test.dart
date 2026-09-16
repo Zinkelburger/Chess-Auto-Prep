@@ -4,6 +4,8 @@
 /// blocks — those are behind the gear.
 library;
 
+import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/screens/settings_screen.dart';
 import 'package:chess_auto_prep/features/games/controllers/recent_games_controller.dart';
 import 'package:chess_auto_prep/features/games/services/games_window.dart';
 import 'package:chess_auto_prep/features/games/models/recent_game.dart';
@@ -20,6 +22,7 @@ import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordin
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 
 class _IdleLibrary extends GamesLibraryService {
   @override
@@ -115,31 +118,34 @@ void main() {
     int unreviewed = 3,
     int openingIssues = 4,
   }) => tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: SizedBox(
-          width: 380,
-          child: Column(
-            children: [
-              AnalysisBlock(
-                runner: runner,
-                coordinator: coordinator,
-                isLoadingGames: false,
-                gamesInWindow: 20,
-                unreviewedCount: unreviewed,
-                windowLabel: 'last 20 games',
-                onStart: onStart ?? () {},
-                onPause: onPause ?? () {},
-              ),
-              OpeningsBlock(
-                openingIssueCount: openingIssues,
-                gamesInWindow: 20,
-                windowLabel: 'last 20 games',
-                onOpeningReview: onOpeningReview ?? () {},
-                repeated: repeated,
-                onFixEntry: onFixEntry,
-              ),
-            ],
+    ChangeNotifierProvider(
+      create: (_) => AppState(),
+      child: MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 380,
+            child: Column(
+              children: [
+                AnalysisBlock(
+                  runner: runner,
+                  coordinator: coordinator,
+                  isLoadingGames: false,
+                  gamesInWindow: 20,
+                  unreviewedCount: unreviewed,
+                  windowLabel: 'last 20 games',
+                  onStart: onStart ?? () {},
+                  onPause: onPause ?? () {},
+                ),
+                OpeningsBlock(
+                  openingIssueCount: openingIssues,
+                  gamesInWindow: 20,
+                  windowLabel: 'last 20 games',
+                  onOpeningReview: onOpeningReview ?? () {},
+                  repeated: repeated,
+                  onFixEntry: onFixEntry,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -252,7 +258,7 @@ void main() {
     expect(find.text('2 cores'), findsOneWidget);
   });
 
-  testWidgets('the gear opens the shared engine popup', (tester) async {
+  testWidgets('the gear opens the shared analysis settings', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final h = build();
     addTearDown(h.games.dispose);
@@ -260,6 +266,7 @@ void main() {
     await pump(tester, runner: h.runner, coordinator: h.co);
     await tester.tap(find.byTooltip('Engine settings'));
     await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
     expect(find.byType(StockfishSettingsBody), findsOneWidget);
     expect(find.byKey(const Key('engine-cores')), findsOneWidget);
   });
