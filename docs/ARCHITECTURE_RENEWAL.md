@@ -1,6 +1,6 @@
 # Architecture renewal
 
-**Status: Not started.** Planning baseline: 2026-09-16. This is the canonical
+**Status: Partial — S0 implemented and verified on Linux; replacement slices pending.** Planning baseline: 2026-09-16. This is the canonical
 rewrite plan. [FUTURE_FEATURES.md](FUTURE_FEATURES.md) tracks feature backlog;
 [COMPONENT_MAP.md](COMPONENT_MAP.md) describes implemented behavior. Update
 milestone evidence and selected decisions here as work proceeds.
@@ -16,7 +16,7 @@ existing policy. These constraints apply throughout the plan.
 
 ## Execution contract and evidence
 
-This is a plan, not an implementation kickoff. At kickoff, record the scope
+At kickoff, record the scope
 actually authorized by the product owner (the person directing this project).
 The recommended first increment is safety prerequisite S0 plus inventory 0;
 produce their evidence and bounded estimates before expanding the rewrite.
@@ -68,6 +68,155 @@ For each exit gate record `requirement ID | scope/host | check or test path |
 result | commit | remaining limitation`. Results are pass, fail or unverified;
 mark genuinely inapplicable requirements with a reason. No test coverage or
 implementation is implied by this empty evidence template.
+
+## Execution record — 2026-09-16
+
+The product owner explicitly authorized the **whole renewal and end-to-end
+validation**, not merely a planning update. Starting commit: `e477dc58`.
+Implementation owner: the architecture-renewal task; product/visual owner:
+the directing user. The existing release policy still applies. No release is
+requested. Worktree: `codex/architecture-renewal`.
+
+### S0 brief and reproduction
+
+Scope: the three controller writes, storage-derived append receipts, guarded
+successive/per-move undo, fileless sessions, draft deletion and chapter-switch
+rejection. Keep the current formats, dependencies and decoded-content storage
+contract. Native byte/file-identity revisions remain milestone 2 work; an S0
+pass does **not** establish DATA-04 or power-loss durability.
+
+The initial nine tests in
+[`repertoire_mutation_safety_test.dart`](../test/core/repertoire_mutation_safety_test.dart)
+all failed on the starting implementation: color/root/import lost interleaved
+writes; external-before-append annotations were lost on single and batched
+undo; external-after-append and between-undo edits were overwritten; undo
+bridged an unrelated external edit; and a failed undo consumed its entry.
+These are reproduced failures, not just inspection findings.
+
+Repair uses the existing expected-content guard. Append preparation supplies
+immutable before-content and ordered logical steps from the same validated
+baseline; one forward disk commit still supports one undo per actual new move.
+The writer links only matching history and keeps committed provenance separate
+from the mutable undo expectation. Duplicate additions do not invent history.
+A malformed adapter receipt fails without manufacturing stale memory snapshots.
+Draft deletion has a separate in-memory undo and never writes a whole chapter.
+An uncertain undo is reconciled only against that attempted decoded result;
+unrelated current content cannot refresh its expectation. Native identity and
+cross-process replacement ambiguity remain outside S0's decoded-text guarantee.
+
+Effort budget: S0 3 active hours, including 1 hour validation reserve; midpoint
+after reproduction and first passing regression run. At that checkpoint the
+nine failures were repaired and the first 76 focused tests passed. Additional
+failure/chapter-switch cases and native desktop checks passed before integration.
+The source checkpoint was reached in 31 minutes of elapsed time, including
+build/test waits (an upper bound on active effort, not a user-task performance
+measurement). No package spike was needed for S0.
+
+### S0 exit evidence
+
+Implementation commit: `19906aeecd652a5f52504d05acd80f6bfc8d1abe`.
+The following evidence is scoped to S0, not a pass for the replacement
+architecture or all workflows sharing the same requirement ID.
+
+| Requirement ID | Scope/host | Check or test path | Result | Commit | Remaining limitation |
+|----------------|------------|--------------------|--------|--------|----------------------|
+| DATA-01 | Three current-code repertoire actions / Linux | `test/core/repertoire_mutation_safety_test.dart`; `integration_test/repertoire_mutation_test.dart` | Pass: interleaved replacements rejected, missing destinations fail, import drafts survive conflict/retry | `19906aee` | Decoded-content guard; no native byte/identity claim |
+| DATA-03 | Append/batch/undo/draft deletion / Linux and deterministic failures | `test/core/repertoire_writer_undo_test.dart`; `test/core/repertoire_mutation_safety_test.dart` | Pass: validated before-content, per-move/successive undo, external edits before/after/between, broken history links, definite/post-install failure, refresh failure, malformed receipt, 20-entry history | `19906aee` | Future native revisions must repeat these contracts; no power-loss claim |
+| STATE-01 | Repertoire append session and import confirmation | `test/core/repertoire_mutation_safety_test.dart`; `test/widgets/pgn_import_dialog_test.dart` | Pass: queued/in-flight chapter switches cannot update the new session; one pending import commit, draft retained on failure | `19906aee` | Does not establish application-wide job ownership or Riverpod lifecycle behavior |
+| TEST-01 | S0 maintenance increment / Linux | `scripts/ci.sh analyze lint`; 11 focused test files listed below; both desktop targets | Pass: 150 focused tests and 8 desktop tests; analyzer has 9 existing informational lints, no warnings/errors | `19906aee` | Full release/offline/engine gates not run; no release requested |
+| DATA-01 | Native missing-destination retry and restart | Private app driver; [inspected screenshot](images/architecture-renewal-unsaved.png) | Pass: draft remains readable, restore destination and retry saves once, driver restart/reopen retains all three games and external annotation | `19906aee` | Automatic fixture/agent inspection, not a human usability study |
+| PLAN-01 | Renewal inventory | Execution record above/below | Unverified: scope and initial owner/parity map recorded; inventory incomplete | `19906aee` | Detailed schema/key/reference/native matrices and measured UX/performance baselines still required |
+| DATA-04, DATA-05, DATA-06, DATA-07 | Replacement storage/artifact contracts | Not implemented by S0 | Unverified | `19906aee` | Native identity/durability, consistent restore and generated-artifact publication remain pending |
+| OPS-01, OPS-02 | Native coverage | Linux app builds/boots; Windows/macOS unavailable | Unverified for renewal exit gates | `19906aee` | Signing, installers, native crash diagnosis and other-host checks not run |
+
+Reproduce the focused suite with:
+
+```sh
+scripts/ci.sh analyze lint
+scripts/ci.sh test test/core/repertoire_mutation_safety_test.dart test/core/repertoire_writer_test.dart test/core/repertoire_writer_undo_test.dart test/core/repertoire_controller_test.dart test/core/repertoire_load_test.dart test/core/repertoire_line_save_switch_test.dart test/services/repertoire_service_test.dart test/services/repertoire_file_editor_test.dart test/utils/atomic_file_safety_test.dart test/widgets/pgn_import_dialog_test.dart test/screens/repertoire_screen_test.dart
+scripts/ci.sh integration integration_test/app_test.dart integration_test/repertoire_mutation_test.dart
+```
+
+`integration` now accepts focused targets and gives each executable a separate
+bounded display/session bus. The first combined native attempt failed to attach
+to its second executable; separate launches fixed that harness failure. The
+initial native test also expected a success snackbar, but the product deliberately
+suppresses those; the final test checks the imported line and persisted content.
+The final dialog layout received another passing 9-test run after screenshot
+inspection fixed a truncated error label. These reruns are not added to the
+150 unique focused-test count.
+
+The desktop app-recreation test logs an inline-engine preparation warning during
+teardown/recreation; its data/UI assertions pass. The separate headless preview
+showed real Stockfish analysis, but this is not evidence for the full PROC-01/
+PROC-02 lifecycle gates. The preview was stopped before final checks.
+
+**Next required increment:** complete milestone 0's missing inventory and
+measured baselines, then implement and validate the first repertoire slice.
+Milestones 1–7 and PLAN-02 have not been completed; no new design direction,
+Riverpod migration, shared native-revision store or vault migration is claimed.
+
+### Initial parity and ownership inventory (milestone 0, partial)
+
+The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
+are sizing context, not a migration target. All eleven `AppMode` values remain
+in scope. Owners below name current code and the milestone responsible for
+replacement; no row is declared migrated by being listed here.
+
+| Capability | Current authority / entry point | Replacement milestone and inherited requirements |
+|------------|---------------------------------|-------------------------------------------------|
+| Repertoires list/create/rename/delete | `RepertoireListBody`, `RepertoireCreation`, `IOStorageService`; recovery through `FileMutationService` | 1/2: ARCH-01, DATA-02, DATA-04, DATA-05, DATA-06, STATE-01, SET-01, UI-01, UI-02, UI-04, TEST-01 |
+| Repertoire builder and chapters | `RepertoireController`, `RepertoireWriter`, `RepertoireFileEditor`, `ChapterStore`, outline controller | S0 and 3: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, ARCH-01, STATE-01, STATE-02, UI-01, UI-02, UI-03, UI-04, TEST-01 |
+| PGN Viewer | PGN viewer screen, `core/pgn/`, `ViewerSessionStore` | 3: ARCH-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, STATE-02, UI-01, UI-02, UI-03, UI-04, TEST-01 |
+| Study | study screen/controller, multi-game PGN documents | 3: same document-workspace requirements as PGN Viewer |
+| Repertoire trainer | `services/training/`, `ReviewProgressStore`, `MoveAttemptStore` | 4: ARCH-01, DATA-06, SET-01, STATE-01, UI-01, UI-04, TEST-01 |
+| Tactics | `features/tactics/`, tactics session controller, game store | 4: ARCH-01, DATA-06, SET-01, STATE-01, UI-01, UI-04, TEST-01 |
+| Player analysis | analysis screen, `PlayerCorpusStore`, game analysis controller | 5: ARCH-01, DATA-02, DATA-05, DATA-07, STATE-01, STATE-02, STATE-03, PROC-01, PROC-02, UI-01, UI-04, OPS-01, TEST-01 |
+| Generation/audit/ingestion | generation session, `GenerationArtifactStore`, audit session and shared jobs | 5: same analysis requirements; source/run identity and edited companion PGN still need proof |
+| Engine tournament | tournament controller/service/store, engine manager | 6: ARCH-01, DATA-06, STATE-01, PROC-01, PROC-02, OPS-01, OPS-02, TEST-01 |
+| Bughouse lab | bughouse controller/engine session, optional bundled assets | 6: ARCH-01, STATE-01, STATE-03, PROC-01, PROC-02, OPS-01, OPS-02, TEST-01 |
+| Databases | databases screen, `GameStoreService`, SQLite/eval adapters | 6: ARCH-01, DATA-05, DATA-06, STATE-01, SET-01, TEST-01 |
+| Players & prep | opponents feature, `OpponentStore`, people/tournament JSON | 6: ARCH-01, DATA-06, STATE-01, UI-01, UI-04, TEST-01 |
+| Accounts/settings | `AppState`, engine/eval/training/display settings, SharedPreferences | 1/2 establishes section owner; 6 completes SET-01, SEC-01, ARCH-01, TEST-01 |
+| Navigation/file opening | app shell/`AppState` handoffs, navigation stack, viewer session store | 1/2 and 3: UI-02, STATE-01, STATE-02, TEST-01 |
+| Imports/exports/offline/recovery | PGN codecs, atomic writer, SQLite recovery, importers; fixtures already exist | Each writing slice: DATA-02, DATA-04, DATA-05, DATA-06, TEST-01 |
+| MCP/offline tools | `tools/mcp/`, separate process runtimes and file contracts | 6: ARCH-01, DATA-06, DATA-07, PROC-01, PROC-02, TEST-01; follow their owning skills before editing |
+| Installers/updates/native assets | packaging, updater, native asset manifest and release-tag workflows | 6/7: OPS-01, OPS-02, PROC-02, TEST-01 |
+
+Persisted authority: chapter and study PGNs, source-game SQLite collections,
+player-corpus manifests, training CSV/progress, opponent/tournament JSON and
+saved analysis artifacts are authoritative in their respective domains.
+SharedPreferences contains both preferences and legacy credentials; ordinary
+settings exports must not absorb the latter. Eval indexes/download caches are
+rebuildable only where their owner says so. Existing quarantine, atomic recovery
+journals and schema backups have distinct retention purposes. A detailed
+key/schema/reference ledger, consistent restore rehearsal and native dependency
+license/ABI matrix are still required before milestone 0 graduates.
+
+Reuse inventory: `scripts/ci.sh analyze lint`, focused Flutter tests, atomic
+failure fixtures, storage/upgrade contracts, scripted engine fixtures,
+`integration_test/app_test.dart` and the private app driver. Missing coverage:
+shared revision/store contract, injected first-slice wiring, native identity and
+vault failures, restore with new post-migration work, large annotated-document
+profiling and user task timings. The runner redirects Documents/config/data to
+its disposable profile; automatic checks never use the user's real databases.
+
+Host matrix: Linux local development/runtime is available. Windows/macOS native
+packaging, signing, reader accessibility, vault and forced-parent-death checks
+are **unverified**, not inferred from Linux. Remote crash reporting, telemetry
+and cloud sync remain outside scope. No package or runtime version has changed
+in S0. Riverpod 3/Widgetbook/ARB remain planned defaults for the first slice;
+SQLite remains the storage default and Drift remains deferred.
+
+Before starting 1/2, finish the missing inventory and record measured baseline
+interaction/frame/edit budgets. Proposed effort cap: 8 active hours (4 feature,
+2 tests, 1 packaging rehearsal, 1 validation reserve), midpoint at 4 hours;
+Riverpod and Widgetbook spikes each capped at 30 minutes within that budget.
+Native revision feasibility gets a separate 1-hour spike; inability to prove
+safe identity fails DATA-04 and narrows work to a bounded repair, not a silent
+weaker implementation. No later feature slice starts before PLAN-02 records
+the first-slice result. Product-owner visual review remains required before
+propagating a new appearance across the application.
 
 ## Reading map
 
@@ -1043,7 +1192,7 @@ These are required future tests, not claims of reproduced runtime failures.
 
 ## Safety prerequisite on current code
 
-**S0 — Not started; independent of the rewrite.** Recheck the findings below on
+**S0 — Complete for the scoped Linux/current-code cases; see exit evidence above.** Recheck the findings below on
 current code. Reproduce all three controller actions and snapshot undo with
 interleaved writes and failure injection; record any finding already fixed with
 its regression evidence. Fix confirmed lost updates using the existing locked
@@ -1064,9 +1213,10 @@ fix or test execution is authorized by this planning-document edit.
 
 ## Storage baseline and overwrite-prevention gate
 
-The following is a code-inspection baseline from 2026-09-16. The findings need
-reproduction and resolution in S0 for the controller/undo paths. Build the full ownership
-inventory in milestone 0; retain evidence for each migrated writer.
+The following records the starting inspection at `e477dc58` on 2026-09-16.
+The controller/undo findings were reproduced and repaired in S0 (evidence above);
+generation artifact publication remains unverified. Complete the ownership
+inventory in milestone 0 and retain evidence for every migrated writer.
 
 | Data | Current representation and ownership evidence | Rewrite requirement |
 |------|-----------------------------------------------|---------------------|
@@ -1236,7 +1386,9 @@ a process does not simulate lost hardware caches.
 
 ## Milestones and exit gates
 
-All milestones are **Not started**. Each row yields a reviewable result; later
+S0 is **complete for the scoped Linux cases** and milestone 0 has a
+**partial inventory** above.
+Milestones 1–7 are **Not started**. Each row yields a reviewable result; later
 rows depend on the contracts established earlier, not on an unbounded framework
 build. Reorder later feature slices after the dependency inventory, with a
 recorded reason. No current mode is silently dropped.

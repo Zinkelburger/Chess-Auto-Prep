@@ -46,7 +46,23 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 
 **Repertoire navigation model:** `RepertoireController` owns a `MoveTree` (editable PGN tree) and a `TreePath` cursor. All navigation goes through `controller.jump(path)`. `controller.awaitLoaded()` returns a Future that completes when the current load finishes (Completer-based); used by `repertoire_screen` for deep-link line navigation and generation seeding instead of listener polling. The PGN editor (`InteractivePgnEditor`) is a pure view that receives `tree` + `currentPath` as props and fires `onJump` / `onCommentChanged` / `onDelete` / `onPromote` / `onMakeMainLine` callbacks. Clipboard writes wired in `EditMainZone` via `onCopyToClipboard`; debounced line saves use `onAutoSave` (falls back to `onLineEdited`) and optional `onDirty`. The "Save to Repertoire" button and `onLineSaved`/`onPersistNewLine` callbacks have been removed — lines are auto-saved.
 
-**PGN context menu (right-click):** Uses Flutter's built-in `showMenu` API (Overlay-based, avoids Stack/Positioned layout issues). Menu items: Add Comment (focuses comment TextField), Promote Variation (non-mainline only), Make Main Line (recursive promote to root, non-mainline only), Duplicate Line (copies full line to clipboard), Copy PGN from Here, View in Lines (existing-line only; switches to Lines tab), Delete from Here. When the context menu is open, all moves from root to the right-clicked position are highlighted (blueGrey background). Delete from Here pushes an undo snapshot via `RepertoireWriter.pushUndo()`, making it reversible with Ctrl+Z.
+**PGN context menu (right-click):** Uses Flutter's built-in `showMenu` API (Overlay-based, avoids Stack/Positioned layout issues). Menu items: Add Comment (focuses comment TextField), Promote Variation (non-mainline only), Make Main Line (recursive promote to root, non-mainline only), Duplicate Line (copies full line to clipboard), Copy PGN from Here, View in Lines (existing-line only; switches to Lines tab), Delete from Here. When the context menu is open, all moves from root to the right-clicked position are highlighted (blueGrey background). Delete from Here records a draft-only undo via `RepertoireWriter.recordDraftUndo()`, making it reversible with Ctrl+Z without replacing the chapter on disk.
+
+**Repertoire mutation safety:** `setRepertoireColor`, `setRootPosition` and
+`importPgnContent` validate their decoded-content baseline before replacement.
+`RepertoireFileEditor` prepares immutable `AppendMovesResult` receipts containing
+the validated before-content and actual added-move steps; a batch commits once.
+`RepertoireWriter` serializes append/undo, captures its document session before
+queueing, and rejects stale queued work. File-backed undo validates its expected
+content and advances only its proven predecessor after commit. Conflicts and
+failed writes retain history; post-install errors reconcile only the attempted
+content. External annotations preceding an append survive undo, and disk
+no-ops create no undo entries. Draft tree deletion is independent of file
+mutation. The import dialog waits for the commit and keeps its draft on conflict/read/write
+failure; color/root failures are surfaced without changing the committed state.
+Missing destinations fail instead of reporting success. Native byte/file-identity
+revision checking is still planned, not provided by these decoded-text guards. Regression coverage lives in
+`test/core/repertoire_mutation_safety_test.dart` and the existing writer suites.
 
 **Line deletion:** `RepertoireService.deleteLine(filePath, lineId)` removes a game from the PGN file on disk. `RepertoireController.deleteLine(line)` calls the service and reloads. `LineItemRow` shows a trash icon with a confirmation dialog; callbacks thread through `LinesListPanel` → `RepertoireLinesBrowser` → `repertoire_screen`.
 
