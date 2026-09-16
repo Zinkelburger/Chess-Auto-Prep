@@ -119,4 +119,92 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets(
+    'interrupted restore keeps original name and recovers through the UI',
+    (tester) async {
+      final fixture = await Directory(
+        p.join(
+          (await AppPaths.supportDirectory()).path,
+          'restore-${DateTime.now().microsecondsSinceEpoch}',
+        ),
+      ).create();
+      final root = await Directory(
+        p.join(fixture.path, 'repertoires'),
+      ).create();
+      final source = await Directory(p.join(root.path, 'Restore me')).create();
+      final chapter = File(p.join(source.path, 'Main.pgn'));
+      await chapter.writeAsString('{retained annotation} 1. d4 d5 *');
+      final bytes = await chapter.readAsBytes();
+      final settings = SharedPreferencesAppSettingsRepository();
+      await settings.repertoireBooks.setPaths(BookSide.black, [source.path]);
+      var interruptRestore = false;
+      final storage = IOStorageService(
+        documentsRoot: fixture,
+        supportRoot: fixture,
+        repertoiresRoot: root,
+        repertoireBooks: settings.repertoireBooks,
+        repertoireMoveHook: (step) async {
+          if (interruptRestore && step == RepertoireMoveStep.moved) {
+            throw StateError('Interrupted restore');
+          }
+        },
+      );
+      Future<void> waitFor(Finder finder) async {
+        for (var i = 0; i < 100 && finder.evaluate().isEmpty; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+        }
+        expect(finder, findsOneWidget);
+        await tester.pumpAndSettle();
+      }
+
+      await tester.pumpWidget(
+        AppDependencies(
+          repertoireCatalog: LegacyRepertoireCatalogRepository(storage),
+          child: MaterialApp(
+            theme: AppTheme.dark(),
+            home: Scaffold(body: RepertoireListBody(onSelected: (_) {})),
+          ),
+        ),
+      );
+      await waitFor(find.text('Restore me'));
+      await tester.tap(find.byTooltip('Delete repertoire'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Delete'),
+        ),
+      );
+      await waitFor(find.text('No repertoires yet'));
+      expect(await chapter.exists(), isFalse);
+      await tester.tap(find.text('Recovery'));
+      await waitFor(find.text('Restore me'));
+      await tester.tap(find.widgetWithText(TextButton, 'Restore'));
+      await tester.pumpAndSettle();
+      interruptRestore = true;
+      await tester.tap(find.widgetWithText(FilledButton, 'Restore'));
+      await waitFor(find.text('Recover library'));
+      expect(await chapter.readAsBytes(), bytes);
+      expect(
+        settings.repertoireBooks.state.committed!.black.single,
+        contains('.chess_auto_prep_trash'),
+      );
+      interruptRestore = false;
+      await tester.tap(find.text('Recover library'));
+      await waitFor(find.text('Recovery is empty'));
+      await tester.tap(find.text('Back to library'));
+      await waitFor(find.text('Restore me'));
+      expect(settings.repertoireBooks.state.committed!.black, [source.path]);
+      final fresh = IOStorageService(
+        documentsRoot: fixture,
+        supportRoot: fixture,
+        repertoiresRoot: root,
+        repertoireBooks: settings.repertoireBooks,
+      );
+      expect((await fresh.listRepertoires()).single.name, 'Restore me');
+      expect(await fresh.listRepertoireRecovery(), isEmpty);
+      expect(await chapter.readAsBytes(), bytes);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

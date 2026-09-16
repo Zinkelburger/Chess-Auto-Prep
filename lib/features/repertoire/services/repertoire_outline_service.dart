@@ -52,7 +52,7 @@ class RepertoireOutlineService {
     ChapterSplitter? splitter,
     ReviewProgressRepointer? repointer,
   }) : _storage = storage ?? StorageFactory.instance,
-       _repertoire = repertoire ?? RepertoireService(),
+       _repertoire = repertoire ?? RepertoireService(storage: storage),
        _chapters = chapters ?? ChapterStore(storage: storage),
        _repointer =
            repointer ??

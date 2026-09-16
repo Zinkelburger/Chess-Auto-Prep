@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../features/repertoires/models/repertoire_metadata.dart';
+import '../../features/repertoires/models/repertoire_recovery_entry.dart';
 import '../../features/settings/repositories/app_settings_repository.dart';
 import '../../infrastructure/settings/shared_preferences_app_settings_repository.dart';
 import '../../infrastructure/repertoires/repertoire_directory_mutations.dart';
@@ -54,6 +55,8 @@ class IOStorageService implements StorageService {
   Future<RepertoireDirectoryMutations> _createMoves() async =>
       RepertoireDirectoryMutations(
         root: await _repertoiresRoot(),
+        trash: await _trashDirectory('repertoires'),
+        trashAllowedRoot: await _documentsRoot(),
         journals: Directory(
           p.join((await _supportRoot()).path, 'repertoire-mutations'),
         ),
@@ -409,8 +412,22 @@ class IOStorageService implements StorageService {
     return newPath;
   }
 
+  Future<List<RepertoireRecoveryEntry>> listRepertoireRecovery() async =>
+      Platform.isLinux ? (await _moves()).listRecovery() : [];
+
+  Future<void> restoreRepertoire(String id, {String? name}) async {
+    if (!Platform.isLinux) {
+      throw UnsupportedError('Restore is not available on this platform yet');
+    }
+    await (await _moves()).restore(id, name: name);
+  }
+
   @override
   Future<void> deleteRepertoireDirectory(String dirPath) async {
+    if (Platform.isLinux) {
+      await (await _moves()).delete(dirPath);
+      return;
+    }
     final root = await _repertoiresRoot();
     final documents = await _documentsRoot();
     final trash = await _trashDirectory('repertoires');

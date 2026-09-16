@@ -64,11 +64,18 @@ Missing destinations fail instead of reporting success. Native byte/file-identit
 revision checking is still planned, not provided by these decoded-text guards. Regression coverage lives in
 `test/core/repertoire_mutation_safety_test.dart` and the existing writer suites.
 
+**Outline storage injection:** `RepertoireService(storage: ...)` routes file
+parsing and course discovery through its supplied storage. `RepertoireOutlineService`
+and `ChapterSplitter` pass their storage owner into their default parser, so a
+fixture or alternate profile is not silently read through `StorageFactory`.
+Pure text parsing does not resolve storage; the legacy default remains for
+unmigrated callers. Editor mutation migration is still pending.
+
 **Line deletion:** `RepertoireService.deleteLine(filePath, lineId)` removes a game from the PGN file on disk. `RepertoireController.deleteLine(line)` calls the service and reloads. `LineItemRow` shows a trash icon with a confirmation dialog; callbacks thread through `LinesListPanel` → `RepertoireLinesBrowser` → `repertoire_screen`.
 
 **Chess logic:** `dartchess` for rules/FEN; `flutter_chess_board` for display.
 
-### Recoverable repertoire folder renames (Linux)
+### Recoverable repertoire folder moves, deletion and restore (Linux)
 
 `RepertoireDirectoryMutations` owns a durable intent/completion journal in
 Support `repertoire-mutations/`. Linux `renameat2(RENAME_NOREPLACE)` refuses
@@ -81,8 +88,19 @@ Reference failures resume from the journal without repeating the namespace move.
 
 `IOStorageService` routes Linux repertoire/nested-folder moves through this
 owner and supplies the same domain lock to managed file operations and the
-native PGN store. Directory creation/deletion is serialized too, but deletion
-still uses its existing quarantine format; there is no new trash restore UI.
+native PGN store. Linux folder deletion moves the complete tree to Documents
+`.chess_auto_prep_trash/repertoires/<receipt-id>` using the same identity and
+journal protocol. Training/book references move to that recovery location;
+`MyRepertoireSettings` excludes parked recovery paths from active opening books.
+The catalog's **Recovery** view lists retained deletion receipts. Restore accepts
+the original name or a replacement name in the original parent, refuses existing
+destinations, verifies the recorded directory identity and replays reference
+updates. A restore receipt links back to its deletion; completion removes it
+from the recovery list without deleting the audit records. Interrupted delete
+and restore use the same persistent **Recover library** action as rename.
+Missing/replaced recovery folders remain listed with restore disabled. No
+receipts or recovery contents are automatically pruned. Older quarantine folders
+without a journal remain on disk; their UI adoption is still pending.
 Single-file/chapter rename remains legacy. Windows/macOS retain their prior
 folder-move adapter pending native verification. A revisionless legacy write
 can still recreate a stale path after a move; full writer migration is pending.
@@ -102,8 +120,8 @@ change, so saving/error transitions do not rerun game analysis.
 The My books panel shows pending/failure state, keeps confirmed choices visible,
 and retries designation without recreating an already imported repertoire.
 The relocation operation maps path components and can retry a partial two-key
-update. Linux folder rename now invokes it through the directory journal below;
-trash restore remains unfinished. Engine, display, training and credentials remain with
+update. Linux folder rename, deletion and restore invoke it through the directory
+journal above. Engine, display, training and credentials remain with
 their legacy owners. There is no cross-process preference transaction claim.
 Startup wraps legacy Linux/Windows preference backends in
 `FreshDesktopPreferencesStore`: serialized requests use fresh backend instances,

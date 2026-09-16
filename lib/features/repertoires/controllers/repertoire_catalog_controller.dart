@@ -29,6 +29,7 @@ class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
 
   final bool includeStudies;
   late RepertoireCatalogRepository _repository;
+  bool get supportsRecovery => _repository.supportsRecovery;
   int _generation = 0;
   Future<void>? _loading;
 
@@ -66,6 +67,7 @@ class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
     state = RepertoireCatalogState(
       repertoires: state.repertoires,
       studies: state.studies,
+      recovery: state.recovery,
       loading: true,
       actionError: state.actionError,
     );
@@ -74,11 +76,13 @@ class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
         repository.listRepertoires(),
         if (includeStudies) repository.listStudies(),
       ]);
+      final recovery = await repository.listRecovery();
       if (!ref.mounted || generation != _generation) return;
       List<RepertoireMetadata> sorted(List<RepertoireMetadata> values) =>
           [...values]..sort((a, b) => b.lastModified.compareTo(a.lastModified));
       state = RepertoireCatalogState(
         repertoires: sorted(results.first),
+        recovery: recovery,
         studies: includeStudies ? sorted(results.last) : const [],
         actionError: state.actionError is RepertoireRecoveryRequired
             ? null
@@ -89,6 +93,7 @@ class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
       state = RepertoireCatalogState(
         repertoires: state.repertoires,
         studies: state.studies,
+        recovery: state.recovery,
         loadError: error,
         actionError: state.actionError,
       );
@@ -110,6 +115,11 @@ class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
     (repository) => repository.moveToRecovery(repertoire),
   );
 
+  Future<void> restore(String id, {String? name}) => _mutate(
+    CatalogAction.restore,
+    (repository) => repository.restore(id, name: name),
+  );
+
   Future<T> _mutate<T>(
     CatalogAction action,
     Future<T> Function(RepertoireCatalogRepository) commit,
@@ -122,6 +132,7 @@ class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
     state = RepertoireCatalogState(
       repertoires: state.repertoires,
       studies: state.studies,
+      recovery: state.recovery,
       action: action,
     );
     try {
@@ -130,6 +141,7 @@ class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
         state = RepertoireCatalogState(
           repertoires: state.repertoires,
           studies: state.studies,
+          recovery: state.recovery,
         );
         // A refresh failure cannot turn a confirmed commit into a failed
         // mutation that a dialog might replay. It has its own retry state.
@@ -141,6 +153,7 @@ class RepertoireCatalogController extends Notifier<RepertoireCatalogState> {
         state = RepertoireCatalogState(
           repertoires: state.repertoires,
           studies: state.studies,
+          recovery: state.recovery,
           actionError: error,
         );
       }

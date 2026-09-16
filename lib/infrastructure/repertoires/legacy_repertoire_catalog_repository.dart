@@ -1,4 +1,7 @@
+import 'dart:io';
 import '../../features/documents/models/pgn_document.dart';
+import '../../features/repertoires/models/repertoire_recovery_entry.dart';
+import '../../services/storage/io_storage_service.dart';
 import '../../features/documents/repositories/pgn_document_store.dart';
 import '../../features/repertoires/models/repertoire_creation.dart';
 import '../../features/repertoires/models/repertoire_metadata.dart';
@@ -16,6 +19,9 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
   final PgnDocumentStore? documents;
 
   final StorageService _storage;
+
+  @override
+  bool get supportsRecovery => Platform.isLinux && _storage is IOStorageService;
 
   @override
   Future<List<RepertoireMetadata>> listRepertoires() =>
@@ -74,6 +80,19 @@ class LegacyRepertoireCatalogRepository implements RepertoireCatalogRepository {
     requireSafeFileName(name);
     if (repertoire.name == name) return;
     await _storage.renameRepertoireDirectory(repertoire.filePath, name);
+  }
+
+  @override
+  Future<List<RepertoireRecoveryEntry>> listRecovery() async =>
+      _storage is IOStorageService ? _storage.listRepertoireRecovery() : [];
+
+  @override
+  Future<void> restore(String id, {String? name}) async {
+    final storage = _storage;
+    if (storage is! IOStorageService) {
+      throw UnsupportedError('Restore is unavailable');
+    }
+    await storage.restoreRepertoire(id, name: name);
   }
 
   @override

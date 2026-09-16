@@ -23,6 +23,7 @@ import 'repertoire_color_inference.dart';
 import 'repertoire_file_editor.dart';
 import 'repertoire_line_ids.dart';
 import 'storage/storage_factory.dart';
+import 'storage/storage_service.dart';
 import 'training/chapter_layout.dart' show ChapterSummary;
 
 /// A game cut from a chapter file and parsed once: the parse tree, the raw
@@ -92,6 +93,12 @@ class _ChapterLayout {
 }
 
 class RepertoireService {
+  RepertoireService({this._storage});
+
+  // Pure text parsing never resolves the legacy default. File callers can
+  // supply the same storage owner as their outline/split workflow.
+  final StorageService? _storage;
+
   /// The editor for the files these lines come from.
   RepertoireFileEditor get files => const RepertoireFileEditor();
 
@@ -121,7 +128,8 @@ class RepertoireService {
     bool colorFromStartingSide = false,
     bool inferColorWhenUnknown = false,
   }) async {
-    final content = await StorageFactory.instance.readRepertoirePgn(filePath);
+    final content = await (_storage ?? StorageFactory.instance)
+        .readRepertoirePgn(filePath);
 
     if (content == null) {
       throw Exception('Repertoire file not found: $filePath');
@@ -188,7 +196,8 @@ class RepertoireService {
   /// 3 MB course without paying for a parse. Model games are left out of the
   /// counts because the trainer never drills them.
   Future<List<ChapterSummary>> courseChaptersInFile(String filePath) async {
-    final content = await StorageFactory.instance.readRepertoirePgn(filePath);
+    final content = await (_storage ?? StorageFactory.instance)
+        .readRepertoirePgn(filePath);
     if (content == null || content.trim().isEmpty) return const [];
     return Isolate.run(() => RepertoireService().courseChaptersOf(content));
   }

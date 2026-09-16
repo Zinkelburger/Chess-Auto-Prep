@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import '../models/repertoire_creation.dart';
+import '../models/repertoire_recovery_entry.dart';
 import '../models/repertoire_recovery_required.dart';
 
 import '../../../widgets/common/name_entry_dialog.dart';
@@ -71,6 +72,7 @@ class RepertoireListBody extends ConsumerStatefulWidget {
 
 class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
   String _search = '';
+  bool _showRecovery = false;
   bool _importing = false;
   bool _pasting = false;
 
@@ -153,6 +155,52 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       );
     }
 
+    if (_showRecovery) {
+      return Column(
+        children: [
+          _buildToolbar(),
+          const Divider(height: 1),
+          if (catalog.actionError != null)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text(
+                'Restore failed. Your recovery files are retained. '
+                'Refresh the list or choose another name.',
+                style: TextStyle(color: AppColors.danger),
+              ),
+            ),
+          Expanded(
+            child: catalog.recovery.isEmpty
+                ? const EmptyStatePlaceholder(
+                    icon: Icons.restore_from_trash,
+                    title: 'Recovery is empty',
+                    subtitle: 'Deleted repertoires will appear here.',
+                  )
+                : ListView(
+                    children: [
+                      for (final item in catalog.recovery)
+                        ListTile(
+                          title: Text(item.name),
+                          subtitle: Text(
+                            item.available
+                                ? 'Deleted ${formatTimeAgo(item.deletedAt)}'
+                                : 'Recovery files are missing or changed',
+                          ),
+                          trailing: TextButton.icon(
+                            onPressed: _busy || !item.available
+                                ? null
+                                : () => _restore(item),
+                            icon: const Icon(Icons.restore),
+                            label: const Text('Restore'),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      );
+    }
+
     // Keep the import action in the same place for empty and populated lists.
     if (_repertoires.isEmpty && _studies.isEmpty) {
       return Column(
@@ -213,39 +261,64 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Your repertoires', style: AppTextStyles.title),
+          Text(
+            _showRecovery ? 'Repertoire recovery' : 'Your repertoires',
+            style: AppTextStyles.title,
+          ),
           const SizedBox(height: 16),
           Wrap(
             spacing: 12,
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              FilledButton.icon(
-                onPressed: (_importing || _busy) ? null : _importRepertoire,
-                icon: importingFile
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.folder_open, size: 20),
-                label: Text(importingFile ? 'Importing…' : 'Open PGN file…'),
-              ),
-              OutlinedButton.icon(
-                onPressed: (_importing || _busy) ? null : _createRepertoire,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Create new repertoire'),
-              ),
-              TextButton.icon(
-                onPressed: (_importing || _busy)
-                    ? null
-                    : () => _importRepertoire(paste: true),
-                icon: const Icon(Icons.content_paste, size: 18),
-                label: const Text('Paste PGN'),
-              ),
+              if (_controller.supportsRecovery)
+                TextButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () {
+                          setState(() => _showRecovery = !_showRecovery);
+                          unawaited(_loadRepertoires());
+                        },
+                  icon: Icon(
+                    _showRecovery ? Icons.arrow_back : Icons.restore_from_trash,
+                  ),
+                  label: Text(_showRecovery ? 'Back to library' : 'Recovery'),
+                ),
+              if (_showRecovery)
+                TextButton.icon(
+                  onPressed: _busy ? null : _loadRepertoires,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh'),
+                ),
+              if (!_showRecovery) ...[
+                FilledButton.icon(
+                  onPressed: (_importing || _busy) ? null : _importRepertoire,
+                  icon: importingFile
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.folder_open, size: 20),
+                  label: Text(importingFile ? 'Importing…' : 'Open PGN file…'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: (_importing || _busy) ? null : _createRepertoire,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Create new repertoire'),
+                ),
+                TextButton.icon(
+                  onPressed: (_importing || _busy)
+                      ? null
+                      : () => _importRepertoire(paste: true),
+                  icon: const Icon(Icons.content_paste, size: 18),
+                  label: const Text('Paste PGN'),
+                ),
+              ],
             ],
           ),
-          if (_repertoires.isNotEmpty || _studies.isNotEmpty) ...[
+          if (!_showRecovery &&
+              (_repertoires.isNotEmpty || _studies.isNotEmpty)) ...[
             const SizedBox(height: 16),
             ListSearchField(
               hintText: 'Search repertoires',
@@ -472,11 +545,43 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
     }
   }
 
+  Future<void> _restore(RepertoireRecoveryEntry entry) async {
+    final name = await showNameEntryDialog(
+      context,
+      title: 'Restore repertoire',
+      prompt: 'Choose a name for the restored repertoire:',
+      fieldLabel: 'Repertoire Name',
+      confirmLabel: 'Restore',
+      allowUnchanged: true,
+      initialValue: entry.name,
+      validate: (name) =>
+          validateSafeFileName(name) ??
+          (_repertoires.any(
+                (r) =>
+                    p.equals(
+                      p.dirname(r.filePath),
+                      p.dirname(entry.originalPath),
+                    ) &&
+                    r.name.toLowerCase() == name.toLowerCase(),
+              )
+              ? 'A repertoire with this name already exists.'
+              : null),
+    );
+    if (name == null || !mounted) return;
+    try {
+      await _controller.restore(entry.id, name: name);
+    } catch (_) {
+      // The catalog owns the persistent error and recovery action.
+    }
+  }
+
   Future<void> _deleteRepertoire(RepertoireMetadata repertoire) async {
     final confirmed = await confirmAction(
       context,
       title: 'Delete repertoire "${repertoire.name}"?',
-      message: 'Its files will be moved to Chess Auto Prep recovery trash.',
+      message: _controller.supportsRecovery
+          ? 'Its files and training history will be kept. Restore it from Recovery in the library.'
+          : 'Its files will be moved to Chess Auto Prep recovery trash.',
       confirmLabel: 'Delete',
     );
 
@@ -485,7 +590,7 @@ class _RepertoireListBodyState extends ConsumerState<RepertoireListBody> {
         await _controller.moveToRecovery(repertoire);
       } catch (e) {
         debugPrint('Delete repertoire failed: $e');
-        if (mounted) {
+        if (mounted && e is! RepertoireRecoveryRequired) {
           showAppSnackBar(
             context,
             AppMessages.deleteRepertoireFailed,

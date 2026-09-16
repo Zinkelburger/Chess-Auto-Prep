@@ -7,5 +7,5 @@ class RepertoireRecoveryRequired implements Exception {
   @override
   String toString() =>
       'The folder may have moved, but its references could not be confirmed. '
-      'Reload the library to recover this operation before renaming again.';
+      'Reload the library to recover this operation before making another change.';
 }

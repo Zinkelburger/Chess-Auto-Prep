@@ -6,6 +6,8 @@ import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import '../../features/repertoires/models/repertoire_recovery_required.dart';
+import '../../features/repertoires/models/repertoire_recovery_entry.dart';
+import '../../utils/safe_file_name.dart';
 import '../../services/storage/file_mutation_service.dart';
 import '../../utils/atomic_file.dart';
 import '../../utils/file_operation_lock.dart';
@@ -21,11 +23,15 @@ class RepertoireDirectoryMutations {
     required this.journals,
     required this.repoint,
     this.testHook,
+    this.trash,
+    this.trashAllowedRoot,
     FileMutationService? mutations,
   }) : _mutations = mutations ?? FileMutationService();
 
   final Directory root;
   final Directory journals;
+  final Directory? trash;
+  final Directory? trashAllowedRoot;
   final Future<void> Function(String from, String to, String operationId)
   repoint;
   final Future<void> Function(RepertoireMoveStep step)? testHook;
@@ -45,41 +51,151 @@ class RepertoireDirectoryMutations {
 
   Future<void> recover() => guard(() async {});
 
-  Future<void> move(String from, String to) => guard(() async {
+  Future<void> move(String from, String to) => guard(() => _move(from, to));
+
+  Future<void> delete(String path) => guard(() async {
+    final recovery = trash;
+    final allowed = trashAllowedRoot;
+    if (recovery == null || allowed == null) {
+      throw UnsupportedError('Recovery storage is not configured');
+    }
+    await _mutations.validateManagedDirectoryPath(
+      recovery,
+      allowedRoot: allowed,
+    );
+    await recovery.create(recursive: true);
+    await _mutations.validateManagedDirectoryPath(
+      recovery,
+      allowedRoot: allowed,
+    );
+    // Persist newly created recovery ancestors before recording a move into
+    // them. The source and destination parents are also flushed after rename.
+    var ancestor = recovery;
+    final boundary = p.normalize(p.absolute(allowed.path));
+    while (true) {
+      await syncDirectory(ancestor.path);
+      if (p.equals(p.normalize(p.absolute(ancestor.path)), boundary)) break;
+      ancestor = ancestor.parent;
+    }
+    final id = _newId();
+    await _move(path, p.join(recovery.path, id), kind: 'trash', id: id);
+  });
+
+  Future<List<RepertoireRecoveryEntry>> listRecovery() => guard(() async {
+    final records = await _records();
+    final restored = records
+        .where((r) => r.kind == 'restore' && r.state == 'completed')
+        .map((r) => r.recoveryId)
+        .toSet();
+    final result = <RepertoireRecoveryEntry>[];
+    for (final record in records.reversed) {
+      if (record.kind != 'trash' ||
+          record.state != 'completed' ||
+          restored.contains(record.id)) {
+        continue;
+      }
+      await _validateOperation(record, history: true);
+      final observation = await observeDirectory(record.to);
+      result.add(
+        RepertoireRecoveryEntry(
+          id: record.id,
+          name: p.basename(record.from),
+          originalPath: record.from,
+          deletedAt: DateTime.fromMicrosecondsSinceEpoch(
+            int.parse(record.id.split('-').first),
+          ),
+          available:
+              observation.status == 0 &&
+              observation.identity == record.identity,
+        ),
+      );
+    }
+    return result;
+  });
+
+  Future<void> restore(String id, {String? name}) => guard(() async {
+    final records = await _records();
+    final candidates = records.where(
+      (r) => r.id == id && r.kind == 'trash' && r.state == 'completed',
+    );
+    if (candidates.length != 1 ||
+        records.any(
+          (r) =>
+              r.kind == 'restore' &&
+              r.recoveryId == id &&
+              r.state == 'completed',
+        )) {
+      throw StateError('This recovery entry is no longer available.');
+    }
+    final original = candidates.single;
+    await _validateOperation(original, history: true);
+    if ((await observeDirectory(original.to)).identity != original.identity) {
+      throw StateError(
+        'Recovery files changed; the retained receipt cannot authorize restore.',
+      );
+    }
+    final target = name == null
+        ? original.from
+        : p.join(p.dirname(original.from), requireSafeFileName(name));
+    await _move(
+      original.to,
+      target,
+      kind: 'restore',
+      recoveryId: id,
+      expectedIdentity: original.identity,
+    );
+  });
+
+  static String _newId() =>
+      '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32).toRadixString(16)}';
+
+  Future<void> _move(
+    String from,
+    String to, {
+    String kind = 'move',
+    String? id,
+    String? recoveryId,
+    String? expectedIdentity,
+  }) async {
     if (p.equals(p.normalize(from), p.normalize(to))) return;
     final source = Directory(p.normalize(p.absolute(from)));
     final destination = Directory(p.normalize(p.absolute(to)));
-    await _validate(source.path, destination.path);
+    await _validate(source.path, destination.path, kind);
     final observation = await observeDirectory(source.path);
-    if (observation.status != 0 || observation.identity == null) {
+    if (observation.status != 0 ||
+        observation.identity == null ||
+        (expectedIdentity != null &&
+            observation.identity != expectedIdentity)) {
       throw FileSystemException(
         'Cannot verify source directory identity',
         from,
       );
     }
-    final id =
-        '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32).toRadixString(16)}';
+    id ??= _newId();
     final operation = _Move(
       id,
       source.path,
       destination.path,
       observation.identity!,
       'pending',
+      kind: kind,
+      recoveryId: recoveryId,
     );
     var prepared = false;
     try {
       await _mutations.moveDirectoryNoReplace(
         source,
         destination,
-        allowedRoot: root,
+        allowedRoot: kind == 'restore' ? trash! : root,
+        destinationAllowedRoot: kind == 'trash' ? trash! : root,
         installNoReplace: () => moveDirectoryNew(source.path, destination.path),
         beforeMove: () async {
           if ((await observeDirectory(source.path)).identity !=
               operation.identity) {
             throw FileSystemException('Source changed before rename', from);
           }
-          await _write(operation, create: true);
           prepared = true;
+          await _write(operation, create: true);
           await testHook?.call(RepertoireMoveStep.prepared);
         },
         afterMove: () async {
@@ -97,24 +213,57 @@ class RepertoireDirectoryMutations {
       if (prepared) throw RepertoireRecoveryRequired(id, error);
       rethrow;
     }
-  });
+  }
 
-  Future<void> _validate(String from, String to) async {
+  Future<void> _validate(String from, String to, String kind) async {
     if (p.equals(from, to) || p.isWithin(from, to)) {
       throw const UnsafeFileMutation('A directory cannot move into itself.');
     }
     await _mutations.validateManagedDirectoryPath(
       Directory(from),
-      allowedRoot: root,
+      allowedRoot: kind == 'restore' ? trash! : root,
     );
     await _mutations.validateManagedDirectoryPath(
       Directory(to),
-      allowedRoot: root,
+      allowedRoot: kind == 'trash' ? trash! : root,
     );
   }
 
+  Future<void> _validateOperation(
+    _Move operation, {
+    bool history = false,
+  }) async {
+    if (operation.kind != 'move') {
+      final recovery = trash;
+      final allowed = trashAllowedRoot;
+      if (recovery == null || allowed == null) {
+        throw StateError('Recovery storage is not configured');
+      }
+      await _mutations.validateManagedDirectoryPath(
+        recovery,
+        allowedRoot: allowed,
+      );
+      final recoveryPath = operation.kind == 'trash'
+          ? operation.to
+          : operation.from;
+      final recoveryId = operation.kind == 'trash'
+          ? operation.id
+          : operation.recoveryId;
+      final libraryPath = operation.kind == 'trash'
+          ? operation.from
+          : operation.to;
+      if (!p.equals(recoveryPath, p.join(recovery.path, recoveryId!)) ||
+          !p.isWithin(p.normalize(p.absolute(root.path)), libraryPath)) {
+        throw const FormatException(
+          'Recovery journal paths do not match its receipt',
+        );
+      }
+    }
+    if (!history) await _validate(operation.from, operation.to, operation.kind);
+  }
+
   Future<void> _finish(_Move operation) async {
-    await _validate(operation.from, operation.to);
+    await _validateOperation(operation);
     final source = await observeDirectory(operation.from);
     final destination = await observeDirectory(operation.to);
     if (source.status != 1 ||
@@ -139,14 +288,15 @@ class RepertoireDirectoryMutations {
     await testHook?.call(RepertoireMoveStep.completed);
   }
 
-  Future<void> _recover() async {
-    if (!await journals.exists()) return;
+  Future<List<_Move>> _records() async {
+    if (!await journals.exists()) return [];
     final files = await journals
         .list()
         .where((entry) => entry is File && p.extension(entry.path) == '.json')
         .cast<File>()
         .toList();
     files.sort((a, b) => a.path.compareTo(b.path));
+    final records = <_Move>[];
     for (final file in files) {
       final raw = await readTextFileSafely(file);
       if (raw == null) continue;
@@ -154,9 +304,32 @@ class RepertoireDirectoryMutations {
         jsonDecode(raw),
         p.basenameWithoutExtension(file.path),
       );
+      records.add(operation);
+    }
+    final byId = {for (final record in records) record.id: record};
+    final completedRestores = <String>{};
+    for (final record in records.where((r) => r.kind == 'restore')) {
+      final original = byId[record.recoveryId];
+      if (original == null ||
+          original.kind != 'trash' ||
+          original.state != 'completed' ||
+          record.from != original.to ||
+          record.identity != original.identity ||
+          (record.state == 'completed' &&
+              !completedRestores.add(original.id))) {
+        throw const FormatException(
+          'Restore receipt does not match its deletion',
+        );
+      }
+    }
+    return records;
+  }
+
+  Future<void> _recover() async {
+    for (final operation in await _records()) {
       if (operation.state != 'pending') continue;
       try {
-        await _validate(operation.from, operation.to);
+        await _validateOperation(operation);
         final source = await observeDirectory(operation.from);
         final destination = await observeDirectory(operation.to);
         if (source.status == 0 &&
@@ -186,13 +359,24 @@ class RepertoireDirectoryMutations {
 }
 
 class _Move {
-  const _Move(this.id, this.from, this.to, this.identity, this.state);
+  const _Move(
+    this.id,
+    this.from,
+    this.to,
+    this.identity,
+    this.state, {
+    this.kind = 'move',
+    this.recoveryId,
+  });
   final String id;
   final String from;
   final String to;
   final String identity;
   final String state;
-  _Move withState(String value) => _Move(id, from, to, identity, value);
+  final String kind;
+  final String? recoveryId;
+  _Move withState(String value) =>
+      _Move(id, from, to, identity, value, kind: kind, recoveryId: recoveryId);
   Map<String, Object> toJson() => {
     'version': 1,
     'id': id,
@@ -200,6 +384,8 @@ class _Move {
     'to': to,
     'identity': identity,
     'state': state,
+    'kind': kind,
+    'recoveryId': ?recoveryId,
   };
   static _Move parse(Object? value, String fileId) {
     if (!RegExp(r'^[0-9]+-[0-9a-f]+$').hasMatch(fileId) ||
@@ -209,6 +395,12 @@ class _Move {
         value['from'] is! String ||
         value['to'] is! String ||
         value['identity'] is! String ||
+        !{'move', 'trash', 'restore'}.contains(value['kind'] ?? 'move') ||
+        (value['kind'] == 'restore' &&
+            (value['recoveryId'] is! String ||
+                !RegExp(
+                  r'^[0-9]+-[0-9a-f]+$',
+                ).hasMatch(value['recoveryId'] as String))) ||
         !{'pending', 'completed', 'cancelled'}.contains(value['state'])) {
       throw const FormatException(
         'Invalid repertoire move journal; retained for recovery',
@@ -220,6 +412,8 @@ class _Move {
       value['to'] as String,
       value['identity'] as String,
       value['state'] as String,
+      kind: (value['kind'] as String?) ?? 'move',
+      recoveryId: value['recoveryId'] as String?,
     );
   }
 }

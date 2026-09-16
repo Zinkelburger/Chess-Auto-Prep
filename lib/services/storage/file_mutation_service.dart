@@ -170,6 +170,7 @@ class FileMutationService {
     Directory source,
     Directory destination, {
     required Directory allowedRoot,
+    Directory? destinationAllowedRoot,
     Future<void> Function()? beforeMove,
     Future<void> Function()? afterMove,
     Future<void> Function()? installNoReplace,
@@ -182,7 +183,10 @@ class FileMutationService {
     }
     await withFileOperationLock(allowedRoot.path, () async {
       await _requireSafeTarget(source, allowedRoot: allowedRoot);
-      await _requireSafeDestination(destination, allowedRoot: allowedRoot);
+      await _requireSafeDestination(
+        destination,
+        allowedRoot: destinationAllowedRoot ?? allowedRoot,
+      );
       if (!await source.exists()) {
         throw FileSystemException(
           'Source directory does not exist',

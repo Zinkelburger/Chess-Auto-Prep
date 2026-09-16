@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:chess_auto_prep/features/games/services/my_repertoire_settings.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:csv/csv.dart';
@@ -92,6 +93,272 @@ void main() {
       '${jsonEncode({'repertoireId': '${source.path}-other/Main.pgn', 'lineId': 'elsewhere'})}\n',
     );
   }
+
+  test(
+    'delete and restore retain bytes, history and parked book selections',
+    () async {
+      await seedTraining();
+      final bytes = await File(chapter).readAsBytes();
+      final books = MyRepertoireSettings(repository: settings.repertoireBooks);
+      addTearDown(books.dispose);
+      await storage().deleteRepertoireDirectory(source.path);
+      expect(await storage().listRepertoires(), isEmpty);
+      final entry = (await storage().listRepertoireRecovery()).single;
+      expect(entry.name, 'Old');
+      expect(entry.available, isTrue);
+      expect(entry.originalPath, source.path);
+      expect(books.blackPaths, isEmpty);
+      expect(books.whitePaths, ['${source.path}-other']);
+      final deletedPath =
+          settings.repertoireBooks.state.committed!.black.single;
+      expect(deletedPath, contains('.chess_auto_prep_trash'));
+      expect(await File(p.join(deletedPath, 'Main.pgn')).readAsBytes(), bytes);
+      // Reusing the original name must not adopt the deleted repertoire's history.
+      await source.create();
+      await File(chapter).writeAsString('new unrelated content');
+      await expectLater(
+        storage().restoreRepertoire(entry.id),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await File(chapter).readAsString(), 'new unrelated content');
+      expect(
+        (await storage().listRepertoireRecovery()).single.available,
+        isTrue,
+      );
+      await storage().restoreRepertoire(entry.id, name: 'Restored');
+      final restored = p.join(root.path, 'Restored');
+      expect(await File(p.join(restored, 'Main.pgn')).readAsBytes(), bytes);
+      expect(books.blackPaths, [restored]);
+      for (final name in [
+        'repertoire_reviews.csv',
+        'repertoire_review_history.csv',
+        'repertoire_move_progress.csv',
+        'repertoire_move_attempts.jsonl',
+      ]) {
+        expect(
+          await File(p.join(profile.path, name)).readAsString(),
+          contains(p.join(restored, 'Main.pgn')),
+        );
+      }
+      expect(await storage().listRepertoireRecovery(), isEmpty);
+      await expectLater(
+        storage().restoreRepertoire(entry.id),
+        throwsStateError,
+      );
+      expect(await File(chapter).readAsString(), 'new unrelated content');
+    },
+    skip: !Platform.isLinux,
+  );
+
+  for (final restore in [false, true]) {
+    for (final step in RepertoireMoveStep.values) {
+      test(
+        '${restore ? 'restore' : 'delete'} interruption at ${step.name} is resolved on restart',
+        () async {
+          await seedTraining();
+          String? entryId;
+          if (restore) {
+            await storage().deleteRepertoireDirectory(source.path);
+            entryId = (await storage().listRepertoireRecovery()).single.id;
+          }
+          await expectLater(
+            restore
+                ? storage(failAt: step).restoreRepertoire(entryId!)
+                : storage(failAt: step).deleteRepertoireDirectory(source.path),
+            throwsA(isA<RepertoireRecoveryRequired>()),
+          );
+          final restarted = storage();
+          final library = await restarted.listRepertoires();
+          final recovery = await restarted.listRepertoireRecovery();
+          final moved = step != RepertoireMoveStep.prepared;
+          final live = restore ? moved : !moved;
+          expect(library.length, live ? 1 : 0);
+          expect(recovery.length, live ? 0 : 1);
+          expect(await File(chapter).exists(), live);
+          final currentPath =
+              settings.repertoireBooks.state.committed!.black.single;
+          expect(currentPath == source.path, live);
+          expect(
+            await File(p.join(currentPath, 'Main.pgn')).readAsString(),
+            contains('annotation'),
+          );
+          expect(
+            (await journals()).every((record) => record['state'] != 'pending'),
+            isTrue,
+          );
+          final receipts = await journals();
+          await restarted.listRepertoires();
+          expect(await journals(), receipts);
+        },
+        skip: !Platform.isLinux,
+      );
+    }
+  }
+
+  test('nested folder deletion restores in its original parent', () async {
+    final nested = await Directory(p.join(source.path, 'Nested')).create();
+    await File(p.join(nested.path, 'Lesson.pgn')).writeAsString('nested bytes');
+    await storage().deleteRepertoireDirectory(nested.path);
+    final entry = (await storage().listRepertoireRecovery()).single;
+    expect(entry.originalPath, nested.path);
+    await storage().restoreRepertoire(entry.id, name: 'Recovered lesson');
+    expect(
+      await File(
+        p.join(source.path, 'Recovered lesson', 'Lesson.pgn'),
+      ).readAsString(),
+      'nested bytes',
+    );
+    expect(await File(chapter).exists(), isTrue);
+  }, skip: !Platform.isLinux);
+
+  test(
+    'a forged restore receipt cannot hide an available recovery entry',
+    () async {
+      await storage().deleteRepertoireDirectory(source.path);
+      final entry = (await storage().listRepertoireRecovery()).single;
+      final record = (await journals()).single;
+      final id = '${DateTime.now().microsecondsSinceEpoch}-abcdef';
+      await File(
+        p.join(profile.path, 'repertoire-mutations', '$id.json'),
+      ).writeAsString(
+        jsonEncode({
+          ...record,
+          'id': id,
+          'kind': 'restore',
+          'recoveryId': entry.id,
+          'from': record['to'],
+          'to': source.path,
+          'identity': 'unrelated',
+        }),
+      );
+      await expectLater(
+        storage().listRepertoireRecovery(),
+        throwsFormatException,
+      );
+      expect(
+        await File(p.join(record['to'] as String, 'Main.pgn')).readAsString(),
+        contains('annotation'),
+      );
+      expect(await source.exists(), isFalse);
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test(
+    'replacement in recovery is visible but cannot authorize restore',
+    () async {
+      await storage().deleteRepertoireDirectory(source.path);
+      final entry = (await storage().listRepertoireRecovery()).single;
+      final trashPath = settings.repertoireBooks.state.committed!.black.single;
+      await Directory(trashPath).rename('$trashPath-original');
+      await Directory(trashPath).create();
+      await File(p.join(trashPath, 'Other.pgn')).writeAsString('external');
+      expect(
+        (await storage().listRepertoireRecovery()).single.available,
+        isFalse,
+      );
+      await expectLater(
+        storage().restoreRepertoire(entry.id),
+        throwsStateError,
+      );
+      expect(await source.exists(), isFalse);
+      expect(
+        await File(p.join('$trashPath-original', 'Main.pgn')).readAsString(),
+        contains('annotation'),
+      );
+      expect(
+        await File(p.join(trashPath, 'Other.pgn')).readAsString(),
+        'external',
+      );
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test(
+    'original name becoming a symlink does not prevent restore under another name',
+    () async {
+      await storage().deleteRepertoireDirectory(source.path);
+      await Link(source.path).create(profile.path);
+      final entry = (await storage().listRepertoireRecovery()).single;
+      await expectLater(
+        storage().restoreRepertoire(entry.id),
+        throwsA(isA<Exception>()),
+      );
+      await storage().restoreRepertoire(entry.id, name: 'Recovered');
+      expect(
+        await File(p.join(root.path, 'Recovered', 'Main.pgn')).exists(),
+        isTrue,
+      );
+      expect(await Link(source.path).target(), profile.path);
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test(
+    'linked recovery root and forged recovery ids never move live data',
+    () async {
+      final elsewhere = await Directory(
+        p.join(profile.path, 'elsewhere'),
+      ).create();
+      await Link(
+        p.join(profile.path, '.chess_auto_prep_trash'),
+      ).create(elsewhere.path);
+      await expectLater(
+        storage().deleteRepertoireDirectory(source.path),
+        throwsA(isA<Exception>()),
+      );
+      expect(await File(chapter).exists(), isTrue);
+      expect(await elsewhere.list().toList(), isEmpty);
+      await expectLater(
+        storage().restoreRepertoire('../outside'),
+        throwsStateError,
+      );
+    },
+    skip: !Platform.isLinux,
+  );
+
+  test('competing restore operations move a receipt only once', () async {
+    await storage().deleteRepertoireDirectory(source.path);
+    final entry = (await storage().listRepertoireRecovery()).single;
+    final results = await Future.wait([
+      for (final name in ['First', 'Second'])
+        storage()
+            .restoreRepertoire(entry.id, name: name)
+            .then<Object?>((_) => null, onError: (Object e) => e),
+    ]);
+    expect(results.where((r) => r == null), hasLength(1));
+    expect(results.whereType<StateError>(), hasLength(1));
+    expect(await storage().listRepertoires(), hasLength(1));
+    expect(await storage().listRepertoireRecovery(), isEmpty);
+  }, skip: !Platform.isLinux);
+
+  test('external creation after restore intent is never overwritten', () async {
+    await storage().deleteRepertoireDirectory(source.path);
+    final entry = (await storage().listRepertoireRecovery()).single;
+    final io = IOStorageService(
+      documentsRoot: profile,
+      supportRoot: profile,
+      repertoiresRoot: root,
+      repertoireBooks: settings.repertoireBooks,
+      repertoireMoveHook: (step) async {
+        if (step == RepertoireMoveStep.prepared) {
+          await source.create();
+          await File(chapter).writeAsString('competing creator');
+        }
+      },
+    );
+    await expectLater(
+      io.restoreRepertoire(entry.id),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await File(chapter).readAsString(), 'competing creator');
+    expect((await storage().listRepertoireRecovery()).single.available, isTrue);
+    await storage().restoreRepertoire(entry.id, name: 'Safe');
+    expect(
+      await File(p.join(root.path, 'Safe', 'Main.pgn')).readAsString(),
+      contains('annotation'),
+    );
+  }, skip: !Platform.isLinux);
 
   test(
     'native directory observation distinguishes rename, replacement, absence and links',

@@ -418,7 +418,8 @@ recovered PGN is present and its journal is completed. The preview is stopped
 before final checks. App analysis/lint passes with nine existing informational
 findings; package analysis and strict C compilation are clean.
 
-Remaining: journaled trash restore and its catalog UI; multi-file course
+Remaining at this checkpoint (trash restore advances below): journaled trash
+restore and its catalog UI; multi-file course
 publication; single-chapter/file rename migration; permanent logical document
 IDs and stale training-session writes after a move; recovery/version retention;
 external writers that do not participate in the domain mutex; lock/performance
@@ -427,6 +428,64 @@ can still recreate a stale absent path after a completed move; migrating them
 to the revision-required API remains necessary. Native pre/post identity checks
 are not an atomic compare-and-swap against arbitrary external source replacement.
 The first-slice data gates and full rewrite remain partial.
+
+### Recovery checkpoint — Linux deletion and restore
+
+Following `14eb0d62`, `RepertoireDirectoryMutations` now journals deletion and
+restore as directory moves under the existing repertoire domain lock. Deletion
+retains the whole tree at Documents `.chess_auto_prep_trash/repertoires/<id>`;
+its receipt retains the original path and native identity. Newly created recovery
+ancestors and both namespace parents are flushed. Restore resolves the receipt
+by id, verifies identity, refuses collisions using native exclusive rename, and
+records a separate completion linked to the deletion. Prepared-but-unmoved
+operations cancel on recovery; moved operations finish references without
+repeating the rename. Completed restore receipts cannot consume another
+folder's deletion record. Records and recovery content are never auto-pruned.
+
+All four training reference formats and book selections relocate into recovery
+and back through the existing replayable migration. Parked book selections are
+excluded from active Games analysis; restoration reactivates selections still
+present in settings. Explicit subsequent selection changes remain authoritative.
+A newer folder at the old path does not inherit the deleted folder's references.
+The original PGN bytes, annotations and unknown training fields are retained.
+
+The injected catalog contract/controller now own recovery listing and restore.
+The Linux **Recovery** view accepts the original name or another name, displays
+missing/replaced folders with restore disabled, and uses **Recover library** for
+uncertain operations. Nested folders deleted through the legacy outline also
+receive receipts and restore inside their original parent. The shared name dialog
+explicitly permits the unchanged name for restore. Other hosts retain their
+existing quarantine behavior and do not advertise the unverified restore UI.
+
+Broader outline tests found a dependency leak: its parser ignored injected
+storage and consulted `StorageFactory`, triggering desktop plugin access in
+isolated tests. `RepertoireService` now accepts storage, and the outline and
+chapter splitter pass their owner through. Pure text parsing stays independent
+of storage. This repairs the ownership connection; it does not claim migration
+of the legacy editor or multi-file splitter to the native document API.
+
+Evidence for this checkpoint: 168 distinct focused regression cases pass. The
+set covers the journal,
+catalog controller/repository, My books, game deviations, outline, splitter,
+file-mutation boundary, IO storage, parser, line moves and file editor. Native
+journeys cover create/search/rename/delete, collision-preserving restore under
+a different name, fresh application owners, interrupted folder rename, and an
+interrupted restore through the UI using the original name. The initial desktop
+check exposed the shared dialog's unchanged-name behavior; the initial expanded
+outline run exposed the storage injection leak. Both were fixed and rerun.
+Inspected headless screenshots show [the recovery list](images/architecture-renewal-recovery.png)
+and [the restored library](images/architecture-renewal-restored.png). The preview
+uses the disposable driver profile and is stopped before final checks. App
+analysis/lint passes with the nine existing informational findings, and the
+updated local documentation links and whitespace checks pass.
+
+Remaining: adoption of older unjournaled quarantine entries; restoring nested
+folders whose original parent was subsequently removed/moved; retained-version
+UI and pruning policy; stable logical identities and stale training sessions;
+revision-required migration of all writers; multi-file course publication;
+consistent profile backup/restore; lock/performance budgets; process-kill and
+power-loss rehearsal; Windows/macOS adoption; design/ARB/Widgetbook and the
+persistent shell. The first slice and full architecture renewal remain partial.
 
 ### Initial parity and ownership inventory (milestone 0, partial)
 

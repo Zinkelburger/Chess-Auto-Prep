@@ -51,6 +51,14 @@ void main() {
           );
       expect(recovered, hasLength(1));
       expect(recovered.single.readAsBytesSync(), bytes);
+      if (repository.supportsRecovery) {
+        final entry = (await repository.listRecovery()).single;
+        await repository.restore(entry.id);
+        expect(await repository.listRecovery(), isEmpty);
+        final restored = (await repository.listRepertoires()).single;
+        expect(restored.name, 'Caro-Kann');
+        expect(File('${restored.filePath}/Main.pgn').readAsBytesSync(), bytes);
+      }
     },
   );
 

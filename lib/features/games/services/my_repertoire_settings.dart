@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:path/path.dart' as p;
 
 import 'package:flutter/foundation.dart';
 
@@ -35,10 +36,17 @@ class MyRepertoireSettings extends ChangeNotifier with SafeChangeNotifier {
   late final StreamSubscription<SettingsState<RepertoireBooks>> _subscription;
 
   SettingsState<RepertoireBooks> get state => repository.state;
-  List<String> get whitePaths => state.committed?.white ?? const [];
-  List<String> get blackPaths => state.committed?.black ?? const [];
+  // Deleted selections retain their recovery location for journal replay, but
+  // are not active opening books. Restore relocates these same references back.
+  List<String> _active(List<String>? paths) => List.unmodifiable(
+    (paths ?? const <String>[]).where(
+      (path) => !p.split(path).contains('.chess_auto_prep_trash'),
+    ),
+  );
+  List<String> get whitePaths => _active(state.committed?.white);
+  List<String> get blackPaths => _active(state.committed?.black);
   bool get isLoaded => state.committed != null;
-  bool get hasAny => state.committed?.hasAny ?? false;
+  bool get hasAny => whitePaths.isNotEmpty || blackPaths.isNotEmpty;
   List<String> pathsFor({required bool white}) =>
       white ? whitePaths : blackPaths;
 

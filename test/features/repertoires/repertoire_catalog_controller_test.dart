@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_recovery_entry.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_recovery_required.dart';
 
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_catalog_controller.dart';
@@ -15,6 +16,20 @@ RepertoireMetadata entry(String name, [int day = 1]) => RepertoireMetadata(
 );
 
 class Catalog implements RepertoireCatalogRepository {
+  @override
+  bool get supportsRecovery => true;
+  List<RepertoireRecoveryEntry> recovery = [];
+  @override
+  Future<List<RepertoireRecoveryEntry>> listRecovery() async => recovery;
+  @override
+  Future<void> restore(String id, {String? name}) async {
+    writes++;
+    await write?.call();
+    final item = recovery.singleWhere((r) => r.id == id);
+    entries = [...entries, entry(name ?? item.name)];
+    recovery = recovery.where((r) => r.id != id).toList();
+  }
+
   List<RepertoireMetadata> entries = [entry('Old'), entry('New', 2)];
   Future<List<RepertoireMetadata>> Function()? read;
   Future<void> Function()? write;
@@ -88,6 +103,35 @@ void main() {
     await container.read(provider.notifier).refresh();
     return container.read(provider.notifier);
   }
+
+  test(
+    'restore retains recovery on failure and refreshes both lists after commit',
+    () async {
+      repository.recovery = [
+        RepertoireRecoveryEntry(
+          id: '1-ab',
+          name: 'Deleted',
+          originalPath: '/Deleted',
+          deletedAt: DateTime(2026),
+          available: true,
+        ),
+      ];
+      final controller = await ready();
+      expect(container.read(provider).recovery, hasLength(1));
+      repository.write = () async => throw StateError('collision');
+      await expectLater(controller.restore('1-ab'), throwsStateError);
+      expect(container.read(provider).recovery, hasLength(1));
+      expect(container.read(provider).actionError, isA<StateError>());
+      repository.write = null;
+      await controller.restore('1-ab', name: 'Recovered');
+      expect(container.read(provider).recovery, isEmpty);
+      expect(
+        container.read(provider).repertoires.map((r) => r.name),
+        contains('Recovered'),
+      );
+      expect(container.read(provider).actionError, isNull);
+    },
+  );
 
   test(
     'recovery refresh clears its error only after a confirmed read and never repeats rename',

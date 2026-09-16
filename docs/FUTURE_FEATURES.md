@@ -22,7 +22,9 @@ repertoire catalog actions now use injected repository/controller boundaries
 and the new hierarchy. Linux catalog creation now uses the typed native-identity
 PGN store. Book selections have one typed settings owner and explicit failed
 write/retry states. Linux folder rename has journaled training/book-reference
-recovery. Remaining settings, writer adoption, trash restore, multi-file
+recovery. Linux journaled deletion and its Recovery/Restore UI now preserve
+files and training/book references, including interrupted restore. Legacy
+unjournaled trash adoption, remaining settings, writer adoption, multi-file
 publication, design and full slice gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design
 principles, storage preservation gates and milestone sequence live in
 [ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). That document is the canonical
