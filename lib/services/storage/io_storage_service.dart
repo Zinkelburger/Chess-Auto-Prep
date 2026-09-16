@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
 import '../../features/repertoires/models/repertoire_metadata.dart';
+import '../../features/repertoires/models/repertoire_creation.dart';
+import '../../infrastructure/repertoires/native_repertoire_publication_store.dart';
+import '../../infrastructure/repertoires/repertoire_import_planner.dart';
 import '../../features/repertoires/models/repertoire_recovery_entry.dart';
 import '../../features/settings/repositories/app_settings_repository.dart';
 import '../../infrastructure/settings/shared_preferences_app_settings_repository.dart';
@@ -34,9 +38,50 @@ class IOStorageService implements StorageService {
     Directory? repertoiresRoot,
     this.repertoireBooks,
     this.repertoireMoveHook,
+    this.repertoirePublicationHook,
   }) : _documentsRootOverride = documentsRoot,
        _supportRootOverride = supportRoot,
        _repertoiresRootOverride = repertoiresRoot;
+
+  final Future<void> Function(RepertoirePublicationStep)?
+  repertoirePublicationHook;
+  Future<NativeRepertoirePublicationStore>? _publicationStore;
+  Future<NativeRepertoirePublicationStore> _publications() async {
+    final result = _publicationStore ??= _createPublications();
+    try {
+      return await result;
+    } catch (_) {
+      if (identical(result, _publicationStore)) _publicationStore = null;
+      rethrow;
+    }
+  }
+
+  Future<NativeRepertoirePublicationStore> _createPublications() async =>
+      NativeRepertoirePublicationStore(
+        root: await _repertoiresRoot(),
+        guardCommit: _guardLibrary,
+        testHook: repertoirePublicationHook,
+      );
+  Future<T> _guardLibrary<T>(Future<T> Function() action) async =>
+      (await _moves()).guard(action);
+
+  Future<RepertoireCreationResult> publishRepertoire(
+    CreateRepertoire request, {
+    DateTime? createdAt,
+    Future<void> Function(String path, String content)? createDocument,
+  }) async {
+    if (!Platform.isLinux) {
+      throw UnsupportedError(
+        'Native repertoire publication is not verified on this host',
+      );
+    }
+    final now = createdAt ?? DateTime.now();
+    final plan = await Isolate.run(() => planRepertoireImport(request, now));
+    return (await _publications()).publish(
+      plan,
+      createDocument: createDocument,
+    );
+  }
 
   final RepertoireBooksRepository? repertoireBooks;
   final Future<void> Function(RepertoireMoveStep)? repertoireMoveHook;
@@ -65,6 +110,7 @@ class IOStorageService implements StorageService {
           books: repertoireBooks,
         ).repoint,
         testHook: repertoireMoveHook,
+        recoverAdditional: () async => (await _publications()).recover(),
       );
 
   /// Shared by the native document store and transitional storage writers.
@@ -347,7 +393,9 @@ class IOStorageService implements StorageService {
 
     final folders = <Directory>[
       await for (final entity in dir.list())
-        if (entity is Directory) entity,
+        if (entity is Directory &&
+            p.basename(entity.path) != RepertoireDirectoryMutations.stagingName)
+          entity,
     ];
 
     return Future.wait(

@@ -1,4 +1,5 @@
 import '../models/repertoire_creation.dart';
+import '../models/repertoire_recovery_required.dart';
 import 'package:flutter/material.dart';
 
 import '../../../services/pgn_mainline_lexer.dart' as pgn;
@@ -96,7 +97,10 @@ class _RepertoireCreationScreenState extends State<RepertoireCreationScreen> {
         setState(() {
           _busy = false;
           _error =
-              e is RepertoireExistsException || e is RepertoireCreationUncertain
+              e is RepertoireExistsException ||
+                  (e is RepertoireCreationUncertain ||
+                      e is RepertoirePreparationFailed ||
+                      e is RepertoireRecoveryRequired)
               ? e.toString()
               : 'Could not create the repertoire. Your input is still here; try again.';
         });

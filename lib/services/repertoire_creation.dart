@@ -17,6 +17,7 @@ import 'pgn_parsing_service.dart' as pgn;
 import 'repertoire_line_expansion.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
+import 'storage/io_storage_service.dart';
 
 /// Create the folder for [name] with one chapter marked for [color]
 /// ('White' or 'Black'), optionally seeded with [pgnContent].
@@ -57,6 +58,20 @@ Future<RepertoireCreationResult> createRepertoire({
   Future<void> Function(String path, String content)? createDocument,
 }) async {
   final store = storage ?? StorageFactory.instance;
+  if (Platform.isLinux && store is IOStorageService) {
+    return store.publishRepertoire(
+      CreateRepertoire(
+        name: name,
+        color: color,
+        pgnContent: pgnContent,
+        gameCount: gameCount,
+        chapterName: chapterName,
+        splitChapters: splitChapters,
+      ),
+      createdAt: createdAt,
+      createDocument: createDocument,
+    );
+  }
   final dirPath = await store.repertoireDirectoryPath(name);
   final chapterPath = store.chapterFilePath(dirPath, chapterName);
   final stamp = (createdAt ?? DateTime.now()).toString().split('.')[0];

@@ -18,7 +18,7 @@ import '../../../core/generation_session_controller.dart';
 import '../../../core/generation_session_types.dart';
 import '../../../services/generation/generation_config.dart';
 import '../../../utils/safe_change_notifier.dart';
-import '../../repertoire/services/chapter_splitter.dart';
+import '../../repertoire/services/course_chapter_partition.dart';
 import '../../repertoire/services/repertoire_outline_service.dart';
 import '../models/plan_models.dart';
 import '../services/san_paths.dart';
@@ -194,7 +194,7 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
     PlanChapter chapter,
     bool isWhite,
   ) async {
-    final base = ChapterSplitter.fileNameFor(chapter.name);
+    final base = CourseChapterPartition.fileNameFor(chapter.name);
     var name = base;
     var attempt = 1;
     while (true) {

@@ -487,6 +487,73 @@ consistent profile backup/restore; lock/performance budgets; process-kill and
 power-loss rehearsal; Windows/macOS adoption; design/ARB/Widgetbook and the
 persistent shell. The first slice and full architecture renewal remain partial.
 
+### Publication checkpoint — complete new repertoire imports on Linux
+
+After recovery checkpoint `1995d990`, new-repertoire creation no longer writes
+the first chapter into the live folder and then splits it there on Linux.
+`RepertoirePublication` describes the complete chapter set. A planner runs off
+the UI isolate and shares the extracted `CourseChapterPartition` with the legacy
+splitter; this removes duplicated naming/pinning logic instead of maintaining
+two course interpretations. Canonical callers, including the generation planner,
+use the extracted helper directly. Original line names/IDs, model-game tags,
+unknown headers and annotations remain attached to their games. Course filenames
+are unique after normalization and avoid reserved operating-system names.
+
+`NativeRepertoirePublicationStore` creates a private batch under the same
+filesystem at `repertoires/.cap-repertoire-publications/<id>/`. The typed native
+PGN store writes the transformed `payload/` chapters and retains original input
+text as `source.pgn`. A flushed manifest records directory identity and every
+chapter's native identity and byte digest. Only a fully prepared folder reaches
+the shared domain lock and a single `renameat2(RENAME_NOREPLACE)` publication.
+An existing folder (even empty), concurrent same/case-folded name, or racing
+external creator cannot be merged into or overwritten. The catalog excludes
+private staging; ordinary folder moves/deletion cannot select it.
+
+The publication manifest states are staged, pending, completed and cancelled.
+Preparation failures leave the live library unchanged and retain private data;
+forms retain their inputs and report that nothing was published. Recovery never
+publishes an uncommitted staged draft. A pending intent with its original payload
+still private and destination absent cancels; an installed folder is acknowledged
+only when its directory identity and entire chapter set match the manifest.
+Ambiguous/replaced/edited output retains its receipt and blocks subsequent
+managed operations through the existing **Recover library** flow. Completed
+receipts remain audit records; later intentional edits do not reopen them.
+The shared creation helper routes the catalog and My books through this Linux
+path; non-Linux hosts retain the existing adapter pending their native gates.
+
+Verification: 162 distinct focused tests and four Linux desktop journeys pass.
+Analysis/lint passes with nine existing informational findings; local document
+links and whitespace checks pass. Regression evidence includes hidden partial staging; interruption after each
+chapter, staged manifest, commit intent, install and acknowledgement; unchanged
+and colliding destinations; two concurrent case-folded names; external creators;
+staged/installed edits; directory replacement; source-text retention; reserved
+staging operations; malformed/escaping/symlinked manifests; and reads waiting
+for publication acknowledgement. Existing splitter, outline, creation, native
+PGN store, catalog, import-dialog and My books tests cover compatibility.
+The first expanded widget run exposed a fake-time wait on a progress indicator;
+it now drains real controller completion while advancing route frames and asserts
+the visible selected chapter. No production test bypass was introduced.
+
+Native desktop journeys exercise failed preparation with draft retention,
+interrupted publication followed by collision-preserving retry, the full catalog
+create/search/rename/delete/restore flow, and course import/reopening with both
+chapters, pinned IDs and annotations intact. A separate headless app check made
+only its disposable staging directory read-only: creation retained its draft and
+published no folder. Restoring permissions and retrying published both chapters.
+Screenshots were inspected for [the retained draft](images/architecture-renewal-publication-failed.png)
+and [the complete chapter list](images/architecture-renewal-publication-complete.png).
+The preview was stopped and its fixture permissions restored before final checks.
+
+Remaining: transactional splitting/merging of **existing** chapters and their
+references; all legacy editor/generator writers; stable document identities;
+UI for retained private imports and retention policy; large-document and lock
+budgets; actual process-kill/power-loss rehearsal; Windows/macOS adoption;
+full profile backup/restore; and the design system, ARB, Widgetbook and persistent
+shell. Native identity checks do not provide compare-and-swap against arbitrary
+external editors. New-directory atomic publication does not prove the separate
+existing-document transaction gates. The first slice and full rewrite remain
+partial, with PLAN-02 still pending.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

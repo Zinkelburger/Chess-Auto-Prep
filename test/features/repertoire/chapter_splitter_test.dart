@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:chess_auto_prep/features/repertoire/services/course_chapter_partition.dart';
 
 import 'package:chess_auto_prep/features/repertoire/services/chapter_splitter.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
@@ -248,16 +249,19 @@ void main() {
   group('fileNameFor', () {
     test('replaces what a filesystem will not take', () {
       expect(
-        ChapterSplitter.fileNameFor('QGD: Other Lines'),
+        CourseChapterPartition.fileNameFor('QGD: Other Lines'),
         'QGD Other Lines',
       );
       expect(
-        ChapterSplitter.fileNameFor(r'Reti / KIA \ lines'),
+        CourseChapterPartition.fileNameFor(r'Reti / KIA \ lines'),
         'Reti KIA lines',
       );
-      expect(ChapterSplitter.fileNameFor('Trailing dots...'), 'Trailing dots');
-      expect(ChapterSplitter.fileNameFor('   '), 'Chapter');
-      expect(ChapterSplitter.fileNameFor('x' * 200).length, 80);
+      expect(
+        CourseChapterPartition.fileNameFor('Trailing dots...'),
+        'Trailing dots',
+      );
+      expect(CourseChapterPartition.fileNameFor('   '), 'Chapter');
+      expect(CourseChapterPartition.fileNameFor('x' * 200).length, 80);
     });
   });
 }

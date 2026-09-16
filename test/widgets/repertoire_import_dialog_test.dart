@@ -252,7 +252,6 @@ void main() {
         await tester.tap(find.widgetWithText(FilledButton, 'Import'));
         await storage.written.future.timeout(const Duration(seconds: 10));
       });
-      await tester.pumpAndSettle();
       // Disk completion precedes controller refresh and Navigator completion.
       // Wait for the user-visible handoff, rather than assuming the write's
       // completer also means that the route has returned its result.
@@ -260,8 +259,11 @@ void main() {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)),
         );
-        await tester.pumpAndSettle();
+        // Advance the route animation without waiting indefinitely on the
+        // progress indicator while real async controller work is still pending.
+        await tester.pump(const Duration(milliseconds: 100));
       }
+      await tester.pumpAndSettle();
       expect(selected, isNotNull);
       expect(selected!.filePath, '/repertoires/Pasted repertoire/Main.pgn');
       expect(selected!.gameCount, 2);

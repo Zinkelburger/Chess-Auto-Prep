@@ -16,7 +16,7 @@
 ///     the `[White]` titles grouping the file for the other two. Cut the file
 ///     up and every one of those answers changes. So each game has the
 ///     answers it has *now* written into its own headers first (see
-///     [_pinned]), which is what makes the split invisible to everything
+///     [CourseChapterPartition.pinGame]), which is what makes the split invisible to everything
 ///     downstream.
 ///  2. **Progress is keyed by file path.** Review schedules and per-move
 ///     progress carry `repertoireId` = the chapter's path, so they are
@@ -29,15 +29,13 @@ library;
 
 import 'package:path/path.dart' as p;
 
-import '../../../models/repertoire_line.dart'
-    show kModelGameResultTag, kModelGameWhiteTag;
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/repertoire_review_service.dart';
 import '../../../services/repertoire_service.dart';
 import '../../../services/storage/storage_factory.dart';
 import '../../../services/storage/storage_service.dart';
 import 'chapter_store.dart';
-import 'pgn_game_headers.dart';
+import 'course_chapter_partition.dart';
 import 'review_progress_repointer.dart';
 
 /// What a split did, for the toast and for the caller to follow the active
@@ -107,44 +105,20 @@ class ChapterSplitter {
     // belongs to, and what id it resolves to — so ask it rather than
     // re-deriving either here.
     final parsed = await _repertoire.parseRepertoireFile(chapterPath);
-    final gameCount = document.games.length;
-    final lineByIndex = {
-      for (final line in parsed)
-        if (line.gameIndex >= 0 && line.gameIndex < gameCount)
-          line.gameIndex: line,
-    };
-    String? titleOf(int index) {
-      final chapter = lineByIndex[index]?.chapter?.trim();
-      return chapter == null || chapter.isEmpty ? null : chapter;
-    }
-
-    // First-seen order, so the new files come out in the course's own order
-    // rather than alphabetically.
-    final titles = <String>[];
-    for (var i = 0; i < gameCount; i++) {
-      final title = titleOf(i);
-      if (title != null && !titles.contains(title)) titles.add(title);
-    }
+    final partition = CourseChapterPartition(document.games, parsed);
+    final titles = partition.chapters.keys.toList();
     if (titles.length < 2) {
       throw const ChapterSplitException(
         'This chapter has no course chapters to split by.',
       );
     }
-
     final folder = _storage.parentPath(chapterPath);
-    final names = await _fileNamesFor(titles, folder: folder);
-
-    // Pin id and name before anything moves — for the games that stay as
-    // well as the ones that leave, since both are re-indexed by the split.
-    final games = [
-      for (var i = 0; i < gameCount; i++)
-        _pinned(
-          document.games[i],
-          id: lineByIndex[i]?.id,
-          name: lineByIndex[i]?.name,
-          isModelGame: lineByIndex[i]?.isModelGame ?? false,
-        ),
-    ];
+    final names = CourseChapterPartition.fileNamesFor(
+      titles,
+      (await _storage.listChapters(
+        folder,
+      )).map((c) => p.basenameWithoutExtension(c.filePath)),
+    );
 
     final color = pgn.extractRepertoireColor(document.preamble);
     final sideIsWhite = color == null ? isWhite : color == 'white';
@@ -156,10 +130,6 @@ class ChapterSplitter {
     for (final title in titles) {
       final name = names[title]!;
       final path = _storage.chapterFilePath(folder, name);
-      final indices = [
-        for (var i = 0; i < games.length; i++)
-          if (titleOf(i) == title) i,
-      ];
       await _repertoire.files.writePgnDocument(
         path,
         preamble: ChapterStore.chapterHeader(
@@ -168,23 +138,17 @@ class ChapterSplitter {
           createdAt: DateTime.now(),
           courseChapter: title,
         ),
-        games: [for (final i in indices) games[i]],
+        games: partition.chapters[title]!,
         createOnly: true,
       );
       createdPaths.add(path);
-      movedIdsByPath[path] = {
-        for (final i in indices)
-          if (lineByIndex[i] case final line?) line.id,
-      };
-      movedLines += indices.length;
+      movedIdsByPath[path] = partition.ids[title] ?? {};
+      movedLines += partition.chapters[title]!.length;
     }
 
     // Only now is the source rewritten — every line above is already on disk
     // under its new chapter.
-    final remaining = [
-      for (var i = 0; i < games.length; i++)
-        if (titleOf(i) == null) games[i],
-    ];
+    final remaining = partition.remaining;
     final sourceRemoved = remaining.isEmpty;
     if (sourceRemoved) {
       await _storage.deleteFile(chapterPath);
@@ -205,104 +169,5 @@ class ChapterSplitter {
       remainingLines: remaining.length,
       sourceRemoved: sourceRemoved,
     );
-  }
-
-  // ── Names ──────────────────────────────────────────────────────────────
-
-  /// Characters no filesystem this app targets will take, plus control
-  /// characters. Same set [RepertoireOutlineService.validateName] refuses,
-  /// except here they are replaced rather than rejected: the user did not
-  /// type these names, the course did.
-  static final _illegal = RegExp(r'[<>:"/\\|?*\x00-\x1F]');
-
-  /// A chapter title as a filename: illegal characters become spaces, runs of
-  /// whitespace collapse, and the result is capped well short of any
-  /// filesystem's limit ("QGD: Other Lines" → "QGD Other Lines").
-  static String fileNameFor(String title) {
-    var name = title.replaceAll(_illegal, ' ');
-    name = name.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (name.length > 80) name = name.substring(0, 80).trim();
-    // Windows takes neither a trailing dot nor a bare dot name.
-    while (name.endsWith('.')) {
-      name = name.substring(0, name.length - 1).trimRight();
-    }
-    return name.isEmpty ? 'Chapter' : name;
-  }
-
-  /// One distinct filename per title, avoiding both each other and the
-  /// chapters already in [folder]. Two titles can collide once illegal
-  /// characters are stripped, and a course chapter can share a name with a
-  /// file that is already there.
-  Future<Map<String, String>> _fileNamesFor(
-    List<String> titles, {
-    required String folder,
-  }) async {
-    final taken = <String>{
-      for (final c in await _storage.listChapters(folder))
-        p.basenameWithoutExtension(c.filePath).toLowerCase(),
-    };
-    final names = <String, String>{};
-    for (final title in titles) {
-      final base = fileNameFor(title);
-      var candidate = base;
-      var n = 2;
-      while (!taken.add(candidate.toLowerCase())) {
-        candidate = '$base ($n)';
-        n++;
-      }
-      names[title] = candidate;
-    }
-    return names;
-  }
-
-  // ── Pinning ────────────────────────────────────────────────────────────
-
-  static final _modelGameHeader = RegExp(
-    '^\\[($kModelGameWhiteTag|$kModelGameResultTag)\\s+"',
-    multiLine: true,
-  );
-
-  /// [gameText] with the three things the split would otherwise take from it
-  /// written into its own headers.
-  ///
-  ///  * `[LineID]`, when it has no id header of its own: the fallback id
-  ///    encodes the game's position in the file, so a move renames the line
-  ///    and orphans its training progress.
-  ///  * `[Event]`, set to the name the line shows now: a course export names
-  ///    the *variation* in `[Black]`, and the parser only reads that header
-  ///    for a file whose `[White]` titles group it. Once a chapter is one
-  ///    file, they no longer do, and every line in it would fall back to the
-  ///    course's `[Event]` — the same name for all of them.
-  ///
-  ///  * The model-game tags, for a game the parser calls a model game. That
-  ///    verdict also comes from the `[White]` titles grouping the file — a
-  ///    real game among chapter-titled lines — so the last model games left
-  ///    behind in the source would come back as lines to drill.
-  ///
-  /// A game that did not parse has none of these, and is passed through
-  /// untouched.
-  static String _pinned(
-    String gameText, {
-    String? id,
-    String? name,
-    bool isModelGame = false,
-  }) {
-    var text = gameText;
-    if (isModelGame && !_modelGameHeader.hasMatch(text)) {
-      final white = pgnHeaderValue(text, 'White') ?? '?';
-      final result = pgnHeaderValue(text, 'Result') ?? '*';
-      text = insertHeadersAfterEvent(
-        text,
-        '[$kModelGameWhiteTag "$white"]\n[$kModelGameResultTag "$result"]',
-      );
-    }
-    if (name != null && name.trim().isNotEmpty) {
-      final title = '[Event "${name.replaceAll('"', "'").trim()}"]';
-      text = eventHeaderPattern.hasMatch(text)
-          ? text.replaceFirst(eventHeaderPattern, title)
-          : '$title\n$text';
-    }
-    if (id != null) text = ReviewProgressRepointer.pinLineId(text, id);
-    return text;
   }
 }

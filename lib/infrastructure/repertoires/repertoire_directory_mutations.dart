@@ -23,11 +23,14 @@ class RepertoireDirectoryMutations {
     required this.journals,
     required this.repoint,
     this.testHook,
+    this.recoverAdditional,
     this.trash,
     this.trashAllowedRoot,
     FileMutationService? mutations,
   }) : _mutations = mutations ?? FileMutationService();
 
+  static const stagingName = '.cap-repertoire-publications';
+  final Future<void> Function()? recoverAdditional;
   final Directory root;
   final Directory journals;
   final Directory? trash;
@@ -44,6 +47,7 @@ class RepertoireDirectoryMutations {
       p.join(canonicalRoot, '.cap-directory-domain'),
       () async {
         await _recover();
+        await recoverAdditional?.call();
         return action();
       },
     );
@@ -216,6 +220,14 @@ class RepertoireDirectoryMutations {
   }
 
   Future<void> _validate(String from, String to, String kind) async {
+    final privateRoot = p.join(root.path, stagingName);
+    if ([from, to].any(
+      (path) => p.equals(path, privateRoot) || p.isWithin(privateRoot, path),
+    )) {
+      throw const UnsafeFileMutation(
+        'Publication staging is not a repertoire.',
+      );
+    }
     if (p.equals(from, to) || p.isWithin(from, to)) {
       throw const UnsafeFileMutation('A directory cannot move into itself.');
     }

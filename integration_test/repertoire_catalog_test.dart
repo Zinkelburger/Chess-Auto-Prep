@@ -171,4 +171,52 @@ void main() {
     expect(await restoredFile.readAsBytes(), bytes);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('course import publishes both chapters and survives reopening', (
+    tester,
+  ) async {
+    final name = 'Published course ${DateTime.now().microsecondsSinceEpoch}';
+    String game(String chapter, String variation, String moves) =>
+        '[Event "Course"]\n[White "$chapter"]\n[Black "$variation"]\n[Result "*"]\n\n$moves *\n\n';
+    final input =
+        '${game('French', 'Advance', '1. e4 e6 2. d4 d5 3. e5 {keep me} c5')}'
+        '${game('French', 'Exchange', '1. e4 e6 2. d4 d5 3. exd5 exd5')}'
+        '${game('Caro-Kann', 'Classical', '1. e4 c6 2. d4 d5 3. Nc3 dxe4')}';
+    await pumpApp(tester);
+    getAppState(tester).setMode(AppMode.repertoireLibrary);
+    await waitFor(tester, find.text('Create new repertoire'));
+    await tester.tap(find.text('Create new repertoire'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('repertoire-create-name')),
+      name,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('repertoire-create-pgn')),
+      input,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Create repertoire'));
+    await waitFor(tester, find.text('French'));
+    expect(find.text('Caro-Kann'), findsWidgets);
+    final folder = Directory(
+      p.join((await AppPaths.repertoiresDirectory()).path, name),
+    );
+    final files = await folder.list().where((f) => f is File).toList();
+    expect(
+      files.map((f) => p.basename(f.path)),
+      unorderedEquals(['French.pgn', 'Caro-Kann.pgn']),
+    );
+    final french = await File(p.join(folder.path, 'French.pgn')).readAsString();
+    expect(french, contains('{keep me}'));
+    expect(french, contains('[LineID "'));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await pumpApp(tester);
+    getAppState(tester).setMode(AppMode.repertoireLibrary);
+    await waitFor(tester, find.widgetWithText(ListTile, name));
+    expect(
+      await File(p.join(folder.path, 'French.pgn')).readAsString(),
+      french,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

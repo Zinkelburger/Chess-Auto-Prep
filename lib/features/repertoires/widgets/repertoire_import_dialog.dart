@@ -1,4 +1,5 @@
 import '../models/repertoire_creation.dart';
+import '../models/repertoire_recovery_required.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -56,7 +57,9 @@ Future<RepertoireCreationResult?> showRepertoireImportDialog(
     if (context.mounted) {
       showAppSnackBar(
         context,
-        e is RepertoireCreationUncertain
+        (e is RepertoireCreationUncertain ||
+                e is RepertoirePreparationFailed ||
+                e is RepertoireRecoveryRequired)
             ? e.toString()
             : 'Could not import the repertoire. Please try again.',
         isError: true,
@@ -145,7 +148,10 @@ class _RepertoirePasteDialogState extends State<_RepertoirePasteDialog> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = e is RepertoireCreationUncertain
+          _error =
+              (e is RepertoireCreationUncertain ||
+                  e is RepertoirePreparationFailed ||
+                  e is RepertoireRecoveryRequired)
               ? e.toString()
               : 'Could not import. Your PGN is still here; try again.';
         });

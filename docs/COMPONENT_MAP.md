@@ -422,10 +422,38 @@ BOM/line-ending changes from conflict checks. The native package
 hashes and codecs run off the UI isolate. Prior bytes are retained under each
 parent's `.cap-pgn-history/`; post-install failures require reconciliation.
 
-Linux catalog creation uses the new exclusive publication path; the remaining
+Linux new-repertoire creation uses the staged publication path below; the remaining
 chapter/editor/generation APIs and other operating systems retain their documented
 legacy adapters. This is partial adoption, not a repository-wide migration.
 See [native-store evidence and limits](ARCHITECTURE_RENEWAL.md#native-document-store-checkpoint--linux-adoption-started).
+
+#### Staged repertoire publication (Linux)
+
+`RepertoirePublication` is an immutable map of the complete new chapter contents.
+`repertoire_import_planner.dart` builds it off the UI isolate. Shared
+`CourseChapterPartition` now owns course partitioning, line/model-game pinning
+and safe unique filenames; the existing splitter and planner use the same
+implementation. It retains annotations, unknown headers, source chapter order
+and line IDs, and handles reserved operating-system filenames.
+
+`NativeRepertoirePublicationStore` prepares every chapter with the typed PGN
+store beneath `repertoires/.cap-repertoire-publications/<id>/payload`. Original
+import text is retained separately as `source.pgn`. This reserved staging tree
+is excluded from the catalog and cannot be renamed/deleted as a repertoire.
+A manifest records directory identity and each chapter's native identity/SHA-256.
+After preparation, the shared repertoire domain lock protects one Linux
+exclusive directory rename into the library. Existing empty folders and
+case-folded name collisions are refused; imports never merge into them.
+
+The manifest advances through staged, pending and completed (or cancelled).
+Startup/managed-operation recovery does not publish staged drafts. A pending
+operation that never moved is cancelled; an installed directory must match the
+complete manifest before acknowledgement. Changed/ambiguous contents block
+managed mutations with **Recover library**. Incomplete private preparation is
+retained, produces an explicit failure and leaves editable input in the form.
+This path serves both the catalog and legacy My books creation on Linux.
+Existing-chapter splitting/editing and non-Linux creation remain legacy; private
+staging retention/inspection UI and process-kill durability gates remain open.
 
 #### App bar conventions (unified June 2026)
 

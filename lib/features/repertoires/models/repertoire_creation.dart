@@ -62,3 +62,12 @@ class RepertoireCreationUncertain implements Exception {
   String toString() =>
       'The file may already be saved. Keep this draft and reload the library before retrying.';
 }
+
+/// Private preparation failed before any folder could be published.
+class RepertoirePreparationFailed implements Exception {
+  const RepertoirePreparationFailed(this.cause);
+  final Object cause;
+  @override
+  String toString() =>
+      'Import preparation failed. No repertoire was published. Keep this draft and retry.';
+}
