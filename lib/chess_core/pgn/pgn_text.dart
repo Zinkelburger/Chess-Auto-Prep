@@ -5,7 +5,7 @@
 /// import parsing helpers and filter types from one place.
 ///
 /// The other halves of what used to live here have their own files:
-/// `pgn_mainline_lexer.dart` (header block and mainline SANs off the text),
+/// `mainline_lexer.dart` (header block and mainline SANs off the text),
 /// `pgn_position_replay.dart` (FEN lookups and the position index) and
 /// `pgn_slice_filter.dart` (header / sequence / position slices).
 ///
@@ -148,7 +148,7 @@ bool _isLineStart(String content, int offset) {
 /// Extracts a map of PGN headers from a single-game PGN string.
 ///
 /// Matches a tag-shaped `[Key "Value"]` anywhere in the text, comments
-/// included; `extractHeaderBlock` in `pgn_mainline_lexer.dart` reads the
+/// included; `extractHeaderBlock` in `mainline_lexer.dart` reads the
 /// leading header block only.
 Map<String, String> extractHeaders(String pgnText) {
   final headers = <String, String>{};

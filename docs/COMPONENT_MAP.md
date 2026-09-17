@@ -1306,6 +1306,36 @@ near the end, scrolling stops at the document boundary instead of revealing
 a screen of blank space.
 **Settings → Shortcuts** shows a compact, bordered Action / Key / Where table with keycaps. Bindings and reference rows live together in `app_shortcuts.dart`; there is no separate list of handwritten mappings. Shared settings cards use 10px vertical row/header padding and 12px group gaps, with a 680px content cap to keep labels and values close together.
 
+PGN collection edits now belong to
+`features/documents/controllers/pgn_collection_editor.dart`. The legacy viewer
+forwards commands and observes this one edit owner; the metadata mixin is retired.
+`PgnCollectionRepository` is injected at construction, with production setup in
+`app/app_dependencies.dart` and its storage/native adapter under
+`infrastructure/documents/`. Read/session/filter migration remains separate.
+
+The editor owns rating/comment changes, screen-only solitaire substitutions,
+per-game persisted baselines, the autosave timer and serialized writes. It captures
+an outgoing collection before awaiting and only updates the active collection's
+mtime/index if that collection still owns the receipt. Later edits stay dirty.
+Failures block queued/automatic source writes; already queued snapshots still
+get distinct recovery copies, including the collection banner. An explicit Save
+can retry a definite failure. An uncertain acknowledgement cannot be replayed;
+the retained recovery copy and original require review/reopen. The shared typed
+inspection/reload/copy panel is not yet adopted by Viewer.
+
+On Linux, the repository observes the current source, patches only uniquely
+matching original games, and commits through `NativePgnDocumentStore`. Unrelated
+bytes and the pre-save native history are preserved. A change between observation
+and validation conflicts without retry; this does not eliminate the documented
+external-editor race after final validation. This is a scoped game-text merge,
+not a claim to detect every replacement since the collection was first opened.
+Native writes require an absolute path. Other hosts retain the serialized legacy
+storage adapter until their native gates pass. Pasted-collection Save As still
+uses its existing picker flow and remains a migration item.
+
+Pure mainline lexing and Study-header rewriting now live in
+`chess_core/pgn/mainline_lexer.dart` and `chess_core/pgn/study_metadata.dart`.
+
 ```
 PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
   → StorageService.fileExists / readFile (absolute paths as-is; relative → app documents)
@@ -1456,7 +1486,7 @@ Collection trees retain null moves as navigable plies so Back preserves the side
 Toggled through **Actions → Edit PGN**. When active:
 
 - **NAG display**: Move-quality NAGs ($1–$6) render inline after the SAN with Lichess-style colors (brilliant=green, good=green, interesting=pink, dubious=blue, mistake=orange, blunder=red). Annotations remain visible outside edit mode.
-- **Save status and annotation panel**: PGN Viewer keeps autosave controls in Actions/settings without a persistent status label; failed autosaves expose Save to retry. Study shows a quiet, fixed-width status beside the file title: **Autosave on · Saved**, **Saving…**, or **Not saved** on failure. There are no success popups or animated indicators, and saving does not insert a toolbar or shift the board. Hover reveals the file path or failure details. Manual saving reports **Autosave off · Saved** / **Unsaved changes** and keeps **Save** available; pasted games say **Not saved to a file** and offer **Save as…**. Failed viewer autosaves expose **Save** to retry. The shared Notes panel labels its target move; NAG buttons retain move-quality colors. Emptying an existing comment field keeps the stored comment until the explicit Delete comment action is confirmed, allowing replacement text without a popup while typing. Submitting an empty inline comment asks before removal. Branch deletion always confirms the count of moves and prose comments across all nested variations; chapter deletion and bulk clearing also show affected counts, including chapter introductions and variation starting comments. Confirmed removals follow the host's normal save setting.
+- **Save status and annotation panel**: PGN Viewer keeps autosave controls in Actions/settings without a persistent status label; failed autosaves expose Save to retry. Study shows a quiet, fixed-width status beside the file title: **Autosave on · Saved**, **Saving…**, or **Not saved** on failure. There are no success popups or animated indicators, and saving does not insert a toolbar or shift the board. Hover reveals the file path or failure details. Manual saving reports **Autosave off · Saved** / **Unsaved changes** and keeps **Save** available; pasted games say **Not saved to a file** and offer **Save as…**. Failed viewer autosaves expose **Save** for explicit retry; uncertain acknowledgements require reviewing the recovery copy and reopening the source. The shared Notes panel labels its target move; NAG buttons retain move-quality colors. Emptying an existing comment field keeps the stored comment until the explicit Delete comment action is confirmed, allowing replacement text without a popup while typing. Submitting an empty inline comment asks before removal. Branch deletion always confirms the count of moves and prose comments across all nested variations; chapter deletion and bulk clearing also show affected counts, including chapter introductions and variation starting comments. Confirmed removals follow the host's normal save setting.
 - **Context menu**: Right-click in edit mode shows Comment, Annotate, Promote (variation), Delete — with promote/delete gated by `protectOriginal`.
 - **Keyboard**: `Escape` exits edit mode.
 - **Persistence**: User-added moves and variations persist in both reading and edit mode; Edit PGN exposes annotation controls. **Settings → Game viewer → Autosave PGN edits** defaults on. Turning it off keeps edits in memory across game navigation until **Save**; closing the file, replacing the collection, or closing the window offers Save / Discard / Cancel. Solitaire guesses and read-only reference readers remain temporary. Saves patch changed games into the source file, preserve unrelated games and file preambles, and retain unsaved status on failure. Pending comments flush on Save and when finishing editing, before the annotation panel is removed; repainting waits until the widget tree unlocks. NAGs saved via `buildGameMovetext()` (the whole tree, so sidelines and the game comment survive) → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.

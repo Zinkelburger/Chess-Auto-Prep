@@ -43,6 +43,10 @@ repertoire line edits, preserving drafts if another owner cancels or changes.
 Study now checkpoints current/retained drafts, their original file revision and
 chapter/cursor/orientation, with startup review/restore and conflict-safe explicit
 saving. Recovery excludes live instances and preserves unreadable records.
+PGN Viewer collection edits now use an injected document-feature owner and native
+Linux scoped game patches, with blocked failed autosaves and preserved recovery
+copies. Its full typed recovery UI, pasted-collection Save As, immutable/private
+game projections and restart recovery remain partial.
 Other editors' persisted drafts, clean workspace/session restoration, archive
 purging, builder-draft checks and job shutdown coordination are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional

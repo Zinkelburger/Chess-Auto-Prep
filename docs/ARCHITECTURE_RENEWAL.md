@@ -961,6 +961,54 @@ receipts and immutable projections; large-document performance measurements;
 builder and job shutdown; native Windows/macOS durability and release gates.
 Milestones 1/2 and 3 remain partial; later feature migrations are still required.
 
+### PGN collection edit ownership checkpoint (2026-09-17)
+
+Following Study restart recovery `14356ed1`, PGN Viewer now delegates collection
+edit/persistence state to `PgnCollectionEditor` under `features/documents/`.
+The metadata mixin is removed, not retained as another writer. The constructor
+requires an injected `PgnCollectionRepository`; the composition root chooses the
+native Linux document store and other hosts retain the legacy serialized adapter.
+Pure mainline/header algorithms have canonical `chess_core/pgn/` paths, with
+imports updated and the old lexer path removed.
+
+Scoped saves preserve other games and unparsed/banner bytes: match the submitted
+original games uniquely against the current source, then validate that observed
+native revision at commit. A replacement before validation conflicts; arbitrary
+external writers can still race the last validation/rename. Native baseline
+history is retained. This merge policy does not promise to reject every
+same-content replacement between initial collection load and patch observation.
+
+The edit owner serializes writes, preserves newer edits against the submitted
+receipt, suppresses failed/uncertain queued retries, and retains each already
+queued draft separately if a prior write failed. Recovery copies include the
+collection banner. Uncertain acknowledgements cannot be replayed through Save.
+Outgoing receipts cannot mark another collection saved. Test fixtures explicitly
+inject their own repositories and disposable document roots.
+
+Validation on Linux:
+
+| Check | Evidence |
+| --- | --- |
+| Analyze/lint | Pass, including 13 architecture-checker tests; only the nine existing informational notices remain. |
+| Regression suite | All 334 tests pass across document sessions/stores, PGN controllers/readers, lexical/property tests, storage integrity and app widgets. |
+| Final message-ownership follow-up | All ten collection revision tests pass, including preservation of unrelated load failures during edit-owner notifications. |
+| Native desktop integration | All nine tests pass: viewer comment save/conflict/recovery, seven app navigation cases and cross-mode document close. |
+| Headless production preview | Edited a move comment, verified the saved PGN/banner/unrelated game; replaced the source externally, edited again, verified the source stayed untouched and the recovery copy contained the latest draft/banner. Inspected the [conflict screenshot](images/renewal-pgn-collection-conflict.png) at 1280×720. |
+
+Early fixture failures were corrected: repositories now capture the intended
+fixture storage, session tests provide disposable document roots, and desktop
+editing selects a move before typing into its enabled annotation field. Native
+race injection targets the pre-validation temp-flush boundary; the documented
+post-validation external-writer window is not claimed as protected. Full release
+and Windows/macOS native gates were not run for this increment.
+
+Remaining document-workspace scope includes Viewer typed inspection/reload/copy
+UI, pasted-collection Save As migration, persisted unsaved Viewer sessions,
+private mutable cores and immutable projections, undo receipts, large-document
+budgets and removal of the remaining viewer slice/window mixins. The old viewer
+still owns library/session reads, navigation and rendering. Milestone 3 remains
+partial, and this does not complete milestones 1/2 or 4–7.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

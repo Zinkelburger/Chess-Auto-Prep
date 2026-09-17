@@ -5,7 +5,7 @@ import '../models/pgn_game_entry.dart';
 import '../models/pgn_filter_models.dart';
 import '../utils/pgn_utils.dart';
 import 'opening_book_service.dart';
-import 'pgn_mainline_lexer.dart' show movetextStart;
+import '../chess_core/pgn/mainline_lexer.dart' show movetextStart;
 import 'pgn_position_replay.dart' show buildFenIndex;
 
 /// The two tags the opening book can fill.

@@ -4,7 +4,7 @@ import '../models/repertoire_creation.dart';
 import 'package:flutter/material.dart';
 import '../../../design_system/components/save_status.dart';
 
-import '../../../services/pgn_mainline_lexer.dart' as pgn;
+import '../../../chess_core/pgn/mainline_lexer.dart' as pgn;
 import '../../../chess_core/pgn/pgn_text.dart' as pgn;
 import '../../../design_system/theme/app_typography.dart';
 import '../../../design_system/theme/app_spacing.dart';

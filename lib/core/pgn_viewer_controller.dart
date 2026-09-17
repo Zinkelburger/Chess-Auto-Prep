@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/pgn/study_metadata.dart';
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
@@ -20,11 +21,10 @@ import '../models/pgn_filter_models.dart';
 import '../models/pgn_game_entry.dart';
 export '../models/pgn_game_entry.dart';
 import '../services/default_pgn_service.dart';
-import '../services/pgn_document_patch.dart';
+import '../features/documents/controllers/pgn_collection_editor.dart';
+import '../features/documents/repositories/pgn_collection_repository.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
-import '../services/pgn_mainline_lexer.dart' show movetextStart;
-import '../chess_core/pgn/pgn_text.dart' show extractHeaders;
 import '../services/storage/storage_factory.dart';
 import 'game_sorting.dart';
 import 'pgn/pgn_viewer_handle.dart';
@@ -35,7 +35,6 @@ export 'pgn/viewer_solitaire_session.dart' show SolitaireSetup;
 import '../utils/safe_change_notifier.dart';
 import '../utils/chess_utils.dart';
 
-part 'pgn/pgn_viewer_controller_metadata.dart';
 part 'pgn/pgn_viewer_controller_slices.dart';
 part 'pgn/pgn_viewer_controller_window.dart';
 
@@ -99,19 +98,84 @@ class Perspective {
 
 /// Business logic and state for the PGN Viewer screen.
 ///
-/// Cohesive member groups live in same-library part files as private mixins:
-/// slice operations ([_SliceOps]), metadata/comment persistence
-/// ([_MetadataOps]) and window/perspective
-/// handling ([_WindowOps]).
+/// Collection edits and persistence belong to the injected [PgnCollectionEditor].
+/// Legacy slice/window responsibilities remain until their workflows migrate.
 class PgnViewerController extends ChangeNotifier
-    with SafeChangeNotifier, _SliceOps, _MetadataOps, _WindowOps {
+    with SafeChangeNotifier, _SliceOps, _WindowOps {
   PgnViewerController({
+    required PgnCollectionRepository collectionRepository,
     required this.pgnWidgetController,
     required this.analysisController,
     this.isActive = _alwaysActive,
     this.schedulePostFrame,
     this.onReclaimFocus,
-  });
+  }) {
+    _editor = PgnCollectionEditor(
+      repository: collectionRepository,
+      path: () => filePath,
+      games: () => allGames,
+      collectionPreamble: () => collectionPreamble,
+      selectedGame: () =>
+          filteredGames.isEmpty ? null : filteredGames[currentGameIndex],
+      isActive: isActive,
+      onReclaimFocus: onReclaimFocus,
+      onContentChanged: ({required resetIndex}) {
+        if (resetIndex) _fenIndex.reset();
+        _markCollectionChanged();
+      },
+      onSavedCopy: (path) => filePath = path,
+      onSaved: (modified) {
+        if (isDisposed) return;
+        loadedFileModified = modified;
+        _fenIndex.markStale();
+      },
+    )..addListener(_onEditorChanged);
+  }
+
+  late final PgnCollectionEditor _editor;
+  String? _lastEditorError;
+  void _onEditorChanged() {
+    final next = _editor.errorMessage;
+    if (next != _lastEditorError) {
+      // A routine save-state notification cannot erase a newer load/analysis
+      // failure owned by the host. Clear only this editor's previous message.
+      if (next != null || errorMessage == _lastEditorError) errorMessage = next;
+      _lastEditorError = next;
+    }
+    notifyListeners();
+  }
+
+  bool get autoSave => _editor.autoSave;
+  bool get isSaving => _editor.isSaving;
+  bool get hasUnsavedChanges => _editor.hasUnsavedChanges;
+  void setAutoSave(bool value) => _editor.setAutoSave(value);
+  Future<bool> saveChanges() => _editor.saveChanges();
+  void adoptSavedCopy(String path, Map<PgnGameEntry, String> snapshot) =>
+      _editor.adoptSavedCopy(path, snapshot);
+  bool canReplaceCollection() => _editor.canReplaceCollection();
+  void discardChanges() => _editor.discardChanges();
+  @override
+  void rememberPersistedGame(PgnGameEntry game) =>
+      _editor.rememberPersistedGame(game);
+  void setRating(int stars) => _editor.setRating(stars);
+  @override
+  Future<void> persistMetadata() => _editor.persistMetadata();
+  Future<void> doPersistMetadata() => _editor.doPersistMetadata();
+  Map<PgnGameEntry, String> snapshotForSave() => _editor.snapshotForSave();
+  void persistMoveComments(String movetext) =>
+      _editor.persistMoveComments(movetext);
+  void persistMoveCommentsFor(
+    PgnGameEntry game,
+    String movetext, {
+    bool writeToFile = true,
+  }) =>
+      _editor.persistMoveCommentsFor(game, movetext, writeToFile: writeToFile);
+  Future<void> flushPendingMetadata() async {
+    final path = filePath;
+    final total = allGames.length;
+    await _editor.flushPendingMetadata();
+    await _fenIndex.flushIfStale(filePath: path, gameTotal: total);
+  }
 
   final PgnViewerHandle pgnWidgetController;
   final GameAnalysisController analysisController;
@@ -135,7 +199,6 @@ class PgnViewerController extends ChangeNotifier
   /// recent games patches every game it analyses with the scores it found —
   /// and a screen that reuses an already-loaded collection would otherwise
   /// show the pre-patch text, graph and all missing.
-  @override
   DateTime? loadedFileModified;
   @override
   List<PgnGameEntry> allGames = [];
@@ -277,7 +340,6 @@ class PgnViewerController extends ChangeNotifier
   /// Text above the first game in the loaded file — a `;`/`%` banner, which
   /// is not a game and so is not in [allGames]. Held here because a write
   /// rewrites the file from [allGames] alone and would otherwise delete it.
-  @override
   String collectionPreamble = '';
 
   /// FEN the next [PgnViewerWidget] mount should park on (tree position after
@@ -380,7 +442,6 @@ class PgnViewerController extends ChangeNotifier
     if (isSolitaireMode) _solitaireSession.restartForNewGame();
   }
 
-  @override
   late final PgnFenIndex _fenIndex = PgnFenIndex(
     isActive: isActive,
     onChanged: _onFenIndexReady,
@@ -423,7 +484,6 @@ class PgnViewerController extends ChangeNotifier
 
   String? collectionsDir;
 
-  @override
   String? errorMessage;
 
   int get currentPly => pgnWidgetController.mainLineIndex;
@@ -438,7 +498,9 @@ class PgnViewerController extends ChangeNotifier
     _solitaireSession.dispose();
     // A comment typed in the last 300 ms and a stale FEN-index stamp both
     // still owe the file a write; the collection is going away, so now.
-    unawaited(flushPendingMetadata());
+    final flush = flushPendingMetadata();
+    _editor.removeListener(_onEditorChanged);
+    unawaited(flush.whenComplete(_editor.dispose));
     super.dispose();
   }
 
@@ -512,7 +574,7 @@ class PgnViewerController extends ChangeNotifier
     loadedFileModified = null;
     allGames = entries;
     _markCollectionChanged();
-    adoptPersistedGames(entries);
+    _editor.adoptPersistedGames(entries);
     collectionPreamble = preamble;
     _detectProtagonist(entries);
     filteredGames = List.of(entries);
@@ -526,8 +588,8 @@ class PgnViewerController extends ChangeNotifier
     _gameCursorFen = null;
     perspective = newPerspective;
     _viewerTree.resetForNewFile();
-    clearScreenOnlyMovetext();
-    clearEditedGames();
+    _editor.clearScreenOnlyMovetext();
+    _editor.clearEditedGames();
   }
 
   /// [restoreSavedSlice] — reapply the slice persisted for this file. Off for

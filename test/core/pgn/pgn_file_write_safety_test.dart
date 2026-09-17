@@ -21,6 +21,8 @@
 /// change, but nothing else in the file may disappear.**
 library;
 
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
+
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
@@ -175,6 +177,9 @@ List<String> _allComments(PgnGame<PgnNodeData> game) {
 Future<PgnViewerController> _openTheFile(_MemoryStorage storage) async {
   storage.writeBehindOurBack(_path, _fileText());
   final controller = PgnViewerController(
+    collectionRepository: StoragePgnCollectionRepository(
+      StorageFactory.instance,
+    ),
     pgnWidgetController: PgnViewerWidgetController(),
     analysisController: _FakeAnalysisController(),
   );
@@ -406,6 +411,9 @@ void main() {
     await c.flushPendingMetadata();
 
     final reopened = PgnViewerController(
+      collectionRepository: StoragePgnCollectionRepository(
+        StorageFactory.instance,
+      ),
       pgnWidgetController: PgnViewerWidgetController(),
       analysisController: _FakeAnalysisController(),
     );

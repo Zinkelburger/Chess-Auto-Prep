@@ -9,7 +9,7 @@ import '../../../services/games_library/games_library_service.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../models/recent_game.dart';
 import '../services/game_deviation_service.dart';
-import '../../../services/pgn_mainline_lexer.dart' show mainlineSansOfBatch;
+import '../../../chess_core/pgn/mainline_lexer.dart' show mainlineSansOfBatch;
 import '../services/game_preview.dart';
 import '../services/game_review_summary.dart';
 import '../services/games_window.dart';

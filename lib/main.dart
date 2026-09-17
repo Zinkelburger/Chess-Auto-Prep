@@ -1,3 +1,4 @@
+import 'features/documents/repositories/pgn_collection_repository.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'infrastructure/settings/fresh_desktop_preferences_store.dart';
 import 'infrastructure/settings/shared_preferences_app_settings_repository.dart';
@@ -195,6 +196,9 @@ class ChessAutoPrepApp extends StatelessWidget {
       documentStore: documents,
       child: MultiProvider(
         providers: [
+          Provider<PgnCollectionRepository>(
+            create: (_) => createPgnCollectionRepository(documents: documents),
+          ),
           ChangeNotifierProvider(
             create: (_) {
               final appState = AppState();

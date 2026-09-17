@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/core/app_state.dart';
@@ -61,7 +63,13 @@ void main() {
         await tester.pumpWidget(
           ChangeNotifierProvider.value(
             value: app,
-            child: const MaterialApp(home: PgnViewerScreen()),
+            child: MaterialApp(
+              home: PgnViewerScreen(
+                collectionRepository: StoragePgnCollectionRepository(
+                  StorageFactory.instance,
+                ),
+              ),
+            ),
           ),
         );
         await tester.pumpAndSettle();

@@ -11,7 +11,7 @@ import '../../utils/atomic_file.dart';
 class LegacyPgnDocumentStore implements PgnDocumentStore {
   LegacyPgnDocumentStore(this.storage);
   final StorageService storage;
-  PgnSnapshot _snapshot(String path, String content) => PgnSnapshot(
+  static PgnSnapshot snapshot(String path, String content) => PgnSnapshot(
     path: path,
     content: content,
     revision: PgnRevision(
@@ -26,7 +26,7 @@ class LegacyPgnDocumentStore implements PgnDocumentStore {
       final content = await storage.readFile(path);
       return content == null
           ? const PgnMissing()
-          : PgnOpened(_snapshot(path, content));
+          : PgnOpened(snapshot(path, content));
     } catch (error) {
       return PgnReadFailed(error);
     }
@@ -51,7 +51,7 @@ class LegacyPgnDocumentStore implements PgnDocumentStore {
         expectedContent: before?.content,
       );
       // This receipt describes the bytes submitted, never a later external edit.
-      return PgnSaved(before: before, after: _snapshot(path, content));
+      return PgnSaved(before: before, after: snapshot(path, content));
     } on AtomicWriteConflict {
       if (before == null) return const PgnNameCollision();
       final current = await open(path);

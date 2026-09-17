@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/documents/controllers/document_close_coordinator.dart';
@@ -91,7 +93,13 @@ void main() {
             ChangeNotifierProvider.value(value: app),
             ChangeNotifierProvider.value(value: history),
           ],
-          child: const MaterialApp(home: PgnViewerScreen()),
+          child: MaterialApp(
+            home: PgnViewerScreen(
+              collectionRepository: StoragePgnCollectionRepository(
+                StorageFactory.instance,
+              ),
+            ),
+          ),
         ),
       );
       await _settleReader(tester);
@@ -143,7 +151,13 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider.value(
           value: app,
-          child: const MaterialApp(home: PgnViewerScreen()),
+          child: MaterialApp(
+            home: PgnViewerScreen(
+              collectionRepository: StoragePgnCollectionRepository(
+                StorageFactory.instance,
+              ),
+            ),
+          ),
         ),
       );
       await _settleReader(tester);
@@ -292,7 +306,13 @@ void main() {
           value: app,
           child: DocumentCloseScope(
             coordinator: coordinator,
-            child: const MaterialApp(home: PgnViewerScreen()),
+            child: MaterialApp(
+              home: PgnViewerScreen(
+                collectionRepository: StoragePgnCollectionRepository(
+                  StorageFactory.instance,
+                ),
+              ),
+            ),
           ),
         ),
       );

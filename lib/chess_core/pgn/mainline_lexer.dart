@@ -9,7 +9,7 @@
 /// `test/services/mainline_lexer_test.dart` — change one, run the other.
 library;
 
-import '../chess_core/pgn/pgn_text.dart' show stripBom;
+import 'pgn_text.dart' show stripBom;
 
 /// dartchess's movetext token grammar, verbatim from its PGN parser: a SAN
 /// (with optional check/mate suffix), a null move, a comment or line-comment

@@ -1,3 +1,5 @@
+import '../features/documents/repositories/pgn_collection_repository.dart';
+import '../infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:io';
 import '../infrastructure/documents/native_pgn_document_store.dart';
 import '../features/documents/repositories/pgn_document_store.dart';
@@ -65,3 +67,10 @@ PgnDocumentStore? createPlatformDocumentStore() {
         : null,
   );
 }
+
+PgnCollectionRepository createPgnCollectionRepository({
+  required PgnDocumentStore? documents,
+}) => StoragePgnCollectionRepository(
+  StorageFactory.instance,
+  documents: documents,
+);

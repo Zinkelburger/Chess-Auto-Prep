@@ -10,6 +10,7 @@
 library;
 
 import 'dart:async';
+import '../features/documents/repositories/pgn_collection_repository.dart';
 import '../features/documents/controllers/document_close_coordinator.dart';
 import '../features/documents/widgets/document_close_scope.dart';
 import '../design_system/components/name_entry_dialog.dart';
@@ -35,7 +36,7 @@ import '../core/pgn/pgn_copy.dart';
 import '../core/pgn/solitaire_controller.dart';
 import '../features/games/services/game_deviation_service.dart';
 import '../features/games/services/opening_review.dart' show deviationVerdict;
-import '../services/pgn_mainline_lexer.dart' show mainlineSansOf;
+import '../chess_core/pgn/mainline_lexer.dart' show mainlineSansOf;
 import '../features/games/services/my_repertoire_settings.dart';
 import '../features/games/widgets/repertoire_line_panel.dart';
 import '../services/games_library/game_filter.dart' show dedupKeyForHeaders;
@@ -102,7 +103,8 @@ part 'pgn_viewer_screen_panes.dart';
 const int _kGameTab = 0;
 
 class PgnViewerScreen extends StatefulWidget {
-  const PgnViewerScreen({super.key});
+  const PgnViewerScreen({super.key, required this.collectionRepository});
+  final PgnCollectionRepository collectionRepository;
 
   @override
   State<PgnViewerScreen> createState() => _PgnViewerScreenState();
@@ -213,6 +215,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _analysisController = GameAnalysisController();
     _analysisController.addListener(_onAnalysisUpdate);
     _controller = PgnViewerController(
+      collectionRepository: widget.collectionRepository,
       pgnWidgetController: _pgnWidgetController,
       analysisController: _analysisController,
       isActive: () => mounted,

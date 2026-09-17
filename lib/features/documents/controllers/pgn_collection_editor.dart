@@ -1,31 +1,68 @@
-// Part of pgn_viewer_controller.dart: metadata/comment persistence — study
-// ratings, StudyRating/StudySummary header rewrites, and debounced move
-// comment writes back to the source file. Same library as the controller, so
-// private members resolve across the class/mixin boundary.
-part of '../pgn_viewer_controller.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import '../../../utils/safe_change_notifier.dart';
+import '../../../models/pgn_game_entry.dart';
+import '../../../chess_core/pgn/pgn_text.dart' show extractHeaders;
+import '../../../chess_core/pgn/study_metadata.dart';
+import '../../../chess_core/pgn/mainline_lexer.dart' show movetextStart;
+import '../models/pgn_document.dart';
+import '../repositories/pgn_collection_repository.dart';
 
-/// Metadata/comment persistence for [PgnViewerController]. State shared with
-/// the rest of the controller is declared abstract here and implemented by
-/// the class; fields owned solely by this group live in this mixin.
-mixin _MetadataOps on ChangeNotifier {
-  // Implemented by PgnViewerController.
-  bool Function() get isActive;
-  VoidCallback? get onReclaimFocus;
-  String? get filePath;
-  set filePath(String? value);
-  DateTime? get loadedFileModified;
-  set loadedFileModified(DateTime? value);
-  List<PgnGameEntry> get allGames;
-  String get collectionPreamble;
-  List<PgnGameEntry> get filteredGames;
-  int get currentGameIndex;
-  PgnFenIndex get _fenIndex;
-  void _markCollectionChanged();
+/// Owns collection edit tracking, autosave scheduling and serialized writes.
+/// Suppliers follow the legacy host's current collection; each write captures
+/// its games and baseline before awaiting. No widget or storage singleton owns
+/// this state. The remaining viewer migration will make game cores private.
+class PgnCollectionEditor extends ChangeNotifier with SafeChangeNotifier {
+  PgnCollectionEditor({
+    required this.repository,
+    required this.path,
+    required this.games,
+    required this.collectionPreamble,
+    required this.selectedGame,
+    required this.onContentChanged,
+    required this.onSaved,
+    required this.onSavedCopy,
+    required this.isActive,
+    this.onReclaimFocus,
+  });
+  final PgnCollectionRepository repository;
+  final String? Function() path;
+  final List<PgnGameEntry> Function() games;
+  final String Function() collectionPreamble;
+  final PgnGameEntry? Function() selectedGame;
+  final void Function({required bool resetIndex}) onContentChanged;
+  final void Function(DateTime? modified) onSaved;
+  final void Function(String path) onSavedCopy;
+  final bool Function() isActive;
+  final VoidCallback? onReclaimFocus;
+  String? get filePath => path();
+  List<PgnGameEntry> get allGames => games();
+
+  @override
+  void dispose() {
+    persistDebounce?.cancel();
+    persistDebounce = null;
+    super.dispose();
+  }
+
+  String _describe(PgnWriteResult result) => switch (result) {
+    PgnConflict() => 'The source game changed or is ambiguous.',
+    PgnNameCollision() => 'The destination already exists.',
+    PgnWriteUncertain() =>
+      'The write could not be confirmed. Review the file before saving again.',
+    PgnWriteFailed(:final error) => 'The write failed: $error',
+    PgnSaved() => '',
+  };
 
   Timer? persistDebounce;
-  String? get errorMessage;
-  set errorMessage(String? value);
+  String? errorMessage;
+  final _outcomes = Expando<PgnWriteResult>();
+  PgnWriteResult? get lastResult => _outcomes[_persistedGames];
+  set lastResult(PgnWriteResult? value) => _outcomes[_persistedGames] = value;
   bool autoSave = true;
+  final _blocked = Expando<bool>();
+  bool get _autoSaveBlocked => _blocked[_persistedGames] ?? false;
+  set _autoSaveBlocked(bool value) => _blocked[_persistedGames] = value;
   int _pendingWrites = 0;
   bool get isSaving => _pendingWrites > 0;
 
@@ -47,22 +84,26 @@ mixin _MetadataOps on ChangeNotifier {
   }
 
   Future<bool> saveChanges() async {
+    if (lastResult is PgnWriteUncertain) return false;
+    _autoSaveBlocked = false;
+    final submittedGames = allGames;
     await doPersistMetadata();
-    return !hasUnsavedChanges;
+    return identical(submittedGames, allGames) && !hasUnsavedChanges;
   }
 
   /// The native Save As dialog wrote this exact snapshot. Later edits stay dirty.
   void adoptSavedCopy(String path, Map<PgnGameEntry, String> snapshot) {
-    filePath = path;
+    onSavedCopy(path);
     _persistedGames = Map.identity()..addAll(snapshot);
     errorMessage = null;
+    lastResult = null;
     if (autoSave && hasUnsavedChanges) unawaited(persistMetadata());
     notifyListeners();
   }
 
   /// Keep the collection available until its manual edits have been saved.
   bool canReplaceCollection() {
-    if (!autoSave && hasUnsavedChanges) {
+    if ((!autoSave || _autoSaveBlocked) && hasUnsavedChanges) {
       errorMessage =
           'Unsaved changes — save or discard them before closing or opening another PGN.';
       notifyListeners();
@@ -88,8 +129,8 @@ mixin _MetadataOps on ChangeNotifier {
     _editedGames.clear();
     _screenOnlyMovetext.clear();
     errorMessage = null;
-    _fenIndex.reset();
-    _markCollectionChanged();
+    lastResult = null;
+    onContentChanged(resetIndex: true);
     notifyListeners();
   }
 
@@ -97,6 +138,7 @@ mixin _MetadataOps on ChangeNotifier {
   Future<void> _metadataWrites = Future.value();
 
   void adoptPersistedGames(List<PgnGameEntry> games) {
+    errorMessage = null;
     _dirtyGames.clear();
     _persistedGames = Map.identity();
     for (final game in games) {
@@ -140,8 +182,8 @@ mixin _MetadataOps on ChangeNotifier {
   void clearScreenOnlyMovetext() => _screenOnlyMovetext.clear();
 
   void setRating(int stars) {
-    if (filteredGames.isEmpty) return;
-    final game = filteredGames[currentGameIndex];
+    final game = selectedGame();
+    if (game == null) return;
     rememberPersistedGame(game);
     final ratingHeader = stars > 0 ? '$stars' : null;
     final changed =
@@ -155,7 +197,7 @@ mixin _MetadataOps on ChangeNotifier {
     }
     _dirtyGames.add(game);
     _editedGames.add(game);
-    if (changed) _markCollectionChanged();
+    if (changed) onContentChanged(resetIndex: false);
     notifyListeners();
     unawaited(persistMetadata());
     onReclaimFocus?.call();
@@ -164,7 +206,7 @@ mixin _MetadataOps on ChangeNotifier {
   Future<void> persistMetadata() async {
     persistDebounce?.cancel();
     persistDebounce = null;
-    if (!autoSave) return;
+    if (!autoSave || _autoSaveBlocked) return;
     persistDebounce = Timer(const Duration(milliseconds: 300), () {
       unawaited(doPersistMetadata());
     });
@@ -197,7 +239,7 @@ mixin _MetadataOps on ChangeNotifier {
         changed = true;
       }
       if (changed) {
-        _markCollectionChanged();
+        onContentChanged(resetIndex: false);
         notifyListeners();
       }
     }
@@ -217,8 +259,9 @@ mixin _MetadataOps on ChangeNotifier {
     persistDebounce?.cancel();
     persistDebounce = null;
     final path = filePath;
-    if (path == null || !isActive()) return;
+    if (path == null || !isActive() || _autoSaveBlocked) return;
     final games = allGames;
+    final preamble = collectionPreamble();
     final originals = _persistedGames;
     final dirty = _prepareMetadata();
 
@@ -235,30 +278,33 @@ mixin _MetadataOps on ChangeNotifier {
             original: output[g]!,
       };
       if (edits.isEmpty) return;
+      PgnWriteResult result;
       try {
-        await StorageFactory.instance.updateFile(path, (current) {
-          if (current == null) throw StateError('The source file is missing.');
-          return patchPgnDocumentAsync(current, edits);
-        });
-      } catch (e) {
-        // Preserve the edited snapshot even if the user has already navigated
-        // away. This is a recovery document, never a replacement of the source.
-        final recovery =
-            'recovery/pgn-${DateTime.now().microsecondsSinceEpoch}.pgn';
+        result = (_blocked[originals] ?? false)
+            ? _outcomes[originals]!
+            : await repository.patch(path, edits);
+      } catch (error) {
+        result = PgnWriteUncertain(error: error, before: null, observed: null);
+      }
+      _outcomes[originals] = result;
+      if (result is! PgnSaved) {
+        String? recovery;
+        Object? recoveryError;
         try {
-          await StorageFactory.instance.writeFile(
-            recovery,
-            '${output.values.join('\n\n')}\n',
-            createOnly: true,
+          recovery = await repository.retainRecovery(
+            '$preamble\n\n${output.values.join('\n\n')}\n',
           );
-          errorMessage =
-              'Changes could not be merged with $path. A recovery copy was saved to $recovery. $e';
-        } catch (recoveryError) {
-          errorMessage =
-              'Changes to $path are unsaved: $e. Recovery save also failed: $recoveryError';
+        } catch (error) {
+          recoveryError = error;
         }
+        errorMessage = recovery != null
+            ? 'Changes could not be merged with $path. A recovery copy was saved to $recovery. ${_describe(result)}'
+            : 'Changes to $path are unsaved: ${_describe(result)}. Recovery save also failed: $recoveryError';
+        _blocked[originals] = true;
         if (filePath == path && identical(allGames, games)) {
           _dirtyGames.addAll(dirty);
+          // A failed or uncertain operation never resumes implicitly.
+          _autoSaveBlocked = true;
         }
         notifyListeners();
         return;
@@ -278,10 +324,16 @@ mixin _MetadataOps on ChangeNotifier {
       // Re-stamping keeps a caller comparing mtimes from reading our own save
       // as somebody else's edit and reloading the whole file for nothing.
       errorMessage = null;
-      loadedFileModified = (await StorageFactory.instance.fileStat(
-        path,
-      ))?.modified;
-      _fenIndex.markStale();
+      lastResult = null;
+      DateTime? modified;
+      try {
+        modified = await repository.modified(path);
+      } catch (_) {
+        // The committed receipt remains valid even if derived stat refresh fails.
+      }
+      if (filePath == path && identical(allGames, games)) {
+        onSaved(modified);
+      }
     });
     _metadataWrites = task.catchError((Object e) {
       errorMessage = 'Could not save: $e';
@@ -295,24 +347,17 @@ mixin _MetadataOps on ChangeNotifier {
     }
   }
 
-  /// Run a debounced persist now (for the collection currently loaded), and
-  /// persist the FEN index if any write left its stamp behind.  Called when
-  /// the collection is replaced or the controller is disposed.
+  /// Flush an outstanding autosave and await all serialized writes. The host
+  /// separately owns derived indexes and their lifecycle.
   Future<void> flushPendingMetadata() async {
-    // Captured before the first await.  This is called *by* the code that is
-    // about to swap the collection out, so reading [filePath] afterwards
-    // would name the file that is arriving and write the outgoing
-    // collection's index into its `.fenidx`.
-    final path = filePath;
-    final total = allGames.length;
     if (persistDebounce != null) await doPersistMetadata();
     await _metadataWrites;
-    await _fenIndex.flushIfStale(filePath: path, gameTotal: total);
   }
 
   void persistMoveComments(String updatedPgnMovetext) {
-    if (filteredGames.isEmpty || filePath == null) return;
-    persistMoveCommentsFor(filteredGames[currentGameIndex], updatedPgnMovetext);
+    final game = selectedGame();
+    if (game == null || filePath == null) return;
+    persistMoveCommentsFor(game, updatedPgnMovetext);
   }
 
   /// Like [persistMoveComments] but bound to a specific [game] object, so
@@ -358,8 +403,7 @@ mixin _MetadataOps on ChangeNotifier {
         // Movetext can add/remove moves and variations, not just comments.
         // Cancel an older build too: until a fresh index is built, position
         // searches must replay the updated PGN instead of using stale hits.
-        _fenIndex.reset();
-        _markCollectionChanged();
+        onContentChanged(resetIndex: true);
         notifyListeners();
       }
     }

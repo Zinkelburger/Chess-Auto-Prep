@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
@@ -57,11 +58,19 @@ void main() {
 
   late PgnViewerController controller;
   late PgnGameEntry game;
+  late _IndexedStorage storage;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    storage = _IndexedStorage(
+      '[Event "Practice"]\n[White "A"]\n[Black "B"]\n\n1. e4 e5 *\n',
+    );
+    StorageFactory.instanceForTest = storage;
     final analysis = _Analysis();
     controller = PgnViewerController(
+      collectionRepository: StoragePgnCollectionRepository(
+        StorageFactory.instance,
+      ),
       pgnWidgetController: PgnViewerWidgetController(),
       analysisController: analysis,
     );
@@ -96,6 +105,14 @@ void main() {
       expect(observed, everyElement(greaterThan(before)));
     },
   );
+
+  test('save-state notifications preserve unrelated load failures', () {
+    controller.errorMessage = 'The requested file could not be opened';
+    controller.setAutoSave(false);
+    expect(controller.errorMessage, 'The requested file could not be opened');
+    controller.setRating(3);
+    expect(controller.errorMessage, 'The requested file could not be opened');
+  });
 
   test('rating changes refresh filter headers before listeners run', () {
     final source = controller.allGames;
@@ -163,8 +180,6 @@ void main() {
   test(
     'metadata rewrite refreshes the raw PGN snapshot before notifying',
     () async {
-      final storage = _MemoryStorage(game.pgnText);
-      StorageFactory.instanceForTest = storage;
       controller.filePath = '/virtual/games.pgn';
       controller.setRating(3);
       final before = controller.collectionRevision;
@@ -185,7 +200,6 @@ void main() {
   test(
     'movetext invalidates the FEN index but rating headers retain it',
     () async {
-      StorageFactory.instanceForTest = _IndexedStorage(game.pgnText);
       await controller.loadFile('/virtual/games.pgn', restoreSavedSlice: false);
       // The persisted index is restored by the deferred collection
       // preparation, which runs after the game is already on screen.

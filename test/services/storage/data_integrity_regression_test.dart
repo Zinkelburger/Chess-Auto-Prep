@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import '../../support/study_fixture.dart';
 import 'dart:io';
 import 'dart:async';
@@ -315,6 +316,9 @@ void main() {
       await file.writeAsString(originalGame);
       final analysis = FakeAnalysis();
       final c = PgnViewerController(
+        collectionRepository: StoragePgnCollectionRepository(
+          StorageFactory.instance,
+        ),
         pgnWidgetController: PgnViewerWidgetController(),
         analysisController: analysis,
       );

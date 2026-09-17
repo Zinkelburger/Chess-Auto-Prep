@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -50,6 +51,9 @@ void main() {
   final controllers = <PgnViewerController>[];
   PgnViewerController make([_Handle? handle]) {
     final controller = PgnViewerController(
+      collectionRepository: StoragePgnCollectionRepository(
+        StorageFactory.instance,
+      ),
       pgnWidgetController: handle ?? _Handle(),
       analysisController: _Analysis(),
     );
@@ -59,8 +63,8 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    StorageFactory.instanceForTest = IOStorageService();
     dir = await Directory.systemTemp.createTemp('viewer-session-test-');
+    StorageFactory.instanceForTest = IOStorageService(documentsRoot: dir);
     path = p.join(dir.path, 'fischer.pgn');
     await File(path).writeAsString(
       '; Collection banner\n\n${List.generate(40, (i) => '[Event "Game $i"]\n[White "Fischer, Robert"]\n[Black "Opponent $i"]\n[Date "${1959 + i}.??.??"]\n\n1. e4 c5 2. Nf3 d6 3. d4 cxd4 *').join('\n\n')}\n',

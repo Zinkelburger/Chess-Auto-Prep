@@ -17,7 +17,7 @@ import '../utils/chess_utils.dart';
 import '../utils/pgn_comment_utils.dart';
 import '../utils/training_markers.dart' show hasPuzzleStart;
 import 'course_chapter_headers.dart';
-import 'pgn_mainline_lexer.dart' as pgn;
+import '../chess_core/pgn/mainline_lexer.dart' as pgn;
 import '../chess_core/pgn/pgn_text.dart' as pgn;
 import 'repertoire_color_inference.dart';
 import 'repertoire_file_editor.dart';
