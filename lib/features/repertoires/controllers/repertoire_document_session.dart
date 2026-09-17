@@ -11,6 +11,8 @@ import '../../../chess_core/pgn/repertoire_line_expansion.dart';
 import '../../../chess_core/pgn/repertoire_pgn_text.dart';
 import '../../../constants/chess_constants.dart';
 import '../../../models/opening_tree.dart';
+import '../../../chess_core/moves/opening_graph.dart';
+import '../models/repertoire_opening_graph.dart';
 import '../../../models/repertoire_line.dart';
 import '../models/loaded_repertoire.dart';
 import '../models/repertoire_authoring.dart';
@@ -53,7 +55,8 @@ class RepertoireDocumentSession {
   String? get repertoirePgn => _repertoirePgn;
 
   OpeningTree? _openingTree;
-  OpeningTree? get openingTree => _openingTree;
+  OpeningGraph? _openingGraph;
+  OpeningGraph? get openingGraph => _openingGraph;
 
   List<RepertoireLine> _lines = const [];
 
@@ -115,10 +118,12 @@ class RepertoireDocumentSession {
     if (_disposed || filePath == null) return false;
 
     final generation = _loadGeneration;
-    final success = await documents.deleteLine(
-      filePath,
-      line.id,
-      expectedContent: line.fullPgn,
+    final success = await runDocumentMutation(
+      () => documents.deleteLine(
+        filePath,
+        line.id,
+        expectedContent: line.fullPgn,
+      ),
     );
     if (!success) return false;
     if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
@@ -146,7 +151,9 @@ class RepertoireDocumentSession {
     };
     if (indexes.isEmpty) return 0;
 
-    final removed = await documents.deleteLinesAt(filePath, indexes);
+    final removed = await runDocumentMutation(
+      () => documents.deleteLinesAt(filePath, indexes),
+    );
     if (removed == 0) return 0;
     if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
       return removed;
@@ -165,6 +172,29 @@ class RepertoireDocumentSession {
   /// Keeping this callback separate from persistence lets core await pending
   /// edits without depending on a widget or its lifecycle.
   void setPendingLineSave(void Function()? flush) => _pendingLineSave = flush;
+
+  /// All Builder writes and their acknowledgements share the editor queue.
+  /// Flush a pending debounce before joining it; flushing inside the queued
+  /// callback would deadlock on the save it schedules behind itself.
+  Future<T> runDocumentMutation<T>(Future<T> Function() action) {
+    final flush = _pendingLineSave;
+    _pendingLineSave = null;
+    flush?.call();
+    final result = _lineSaveTail.then((_) {
+      if (_disposed) throw StateError('The document session is closed.');
+      if (_lineSaveFailure != null) {
+        throw StateError(
+          'Could not save pending line edits: $_lineSaveFailure',
+        );
+      }
+      return action();
+    });
+    _lineSaveTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
+  }
 
   /// Await pending document edits without consuming a failure on a close retry.
   Future<void> flushDocumentForClose() => _flushPendingLineSaves();
@@ -574,7 +604,15 @@ class RepertoireDocumentSession {
   void _applyLoaded(LoadedRepertoire loaded) {
     _lineOriginals = {for (final line in loaded.lines) line.id: line.fullPgn};
     _repertoirePgn = loaded.pgn;
-    _openingTree = loaded.openingTree;
+    // Ownership crosses the decoder boundary once; retaining/mutating a
+    // decoder result cannot change the active session behind its revision.
+    final source = loaded.openingTree;
+    _openingTree = source == null
+        ? null
+        : OpeningTree.fromTransferJson(source.toTransferJson());
+    _openingGraph = _openingTree == null
+        ? null
+        : RepertoireOpeningGraph(_openingTree!);
     _repertoireLines = loaded.lines;
 
     final headers = loaded.headers;
@@ -598,12 +636,14 @@ class RepertoireDocumentSession {
     final generation = _loadGeneration;
 
     final colorLabel = isWhite ? 'White' : 'Black';
-    final existing = (await documents.read(filePath)).pgn;
-    if (existing == null) {
-      throw StateError('The selected chapter is unavailable.');
-    }
-    final updated = upsertMetadataComment(existing, '// Color:', colorLabel);
-    await documents.replace(filePath, updated, expectedContent: existing);
+    await runDocumentMutation(() async {
+      final existing = (await documents.read(filePath)).pgn;
+      if (existing == null) {
+        throw StateError('The selected chapter is unavailable.');
+      }
+      final updated = upsertMetadataComment(existing, '// Color:', colorLabel);
+      await documents.replace(filePath, updated, expectedContent: existing);
+    });
     if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
       return;
     }
@@ -621,12 +661,14 @@ class RepertoireDocumentSession {
       currentMoveSequence(),
       startingFen: startingFen() ?? kStandardStartFen,
     );
-    final existing = (await documents.read(filePath)).pgn;
-    if (existing == null) {
-      throw StateError('The selected chapter is unavailable.');
-    }
-    final updated = upsertMetadataComment(existing, '// Root:', moveText);
-    await documents.replace(filePath, updated, expectedContent: existing);
+    await runDocumentMutation(() async {
+      final existing = (await documents.read(filePath)).pgn;
+      if (existing == null) {
+        throw StateError('The selected chapter is unavailable.');
+      }
+      final updated = upsertMetadataComment(existing, '// Root:', moveText);
+      await documents.replace(filePath, updated, expectedContent: existing);
+    });
     if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
       return;
     }
@@ -647,20 +689,22 @@ class RepertoireDocumentSession {
     final expanded = expandVariationsIntoLines(pgnContent);
     final gameCount = expanded.gameCount;
 
-    final existing = (await documents.read(filePath)).pgn;
-    if (existing == null) {
-      throw StateError('The selected chapter is unavailable.');
-    }
-    final separator = existing.endsWith('\n\n')
-        ? ''
-        : existing.endsWith('\n')
-        ? '\n'
-        : '\n\n';
-    await documents.replace(
-      filePath,
-      '$existing$separator${expanded.pgn}\n',
-      expectedContent: existing,
-    );
+    await runDocumentMutation(() async {
+      final existing = (await documents.read(filePath)).pgn;
+      if (existing == null) {
+        throw StateError('The selected chapter is unavailable.');
+      }
+      final separator = existing.endsWith('\n\n')
+          ? ''
+          : existing.endsWith('\n')
+          ? '\n'
+          : '\n\n';
+      await documents.replace(
+        filePath,
+        '$existing$separator${expanded.pgn}\n',
+        expectedContent: existing,
+      );
+    });
 
     if (isCurrent(generation) && _currentRepertoire?.filePath == filePath) {
       await loadRepertoire();

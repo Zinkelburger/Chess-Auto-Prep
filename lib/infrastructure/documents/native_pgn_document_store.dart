@@ -255,6 +255,11 @@ class NativePgnDocumentStore implements PgnDocumentStore {
               before: before,
               recoveryPath: recoveryPath,
               observed: observed,
+              installedRevision:
+                  observed?.revision.nativeIdentity == stagedIdentity &&
+                      observed?.revision.sha256 == prepared.digest
+                  ? observed?.revision
+                  : null,
             );
           }
           return PgnWriteFailed(error);

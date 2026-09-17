@@ -1616,6 +1616,26 @@ results rather than generated code volume or number of new classes.
   primary documentation for selected defaults and deferred alternatives.
 
 
+### Builder native history and private graph cutover (2026-09-17)
+
+Source `09aeb6ed` replaces Builder append/history authorization with validated
+native revision receipts and one session edit/history queue. Deletes
+`AppendMovesResult`, `appendMoveAtPath`, `appendMovesAtPath`, `rebuildLine`,
+`reconcileInstalled`, the duplicate writer queue and Builder's public mutable
+`openingTree`. All Builder graph consumers use the protected query projection;
+the decoder's mutable graph is copied into exclusive session ownership. Zero
+remaining retired API references were verified in `lib/` and `test/`.
+
+515 focused tests and three Linux native journeys passed: batched append and
+successive UI undo, equal-text external replacement refusing undo while retaining
+the document/board/graph/history, annotation/reload and import conflict. Merged
+analyze/lint passed with 13 informational findings, no warnings/errors. This
+completes the named history/graph responsibility without a compatibility shim.
+Whole Builder still requires durable scratch recovery, host retirement and
+remaining non-history edit contracts. Undo restores decoded PGN; original
+encoding/raw bytes remain in native recovery archives. Other-host gates remain
+unverified.
+
 ## Execution record — 2026-09-16
 
 Historical evidence and decisions follow. Earlier temporary-bridge and

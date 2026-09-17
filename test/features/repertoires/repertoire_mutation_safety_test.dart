@@ -1,7 +1,7 @@
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_mutation_receipt.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import '../../support/repertoire_dependencies.dart';
-import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -223,7 +223,7 @@ void main() {
       );
       final rejected = expectLater(append, throwsStateError);
       await editor.committed.future;
-      await controller.setRepertoire(
+      final switched = controller.setRepertoire(
         RepertoireMetadata(
           name: 'Other',
           filePath: other.path,
@@ -232,6 +232,7 @@ void main() {
       );
       editor.resume.complete();
       await rejected;
+      await switched;
       expect(await file.readAsString(), contains('Nf3'));
       expect(await other.readAsString(), original);
       expect(controller.repertoirePgn, original);
@@ -266,18 +267,20 @@ void main() {
         await repository.committed.future;
         final other = File(p.join(directory.path, 'other.pgn'));
         await other.writeAsString(original);
-        await controller.setRepertoire(
+        final switched = controller.setRepertoire(
           RepertoireMetadata(
             name: 'Other',
             filePath: other.path,
             lastModified: DateTime(2026),
           ),
         );
+        expect(controller.isLoading, isTrue);
+        repository.resume.complete();
+        await deletion;
+        await switched;
         controller.loadPgnLine(controller.repertoireLines.single);
         final tree = controller.tree;
         final selected = controller.selectedPgnLine;
-        repository.resume.complete();
-        await deletion;
         expect(controller.tree, same(tree));
         expect(controller.selectedPgnLine, same(selected));
         expect(controller.currentRepertoire!.filePath, other.path);
@@ -364,16 +367,22 @@ void main() {
   );
 
   test(
-    'DATA-03: post-install failure reconciles without replaying undo',
+    'DATA-03: legacy post-install uncertainty cannot rearm native history',
     () async {
       await add(['Nf3', 'Nc6']);
       gateway.delegate = _AfterWriteFailure(storage);
-      expect(await controller.writer.undo(), isTrue);
-      expect(controller.repertoireLines.single.moves, ['e4', 'e5', 'Nf3']);
+      await expectLater(
+        controller.writer.undo(),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(controller.writer.canUndo, isTrue);
       gateway.delegate = storage;
-      expect(await controller.writer.undo(), isTrue);
-      expect(await file.readAsString(), original);
-      expect(controller.writer.canUndo, isFalse);
+      await expectLater(
+        controller.writer.undo(),
+        throwsA(isA<AtomicWriteConflict>()),
+      );
+      expect(await file.readAsString(), contains('Nf3'));
+      expect(await file.readAsString(), isNot(contains('Nc6')));
     },
   );
 
@@ -518,7 +527,7 @@ class _PausedRepository extends DocumentRepertoireRepository {
   final resume = Completer<void>();
 
   @override
-  Future<AppendMovesResult> append(
+  Future<RepertoireMutationReceipt> append(
     String filePath,
     List<String> pathFromRoot,
     List<String> newSans, {
