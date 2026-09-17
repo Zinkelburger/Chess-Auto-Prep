@@ -61,8 +61,7 @@ class SettingsSectionController<C extends SectionConfiguration<C>> {
   }
 
   Future<void> ensureLoaded() =>
-      _loading ??
-      (state.phase == SettingsPhase.unloaded ? reload() : Future.value());
+      _loading ?? (state.committed == null ? reload() : Future.value());
 
   Future<void> reload() {
     final pending = _loading;

@@ -60,10 +60,10 @@ ID when a requirement changes. IDs stay stable if milestones are rearranged.
 | DATA-05 | Measure lock wait/hold times; interrupted and synced-file operations preserve recoverable content with bounded retries and explicit durability limits. | [Filesystem contracts](#filesystem-and-cross-process-contracts) |
 | DATA-06 | Restore a consistent database/document backup into a disposable profile; migration and adapter rollback preserve new work and stable references. | [Coexistence](#data-preservation-and-coexistence) |
 | DATA-07 | Generation commits only against its source/run identity and preserves edited artifacts. Exercise stale completion and interrupted publication. | [Storage gate](#storage-baseline-and-overwrite-prevention-gate) |
-| STATE-01 | One action-state owner implements reject/coalesce/queue; retries, offscreen listeners and stale callbacks cannot duplicate jobs or publish stale state. | [Runtime state](#runtime-state-and-large-documents) |
+| STATE-01 | Each action scope has one state owner and an explicit reject/coalesce/queue policy; retries, offscreen listeners and stale callbacks cannot duplicate jobs or publish stale state. | [Runtime state](#runtime-state-and-large-documents) |
 | STATE-02 | Large projections are immutable, cheaply comparable and scoped to their dependencies; receive-side decoding and measured edits/rebuilds meet the baseline budgets. | [Runtime state](#runtime-state-and-large-documents) |
 | STATE-03 | Continuous analysis produces bounded periodic UI updates without losing terminal events; verify with fake-time burst tests. | [Runtime state](#runtime-state-and-large-documents) |
-| SET-01 | One writer per settings key; failed saves stay visible and active-job configuration is explicit. Test concurrent panels and restart. | [Settings](#settings-and-credentials) |
+| SET-01 | One writer per settings key; failed reads/saves stay visible, unknown preferences cannot authorize startup work, and active-job configuration is explicit. Test concurrent panels, startup/toggle ordering, retry and restart. | [Settings](#settings-and-credentials) |
 | SEC-01 | Before migrating Accounts, verify native vault migration, restart and disconnect with synthetic secrets; no silent plaintext fallback. | [Credentials](#settings-and-credentials) |
 | PROC-01 | Owned workers/ports/processes terminate on the specified cancellation/shutdown paths; test failed startup and return to resource baseline. | [Supervision](#worker-and-engine-supervision) |
 | PROC-02 | A verified containment or parent-liveness mechanism is active before engine work; forced app death cleans up the supported descendant tree on each verified host. | [Supervision](#worker-and-engine-supervision) |
@@ -159,6 +159,44 @@ legacy-theme-consumer checks remain active. These static checks do not prove
 runtime ownership or certify code outside their declared boundary rules. Moving
 code to `legacy_features/` alone earns no migration credit and is not a
 replacement for the full inventory and parity checks.
+
+**Review corrections to the completion gates (2026-09-17).** These requirements
+apply to the complete replacement, including its existing UI and helper files:
+
+- ARCH-01/ARCH-02: inventory the whole production dependency graph, including
+  `features/*/services/` and shared `lib/models/` types. The current checker does
+  not forbid all legacy-service imports from feature service folders; an
+  `enforced` classification therefore cannot establish this gate. Close those
+  edges through final pure algorithms or injected contracts, move each canonical
+  domain type with all consumers, and extend checker regression cases to cover
+  alternate folder placement. Do not rename files to evade a rule or expand the
+  debt baseline to claim success. The remaining wider checker coverage is open.
+- UI-01: controllers expose typed failure/status data; widgets resolve ARB copy,
+  including retry, empty, recovery and error states. Remove English error mirrors
+  and raw exception display in the same consumer cutover. Keep the ban on
+  localization imports in controllers. ARB message counts or a static boundary
+  pass are not localization evidence; exercise the rendered states, long labels
+  and text scaling. Existing controller English remains unfinished UI work.
+- STATE-01: document each action's owner, admission policy, invalidation events
+  and publication checks. Independent open/selection/cache revisions are allowed
+  when their scopes differ. Fewer integer counters alone neither prove nor
+  disprove correctness. Verify overlapping commands, invalidation before
+  cancellation, disposal and late results across the real owners; do not add a
+  generic token wrapper merely to conceal the same competing ownership.
+- SET-01: distinguish unavailable preferences from a successfully read absent
+  key. A failed initial read must remain retryable and cannot silently enable
+  analysis using defaults. Startup, toggles and generation transitions share
+  lifecycle ordering. Normalize edits once in the canonical configuration;
+  setters and explicit edit commands follow the same invalid-input policy.
+- TEST-01: every changed production provider must be installed by its affected
+  widget fixtures before integration. Cache/database fixtures select disposable
+  storage themselves, including direct test invocations, and test only their own
+  rows. The bounded runner's disposable XDG profile is additional containment;
+  its potentially warm cache is not test isolation. Never inspect or clear the
+  user's database to make a test pass. Record the test process's actual exit
+  status, not that of a trailing log command. Known failing affected tests block
+  integration. Focused repairs do not turn an earlier red full suite into a
+  green result; rerun the combined suite before claiming that result.
 
 **Definition of done per cutover.** Final production wiring + deleted old
 owner/APIs/callers + no temporary scaffolding + passing behavior/failure checks +
@@ -4072,8 +4110,10 @@ workflow work must still remove remaining legacy ownership and UI debt.
 Combined verification: the full engine/artifact baseline at `f1109c5b` ran
 6,421 passing tests, 12 skips and four failures. The failures were two Builder
 settings fixtures, one settings contrast fixture, and a cache-only Explorer
-fixture that unintentionally gained a scripted engine. All four were repaired;
-the focused fixture suites passed 14 and 10 tests. The cache-only test now injects
+fixture that unintentionally gained a scripted engine and lacked explicit cache
+isolation. The scripted-engine source of false evaluations and the three provider
+fixtures were repaired in the Viewer integration; cache isolation follows below.
+The focused fixture suites passed 14 and 10 tests. The cache-only test now injects
 an unavailable engine and still asserts that uncached evaluations stay absent.
 This is full-baseline evidence plus focused repairs, not a claim of a green full
 suite on the final merged Viewer revision. The merged Viewer tests and six native
@@ -4085,6 +4125,44 @@ Production Linux screenshots were inspected for the
 profile left by the restart journey. The preview was stopped before the final
 checks. Existing leaf tests additionally cover active themes and 200% text scaling;
 these screenshots do not prove all UI-01 or non-Linux gates.
+
+
+### External review follow-up: startup and test isolation (2026-09-17)
+
+The supplied review describes the earlier `f1109c5b` baseline. Viewer facade
+retirement is now on local main at `8e5e5dcc`; the legacy theme ledger has 246
+entries, not 251. Whole UI renewal is still unfinished. The reported four test
+failures remain historical baseline evidence, with focused repairs recorded
+above; they must not be relabeled as a successful full-suite run.
+
+Confirmed startup findings are addressed in the existing final owners.
+`SettingsSectionController.ensureLoaded` retries when no committed value exists,
+including after failed reads. `EngineLifecycle` queues startup with toggles and
+generation, retains an unknown preference as off after failure, permits retry,
+and prevents a late startup call from overriding a successful explicit toggle.
+Navigation resume no longer rewrites preferences. Engine setters now submit
+fields directly to the existing canonical normalization; their duplicate
+normalization and inconsistent early-return guards are deleted.
+
+The cache-only Explorer and eval-cache suites now install their own fresh
+application-support directory before cache initialization, verify the expected
+database exists before clearing any rows, reset between tests and delete their
+own database at teardown. Our bounded test runner already overrides XDG data
+paths; that does not establish the source of another runner's cache rows. No
+user database was inspected or modified for this investigation. Retiring the
+production eval-cache singleton remains separate unfinished ownership work;
+this explicit test fixture does not certify that architectural replacement.
+
+Validation on the combined `8e5e5dcc` source plus these corrections: the full
+`scripts/ci.sh test` process exited 0 with **6,461 passing tests, 12 skips and zero
+failures**. The 62 focused settings/lifecycle/runtime/cache cases also pass.
+`scripts/ci.sh analyze lint` passes with 63 informational findings and no warnings
+or errors; all 94 local file links across this plan and the component map resolve.
+This full run includes the repaired provider fixtures and explicitly isolated
+Explorer cache fixture. The 12 skips are still skips; this does not establish
+unrun native/platform or whole-renewal acceptance gates. Production changes remove
+87 net lines from existing settings/lifecycle owners and add no transitional
+owner, facade or compatibility layer.
 
 ### Legacy artifact recovery access (follow-up to `7032e719`)
 
