@@ -1,3 +1,5 @@
+import '../support/generation_artifacts_fixture.dart';
+import '../support/generation_publication_fixture.dart';
 // The expectimax database on GenerationSessionController: loading what a
 // repertoire saved, refusing a probe it cannot place, and keeping a
 // probe-origin main tree when a full build arrives.
@@ -13,10 +15,10 @@ import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
 import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
-import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'fake_storage.dart';
+import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
+import 'package:chess_auto_prep/features/generation/models/generation_artifacts.dart';
 
 const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
 const _afterE4C5 =
@@ -45,6 +47,11 @@ BuildTree _tree(String rootFen, {String childFen = _afterE4}) {
 }
 
 class _CapturingGeneration extends GenerationSessionController {
+  _CapturingGeneration(MemoryGenerationArtifacts storage)
+    : super(
+        artifacts: GenerationArtifacts(storage),
+        publication: generationPublicationFixture(),
+      );
   GenerationRequest? request;
   @override
   Future<void> startBuild(GenerationRequest request) async {
@@ -78,15 +85,13 @@ const _pvTarget = ExpectimaxProbeTarget(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late MemoryStorage storage;
+  late MemoryGenerationArtifacts storage;
   setUp(() {
-    storage = MemoryStorage();
-    StorageFactory.instanceForTest = storage;
+    storage = MemoryGenerationArtifacts();
   });
-  tearDown(() => StorageFactory.instanceForTest = null);
 
   test('PV save failure reports an error instead of durable success', () async {
-    storage.failWrites = true;
+    storage.failure = StateError('disk full');
     final pool = FakeStockfishPool();
     pool.discoveryByFen[playUciMove(
       kStandardStartFen,
@@ -98,6 +103,8 @@ void main() {
       depth: 14,
     );
     final controller = GenerationSessionController(
+      artifacts: GenerationArtifacts(storage),
+      publication: generationPublicationFixture(),
       enginePool: pool,
       engineLifecycle: _PvLifecycle(),
     );
@@ -106,13 +113,15 @@ void main() {
     expect(error, contains('disk full'));
     expect(controller.lastRunSummary, isNot(contains('saved')));
     expect(controller.isGenerating, isFalse);
-    expect(storage.files, isEmpty);
+    expect(storage.saved, isEmpty);
   });
 
   test('cancel during engine entry never starts PV discovery', () async {
     final lifecycle = _PvLifecycle()..gate = Completer<void>();
     final pool = FakeStockfishPool();
     final controller = GenerationSessionController(
+      artifacts: GenerationArtifacts(storage),
+      publication: generationPublicationFixture(),
       enginePool: pool,
       engineLifecycle: lifecycle,
     );
@@ -125,7 +134,7 @@ void main() {
     expect(pool.discoverMultiPvCalls, isEmpty);
     expect(controller.lastRunSummary, contains('cancelled'));
     expect(controller.lastError, isNull);
-    expect(storage.files, isEmpty);
+    expect(storage.saved, isEmpty);
   });
 
   for (final pv in [true, false]) {
@@ -134,13 +143,13 @@ void main() {
       () async {
         final entered = Completer<void>();
         final release = Completer<void>();
-        storage.beforeExists = (path) async {
-          if (path == '/r/x_tree.json') {
+        storage.beforeRead = (path) async {
+          if (path == '/r/x.pgn') {
             entered.complete();
             await release.future;
           }
         };
-        final controller = _CapturingGeneration();
+        final controller = _CapturingGeneration(storage);
         addTearDown(controller.dispose);
         final pending = pv
             ? controller.computeMovePv(_pvTarget)
@@ -150,18 +159,23 @@ void main() {
         release.complete();
         expect(await pending, contains('session changed'));
         expect(controller.request, isNull);
-        expect(storage.files, isEmpty);
+        expect(storage.saved, isEmpty);
       },
     );
   }
 
   group('loadSavedTreeFor', () {
     test('loads the build tree and its probes', () async {
-      storage.files['/r/x_tree.json'] = serializeTree(_tree(kStandardStartFen));
-      storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+      (storage.saved['/r/x.pgn'] ??= {})[GenerationArtifactKind.tree] =
+          serializeTree(_tree(kStandardStartFen));
+      (storage.saved['/r/x.pgn'] ??=
+          {})[GenerationArtifactKind.probes] = ExpectimaxProbeCodec.encode([
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        artifacts: GenerationArtifacts(storage),
+        publication: generationPublicationFixture(),
+      );
 
       await controller.loadSavedTreeFor('/r/x.pgn');
 
@@ -175,11 +189,15 @@ void main() {
     });
 
     test('a repertoire with only probes uses the first as its tree', () async {
-      storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+      (storage.saved['/r/x.pgn'] ??=
+          {})[GenerationArtifactKind.probes] = ExpectimaxProbeCodec.encode([
         _tree(_afterE4C5, childFen: 'probe-child'),
         _tree(_afterE4, childFen: 'other-child'),
       ]);
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        artifacts: GenerationArtifacts(storage),
+        publication: generationPublicationFixture(),
+      );
 
       await controller.loadSavedTreeFor('/r/x.pgn');
 
@@ -189,7 +207,10 @@ void main() {
     });
 
     test('a repertoire with nothing saved ends with no tree', () async {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        artifacts: GenerationArtifacts(storage),
+        publication: generationPublicationFixture(),
+      );
       controller.onTreeBuilt(_tree(kStandardStartFen));
 
       await controller.loadSavedTreeFor('/r/none.pgn');
@@ -199,10 +220,14 @@ void main() {
     });
 
     test('a full build keeps a probe-origin main tree as a probe', () async {
-      storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+      (storage.saved['/r/x.pgn'] ??=
+          {})[GenerationArtifactKind.probes] = ExpectimaxProbeCodec.encode([
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        artifacts: GenerationArtifacts(storage),
+        publication: generationPublicationFixture(),
+      );
       await controller.loadSavedTreeFor('/r/x.pgn');
 
       controller.onTreeBuilt(_tree(kStandardStartFen));
@@ -217,10 +242,11 @@ void main() {
     test(
       'loads existing analysis before the first position generation',
       () async {
-        storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+        (storage.saved['/r/x.pgn'] ??=
+            {})[GenerationArtifactKind.probes] = ExpectimaxProbeCodec.encode([
           _tree(_afterE4C5, childFen: 'probe-child'),
         ]);
-        final controller = _CapturingGeneration();
+        final controller = _CapturingGeneration(storage);
         await controller.computeExpectimax(
           const ExpectimaxProbeTarget(
             repertoireFilePath: '/r/x.pgn',
@@ -242,7 +268,7 @@ void main() {
     test(
       'explicit depth and cores create a database-only request at the chosen move',
       () async {
-        final controller = _CapturingGeneration();
+        final controller = _CapturingGeneration(storage);
         final error = await controller.computeExpectimax(
           const ExpectimaxProbeTarget(
             repertoireFilePath: '/r/x.pgn',
@@ -265,12 +291,15 @@ void main() {
         expect(request.buildRootFen, _afterE4C5.replaceFirst(' c6 ', ' - '));
         expect(request.config.verifyFinal, isFalse);
         expect(request.config.downloadMasterGamesIfMissing, isFalse);
-        expect(storage.files, isEmpty);
+        expect(storage.saved, isEmpty);
         controller.dispose();
       },
     );
     test('refuses moves it cannot play from the start', () async {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        artifacts: GenerationArtifacts(storage),
+        publication: generationPublicationFixture(),
+      );
 
       final error = await controller.computeExpectimax(
         const ExpectimaxProbeTarget(

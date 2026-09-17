@@ -1,3 +1,4 @@
+import '../../support/generation_artifacts_fixture.dart';
 import 'package:chess_auto_prep/app/training_dependencies.dart';
 import '../../support/repertoire_dependencies.dart';
 import 'dart:io';
@@ -29,6 +30,7 @@ void main() {
     repService = FakeRepertoireService();
     reviewService = FakeReviewService();
     controller = createTrainingSession(
+      artifacts: generationArtifactsFixture().repository,
       configuration: createTrainingSettings(),
       session: testRepertoireController(),
       repertoireService: repService,

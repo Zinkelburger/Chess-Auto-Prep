@@ -53,6 +53,9 @@ class RepertoireWriter {
 
   bool get canUndo => _undoStack.isNotEmpty;
 
+  /// Suspend queued writes during a load without losing recoverable history.
+  void invalidatePendingActions() => _session++;
+
   void clearUndoStack() {
     _session++;
     _undoStack.clear();
@@ -166,7 +169,7 @@ class RepertoireWriter {
   }
 
   void _requireSession(int session, {bool committed = false}) {
-    if (session != _session) {
+    if (session != _session || _controller.isLoading) {
       throw StateError('The repertoire changed before the action could run.');
     }
   }

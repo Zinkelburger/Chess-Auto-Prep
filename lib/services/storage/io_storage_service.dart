@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../features/repertoires/models/repertoire_metadata.dart';
+import '../../infrastructure/generation/storage_generation_draft_repository.dart';
 import '../../features/repertoires/models/repertoire_creation.dart';
 import '../../infrastructure/repertoires/native_repertoire_publication_store.dart';
 import '../../infrastructure/repertoires/repertoire_import_planner.dart';
@@ -394,7 +395,11 @@ class IOStorageService implements StorageService {
     final folders = <Directory>[
       await for (final entity in dir.list())
         if (entity is Directory &&
-            p.basename(entity.path) != RepertoireDirectoryMutations.stagingName)
+            p.basename(entity.path) !=
+                RepertoireDirectoryMutations.stagingName &&
+            p.basename(entity.path) !=
+                StorageGenerationDraftRepository.directoryName &&
+            p.basename(entity.path) != '.cap-pgn-history')
           entity,
     ];
 
@@ -496,7 +501,11 @@ class IOStorageService implements StorageService {
     if (!await dir.exists()) return [];
     final out = <String>[
       await for (final entity in dir.list())
-        if (entity is Directory) entity.path,
+        if (entity is Directory &&
+            p.basename(entity.path) !=
+                StorageGenerationDraftRepository.directoryName &&
+            p.basename(entity.path) != '.cap-pgn-history')
+          entity.path,
     ];
     out.sort(
       (a, b) =>

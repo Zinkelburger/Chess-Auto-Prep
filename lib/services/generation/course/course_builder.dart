@@ -89,13 +89,6 @@ class CourseBuilder {
   /// actually follows the repertoire. Null until the tree is built.
   final FenMap? Function() fenMap;
 
-  /// Companion file path for a course at [courseFilePath] — the model games
-  /// again, as a game collection a PGN viewer opens directly.
-  static String modelGamesPathFor(String courseFilePath) => p.join(
-    p.dirname(courseFilePath),
-    '${p.basenameWithoutExtension(courseFilePath)}_model_games.pgn',
-  );
-
   /// Enrich [lines] and compose them into a course.
   ///
   /// The four passes run in sequence rather than concurrently: each drives

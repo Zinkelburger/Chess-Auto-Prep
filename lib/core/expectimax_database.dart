@@ -5,7 +5,7 @@
 /// Owned by [GenerationSessionController], which decides when the bundle
 /// changes and tells its listeners; this class holds the bundle, lands
 /// probes in it, and moves it to and from disk through a
-/// [GenerationArtifactStore]. Nothing here notifies anyone.
+/// [GenerationArtifacts]. Nothing here notifies anyone.
 library;
 
 import 'package:path/path.dart' as p;
@@ -17,7 +17,7 @@ import '../services/generation/generation_config.dart';
 import '../utils/fen_utils.dart';
 import '../utils/log.dart';
 import 'generated_repertoire.dart';
-import 'generation_artifacts.dart';
+import '../features/generation/services/generation_artifacts.dart';
 
 /// What [ExpectimaxDatabase.load] did.
 enum ExpectimaxLoadOutcome {
@@ -36,9 +36,9 @@ enum ExpectimaxLoadOutcome {
 typedef ProbeLanding = ({int added, bool mainTreeChanged});
 
 class ExpectimaxDatabase {
-  ExpectimaxDatabase({required this.store});
+  ExpectimaxDatabase({required this.readSaved});
 
-  final GenerationArtifactStore store;
+  final Future<SavedExpectimaxDatabase> Function(String) readSaved;
 
   /// Single source of truth for the generated tree and every artifact
   /// derived from it (FenMap, eval-tree snapshot, trap index).
@@ -160,7 +160,7 @@ class ExpectimaxDatabase {
     required bool Function() canApply,
   }) async {
     final seq = ++_loadSeq;
-    final saved = await store.readDatabase(repertoireFilePath);
+    final saved = await readSaved(repertoireFilePath);
     if (seq != _loadSeq || !canApply()) {
       return ExpectimaxLoadOutcome.superseded;
     }
@@ -310,22 +310,6 @@ class ExpectimaxDatabase {
       );
     }
     return false;
-  }
-
-  /// Write the probe trees (and a probe-origin main tree) to the probe
-  /// file; rewrite the tree file when [mainTreeChanged], so the database
-  /// survives a restart. Throws when the write fails.
-  Future<void> persist(
-    String repertoireFilePath, {
-    required bool mainTreeChanged,
-  }) async {
-    final bundle = _current;
-    if (bundle == null) return;
-    await store.writeDatabase(
-      repertoireFilePath,
-      probeTrees: [if (_mainTreeIsProbe) bundle.tree, ...bundle.probes],
-      mainTree: mainTreeChanged && !_mainTreeIsProbe ? bundle.tree : null,
-    );
   }
 
   /// The config a saved tree was built with, or null for a legacy tree

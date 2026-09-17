@@ -2,10 +2,13 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
+import '../features/generation/services/generation_artifacts.dart';
+
 import '../features/repertoires/repositories/repertoire_document_repository.dart';
 import '../features/repertoires/repositories/repertoire_decoder.dart';
 
 import '../app/legacy_theme_boundary.dart';
+import '../features/generation/controllers/generation_publication_controller.dart';
 
 import 'dart:async';
 import '../features/documents/controllers/document_close_coordinator.dart';
@@ -129,8 +132,11 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   late final RepertoireController _controller;
   final _workspaceNavigation = WorkspaceNavigationController();
   AppState? _appState;
-  final GenerationSessionController _generationController =
-      GenerationSessionController();
+  late final GenerationSessionController _generationController =
+      GenerationSessionController(
+        publication: context.read<GenerationPublicationFactory>()(),
+        artifacts: context.read<GenerationArtifacts>(),
+      );
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
   final AuditSessionController _auditController = AuditSessionController();
@@ -176,7 +182,9 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   EphemeralFindingPreview? _ephemeralPreview;
 
   /// Loaded traps, their position index, and the tour's open/closed state.
-  final TrapSessionController _trapSession = TrapSessionController();
+  late final TrapSessionController _trapSession = TrapSessionController(
+    loadFile: context.read<GenerationArtifacts>().readTraps,
+  );
   final GlobalKey<TrapTourBarState> _trapTourKey =
       GlobalKey<TrapTourBarState>();
 
@@ -313,12 +321,8 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
                 // the generated ones.
                 if (droppedKeys.contains(line.moves.join(' '))) line,
             ]),
-            onLinesSaved: (lines) {
-              _controller.appendNewLines([
-                for (final l in lines)
-                  (moves: l.moves, title: l.title, pgn: l.pgn),
-              ]);
-            },
+            createPublicationReceiver: () =>
+                _controller.publishedDocumentReceiver,
             onCreateStudy: (name, pgn) async {
               final study = context.read<StudyController>();
               final app = context.read<AppState>();
@@ -591,6 +595,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   /// A notification that leaves it unchanged is a cursor move, which only
   /// the position zones need to hear about.
   int _structureSeen = -1;
+  String? _lastArtifactSource;
 
   /// The repertoire the colour question has already been put for, and whether
   /// that dialog is on screen right now.
@@ -642,6 +647,18 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
               _controller.rootMoves;
           unawaited(_trapSession.loadFromFile(currentId));
           newRepertoireId = currentId;
+        }
+
+        final source = _controller.repertoirePgn;
+        if (!_generationController.isGenerating &&
+            source != _lastArtifactSource) {
+          _lastArtifactSource = source;
+          if (newRepertoireId == null) {
+            _generationController.clearTree();
+            unawaited(_generationController.loadSavedTreeFor(currentId));
+            _trapSession.endTourForRepertoireSwitch();
+            unawaited(_trapSession.loadFromFile(currentId));
+          }
         }
 
         if (_controller.needsColorSelection &&
@@ -1076,7 +1093,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     }
 
     final loadError = _controller.loadError;
-    if (loadError != null) {
+    if (loadError != null && _controller.currentRepertoire == null) {
       return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
@@ -1179,6 +1196,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         ),
       ),
       body: RepertoireLoadingFrame(
+        loadError: loadError,
+        onDismissError: _controller.dismissLoadError,
         isLoading: _controller.isLoading,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,

@@ -150,20 +150,4 @@ void main() {
       expect(built.modelGameNote, contains('follows this repertoire'));
     });
   });
-
-  group('modelGamesPathFor', () {
-    test('sits beside the course under a companion name', () {
-      expect(
-        CourseBuilder.modelGamesPathFor('/books/Benko.pgn'),
-        '/books/Benko_model_games.pgn',
-      );
-    });
-
-    test('replaces the extension rather than appending to it', () {
-      expect(
-        CourseBuilder.modelGamesPathFor('/books/Sicilian.notpgn'),
-        '/books/Sicilian_model_games.pgn',
-      );
-    });
-  });
 }

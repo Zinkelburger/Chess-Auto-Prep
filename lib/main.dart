@@ -1,4 +1,7 @@
 import 'app/runtime_settings.dart';
+import 'features/generation/services/generation_artifacts.dart';
+import 'app/generation_dependencies.dart';
+import 'features/generation/controllers/generation_publication_controller.dart';
 import 'app/repertoire_dependencies.dart';
 import 'features/repertoires/repositories/repertoire_document_repository.dart';
 import 'features/repertoires/repositories/repertoire_decoder.dart';
@@ -209,6 +212,13 @@ class ChessAutoPrepApp extends StatelessWidget {
       documentStore: documents,
       child: MultiProvider(
         providers: [
+          Provider<GenerationArtifacts>(
+            create: (_) => createGenerationArtifacts(documents: documents),
+          ),
+          Provider<GenerationPublicationFactory>(
+            create: (_) =>
+                () => createGenerationPublication(documents: documents),
+          ),
           Provider<RepertoireDocumentRepository>(
             create: (_) =>
                 repertoireDocuments ??

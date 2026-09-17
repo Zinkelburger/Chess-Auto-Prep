@@ -1,6 +1,8 @@
 /// Value types of the generation session: the few derived facts they carry.
 library;
 
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
@@ -34,7 +36,7 @@ void main() {
         buildRootFen: 'x',
         lineMovePrefix: [],
         repertoireStartFen: 'x',
-        onLinesSaved: _ignore,
+        onPublished: _ignore,
       );
       expect(request.existingTree, isNull);
       expect(request.existingLineKeys, isEmpty);
@@ -104,7 +106,7 @@ void main() {
       buildRootFen: afterE4,
       lineMovePrefix: const ['e4'],
       repertoireStartFen: kStandardStartFen,
-      onLinesSaved: _ignore,
+      onPublished: _ignore,
       existingTree: tree,
     );
 
@@ -115,7 +117,7 @@ void main() {
         buildRootFen: 'x',
         lineMovePrefix: ['e4', 'c5'],
         repertoireStartFen: 'x',
-        onLinesSaved: _ignore,
+        onPublished: _ignore,
       );
       expect(request.resolveLinePrefix(), ['e4', 'c5']);
     });
@@ -229,10 +231,8 @@ void main() {
       expect(request.repertoireStartFen, 'x');
       expect(request.existingTree, isNull);
       expect(request.existingLineKeys, isEmpty);
-      // Nothing to report: the callback is a no-op rather than a throw.
-      request.onLinesSaved(const []);
     });
   });
 }
 
-void _ignore(List<GeneratedLineExport> _) {}
+void _ignore(PgnSnapshot _) {}

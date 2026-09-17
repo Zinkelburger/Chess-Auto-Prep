@@ -5,14 +5,15 @@ import 'dart:async';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/expectimax_database.dart';
-import 'package:chess_auto_prep/core/generation_artifacts.dart';
+import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'fake_storage.dart';
+import '../support/generation_artifacts_fixture.dart';
+import 'package:chess_auto_prep/features/generation/models/generation_artifacts.dart';
 
 const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
 const _afterE4C5 =
@@ -52,14 +53,27 @@ const _config = TreeBuildConfig(startFen: kStandardStartFen, playAsWhite: true);
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late MemoryStorage storage;
+  late MemoryGenerationArtifacts storage;
   late ExpectimaxDatabase db;
+  late GenerationArtifacts artifacts;
   setUp(() {
-    storage = MemoryStorage();
-    db = ExpectimaxDatabase(
-      store: GenerationArtifactStore(storage: () => storage),
-    );
+    storage = MemoryGenerationArtifacts();
+    artifacts = GenerationArtifacts(storage);
+    db = ExpectimaxDatabase(readSaved: artifacts.readDatabase);
   });
+
+  Future<void> persist(String path) async {
+    final bundle = db.current;
+    if (bundle == null) return;
+    final run = await artifacts.repository.begin(path, {});
+    await artifacts.writeDatabase(
+      run,
+      probeTrees: [if (db.mainTreeIsProbe) bundle.tree, ...bundle.probes],
+      mainTree: db.mainTreeIsProbe ? null : bundle.tree,
+      traps: bundle.traps.allTraps,
+    );
+    artifacts.repository.close(run);
+  }
 
   group('publish', () {
     test('derives the bundle and reads the side from the snapshot', () {
@@ -104,20 +118,21 @@ void main() {
 
       db.dropTree();
       db.publish(_tree(kStandardStartFen));
-      await db.persist('/r/x.pgn', mainTreeChanged: true);
+      await persist('/r/x.pgn');
 
       expect(db.probes, [same(probe)]);
       expect(db.mainTreeIsProbe, isFalse);
       expect(
-        ExpectimaxProbeStore.decode(
-          storage.files['/r/x_expectimax.json']!,
+        ExpectimaxProbeCodec.decode(
+          (storage.saved['/r/x.pgn'] ??= {})[GenerationArtifactKind.probes]!,
         ).single.root.fen,
         _afterD4,
       );
     });
 
     test('clear drops everything and forgets the path', () async {
-      storage.files['/r/x_tree.json'] = serializeTree(_tree(kStandardStartFen));
+      (storage.saved['/r/x.pgn'] ??= {})[GenerationArtifactKind.tree] =
+          serializeTree(_tree(kStandardStartFen));
       await db.load('/r/x.pgn', canApply: () => true);
       expect(db.isFor('/r/x.pgn'), isTrue);
 
@@ -131,8 +146,10 @@ void main() {
 
   group('load', () {
     test('a saved tree and its probes become the bundle', () async {
-      storage.files['/r/x_tree.json'] = serializeTree(_tree(kStandardStartFen));
-      storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+      (storage.saved['/r/x.pgn'] ??= {})[GenerationArtifactKind.tree] =
+          serializeTree(_tree(kStandardStartFen));
+      (storage.saved['/r/x.pgn'] ??=
+          {})[GenerationArtifactKind.probes] = ExpectimaxProbeCodec.encode([
         _tree(_afterE4C5, childFen: 'probe-child'),
       ]);
 
@@ -145,7 +162,8 @@ void main() {
     });
 
     test('with only probes saved, the first stands in as the tree', () async {
-      storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
+      (storage.saved['/r/x.pgn'] ??=
+          {})[GenerationArtifactKind.probes] = ExpectimaxProbeCodec.encode([
         _tree(_afterE4C5, childFen: 'probe-child'),
         _tree(_afterE4, childFen: 'other-child'),
       ]);
@@ -158,26 +176,25 @@ void main() {
     });
 
     test('switching repertoires cannot carry a previous probe along', () async {
-      storage.files['/r/a_expectimax.json'] = ExpectimaxProbeStore.encode([
-        _tree(_afterD4),
-      ]);
-      storage.files['/r/b_tree.json'] = serializeTree(_tree(kStandardStartFen));
+      (storage.saved['/r/a.pgn'] ??= {})[GenerationArtifactKind.probes] =
+          ExpectimaxProbeCodec.encode([_tree(_afterD4)]);
+      (storage.saved['/r/b.pgn'] ??= {})[GenerationArtifactKind.tree] =
+          serializeTree(_tree(kStandardStartFen));
       await db.load('/r/a.pgn', canApply: () => true);
 
       await db.load('/r/b.pgn', canApply: () => true);
-      await db.persist('/r/b.pgn', mainTreeChanged: false);
+      await persist('/r/b.pgn');
 
       expect(db.probes, isEmpty);
       expect(db.current!.fenMap.getCanonical(_afterD4), isNull);
-      expect(storage.files.containsKey('/r/b_expectimax.json'), isFalse);
+      expect((await artifacts.readDatabase('/r/b.pgn')).probes, isEmpty);
     });
 
     test(
       'reloading a probe-only repertoire does not duplicate probes',
       () async {
-        storage.files['/r/x_expectimax.json'] = ExpectimaxProbeStore.encode([
-          _tree(_afterD4),
-        ]);
+        (storage.saved['/r/x.pgn'] ??= {})[GenerationArtifactKind.probes] =
+            ExpectimaxProbeCodec.encode([_tree(_afterD4)]);
         await db.load('/r/x.pgn', canApply: () => true);
         await db.load('/r/x.pgn', canApply: () => true);
 
@@ -189,9 +206,10 @@ void main() {
     test(
       'a load cannot replace a full build that finished meanwhile',
       () async {
-        storage.files['/r/x_tree.json'] = serializeTree(_tree(_afterD4));
+        (storage.saved['/r/x.pgn'] ??= {})[GenerationArtifactKind.tree] =
+            serializeTree(_tree(_afterD4));
         final release = Completer<void>();
-        storage.beforeExists = (_) => release.future;
+        storage.beforeRead = (_) => release.future;
         final loading = db.load('/r/x.pgn', canApply: () => true);
         db.dropTree();
         final built = _tree(kStandardStartFen);
@@ -214,11 +232,13 @@ void main() {
     });
 
     test('an older load landing after a newer one is superseded', () async {
-      storage.files['/r/a_tree.json'] = serializeTree(_tree(_afterD4));
-      storage.files['/r/b_tree.json'] = serializeTree(_tree(kStandardStartFen));
+      (storage.saved['/r/a.pgn'] ??= {})[GenerationArtifactKind.tree] =
+          serializeTree(_tree(_afterD4));
+      (storage.saved['/r/b.pgn'] ??= {})[GenerationArtifactKind.tree] =
+          serializeTree(_tree(kStandardStartFen));
       final release = Completer<void>();
-      storage.beforeExists = (path) async {
-        if (path == '/r/a_tree.json') await release.future;
+      storage.beforeRead = (path) async {
+        if (path == '/r/a.pgn') await release.future;
       };
 
       final first = db.load('/r/a.pgn', canApply: () => true);
@@ -232,7 +252,8 @@ void main() {
     });
 
     test('the owner can refuse to apply a finished load', () async {
-      storage.files['/r/x_tree.json'] = serializeTree(_tree(kStandardStartFen));
+      (storage.saved['/r/x.pgn'] ??= {})[GenerationArtifactKind.tree] =
+          serializeTree(_tree(kStandardStartFen));
 
       final outcome = await db.load('/r/x.pgn', canApply: () => false);
 
@@ -380,15 +401,18 @@ void main() {
     test('writes the probes and the changed main tree', () async {
       db.publish(_tree(kStandardStartFen), probes: [_tree(_afterD4)]);
 
-      await db.persist('/r/x.pgn', mainTreeChanged: true);
+      await persist('/r/x.pgn');
 
       expect(
-        storage.files.keys,
-        containsAll(['/r/x_tree.json', '/r/x_expectimax.json']),
+        storage.saved['/r/x.pgn']!.keys,
+        containsAll([
+          GenerationArtifactKind.tree,
+          GenerationArtifactKind.probes,
+        ]),
       );
       expect(
-        ExpectimaxProbeStore.decode(
-          storage.files['/r/x_expectimax.json']!,
+        ExpectimaxProbeCodec.decode(
+          (storage.saved['/r/x.pgn'] ??= {})[GenerationArtifactKind.probes]!,
         ).single.root.fen,
         _afterD4,
       );
@@ -397,20 +421,20 @@ void main() {
     test('a probe-origin main tree is saved among the probes', () async {
       db.publish(_tree(_afterD4), probes: const [], mainIsProbe: true);
 
-      await db.persist('/r/x.pgn', mainTreeChanged: true);
+      await persist('/r/x.pgn');
 
-      expect(storage.files.containsKey('/r/x_tree.json'), isFalse);
+      expect((await artifacts.readDatabase('/r/x.pgn')).tree, isNull);
       expect(
-        ExpectimaxProbeStore.decode(
-          storage.files['/r/x_expectimax.json']!,
+        ExpectimaxProbeCodec.decode(
+          (storage.saved['/r/x.pgn'] ??= {})[GenerationArtifactKind.probes]!,
         ).single.root.fen,
         _afterD4,
       );
     });
 
     test('an empty bundle writes nothing', () async {
-      await db.persist('/r/x.pgn', mainTreeChanged: true);
-      expect(storage.files, isEmpty);
+      await persist('/r/x.pgn');
+      expect(storage.saved, isEmpty);
     });
   });
 }

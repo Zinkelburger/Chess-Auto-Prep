@@ -1,3 +1,4 @@
+import '../../support/generation_artifacts_fixture.dart';
 import 'package:chess_auto_prep/features/training/repositories/training_source_repository.dart';
 import 'package:chess_auto_prep/features/training/repositories/training_answers.dart';
 import 'dart:io';
@@ -28,6 +29,7 @@ void main() {
     reviewService = FakeReviewService();
     askedQuestions = AskedQuestionsStore();
     loader = TrainingSourceLoader(
+      artifacts: generationArtifactsFixture().repository,
       repertoireService: repService,
       reviewService: reviewService,
       askedQuestions: askedQuestions,

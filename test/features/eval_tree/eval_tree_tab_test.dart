@@ -1,3 +1,4 @@
+import '../../support/generation_artifacts_fixture.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +39,7 @@ void main() {
       await tester.pumpWidget(
         buildHarness(
           child: EvalTreeTab(
+            artifacts: generationArtifactsFixture().repository,
             currentRepertoire: _testRepertoire,
             isWhiteRepertoire: true,
             generatedTree: tree,
@@ -70,6 +72,7 @@ void main() {
     var selections = 0;
     Widget tab(int reset) => buildHarness(
       child: EvalTreeTab(
+        artifacts: generationArtifactsFixture().repository,
         currentRepertoire: _testRepertoire,
         isWhiteRepertoire: true,
         generatedTree: tree,
@@ -97,6 +100,7 @@ void main() {
     await tester.pumpWidget(
       buildHarness(
         child: EvalTreeTab(
+          artifacts: generationArtifactsFixture().repository,
           currentRepertoire: _testRepertoire,
           isWhiteRepertoire: true,
           generatedTree: tree,
@@ -126,6 +130,7 @@ void main() {
     await tester.pumpWidget(
       buildHarness(
         child: EvalTreeTab(
+          artifacts: generationArtifactsFixture().repository,
           currentRepertoire: _testRepertoire,
           isWhiteRepertoire: true,
           generatedTree: tree,
@@ -175,6 +180,7 @@ void main() {
             body: TabBarView(
               children: [
                 EvalTreeTab(
+                  artifacts: generationArtifactsFixture().repository,
                   currentRepertoire: _testRepertoire,
                   isWhiteRepertoire: true,
                   generatedTree: tree,
@@ -218,6 +224,7 @@ void main() {
       buildHarness(
         width: 320,
         child: EvalTreeTab(
+          artifacts: generationArtifactsFixture().repository,
           currentRepertoire: _testRepertoire,
           isWhiteRepertoire: true,
           generatedTree: tree,
@@ -299,6 +306,7 @@ class _EvalTreeReloadHarnessState extends State<_EvalTreeReloadHarness> {
   @override
   Widget build(BuildContext context) {
     return EvalTreeTab(
+      artifacts: generationArtifactsFixture().repository,
       currentRepertoire: _testRepertoire,
       isWhiteRepertoire: true,
       generatedTree: _tree,

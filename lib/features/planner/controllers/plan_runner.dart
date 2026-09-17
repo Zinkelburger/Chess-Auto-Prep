@@ -236,7 +236,7 @@ class PlanRunner extends ChangeNotifier with SafeChangeNotifier {
         buildRootFen: fen,
         lineMovePrefix: List.unmodifiable(point.moves),
         repertoireStartFen: kStandardStartFen,
-        onLinesSaved: (_) {},
+        onPublished: (_) {},
       );
       if (generation.isGenerating) {
         throw StateError('Another build is already running.');
