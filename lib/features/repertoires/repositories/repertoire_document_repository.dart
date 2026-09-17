@@ -12,7 +12,13 @@ typedef RepertoireLineSaveReceipt = ({
 /// Chapter storage boundary. Replacements require the captured decoded content;
 /// adapters also validate the observed document revision at publication.
 abstract interface class RepertoireDocumentRepository {
-  Future<({bool exists, String? pgn})> read(String path);
+  /// Observations retain native identity and bytes digest for recovery decisions.
+  Future<PgnOpenResult> read(String path);
+
+  /// Append captured game text to one freshly observed chapter. Publication
+  /// validates that exact revision, including identity, without reopening to
+  /// rebase against equal decoded text. Never replay an uncertain append.
+  Future<PgnWriteResult> appendPgn(String path, String capturedPgn);
   Future<void> replace(
     String path,
     String content, {
