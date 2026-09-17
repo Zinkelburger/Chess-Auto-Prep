@@ -1,5 +1,7 @@
-import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:async';
+
+import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 
 import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
@@ -68,6 +70,9 @@ void main() {
     StorageFactory.instanceForTest = storage;
     final analysis = _Analysis();
     controller = PgnViewerController(
+      preferences: SharedPreferencesViewerRepository(
+        SharedPreferences.getInstance,
+      ),
       collectionRepository: StoragePgnCollectionRepository(
         StorageFactory.instance,
       ),

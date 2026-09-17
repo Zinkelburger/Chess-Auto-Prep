@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+
+import '../features/documents/repositories/viewer_preferences_repository.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
@@ -22,10 +24,12 @@ import '../widgets/pgn_viewer_widget.dart';
 class PgnViewerLifetime {
   PgnViewerLifetime({
     required PgnCollectionRepository repository,
+    required ViewerPreferencesRepository preferences,
     required WorkspaceRecoveryStore<PgnWorkspaceSnapshot> store,
   }) {
     controller = PgnViewerController(
       collectionRepository: repository,
+      preferences: preferences,
       pgnWidgetController: reader,
       analysisController: analysis,
       isActive: () => !_disposed,
@@ -81,6 +85,7 @@ class PgnViewerLifetime {
     reclaimFocus = null;
     reader.flushPendingComments();
     try {
+      await controller.saveSession();
       await recovery.shutdown();
     } finally {
       _disposed = true;

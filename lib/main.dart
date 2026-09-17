@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:path/path.dart' as p;
 import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
 import 'app/pgn_viewer_lifetime.dart';
@@ -6,7 +8,6 @@ import 'features/documents/repositories/pgn_collection_repository.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'infrastructure/settings/fresh_desktop_preferences_store.dart';
 import 'infrastructure/settings/shared_preferences_app_settings_repository.dart';
-import 'dart:async';
 
 import 'app/app_dependencies.dart';
 import 'app/study_dependencies.dart';
@@ -207,6 +208,7 @@ class ChessAutoPrepApp extends StatelessWidget {
           ),
           Provider<PgnViewerLifetime>(
             create: (ctx) => PgnViewerLifetime(
+              preferences: createViewerPreferencesRepository(),
               repository: ctx.read<PgnCollectionRepository>(),
               store: pgnRecoveryStore ?? createPgnRecoveryStore(),
             ),

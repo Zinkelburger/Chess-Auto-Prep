@@ -1,13 +1,16 @@
-import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:async';
 import 'dart:io';
+
+import 'package:chess_auto_prep/features/documents/models/viewer_session.dart';
+import 'package:chess_auto_prep/features/documents/repositories/viewer_preferences_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
-import 'package:chess_auto_prep/core/pgn/viewer_session_store.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/features/games/models/game_view_preferences.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
@@ -44,13 +47,42 @@ Future<void> _waitForPreparation(PgnViewerController controller) async {
   }
 }
 
+class _FailingSessionPreferences extends SharedPreferencesViewerRepository {
+  _FailingSessionPreferences() : super(SharedPreferences.getInstance);
+  bool fail = false;
+  @override
+  Future<void> saveSession(String path, ViewerSession session) async {
+    if (fail) throw StateError('preference write rejected');
+    await super.saveSession(path, session);
+  }
+}
+
+class _FailedOpeningPreferences extends SharedPreferencesViewerRepository {
+  _FailedOpeningPreferences() : super(SharedPreferences.getInstance);
+  @override
+  Future<bool> autoDetectOpenings() async => throw StateError('unavailable');
+}
+
+class _DelayedRecentPreferences extends SharedPreferencesViewerRepository {
+  _DelayedRecentPreferences() : super(SharedPreferences.getInstance);
+  final pending = Completer<List<String>>();
+  @override
+  Future<List<String>> loadRecentFiles() => pending.future;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory dir;
   late String path;
   final controllers = <PgnViewerController>[];
-  PgnViewerController make([_Handle? handle]) {
+  PgnViewerController make([
+    _Handle? handle,
+    ViewerPreferencesRepository? preferences,
+  ]) {
     final controller = PgnViewerController(
+      preferences:
+          preferences ??
+          SharedPreferencesViewerRepository(SharedPreferences.getInstance),
       collectionRepository: StoragePgnCollectionRepository(
         StorageFactory.instance,
       ),
@@ -81,6 +113,58 @@ void main() {
     controllers.clear();
     StorageFactory.instanceForTest = null;
     await dir.delete(recursive: true);
+  });
+
+  test(
+    'reading checkpoint failure stays visible until a successful retry',
+    () async {
+      final preferences = _FailingSessionPreferences();
+      final handle = _Handle();
+      final controller = make(handle, preferences);
+      await controller.loadFile(path);
+      final unchanged = await File(path).readAsString();
+      preferences.fail = true;
+      handle.mainLineIndex = 4;
+      controller.rememberReadingPosition();
+      await controller.saveSession();
+      expect(
+        controller.errorMessage,
+        contains('Could not save the reading position'),
+      );
+      preferences.fail = false;
+      await controller.saveSession();
+      expect(controller.errorMessage, isNull);
+      expect((await preferences.loadSession(path))!.ply, 4);
+      expect(await File(path).readAsString(), unchanged);
+      controller.errorMessage = 'A newer analysis failure';
+      await controller.saveSession();
+      expect(controller.errorMessage, 'A newer analysis failure');
+    },
+  );
+
+  test(
+    'pasted games stay readable when opening preferences cannot be read',
+    () async {
+      final controller = make(null, _FailedOpeningPreferences());
+      await controller.loadPgnContent('[Event "Pasted"]\n\n1. e4 e5 *');
+      expect(controller.allGames.single.pgnText, contains('1. e4 e5'));
+      expect(controller.isLoading, isFalse);
+      expect(controller.autoDetectOpenings, isFalse);
+      expect(
+        controller.errorMessage,
+        contains('opening-detection preferences'),
+      );
+    },
+  );
+
+  test('a delayed recent-file read cannot erase a newly opened file', () async {
+    final preferences = _DelayedRecentPreferences();
+    final controller = make(null, preferences);
+    final loading = controller.loadRecentFiles();
+    await controller.addToRecentFiles(path);
+    preferences.pending.complete([]);
+    await loading;
+    expect(controller.recentFiles, [path]);
   });
 
   test(
@@ -254,12 +338,19 @@ void main() {
       await handoff.loadFile(path, restoreSavedSlice: false);
       expect(handoff.currentGameIndex, 0);
       handoff.closeFile();
-      await ViewerSessionStore().load(path); // allow queued preferences IO
+      await SharedPreferencesViewerRepository(
+        SharedPreferences.getInstance,
+      ).loadSession(path); // allow queued preferences IO
       await Future<void>.delayed(const Duration(milliseconds: 20));
       final fresh = make();
       await fresh.restoreLastSession();
       expect(fresh.filePath, isNull);
-      expect(await ViewerSessionStore().load(path), isNotNull);
+      expect(
+        await SharedPreferencesViewerRepository(
+          SharedPreferences.getInstance,
+        ).loadSession(path),
+        isNotNull,
+      );
     },
   );
 }

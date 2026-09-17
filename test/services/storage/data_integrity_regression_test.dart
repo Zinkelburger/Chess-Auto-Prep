@@ -1,9 +1,12 @@
-import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
-import '../../support/study_fixture.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:isolate';
 import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
+import '../../support/study_fixture.dart';
 import 'package:chess_auto_prep/services/analysis/player_corpus_store.dart';
 import 'package:chess_auto_prep/models/analysis_player_info.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
@@ -316,6 +319,9 @@ void main() {
       await file.writeAsString(originalGame);
       final analysis = FakeAnalysis();
       final c = PgnViewerController(
+        preferences: SharedPreferencesViewerRepository(
+          SharedPreferences.getInstance,
+        ),
         collectionRepository: StoragePgnCollectionRepository(
           StorageFactory.instance,
         ),

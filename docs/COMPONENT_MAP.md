@@ -1524,6 +1524,8 @@ exports use a separate save session and leave the viewer's source unchanged.
 Retained-draft selection now survives through the shared workspace checkpoint
 protocol described above. Recovery PGN bytes are also written before displacement.
 
+Canonical game identity now lives in `chess_core/pgn/game_identity.dart`; stored games and Viewer bookmarks share its unchanged URL/hash rules.
+
 Pure mainline lexing and Study-header rewriting now live in
 `chess_core/pgn/mainline_lexer.dart` and `chess_core/pgn/study_metadata.dart`.
 
@@ -1533,7 +1535,7 @@ PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal
   → compute(parseMultiGamePgn) → lightweight headers/raw text in allGames / filteredGames; only the selected game is parsed into the reader
   → on failure: controller.errorMessage + debugPrint; screen shows SnackBar + inline error in empty state
   → on success: recent-files prefs, missing ECO/Opening tags, optional saved slice and reading-session restore, loadCurrentGame
-  → viewer startup reopens the last file, filters, sort order, game and mainline move; explicit file/game handoffs take precedence. Closing the collection clears auto-reopen, keeping its per-file bookmark. `ViewerSessionStore` validates game identity before restoring a cursor, including when a file was reordered.
+  → viewer startup reopens the last file, filters, sort order, game and mainline move; explicit file/game handoffs take precedence. Closing the collection clears auto-reopen, keeping its per-file bookmark. `features/documents/models/viewer_session.dart` validates game identity before restoring a cursor, including when a file was reordered. The pure `ViewerSessionController` serializes checkpoints and only deduplicates acknowledged saves; failed writes remain retryable. `ViewerPreferencesRepository` is injected at app startup, with `SharedPreferencesViewerRepository` retaining the existing bookmark, recent-file, filter and opening-preference keys. Failed platform acknowledgements are surfaced, and reads refresh the plugin cache. App shutdown awaits its final reading checkpoint.
   → ordinary opens make the selected game available before background opening classification and position indexing finish (saved filters needing opening tags wait for classification). Opening-tag autosaves match source game ranges in one pass and assemble the document in an isolate under the atomic file lock; they preserve untouched text and reject changed/duplicate source games.
   → default-on **Board and moves → Auto-detect ECO and opening** classifies every game's mainline using the bundled opening book (including transpositions). Missing/placeholder ECO and Opening tags are patched into the source PGN without replacing existing values or reserializing movetext. Detected tags appear above the game and in exported/copied PGNs. Turning this off stops detection and hides that label; previously saved tags remain in the PGN.
   → game change (↓/↑, dropdown, slice, sort): `loadCurrentGame` resets `currentPosition` to start; `PgnViewerWidget._loadGame` defers `onPositionChanged` to a post-frame callback (avoids setState-during-build when called from `didUpdateWidget`)

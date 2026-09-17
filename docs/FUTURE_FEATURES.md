@@ -78,7 +78,11 @@ Viewer now indexes and lazily renders mainline/variation rows through the shared
 viewport, retaining reading anchors, branch bookmarks and evicted inline drafts.
 20,000-ply mainline and sideline native journeys are covered; individual long
 comments remain whole passages and full performance budgets remain pending.
-Legacy collection controller/widget ownership, remaining Builder storage/
+Viewer reading checkpoints now have a pure ordered session owner and injected
+preferences repository, with acknowledged-write deduplication, explicit failure/retry
+and stale recent-file read protection. Existing preference keys and game identities
+are preserved. This does not complete variation cursor, panel or whole-workspace
+restoration. Legacy collection controller/widget ownership, remaining Builder storage/
 session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/filter/panel
 restoration and complete large-document performance evidence remain pending.
 Study now has independent cursor/metadata projections and scoped subscriptions;

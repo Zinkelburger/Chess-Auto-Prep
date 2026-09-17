@@ -1,10 +1,8 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../../models/pgn_filter_models.dart';
-import '../../models/pgn_game_entry.dart';
-import '../../services/game_identity.dart';
+import '../../../models/pgn_filter_models.dart';
+import '../../../models/pgn_game_entry.dart';
+import 'package:chess_auto_prep/chess_core/pgn/game_identity.dart';
 
 /// Per-file reading position, separate from the PGN's chess annotations.
 class ViewerSession {
@@ -59,35 +57,4 @@ class ViewerSession {
       return null;
     }
   }
-}
-
-class ViewerSessionStore {
-  static const lastFileKey = 'pgn_viewer.last_file';
-  static const _prefix = 'pgn_viewer.session:';
-  Future<void> _writes = Future.value();
-
-  Future<String?> lastFile() async =>
-      (await SharedPreferences.getInstance()).getString(lastFileKey);
-
-  Future<ViewerSession?> load(String path) async {
-    await _writes;
-    final prefs = await SharedPreferences.getInstance();
-    return ViewerSession.decode(prefs.getString('$_prefix$path'));
-  }
-
-  Future<void> save(String path, ViewerSession session) {
-    final json = session.encode();
-    return _writes = _writes.then((_) async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('$_prefix$path', json);
-      await prefs.setString(lastFileKey, path);
-    });
-  }
-
-  Future<void> close() => _writes = _writes.then((_) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(lastFileKey);
-  });
-
-  Future<void> flush() => _writes;
 }

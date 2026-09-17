@@ -1671,6 +1671,52 @@ Collection/widget ownership, scoped presentation, session/undo parity, remaining
 feature migrations, bridge retirement and non-Linux/release gates remain open.
 Milestones 1/2 and 3 remain partial; milestones 4–7 remain unfinished.
 
+### Viewer preference and session ownership checkpoint (2026-09-17)
+
+Reading checkpoints now have a pure owner at
+`features/documents/controllers/viewer_session_controller.dart`, with a pure
+`ViewerSession` value and injected `ViewerPreferencesRepository` contract.
+App startup selects `infrastructure/documents/shared_preferences_viewer_repository.dart`.
+The old `core/pgn/viewer_session_store.dart` and `slice_persistence.dart` are
+retired. Canonical game identity moves from the catch-all services directory to
+`chess_core/pgn/game_identity.dart`; all consumers use the same unchanged algorithm.
+
+The repository retains existing keys/payloads for last file, per-file bookmark,
+recent files, saved filters and automatic opening detection. Session saves and
+close are ordered; deduplication records only successful acknowledgements, so
+retrying the same failed bookmark writes it again. Reads wait for pending session
+operations. The adapter checks rejected boolean writes and refreshes the plugin
+cache before access, preventing failed cached writes being read back as persisted.
+This queue is local to one app instance; the two session keys are not a
+cross-process or atomic multi-key transaction. PGN bytes are unaffected by these
+preference writes.
+
+The legacy collection host now reports failed reading checkpoints and clears its
+own error on a successful retry without clearing newer unrelated errors. Recent
+file reads reject stale results after a new open; async restore guards disposal.
+Pasted games remain readable when opening-preference reads fail, with detection
+disabled and an explicit error. App lifetime shutdown awaits the final checkpoint.
+This does not add a close veto for a failed reading preference write.
+
+Verification: all 101 focused unit/widget cases pass, covering session ordering,
+failed acknowledgements/retries, legacy preference payloads and identities,
+saved-filter/mainline restoration, stale recent reads, pasted-game read failure,
+collection revision and write preservation, Viewer display and close protection.
+Both Linux native journeys in `integration_test/pgn_restart_recovery_test.dart`
+pass: unsaved draft recovery after external source replacement with an exclusive
+copy, and clean-session reopening at the same game/mainline move without a draft.
+These restart journeys reconstruct the app and its owners within the native test
+process; they do not certify an OS crash or a separate-process restart.
+Analyze/lint passes with nine existing informational notices and all 18
+architecture-checker cases. No selected tests are skipped. An initial regression
+batch failed to compile a new fake's cursor setter; it was corrected and the full
+focused batch rerun successfully. Full-suite, engine and other-platform gates were
+not rerun for this checkpoint.
+Collection/widget orchestration, scoped presentation, variation-cursor/panel
+restoration, Builder persistence/undo/recovery, other feature migrations and
+non-Linux/release gates remain open. Milestones 1/2 and 3 remain partial;
+milestones 4–7 are unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
@@ -1682,7 +1728,7 @@ replacement; no row is declared migrated by being listed here.
 |------------|---------------------------------|-------------------------------------------------|
 | Repertoires list/create/rename/delete | `RepertoireListBody`, `RepertoireCreation`, `IOStorageService`; recovery through `FileMutationService` | 1/2: ARCH-01, DATA-02, DATA-04, DATA-05, DATA-06, STATE-01, SET-01, UI-01, UI-02, UI-04, TEST-01 |
 | Repertoire builder and chapters | `RepertoireController`, `RepertoireWriter`, `RepertoireFileEditor`, `ChapterStore`, outline controller | S0 and 3: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, ARCH-01, STATE-01, STATE-02, UI-01, UI-02, UI-03, UI-04, TEST-01 |
-| PGN Viewer | PGN viewer screen, `core/pgn/`, `ViewerSessionStore` | 3: ARCH-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, STATE-02, UI-01, UI-02, UI-03, UI-04, TEST-01 |
+| PGN Viewer | PGN viewer screen, `core/pgn/`, document-feature game/session owners | 3: ARCH-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, STATE-02, UI-01, UI-02, UI-03, UI-04, TEST-01 |
 | Study | study screen/controller, multi-game PGN documents | 3: same document-workspace requirements as PGN Viewer |
 | Repertoire trainer | `services/training/`, `ReviewProgressStore`, `MoveAttemptStore` | 4: ARCH-01, DATA-06, SET-01, STATE-01, UI-01, UI-04, TEST-01 |
 | Tactics | `features/tactics/`, tactics session controller, game store | 4: ARCH-01, DATA-06, SET-01, STATE-01, UI-01, UI-04, TEST-01 |
@@ -1693,7 +1739,7 @@ replacement; no row is declared migrated by being listed here.
 | Databases | databases screen, `GameStoreService`, SQLite/eval adapters | 6: ARCH-01, DATA-05, DATA-06, STATE-01, SET-01, TEST-01 |
 | Players & prep | opponents feature, `OpponentStore`, people/tournament JSON | 6: ARCH-01, DATA-06, STATE-01, UI-01, UI-04, TEST-01 |
 | Accounts/settings | `AppState`, engine/eval/training/display settings, SharedPreferences | 1/2 establishes section owner; 6 completes SET-01, SEC-01, ARCH-01, TEST-01 |
-| Navigation/file opening | app shell/`AppState` handoffs, navigation stack, viewer session store | 1/2 and 3: UI-02, STATE-01, STATE-02, TEST-01 |
+| Navigation/file opening | app shell/`AppState` handoffs, navigation stack, `ViewerSessionController` | 1/2 and 3: UI-02, STATE-01, STATE-02, TEST-01 |
 | Imports/exports/offline/recovery | PGN codecs, atomic writer, SQLite recovery, importers; fixtures already exist | Each writing slice: DATA-02, DATA-04, DATA-05, DATA-06, TEST-01 |
 | MCP/offline tools | `tools/mcp/`, separate process runtimes and file contracts | 6: ARCH-01, DATA-06, DATA-07, PROC-01, PROC-02, TEST-01; follow their owning skills before editing |
 | Installers/updates/native assets | packaging, updater, native asset manifest and release-tag workflows | 6/7: OPS-01, OPS-02, PROC-02, TEST-01 |

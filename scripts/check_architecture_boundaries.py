@@ -96,6 +96,7 @@ def main() -> int:
     pure_roots.extend([
         'lib/features/documents/controllers/viewer_game_controller.dart',
         'lib/features/documents/controllers/viewer_game_load_controller.dart',
+        'lib/features/documents/controllers/viewer_session_controller.dart',
     ])
     errors.extend(pure_dependency_violations(sources, pure_roots))
     for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/features/settings', 'lib/features/studies', 'lib/chess_core', 'lib/infrastructure', 'lib/design_system', 'widgetbook'):

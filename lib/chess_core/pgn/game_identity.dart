@@ -1,8 +1,9 @@
 /// Stable identity for a stored game: which URL or hash the game is keyed by.
 library;
 
-import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:convert';
+
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:crypto/crypto.dart';
 
 /// A Lichess game path: the 8-char game id, optionally followed by the

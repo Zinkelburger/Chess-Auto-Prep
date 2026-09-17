@@ -1,5 +1,7 @@
-import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:async';
+
+import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 
 import 'package:dartchess/dartchess.dart';
 
@@ -41,6 +43,9 @@ class _FakeAnalysisController extends GameAnalysisController {
 class _GatedOpeningController extends PgnViewerController {
   _GatedOpeningController()
     : super(
+        preferences: SharedPreferencesViewerRepository(
+          SharedPreferences.getInstance,
+        ),
         collectionRepository: StoragePgnCollectionRepository(
           StorageFactory.instance,
         ),
@@ -69,6 +74,9 @@ PgnViewerController _makeController() {
   // A detached widget controller behaves as a no-op stub (its methods guard on
   // a null attached state), so it is safe to use without mounting a widget.
   return PgnViewerController(
+    preferences: SharedPreferencesViewerRepository(
+      SharedPreferences.getInstance,
+    ),
     collectionRepository: StoragePgnCollectionRepository(
       StorageFactory.instance,
     ),

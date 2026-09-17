@@ -5,7 +5,8 @@ library;
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../../services/game_identity.dart' show platformGameUrl;
+import 'package:chess_auto_prep/chess_core/pgn/game_identity.dart'
+    show platformGameUrl;
 import '../../../chess_core/pgn/pgn_text.dart' show extractHeaders;
 import '../../../utils/log.dart';
 

@@ -9,7 +9,7 @@
 /// Pure / synchronous — fully unit-testable.
 library;
 
-import '../game_identity.dart';
+import 'package:chess_auto_prep/chess_core/pgn/game_identity.dart';
 import '../../chess_core/pgn/pgn_text.dart'
     show splitPgnIntoGames, extractHeaders;
 

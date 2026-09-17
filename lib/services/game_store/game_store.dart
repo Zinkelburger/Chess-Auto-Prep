@@ -33,7 +33,7 @@ import '../../chess_core/pgn/pgn_text.dart'
     show extractHeaders, splitPgnIntoGames;
 import '../storage/app_paths.dart';
 import '../storage/schema_guard.dart';
-import '../game_identity.dart';
+import 'package:chess_auto_prep/chess_core/pgn/game_identity.dart';
 import 'game_store_schema.dart';
 
 /// Plies indexed into `positions` per game — the opening, where position

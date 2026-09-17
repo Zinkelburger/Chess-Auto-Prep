@@ -1,18 +1,19 @@
-import 'package:chess_auto_prep/chess_core/pgn/study_metadata.dart';
 import 'dart:async';
+
+import 'package:chess_auto_prep/chess_core/pgn/study_metadata.dart';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'pgn/auto_play_engine.dart';
 import 'pgn/pgn_collection_helpers.dart';
 export 'pgn/pgn_collection_helpers.dart';
 import 'pgn/pgn_fen_index.dart';
-import 'pgn/slice_persistence.dart';
-import 'pgn/viewer_session_store.dart';
+import '../features/documents/models/viewer_session.dart';
+import '../features/documents/repositories/viewer_preferences_repository.dart';
+import '../features/documents/controllers/viewer_session_controller.dart';
 import '../services/pgn_opening_headers.dart';
 import 'pgn/viewer_opening_tree.dart';
 import 'pgn/viewer_solitaire_session.dart';
@@ -107,6 +108,7 @@ class PgnViewerController extends ChangeNotifier
     with SafeChangeNotifier, _SliceOps, _WindowOps {
   PgnViewerController({
     required this.collectionRepository,
+    required this.preferences,
     required this.pgnWidgetController,
     required this.analysisController,
     this.isActive = _alwaysActive,
@@ -131,7 +133,6 @@ class PgnViewerController extends ChangeNotifier
         filePath = path;
         loadedFileModified = null;
         _fenIndex.reset();
-        _lastSessionJson = null;
         unawaited(saveSession());
       },
       onSaved: (modified) {
@@ -143,6 +144,8 @@ class PgnViewerController extends ChangeNotifier
   }
 
   final PgnCollectionRepository collectionRepository;
+  @override
+  final ViewerPreferencesRepository preferences;
   late final PgnCollectionEditor _editor;
   DocumentSaveActions get saveActions => _editor;
   Future<void Function()> _prepareRecoveryReplacement(
@@ -352,10 +355,9 @@ class PgnViewerController extends ChangeNotifier
         .clamp(0, 100000);
   }
 
-  final _sessions = ViewerSessionStore();
+  late final _sessions = ViewerSessionController(preferences);
   bool _restoringSession = false;
   bool get isRestoringSession => _restoringSession;
-  String? _lastSessionJson;
 
   /// Called only by the game reader; tree/reference cursors are independent.
   void rememberReadingPosition() {
@@ -380,20 +382,48 @@ class PgnViewerController extends ChangeNotifier
       ply: resumePlyFor(game),
       sortMode: sortMode,
     );
-    final json = '$path:${session.encode()}';
-    if (json == _lastSessionJson) return _sessions.flush();
-    _lastSessionJson = json;
-    return _sessions.save(path, session);
+    return _reportSessionResult(_sessions.save(path, session));
+  }
+
+  static const _sessionFailure =
+      'Could not save the reading position. Try again before closing.';
+  Future<void> _reportSessionResult(Future<bool> operation) async {
+    await operation;
+    if (isDisposed || !isActive()) return;
+    if (_sessions.error != null) {
+      errorMessage = _sessionFailure;
+      notifyListeners();
+    } else if (errorMessage == _sessionFailure) {
+      errorMessage = null;
+      notifyListeners();
+    }
+  }
+
+  @override
+  Future<void> persistViewerPreference(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (_) {
+      if (isDisposed || !isActive()) return;
+      errorMessage = 'Could not save Viewer preferences. Try again.';
+      notifyListeners();
+    }
   }
 
   /// A deliberate file/handoff request always wins over startup restoration.
   Future<void> restoreLastSession() async {
-    if (_loadEpoch != 0) return;
-    final path = await _sessions.lastFile();
-    if (_loadEpoch != 0 || !isActive() || path == null) return;
-    if (!await StorageFactory.instance.fileExists(path)) return;
-    if (_loadEpoch != 0 || !isActive()) return;
-    await loadFile(path);
+    if (_loadEpoch != 0 || isDisposed) return;
+    try {
+      final path = await _sessions.lastFile();
+      if (!_isCurrentLoad(0) || path == null) return;
+      if (!await StorageFactory.instance.fileExists(path)) return;
+      if (!_isCurrentLoad(0)) return;
+      await loadFile(path);
+    } catch (_) {
+      if (!_isCurrentLoad(0)) return;
+      errorMessage = 'Could not restore the previous reading session.';
+      notifyListeners();
+    }
   }
 
   int resumePlyFor(PgnGameEntry game) => _resumePlyByGame[game] ?? 0;
@@ -404,7 +434,8 @@ class PgnViewerController extends ChangeNotifier
   int _loadEpoch = 0;
   int _gameLoadEpoch = 0;
 
-  bool _isCurrentLoad(int epoch) => isActive() && epoch == _loadEpoch;
+  bool _isCurrentLoad(int epoch) =>
+      !isDisposed && isActive() && epoch == _loadEpoch;
 
   /// Text above the first game in the loaded file — a `;`/`%` banner, which
   /// is not a game and so is not in [allGames]. Held here because a write
@@ -548,7 +579,6 @@ class PgnViewerController extends ChangeNotifier
   GameSortMode sortMode = GameSortMode.fileOrder;
 
   List<String> recentFiles = [];
-  static const recentFilesKey = 'pgn_viewer_recent_files';
   static const maxRecentFiles = 10;
 
   String? collectionsDir;
@@ -573,34 +603,42 @@ class PgnViewerController extends ChangeNotifier
     super.dispose();
   }
 
+  int _recentEpoch = 0;
   Future<void> loadRecentFiles() async {
-    final prefs = await SharedPreferences.getInstance();
-    final files = prefs.getStringList(recentFilesKey) ?? [];
-    final existing = <String>[];
-    final storage = StorageFactory.instance;
-    for (final f in files) {
-      if (await storage.fileExists(f)) existing.add(f);
+    final epoch = ++_recentEpoch;
+    try {
+      final files = await preferences.loadRecentFiles();
+      final existing = <String>[];
+      final storage = StorageFactory.instance;
+      for (final f in files) {
+        if (await storage.fileExists(f)) existing.add(f);
+      }
+      if (isDisposed || !isActive() || epoch != _recentEpoch) return;
+      recentFiles = existing;
+      notifyListeners();
+    } catch (_) {
+      if (isDisposed || !isActive() || epoch != _recentEpoch) return;
+      errorMessage = 'Could not load recent PGN files.';
+      notifyListeners();
     }
-    if (!isActive()) return;
-    recentFiles = existing;
-    notifyListeners();
   }
 
   Future<void> loadCollections() async {
     final dir = await DefaultPgnService.collectionsPath;
-    if (!isActive()) return;
+    if (isDisposed || !isActive()) return;
     collectionsDir = dir;
     notifyListeners();
   }
 
   Future<void> addToRecentFiles(String path) async {
+    _recentEpoch++;
     recentFiles.remove(path);
     recentFiles.insert(0, path);
     if (recentFiles.length > maxRecentFiles) {
       recentFiles = recentFiles.sublist(0, maxRecentFiles);
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(recentFilesKey, recentFiles);
+    final captured = List<String>.of(recentFiles);
+    await persistViewerPreference(() => preferences.saveRecentFiles(captured));
   }
 
   String? pickFileInitialDirectory() {
@@ -636,7 +674,6 @@ class PgnViewerController extends ChangeNotifier
     // stale FEN-index stamp) before its path and games are replaced; the
     // flush captures both synchronously.
     if (flushOutgoing) unawaited(flushPendingMetadata());
-    _lastSessionJson = null;
     _openingEpoch++;
     filePath = path;
     // Whoever adopted a collection knows the mtime if there is one; a
@@ -749,14 +786,13 @@ class PgnViewerController extends ChangeNotifier
       await addToRecentFiles(path);
       if (!_isCurrentLoad(loadEpoch)) return;
       _fenIndex.reset();
-      final prefs = await SharedPreferences.getInstance();
+      final detect = await preferences.autoDetectOpenings();
       if (!_isCurrentLoad(loadEpoch)) return;
-      autoDetectOpenings =
-          prefs.getBool('pgn_viewer.auto_detect_openings') ?? true;
+      autoDetectOpenings = detect;
       // A saved filter can depend on inferred opening tags. Ordinary opens
       // should display the game before classifying the entire collection.
       final savedSlice = restoreSavedSlice
-          ? await SlicePersistence.load(path)
+          ? await preferences.loadSlice(path)
           : null;
       if (!_isCurrentLoad(loadEpoch)) return;
       final needsOpeningTags =
@@ -867,10 +903,16 @@ class PgnViewerController extends ChangeNotifier
 
     await loadCurrentGame();
     if (!_isCurrentLoad(loadEpoch)) return;
-    final prefs = await SharedPreferences.getInstance();
-    if (!_isCurrentLoad(loadEpoch)) return;
-    autoDetectOpenings =
-        prefs.getBool('pgn_viewer.auto_detect_openings') ?? true;
+    try {
+      final detect = await preferences.autoDetectOpenings();
+      if (!_isCurrentLoad(loadEpoch)) return;
+      autoDetectOpenings = detect;
+    } catch (_) {
+      if (!_isCurrentLoad(loadEpoch)) return;
+      autoDetectOpenings = false;
+      errorMessage = 'Could not load opening-detection preferences.';
+      notifyListeners();
+    }
     unawaited(_prepareCollection(loadEpoch));
   }
 
@@ -954,7 +996,7 @@ class PgnViewerController extends ChangeNotifier
   void closeFile() {
     if (!canReplaceCollection()) return;
     unawaited(saveSession());
-    unawaited(_sessions.close());
+    unawaited(_reportSessionResult(_sessions.close()));
     _restoringSession = false;
     // Bumped first: an in-flight load or slice recompute would otherwise land
     // its results — and its isLoading release — on the cleared state.

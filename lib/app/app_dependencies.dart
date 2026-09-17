@@ -1,10 +1,14 @@
+import 'dart:io';
+
+import 'package:shared_preferences/shared_preferences.dart';
+import '../features/documents/repositories/viewer_preferences_repository.dart';
+import '../infrastructure/documents/shared_preferences_viewer_repository.dart';
 import '../features/documents/repositories/stored_game_repository.dart';
 import '../features/documents/widgets/stored_game_scope.dart';
 import '../infrastructure/documents/archive_stored_game_repository.dart';
 import '../services/game_store/game_store_service.dart';
 import '../features/documents/repositories/pgn_collection_repository.dart';
 import '../infrastructure/documents/storage_pgn_collection_repository.dart';
-import 'dart:io';
 import '../infrastructure/documents/native_pgn_document_store.dart';
 import '../features/documents/repositories/pgn_document_store.dart';
 import 'package:flutter/widgets.dart';
@@ -87,3 +91,6 @@ PgnCollectionRepository createPgnCollectionRepository({
   StorageFactory.instance,
   documents: documents,
 );
+
+ViewerPreferencesRepository createViewerPreferencesRepository() =>
+    SharedPreferencesViewerRepository(SharedPreferences.getInstance);

@@ -1,10 +1,12 @@
+import 'dart:io';
+
+import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
 import 'package:chess_auto_prep/app/pgn_viewer_lifetime.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_workspace_snapshot.dart';
 import '../support/memory_workspace_recovery_store.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
-import 'dart:io';
 
 import 'package:chess_auto_prep/features/documents/controllers/document_close_coordinator.dart';
 import 'package:chess_auto_prep/features/documents/widgets/document_close_scope.dart';
@@ -80,6 +82,9 @@ void main() {
       directory.deleteSync(recursive: true);
     });
     lifetime = PgnViewerLifetime(
+      preferences: SharedPreferencesViewerRepository(
+        SharedPreferences.getInstance,
+      ),
       repository: StoragePgnCollectionRepository(StorageFactory.instance),
       store: MemoryWorkspaceRecoveryStore<PgnWorkspaceSnapshot>(),
     );

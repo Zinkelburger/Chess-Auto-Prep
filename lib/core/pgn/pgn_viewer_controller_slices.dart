@@ -10,6 +10,8 @@ part of '../pgn_viewer_controller.dart';
 mixin _SliceOps on ChangeNotifier {
   // Implemented by PgnViewerController.
   bool Function() get isActive;
+  ViewerPreferencesRepository get preferences;
+  Future<void> persistViewerPreference(Future<void> Function() action);
   String? get filePath;
   List<PgnGameEntry> get allGames;
   abstract List<PgnGameEntry> filteredGames;
@@ -44,7 +46,7 @@ mixin _SliceOps on ChangeNotifier {
     List<PgnGameEntry> entries,
   ) async {
     final epoch = _sliceEpoch;
-    final config = await SlicePersistence.load(path);
+    final config = await preferences.loadSlice(path);
     if (config == null) return;
     if (!isActive() || epoch != _sliceEpoch) return;
 
@@ -197,13 +199,15 @@ mixin _SliceOps on ChangeNotifier {
   Future<void> persistSliceConfig(SliceConfig config) async {
     final path = filePath;
     if (path == null) return;
-    await SlicePersistence.save(path, config);
+    await persistViewerPreference(() => preferences.saveSlice(path, config));
   }
 
   Future<void> clearSavedSlice() async {
     final path = filePath;
     if (path == null) return;
-    await SlicePersistence.clear(path);
+    await persistViewerPreference(
+      () => preferences.saveSlice(path, const SliceConfig.empty()),
+    );
   }
 
   Future<String?> exportSliceToPath(String outPath) async {

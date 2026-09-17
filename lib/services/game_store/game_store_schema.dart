@@ -9,7 +9,7 @@ import 'dart:convert';
 
 import 'package:sqlite3/sqlite3.dart';
 
-import '../game_identity.dart';
+import 'package:chess_auto_prep/chess_core/pgn/game_identity.dart';
 
 /// `PRAGMA user_version` a fully migrated database carries.
 const int gameStoreSchemaVersion = 2;

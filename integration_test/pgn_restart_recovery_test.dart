@@ -180,4 +180,73 @@ void main() {
       await inspection.close();
     },
   );
+
+  testWidgets(
+    'clean Viewer restart restores the reading bookmark without a draft',
+    (tester) async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('pgn_viewer.auto_detect_openings', false);
+      await prefs.remove('pgn_viewer.last_file');
+      final root = await Directory(
+        '${(await AppPaths.documentsDirectory()).path}/pgn-clean-restart-${DateTime.now().microsecondsSinceEpoch}',
+      ).create();
+      final file = File('${root.path}/Clean.pgn');
+      const original =
+          '[Event "First"]\n\n1. e4 e5 *\n\n[Event "Second"]\n\n1. d4 d5 2. c4 e6 *\n';
+      await file.writeAsString(original);
+      FileWorkspaceRecoveryStore<PgnWorkspaceSnapshot> store() =>
+          FileWorkspaceRecoveryStore<PgnWorkspaceSnapshot>(
+            directory: () async => Directory('${root.path}/checkpoints'),
+            codec: const PgnWorkspaceCodec(),
+          );
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+      await tester.pumpWidget(ChessAutoPrepApp(pgnRecoveryStore: store()));
+      await tester.pumpAndSettle();
+      final context = tester.element(find.byType(AppModeSwitcher).first);
+      context.read<AppState>().setMode(AppMode.pgnViewer);
+      await tester.pumpAndSettle();
+      final first = context.read<PgnViewerLifetime>();
+      await first.controller.loadFile(file.path);
+      await tester.pumpAndSettle();
+      first.controller.goToGame(1);
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.byTooltip(RegExp(r'^Forward')).first);
+        await tester.pumpAndSettle();
+      }
+      expect(first.reader.mainLineIndex, 3);
+      expect(first.controller.hasUnsavedChanges, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await first.shutdown();
+      await tester.pumpAndSettle();
+      final inspection = store();
+      expect((await inspection.list()).entries, isEmpty);
+      await inspection.close();
+
+      await tester.pumpWidget(ChessAutoPrepApp(pgnRecoveryStore: store()));
+      await tester.pumpAndSettle();
+      final restartedContext = tester.element(
+        find.byType(AppModeSwitcher).first,
+      );
+      restartedContext.read<AppState>().setMode(AppMode.pgnViewer);
+      final restarted = restartedContext.read<PgnViewerLifetime>();
+      for (var i = 0; i < 100 && restarted.reader.mainLineIndex != 3; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pumpAndSettle();
+      expect(restarted.controller.filePath, file.path);
+      expect(restarted.controller.currentGameIndex, 1);
+      expect(restarted.reader.mainLineIndex, 3);
+      expect(restarted.controller.recentFiles, contains(file.path));
+      expect(await file.readAsString(), original);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await restarted.shutdown();
+      await tester.pumpAndSettle();
+    },
+  );
 }
