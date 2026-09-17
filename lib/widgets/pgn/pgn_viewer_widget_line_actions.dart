@@ -199,6 +199,7 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
 
   @override
   void _notifyCommentsChanged() {
+    if (!mounted || !_gameReady) return;
     if (widget.onCommentsChanged == null || _moveHistory.isEmpty) return;
     // The model serializes mainline + saved sidelines (comments and NAGs
     // intact, ephemeral nodes excluded), headers stripped for splicing back

@@ -7,7 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:chess_auto_prep/services/stored_game_lookup.dart';
+import '../features/documents/controllers/viewer_game_load_controller.dart';
+import '../features/documents/models/viewer_game_load_state.dart';
+import '../features/documents/repositories/stored_game_repository.dart';
+import '../features/documents/widgets/stored_game_scope.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_date_utils.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart'
@@ -261,6 +264,9 @@ class PgnViewerWidgetController implements PgnViewerHandle {
 
 class PgnViewerWidget extends StatefulWidget {
   final String? gameId;
+
+  /// Optional explicit archive; otherwise supplied by the app scope.
+  final StoredGameRepository? storedGames;
   final String? pgnText;
   final int? moveNumber;
   final bool? isWhiteToPlay;
@@ -296,6 +302,7 @@ class PgnViewerWidget extends StatefulWidget {
   const PgnViewerWidget({
     super.key,
     this.gameId,
+    this.storedGames,
     this.pgnText,
     this.moveNumber,
     this.isWhiteToPlay,
@@ -374,6 +381,7 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   void _setInlineCursor(int cursor); // navigation
   void _startEditingComment(int moveIndex); // annotations
   void _notifyCommentsChanged(); // line actions
+  bool get _gameReady;
 }
 
 class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
@@ -390,8 +398,19 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   String _gameInfoNoResult = '';
 
   String get _headerText => widget.hideResult ? _gameInfoNoResult : _gameInfo;
-  bool _isLoading = true;
-  String? _error;
+  ViewerGameLoadController? _loader;
+  StoredGameRepository? _scopedGames;
+  bool get _isLoading => _loader?.isLoading ?? true;
+  @override
+  bool get _gameReady => _loader?.state is ViewerGameLoaded;
+  String? get _error => switch (_loader?.failure) {
+    null => null,
+    ViewerGameLoadFailure.noInput => 'No game ID or PGN text provided',
+    ViewerGameLoadFailure.notFound => 'Game not found in PGN files',
+    ViewerGameLoadFailure.archiveUnavailable =>
+      'Unable to read the game archive',
+    ViewerGameLoadFailure.invalidPgn => 'Error loading PGN',
+  };
 
   @override
   bool get wantKeepAlive => true;
@@ -400,11 +419,28 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   void initState() {
     super.initState();
     widget.controller?._attach(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadGame());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _scopedGames = StoredGameScope.maybeOf(context);
+    if (_bindLoader()) unawaited(_loadGame());
+  }
+
+  bool _bindLoader() {
+    final repository = widget.storedGames ?? _scopedGames;
+    if (_loader != null && identical(_loader!.storedGames, repository)) {
+      return false;
+    }
+    _loader?.dispose();
+    _loader = ViewerGameLoadController(game: _m, storedGames: repository);
+    return true;
   }
 
   @override
   void dispose() {
+    _loader?.dispose();
     widget.controller?._detach(this);
     super.dispose();
   }
@@ -412,6 +448,11 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   @override
   void didUpdateWidget(PgnViewerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller?._detach(this);
+      widget.controller?._attach(this);
+    }
+    final repositoryChanged = _bindLoader();
     final gameIdChanged = widget.gameId != oldWidget.gameId;
     final pgnChanged = widget.pgnText != oldWidget.pgnText;
 
@@ -421,23 +462,32 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     final incomingMovetext = _normalizeMovetext(
       _stripHeaders(widget.pgnText ?? ''),
     );
+    final headersChanged =
+        _headerLineRe
+            .allMatches(widget.pgnText ?? '')
+            .map((m) => m.group(0))
+            .join('\n') !=
+        _headerLineRe
+            .allMatches(oldWidget.pgnText ?? '')
+            .map((m) => m.group(0))
+            .join('\n');
     final isOwnEdit =
+        !headersChanged &&
         _lastEmittedMovetext != null &&
         incomingMovetext == _lastEmittedMovetext;
 
-    if (gameIdChanged ||
-        (pgnChanged &&
-            !isOwnEdit &&
-            _stripHeaders(widget.pgnText ?? '') !=
-                _stripHeaders(oldWidget.pgnText ?? ''))) {
+    if (repositoryChanged || gameIdChanged || (pgnChanged && !isOwnEdit)) {
       // The same game with new annotations on it (an engine pass writing
       // its scores and lines back) is adopted where the reader is; anything
       // else is a different game and starts over.
-      if (gameIdChanged || !_adoptAnnotations(widget.pgnText)) {
+      if (repositoryChanged ||
+          gameIdChanged ||
+          !_adoptAnnotations(widget.pgnText)) {
         unawaited(_loadGame());
       }
-    } else if (widget.moveNumber != oldWidget.moveNumber ||
-        widget.isWhiteToPlay != oldWidget.isWhiteToPlay) {
+    } else if (_gameReady &&
+        (widget.moveNumber != oldWidget.moveNumber ||
+            widget.isWhiteToPlay != oldWidget.isWhiteToPlay)) {
       _clearAnalysis();
       if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
         _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
@@ -452,7 +502,10 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     try {
       final adopted = _m.adoptAnnotations(parsePgnGame(pgnText));
       if (adopted) {
-        setState(() {});
+        setState(() {
+          _gameInfo = _buildGameInfo(_m.game!);
+          _gameInfoNoResult = _buildGameInfo(_m.game!, includeResult: false);
+        });
         _persistMigratedAnalysis();
       }
       return adopted;
@@ -466,90 +519,53 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   void _persistMigratedAnalysis() {
     if (!_m.didMaterializeAnalysis || !widget.persistMoves) return;
     final session = _m.session;
+    final loader = _loader!;
+    final revision = loader.revision;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !identical(_m.session, session)) return;
+      if (!mounted ||
+          !loader.isCurrent(revision) ||
+          !identical(_m.session, session)) {
+        return;
+      }
       _notifyCommentsChanged();
     });
   }
 
   Future<void> _loadGame() async {
-    if (widget.pgnText == null && widget.gameId == null) {
-      setState(() {
-        _error = 'No game ID or PGN text provided';
-        _isLoading = false;
-      });
-      return;
-    }
-
+    final loader = _loader!;
+    final pending = loader.load(gameId: widget.gameId, pgnText: widget.pgnText);
+    final revision = loader.revision;
+    setState(() {});
+    final loaded = await pending;
+    if (!mounted || !loader.isCurrent(revision)) return;
     setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      String pgnText = '';
-
-      // Prefer the full source game (looked up by id) so the viewer shows the
-      // whole game; fall back to any explicit pgnText — e.g. a tactic's
-      // solution-only PGN — when the source game isn't in storage (external
-      // sets, custom puzzles, pruned games).
-      if (widget.gameId != null && widget.gameId!.isNotEmpty) {
-        pgnText = await _findGamePgn(widget.gameId!);
-        if (!mounted) return;
-      }
-      if (pgnText.isEmpty && widget.pgnText != null) {
-        pgnText = widget.pgnText!;
-      }
-      if (pgnText.isEmpty) {
-        setState(() {
-          _error = widget.gameId != null
-              ? 'Game not found in PGN files'
-              : 'No game ID or PGN text provided';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      final game = parsePgnGame(pgnText);
-      if (!mounted) return;
-
-      setState(() {
-        _m.load(game);
+      if (loaded) {
         _editingCommentIndex = null;
-        _gameInfo = _buildGameInfo(game);
-        _gameInfoNoResult = _buildGameInfo(game, includeResult: false);
-        _isLoading = false;
-      });
-
-      // Defer the position notification so it doesn't fire during
-      // didUpdateWidget's build phase (which would cause setState-during-build).
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        widget.onPositionChanged?.call(_currentPosition);
-        if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
-          _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
-        } else if (widget.initialFen != null) {
-          _jumpToFen(widget.initialFen!);
-        } else if (widget.initialMainLineIndex > 0) {
-          _goToMainLineMove(widget.initialMainLineIndex);
-        }
-        widget.onGameLoaded?.call();
-      });
-      _persistMigratedAnalysis();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'Error loading PGN: $e';
-        _isLoading = false;
-      });
-    }
+        _clearInlineLine();
+        _lastEmittedMovetext = null;
+        _gameInfo = _buildGameInfo(_m.game!);
+        _gameInfoNoResult = _buildGameInfo(_m.game!, includeResult: false);
+      }
+    });
+    if (!loaded) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !loader.isCurrent(revision)) return;
+      widget.onPositionChanged?.call(_currentPosition);
+      // A host callback can synchronously replace/dispose this reader.
+      if (!mounted || !loader.isCurrent(revision)) return;
+      if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
+        _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
+      } else if (widget.initialFen != null) {
+        _jumpToFen(widget.initialFen!);
+      } else if (widget.initialMainLineIndex > 0) {
+        _goToMainLineMove(widget.initialMainLineIndex);
+      }
+      if (mounted && loader.isCurrent(revision)) widget.onGameLoaded?.call();
+    });
+    _persistMigratedAnalysis();
   }
 
-  // ── Game search ──
-
-  Future<String> _findGamePgn(String gameId) => findStoredGamePgn(gameId);
-
-  String _buildGameInfo(PgnGame game, {bool includeResult = true}) {
+  String _buildGameInfo(PgnGameMetadata game, {bool includeResult = true}) {
     final white = (game.headers['White'] ?? '?').trim();
     final black = (game.headers['Black'] ?? '?').trim();
     final event = game.headers['Event'] ?? '';

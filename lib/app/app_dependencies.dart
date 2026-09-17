@@ -1,3 +1,7 @@
+import '../features/documents/repositories/stored_game_repository.dart';
+import '../features/documents/widgets/stored_game_scope.dart';
+import '../infrastructure/documents/archive_stored_game_repository.dart';
+import '../services/game_store/game_store_service.dart';
 import '../features/documents/repositories/pgn_collection_repository.dart';
 import '../infrastructure/documents/storage_pgn_collection_repository.dart';
 import 'dart:io';
@@ -24,18 +28,24 @@ class AppDependencies extends StatefulWidget {
     this.repertoireCatalog,
     this.documentStore,
     this.settings,
+    this.storedGames,
   });
 
   final Widget child;
   final RepertoireCatalogRepository? repertoireCatalog;
   final PgnDocumentStore? documentStore;
   final AppSettingsRepository? settings;
+  final StoredGameRepository? storedGames;
 
   @override
   State<AppDependencies> createState() => _AppDependenciesState();
 }
 
 class _AppDependenciesState extends State<AppDependencies> {
+  late final _storedGames = ArchiveStoredGameRepository(
+    GameStoreService.instance.open,
+  );
+
   late final _defaultCatalog = LegacyRepertoireCatalogRepository(
     StorageFactory.instance,
     documents: widget.documentStore,
@@ -52,7 +62,10 @@ class _AppDependenciesState extends State<AppDependencies> {
         widget.repertoireCatalog ?? _defaultCatalog,
       ),
     ],
-    child: widget.child,
+    child: StoredGameScope(
+      repository: widget.storedGames ?? _storedGames,
+      child: widget.child,
+    ),
   );
 }
 

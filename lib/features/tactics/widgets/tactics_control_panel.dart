@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/app_state.dart';
+import '../../documents/widgets/stored_game_scope.dart';
 import '../models/tactics_session_settings.dart';
 import '../../../services/maia/maia_factory.dart';
 import '../services/tactics_import_coordinator.dart';

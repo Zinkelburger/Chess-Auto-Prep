@@ -93,7 +93,10 @@ def main() -> int:
     errors = []
     sources = {path.relative_to(ROOT).as_posix(): path.read_text() for path in (ROOT / 'lib').rglob('*.dart')}
     pure_roots = [path for path in sources if path.startswith('lib/chess_core/')]
-    pure_roots.append('lib/features/documents/controllers/viewer_game_controller.dart')
+    pure_roots.extend([
+        'lib/features/documents/controllers/viewer_game_controller.dart',
+        'lib/features/documents/controllers/viewer_game_load_controller.dart',
+    ])
     errors.extend(pure_dependency_violations(sources, pure_roots))
     for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/features/settings', 'lib/features/studies', 'lib/chess_core', 'lib/infrastructure', 'lib/design_system', 'widgetbook'):
         for path in (ROOT / folder).rglob('*.dart'):

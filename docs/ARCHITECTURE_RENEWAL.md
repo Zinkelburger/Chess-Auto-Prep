@@ -1472,6 +1472,60 @@ workspace/undo/performance parity and remaining hierarchy/bridge retirement.
 Milestones 1/2 and 3 remain partial; milestones 4–7 and non-Linux/release gates
 remain unfinished.
 
+### Viewer loading ownership checkpoint (2026-09-17)
+
+`features/documents/controllers/viewer_game_load_controller.dart` now owns
+asynchronous source-game replacement. Its immutable states distinguish idle,
+loading, loaded, typed failure and closed. Each load rotates an opaque request
+revision before awaiting the archive. New selections (including empty/failed
+ones), repository replacement and disposal revoke previous reads and deferred
+position/loaded/materialized-analysis callbacks. Superseded success or failure
+cannot replace the current game or its error. Shared database opening is not
+cancelled: this owner revokes publication, not the archive connection's lifetime.
+
+`features/documents/repositories/stored_game_repository.dart` is the pure lookup
+contract. The indexed `infrastructure/documents/archive_stored_game_repository.dart`
+adapter borrows an injected GameStore opener. `AppDependencies` supplies it through
+`StoredGameScope`; standalone readers can instead pass `storedGames` directly.
+The Viewer and tactics copy/add-to-study workflows use this contract, and the old
+`services/stored_game_lookup.dart` singleton helper is deleted. The underlying
+GameStore connection bridge remains until training/ingestion milestones 4/5.
+A missing/unavailable optional archive preserves an explicit fallback solution;
+without one, missing and unavailable are distinct failures. Text-only readers do
+not open an archive. The transitive pure-Dart dependency gate now includes the
+load owner as well as the game owner.
+
+Replacing a Viewer control handle detaches its predecessor. Header-only updates
+refresh title metadata while preserving a matching game's cursor; a changed PGN
+starting FEN replaces the game. Annotation callbacks cannot publish the previous
+game into a loading selection. A successful replacement clears the previous
+inline preview and emitted-edit marker.
+
+Verification (Linux, this checkpoint):
+
+| Check | Result |
+|---|---|
+| Unit/widget regression | 113 cases pass: document controllers, Viewer loading and annotation/solitaire/read-view behavior, archive adapter and tactics source-game actions. No selected cases skipped. |
+| Loading ownership | Eight pure-owner cases exercise reversed completion, late failure, explicit fallback, missing/unavailable distinction, retry, empty-selection revocation, disposal and text-only loading. |
+| Linux native integration | Ten cases in `integration_test/viewer_loading_test.dart` pass: nine production-reader scenarios shared with widget tests plus app dependency wiring to a disposable SQLite archive. Existing full-app collection annotation/save/conflict recovery and restart recovery journeys also pass (12 native cases total). |
+| Architecture | The load controller is included in the transitive pure-Dart gate. The 18 boundary-checker regression cases pass. |
+| Analysis/lint | Pass with nine existing informational notices; no warnings or errors. |
+
+The first adapter test assumed a headerless imported PGN was retained verbatim;
+the existing importer adds default headers to such input. The fixture now carries
+an Event header and verifies the stored source bytes and collection isolation.
+No production regression was identified by that failed assertion.
+
+The headless production app opened the recovered native-test collection and
+switched between its two games. The inspected [1280×720 screenshot](images/renewal-viewer-loading.png)
+shows the second game's retained note, selected d4 move and matching board.
+Recovery banners belong to this disposable profile. The preview was stopped.
+
+Remaining: legacy collection orchestration, nested annotation reconciliation,
+Viewer movetext windowing, scoped presentation state, workspace/undo/performance
+parity, full hierarchy/bridge retirement, milestones 4–7 and non-Linux/release
+gates. The full renewal remains incomplete.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

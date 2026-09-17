@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/documents/repositories/stored_game_repository.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_solution_pgn.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +16,52 @@ TacticsPosition _tactic({required String fen}) => TacticsPosition(
   mistakeAnalysis: 'test',
 );
 
+class _Archive implements StoredGameRepository {
+  _Archive(this.lookup);
+  final Future<String?> Function(String) lookup;
+  @override
+  Future<String?> findById(String id) => lookup(id);
+}
+
 void main() {
+  test(
+    'source-game actions use the injected archive before the solution',
+    () async {
+      final tactic = _tactic(
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      );
+      final pgn = await sourceGamePgn(
+        tactic,
+        ['e4'],
+        storedGames: _Archive((id) async {
+          expect(id, 'g1');
+          return '1. d4 d5 *';
+        }),
+      );
+      expect(pgn, '1. d4 d5 *');
+    },
+  );
+
+  for (final unavailable in [false, true]) {
+    test(
+      'source-game action retains its solution when archive ${unavailable ? "fails" : "has no game"}',
+      () async {
+        final tactic = _tactic(
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        );
+        final pgn = await sourceGamePgn(
+          tactic,
+          ['e4'],
+          storedGames: _Archive((id) async {
+            if (unavailable) throw StateError('offline');
+            return null;
+          }),
+        );
+        expect(pgn, buildSolutionPgn(tactic, ['e4']));
+      },
+    );
+  }
+
   test('numbers moves from a white-to-move position', () {
     final pgn = buildSolutionPgn(
       _tactic(fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'),

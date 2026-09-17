@@ -38,6 +38,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   }
 
   void _togglePanelNodeNag(MoveNodeView node, int nagId) {
+    if (!mounted || !_gameReady) return;
     if (!_m.toggleNodeNag(node, nagId)) return;
     _refreshAfterCommentEdit();
     _notifyCommentsChanged();
@@ -47,6 +48,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   /// possibly as a debounce flush after navigation moved off [node] (or during
   /// panel dispose) — hence the object binding and the `mounted` guard.
   void _setPanelNodeComment(MoveNodeView node, String text) {
+    if (!mounted || !_gameReady) return;
     if (!_m.setNodeComment(node, text)) return;
     _refreshAfterCommentEdit();
     _notifyCommentsChanged();
@@ -55,6 +57,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   /// Mainline counterpart of [_setPanelNodeComment], bound to the move's
   /// opaque identity so a late flush cannot hit a replacement game's move.
   void _setPanelMainlineComment(int index, PgnMoveSnapshot move, String text) {
+    if (!mounted || !_gameReady) return;
     if (!_m.setMainlineComment(index, text, expectedMove: move.identity)) {
       return;
     }
@@ -165,6 +168,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   }
 
   void _toggleNag(int moveIndex, int nagId, {Object? expectedMove}) {
+    if (!mounted || !_gameReady) return;
     if (!_m.toggleMainlineNag(moveIndex, nagId, expectedMove: expectedMove)) {
       return;
     }

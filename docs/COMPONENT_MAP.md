@@ -565,8 +565,29 @@ the exact snapshot. Builder's close revision also exposes an opaque identity,
 never the mutable core. Line-entry operations that insert moves notify structural
 subscribers even when the visible cursor does not move.
 
+`features/documents/controllers/viewer_game_controller.dart` owns the Viewer's
+private parsed game, mainline and variation forest. Its public move views are
+immutable; mutations resolve live identities inside the owner. The separate
+`viewer_game_load_controller.dart` owns asynchronous replacement, immutable load
+states and request revisions. Superseded reads, failures and deferred callbacks
+cannot publish into a newer selection; closing the reader revokes its requests.
+Missing/unavailable source games can use an explicitly supplied solution PGN.
+
+`features/documents/repositories/stored_game_repository.dart` is the injected
+source-game contract. `AppDependencies` provides `StoredGameScope` for readers
+and tactics copy/add-to-study actions, using the indexed
+`infrastructure/documents/archive_stored_game_repository.dart` adapter. Its
+connection opener is injected at app startup; the adapter borrows the shared
+archive connection and does not close it. This GameStore bridge retires with
+training/ingestion milestones 4/5. The old `services/stored_game_lookup.dart`
+global helper is removed. Standalone readers can inject `storedGames` directly;
+text-only readers need no archive. Header-only updates refresh the Viewer title,
+a changed initial FEN replaces its position, and replacing a widget control
+handle detaches the old handle.
+
 Riverpod/legacy bridge retirement, undo receipts, bulk/decode allocation and
-native frame measurements, and Viewer private-core adoption remain unfinished.
+native frame measurements remain unfinished. Viewer still needs nested annotation
+reconciliation, windowed movetext and migration of collection/widget orchestration.
 Builder still owns legacy storage/session collaborators and needs the remaining
 feature ownership, draft recovery and presentation migrations.
 
