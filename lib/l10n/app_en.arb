@@ -761,72 +761,72 @@
   "@untitledPgnWorkspace": {
     "description": "Workspace recovery display name"
   },
-  "legacyAnalysisTitle": "Recover older analysis",
-  "@legacyAnalysisTitle": {
+  "generationRecoveryTitle": "Recover generated outputs",
+  "@generationRecoveryTitle": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryAction": "Recover generated outputs…",
+  "@generationRecoveryAction": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryProvenance": "These older files have no recorded source revision. Inspect or export them here; they do not replace the current chapter or its verified analysis. Original files stay unchanged.",
+  "@generationRecoveryProvenance": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisAction": "Recover older analysis…",
-  "@legacyAnalysisAction": {
+  "generationRecoveryTree": "Saved tree",
+  "@generationRecoveryTree": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisProvenance": "These older files have no recorded source revision. Inspect or export them here; they do not replace the current chapter or its verified analysis. Original files stay unchanged.",
-  "@legacyAnalysisProvenance": {
+  "generationRecoveryProbes": "Saved probes",
+  "@generationRecoveryProbes": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisTree": "Saved tree",
-  "@legacyAnalysisTree": {
+  "generationRecoveryTraps": "Saved traps",
+  "@generationRecoveryTraps": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisProbes": "Saved probes",
-  "@legacyAnalysisProbes": {
+  "generationRecoveryPartial": "Unfinished build",
+  "@generationRecoveryPartial": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisTraps": "Saved traps",
-  "@legacyAnalysisTraps": {
+  "generationRecoveryExport": "Export original file…",
+  "@generationRecoveryExport": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisPartial": "Unfinished build",
-  "@legacyAnalysisPartial": {
+  "generationRecoveryExportDirectory": "Choose a folder for the recovered file",
+  "@generationRecoveryExportDirectory": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisExport": "Export original file…",
-  "@legacyAnalysisExport": {
+  "generationRecoveryEmpty": "No saved files were found in this output. Choose another retained output or refresh.",
+  "@generationRecoveryEmpty": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySelect": "Select a saved artifact to inspect its contents.",
+  "@generationRecoverySelect": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisExportDirectory": "Choose a folder for the recovered file",
-  "@legacyAnalysisExportDirectory": {
+  "generationRecoveryNoEntries": "No saved entries",
+  "@generationRecoveryNoEntries": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisEmpty": "No older analysis files found beside this chapter.",
-  "@legacyAnalysisEmpty": {
+  "generationRecoveryUnreadable": "Could not read this entry",
+  "@generationRecoveryUnreadable": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisSelect": "Select a saved artifact to inspect its contents.",
-  "@legacyAnalysisSelect": {
+  "generationRecoveryResumeUnavailable": "Automatic resume is unavailable: this unfinished build has no verifiable source revision. You can inspect its explored positions, export the original file, or start a fresh build from the chapter.",
+  "@generationRecoveryResumeUnavailable": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisNoEntries": "No saved entries",
-  "@legacyAnalysisNoEntries": {
+  "generationRecoveryConfig": "Saved configuration",
+  "@generationRecoveryConfig": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisUnreadable": "Could not read this entry",
-  "@legacyAnalysisUnreadable": {
+  "generationRecoveryParent": "Previous position",
+  "@generationRecoveryParent": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisResumeUnavailable": "Automatic resume is unavailable: this unfinished build has no verifiable source revision. You can inspect its explored positions, export the original file, or start a fresh build from the chapter.",
-  "@legacyAnalysisResumeUnavailable": {
-    "description": "Legacy generation artifact recovery"
-  },
-  "legacyAnalysisConfig": "Saved configuration",
-  "@legacyAnalysisConfig": {
-    "description": "Legacy generation artifact recovery"
-  },
-  "legacyAnalysisParent": "Previous position",
-  "@legacyAnalysisParent": {
-    "description": "Legacy generation artifact recovery"
-  },
-  "legacyAnalysisExported": "Original file exported to {path}",
-  "@legacyAnalysisExported": {
+  "generationRecoveryExported": "Original file exported to {path}",
+  "@generationRecoveryExported": {
     "description": "Legacy generation artifact recovery",
     "placeholders": {
       "path": {
@@ -834,8 +834,8 @@
       }
     }
   },
-  "legacyAnalysisEntry": "Entry {number}",
-  "@legacyAnalysisEntry": {
+  "generationRecoveryEntry": "Entry {number}",
+  "@generationRecoveryEntry": {
     "description": "Legacy generation artifact recovery",
     "placeholders": {
       "number": {
@@ -843,8 +843,8 @@
       }
     }
   },
-  "legacyAnalysisNodes": "{nodes} saved nodes · depth {depth}",
-  "@legacyAnalysisNodes": {
+  "generationRecoveryNodes": "{nodes} saved nodes · depth {depth}",
+  "@generationRecoveryNodes": {
     "description": "Legacy generation artifact recovery",
     "placeholders": {
       "nodes": {
@@ -855,36 +855,36 @@
       }
     }
   },
-  "legacyAnalysisDiagnostics": "Technical details",
-  "@legacyAnalysisDiagnostics": {
+  "generationRecoveryDiagnostics": "Technical details",
+  "@generationRecoveryDiagnostics": {
     "description": "Legacy analysis recovery failure"
   },
-  "legacyAnalysisLoadFailed": "Older analysis could not be loaded. Try refreshing.",
-  "@legacyAnalysisLoadFailed": {
+  "generationRecoveryLoadFailed": "Saved outputs could not be loaded. Try refreshing.",
+  "@generationRecoveryLoadFailed": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReadFailed": "This file could not be read safely. Other saved files remain available.",
+  "@generationRecoveryReadFailed": {
     "description": "Legacy analysis recovery failure"
   },
-  "legacyAnalysisReadFailed": "This file could not be read safely. Other saved files remain available.",
-  "@legacyAnalysisReadFailed": {
+  "generationRecoveryDecodeFailed": "This entry could not be decoded. You can still export its original file.",
+  "@generationRecoveryDecodeFailed": {
     "description": "Legacy analysis recovery failure"
   },
-  "legacyAnalysisDecodeFailed": "This entry could not be decoded. You can still export its original file.",
-  "@legacyAnalysisDecodeFailed": {
+  "generationRecoveryCollision": "A file already exists at that destination. Choose a different location; nothing was replaced.",
+  "@generationRecoveryCollision": {
     "description": "Legacy analysis recovery failure"
   },
-  "legacyAnalysisCollision": "A file already exists at that destination. Choose a different location; nothing was replaced.",
-  "@legacyAnalysisCollision": {
+  "generationRecoveryExportFailed": "The original file could not be exported. Choose another location or try again.",
+  "@generationRecoveryExportFailed": {
     "description": "Legacy analysis recovery failure"
   },
-  "legacyAnalysisExportFailed": "The original file could not be exported. Choose another location or try again.",
-  "@legacyAnalysisExportFailed": {
+  "generationRecoveryExportUncertain": "The export may have been saved, but completion could not be confirmed. Inspect the destination below before trying again.",
+  "@generationRecoveryExportUncertain": {
     "description": "Legacy analysis recovery failure"
   },
-  "legacyAnalysisExportUncertain": "The export may have been saved, but completion could not be confirmed. Inspect the destination below before trying again.",
-  "@legacyAnalysisExportUncertain": {
-    "description": "Legacy analysis recovery failure"
-  },
-  "legacyAnalysisDestination": "Destination: {path}",
-  "@legacyAnalysisDestination": {
+  "generationRecoveryDestination": "Destination: {path}",
+  "@generationRecoveryDestination": {
     "description": "Legacy analysis inspection",
     "placeholders": {
       "path": {
@@ -892,36 +892,124 @@
       }
     }
   },
-  "legacyAnalysisPopularMove": "Popular reply",
-  "@legacyAnalysisPopularMove": {
+  "generationRecoveryPopularMove": "Popular reply",
+  "@generationRecoveryPopularMove": {
     "description": "Legacy analysis inspection"
   },
-  "legacyAnalysisBestMove": "Best reply",
-  "@legacyAnalysisBestMove": {
+  "generationRecoveryBestMove": "Best reply",
+  "@generationRecoveryBestMove": {
     "description": "Legacy analysis inspection"
   },
-  "legacyAnalysisProbability": "Move probability",
-  "@legacyAnalysisProbability": {
+  "generationRecoveryProbability": "Move probability",
+  "@generationRecoveryProbability": {
     "description": "Legacy analysis inspection"
   },
-  "legacyAnalysisGain": "Evaluation gain",
-  "@legacyAnalysisGain": {
+  "generationRecoveryGain": "Evaluation gain",
+  "@generationRecoveryGain": {
     "description": "Legacy analysis inspection"
   },
-  "legacyAnalysisEvaluation": "Evaluation (side to move)",
-  "@legacyAnalysisEvaluation": {
+  "generationRecoveryEvaluation": "Evaluation (side to move)",
+  "@generationRecoveryEvaluation": {
     "description": "Legacy analysis inspection"
   },
-  "legacyAnalysisExpectedScore": "Expected score",
-  "@legacyAnalysisExpectedScore": {
+  "generationRecoveryExpectedScore": "Expected score",
+  "@generationRecoveryExpectedScore": {
     "description": "Legacy analysis inspection"
   },
-  "legacyAnalysisPv": "Engine principal variation (UCI)",
-  "@legacyAnalysisPv": {
+  "generationRecoveryPv": "Engine principal variation (UCI)",
+  "@generationRecoveryPv": {
     "description": "Legacy analysis inspection"
   },
-  "legacyAnalysisNotSaved": "Not saved",
-  "@legacyAnalysisNotSaved": {
+  "generationRecoveryNotSaved": "Not saved",
+  "@generationRecoveryNotSaved": {
     "description": "Legacy analysis inspection"
+  },
+  "generationRecoveryReadOnly": "Inspect or export saved outputs. Recovery does not change the chapter, select analysis or resume a build. Original files stay unchanged.",
+  "@generationRecoveryReadOnly": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryChooseOutput": "Choose saved output",
+  "@generationRecoveryChooseOutput": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryLegacyFiles": "Older files beside this chapter",
+  "@generationRecoveryLegacyFiles": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryCourse": "Generated PGN proposal",
+  "@generationRecoveryCourse": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryModelGames": "Model games",
+  "@generationRecoveryModelGames": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryManifest": "Run record",
+  "@generationRecoveryManifest": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReceipt": "Publication receipt",
+  "@generationRecoveryReceipt": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryRun": "Recorded run",
+  "@generationRecoveryRun": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySource": "Recorded source",
+  "@generationRecoverySource": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySourceUnknown": "The source revision was not recorded or could not be decoded.",
+  "@generationRecoverySourceUnknown": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySourceMatches": "The recorded source revision matches the chapter observed now. This alone does not verify the saved analysis.",
+  "@generationRecoverySourceMatches": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySourceChanged": "The recorded source differs from the chapter observed now.",
+  "@generationRecoverySourceChanged": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySourceUnavailable": "The current chapter could not be read, so its source revision could not be compared.",
+  "@generationRecoverySourceUnavailable": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySelectionNames": "The current selection record names this output. Recovery does not certify it as current analysis.",
+  "@generationRecoverySelectionNames": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoverySelectionUnknown": "No current selection evidence was found for this output. It may have been selected previously.",
+  "@generationRecoverySelectionUnknown": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReceiptAbsent": "No publication receipt was found. The PGN write may still have succeeded; inspect the chapter before generating again.",
+  "@generationRecoveryReceiptAbsent": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReceiptPresent": "A publication receipt was recorded. It does not prove that this output is the current chapter.",
+  "@generationRecoveryReceiptPresent": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryReceiptUnreadable": "A publication receipt exists but could not be verified. The PGN write may have succeeded.",
+  "@generationRecoveryReceiptUnreadable": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryResumeRetained": "Recovery does not resume retained builds. Use the normal generation flow only when its current source and saved configuration are validated.",
+  "@generationRecoveryResumeRetained": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryIntegrityChanged": "This file differs from its recorded checksum. Inspect or export it as edited data.",
+  "@generationRecoveryIntegrityChanged": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryIntegrityMatches": "This file matches the checksum in its run record; that record is not proof of publication.",
+  "@generationRecoveryIntegrityMatches": {
+    "description": "Read-only generation output recovery."
+  },
+  "generationRecoveryListFailed": "Retained outputs could not be listed. Older files remain accessible. Try refreshing.",
+  "@generationRecoveryListFailed": {
+    "description": "Recovery namespace enumeration failed; explicit refresh remains available."
   }
 }

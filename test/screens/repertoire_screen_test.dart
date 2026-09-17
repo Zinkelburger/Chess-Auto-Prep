@@ -187,10 +187,12 @@ void main() {
     await _settleUntil(tester, find.text('Italian Game'));
     await tester.tap(find.text('Actions'));
     await _settle(tester, cycles: 3);
-    await tester.tap(find.text('Recover older analysis…'));
+    await tester.tap(find.text('Recover generated outputs…'));
     await _settleUntil(
       tester,
-      find.text('No older analysis files found beside this chapter.'),
+      find.text(
+        'No saved files were found in this output. Choose another retained output or refresh.',
+      ),
     );
     expect(find.text(path), findsOneWidget);
     await tester.tap(find.byTooltip('Close'));

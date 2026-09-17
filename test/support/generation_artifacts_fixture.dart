@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/generation/models/generation_artifacts.dart';
+import 'package:chess_auto_prep/features/generation/models/generation_recovery.dart';
 import 'package:chess_auto_prep/features/generation/models/generation_publication.dart';
 import 'package:chess_auto_prep/features/generation/repositories/generation_artifact_repository.dart';
 
@@ -29,12 +30,22 @@ class MemoryGenerationArtifacts implements GenerationArtifactRepository {
   }
 
   @override
-  Future<GenerationArtifactSnapshot> readLegacy(String path) async =>
-      GenerationArtifactSnapshot(origin: GenerationArtifactOrigin.legacy);
+  Future<GenerationRecoveryCatalog> listRecovery(String path) async =>
+      GenerationRecoveryCatalog([
+        GenerationRecoveryEntry(
+          chapterPath: path,
+          id: 'legacy',
+          path: path,
+          legacy: true,
+        ),
+      ]);
   @override
-  Future<void> exportLegacy(
-    GenerationArtifactSnapshot snapshot,
-    GenerationArtifactKind kind,
+  Future<GenerationRecoverySnapshot> readRecovery(
+    GenerationRecoveryEntry entry,
+  ) async => GenerationRecoverySnapshot(entry: entry, files: const []);
+  @override
+  Future<void> exportRecovery(
+    GenerationRecoveryFile file,
     String destination,
   ) async =>
       throw UnimplementedError('Recovery export requires an explicit fixture');

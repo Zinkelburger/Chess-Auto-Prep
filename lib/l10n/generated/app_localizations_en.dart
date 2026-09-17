@@ -602,126 +602,206 @@ class AppLocalizationsEn extends AppLocalizations {
   String get untitledPgnWorkspace => 'Untitled PGN';
 
   @override
-  String get legacyAnalysisTitle => 'Recover older analysis';
+  String get generationRecoveryTitle => 'Recover generated outputs';
 
   @override
-  String get legacyAnalysisAction => 'Recover older analysis…';
+  String get generationRecoveryAction => 'Recover generated outputs…';
 
   @override
-  String get legacyAnalysisProvenance =>
+  String get generationRecoveryProvenance =>
       'These older files have no recorded source revision. Inspect or export them here; they do not replace the current chapter or its verified analysis. Original files stay unchanged.';
 
   @override
-  String get legacyAnalysisTree => 'Saved tree';
+  String get generationRecoveryTree => 'Saved tree';
 
   @override
-  String get legacyAnalysisProbes => 'Saved probes';
+  String get generationRecoveryProbes => 'Saved probes';
 
   @override
-  String get legacyAnalysisTraps => 'Saved traps';
+  String get generationRecoveryTraps => 'Saved traps';
 
   @override
-  String get legacyAnalysisPartial => 'Unfinished build';
+  String get generationRecoveryPartial => 'Unfinished build';
 
   @override
-  String get legacyAnalysisExport => 'Export original file…';
+  String get generationRecoveryExport => 'Export original file…';
 
   @override
-  String get legacyAnalysisExportDirectory =>
+  String get generationRecoveryExportDirectory =>
       'Choose a folder for the recovered file';
 
   @override
-  String get legacyAnalysisEmpty =>
-      'No older analysis files found beside this chapter.';
+  String get generationRecoveryEmpty =>
+      'No saved files were found in this output. Choose another retained output or refresh.';
 
   @override
-  String get legacyAnalysisSelect =>
+  String get generationRecoverySelect =>
       'Select a saved artifact to inspect its contents.';
 
   @override
-  String get legacyAnalysisNoEntries => 'No saved entries';
+  String get generationRecoveryNoEntries => 'No saved entries';
 
   @override
-  String get legacyAnalysisUnreadable => 'Could not read this entry';
+  String get generationRecoveryUnreadable => 'Could not read this entry';
 
   @override
-  String get legacyAnalysisResumeUnavailable =>
+  String get generationRecoveryResumeUnavailable =>
       'Automatic resume is unavailable: this unfinished build has no verifiable source revision. You can inspect its explored positions, export the original file, or start a fresh build from the chapter.';
 
   @override
-  String get legacyAnalysisConfig => 'Saved configuration';
+  String get generationRecoveryConfig => 'Saved configuration';
 
   @override
-  String get legacyAnalysisParent => 'Previous position';
+  String get generationRecoveryParent => 'Previous position';
 
   @override
-  String legacyAnalysisExported(String path) {
+  String generationRecoveryExported(String path) {
     return 'Original file exported to $path';
   }
 
   @override
-  String legacyAnalysisEntry(int number) {
+  String generationRecoveryEntry(int number) {
     return 'Entry $number';
   }
 
   @override
-  String legacyAnalysisNodes(int nodes, int depth) {
+  String generationRecoveryNodes(int nodes, int depth) {
     return '$nodes saved nodes · depth $depth';
   }
 
   @override
-  String get legacyAnalysisDiagnostics => 'Technical details';
+  String get generationRecoveryDiagnostics => 'Technical details';
 
   @override
-  String get legacyAnalysisLoadFailed =>
-      'Older analysis could not be loaded. Try refreshing.';
+  String get generationRecoveryLoadFailed =>
+      'Saved outputs could not be loaded. Try refreshing.';
 
   @override
-  String get legacyAnalysisReadFailed =>
+  String get generationRecoveryReadFailed =>
       'This file could not be read safely. Other saved files remain available.';
 
   @override
-  String get legacyAnalysisDecodeFailed =>
+  String get generationRecoveryDecodeFailed =>
       'This entry could not be decoded. You can still export its original file.';
 
   @override
-  String get legacyAnalysisCollision =>
+  String get generationRecoveryCollision =>
       'A file already exists at that destination. Choose a different location; nothing was replaced.';
 
   @override
-  String get legacyAnalysisExportFailed =>
+  String get generationRecoveryExportFailed =>
       'The original file could not be exported. Choose another location or try again.';
 
   @override
-  String get legacyAnalysisExportUncertain =>
+  String get generationRecoveryExportUncertain =>
       'The export may have been saved, but completion could not be confirmed. Inspect the destination below before trying again.';
 
   @override
-  String legacyAnalysisDestination(String path) {
+  String generationRecoveryDestination(String path) {
     return 'Destination: $path';
   }
 
   @override
-  String get legacyAnalysisPopularMove => 'Popular reply';
+  String get generationRecoveryPopularMove => 'Popular reply';
 
   @override
-  String get legacyAnalysisBestMove => 'Best reply';
+  String get generationRecoveryBestMove => 'Best reply';
 
   @override
-  String get legacyAnalysisProbability => 'Move probability';
+  String get generationRecoveryProbability => 'Move probability';
 
   @override
-  String get legacyAnalysisGain => 'Evaluation gain';
+  String get generationRecoveryGain => 'Evaluation gain';
 
   @override
-  String get legacyAnalysisEvaluation => 'Evaluation (side to move)';
+  String get generationRecoveryEvaluation => 'Evaluation (side to move)';
 
   @override
-  String get legacyAnalysisExpectedScore => 'Expected score';
+  String get generationRecoveryExpectedScore => 'Expected score';
 
   @override
-  String get legacyAnalysisPv => 'Engine principal variation (UCI)';
+  String get generationRecoveryPv => 'Engine principal variation (UCI)';
 
   @override
-  String get legacyAnalysisNotSaved => 'Not saved';
+  String get generationRecoveryNotSaved => 'Not saved';
+
+  @override
+  String get generationRecoveryReadOnly =>
+      'Inspect or export saved outputs. Recovery does not change the chapter, select analysis or resume a build. Original files stay unchanged.';
+
+  @override
+  String get generationRecoveryChooseOutput => 'Choose saved output';
+
+  @override
+  String get generationRecoveryLegacyFiles => 'Older files beside this chapter';
+
+  @override
+  String get generationRecoveryCourse => 'Generated PGN proposal';
+
+  @override
+  String get generationRecoveryModelGames => 'Model games';
+
+  @override
+  String get generationRecoveryManifest => 'Run record';
+
+  @override
+  String get generationRecoveryReceipt => 'Publication receipt';
+
+  @override
+  String get generationRecoveryRun => 'Recorded run';
+
+  @override
+  String get generationRecoverySource => 'Recorded source';
+
+  @override
+  String get generationRecoverySourceUnknown =>
+      'The source revision was not recorded or could not be decoded.';
+
+  @override
+  String get generationRecoverySourceMatches =>
+      'The recorded source revision matches the chapter observed now. This alone does not verify the saved analysis.';
+
+  @override
+  String get generationRecoverySourceChanged =>
+      'The recorded source differs from the chapter observed now.';
+
+  @override
+  String get generationRecoverySourceUnavailable =>
+      'The current chapter could not be read, so its source revision could not be compared.';
+
+  @override
+  String get generationRecoverySelectionNames =>
+      'The current selection record names this output. Recovery does not certify it as current analysis.';
+
+  @override
+  String get generationRecoverySelectionUnknown =>
+      'No current selection evidence was found for this output. It may have been selected previously.';
+
+  @override
+  String get generationRecoveryReceiptAbsent =>
+      'No publication receipt was found. The PGN write may still have succeeded; inspect the chapter before generating again.';
+
+  @override
+  String get generationRecoveryReceiptPresent =>
+      'A publication receipt was recorded. It does not prove that this output is the current chapter.';
+
+  @override
+  String get generationRecoveryReceiptUnreadable =>
+      'A publication receipt exists but could not be verified. The PGN write may have succeeded.';
+
+  @override
+  String get generationRecoveryResumeRetained =>
+      'Recovery does not resume retained builds. Use the normal generation flow only when its current source and saved configuration are validated.';
+
+  @override
+  String get generationRecoveryIntegrityChanged =>
+      'This file differs from its recorded checksum. Inspect or export it as edited data.';
+
+  @override
+  String get generationRecoveryIntegrityMatches =>
+      'This file matches the checksum in its run record; that record is not proof of publication.';
+
+  @override
+  String get generationRecoveryListFailed =>
+      'Retained outputs could not be listed. Older files remain accessible. Try refreshing.';
 }

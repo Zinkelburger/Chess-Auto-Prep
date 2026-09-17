@@ -25,7 +25,9 @@
     "lib/models/trap_line_info.dart",
     "lib/models/trap_reply.dart",
     "lib/services/generation/tree_serialization.dart",
-    "lib/services/eval/eval_canonicalize.dart"
+    "lib/services/eval/eval_canonicalize.dart",
+    "lib/features/generation/controllers/legacy_analysis_controller.dart",
+    "lib/features/generation/widgets/legacy_analysis_dialog.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -38,6 +40,14 @@
     "PgnPerspectiveButton",
     "GenerationArtifactStore",
     "ExpectimaxProbeStore",
-    "serializeTreeInIsolate"
+    "serializeTreeInIsolate",
+    "LegacyAnalysisController",
+    "LegacyAnalysisDialog",
+    "LegacyAnalysisInspection",
+    "LegacyAnalysisItem",
+    "inspectLegacy",
+    "readLegacy",
+    "exportLegacy",
+    "showLegacyAnalysisRecovery"
   ]
 }

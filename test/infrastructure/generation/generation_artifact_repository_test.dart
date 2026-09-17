@@ -230,8 +230,10 @@ void main() {
         GenerationArtifactOrigin.absent,
       );
       expect(
-        (await repository.readLegacy(path)).origin,
-        GenerationArtifactOrigin.legacy,
+        (await repository.readRecovery(
+          (await repository.listRecovery(path)).entries.first,
+        )).entry.legacy,
+        true,
       );
       final run = await repository.begin(path, {});
       await publish(run, {GenerationArtifactKind.probes: 'fresh probe'});

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/generation/models/generation_artifacts.dart';
+import 'package:chess_auto_prep/features/generation/models/generation_recovery.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'package:chess_auto_prep/infrastructure/generation/storage_generation_artifact_repository.dart';
@@ -34,7 +35,7 @@ void main() {
   File original(GenerationArtifactKind kind) =>
       File(p.join(root.path, 'Main_${suffixes[kind]}.json'));
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('legacy-recovery-');
+    root = await Directory.systemTemp.createTemp('recovery-recovery-');
     chapter = p.join(root.path, 'Main.pgn');
     await File(
       chapter,
@@ -52,12 +53,12 @@ void main() {
       final baseline = await File(chapter).readAsBytes();
       final inspected = await GenerationArtifacts(
         repository,
-      ).inspectLegacy(chapter);
+      ).inspectRecovery((await repository.listRecovery(chapter)).entries.first);
       expect(inspected.items, hasLength(4));
       expect(inspected.items.where((i) => i.tree != null), hasLength(3));
       expect(
         inspected.items
-            .singleWhere((i) => i.kind == GenerationArtifactKind.partial)
+            .singleWhere((i) => i.kind == GenerationRecoveryFileKind.partial)
             .tree!
             .buildComplete,
         false,
@@ -76,10 +77,10 @@ void main() {
       );
       final restarted = await GenerationArtifacts(
         reopen(),
-      ).inspectLegacy(chapter);
+      ).inspectRecovery((await repository.listRecovery(chapter)).entries.first);
       expect(
-        restarted.snapshot.originalBytes,
-        inspected.snapshot.originalBytes,
+        restarted.snapshot.files.map((f) => f.bytes).toList(),
+        inspected.snapshot.files.map((f) => f.bytes).toList(),
       );
       expect(await File(chapter).readAsBytes(), baseline);
       expect(
@@ -101,15 +102,19 @@ void main() {
       ).create(original(GenerationArtifactKind.partial).path);
       final result = await GenerationArtifacts(
         repository,
-      ).inspectLegacy(chapter);
+      ).inspectRecovery((await repository.listRecovery(chapter)).entries.first);
       expect(result.items.where((i) => i.error != null), hasLength(2));
       expect(result.items.where((i) => i.tree != null), hasLength(2));
       expect(
-        result.snapshot.originalBytes.containsKey(GenerationArtifactKind.tree),
+        result.snapshot.files.any(
+          (f) => f.kind == GenerationRecoveryFileKind.tree && f.bytes != null,
+        ),
         true,
       );
       expect(
-        result.snapshot.originalBytes.containsKey(GenerationArtifactKind.traps),
+        result.snapshot.files.any(
+          (f) => f.kind == GenerationRecoveryFileKind.traps && f.bytes != null,
+        ),
         false,
       );
     },
@@ -123,9 +128,11 @@ void main() {
     await original(
       GenerationArtifactKind.probes,
     ).writeAsString(jsonEncode(data));
-    final result = await GenerationArtifacts(repository).inspectLegacy(chapter);
+    final result = await GenerationArtifacts(
+      repository,
+    ).inspectRecovery((await repository.listRecovery(chapter)).entries.first);
     final probes = result.items
-        .where((item) => item.kind == GenerationArtifactKind.probes)
+        .where((item) => item.kind == GenerationRecoveryFileKind.probes)
         .toList();
     expect(probes, hasLength(2));
     expect(probes.first.error?.kind, GenerationArtifactFailureKind.decode);
@@ -151,12 +158,15 @@ void main() {
       ]) {
         final file = original(GenerationArtifactKind.tree);
         await file.writeAsBytes(bytes);
-        final captured = await repository.readLegacy(chapter);
+        final captured = await repository.readRecovery(
+          (await repository.listRecovery(chapter)).entries.first,
+        );
         await file.writeAsString('externally changed');
         final destination = p.join(root.path, 'Recovered-${bytes.length}.json');
-        await repository.exportLegacy(
-          captured,
-          GenerationArtifactKind.tree,
+        await repository.exportRecovery(
+          captured.files.singleWhere(
+            (f) => f.kind == GenerationRecoveryFileKind.tree,
+          ),
           destination,
         );
         expect(await File(destination).readAsBytes(), bytes);
@@ -168,19 +178,24 @@ void main() {
   test(
     'export collision and interrupted staging preserve destination and originals',
     () async {
-      final captured = await repository.readLegacy(chapter);
+      final captured = await repository.readRecovery(
+        (await repository.listRecovery(chapter)).entries.first,
+      );
       final destination = original(GenerationArtifactKind.tree);
       await expectLater(
-        repository.exportLegacy(
-          captured,
-          GenerationArtifactKind.partial,
+        repository.exportRecovery(
+          captured.files.singleWhere(
+            (f) => f.kind == GenerationRecoveryFileKind.partial,
+          ),
           destination.path,
         ),
         throwsA(isA<GenerationArtifactFailure>()),
       );
       expect(
         await destination.readAsBytes(),
-        captured.originalBytes[GenerationArtifactKind.tree],
+        captured.files
+            .singleWhere((f) => f.kind == GenerationRecoveryFileKind.tree)
+            .bytes,
       );
       final interrupted = reopen(
         writer: AtomicFileWriter(
@@ -193,13 +208,20 @@ void main() {
       );
       final path = p.join(root.path, 'Interrupted.json');
       await expectLater(
-        interrupted.exportLegacy(captured, GenerationArtifactKind.tree, path),
+        interrupted.exportRecovery(
+          captured.files.singleWhere(
+            (f) => f.kind == GenerationRecoveryFileKind.tree,
+          ),
+          path,
+        ),
         throwsA(isA<GenerationArtifactFailure>()),
       );
       expect(await File(path).exists(), false);
       expect(
         await destination.readAsBytes(),
-        captured.originalBytes[GenerationArtifactKind.tree],
+        captured.files
+            .singleWhere((f) => f.kind == GenerationRecoveryFileKind.tree)
+            .bytes,
       );
     },
   );
@@ -217,10 +239,17 @@ void main() {
       final failing = reopen(
         flush: (_) async => throw StateError('acknowledgement failed'),
       );
-      final snapshot = await failing.readLegacy(chapter);
+      final snapshot = await failing.readRecovery(
+        (await failing.listRecovery(chapter)).entries.first,
+      );
       final path = p.join(root.path, 'Uncertain.json');
       await expectLater(
-        failing.exportLegacy(snapshot, GenerationArtifactKind.partial, path),
+        failing.exportRecovery(
+          snapshot.files.singleWhere(
+            (f) => f.kind == GenerationRecoveryFileKind.partial,
+          ),
+          path,
+        ),
         throwsA(
           isA<GenerationArtifactFailure>()
               .having((e) => e.proposalPath, 'recovery path', path)
@@ -233,16 +262,25 @@ void main() {
       );
       expect(
         await File(path).readAsBytes(),
-        snapshot.originalBytes[GenerationArtifactKind.partial],
+        snapshot.files
+            .singleWhere((f) => f.kind == GenerationRecoveryFileKind.partial)
+            .bytes,
       );
       expect((await reopen().read(chapter)).generationId, before.generationId);
       await expectLater(
-        repository.exportLegacy(snapshot, GenerationArtifactKind.tree, path),
+        repository.exportRecovery(
+          snapshot.files.singleWhere(
+            (f) => f.kind == GenerationRecoveryFileKind.tree,
+          ),
+          path,
+        ),
         throwsA(isA<GenerationArtifactFailure>()),
       );
       expect(
         await File(path).readAsBytes(),
-        snapshot.originalBytes[GenerationArtifactKind.partial],
+        snapshot.files
+            .singleWhere((f) => f.kind == GenerationRecoveryFileKind.partial)
+            .bytes,
       );
     },
   );

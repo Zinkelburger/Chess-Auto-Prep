@@ -7,7 +7,7 @@ import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 
 import '../features/generation/services/generation_artifacts.dart';
-import '../app/generation_dependencies.dart' show showLegacyAnalysisRecovery;
+import '../app/generation_dependencies.dart' show showGenerationRecovery;
 
 import '../features/repertoires/repositories/repertoire_document_repository.dart';
 import '../features/repertoires/repositories/repertoire_decoder.dart';
@@ -1196,7 +1196,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onImportPgn: _importPgn,
         onReload: _reloadRepertoire,
         onRecoverAnalysis: () => unawaited(
-          showLegacyAnalysisRecovery(
+          showGenerationRecovery(
             context,
             path: repertoire.filePath,
             artifacts: context.read<GenerationArtifacts>(),

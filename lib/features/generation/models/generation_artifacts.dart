@@ -1,34 +1,21 @@
-import 'dart:typed_data';
-
 import '../../documents/models/pgn_document.dart';
 import 'generation_publication.dart';
 
 enum GenerationArtifactKind { tree, probes, traps, partial }
 
-enum GenerationArtifactOrigin { current, legacy, absent, stale }
+enum GenerationArtifactOrigin { current, absent, stale }
 
-/// A verified generation, or an explicitly requested unverified legacy preview.
+/// An authoritative generation; recovery observations use a separate type.
 class GenerationArtifactSnapshot {
   GenerationArtifactSnapshot({
     required this.origin,
     Map<GenerationArtifactKind, String> payloads = const {},
-    Map<GenerationArtifactKind, List<int>> originalBytes = const {},
-    Map<GenerationArtifactKind, GenerationArtifactFailure> readFailures =
-        const {},
     this.generationId,
     this.notice,
-  }) : payloads = Map.unmodifiable(payloads),
-       originalBytes = Map.unmodifiable({
-         for (final entry in originalBytes.entries)
-           entry.key: Uint8List.fromList(entry.value).asUnmodifiableView(),
-       }),
-       readFailures = Map.unmodifiable(readFailures);
+  }) : payloads = Map.unmodifiable(payloads);
   final GenerationArtifactOrigin origin;
   final Map<GenerationArtifactKind, String> payloads;
 
-  /// Exact legacy file bytes for explicit recovery export, never publication.
-  final Map<GenerationArtifactKind, List<int>> originalBytes;
-  final Map<GenerationArtifactKind, GenerationArtifactFailure> readFailures;
   final String? generationId;
   final String? notice;
 }
@@ -55,6 +42,7 @@ class GenerationArtifactProposal {
 
 enum GenerationArtifactFailureKind {
   publication,
+  enumerate,
   read,
   decode,
   export,

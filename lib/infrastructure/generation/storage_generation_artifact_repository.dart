@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import '../../features/documents/models/pgn_document.dart';
 import '../../features/documents/repositories/pgn_document_store.dart';
 import '../../features/generation/models/generation_artifacts.dart';
+import '../../features/generation/models/generation_recovery.dart';
 import '../../features/generation/models/generation_publication.dart';
 import '../../features/generation/repositories/generation_artifact_repository.dart';
 import '../../services/storage/storage_service.dart';
@@ -194,65 +195,311 @@ class StorageGenerationArtifactRepository
     );
   }
 
+  static const _retainedNames = {
+    GenerationRecoveryFileKind.tree: 'tree.json',
+    GenerationRecoveryFileKind.probes: 'probes.json',
+    GenerationRecoveryFileKind.traps: 'traps.json',
+    GenerationRecoveryFileKind.partial: 'partial.json',
+    GenerationRecoveryFileKind.course: 'course.pgn',
+    GenerationRecoveryFileKind.modelGames: 'model_games.pgn',
+    GenerationRecoveryFileKind.manifest: 'manifest.json',
+    GenerationRecoveryFileKind.receipt: 'published.json',
+  };
+
+  static GenerationArtifactFailure _recoveryFailure(Object error) =>
+      GenerationArtifactFailure(
+        '$error',
+        kind: GenerationArtifactFailureKind.read,
+      );
+
   @override
-  Future<GenerationArtifactSnapshot> readLegacy(String path) async {
-    // These observations never feed begin(): neither naming nor a saved config
-    // proves the historical source revision. Keep exact bytes even if malformed.
-    final base = p.withoutExtension(path);
-    final payloads = <GenerationArtifactKind, String>{};
-    final bytes = <GenerationArtifactKind, List<int>>{};
-    final failures = <GenerationArtifactKind, GenerationArtifactFailure>{};
-    for (final entry in {
-      GenerationArtifactKind.tree: '${base}_tree.json',
-      GenerationArtifactKind.probes: '${base}_expectimax.json',
-      GenerationArtifactKind.traps: '${base}_traps.json',
-      GenerationArtifactKind.partial: '${base}_partial_tree.json',
-    }.entries) {
-      try {
-        if (nativePaths) {
-          final observed = await observeFile(entry.value);
-          if (observed.status == 1) continue;
-          if (observed.status != 0 || observed.bytes == null) {
-            throw GenerationArtifactFailure(
-              'Cannot safely read ${entry.value} (native error ${observed.error})',
-            );
-          }
-          bytes[entry.key] = observed.bytes!;
-          final captured = observed.bytes!;
-          payloads[entry.key] = await Isolate.run(
-            () => decodeTextBytes(maybeGunzip(captured)),
+  Future<GenerationRecoveryCatalog> listRecovery(String path) async {
+    final entries = <GenerationRecoveryEntry>[
+      GenerationRecoveryEntry(
+        chapterPath: path,
+        id: 'legacy',
+        path: path,
+        legacy: true,
+      ),
+    ];
+    try {
+      await _safeNamespace(path);
+      final directory = chapterDirectory(path);
+      if (nativePaths) {
+        final before = await observeDirectory(directory);
+        if (before.status == 1) return GenerationRecoveryCatalog(entries);
+        if (before.status != 0) throw StateError('Cannot inspect $directory');
+        await for (final entity in Directory(
+          directory,
+        ).list(followLinks: false)) {
+          // Pointer and temporary files are not generations. A replaced run
+          // directory is still listed with a typed failure, never followed.
+          if (entity is File) continue;
+          final observed = await observeDirectory(entity.path);
+          entries.add(
+            GenerationRecoveryEntry(
+              chapterPath: path,
+              id: p.basename(entity.path),
+              path: entity.path,
+              directoryIdentity: observed.identity,
+              error: observed.status == 0
+                  ? null
+                  : _recoveryFailure(
+                      'Unsafe retained directory ${entity.path}',
+                    ),
+            ),
           );
-        } else if (await storage.fileExists(entry.value)) {
-          final text = await _readPayload(entry.value);
-          payloads[entry.key] = text;
-          bytes[entry.key] = utf8.encode(text);
         }
-      } catch (error) {
-        failures[entry.key] = GenerationArtifactFailure(
-          error.toString(),
-          kind: GenerationArtifactFailureKind.read,
-        );
+        await _safeNamespace(path);
+        final after = await observeDirectory(directory);
+        if (after.status != 0 || after.identity != before.identity) {
+          throw StateError('Recovery namespace changed while listing');
+        }
+      } else {
+        for (final child in await storage.listSubdirectories(directory)) {
+          entries.add(
+            GenerationRecoveryEntry(
+              chapterPath: path,
+              id: p.basename(child),
+              path: child,
+            ),
+          );
+        }
+      }
+      final retained = entries.skip(1).toList()
+        ..sort((a, b) => b.id.compareTo(a.id));
+      return GenerationRecoveryCatalog([entries.first, ...retained]);
+    } catch (error) {
+      // Discard observations from a failed enumeration; retry is explicit.
+      return GenerationRecoveryCatalog([
+        entries.first,
+      ], error: _recoveryFailure(error));
+    }
+  }
+
+  Future<GenerationRecoveryFile?> _observeRecoveryFile(
+    GenerationRecoveryFileKind kind,
+    String path, {
+    String? expectedHash,
+    bool required = false,
+  }) async {
+    List<int>? bytes;
+    try {
+      if (nativePaths) {
+        final observed = await observeFile(path);
+        if (observed.status == 1 && !required) return null;
+        if (observed.status != 0 || observed.bytes == null) {
+          throw StateError(
+            'Cannot safely read $path (native error ${observed.error})',
+          );
+        }
+        bytes = observed.bytes!;
+      } else {
+        final text = await storage.readFile(path);
+        if (text == null && !required) return null;
+        if (text == null) throw StateError('Missing retained file $path');
+        bytes = utf8.encode(text);
+      }
+      final captured = bytes;
+      final text = await Isolate.run(
+        () => decodeTextBytes(maybeGunzip(captured)),
+      );
+      return GenerationRecoveryFile(
+        kind: kind,
+        path: path,
+        bytes: bytes,
+        text: text,
+        integrity: expectedHash == null
+            ? GenerationRecoveryIntegrity.unrecorded
+            : _hash(text) == expectedHash
+            ? GenerationRecoveryIntegrity.matches
+            : GenerationRecoveryIntegrity.changed,
+      );
+    } catch (error) {
+      return GenerationRecoveryFile(
+        kind: kind,
+        path: path,
+        bytes: bytes,
+        error: GenerationArtifactFailure(
+          '$error',
+          kind: GenerationArtifactFailureKind.enumerate,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<GenerationRecoverySnapshot> readRecovery(
+    GenerationRecoveryEntry entry,
+  ) async {
+    final path = entry.chapterPath;
+    if (entry.error case final failure?) throw failure;
+    if (entry.legacy) {
+      if (entry.path != path || entry.id != 'legacy') {
+        throw _recoveryFailure('Invalid legacy observation');
+      }
+      final base = p.withoutExtension(path);
+      final files = <GenerationRecoveryFile>[];
+      for (final item in {
+        GenerationRecoveryFileKind.tree: '${base}_tree.json',
+        GenerationRecoveryFileKind.probes: '${base}_expectimax.json',
+        GenerationRecoveryFileKind.traps: '${base}_traps.json',
+        GenerationRecoveryFileKind.partial: '${base}_partial_tree.json',
+      }.entries) {
+        final file = await _observeRecoveryFile(item.key, item.value);
+        if (file != null) files.add(file);
+      }
+      return GenerationRecoverySnapshot(entry: entry, files: files);
+    }
+    if (p.dirname(entry.path) != chapterDirectory(path) ||
+        p.basename(entry.path) != entry.id ||
+        entry.id == '.' ||
+        entry.id == '..') {
+      throw _recoveryFailure('Invalid retained generation path');
+    }
+    await _safeNamespace(path);
+    final before = nativePaths ? await observeDirectory(entry.path) : null;
+    if (nativePaths &&
+        (before!.status != 0 || before.identity != entry.directoryIdentity)) {
+      throw _recoveryFailure(
+        'Retained directory changed; refresh before inspecting it',
+      );
+    }
+    final manifest = (await _observeRecoveryFile(
+      GenerationRecoveryFileKind.manifest,
+      p.join(entry.path, 'manifest.json'),
+      required: true,
+    ))!;
+    final files = <GenerationRecoveryFile>[manifest];
+    Map<String, dynamic>? data;
+    GenerationArtifactFailure? error = manifest.error;
+    try {
+      if (manifest.text != null) {
+        data = jsonDecode(manifest.text!) as Map<String, dynamic>;
+        if (data['version'] != 1 ||
+            data['runId'] is! String ||
+            (data['sourcePath'] ?? data['source']) is! String) {
+          throw const FormatException('Unrecognized retained manifest');
+        }
+      }
+    } catch (failure) {
+      data = null;
+      error = GenerationArtifactFailure(
+        '$failure',
+        kind: GenerationArtifactFailureKind.decode,
+      );
+    }
+    final artifacts = data?['artifacts'];
+    for (final item in _retainedNames.entries) {
+      if (item.key == GenerationRecoveryFileKind.manifest) continue;
+      final hash = artifacts is Map ? artifacts[item.key.name] : null;
+      // Inspect only fixed filenames; manifest paths never control reads.
+      final required =
+          hash != null ||
+          (item.key == GenerationRecoveryFileKind.course &&
+              data?['course'] != null) ||
+          (item.key == GenerationRecoveryFileKind.modelGames &&
+              data?['modelGames'] != null);
+      final file = await _observeRecoveryFile(
+        item.key,
+        p.join(entry.path, item.value),
+        expectedHash: hash is String ? hash : null,
+        required: required,
+      );
+      if (file != null) files.add(file);
+    }
+    final recordedSource = (data?['sourcePath'] ?? data?['source']) as String?;
+    var sourceState = GenerationRecoverySource.unrecorded;
+    final revision = data?['sourceRevision'] ?? data?['baseline'];
+    bool validRevision(dynamic value) =>
+        value is Map &&
+        const [
+          'documentId',
+          'nativeIdentity',
+          'sha256',
+        ].every((key) => value[key] is String);
+    if (revision != null && !validRevision(revision)) {
+      error = const GenerationArtifactFailure(
+        'Invalid recorded source revision',
+        kind: GenerationArtifactFailureKind.decode,
+      );
+    }
+    if (validRevision(revision)) {
+      try {
+        final source = await _open(path);
+        sourceState = source == null
+            ? GenerationRecoverySource.unavailable
+            : recordedSource == path && _matches(revision, source)
+            ? GenerationRecoverySource.matches
+            : GenerationRecoverySource.changed;
+      } catch (_) {
+        sourceState = GenerationRecoverySource.unavailable;
       }
     }
-    return GenerationArtifactSnapshot(
-      origin: GenerationArtifactOrigin.legacy,
-      payloads: payloads,
-      originalBytes: bytes,
-      readFailures: failures,
-      notice: 'Legacy analysis has no recorded source identity. Preview only.',
+    var receipt = GenerationRecoveryReceipt.absent;
+    final receipts = files.where(
+      (f) => f.kind == GenerationRecoveryFileKind.receipt,
+    );
+    if (receipts.isNotEmpty) {
+      try {
+        final parsed =
+            jsonDecode(receipts.single.text!) as Map<String, dynamic>;
+        receipt =
+            parsed['state'] == 'published' && validRevision(parsed['revision'])
+            ? GenerationRecoveryReceipt.recorded
+            : GenerationRecoveryReceipt.unreadable;
+      } catch (_) {
+        receipt = GenerationRecoveryReceipt.unreadable;
+      }
+    }
+    var namedBySelection = false;
+    try {
+      final pointer = await _observeRecoveryFile(
+        GenerationRecoveryFileKind.manifest,
+        pointerPath(path),
+      );
+      if (pointer?.text case final text?) {
+        final selected = jsonDecode(text) as Map<String, dynamic>;
+        namedBySelection =
+            selected['version'] == 1 &&
+            selected['sourcePath'] == path &&
+            selected['generation'] == entry.id;
+      }
+    } catch (_) {
+      // No readable selection evidence. Never infer historical publication.
+    }
+    await _safeNamespace(path);
+    if (nativePaths) {
+      final after = await observeDirectory(entry.path);
+      if (after.status != 0 || after.identity != before!.identity) {
+        throw _recoveryFailure('Retained directory changed while reading');
+      }
+    }
+    return GenerationRecoverySnapshot(
+      entry: entry,
+      files: files,
+      runId: data?['runId'] as String?,
+      recordedSource: recordedSource,
+      sourceState: sourceState,
+      receipt: receipt,
+      namedBySelection: namedBySelection,
+      error: error,
+      config: data?['config'] is Map<String, dynamic>
+          ? data!['config'] as Map<String, dynamic>
+          : const {},
     );
   }
 
   @override
-  Future<void> exportLegacy(
-    GenerationArtifactSnapshot snapshot,
-    GenerationArtifactKind kind,
+  Future<void> exportRecovery(
+    GenerationRecoveryFile file,
     String destination,
   ) async {
-    final bytes = snapshot.originalBytes[kind];
-    if (snapshot.origin != GenerationArtifactOrigin.legacy || bytes == null) {
+    final bytes = file.bytes;
+    if (bytes == null) {
       throw const GenerationArtifactFailure(
-        'No captured legacy bytes to export',
+        'No captured bytes to export',
+        kind: GenerationArtifactFailureKind.export,
       );
     }
     final target = File(destination);
