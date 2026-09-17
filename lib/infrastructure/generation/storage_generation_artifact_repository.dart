@@ -44,6 +44,7 @@ class StorageGenerationArtifactRepository
     required this.storage,
     required this.documents,
     this.nativePaths = true,
+    this.recoveryRoot,
     AtomicFileWriter? recoveryWriter,
     Future<void> Function(String)? flushRecoveryDirectory,
   }) : _recoveryWriter = recoveryWriter ?? AtomicFileWriter(),
@@ -51,6 +52,7 @@ class StorageGenerationArtifactRepository
   final StorageService storage;
   final PgnDocumentStore documents;
   final bool nativePaths;
+  final Future<String> Function()? recoveryRoot;
   final AtomicFileWriter _recoveryWriter;
   final Future<void> Function(String) _flushRecoveryDirectory;
   final _runs = <GenerationArtifactRun, _Run>{};
@@ -213,6 +215,64 @@ class StorageGenerationArtifactRepository
       );
 
   @override
+  Future<List<GenerationRecoverySourceEntry>> listRecoverySources() async {
+    final root = await recoveryRoot?.call();
+    if (root == null) return const [];
+    final found = <GenerationRecoverySourceEntry>[];
+    Future<void> walk(String directory) async {
+      final before = await observeDirectory(directory);
+      if (before.status == 1) return;
+      if (before.status != 0) {
+        throw StateError('Unsafe recovery directory $directory');
+      }
+      await for (final entity in Directory(
+        directory,
+      ).list(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final name = p.basename(entity.path);
+        if (name == '.cap-generation') {
+          final namespace = await observeDirectory(entity.path);
+          if (namespace.status != 0) {
+            throw StateError('Unsafe generation namespace');
+          }
+          await for (final chapter in Directory(
+            entity.path,
+          ).list(followLinks: false)) {
+            if (chapter is! Directory) continue;
+            final source = p.join(directory, p.basename(chapter.path));
+            found.add(
+              GenerationRecoverySourceEntry(
+                path: source,
+                label: p.relative(source, from: root),
+              ),
+            );
+          }
+          if ((await observeDirectory(entity.path)).identity !=
+              namespace.identity) {
+            throw StateError('Generation namespace changed while listing');
+          }
+        } else if (!name.startsWith('.')) {
+          await walk(entity.path);
+        }
+      }
+      if ((await observeDirectory(directory)).identity != before.identity) {
+        throw StateError('Recovery directory changed while listing');
+      }
+    }
+
+    try {
+      await walk(root);
+      found.sort((a, b) => a.label.compareTo(b.label));
+      return found;
+    } catch (error) {
+      throw GenerationArtifactFailure(
+        '$error',
+        kind: GenerationArtifactFailureKind.enumerate,
+      );
+    }
+  }
+
+  @override
   Future<GenerationRecoveryCatalog> listRecovery(String path) async {
     final entries = <GenerationRecoveryEntry>[
       GenerationRecoveryEntry(
@@ -271,9 +331,13 @@ class StorageGenerationArtifactRepository
       return GenerationRecoveryCatalog([entries.first, ...retained]);
     } catch (error) {
       // Discard observations from a failed enumeration; retry is explicit.
-      return GenerationRecoveryCatalog([
-        entries.first,
-      ], error: _recoveryFailure(error));
+      return GenerationRecoveryCatalog(
+        [entries.first],
+        error: GenerationArtifactFailure(
+          '$error',
+          kind: GenerationArtifactFailureKind.enumerate,
+        ),
+      );
     }
   }
 
@@ -320,10 +384,7 @@ class StorageGenerationArtifactRepository
         kind: kind,
         path: path,
         bytes: bytes,
-        error: GenerationArtifactFailure(
-          '$error',
-          kind: GenerationArtifactFailureKind.enumerate,
-        ),
+        error: _recoveryFailure(error),
       );
     }
   }

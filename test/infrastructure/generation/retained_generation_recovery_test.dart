@@ -45,6 +45,7 @@ void main() {
       StorageGenerationArtifactRepository(
         storage: storage,
         documents: documents,
+        recoveryRoot: () async => root.path,
       );
   setUp(() async {
     root = await Directory.systemTemp.createTemp(
@@ -55,6 +56,45 @@ void main() {
     storage = IOStorageService(documentsRoot: root, supportRoot: root);
   });
   tearDown(() => root.delete(recursive: true));
+
+  test(
+    'orphan chapter namespaces remain discoverable without trusting manifest source paths',
+    () async {
+      final repository = reopen();
+      final run = await repository.begin(path, {});
+      final proposal = await repository.prepare(run, legacyRecoveryPayloads());
+      repository.close(run);
+      await File(path).delete();
+      final sources = await repository.listRecoverySources();
+      expect(sources.single.path, path);
+      final entries = await repository.listRecovery(sources.single.path);
+      final retained = entries.entries.singleWhere((e) => !e.legacy);
+      expect(retained.path, p.dirname(proposal.manifestPath));
+      final snapshot = await repository.readRecovery(retained);
+      expect(snapshot.sourceState, GenerationRecoverySource.unavailable);
+      expect(
+        snapshot.files
+            .singleWhere((f) => f.kind == GenerationRecoveryFileKind.tree)
+            .text,
+        isNotNull,
+      );
+      final hidden = Directory(
+        p.join(
+          root.path,
+          '.deleted',
+          'Rep',
+          '.cap-generation',
+          'Other.pgn',
+          'run',
+        ),
+      );
+      await hidden.create(recursive: true);
+      await Link(p.join(root.path, 'linked')).create(hidden.parent.parent.path);
+      expect((await repository.listRecoverySources()).map((s) => s.path), [
+        path,
+      ]);
+    },
+  );
 
   test(
     'source conflict retains inspectable course/model PGNs across restart and export',

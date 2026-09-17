@@ -8,6 +8,7 @@ abstract interface class GenerationArtifactRepository {
 
   /// Read-only recovery over retained proposals/history and legacy sidecars.
   /// None of these observations can select a generation or authorize resume.
+  Future<List<GenerationRecoverySourceEntry>> listRecoverySources();
   Future<GenerationRecoveryCatalog> listRecovery(String path);
   Future<GenerationRecoverySnapshot> readRecovery(
     GenerationRecoveryEntry entry,

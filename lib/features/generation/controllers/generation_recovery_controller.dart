@@ -10,6 +10,8 @@ class GenerationRecoveryController extends ChangeNotifier
     with SafeChangeNotifier {
   GenerationRecoveryController(this.artifacts);
   final GenerationArtifacts artifacts;
+  List<GenerationRecoverySourceEntry>? sources;
+  String? chapterPath;
   GenerationRecoveryCatalog? catalog;
   GenerationRecoveryEntry? selected;
   GenerationRecoveryInspection? inspection;
@@ -26,10 +28,38 @@ class GenerationRecoveryController extends ChangeNotifier
       ? error
       : GenerationArtifactFailure('$error', kind: kind);
 
+  Future<void> loadSources() async {
+    if (isDisposed || exporting) return;
+    final epoch = ++_epoch;
+    sources = null;
+    chapterPath = null;
+    catalog = null;
+    selected = null;
+    inspection = null;
+    error = null;
+    exportedPath = null;
+    loading = true;
+    notifyListeners();
+    try {
+      final result = await artifacts.repository.listRecoverySources();
+      if (!isDisposed && epoch == _epoch) sources = result;
+    } catch (failure) {
+      if (!isDisposed && epoch == _epoch) {
+        error = _failure(failure, GenerationArtifactFailureKind.enumerate);
+      }
+    } finally {
+      if (!isDisposed && epoch == _epoch) {
+        loading = false;
+        notifyListeners();
+      }
+    }
+  }
+
   Future<void> load(String path) async {
     if (isDisposed || exporting) return;
     final epoch = ++_epoch;
     loading = true;
+    chapterPath = path;
     catalog = null;
     selected = null;
     inspection = null;

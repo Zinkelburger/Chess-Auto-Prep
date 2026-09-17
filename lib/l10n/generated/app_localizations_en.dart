@@ -804,4 +804,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get generationRecoveryListFailed =>
       'Retained outputs could not be listed. Older files remain accessible. Try refreshing.';
+
+  @override
+  String get generationRecoveryAllSources => 'All retained chapter outputs';
+
+  @override
+  String get generationRecoveryNoSources =>
+      'No retained chapter namespaces were found in the repertoire library.';
+
+  @override
+  String get generationRecoveryDeletedRepertoire =>
+      'Deleted chapter files can be recovered here. If the entire repertoire was deleted, restore its folder from library recovery first.';
 }

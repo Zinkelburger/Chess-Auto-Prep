@@ -1088,6 +1088,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
+          onRecoverAnalysis: () => unawaited(
+            showGenerationRecovery(
+              context,
+              artifacts: context.read<GenerationArtifacts>(),
+            ),
+          ),
           onSettingsClosed: _reclaimFocus,
         ),
         body: const Center(
@@ -1108,6 +1114,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
+          onRecoverAnalysis: () => unawaited(
+            showGenerationRecovery(
+              context,
+              artifacts: context.read<GenerationArtifacts>(),
+            ),
+          ),
           showSelectRepertoireAction: true,
           onSettingsClosed: _reclaimFocus,
           onSelectRepertoire: _showRepertoireSelection,
@@ -1142,6 +1154,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
+          onRecoverAnalysis: () => unawaited(
+            showGenerationRecovery(
+              context,
+              artifacts: context.read<GenerationArtifacts>(),
+            ),
+          ),
           showSelectRepertoireAction: true,
           onSettingsClosed: _reclaimFocus,
           onSelectRepertoire: _showRepertoireSelection,

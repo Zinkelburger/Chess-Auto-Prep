@@ -30,6 +30,17 @@ enum GenerationRecoveryIntegrity { unrecorded, matches, changed }
 
 enum GenerationRecoveryReceipt { absent, recorded, unreadable }
 
+/// A chapter namespace discovered under the configured repertoire root.
+/// The path comes from that namespace, never the manifest's source field.
+class GenerationRecoverySourceEntry {
+  const GenerationRecoverySourceEntry({
+    required this.path,
+    required this.label,
+  });
+  final String path;
+  final String label;
+}
+
 /// A catalog observation, not a publication/resume capability. Identity is
 /// rechecked when loading; the caller cannot redirect the chapter or run.
 class GenerationRecoveryEntry {

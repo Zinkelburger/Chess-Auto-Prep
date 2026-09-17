@@ -19,11 +19,11 @@ import '../services/generation_artifacts.dart';
 class GenerationRecoveryDialog extends StatefulWidget {
   const GenerationRecoveryDialog({
     super.key,
-    required this.path,
+    this.path,
     required this.artifacts,
     required this.chooseExportDestination,
   });
-  final String path;
+  final String? path;
   final GenerationArtifacts artifacts;
   final Future<String?> Function(GenerationRecoveryFileKind)
   chooseExportDestination;
@@ -41,7 +41,11 @@ class _GenerationRecoveryDialogState extends State<GenerationRecoveryDialog> {
   @override
   void initState() {
     super.initState();
-    unawaited(_controller.load(widget.path));
+    unawaited(
+      widget.path == null
+          ? _controller.loadSources()
+          : _controller.load(widget.path!),
+    );
   }
 
   @override
@@ -114,7 +118,8 @@ class _GenerationRecoveryDialogState extends State<GenerationRecoveryDialog> {
                           ],
                         ),
                         SelectableText(
-                          widget.path,
+                          _controller.chapterPath ??
+                              l10n.generationRecoveryAllSources,
                           style: AppTypography.caption(context),
                         ),
                         const SizedBox(height: AppSpacing.sm),
@@ -123,6 +128,46 @@ class _GenerationRecoveryDialogState extends State<GenerationRecoveryDialog> {
                           style: AppTypography.body(context),
                         ),
                         const SizedBox(height: AppSpacing.sm),
+                        TextButton.icon(
+                          key: const Key('recovery-all-sources'),
+                          onPressed:
+                              _controller.loading || _controller.exporting
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _selected = null;
+                                    _node = null;
+                                  });
+                                  unawaited(_controller.loadSources());
+                                },
+                          icon: const Icon(Icons.folder_open),
+                          label: Text(l10n.generationRecoveryAllSources),
+                        ),
+                        if (_controller.chapterPath == null) ...[
+                          Text(l10n.generationRecoveryDeletedRepertoire),
+                          if (_controller.sources case final sources?) ...[
+                            if (sources.isEmpty)
+                              Text(l10n.generationRecoveryNoSources),
+                            for (final source in sources)
+                              ListTile(
+                                key: ValueKey(
+                                  'recovery-source-${source.label}',
+                                ),
+                                title: Text(source.label),
+                                onTap: _controller.exporting
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _selected = null;
+                                          _node = null;
+                                        });
+                                        unawaited(
+                                          _controller.load(source.path),
+                                        );
+                                      },
+                              ),
+                          ],
+                        ],
                         if (_controller.catalog case final catalog?)
                           ExpansionTile(
                             key: const Key('recovery-catalog'),
@@ -174,7 +219,13 @@ class _GenerationRecoveryDialogState extends State<GenerationRecoveryDialog> {
                                         _selected = null;
                                         _node = null;
                                       });
-                                      unawaited(_controller.load(widget.path));
+                                      unawaited(
+                                        _controller.chapterPath == null
+                                            ? _controller.loadSources()
+                                            : _controller.load(
+                                                _controller.chapterPath!,
+                                              ),
+                                      );
                                     },
                               icon: const Icon(Icons.refresh),
                               label: Text(l10n.refresh),

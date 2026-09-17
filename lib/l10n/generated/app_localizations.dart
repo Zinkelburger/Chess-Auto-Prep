@@ -1401,6 +1401,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retained outputs could not be listed. Older files remain accessible. Try refreshing.'**
   String get generationRecoveryListFailed;
+
+  /// Generation recovery source selection.
+  ///
+  /// In en, this message translates to:
+  /// **'All retained chapter outputs'**
+  String get generationRecoveryAllSources;
+
+  /// Generation recovery source selection.
+  ///
+  /// In en, this message translates to:
+  /// **'No retained chapter namespaces were found in the repertoire library.'**
+  String get generationRecoveryNoSources;
+
+  /// Generation recovery source selection.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted chapter files can be recovered here. If the entire repertoire was deleted, restore its folder from library recovery first.'**
+  String get generationRecoveryDeletedRepertoire;
 }
 
 class _AppLocalizationsDelegate

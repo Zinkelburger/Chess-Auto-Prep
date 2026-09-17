@@ -11,6 +11,7 @@ import '../features/generation/controllers/generation_publication_controller.dar
 import '../infrastructure/documents/legacy_pgn_document_store.dart';
 import '../infrastructure/generation/storage_generation_draft_repository.dart';
 import '../services/storage/storage_factory.dart';
+import '../services/storage/app_paths.dart';
 
 GenerationPublicationController createGenerationPublication({
   required PgnDocumentStore? documents,
@@ -29,6 +30,8 @@ GenerationArtifacts createGenerationArtifacts({
   return GenerationArtifacts(
     StorageGenerationArtifactRepository(
       storage: storage,
+      recoveryRoot: () async =>
+          (await AppPaths.repertoiresDirectory(create: false)).path,
       documents: documents ?? LegacyPgnDocumentStore(storage),
     ),
   );
@@ -38,7 +41,7 @@ GenerationArtifacts createGenerationArtifacts({
 /// an open recovery view or its eventual export to a different chapter.
 Future<void> showGenerationRecovery(
   BuildContext context, {
-  required String path,
+  String? path,
   required GenerationArtifacts artifacts,
 }) => showDialog<void>(
   context: context,
@@ -54,7 +57,7 @@ Future<void> showGenerationRecovery(
       if (directory == null) return null;
       return p.join(
         directory,
-        '${p.basenameWithoutExtension(path)}-recovered-${kind.name}-'
+        '${path == null ? 'Generated' : p.basenameWithoutExtension(path)}-recovered-${kind.name}-'
         '${DateTime.now().microsecondsSinceEpoch}.${kind.extension}',
       );
     },

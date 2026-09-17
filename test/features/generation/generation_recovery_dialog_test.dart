@@ -112,14 +112,11 @@ void main() {
         File(p.join(directory.path, 'course.pgn')).writeAsStringSync(proposal);
         // Missing model-games demonstrates a failed partial staging: the course
         // remains inspectable/exportable and publication remains uncertain.
-        final namespace = directory.parent.parent;
-        final held = namespace.renameSync('${namespace.path}-held');
-        final outside = Directory(p.join(root.path, 'outside'))..createSync();
-        Link(namespace.path).createSync(outside.path);
         final artifacts = GenerationArtifacts(
           StorageGenerationArtifactRepository(
             storage: IOStorageService(documentsRoot: root, supportRoot: root),
             documents: NativePgnDocumentStore(),
+            recoveryRoot: () async => root.path,
           ),
         );
         await tester.pumpWidget(
@@ -137,17 +134,14 @@ void main() {
               body: Builder(
                 builder: (context) => RepertoireActionsMenu(
                   onRecoverAnalysis: () => unawaited(
-                    showGenerationRecovery(
-                      context,
-                      path: path,
-                      artifacts: artifacts,
-                    ),
+                    showGenerationRecovery(context, artifacts: artifacts),
                   ),
                 ),
               ),
             ),
           ),
         );
+        File(path).deleteSync();
         await tester.tap(find.text('Actions'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Recover generated outputs…'));
@@ -169,14 +163,10 @@ void main() {
           expect(finder.hitTestable(), findsWidgets);
         }
 
-        await show(
-          find.textContaining('Retained outputs could not be listed'),
-          160,
+        await show(find.byKey(const ValueKey('recovery-source-Main.pgn')), 160);
+        await tester.tap(
+          find.byKey(const ValueKey('recovery-source-Main.pgn')),
         );
-        Link(namespace.path).deleteSync();
-        held.renameSync(namespace.path);
-        await show(find.text('Refresh'), -160);
-        await tester.tap(find.text('Refresh'));
         await _waitRecovery(tester);
         await show(find.text('Choose saved output'), 160);
         await tester.tap(find.text('Choose saved output'));
@@ -189,9 +179,14 @@ void main() {
           find.byKey(const ValueKey('recovery-run-retained-run')),
         );
         await _waitRecovery(tester);
-        await show(find.textContaining('The recorded source differs'), 160);
+        await show(
+          find.textContaining('The current chapter could not be read'),
+          160,
+        );
         expect(
-          find.textContaining('The recorded source differs').hitTestable(),
+          find
+              .textContaining('The current chapter could not be read')
+              .hitTestable(),
           findsOneWidget,
         );
         await show(
@@ -211,14 +206,14 @@ void main() {
         await tester.tap(find.byKey(const Key('generation-recovery-export')));
         await _until(tester, find.textContaining('Original file exported to'));
         final exported = root.listSync().whereType<File>().singleWhere(
-          (f) => p.basename(f.path).startsWith('Main-recovered-course-'),
+          (f) => p.basename(f.path).startsWith('Generated-recovered-course-'),
         );
         expect(exported.path.endsWith('.pgn'), true);
         expect(
           exported.readAsBytesSync(),
           File(p.join(directory.path, 'course.pgn')).readAsBytesSync(),
         );
-        expect(File(path).readAsStringSync(), '1. d4 *');
+        expect(File(path).existsSync(), false);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },

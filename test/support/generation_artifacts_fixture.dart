@@ -30,6 +30,10 @@ class MemoryGenerationArtifacts implements GenerationArtifactRepository {
   }
 
   @override
+  Future<List<GenerationRecoverySourceEntry>> listRecoverySources() async =>
+      const [];
+
+  @override
   Future<GenerationRecoveryCatalog> listRecovery(String path) async =>
       GenerationRecoveryCatalog([
         GenerationRecoveryEntry(

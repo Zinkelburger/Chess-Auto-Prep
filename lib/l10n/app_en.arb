@@ -1011,5 +1011,17 @@
   "generationRecoveryListFailed": "Retained outputs could not be listed. Older files remain accessible. Try refreshing.",
   "@generationRecoveryListFailed": {
     "description": "Recovery namespace enumeration failed; explicit refresh remains available."
+  },
+  "generationRecoveryAllSources": "All retained chapter outputs",
+  "@generationRecoveryAllSources": {
+    "description": "Generation recovery source selection."
+  },
+  "generationRecoveryNoSources": "No retained chapter namespaces were found in the repertoire library.",
+  "@generationRecoveryNoSources": {
+    "description": "Generation recovery source selection."
+  },
+  "generationRecoveryDeletedRepertoire": "Deleted chapter files can be recovered here. If the entire repertoire was deleted, restore its folder from library recovery first.",
+  "@generationRecoveryDeletedRepertoire": {
+    "description": "Generation recovery source selection."
   }
 }
