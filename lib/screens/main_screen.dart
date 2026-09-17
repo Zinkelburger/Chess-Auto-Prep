@@ -1,4 +1,4 @@
-import '../features/documents/repositories/pgn_collection_repository.dart';
+import '../app/pgn_viewer_lifetime.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -276,9 +276,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return const RepertoireTrainingScreen();
       case AppMode.pgnViewer:
         return LegacyThemeBoundary(
-          child: PgnViewerScreen(
-            collectionRepository: context.read<PgnCollectionRepository>(),
-          ),
+          child: PgnViewerScreen(lifetime: context.read<PgnViewerLifetime>()),
         );
       case AppMode.study:
         return const LegacyThemeBoundary(child: StudyScreen());

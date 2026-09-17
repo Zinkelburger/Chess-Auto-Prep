@@ -1,3 +1,7 @@
+import 'package:path/path.dart' as p;
+import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
+import 'app/pgn_viewer_lifetime.dart';
+import 'features/documents/models/pgn_workspace_snapshot.dart';
 import 'features/documents/repositories/pgn_collection_repository.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'infrastructure/settings/fresh_desktop_preferences_store.dart';
@@ -19,9 +23,9 @@ import 'core/app_history.dart';
 import 'core/app_state.dart';
 import 'features/studies/controllers/study_controller.dart';
 import 'features/studies/widgets/study_close_guard.dart';
-import 'features/studies/widgets/study_recovery_host.dart';
-import 'features/studies/controllers/study_recovery_controller.dart';
-import 'features/studies/repositories/study_recovery_store.dart';
+import 'features/documents/widgets/workspace_recovery_host.dart';
+import 'features/documents/controllers/workspace_recovery_controller.dart';
+import 'features/documents/repositories/workspace_recovery_store.dart';
 import 'features/bughouse/services/bughouse_bundle.dart';
 import 'debug/agent_driver.dart';
 import 'models/board_display_settings.dart';
@@ -183,10 +187,12 @@ class ChessAutoPrepApp extends StatelessWidget {
     this.settings,
     this.closePort,
     this.studyRecoveryStore,
+    this.pgnRecoveryStore,
   });
   final AppSettingsRepository? settings;
   final DesktopClosePort? closePort;
-  final StudyRecoveryStore? studyRecoveryStore;
+  final WorkspaceRecoveryStore<StudyWorkspaceSnapshot>? studyRecoveryStore;
+  final WorkspaceRecoveryStore<PgnWorkspaceSnapshot>? pgnRecoveryStore;
 
   @override
   Widget build(BuildContext context) {
@@ -198,6 +204,13 @@ class ChessAutoPrepApp extends StatelessWidget {
         providers: [
           Provider<PgnCollectionRepository>(
             create: (_) => createPgnCollectionRepository(documents: documents),
+          ),
+          Provider<PgnViewerLifetime>(
+            create: (ctx) => PgnViewerLifetime(
+              repository: ctx.read<PgnCollectionRepository>(),
+              store: pgnRecoveryStore ?? createPgnRecoveryStore(),
+            ),
+            dispose: (_, lifetime) => lifetime.dispose(),
           ),
           ChangeNotifierProvider(
             create: (_) {
@@ -234,11 +247,16 @@ class ChessAutoPrepApp extends StatelessWidget {
           ChangeNotifierProvider<StudyController>(
             create: (_) => createStudyController(documents: documents),
           ),
-          ChangeNotifierProvider<StudyRecoveryController>(
-            create: (ctx) => StudyRecoveryController(
-              study: ctx.read<StudyController>(),
-              store: studyRecoveryStore ?? createStudyRecoveryStore(),
-            ),
+          ChangeNotifierProvider<
+            WorkspaceRecoveryController<StudyWorkspaceSnapshot>
+          >(
+            create: (ctx) =>
+                WorkspaceRecoveryController<StudyWorkspaceSnapshot>(
+                  workspace: ctx.read<StudyController>(),
+                  capture: ctx.read<StudyController>().captureWorkspace,
+                  restoreSnapshot: ctx.read<StudyController>().restoreWorkspace,
+                  store: studyRecoveryStore ?? createStudyRecoveryStore(),
+                ),
           ),
         ],
         // Boards and move lists read the Display preferences through this scope
@@ -262,11 +280,36 @@ class ChessAutoPrepApp extends StatelessWidget {
               builder: (context) => AppUpdateHost(
                 child: StudyCloseGuard(
                   study: context.read<StudyController>(),
-                  child: StudyRecoveryHost(
-                    recovery: context.read<StudyRecoveryController>(),
+                  child: WorkspaceRecoveryHost<StudyWorkspaceSnapshot>(
+                    id: 'study',
+                    workspaceName: AppLocalizations.of(
+                      context,
+                    ).studyWorkspaceName,
+                    title: (snapshot) => snapshot.name,
+                    path: (snapshot) => snapshot.path,
+                    recovery: context
+                        .read<
+                          WorkspaceRecoveryController<StudyWorkspaceSnapshot>
+                        >(),
                     onRestored: () =>
                         context.read<AppState>().setMode(AppMode.study),
-                    child: const MainScreen(),
+                    child: WorkspaceRecoveryHost<PgnWorkspaceSnapshot>(
+                      id: 'pgn',
+                      workspaceName: AppLocalizations.of(
+                        context,
+                      ).pgnWorkspaceName,
+                      title: (snapshot) => snapshot.path.isEmpty
+                          ? AppLocalizations.of(context).untitledPgnWorkspace
+                          : p.basename(snapshot.path),
+                      path: (snapshot) => snapshot.path,
+                      recovery: context.read<PgnViewerLifetime>().recovery,
+                      onRestored: () =>
+                          context.read<AppState>().setMode(AppMode.pgnViewer),
+                      child: PgnViewerCloseHost(
+                        lifetime: context.read<PgnViewerLifetime>(),
+                        child: const MainScreen(),
+                      ),
+                    ),
                   ),
                 ),
               ),

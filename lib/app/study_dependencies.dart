@@ -1,7 +1,9 @@
+import 'package:chess_auto_prep/infrastructure/studies/study_recovery_codec.dart';
+import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import '../features/studies/repositories/study_recovery_store.dart';
-import '../infrastructure/studies/file_study_recovery_store.dart';
+import '../features/documents/repositories/workspace_recovery_store.dart';
+import '../infrastructure/documents/file_workspace_recovery_store.dart';
 import '../services/storage/app_paths.dart';
 import '../features/documents/repositories/pgn_document_store.dart';
 import '../features/studies/controllers/study_controller.dart';
@@ -19,8 +21,10 @@ StudyController createStudyController({PgnDocumentStore? documents}) {
   );
 }
 
-StudyRecoveryStore createStudyRecoveryStore() => FileStudyRecoveryStore(
-  directory: () async => Directory(
-    p.join((await AppPaths.supportDirectory()).path, 'study-recovery-v1'),
-  ),
-);
+WorkspaceRecoveryStore<StudyWorkspaceSnapshot> createStudyRecoveryStore() =>
+    FileWorkspaceRecoveryStore<StudyWorkspaceSnapshot>(
+      codec: const StudyRecoveryCodec(),
+      directory: () async => Directory(
+        p.join((await AppPaths.supportDirectory()).path, 'study-recovery-v1'),
+      ),
+    );

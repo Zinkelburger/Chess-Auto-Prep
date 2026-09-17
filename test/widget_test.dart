@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/features/documents/models/pgn_workspace_snapshot.dart';
+import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
 // This is a basic Flutter widget test.
 //
 // To perform an interaction with a widget in your test, use the WidgetTester
@@ -7,7 +9,7 @@
 
 import 'package:flutter/material.dart';
 import 'support/memory_desktop_close_port.dart';
-import 'support/memory_study_recovery_store.dart';
+import 'support/memory_workspace_recovery_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,7 +56,9 @@ void main() {
       tester,
       ChessAutoPrepApp(
         closePort: MemoryDesktopClosePort(),
-        studyRecoveryStore: MemoryStudyRecoveryStore(),
+        studyRecoveryStore:
+            MemoryWorkspaceRecoveryStore<StudyWorkspaceSnapshot>(),
+        pgnRecoveryStore: MemoryWorkspaceRecoveryStore<PgnWorkspaceSnapshot>(),
       ),
     );
 

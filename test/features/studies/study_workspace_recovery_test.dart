@@ -1,14 +1,15 @@
+import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
-import 'package:chess_auto_prep/features/studies/controllers/study_recovery_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/workspace_recovery_controller.dart';
 import 'package:chess_auto_prep/features/studies/models/study_document.dart';
-import 'package:chess_auto_prep/features/studies/repositories/study_recovery_store.dart';
+import 'package:chess_auto_prep/features/documents/repositories/workspace_recovery_store.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import '../../support/scripted_document_store.dart';
 import '../../support/study_fixture.dart';
-import '../../support/memory_study_recovery_store.dart';
+import '../../support/memory_workspace_recovery_store.dart';
 
 StudyController owner(
   Store store, {
@@ -23,6 +24,39 @@ StudyController owner(
           StudyDocument.fromPgn(text, name: name, filePath: path),
 );
 void main() {
+  test(
+    'a repeated restore is rejected while the first awaits its checkpoint',
+    () async {
+      final source = memoryStudy()..playSan('e4');
+      final study = memoryStudy();
+      final store = MemoryWorkspaceRecoveryStore<StudyWorkspaceSnapshot>();
+      final gate = Completer<void>();
+      store.beforeWrite = () => gate.future;
+      final entry = WorkspaceRecoveryEntry<StudyWorkspaceSnapshot>(
+        id: 'old',
+        revision: 'one',
+        updatedAt: DateTime(2026),
+        snapshot: source.captureWorkspace(),
+      );
+      store.entries.add(entry);
+      final recovery = WorkspaceRecoveryController<StudyWorkspaceSnapshot>(
+        workspace: study,
+        capture: study.captureWorkspace,
+        restoreSnapshot: study.restoreWorkspace,
+        store: store,
+      );
+      final first = recovery.restore(entry);
+      expect(await recovery.restore(entry), isFalse);
+      expect(store.resolved, isEmpty);
+      gate.complete();
+      expect(await first, isTrue);
+      expect(store.resolved, ['old']);
+      await recovery.shutdown();
+      recovery.dispose();
+      study.dispose();
+      source.dispose();
+    },
+  );
   test(
     'restore retains baseline, chapter cursor and flip; external changes still conflict',
     () async {
@@ -114,9 +148,11 @@ void main() {
     'checkpoint writes coalesce later edits behind an in-flight write',
     () async {
       final study = memoryStudy();
-      final store = MemoryStudyRecoveryStore();
-      final recovery = StudyRecoveryController(
-        study: study,
+      final store = MemoryWorkspaceRecoveryStore<StudyWorkspaceSnapshot>();
+      final recovery = WorkspaceRecoveryController<StudyWorkspaceSnapshot>(
+        workspace: study,
+        capture: study.captureWorkspace,
+        restoreSnapshot: study.restoreWorkspace,
         store: store,
         interval: const Duration(days: 1),
       );
@@ -141,17 +177,22 @@ void main() {
     'old checkpoint is resolved only after replacement persistence succeeds',
     () async {
       final source = memoryStudy()..playSan('e4');
-      final entry = StudyRecoveryEntry(
+      final entry = WorkspaceRecoveryEntry<StudyWorkspaceSnapshot>(
         id: 'old',
         revision: '1',
         updatedAt: DateTime(2026),
         snapshot: source.captureWorkspace(),
       );
-      final store = MemoryStudyRecoveryStore()
+      final store = MemoryWorkspaceRecoveryStore<StudyWorkspaceSnapshot>()
         ..entries.add(entry)
         ..writeError = StateError('disk');
       final study = memoryStudy();
-      final recovery = StudyRecoveryController(study: study, store: store);
+      final recovery = WorkspaceRecoveryController<StudyWorkspaceSnapshot>(
+        workspace: study,
+        capture: study.captureWorkspace,
+        restoreSnapshot: study.restoreWorkspace,
+        store: store,
+      );
       await recovery.restore(entry);
       expect(recovery.actionError, isNotNull);
       expect(store.resolved, isEmpty);

@@ -617,67 +617,6 @@
   "@closeApplication": {
     "description": "Application document close interaction: closeApplication"
   },
-  "studyRecoveryTitle": "Recover Study work",
-  "@studyRecoveryTitle": {
-    "description": "Study workspace restart recovery: studyRecoveryTitle"
-  },
-  "studyRecoveryExplanation": "These checkpoints contain work from previous sessions. Restoring opens the captured draft without writing to its original file. Save or make a copy after reviewing it.",
-  "@studyRecoveryExplanation": {
-    "description": "Study workspace restart recovery: studyRecoveryExplanation"
-  },
-  "studyRecoveryActionFailed": "Recovery could not finish. Your checkpoint is still preserved. Retry or save the current draft as a copy.",
-  "@studyRecoveryActionFailed": {
-    "description": "Study workspace restart recovery: studyRecoveryActionFailed"
-  },
-  "restoreStudyRecovery": "Restore draft",
-  "@restoreStudyRecovery": {
-    "description": "Study workspace restart recovery: restoreStudyRecovery"
-  },
-  "dismissStudyRecovery": "Dismiss recovery",
-  "@dismissStudyRecovery": {
-    "description": "Study workspace restart recovery: dismissStudyRecovery"
-  },
-  "dismissStudyRecoveryQuestion": "Remove this checkpoint from the recovery list? Its archived bytes remain on disk, but the app will no longer offer to restore it.",
-  "@dismissStudyRecoveryQuestion": {
-    "description": "Study workspace restart recovery: dismissStudyRecoveryQuestion"
-  },
-  "studyRecoveryUnavailable": "Study recovery is unavailable. Save your work explicitly; recent edits may not survive a restart.",
-  "@studyRecoveryUnavailable": {
-    "description": "Study workspace restart recovery: studyRecoveryUnavailable"
-  },
-  "studyRecoveryUnreadable": "Some Study recovery files could not be read. Their files have been preserved.",
-  "@studyRecoveryUnreadable": {
-    "description": "Study workspace restart recovery: studyRecoveryUnreadable"
-  },
-  "studyRecoveryAvailable": "{count, plural, =1{Study work from a previous session is available.} other{Study work from {count} previous sessions is available.}}",
-  "@studyRecoveryAvailable": {
-    "description": "Study workspace restart recovery: studyRecoveryAvailable",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "reviewStudyRecovery": "Review recovery",
-  "@reviewStudyRecovery": {
-    "description": "Study workspace restart recovery: reviewStudyRecovery"
-  },
-  "retryStudyRecovery": "Retry recovery",
-  "@retryStudyRecovery": {
-    "description": "Study workspace restart recovery: retryStudyRecovery"
-  },
-  "studyRecoveryTimestamp": "{date} · {time}",
-  "@studyRecoveryTimestamp": {
-    "description": "Local date and time of the saved Study checkpoint",
-    "placeholders": {
-      "date": {
-        "type": "String"
-      },
-      "time": {
-        "type": "String"
-      }
-    }
-  },
   "documentCopyPrompt": "Choose a new PGN filename. Existing files are kept.",
   "documentCopyName": "File name",
   "documentCopyFolder": "Folder",
@@ -730,5 +669,96 @@
         "type": "String"
       }
     }
+  },
+  "workspaceRecoveryTitle": "Recover {workspace} work",
+  "@workspaceRecoveryTitle": {
+    "description": "Recovery status for the named workspace",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceRecoveryExplanation": "These checkpoints contain work from previous sessions. Restoring opens the captured draft without writing to its original file. Save or make a copy after reviewing it.",
+  "@workspaceRecoveryExplanation": {
+    "description": "Study workspace restart recovery: studyRecoveryExplanation"
+  },
+  "workspaceRecoveryActionFailed": "Recovery could not finish. Your checkpoint is still preserved. Retry or save the current draft as a copy.",
+  "@workspaceRecoveryActionFailed": {
+    "description": "Study workspace restart recovery: studyRecoveryActionFailed"
+  },
+  "restoreWorkspaceRecovery": "Restore draft",
+  "@restoreWorkspaceRecovery": {
+    "description": "Study workspace restart recovery: restoreStudyRecovery"
+  },
+  "dismissWorkspaceRecovery": "Dismiss recovery",
+  "@dismissWorkspaceRecovery": {
+    "description": "Study workspace restart recovery: dismissStudyRecovery"
+  },
+  "dismissWorkspaceRecoveryQuestion": "Remove this checkpoint from the recovery list? Its archived bytes remain on disk, but the app will no longer offer to restore it.",
+  "@dismissWorkspaceRecoveryQuestion": {
+    "description": "Study workspace restart recovery: dismissStudyRecoveryQuestion"
+  },
+  "workspaceRecoveryUnavailable": "{workspace} recovery is unavailable. Save your work explicitly; recent edits may not survive a restart.",
+  "@workspaceRecoveryUnavailable": {
+    "description": "Recovery status for the named workspace",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceRecoveryUnreadable": "Some {workspace} recovery files could not be read. Their files have been preserved.",
+  "@workspaceRecoveryUnreadable": {
+    "description": "Recovery status for the named workspace",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceRecoveryAvailable": "{count, plural, =1{{workspace} work from a previous session is available.} other{{workspace} work from {count} previous sessions is available.}}",
+  "@workspaceRecoveryAvailable": {
+    "description": "Recovery status for the named workspace",
+    "placeholders": {
+      "workspace": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewWorkspaceRecovery": "Review recovery",
+  "@reviewWorkspaceRecovery": {
+    "description": "Study workspace restart recovery: reviewStudyRecovery"
+  },
+  "retryWorkspaceRecovery": "Retry recovery",
+  "@retryWorkspaceRecovery": {
+    "description": "Study workspace restart recovery: retryStudyRecovery"
+  },
+  "workspaceRecoveryTimestamp": "{date} · {time}",
+  "@workspaceRecoveryTimestamp": {
+    "description": "Local date and time of the saved Study checkpoint",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "studyWorkspaceName": "Study",
+  "@studyWorkspaceName": {
+    "description": "Workspace recovery display name"
+  },
+  "pgnWorkspaceName": "PGN Viewer",
+  "@pgnWorkspaceName": {
+    "description": "Workspace recovery display name"
+  },
+  "untitledPgnWorkspace": "Untitled PGN",
+  "@untitledPgnWorkspace": {
+    "description": "Workspace recovery display name"
   }
 }

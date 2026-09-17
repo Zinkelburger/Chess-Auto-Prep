@@ -1,13 +1,27 @@
 import '../../features/documents/models/document_save_state.dart';
-import '../../features/documents/models/pgn_document.dart';
+import '../documents/pgn_snapshot_codec.dart';
 import '../../features/studies/models/study_workspace_snapshot.dart';
+import '../documents/workspace_recovery_codec.dart';
+
+class StudyRecoveryCodec
+    implements WorkspaceRecoveryCodec<StudyWorkspaceSnapshot> {
+  const StudyRecoveryCodec();
+  @override
+  Map<String, Object?> encode(StudyWorkspaceSnapshot snapshot) =>
+      encodeStudyWorkspace(snapshot);
+  @override
+  StudyWorkspaceSnapshot decode(Map<String, dynamic> data) =>
+      decodeStudyWorkspace(data);
+  @override
+  bool needsRecovery(StudyWorkspaceSnapshot snapshot) => snapshot.needsRecovery;
+}
 
 Map<String, Object?> encodeStudyWorkspace(StudyWorkspaceSnapshot value) => {
   'name': value.name,
   'path': value.path,
   'content': value.content,
   'dirty': value.dirty,
-  'baseline': _snapshot(value.baseline),
+  'baseline': encodePgnSnapshot(value.baseline),
   'uncertain': value.uncertain,
   'uncertainPath': value.uncertainPath,
   'retained': [
@@ -15,35 +29,13 @@ Map<String, Object?> encodeStudyWorkspace(StudyWorkspaceSnapshot value) => {
       {
         'path': draft.path,
         'content': draft.content,
-        'baseline': _snapshot(draft.baseline),
+        'baseline': encodePgnSnapshot(draft.baseline),
       },
   ],
   'chapter': value.chapter,
   'cursor': value.cursor,
   'flipped': value.flipped,
 };
-Map<String, Object?>? _snapshot(PgnSnapshot? value) => value == null
-    ? null
-    : {
-        'path': value.path,
-        'content': value.content,
-        'documentId': value.revision.documentId,
-        'nativeIdentity': value.revision.nativeIdentity,
-        'sha256': value.revision.sha256,
-      };
-PgnSnapshot? _decodeSnapshot(Object? raw) {
-  if (raw == null) return null;
-  final data = raw as Map<String, dynamic>;
-  return PgnSnapshot(
-    path: data['path'] as String,
-    content: data['content'] as String,
-    revision: PgnRevision(
-      documentId: data['documentId'] as String,
-      nativeIdentity: data['nativeIdentity'] as String,
-      sha256: data['sha256'] as String,
-    ),
-  );
-}
 
 StudyWorkspaceSnapshot decodeStudyWorkspace(Map<String, dynamic> data) {
   final chapter = data['chapter'] as int;
@@ -52,7 +44,7 @@ StudyWorkspaceSnapshot decodeStudyWorkspace(Map<String, dynamic> data) {
     throw const FormatException('Invalid recovery selection');
   }
   final path = data['path'] as String;
-  final baseline = _decodeSnapshot(data['baseline']);
+  final baseline = decodePgnSnapshot(data['baseline']);
   if (baseline != null && baseline.path != path) {
     throw const FormatException('Mismatched recovery baseline');
   }
@@ -69,7 +61,7 @@ StudyWorkspaceSnapshot decodeStudyWorkspace(Map<String, dynamic> data) {
         RetainedDocumentDraft(
           path: raw['path'] as String,
           content: raw['content'] as String,
-          baseline: _decodeSnapshot(raw['baseline']),
+          baseline: decodePgnSnapshot(raw['baseline']),
         ),
     ],
     chapter: chapter,

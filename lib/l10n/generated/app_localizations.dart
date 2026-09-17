@@ -898,78 +898,6 @@ abstract class AppLocalizations {
   /// **'Close application'**
   String get closeApplication;
 
-  /// Study workspace restart recovery: studyRecoveryTitle
-  ///
-  /// In en, this message translates to:
-  /// **'Recover Study work'**
-  String get studyRecoveryTitle;
-
-  /// Study workspace restart recovery: studyRecoveryExplanation
-  ///
-  /// In en, this message translates to:
-  /// **'These checkpoints contain work from previous sessions. Restoring opens the captured draft without writing to its original file. Save or make a copy after reviewing it.'**
-  String get studyRecoveryExplanation;
-
-  /// Study workspace restart recovery: studyRecoveryActionFailed
-  ///
-  /// In en, this message translates to:
-  /// **'Recovery could not finish. Your checkpoint is still preserved. Retry or save the current draft as a copy.'**
-  String get studyRecoveryActionFailed;
-
-  /// Study workspace restart recovery: restoreStudyRecovery
-  ///
-  /// In en, this message translates to:
-  /// **'Restore draft'**
-  String get restoreStudyRecovery;
-
-  /// Study workspace restart recovery: dismissStudyRecovery
-  ///
-  /// In en, this message translates to:
-  /// **'Dismiss recovery'**
-  String get dismissStudyRecovery;
-
-  /// Study workspace restart recovery: dismissStudyRecoveryQuestion
-  ///
-  /// In en, this message translates to:
-  /// **'Remove this checkpoint from the recovery list? Its archived bytes remain on disk, but the app will no longer offer to restore it.'**
-  String get dismissStudyRecoveryQuestion;
-
-  /// Study workspace restart recovery: studyRecoveryUnavailable
-  ///
-  /// In en, this message translates to:
-  /// **'Study recovery is unavailable. Save your work explicitly; recent edits may not survive a restart.'**
-  String get studyRecoveryUnavailable;
-
-  /// Study workspace restart recovery: studyRecoveryUnreadable
-  ///
-  /// In en, this message translates to:
-  /// **'Some Study recovery files could not be read. Their files have been preserved.'**
-  String get studyRecoveryUnreadable;
-
-  /// Study workspace restart recovery: studyRecoveryAvailable
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{Study work from a previous session is available.} other{Study work from {count} previous sessions is available.}}'**
-  String studyRecoveryAvailable(int count);
-
-  /// Study workspace restart recovery: reviewStudyRecovery
-  ///
-  /// In en, this message translates to:
-  /// **'Review recovery'**
-  String get reviewStudyRecovery;
-
-  /// Study workspace restart recovery: retryStudyRecovery
-  ///
-  /// In en, this message translates to:
-  /// **'Retry recovery'**
-  String get retryStudyRecovery;
-
-  /// Local date and time of the saved Study checkpoint
-  ///
-  /// In en, this message translates to:
-  /// **'{date} · {time}'**
-  String studyRecoveryTimestamp(String date, String time);
-
   /// PGN document save and recovery control.
   ///
   /// In en, this message translates to:
@@ -1041,6 +969,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Exported {name}'**
   String documentExported(String name);
+
+  /// Recovery status for the named workspace
+  ///
+  /// In en, this message translates to:
+  /// **'Recover {workspace} work'**
+  String workspaceRecoveryTitle(String workspace);
+
+  /// Study workspace restart recovery: studyRecoveryExplanation
+  ///
+  /// In en, this message translates to:
+  /// **'These checkpoints contain work from previous sessions. Restoring opens the captured draft without writing to its original file. Save or make a copy after reviewing it.'**
+  String get workspaceRecoveryExplanation;
+
+  /// Study workspace restart recovery: studyRecoveryActionFailed
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery could not finish. Your checkpoint is still preserved. Retry or save the current draft as a copy.'**
+  String get workspaceRecoveryActionFailed;
+
+  /// Study workspace restart recovery: restoreStudyRecovery
+  ///
+  /// In en, this message translates to:
+  /// **'Restore draft'**
+  String get restoreWorkspaceRecovery;
+
+  /// Study workspace restart recovery: dismissStudyRecovery
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss recovery'**
+  String get dismissWorkspaceRecovery;
+
+  /// Study workspace restart recovery: dismissStudyRecoveryQuestion
+  ///
+  /// In en, this message translates to:
+  /// **'Remove this checkpoint from the recovery list? Its archived bytes remain on disk, but the app will no longer offer to restore it.'**
+  String get dismissWorkspaceRecoveryQuestion;
+
+  /// Recovery status for the named workspace
+  ///
+  /// In en, this message translates to:
+  /// **'{workspace} recovery is unavailable. Save your work explicitly; recent edits may not survive a restart.'**
+  String workspaceRecoveryUnavailable(String workspace);
+
+  /// Recovery status for the named workspace
+  ///
+  /// In en, this message translates to:
+  /// **'Some {workspace} recovery files could not be read. Their files have been preserved.'**
+  String workspaceRecoveryUnreadable(String workspace);
+
+  /// Recovery status for the named workspace
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{{workspace} work from a previous session is available.} other{{workspace} work from {count} previous sessions is available.}}'**
+  String workspaceRecoveryAvailable(String workspace, int count);
+
+  /// Study workspace restart recovery: reviewStudyRecovery
+  ///
+  /// In en, this message translates to:
+  /// **'Review recovery'**
+  String get reviewWorkspaceRecovery;
+
+  /// Study workspace restart recovery: retryStudyRecovery
+  ///
+  /// In en, this message translates to:
+  /// **'Retry recovery'**
+  String get retryWorkspaceRecovery;
+
+  /// Local date and time of the saved Study checkpoint
+  ///
+  /// In en, this message translates to:
+  /// **'{date} · {time}'**
+  String workspaceRecoveryTimestamp(String date, String time);
+
+  /// Workspace recovery display name
+  ///
+  /// In en, this message translates to:
+  /// **'Study'**
+  String get studyWorkspaceName;
+
+  /// Workspace recovery display name
+  ///
+  /// In en, this message translates to:
+  /// **'PGN Viewer'**
+  String get pgnWorkspaceName;
+
+  /// Workspace recovery display name
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled PGN'**
+  String get untitledPgnWorkspace;
 }
 
 class _AppLocalizationsDelegate

@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/pgn_viewer_lifetime.dart';
+import 'package:chess_auto_prep/features/documents/models/pgn_workspace_snapshot.dart';
+import '../support/memory_workspace_recovery_store.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
@@ -40,6 +43,7 @@ Future<void> _settleReader(WidgetTester tester) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late PgnViewerLifetime lifetime;
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     EngineLifecycle.instance.resetForTest();
@@ -75,6 +79,11 @@ void main() {
           .setMockMethodCallHandler(channel, null);
       directory.deleteSync(recursive: true);
     });
+    lifetime = PgnViewerLifetime(
+      repository: StoragePgnCollectionRepository(StorageFactory.instance),
+      store: MemoryWorkspaceRecoveryStore<PgnWorkspaceSnapshot>(),
+    );
+    addTearDown(lifetime.shutdown);
   });
   tearDown(() => EngineLifecycle.instance.resetForTest());
 
@@ -97,10 +106,9 @@ void main() {
           child: MaterialApp(
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
-            home: PgnViewerScreen(
-              collectionRepository: StoragePgnCollectionRepository(
-                StorageFactory.instance,
-              ),
+            home: PgnViewerCloseHost(
+              lifetime: lifetime,
+              child: PgnViewerScreen(lifetime: lifetime),
             ),
           ),
         ),
@@ -140,6 +148,7 @@ void main() {
       expect(history.length, 2);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(lifetime.shutdown);
       await _settleReader(tester);
     },
   );
@@ -157,10 +166,9 @@ void main() {
           child: MaterialApp(
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
-            home: PgnViewerScreen(
-              collectionRepository: StoragePgnCollectionRepository(
-                StorageFactory.instance,
-              ),
+            home: PgnViewerCloseHost(
+              lifetime: lifetime,
+              child: PgnViewerScreen(lifetime: lifetime),
             ),
           ),
         ),
@@ -289,6 +297,7 @@ void main() {
       expect(find.byType(PgnAnnotationPanel), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(lifetime.shutdown);
       // Let cancellation finish if the background FEN-index isolate was still
       // spawning when the reader was disposed.
       await tester.runAsync(
@@ -314,10 +323,9 @@ void main() {
             child: MaterialApp(
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
-              home: PgnViewerScreen(
-                collectionRepository: StoragePgnCollectionRepository(
-                  StorageFactory.instance,
-                ),
+              home: PgnViewerCloseHost(
+                lifetime: lifetime,
+                child: PgnViewerScreen(lifetime: lifetime),
               ),
             ),
           ),
@@ -330,7 +338,7 @@ void main() {
       await _settleReader(tester);
       // Pasted content has no durable source even before its first annotation.
       final untouchedClose = coordinator.prepareClose();
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.text('Save PGN collection'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await _settleReader(tester);
@@ -348,7 +356,7 @@ void main() {
         prepare: () async => null,
       );
       final close = coordinator.prepareClose();
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.text('Save PGN collection'), findsOneWidget);
       await tester.tap(find.text('Close without saving'));
       await _settleReader(tester);
@@ -359,12 +367,13 @@ void main() {
       );
       // The next close still asks about the retained work.
       final retry = coordinator.prepareClose();
-      await tester.pumpAndSettle();
+      await _settleReader(tester);
       expect(find.text('Save PGN collection'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await _settleReader(tester);
       expect((await retry).disposition, DocumentCloseDisposition.cancelled);
       await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(lifetime.shutdown);
       await _settleReader(tester);
     },
   );

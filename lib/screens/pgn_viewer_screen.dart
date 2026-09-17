@@ -10,15 +10,12 @@
 library;
 
 import 'dart:async';
-import '../features/documents/repositories/pgn_collection_repository.dart';
-import '../features/documents/controllers/document_close_coordinator.dart';
-import '../features/documents/widgets/document_close_scope.dart';
+import '../app/pgn_viewer_lifetime.dart';
 import '../design_system/components/name_entry_dialog.dart';
 import '../features/documents/controllers/document_save_session.dart';
 import '../features/documents/models/pgn_document.dart';
 import '../features/documents/widgets/document_save_dialog.dart';
 import '../features/documents/widgets/document_save_panel.dart';
-import '../features/documents/widgets/pgn_copy_destination_dialog.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../design_system/theme/app_spacing.dart';
 import 'package:dartchess/dartchess.dart'
@@ -109,8 +106,8 @@ part 'pgn_viewer_screen_panes.dart';
 const int _kGameTab = 0;
 
 class PgnViewerScreen extends StatefulWidget {
-  const PgnViewerScreen({super.key, required this.collectionRepository});
-  final PgnCollectionRepository collectionRepository;
+  const PgnViewerScreen({super.key, required this.lifetime});
+  final PgnViewerLifetime lifetime;
 
   @override
   State<PgnViewerScreen> createState() => _PgnViewerScreenState();
@@ -216,19 +213,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _tabController = PgnWorkspace();
     _explorer = LiveExplorerService();
     _gameOpener = ExplorerGameOpener();
-    _pgnWidgetController = PgnViewerWidgetController();
+    _pgnWidgetController = widget.lifetime.reader;
     _lineWidgetController = PgnViewerWidgetController();
-    _analysisController = GameAnalysisController();
+    _analysisController = widget.lifetime.analysis;
     _analysisController.addListener(_onAnalysisUpdate);
-    _controller = PgnViewerController(
-      collectionRepository: widget.collectionRepository,
-      pgnWidgetController: _pgnWidgetController,
-      analysisController: _analysisController,
-      isActive: () => mounted,
-      schedulePostFrame: (fn) =>
-          WidgetsBinding.instance.addPostFrameCallback((_) => fn()),
-      onReclaimFocus: _reclaimFocus,
-    );
+    _controller = widget.lifetime.controller;
+    widget.lifetime.reclaimFocus = _reclaimFocus;
     _controller.addListener(_onControllerUpdate);
     MyRepertoireSettings.instance.addListener(_onRepertoireDesignationsChanged);
     windowManager.addListener(this);
@@ -742,34 +732,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _onRepertoireDesignationsChanged,
     );
     _controller.removeListener(_onControllerUpdate);
-    _controller.dispose();
+    widget.lifetime.reclaimFocus = null;
     _analysisController.removeListener(_onAnalysisUpdate);
-    _analysisController.dispose();
     _explorer.dispose();
     _tabController.dispose();
     _focusNode.dispose();
     super.dispose();
-  }
-
-  Object get _closeRevision => (
-    _controller.filePath,
-    _controller.collectionRevision,
-    _controller.saveActions.state.dirty,
-    _controller.isSaving,
-    _controller.currentGameIndex,
-    _controller.saveActions.state.uncertain,
-    _controller.saveActions.state.inspectionPath,
-    _controller.saveActions.state.retainedDrafts.length,
-  );
-
-  Future<DocumentCloseApproval?> _prepareWindowClose() async {
-    if (!await _confirmLeavePgn(forWindowClose: true) || !mounted) return null;
-    // Capture approval before awaiting other persistence. Later edits must
-    // invalidate it, including when the user chose to close without saving.
-    final approval = DocumentCloseApproval(_closeRevision);
-    await _controller.flushPendingMetadata();
-    await _controller.saveSession();
-    return mounted ? approval : null;
   }
 
   @override
@@ -864,23 +832,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   Future<String?> _chooseCopyDestination(
     BuildContext context, {
     String? name,
-  }) async {
-    final directory = _controller.filePath == null
-        ? (await AppPaths.documentsDirectory()).path
-        : p.dirname(_controller.filePath!);
-    if (!context.mounted) return null;
-    return showPgnCopyDestinationDialog(
-      context,
-      initialDirectory: directory,
-      initialName:
-          name ??
-          (_controller.filePath == null
-              ? 'games.pgn'
-              : '${p.basenameWithoutExtension(_controller.filePath!)} copy.pgn'),
-      pickDirectory: (current) =>
-          FilePicker.getDirectoryPath(initialDirectory: current),
-    );
-  }
+  }) => chooseViewerCopyDestination(context, _controller, name: name);
 
   @override
   Future<bool> _savePgn() async {
@@ -895,7 +847,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         !_controller.saveActions.state.uncertain;
   }
 
-  Future<bool> _confirmLeavePgn({bool forWindowClose = false}) async {
+  Future<bool> _confirmLeavePgn() async {
     _pgnWidgetController.flushPendingComments();
     bool resolved() =>
         !_controller.saveActions.state.dirty &&
@@ -949,7 +901,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       ),
     );
     if (!mounted || choice == null) return false;
-    if (choice == 'discard' && !forWindowClose) _controller.discardChanges();
+    if (choice == 'discard') _controller.discardChanges();
     return true;
   }
 
@@ -1941,13 +1893,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               ),
       ),
     );
-    return DocumentCloseRegistration(
-      revision: () {
-        _pgnWidgetController.flushPendingComments();
-        return _closeRevision;
-      },
-      prepare: _prepareWindowClose,
-      child: content,
-    );
+    return content;
   }
 }

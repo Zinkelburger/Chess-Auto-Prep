@@ -1,24 +1,28 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../../utils/safe_change_notifier.dart';
-import '../repositories/study_recovery_store.dart';
-import 'study_controller.dart';
+import '../repositories/workspace_recovery_store.dart';
 
 /// Recovery I/O has one coalesced pending checkpoint and one in-flight write.
 /// A periodic trailing checkpoint cannot starve during continuous editing.
-class StudyRecoveryController extends ChangeNotifier with SafeChangeNotifier {
-  StudyRecoveryController({
-    required this.study,
+class WorkspaceRecoveryController<T> extends ChangeNotifier
+    with SafeChangeNotifier {
+  WorkspaceRecoveryController({
+    required this.workspace,
+    required this.capture,
+    required this.restoreSnapshot,
     required this._store,
     this.interval = const Duration(seconds: 1),
   }) {
-    study.addListener(_changed);
+    workspace.addListener(_changed);
     unawaited(refresh());
   }
-  final StudyController study;
-  final StudyRecoveryStore _store;
+  final Listenable workspace;
+  final T Function() capture;
+  final Future<void> Function(T snapshot) restoreSnapshot;
+  final WorkspaceRecoveryStore<T> _store;
   final Duration interval;
-  StudyRecoveryListing listing = StudyRecoveryListing([]);
+  WorkspaceRecoveryListing<T> listing = WorkspaceRecoveryListing<T>([]);
   Object? readError;
   Object? writeError;
   Object? actionError;
@@ -29,6 +33,7 @@ class StudyRecoveryController extends ChangeNotifier with SafeChangeNotifier {
   bool _restoring = false;
   Timer? _timer;
   Future<void>? _writing;
+  Future<void>? _shutdown;
 
   void _changed() {
     if (_stopped) return;
@@ -64,7 +69,7 @@ class StudyRecoveryController extends ChangeNotifier with SafeChangeNotifier {
           while (_pending) {
             _pending = false;
             try {
-              await _store.write(study.captureWorkspace());
+              await _store.write(capture());
               writeError = null;
             } catch (error) {
               _pending = true;
@@ -78,8 +83,8 @@ class StudyRecoveryController extends ChangeNotifier with SafeChangeNotifier {
         .whenComplete(() => _writing = null);
   }
 
-  Future<void> restore(StudyRecoveryEntry entry) async {
-    if (busy || _stopped) return;
+  Future<bool> restore(WorkspaceRecoveryEntry<T> entry) async {
+    if (busy || _stopped) return false;
     busy = true;
     _restoring = true;
     actionError = null;
@@ -88,13 +93,15 @@ class StudyRecoveryController extends ChangeNotifier with SafeChangeNotifier {
     notifyListeners();
     try {
       await _writing;
-      await study.restoreWorkspace(entry.snapshot);
+      await restoreSnapshot(entry.snapshot);
       _pending = true;
       await flush(); // A durable new checkpoint precedes resolving the old one.
       await _store.resolve(entry);
       await refresh();
+      return true;
     } catch (error) {
       actionError = error;
+      return false;
     } finally {
       busy = false;
       _restoring = false;
@@ -102,7 +109,7 @@ class StudyRecoveryController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  Future<void> dismiss(StudyRecoveryEntry entry) async {
+  Future<void> dismiss(WorkspaceRecoveryEntry<T> entry) async {
     if (busy || _stopped) return;
     busy = true;
     actionError = null;
@@ -118,10 +125,11 @@ class StudyRecoveryController extends ChangeNotifier with SafeChangeNotifier {
     }
   }
 
-  Future<void> shutdown() async {
+  Future<void> shutdown() => _shutdown ??= _close();
+  Future<void> _close() async {
     if (_stopped) return;
     _stopped = true;
-    study.removeListener(_changed);
+    workspace.removeListener(_changed);
     _timer?.cancel();
     _timer = null;
     try {

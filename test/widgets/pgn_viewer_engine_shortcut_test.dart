@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/pgn_viewer_lifetime.dart';
+import 'package:chess_auto_prep/features/documents/models/pgn_workspace_snapshot.dart';
+import '../support/memory_workspace_recovery_store.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
@@ -17,6 +20,7 @@ import '../support/board_engine_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  late PgnViewerLifetime lifetime;
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     EngineLifecycle.instance.resetForTest();
@@ -49,6 +53,11 @@ void main() {
           .setMockMethodCallHandler(channel, null);
       directory.deleteSync(recursive: true);
     });
+    lifetime = PgnViewerLifetime(
+      repository: StoragePgnCollectionRepository(StorageFactory.instance),
+      store: MemoryWorkspaceRecoveryStore<PgnWorkspaceSnapshot>(),
+    );
+    addTearDown(lifetime.shutdown);
   });
   tearDown(() => EngineLifecycle.instance.resetForTest());
 
@@ -67,10 +76,9 @@ void main() {
             child: MaterialApp(
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
-              home: PgnViewerScreen(
-                collectionRepository: StoragePgnCollectionRepository(
-                  StorageFactory.instance,
-                ),
+              home: PgnViewerCloseHost(
+                lifetime: lifetime,
+                child: PgnViewerScreen(lifetime: lifetime),
               ),
             ),
           ),
@@ -101,6 +109,7 @@ void main() {
         expect(InlineEngineBar.isEngineEnabled, isTrue);
         expect(find.byType(InlineEngineBar), findsOneWidget);
         await tester.pumpWidget(const SizedBox.shrink());
+        await tester.runAsync(lifetime.shutdown);
         await tester.pumpAndSettle();
       },
       timeout: const Timeout(Duration(seconds: 20)),

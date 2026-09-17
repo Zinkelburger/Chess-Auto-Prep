@@ -1,8 +1,9 @@
+import 'package:chess_auto_prep/infrastructure/studies/study_recovery_codec.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:isolate';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/infrastructure/studies/file_study_recovery_store.dart';
+import 'package:chess_auto_prep/infrastructure/documents/file_workspace_recovery_store.dart';
 import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
 import 'package:chess_auto_prep/features/documents/models/document_save_state.dart';
 import 'package:chess_auto_prep/utils/atomic_file.dart';
@@ -29,15 +30,21 @@ StudyWorkspaceSnapshot draft({String content = '1. e4 *', bool dirty = true}) =>
       uncertainPath: '/copy.pgn',
     );
 Future<int> _isolatedCount(String path) => Isolate.run(() async {
-  final store = FileStudyRecoveryStore(directory: () async => Directory(path));
+  final store = FileWorkspaceRecoveryStore<StudyWorkspaceSnapshot>(
+    codec: const StudyRecoveryCodec(),
+    directory: () async => Directory(path),
+  );
   return (await store.list()).entries.length;
 });
 void main() {
   late Directory root;
-  late FileStudyRecoveryStore store;
+  late FileWorkspaceRecoveryStore<StudyWorkspaceSnapshot> store;
   setUp(() async {
     root = await Directory.systemTemp.createTemp('study-recovery-');
-    store = FileStudyRecoveryStore(directory: () async => root);
+    store = FileWorkspaceRecoveryStore<StudyWorkspaceSnapshot>(
+      codec: const StudyRecoveryCodec(),
+      directory: () async => root,
+    );
   });
   tearDown(() async {
     await store.close();
@@ -47,7 +54,10 @@ void main() {
     'live sessions stay hidden across stores and isolates; release exposes exact work',
     () async {
       await store.write(draft());
-      final reader = FileStudyRecoveryStore(directory: () async => root);
+      final reader = FileWorkspaceRecoveryStore<StudyWorkspaceSnapshot>(
+        codec: const StudyRecoveryCodec(),
+        directory: () async => root,
+      );
       expect((await reader.list()).entries, isEmpty);
       expect(await _isolatedCount(root.path), 0);
       await store.close();
@@ -64,7 +74,8 @@ void main() {
   );
   test('failed replacement preserves the acknowledged checkpoint', () async {
     var fail = false;
-    final writer = FileStudyRecoveryStore(
+    final writer = FileWorkspaceRecoveryStore<StudyWorkspaceSnapshot>(
+      codec: const StudyRecoveryCodec(),
       directory: () async => root,
       writer: AtomicFileWriter(
         testHook: (step) async {
@@ -88,7 +99,10 @@ void main() {
     () async {
       await store.write(draft());
       await store.close();
-      final reader = FileStudyRecoveryStore(directory: () async => root);
+      final reader = FileWorkspaceRecoveryStore<StudyWorkspaceSnapshot>(
+        codec: const StudyRecoveryCodec(),
+        directory: () async => root,
+      );
       final entry = (await reader.list()).entries.single;
       await reader.resolve(entry);
       await reader.resolve(entry);
@@ -125,7 +139,10 @@ void main() {
   test(
     'a later clean save resolves only that session, leaving another draft available',
     () async {
-      final other = FileStudyRecoveryStore(directory: () async => root);
+      final other = FileWorkspaceRecoveryStore<StudyWorkspaceSnapshot>(
+        codec: const StudyRecoveryCodec(),
+        directory: () async => root,
+      );
       await other.write(draft(content: '1. c4 *'));
       await other.close();
       await store.write(draft());

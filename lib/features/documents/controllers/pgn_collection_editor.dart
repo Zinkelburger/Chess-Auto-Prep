@@ -7,6 +7,7 @@ import '../../../chess_core/pgn/study_metadata.dart';
 import '../../../chess_core/pgn/mainline_lexer.dart' show movetextStart;
 import '../models/pgn_document.dart';
 import '../models/document_save_state.dart';
+import '../models/pgn_workspace_snapshot.dart';
 import '../repositories/document_save_actions.dart';
 import '../repositories/pgn_collection_repository.dart';
 
@@ -32,7 +33,11 @@ class PgnCollectionEditor extends ChangeNotifier
   });
 
   /// Decode without changing the host, then return a synchronous adoption.
-  final Future<void Function()> Function(String content, String? path)?
+  final Future<void Function()> Function(
+    String content,
+    String? path, {
+    int? expectedGames,
+  })?
   prepareReplacement;
   final PgnCollectionRepository repository;
   final _changes = StreamController<DocumentSaveState>.broadcast(sync: true);
@@ -43,6 +48,7 @@ class PgnCollectionEditor extends ChangeNotifier
   String _capturedContent = '';
   bool _reloading = false;
   bool _copying = false;
+  String? _copyDestination;
   bool _wholeReplacement = false;
   @override
   Stream<DocumentSaveState> get changes => _changes.stream;
@@ -118,6 +124,7 @@ class PgnCollectionEditor extends ChangeNotifier
     final previous = lastResult;
     final previousUncertainPath = _uncertainPath;
     _copying = true;
+    _copyDestination = destination;
     notifyListeners();
     PgnWriteResult result;
     try {
@@ -147,9 +154,89 @@ class PgnCollectionEditor extends ChangeNotifier
       }
     }
     _copying = false;
+    _copyDestination = null;
     notifyListeners();
     // Late edits stay dirty. Saving the copy does not start an implicit write.
     return result;
+  }
+
+  PgnWorkspaceSnapshot captureWorkspace({
+    int gameIndex = 0,
+    int ply = 0,
+    bool flipped = false,
+  }) {
+    final output = snapshotForSave();
+    return PgnWorkspaceSnapshot(
+      path: filePath ?? '',
+      content: _serialize(output),
+      dirty: state.dirty,
+      persistedGames: [
+        for (final game in allGames) _persistedGames[game] ?? output[game]!,
+      ],
+      baseline: _baseline,
+      wholeReplacement: _wholeReplacement,
+      uncertain: state.uncertain || _copying || isSaving,
+      uncertainPath:
+          _copyDestination ?? _uncertainPath ?? (isSaving ? filePath : null),
+      retainedDrafts: _retainedDrafts,
+      gameIndex: gameIndex,
+      ply: ply,
+      flipped: flipped,
+    );
+  }
+
+  /// Recovery never reads a newer source revision or starts an implicit save.
+  /// Decode first; preserve any displaced work before replacing this session.
+  Future<void> restoreWorkspace(PgnWorkspaceSnapshot snapshot) async {
+    if (isDisposed || state.busy || prepareReplacement == null) {
+      throw StateError('The collection cannot be restored while busy');
+    }
+    persistDebounce?.cancel();
+    persistDebounce = null;
+    final source = allGames;
+    final before = _serialize(snapshotForSave());
+    _reloading = true;
+    notifyListeners();
+    try {
+      final adopt = await prepareReplacement!(
+        snapshot.content,
+        snapshot.path.isEmpty ? null : snapshot.path,
+        expectedGames: snapshot.persistedGames.length,
+      );
+      if (isDisposed ||
+          !identical(source, allGames) ||
+          before != _serialize(snapshotForSave())) {
+        throw StateError('The current draft changed during recovery');
+      }
+      final displaced = await _retainCurrentDraft();
+      if (isDisposed || !identical(source, allGames)) {
+        throw StateError('The current collection changed during recovery');
+      }
+      adopt();
+      _persistedGames = Map.identity();
+      for (var i = 0; i < allGames.length; i++) {
+        _persistedGames[allGames[i]] = snapshot.persistedGames[i];
+      }
+      _editedGames.addAll(allGames);
+      _baseline = snapshot.baseline;
+      _capturedContent = snapshot.content;
+      _wholeReplacement = snapshot.wholeReplacement;
+      _retainedDrafts.addAll(snapshot.retainedDrafts);
+      if (displaced != null) _retainedDrafts.add(displaced);
+      _autoSaveBlocked = true;
+      _uncertainPath = snapshot.uncertainPath;
+      lastResult = snapshot.uncertain
+          ? PgnWriteUncertain(
+              error: StateError('Recovered unresolved write'),
+              before: snapshot.baseline,
+              observed: null,
+            )
+          : null;
+      _readFailure = null;
+    } finally {
+      _reloading = false;
+      notifyListeners();
+    }
   }
 
   @override

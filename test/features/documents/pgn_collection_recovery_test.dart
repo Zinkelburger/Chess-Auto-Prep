@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_collection_helpers.dart';
 import 'package:chess_auto_prep/features/documents/controllers/pgn_collection_editor.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/documents/models/pgn_workspace_snapshot.dart';
 import 'package:chess_auto_prep/features/documents/repositories/pgn_collection_repository.dart';
 import '../../support/scripted_document_store.dart';
 
@@ -14,12 +15,17 @@ class Repository extends Store implements PgnCollectionRepository {
     current = snapshot(original);
   }
   final recovered = <String>[];
+  final patches = <Map<String, String>>[];
   Future<void> Function()? onRecovery;
   @override
   Future<PgnWriteResult> patch(
     String path,
     Map<String, String> replacements,
-  ) async => save(current, replacements.values.join('\n\n'));
+  ) async {
+    patches.add(Map.of(replacements));
+    return save(current, replacements.values.join('\n\n'));
+  }
+
   @override
   Future<String?> retainRecovery(String content) async {
     await onRecovery?.call();
@@ -48,9 +54,12 @@ class Fixture {
       onSaved: (_) {},
       onSavedCopy: (value) => path = value,
       isActive: () => true,
-      prepareReplacement: (content, destination) async {
+      prepareReplacement: (content, destination, {int? expectedGames}) async {
         await decodeGate?.call();
         final parsed = parseMultiGamePgn(content);
+        if (expectedGames != null && parsed.length != expectedGames) {
+          throw const FormatException('Game count');
+        }
         return () {
           games = parsed;
           path = destination;
@@ -71,6 +80,88 @@ void main() {
   late Fixture f;
   setUp(() => f = Fixture());
   tearDown(() => f.editor.dispose());
+  test(
+    'restart preserves per-game originals and never resumes autosave',
+    () async {
+      f.edit('restart note');
+      final checkpoint = f.editor.captureWorkspace(
+        gameIndex: 0,
+        ply: 1,
+        flipped: true,
+      );
+      f.edit('newer note');
+      expect(checkpoint.content, contains('{restart note}'));
+      expect(
+        () => checkpoint.persistedGames.add('bad'),
+        throwsUnsupportedError,
+      );
+      final restarted = Fixture();
+      addTearDown(restarted.editor.dispose);
+      await restarted.editor.restoreWorkspace(checkpoint);
+      expect(restarted.games.single.pgnText, contains('{restart note}'));
+      expect(
+        restarted.editor.captureWorkspace().persistedGames.single,
+        original,
+      );
+      expect(restarted.editor.state.baseline, checkpoint.baseline);
+      restarted.editor.setAutoSave(true);
+      await restarted.editor.flushPendingMetadata();
+      expect(restarted.repository.patches, isEmpty);
+      expect(await restarted.editor.save(), isA<PgnSaved>());
+      expect(restarted.repository.patches.single.keys.single, original);
+      expect(
+        restarted.repository.patches.single.values.single,
+        contains('{restart note}'),
+      );
+    },
+  );
+  test(
+    'an in-flight copy checkpoint preserves its uncertain destination',
+    () async {
+      f.edit('copy draft');
+      final gate = Completer<PgnWriteResult>();
+      f.repository.onCreate = (_, _) => gate.future;
+      final saving = f.editor.saveCopy('/pending-copy.pgn');
+      final checkpoint = f.editor.captureWorkspace();
+      expect(checkpoint.uncertain, isTrue);
+      expect(checkpoint.uncertainPath, '/pending-copy.pgn');
+      final restarted = Fixture();
+      addTearDown(restarted.editor.dispose);
+      await restarted.editor.restoreWorkspace(checkpoint);
+      expect(restarted.editor.state.canSave, isFalse);
+      expect(await restarted.editor.saveChanges(), isFalse);
+      expect(restarted.repository.patches, isEmpty);
+      gate.complete(PgnWriteFailed(StateError('disk')));
+      await saving;
+    },
+  );
+  test(
+    'restart adoption rejects concurrent edits and malformed game counts',
+    () async {
+      f.edit('checkpoint');
+      final checkpoint = f.editor.captureWorkspace();
+      final gate = Completer<void>();
+      f.decodeGate = () => gate.future;
+      final restore = f.editor.restoreWorkspace(checkpoint);
+      f.edit('late edit');
+      gate.complete();
+      await expectLater(restore, throwsStateError);
+      expect(f.games.single.pgnText, contains('{late edit}'));
+      f.decodeGate = null;
+      await expectLater(
+        f.editor.restoreWorkspace(
+          PgnWorkspaceSnapshot(
+            path: '/main.pgn',
+            content: original,
+            dirty: true,
+            persistedGames: [],
+          ),
+        ),
+        throwsFormatException,
+      );
+      expect(f.games.single.pgnText, contains('{late edit}'));
+    },
+  );
   test(
     'exclusive copy keeps a collision unchanged and late edits dirty',
     () async {

@@ -498,57 +498,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get closeApplication => 'Close application';
 
   @override
-  String get studyRecoveryTitle => 'Recover Study work';
-
-  @override
-  String get studyRecoveryExplanation =>
-      'These checkpoints contain work from previous sessions. Restoring opens the captured draft without writing to its original file. Save or make a copy after reviewing it.';
-
-  @override
-  String get studyRecoveryActionFailed =>
-      'Recovery could not finish. Your checkpoint is still preserved. Retry or save the current draft as a copy.';
-
-  @override
-  String get restoreStudyRecovery => 'Restore draft';
-
-  @override
-  String get dismissStudyRecovery => 'Dismiss recovery';
-
-  @override
-  String get dismissStudyRecoveryQuestion =>
-      'Remove this checkpoint from the recovery list? Its archived bytes remain on disk, but the app will no longer offer to restore it.';
-
-  @override
-  String get studyRecoveryUnavailable =>
-      'Study recovery is unavailable. Save your work explicitly; recent edits may not survive a restart.';
-
-  @override
-  String get studyRecoveryUnreadable =>
-      'Some Study recovery files could not be read. Their files have been preserved.';
-
-  @override
-  String studyRecoveryAvailable(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Study work from $count previous sessions is available.',
-      one: 'Study work from a previous session is available.',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get reviewStudyRecovery => 'Review recovery';
-
-  @override
-  String get retryStudyRecovery => 'Retry recovery';
-
-  @override
-  String studyRecoveryTimestamp(String date, String time) {
-    return '$date · $time';
-  }
-
-  @override
   String get documentCopyPrompt =>
       'Choose a new PGN filename. Existing files are kept.';
 
@@ -587,4 +536,68 @@ class AppLocalizationsEn extends AppLocalizations {
   String documentExported(String name) {
     return 'Exported $name';
   }
+
+  @override
+  String workspaceRecoveryTitle(String workspace) {
+    return 'Recover $workspace work';
+  }
+
+  @override
+  String get workspaceRecoveryExplanation =>
+      'These checkpoints contain work from previous sessions. Restoring opens the captured draft without writing to its original file. Save or make a copy after reviewing it.';
+
+  @override
+  String get workspaceRecoveryActionFailed =>
+      'Recovery could not finish. Your checkpoint is still preserved. Retry or save the current draft as a copy.';
+
+  @override
+  String get restoreWorkspaceRecovery => 'Restore draft';
+
+  @override
+  String get dismissWorkspaceRecovery => 'Dismiss recovery';
+
+  @override
+  String get dismissWorkspaceRecoveryQuestion =>
+      'Remove this checkpoint from the recovery list? Its archived bytes remain on disk, but the app will no longer offer to restore it.';
+
+  @override
+  String workspaceRecoveryUnavailable(String workspace) {
+    return '$workspace recovery is unavailable. Save your work explicitly; recent edits may not survive a restart.';
+  }
+
+  @override
+  String workspaceRecoveryUnreadable(String workspace) {
+    return 'Some $workspace recovery files could not be read. Their files have been preserved.';
+  }
+
+  @override
+  String workspaceRecoveryAvailable(String workspace, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$workspace work from $count previous sessions is available.',
+      one: '$workspace work from a previous session is available.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get reviewWorkspaceRecovery => 'Review recovery';
+
+  @override
+  String get retryWorkspaceRecovery => 'Retry recovery';
+
+  @override
+  String workspaceRecoveryTimestamp(String date, String time) {
+    return '$date · $time';
+  }
+
+  @override
+  String get studyWorkspaceName => 'Study';
+
+  @override
+  String get pgnWorkspaceName => 'PGN Viewer';
+
+  @override
+  String get untitledPgnWorkspace => 'Untitled PGN';
 }

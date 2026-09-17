@@ -5,19 +5,22 @@ import 'package:sqlite3/sqlite3.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:document_file_io/document_file_io.dart' show syncDirectory;
-import '../../features/studies/models/study_workspace_snapshot.dart';
-import '../../features/studies/repositories/study_recovery_store.dart';
+import '../../features/documents/repositories/workspace_recovery_store.dart';
 import '../../utils/atomic_file.dart';
-import 'study_recovery_codec.dart';
+import 'workspace_recovery_codec.dart';
 
 /// Each app instance owns one random checkpoint and a lifetime lease. A crashed
 /// process releases its lease; other live sessions never enter the recovery UI.
 /// Checkpoints and resolution receipts use the existing journaled atomic writer.
-class FileStudyRecoveryStore implements StudyRecoveryStore {
-  FileStudyRecoveryStore({required this._directory, AtomicFileWriter? writer})
-    : _writer = writer ?? AtomicFileWriter();
+class FileWorkspaceRecoveryStore<S> implements WorkspaceRecoveryStore<S> {
+  FileWorkspaceRecoveryStore({
+    required this._directory,
+    required this.codec,
+    AtomicFileWriter? writer,
+  }) : _writer = writer ?? AtomicFileWriter();
   final Future<Directory> Function() _directory;
   final AtomicFileWriter _writer;
+  final WorkspaceRecoveryCodec<S> codec;
   static final _idPattern = RegExp(r'^[a-f0-9]{32}$');
   String? _id;
   Database? _lease;
@@ -102,11 +105,11 @@ class FileStudyRecoveryStore implements StudyRecoveryStore {
   }
 
   @override
-  Future<StudyRecoveryListing> list() => _serial(() async {
+  Future<WorkspaceRecoveryListing<S>> list() => _serial(() async {
     final root = await _directory();
-    if (!await root.exists()) return StudyRecoveryListing([]);
+    if (!await root.exists()) return WorkspaceRecoveryListing<S>([]);
     await recoverAtomicWritesInDirectory(root);
-    final entries = <StudyRecoveryEntry>[];
+    final entries = <WorkspaceRecoveryEntry<S>>[];
     var unreadable = 0;
     await for (final entity in root.list(followLinks: false)) {
       if (!entity.path.endsWith('.json')) continue;
@@ -124,13 +127,11 @@ class FileStudyRecoveryStore implements StudyRecoveryStore {
           final data = _record(text);
           if (data['resolved'] as bool) return;
           entries.add(
-            StudyRecoveryEntry(
+            WorkspaceRecoveryEntry<S>(
               id: id,
               revision: _digest(text),
               updatedAt: DateTime.parse(data['updatedAt'] as String),
-              snapshot: decodeStudyWorkspace(
-                data['snapshot'] as Map<String, dynamic>,
-              ),
+              snapshot: codec.decode(data['snapshot'] as Map<String, dynamic>),
             ),
           );
         });
@@ -139,16 +140,16 @@ class FileStudyRecoveryStore implements StudyRecoveryStore {
       }
     }
     entries.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return StudyRecoveryListing(entries, unreadable: unreadable);
+    return WorkspaceRecoveryListing<S>(entries, unreadable: unreadable);
   });
   @override
-  Future<void> write(StudyWorkspaceSnapshot snapshot) => _serial(() async {
+  Future<void> write(S snapshot) => _serial(() async {
     final root = await _directory();
     await _own(root);
-    final payload = encodeStudyWorkspace(snapshot);
+    final payload = codec.encode(snapshot);
     final text = jsonEncode({
       'schema': 1,
-      'resolved': !snapshot.needsRecovery,
+      'resolved': !codec.needsRecovery(snapshot),
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
       'snapshot': payload,
       'payloadSha256': _digest(jsonEncode(payload)),
@@ -162,7 +163,7 @@ class FileStudyRecoveryStore implements StudyRecoveryStore {
     await _sync(root);
   });
   @override
-  Future<void> resolve(StudyRecoveryEntry entry) => _serial(() async {
+  Future<void> resolve(WorkspaceRecoveryEntry<S> entry) => _serial(() async {
     if (!_idPattern.hasMatch(entry.id)) {
       throw ArgumentError('Invalid recovery ID');
     }

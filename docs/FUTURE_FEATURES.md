@@ -48,8 +48,11 @@ Linux scoped game patches, with blocked failed autosaves and preserved recovery
 copies. Its shared typed recovery UI now supports inspection, reload with draft
 retention, restoration, exclusive pasted-collection Save As and PGN exports.
 Failed recovery writes block replacement; exports leave the current source intact.
-Private game cores/immutable projections, continuous Viewer checkpoints and
-restart discovery remain pending.
+Viewer now has app-lifetime ownership and shared durable checkpoints/startup
+discovery for current/retained drafts, original game text, uncertain writes and
+game/mainline cursor/orientation. Close protection works before the reader opens.
+Private game cores/immutable projections, undo receipts, variation-cursor/filter/
+panel restoration and large-document performance evidence remain pending.
 Other editors' persisted drafts, clean workspace/session restoration, archive
 purging, builder-draft checks and job shutdown coordination are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional

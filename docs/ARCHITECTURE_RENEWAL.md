@@ -1063,6 +1063,57 @@ undo receipts, complete workspace restoration, large-document budgets and the
 remaining viewer mixin/legacy-reader migrations are still pending. No milestone
 1/2 or 4–7 graduation, Windows/macOS certification or release validation is claimed.
 
+### Shared workspace recovery and Viewer lifetime checkpoint (2026-09-17)
+
+After PGN recovery/copy `d9a339ea`, Viewer ownership moves out of its screen.
+`app/pgn_viewer_lifetime.dart` constructs the legacy controller, reader handle,
+analysis controller and checkpoint owner; the screen borrows them. This app
+bridge remains temporary until the underlying reader and analysis ownership
+migrate. `PgnCloseGuard` protects the document even before the screen exists.
+Cancelling another document's close approval never discards this draft.
+
+Study's checkpoint controller, pure repository contract, native journal/lease
+store and recovery host now have canonical shared owners in `features/documents/`
+and `infrastructure/documents/`. Their previous Study paths are removed without
+forwarding shims. Injected codecs keep the existing Study schema/directory intact;
+Viewer uses its own `pgn-viewer-recovery-v1` namespace. Live-instance exclusion,
+checksum checks, atomic replacement, exact-revision resolution and archived bytes
+follow the same tested protocol for both workspaces.
+
+Viewer checkpoints retain current text, each game's persisted original, the full
+source revision, explicit whole-replacement intent, retained drafts, uncertain
+write destination, selected game, mainline ply and orientation. Recovered edits
+keep their original scoped patch baselines; a changed source game still conflicts.
+In-flight writes recover as uncertain. Restoration validates the decoded game
+count, refuses intervening edits, retains displaced work before adoption, and
+never resumes source autosaving or engine enrichment implicitly. A replacement
+checkpoint must be acknowledged before resolving the previous recovery entry.
+
+Validation on Linux:
+
+| Check | Evidence |
+| --- | --- |
+| Analyze/lint | Pass; 13 architecture-checker cases pass and only the nine existing informational notices remain. |
+| Focused regression suite | All 318 tests pass across Study/documents, native stores, PGN controllers, lexical/save integrity, viewer widgets and app startup. Includes immutable checkpoints, per-game original preservation, in-flight-copy uncertainty, concurrent-edit rejection, corrupt selections, repeated-restore rejection and failed-write/recovery ordering. |
+| Shared journal/lease regression | Existing Study payloads still round-trip; live stores/isolates stay hidden, failed replacement preserves the acknowledged checkpoint, stale receipts cannot resolve newer records, and SIGKILL releases a subprocess lease without losing acknowledged work. |
+| Native desktop journeys | All five pass: Viewer close before first reader mount plus restart/conflict/copy; Study restart/conflict/copy; Viewer save/reload/retained recovery; pasted-copy/export; cross-mode native close. |
+| Full app-process restart | Entered an unsaved annotation and advanced to ply 2, verified checkpoint bytes and unchanged source, stopped the headless process and launched a new one. Recovery appeared in Tactics before Viewer mounted; restored annotation and ply 2, verified the new checkpoint retained original per-game text and that the source stayed unchanged. Inspected [startup review](images/renewal-pgn-restart-review.png) and [restored Viewer](images/renewal-pgn-restart-restored.png) at 1280×720. |
+
+Early fixture failures identified the new lifetime boundary: standalone widget
+fixtures now explicitly stop their app owner, and close assertions allow its
+checkpoint flush to finish. The native conflict test waits until the recovery
+write is idle before activating Save a copy. An ignored repeated restore now
+returns an explicit rejected result, so it cannot close the review dialog while
+the first restore is still running. All corrected checks pass. Preview
+data stayed in the disposable driver profile, and the preview was stopped.
+
+Remaining milestone 3 scope includes private mutable game cores and immutable
+projections, undo receipts, variation-cursor/filter/tab/panel restoration, other
+editors' checkpoints and large-document measurements. This does not graduate
+milestones 1/2 or 3, start/finish milestones 4–7, or certify non-Linux native and
+release gates. Checkpoint acknowledgement is the recovery boundary; edits not
+yet checkpointed can still be lost on abrupt process termination.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

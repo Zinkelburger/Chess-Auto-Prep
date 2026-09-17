@@ -24,6 +24,7 @@ import '../services/default_pgn_service.dart';
 import '../features/documents/controllers/pgn_collection_editor.dart';
 import '../features/documents/repositories/pgn_collection_repository.dart';
 import '../features/documents/models/pgn_document.dart';
+import '../features/documents/models/pgn_workspace_snapshot.dart';
 import '../features/documents/repositories/document_save_actions.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
@@ -146,10 +147,12 @@ class PgnViewerController extends ChangeNotifier
   DocumentSaveActions get saveActions => _editor;
   Future<void Function()> _prepareRecoveryReplacement(
     String content,
-    String? path,
-  ) async {
+    String? path, {
+    int? expectedGames,
+  }) async {
     final entries = await compute(parseMultiGamePgn, content);
-    if (entries.isEmpty) {
+    if ((entries.isEmpty && expectedGames != 0) ||
+        (expectedGames != null && entries.length != expectedGames)) {
       throw const FormatException('No valid games in the document');
     }
     return () {
@@ -170,9 +173,32 @@ class PgnViewerController extends ChangeNotifier
         preamble: pgnCollectionPreamble(content),
         flushOutgoing: false,
       );
-      unawaited(loadCurrentGame());
+      if (expectedGames == null) unawaited(loadCurrentGame());
       notifyListeners();
     };
+  }
+
+  PgnWorkspaceSnapshot captureWorkspace() => _editor.captureWorkspace(
+    gameIndex: filteredGames.isEmpty
+        ? 0
+        : allGames.indexOf(filteredGames[currentGameIndex]),
+    ply: filteredGames.isEmpty
+        ? 0
+        : resumePlyFor(filteredGames[currentGameIndex]),
+    flipped: boardFlipped,
+  );
+
+  Future<void> restoreWorkspace(PgnWorkspaceSnapshot snapshot) async {
+    await _editor.restoreWorkspace(snapshot);
+    final epoch = _loadEpoch;
+    if (allGames.isNotEmpty) {
+      currentGameIndex = snapshot.gameIndex.clamp(0, allGames.length - 1);
+      _resumePlyByGame[allGames[currentGameIndex]] = snapshot.ply;
+      await loadCurrentGame(enrich: false);
+      if (!_isCurrentLoad(epoch)) return;
+    }
+    boardFlipped = snapshot.flipped;
+    notifyListeners();
   }
 
   String? _lastEditorError;
@@ -336,6 +362,7 @@ class PgnViewerController extends ChangeNotifier
     if (_restoringSession || isLoading) return;
     _rememberCurrentPlace();
     unawaited(saveSession());
+    notifyListeners();
   }
 
   Future<void> saveSession() {
@@ -1086,7 +1113,7 @@ class PgnViewerController extends ChangeNotifier
       detectBothPlayersFrom(allGames);
 
   @override
-  Future<void> loadCurrentGame() async {
+  Future<void> loadCurrentGame({bool enrich = true}) async {
     if (filteredGames.isEmpty) return;
     final gameLoadEpoch = ++_gameLoadEpoch;
     stopAutoPlay();
@@ -1103,7 +1130,7 @@ class PgnViewerController extends ChangeNotifier
     if (!isActive() || gameLoadEpoch != _gameLoadEpoch) return;
     notifyListeners();
     onReclaimFocus?.call();
-    if (restored) unawaited(_fillMissingBestLines(game));
+    if (restored && enrich) unawaited(_fillMissingBestLines(game));
     unawaited(saveSession());
   }
 
