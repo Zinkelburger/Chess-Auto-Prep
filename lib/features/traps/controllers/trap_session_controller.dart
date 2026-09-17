@@ -12,7 +12,6 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../../../models/trap_line_info.dart';
-import '../../../services/generation/trap_extractor.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../services/trap_index_service.dart';
 import '../services/trap_tour_order.dart';
@@ -22,10 +21,11 @@ import '../services/trap_tour_order.dart';
 typedef TrapFileLoader = Future<List<TrapLineInfo>?> Function(String filePath);
 
 class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
-  TrapSessionController({TrapFileLoader? loadFile})
-    : _loadFile = loadFile ?? TrapExtractor.loadFromFile;
+  TrapSessionController({required TrapFileLoader loadFile})
+    : _loadFile = loadFile;
 
   final TrapFileLoader _loadFile;
+  int _loadGeneration = 0;
 
   List<TrapLineInfo> _traps = const [];
   TrapIndexService? _index;
@@ -45,7 +45,9 @@ class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Reads the trap sidecar next to [filePath] and replaces the current set.
   Future<void> loadFromFile(String filePath) async {
+    final generation = ++_loadGeneration;
     final traps = await _loadFile(filePath);
+    if (isDisposed || generation != _loadGeneration) return;
     _setTraps(traps ?? const []);
   }
 
@@ -59,6 +61,7 @@ class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
     String? fallbackFilePath,
   }) async {
     if (bundleIndex != null) {
+      _loadGeneration++;
       final traps = bundleIndex.allTraps;
       _traps = traps;
       _index = traps.isEmpty ? null : bundleIndex;
@@ -91,6 +94,9 @@ class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// through the previous repertoire's traps means nothing here. The traps
   /// themselves are replaced by the load that follows.
   void endTourForRepertoireSwitch() {
+    _loadGeneration++;
+    _traps = const [];
+    _index = null;
     _tourVisible = false;
     _tourInitialTrap = null;
   }

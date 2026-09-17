@@ -2,6 +2,8 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
+import '../features/generation/services/generation_artifacts.dart';
+
 import '../features/repertoires/repositories/repertoire_document_repository.dart';
 import '../features/repertoires/repositories/repertoire_decoder.dart';
 
@@ -133,6 +135,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   late final GenerationSessionController _generationController =
       GenerationSessionController(
         publication: context.read<GenerationPublicationFactory>()(),
+        artifacts: context.read<GenerationArtifacts>(),
       );
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
@@ -179,7 +182,9 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   EphemeralFindingPreview? _ephemeralPreview;
 
   /// Loaded traps, their position index, and the tour's open/closed state.
-  final TrapSessionController _trapSession = TrapSessionController();
+  late final TrapSessionController _trapSession = TrapSessionController(
+    loadFile: context.read<GenerationArtifacts>().readTraps,
+  );
   final GlobalKey<TrapTourBarState> _trapTourKey =
       GlobalKey<TrapTourBarState>();
 
@@ -590,6 +595,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   /// A notification that leaves it unchanged is a cursor move, which only
   /// the position zones need to hear about.
   int _structureSeen = -1;
+  String? _lastArtifactSource;
 
   /// The repertoire the colour question has already been put for, and whether
   /// that dialog is on screen right now.
@@ -640,6 +646,18 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           EngineSettings.instance.probabilityStartMoves = _controller.rootMoves;
           unawaited(_trapSession.loadFromFile(currentId));
           newRepertoireId = currentId;
+        }
+
+        final source = _controller.repertoirePgn;
+        if (!_generationController.isGenerating &&
+            source != _lastArtifactSource) {
+          _lastArtifactSource = source;
+          if (newRepertoireId == null) {
+            _generationController.clearTree();
+            unawaited(_generationController.loadSavedTreeFor(currentId));
+            _trapSession.endTourForRepertoireSwitch();
+            unawaited(_trapSession.loadFromFile(currentId));
+          }
         }
 
         if (_controller.needsColorSelection &&

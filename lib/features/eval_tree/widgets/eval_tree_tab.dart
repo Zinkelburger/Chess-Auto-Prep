@@ -3,12 +3,12 @@ import 'dart:async';
 import '../../../utils/isolate_task.dart';
 
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../constants/chess_constants.dart';
 import '../../../models/build_tree_node.dart';
 import '../../repertoires/models/repertoire_metadata.dart';
-import '../services/eval_tree_file_loader.dart';
+import '../../generation/repositories/generation_artifact_repository.dart';
+import '../../generation/models/generation_artifacts.dart';
 import '../../../services/generation/tree_serialization.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
@@ -49,6 +49,7 @@ class EvalTreePositionSelection {
 
 class EvalTreeTab extends StatefulWidget {
   final RepertoireMetadata? currentRepertoire;
+  final GenerationArtifactRepository artifacts;
   final bool isWhiteRepertoire;
   final BuildTree? generatedTree;
   final int treeResetCounter;
@@ -58,6 +59,7 @@ class EvalTreeTab extends StatefulWidget {
   const EvalTreeTab({
     super.key,
     required this.currentRepertoire,
+    required this.artifacts,
     required this.isWhiteRepertoire,
     required this.generatedTree,
     required this.treeResetCounter,
@@ -74,6 +76,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
   final EvalTreeController _controller = EvalTreeController();
 
   int? _maxPly;
+  bool _legacyPreview = false;
   IsolateTask? _loadTask;
   EvalTreeSnapshot? _snapshot;
   EvalTreeLineMetricsCache? _metricsCache;
@@ -274,6 +277,8 @@ class _EvalTreeTabState extends State<EvalTreeTab>
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           const Icon(Icons.insights, size: 16, color: AppColors.onSurfaceSoft),
+          if (_legacyPreview)
+            const Text('Legacy preview · source identity unverified'),
           Text(
             '${snapshot.nodeCount} nodes • max ply $maxPly',
             style: AppTextStyles.caption,
@@ -370,20 +375,21 @@ class _EvalTreeTabState extends State<EvalTreeTab>
       _error = null;
     });
     try {
-      if (!isEvalTreeFileAccessSupported) {
-        throw UnsupportedError(evalTreeFileAccessUnsupportedReason);
+      var saved = await widget.artifacts.read(path);
+      if (saved.payloads[GenerationArtifactKind.tree] == null && !autoLoad) {
+        saved = await widget.artifacts.readLegacy(path);
       }
-      if (!await evalTreeFileExists(path)) {
+      final json = saved.payloads[GenerationArtifactKind.tree];
+      if (json == null) {
         if (!mounted || task.isCancelled) return;
         setState(() {
           _isLoading = false;
-          _error = autoLoad
-              ? 'No saved tree file found for this repertoire yet.'
-              : 'No tree file found. Generate a tree first.';
+          _error =
+              saved.notice ?? 'No saved tree found. Generate a tree first.';
         });
         return;
       }
-      final json = await readEvalTreeFile(path);
+      _legacyPreview = saved.origin == GenerationArtifactOrigin.legacy;
       if (!mounted || task.isCancelled) return;
       final prepared = await task.compute(_prepareSavedTree, (
         json,
@@ -401,6 +407,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
   }
 
   Future<void> _setTree(BuildTree tree, {required bool resetView}) async {
+    _legacyPreview = false;
     _loadTask?.cancel();
     final task = _loadTask = IsolateTask();
     final playAsWhite = widget.isWhiteRepertoire;
@@ -476,8 +483,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     if (filePath == null || filePath.isEmpty) {
       return null;
     }
-    final base = p.withoutExtension(filePath);
-    return '${base}_tree.json';
+    return filePath;
   }
 }
 

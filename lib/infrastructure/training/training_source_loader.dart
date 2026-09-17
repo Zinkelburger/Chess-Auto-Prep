@@ -21,6 +21,8 @@ library;
 
 import 'package:chess_auto_prep/features/training/repositories/training_answers.dart';
 import '../../features/training/repositories/training_source_repository.dart';
+import '../../features/generation/repositories/generation_artifact_repository.dart';
+import '../../features/generation/models/generation_artifacts.dart';
 
 import 'dart:isolate';
 
@@ -46,12 +48,14 @@ class TrainingSourceLoader implements TrainingSourceRepository {
     required this.repertoireService,
     required this.reviewService,
     required this.askedQuestions,
+    required this.artifacts,
     StorageService Function()? storage,
   }) : _storage = storage ?? (() => StorageFactory.instance);
 
   final RepertoireService repertoireService;
   final RepertoireReviewService reviewService;
   final AskedQuestionsStore askedQuestions;
+  final GenerationArtifactRepository artifacts;
   final StorageService Function() _storage;
 
   /// Load [source].
@@ -178,11 +182,10 @@ class TrainingSourceLoader implements TrainingSourceRepository {
     List<RepertoireLine> lines, {
     bool Function()? isStale,
   }) async {
-    final treePath = '${p.withoutExtension(filePath)}_tree.json';
-    final storage = _storage();
     try {
-      if (!await storage.fileExists(treePath)) return const {};
-      final json = await storage.readFile(treePath);
+      final json = (await artifacts.read(
+        filePath,
+      )).payloads[GenerationArtifactKind.tree];
       if (json == null || json.isEmpty) return const {};
       if (isStale?.call() ?? false) return const {};
       final linePaths = [

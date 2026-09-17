@@ -1,3 +1,4 @@
+import '../../support/generation_artifacts_fixture.dart';
 import '../../support/generation_publication_fixture.dart';
 // The expectimax pane with probe hooks: it offers to compute what the
 // database lacks and routes each request to the right position and move.
@@ -105,6 +106,7 @@ void main() {
 
   setUp(() {
     generation = GenerationSessionController(
+      artifacts: generationArtifactsFixture(),
       publication: generationPublicationFixture(),
     );
     recorder = _Recorder();

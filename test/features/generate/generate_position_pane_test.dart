@@ -1,3 +1,4 @@
+import '../../support/generation_artifacts_fixture.dart';
 import '../../support/generation_publication_fixture.dart';
 import 'dart:async';
 
@@ -16,6 +17,7 @@ void main() {
     'settings stay in the overlay and apply to both generation actions',
     (tester) async {
       final gen = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
       addTearDown(gen.dispose);
@@ -128,6 +130,7 @@ void main() {
     tester,
   ) async {
     final gen = GenerationSessionController(
+      artifacts: generationArtifactsFixture(),
       publication: generationPublicationFixture(),
     );
     addTearDown(gen.dispose);
@@ -182,6 +185,7 @@ void main() {
     tester,
   ) async {
     final gen = GenerationSessionController(
+      artifacts: generationArtifactsFixture(),
       publication: generationPublicationFixture(),
     );
     addTearDown(gen.dispose);

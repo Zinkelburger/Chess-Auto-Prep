@@ -5,7 +5,7 @@
 /// full Generate wrote, plus every probe the user asked for from a position
 /// that tree never reached. A probe that lands on a position an existing tree
 /// already holds is grafted into it ([graftProbe]); one that lands elsewhere
-/// becomes a tree of its own ([ExpectimaxProbeStore] persists those).
+/// becomes a tree of its own ([ExpectimaxProbeCodec] persists those).
 ///
 /// Everything here is a pure function over trees. The engine work happens in
 /// the ordinary build pipeline; this file only merges and re-scores.
@@ -13,8 +13,6 @@ library;
 
 import 'dart:convert';
 import 'dart:math' as math;
-
-import 'package:path/path.dart' as p;
 
 import '../../models/build_tree_node.dart';
 import 'build_run.dart' show findMaxNodeId;
@@ -164,13 +162,9 @@ void rescoreTree(BuildTree tree, TreeBuildConfig config, FenMap fenMap) {
   calculateMyEase(tree, playAsWhite: config.playAsWhite);
 }
 
-/// Persistence for the probe trees of one repertoire:
-/// `<repertoire>_expectimax.json` beside `<repertoire>_tree.json`.
-class ExpectimaxProbeStore {
+/// Versioned probe-tree encoding, independent of storage location.
+class ExpectimaxProbeCodec {
   static const int version = 1;
-
-  static String pathFor(String repertoireFilePath) =>
-      '${p.withoutExtension(repertoireFilePath)}_expectimax.json';
 
   /// Every tree serialized on its own, so each one round-trips through the
   /// same v4 format as the main tree file.

@@ -1,3 +1,4 @@
+import '../support/generation_artifacts_fixture.dart';
 import '../support/generation_publication_fixture.dart';
 // GenerationSessionController drives engines and isolates for real runs, so
 // these tests cover only what is unit-testable without an engine: initial
@@ -89,6 +90,7 @@ void main() {
 
   test('initial state is idle with no tree and clean progress', () {
     final controller = GenerationSessionController(
+      artifacts: generationArtifactsFixture(),
       publication: generationPublicationFixture(),
     );
 
@@ -117,6 +119,7 @@ void main() {
   group('generated tree lifecycle', () {
     test('onTreeBuilt publishes the bundle and notifies', () {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
       var notified = 0;
@@ -136,6 +139,7 @@ void main() {
 
     test('onTreeBuilt reads play_as_white from the config snapshot', () {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
 
@@ -149,6 +153,7 @@ void main() {
 
     test('clearTree drops the bundle and notifies', () {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
       controller.onTreeBuilt(_smallTree());
@@ -169,6 +174,7 @@ void main() {
       'a legacy partial tree from another position refuses cleanly',
       () async {
         final controller = GenerationSessionController(
+          artifacts: generationArtifactsFixture(),
           publication: generationPublicationFixture(),
         );
         var notified = 0;
@@ -204,6 +210,7 @@ void main() {
   group('progress plumbing', () {
     test('progress.update stores every field it is given', () {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
 
@@ -231,6 +238,7 @@ void main() {
 
     test('rapid updates coalesce into a throttled trailing notify', () async {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
       var notified = 0;
@@ -252,6 +260,7 @@ void main() {
   group('idle guards', () {
     test('pause/resume/cancel/finishNow are no-ops when idle', () {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
       var notified = 0;
@@ -273,6 +282,7 @@ void main() {
 
     test('exportSnapshot refuses without an active build', () async {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
 
@@ -288,6 +298,7 @@ void main() {
 
     test('snapshotNameSuggestion falls back when no run is active', () {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
       expect(controller.snapshotNameSuggestion(), 'Generated d0 snapshot');
@@ -302,6 +313,7 @@ void main() {
         () async {
           final lifecycle = _FailingExitLifecycle(failPause: failPause);
           final controller = GenerationSessionController(
+            artifacts: generationArtifactsFixture(),
             publication: generationPublicationFixture(),
             engineLifecycle: lifecycle,
           );
@@ -350,6 +362,7 @@ void main() {
 
     test('dispose cancels the pending throttle timer', () async {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
       var notified = 0;
@@ -366,6 +379,7 @@ void main() {
 
     test('late progress updates after dispose are swallowed', () async {
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       );
       controller.dispose();
@@ -456,6 +470,7 @@ void main() {
         'and cancelling there is felt at once', () async {
       final svc = await emptyService();
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       )..masterGames = () => svc;
 
@@ -483,6 +498,7 @@ void main() {
         'started', () async {
       final svc = await emptyService();
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       )..masterGames = () => svc;
 
@@ -510,6 +526,7 @@ void main() {
     test('dispose releases a parked run and forbids another run', () async {
       final svc = await emptyService();
       final controller = GenerationSessionController(
+        artifacts: generationArtifactsFixture(),
         publication: generationPublicationFixture(),
       )..masterGames = () => svc;
       final request = requestWith(download: true);
@@ -531,6 +548,7 @@ void main() {
       () async {
         final svc = await emptyService();
         final controller = GenerationSessionController(
+          artifacts: generationArtifactsFixture(),
           publication: generationPublicationFixture(),
         )..masterGames = () => svc;
 

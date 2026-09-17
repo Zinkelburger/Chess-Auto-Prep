@@ -1,9 +1,9 @@
+import '../support/generation_artifacts_fixture.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/core/generation_artifacts.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
@@ -82,7 +82,7 @@ void main() {
             prepareDirectory: (_) async {},
           ),
         ),
-        artifacts: GenerationArtifactStore(storage: () => storage),
+        artifacts: generationArtifactsFixture(),
         engineLifecycle: lifecycle,
       );
       addTearDown(controller.dispose);

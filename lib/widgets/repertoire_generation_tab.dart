@@ -7,10 +7,8 @@
 library;
 
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 
 import '../features/documents/models/pgn_document.dart';
 import '../core/generation_session_controller.dart';
@@ -21,8 +19,6 @@ import '../services/generation/generation_config.dart';
 import 'generation/training_plan_card.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/repertoire_slice.dart';
-import '../services/generation/tree_serialization.dart';
-import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
@@ -107,6 +103,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final ScrollController _scrollCtrl = ScrollController();
 
   BuildTree? _savedPartialTree;
+  String? _savedPartialGeneration;
 
   @override
   void initState() {
@@ -185,44 +182,27 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   // ── Partial tree handling ────────────────────────────────────────────
 
-  String? _partialTreePath() {
-    final filePath = widget.currentRepertoire?.filePath;
-    if (filePath == null || filePath.isEmpty) return null;
-    final base = p.withoutExtension(filePath);
-    return '${base}_partial_tree.json';
-  }
+  int _partialRead = 0;
 
   Future<void> _checkForPartialTree() async {
-    final path = _partialTreePath();
-    if (path == null) return;
-    final storage = StorageFactory.instance;
-    if (await storage.fileExists(path)) {
-      try {
-        final json = await storage.readFile(path);
-        if (json == null) return;
-        final tree = await Isolate.run(() => deserializeTree(json));
-        // The card reports the saved target depth; the Max line length field
-        // is left alone. Rewriting it here used to change the depth of the
-        // next *fresh* build without a word.
-        //
-        // A tree that finished exploring but was cancelled before its lines
-        // were built is offered too — Finish Now is exactly what it needs.
-        if (mounted) setState(() => _savedPartialTree = tree);
-      } catch (e) {
-        debugPrint('[RepertoireGenTab] Failed to load partial tree: $e');
-      }
-    } else if (_savedPartialTree != null && mounted) {
-      setState(() => _savedPartialTree = null);
-    }
-  }
-
-  Future<void> _deletePartialTree() async {
-    final path = _partialTreePath();
-    if (path == null) return;
+    final path = widget.currentRepertoire?.filePath;
+    if (path == null || path.isEmpty) return;
+    final generation = ++_partialRead;
     try {
-      await StorageFactory.instance.deleteFile(path);
-    } catch (e) {
-      debugPrint('[RepertoireGenTab] Failed to delete tree file: $e');
+      final tree = await widget.generationController.readSavedPartial(path);
+      if (mounted &&
+          generation == _partialRead &&
+          widget.currentRepertoire?.filePath == path) {
+        setState(() {
+          _savedPartialTree = tree?.tree;
+          _savedPartialGeneration = tree?.generationId;
+        });
+      }
+    } catch (error) {
+      if (mounted && generation == _partialRead) {
+        setState(() => _savedPartialTree = null);
+      }
+      debugPrint('[RepertoireGenTab] Failed to load partial tree: $error');
     }
   }
 
@@ -232,13 +212,16 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   /// deleting it is not undoable — so this asks first and says what is being
   /// lost, the way deleting a saved preset does.
   Future<void> _confirmDiscardPartialTree(BuildTree tree) async {
+    final path = widget.currentRepertoire?.filePath;
+    final generation = _savedPartialGeneration;
+    if (path == null || generation == null) return;
     final discard = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Discard unfinished build?'),
         content: Text(
           '${tree.totalNodes} nodes explored to depth ${tree.maxPlyReached} '
-          'will be moved to Chess Auto Prep recovery trash. The app will no '
+          'will remain in recovery history. The app will no '
           'longer resume that search.',
         ),
         actions: [
@@ -255,8 +238,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       ),
     );
     if (discard != true) return;
-    await _deletePartialTree();
-    if (mounted) setState(() => _savedPartialTree = null);
+    try {
+      await widget.generationController.discardSavedPartial(path, generation);
+      if (mounted && _savedPartialGeneration == generation) {
+        setState(() => _savedPartialTree = null);
+      }
+    } catch (error) {
+      if (mounted) showAppSnackBar(context, '$error', isError: true);
+    }
   }
 
   /// Whether the saved partial tree can resume safely: either it recorded
@@ -307,9 +296,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       );
     }
 
-    if (existingTree == null) {
-      await _deletePartialTree();
-    }
     form.resetChessDbApiUsageForBuild(config.chessDbApiDailyQuota);
     if (mounted) setState(() => _savedPartialTree = null);
 
@@ -320,6 +306,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       lineMovePrefix: List.unmodifiable(widget.currentMoveSequence),
       repertoireStartFen: widget.repertoireStartFen,
       existingTree: existingTree,
+      artifactGeneration: existingTree == null ? null : _savedPartialGeneration,
       onPublished: widget.createPublicationReceiver(),
       existingLineKeys: {
         for (final moves in widget.existingLineMoves)

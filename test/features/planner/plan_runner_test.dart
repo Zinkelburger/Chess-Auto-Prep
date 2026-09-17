@@ -1,3 +1,4 @@
+import '../../support/generation_artifacts_fixture.dart';
 import '../../support/generation_publication_fixture.dart';
 import 'dart:async';
 
@@ -22,7 +23,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// Records every build request; each build waits until [release] (or
 /// [cancelBuild]) and then reports [refuseWith] through [lastError].
 class _FakeGeneration extends GenerationSessionController {
-  _FakeGeneration() : super(publication: generationPublicationFixture());
+  _FakeGeneration()
+    : super(
+        artifacts: generationArtifactsFixture(),
+        publication: generationPublicationFixture(),
+      );
   final List<GenerationRequest> requests = [];
   bool _generating = false;
   Completer<void>? _build;

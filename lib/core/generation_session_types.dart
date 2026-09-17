@@ -35,6 +35,9 @@ class GenerationRequest {
   /// Partial tree to resume, or null for a fresh build.
   final BuildTree? existingTree;
 
+  /// Source-bound artifact selection captured by the saved-partial card.
+  final String? artifactGeneration;
+
   /// Awaited once after source publication. The host adopts the committed
   /// document under its captured chapter session, before another run starts.
   final FutureOr<void> Function(PgnSnapshot saved) onPublished;
@@ -58,6 +61,7 @@ class GenerationRequest {
     required this.repertoireStartFen,
     required this.onPublished,
     this.existingTree,
+    this.artifactGeneration,
     this.existingLineKeys = const {},
     this.expectimaxOnly = false,
   });
@@ -73,6 +77,7 @@ class GenerationRequest {
        repertoireStartFen = target.repertoireStartFen,
        onPublished = _ignorePublication,
        existingTree = null,
+       artifactGeneration = null,
        existingLineKeys = const {},
        expectimaxOnly = true;
 
