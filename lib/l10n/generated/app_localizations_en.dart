@@ -694,5 +694,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get legacyAnalysisExportUncertain =>
-      'The export may have been saved, but completion could not be confirmed. Inspect the destination in Technical details before trying again.';
+      'The export may have been saved, but completion could not be confirmed. Inspect the destination below before trying again.';
+
+  @override
+  String legacyAnalysisDestination(String path) {
+    return 'Destination: $path';
+  }
+
+  @override
+  String get legacyAnalysisPopularMove => 'Popular reply';
+
+  @override
+  String get legacyAnalysisBestMove => 'Best reply';
+
+  @override
+  String get legacyAnalysisProbability => 'Move probability';
+
+  @override
+  String get legacyAnalysisGain => 'Evaluation gain';
+
+  @override
+  String get legacyAnalysisEvaluation => 'Evaluation (side to move)';
+
+  @override
+  String get legacyAnalysisExpectedScore => 'Expected score';
+
+  @override
+  String get legacyAnalysisPv => 'Engine principal variation (UCI)';
+
+  @override
+  String get legacyAnalysisNotSaved => 'Not saved';
 }

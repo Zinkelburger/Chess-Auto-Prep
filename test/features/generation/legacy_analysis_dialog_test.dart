@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/app/generation_dependencies.dart';
 import 'package:chess_auto_prep/design_system/theme/app_theme.dart';
 import 'package:chess_auto_prep/features/generation/models/generation_artifacts.dart';
+import 'package:chess_auto_prep/features/generation/controllers/legacy_analysis_controller.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/features/generation/widgets/legacy_analysis_dialog.dart';
 import 'package:chess_auto_prep/features/repertoire/widgets/repertoire_toolbar.dart';
@@ -114,7 +115,7 @@ void main() {
       expect(find.text('2 saved nodes · depth 1'), findsOneWidget);
       await tester.tap(find.byKey(const Key('legacy-traps-0')));
       await tester.pump();
-      expect(find.textContaining('"popular_move": "f6"'), findsOneWidget);
+      expect(find.text('f6'), findsOneWidget);
       await tester.tap(find.byKey(const Key('legacy-partial-0')));
       await tester.pump();
       expect(
@@ -149,6 +150,120 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  for (final size in [const Size(640, 480), const Size(800, 600)]) {
+    testWidgets('recovery remains usable at $size and 200 percent text', (
+      tester,
+    ) async {
+      final root = Directory.systemTemp.createTempSync(
+        'legacy-recovery-scaled-',
+      );
+      addTearDown(() => root.deleteSync(recursive: true));
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final path = p.join(root.path, 'Main.pgn');
+      File(p.join(root.path, 'Main_tree.json')).writeAsStringSync(
+        legacyRecoveryPayloads()[GenerationArtifactKind.tree]!,
+      );
+      final artifacts = GenerationArtifacts(
+        StorageGenerationArtifactRepository(
+          storage: IOStorageService(documentsRoot: root, supportRoot: root),
+          documents: NativePgnDocumentStore(),
+          flushRecoveryDirectory: (_) async =>
+              throw StateError('flush acknowledgement unavailable'),
+        ),
+      );
+      final destination = p.join(root.path, 'Recovered.json');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: LegacyAnalysisDialog(
+            path: path,
+            artifacts: artifacts,
+            chooseExportDestination: (_) async => destination,
+          ),
+        ),
+      );
+      await _until(tester, find.text('Recover older analysis'));
+      final controller =
+          tester
+                  .widget<ListenableBuilder>(
+                    find
+                        .descendant(
+                          of: find.byType(LegacyAnalysisDialog),
+                          matching: find.byType(ListenableBuilder),
+                        )
+                        .first,
+                  )
+                  .listenable
+              as LegacyAnalysisController;
+      for (var i = 0; i < 100 && controller.loading; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+      expect(controller.loading, false);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('legacy-tree-0')).hitTestable(),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('legacy-analysis-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('legacy-tree-0')));
+      await tester.pump();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('legacy-analysis-export')),
+        -200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('legacy-analysis-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await Scrollable.ensureVisible(
+        tester.element(find.byKey(const Key('legacy-analysis-export'))),
+        alignment: 0.5,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('legacy-analysis-export')).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('legacy-analysis-export')));
+      await _until(tester, find.text('Destination: $destination'));
+      await tester.ensureVisible(find.text('Destination: $destination'));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('The export may have been saved'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Destination: $destination').hitTestable(),
+        findsOneWidget,
+      );
+      expect(File(destination).existsSync(), true);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
   testWidgets(
     'damaged tree remains exportable and an export failure is visible',

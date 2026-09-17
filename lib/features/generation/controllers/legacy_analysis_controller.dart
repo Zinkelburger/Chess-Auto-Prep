@@ -4,12 +4,12 @@ import '../models/generation_artifacts.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../services/generation_artifacts.dart';
 
-/// Owns one read-only recovery view. It has no publication or engine capability.
+/// Owns one recovery view; reads and exports without publication or engine work.
 class LegacyAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   LegacyAnalysisController(this.artifacts);
   final GenerationArtifacts artifacts;
   LegacyAnalysisInspection? inspection;
-  Object? error;
+  GenerationArtifactFailure? error;
   String? exportedPath;
   bool loading = false;
   bool exporting = false;
@@ -29,7 +29,12 @@ class LegacyAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       inspection = result;
     } catch (failure) {
       if (isDisposed || epoch != _epoch) return;
-      error = failure;
+      error = failure is GenerationArtifactFailure
+          ? failure
+          : GenerationArtifactFailure(
+              '$failure',
+              kind: GenerationArtifactFailureKind.read,
+            );
     } finally {
       if (!isDisposed && epoch == _epoch) {
         loading = false;
@@ -58,7 +63,14 @@ class LegacyAnalysisController extends ChangeNotifier with SafeChangeNotifier {
       );
       if (!isDisposed) exportedPath = destination;
     } catch (failure) {
-      if (!isDisposed) error = failure;
+      if (!isDisposed) {
+        error = failure is GenerationArtifactFailure
+            ? failure
+            : GenerationArtifactFailure(
+                '$failure',
+                kind: GenerationArtifactFailureKind.export,
+              );
+      }
     } finally {
       if (!isDisposed) {
         exporting = false;

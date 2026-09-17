@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../documents/models/pgn_document.dart';
 import 'generation_publication.dart';
 
@@ -18,7 +20,7 @@ class GenerationArtifactSnapshot {
   }) : payloads = Map.unmodifiable(payloads),
        originalBytes = Map.unmodifiable({
          for (final entry in originalBytes.entries)
-           entry.key: List<int>.unmodifiable(entry.value),
+           entry.key: Uint8List.fromList(entry.value).asUnmodifiableView(),
        }),
        readFailures = Map.unmodifiable(readFailures);
   final GenerationArtifactOrigin origin;

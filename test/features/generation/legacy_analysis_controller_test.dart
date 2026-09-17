@@ -32,6 +32,34 @@ GenerationArtifactSnapshot snapshot() => GenerationArtifactSnapshot(
   },
 );
 void main() {
+  test(
+    'unexpected read and picker errors retain their command category',
+    () async {
+      final repository = _Repository();
+      final controller = LegacyAnalysisController(
+        GenerationArtifacts(repository),
+      );
+      addTearDown(controller.dispose);
+      final failedLoad = controller.load('unavailable');
+      repository.gates['unavailable']!.completeError(
+        StateError('read unavailable'),
+      );
+      await failedLoad;
+      expect(controller.error?.kind, GenerationArtifactFailureKind.read);
+      final loaded = controller.load('chapter');
+      repository.gates['chapter']!.complete(snapshot());
+      await loaded;
+      await controller.export(
+        GenerationArtifactKind.tree,
+        () async => throw StateError('picker unavailable'),
+      );
+      expect(controller.error?.kind, GenerationArtifactFailureKind.export);
+      expect(controller.error?.reason, contains('picker unavailable'));
+      expect(controller.exporting, false);
+      expect(repository.exports, isEmpty);
+    },
+  );
+
   test('newer selection and disposal reject late legacy results', () async {
     final repository = _Repository();
     final controller = LegacyAnalysisController(

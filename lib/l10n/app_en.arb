@@ -879,8 +879,49 @@
   "@legacyAnalysisExportFailed": {
     "description": "Legacy analysis recovery failure"
   },
-  "legacyAnalysisExportUncertain": "The export may have been saved, but completion could not be confirmed. Inspect the destination in Technical details before trying again.",
+  "legacyAnalysisExportUncertain": "The export may have been saved, but completion could not be confirmed. Inspect the destination below before trying again.",
   "@legacyAnalysisExportUncertain": {
     "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisDestination": "Destination: {path}",
+  "@legacyAnalysisDestination": {
+    "description": "Legacy analysis inspection",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "legacyAnalysisPopularMove": "Popular reply",
+  "@legacyAnalysisPopularMove": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisBestMove": "Best reply",
+  "@legacyAnalysisBestMove": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisProbability": "Move probability",
+  "@legacyAnalysisProbability": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisGain": "Evaluation gain",
+  "@legacyAnalysisGain": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisEvaluation": "Evaluation (side to move)",
+  "@legacyAnalysisEvaluation": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisExpectedScore": "Expected score",
+  "@legacyAnalysisExpectedScore": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisPv": "Engine principal variation (UCI)",
+  "@legacyAnalysisPv": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisNotSaved": "Not saved",
+  "@legacyAnalysisNotSaved": {
+    "description": "Legacy analysis inspection"
   }
 }

@@ -1213,8 +1213,62 @@ abstract class AppLocalizations {
   /// Legacy analysis recovery failure
   ///
   /// In en, this message translates to:
-  /// **'The export may have been saved, but completion could not be confirmed. Inspect the destination in Technical details before trying again.'**
+  /// **'The export may have been saved, but completion could not be confirmed. Inspect the destination below before trying again.'**
   String get legacyAnalysisExportUncertain;
+
+  /// Legacy analysis inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Destination: {path}'**
+  String legacyAnalysisDestination(String path);
+
+  /// Legacy analysis inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Popular reply'**
+  String get legacyAnalysisPopularMove;
+
+  /// Legacy analysis inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Best reply'**
+  String get legacyAnalysisBestMove;
+
+  /// Legacy analysis inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Move probability'**
+  String get legacyAnalysisProbability;
+
+  /// Legacy analysis inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Evaluation gain'**
+  String get legacyAnalysisGain;
+
+  /// Legacy analysis inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Evaluation (side to move)'**
+  String get legacyAnalysisEvaluation;
+
+  /// Legacy analysis inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Expected score'**
+  String get legacyAnalysisExpectedScore;
+
+  /// Legacy analysis inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Engine principal variation (UCI)'**
+  String get legacyAnalysisPv;
+
+  /// Legacy analysis inspection
+  ///
+  /// In en, this message translates to:
+  /// **'Not saved'**
+  String get legacyAnalysisNotSaved;
 }
 
 class _AppLocalizationsDelegate
