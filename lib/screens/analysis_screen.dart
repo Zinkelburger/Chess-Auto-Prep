@@ -1,6 +1,12 @@
 /// Analysis screen – position analysis view.
 library;
 
+import 'package:chess_auto_prep/services/tree_build_service.dart';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+
+import 'package:provider/provider.dart';
+
 ///
 /// Keeps one toolbar above both the embedded player picker and the
 /// three-panel [PositionAnalysisWidget].
@@ -11,7 +17,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../features/audit/models/audit_finding.dart';
@@ -122,7 +127,13 @@ abstract class _AnalysisScreenStateBase extends State<AnalysisScreen> {
   //
   // Reports are kept per colour (keyed by "player is white"), mirroring the
   // two game trees, and persisted per player + colour.
-  final HoleHuntService _holeService = HoleHuntService();
+  late final HoleHuntService _holeService = HoleHuntService(
+    pool: context.read<StockfishPool>(),
+    probeTreeBuilder: TreeBuildService(
+      pool: context.read<StockfishPool>(),
+      lifecycle: context.read<EngineLifecycle>(),
+    ).build,
+  );
   final Map<bool, AuditResult?> _holesResults = {true: null, false: null};
   final Map<bool, HoleHuntConfig?> _holesConfigs = {true: null, false: null};
   List<AuditFinding> _holesLive = [];

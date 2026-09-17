@@ -10,6 +10,8 @@
 library;
 
 import 'package:chess_auto_prep/models/pgn_game_entry.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+
 import 'dart:async';
 
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
@@ -317,8 +319,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _showPanel(PgnWorkspace.game);
     // Revealing an already enabled engine must not turn it off. Subsequent
     // presses toggle analysis while leaving the panel in place.
-    if (!hidden || !InlineEngineBar.isEngineEnabled) {
-      InlineEngineBar.toggleEngine();
+    if (!hidden || !InlineEngineBar.isEngineEnabled(context)) {
+      InlineEngineBar.toggleEngine(context);
     }
   }
 
@@ -1210,6 +1212,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// that were played, so the comparison needs both halves together.
   @override
   Future<void> _detectTrophies() async {
+    final pool = context.read<StockfishPool>();
     final guesses = _document.reading.solitaire.controller.guessLog;
     if (guesses.isEmpty || _document.collection.visibleGames.isEmpty) return;
 
@@ -1217,6 +1220,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         _document.collection.visibleGames[_document.collection.selectedIndex];
     try {
       final found = await detectSolitaireTrophies(
+        pool: pool,
         guesses: guesses,
         evals: _analysisController.evals,
         userIsWhite: _document.reading.solitaire.controller.userIsWhite,

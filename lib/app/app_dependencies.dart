@@ -1,3 +1,15 @@
+import 'engine_runtime.dart';
+import '../services/engine/board_engine.dart';
+import '../services/engine/engine_lifecycle.dart';
+import '../services/engine/engine_search_budget.dart';
+import '../services/engine/generation_lease.dart';
+import '../services/engine/stockfish_pool.dart';
+import 'dart:async';
+import 'runtime_settings.dart';
+import '../features/settings/controllers/engine_settings.dart';
+import '../features/settings/controllers/bulk_analysis_settings.dart';
+import '../features/settings/controllers/board_display_settings.dart';
+import '../features/settings/widgets/display_settings_scope.dart';
 import 'dart:io';
 import 'package:provider/provider.dart' as legacy_provider;
 import 'training_dependencies.dart';
@@ -46,6 +58,8 @@ class AppDependencies extends StatefulWidget {
     this.settings,
     this.storedGames,
     this.trainingSettings,
+    this.runtimeSettings,
+    this.engineRuntime,
   });
 
   final Widget child;
@@ -54,17 +68,35 @@ class AppDependencies extends StatefulWidget {
   final AppSettingsRepository? settings;
   final StoredGameRepository? storedGames;
   final TrainingSettingsRepository? trainingSettings;
+  final RuntimeSettings? runtimeSettings;
+  final EngineRuntime? engineRuntime;
 
   @override
   State<AppDependencies> createState() => _AppDependenciesState();
 }
 
 class _AppDependenciesState extends State<AppDependencies> {
+  late final _runtime = widget.runtimeSettings ?? RuntimeSettings.preferences();
+  late final _engines =
+      widget.engineRuntime ?? EngineRuntime(settings: _runtime.engine);
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_runtime.load());
+    if (widget.engineRuntime == null) {
+      unawaited(
+        _engines.lifecycle.loadPersistedState().catchError((Object _) {}),
+      );
+    }
+  }
+
   late final _trainingSettings = createTrainingSettings();
 
   @override
   void dispose() {
     _trainingSettings.dispose();
+    _engines.dispose();
+    _runtime.dispose();
     super.dispose();
   }
 
@@ -92,7 +124,34 @@ class _AppDependenciesState extends State<AppDependencies> {
       repository: widget.storedGames ?? _storedGames,
       child: legacy_provider.Provider<TrainingSettingsRepository>.value(
         value: widget.trainingSettings ?? _trainingSettings,
-        child: widget.child,
+        child: legacy_provider.MultiProvider(
+          providers: [
+            legacy_provider.Provider<BoardEngine>.value(value: _engines.board),
+            legacy_provider.Provider<StockfishPool>.value(value: _engines.pool),
+            legacy_provider.Provider<EngineSearchBudget>.value(
+              value: _engines.budget,
+            ),
+            legacy_provider.ChangeNotifierProvider<EngineLifecycle>.value(
+              value: _engines.lifecycle,
+            ),
+            legacy_provider.Provider<GenerationLease>.value(
+              value: _engines.lease,
+            ),
+            legacy_provider.ChangeNotifierProvider<EngineSettings>.value(
+              value: _runtime.engine,
+            ),
+            legacy_provider.ChangeNotifierProvider<BulkAnalysisSettings>.value(
+              value: _runtime.bulk,
+            ),
+            legacy_provider.ChangeNotifierProvider<BoardDisplaySettings>.value(
+              value: _runtime.display,
+            ),
+          ],
+          child: DisplaySettingsScope(
+            settings: _runtime.display,
+            child: widget.child,
+          ),
+        ),
       ),
     ),
   );

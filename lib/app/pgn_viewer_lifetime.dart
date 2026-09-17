@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import '../features/documents/repositories/viewer_position_index_repository.dart';
 import '../features/documents/repositories/viewer_opening_repository.dart';
 import '../features/documents/repositories/viewer_solitaire_repository.dart';
@@ -36,6 +38,9 @@ class PgnViewerLifetime {
     required ViewerOpeningRepository openings,
     required ViewerSolitaireRepository solitaireRepository,
     required DesktopFullscreenPort window,
+    int Function()? bulkDepth,
+    required StockfishPool pool,
+    required EngineLifecycle lifecycle,
     required PgnCollectionRepository repository,
     required PgnCollectionDecoder collectionDecoder,
     required PgnCollectionFilter collectionFilter,
@@ -43,6 +48,11 @@ class PgnViewerLifetime {
     required ViewerPreferencesRepository preferences,
     required WorkspaceRecoveryStore<PgnWorkspaceSnapshot> store,
   }) {
+    analysis = GameAnalysisController(
+      bulkDepth: bulkDepth,
+      pool: pool,
+      lifecycle: lifecycle,
+    );
     document = ViewerDocumentController(
       positionIndex: positionIndex,
       openings: openings,
@@ -77,7 +87,7 @@ class PgnViewerLifetime {
     );
   }
   final reader = PgnViewerWidgetController();
-  final analysis = GameAnalysisController();
+  late final GameAnalysisController analysis;
   late final ViewerDocumentController document;
   late final WorkspaceRecoveryController<PgnWorkspaceSnapshot> recovery;
   VoidCallback? reclaimFocus;

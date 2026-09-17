@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import 'dart:io';
@@ -17,7 +20,6 @@ import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_
 
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/screens/pgn_viewer_screen.dart';
-import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/widgets/engine/inline_engine_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,13 +29,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/board_engine_fixture.dart';
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   late PgnViewerLifetime lifetime;
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    EngineLifecycle.instance.resetForTest();
-    EngineLifecycle.testMode = true;
+
     useScriptedBoardEngine();
     const windowChannel = MethodChannel('window_manager');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -63,6 +71,8 @@ void main() {
       directory.deleteSync(recursive: true);
     });
     lifetime = PgnViewerLifetime(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
       positionIndex: createViewerPositionIndex(),
       openings: createViewerOpenings(),
       solitaireRepository: createViewerSolitaire(),
@@ -81,7 +91,6 @@ void main() {
     );
     addTearDown(lifetime.shutdown);
   });
-  tearDown(() => EngineLifecycle.instance.resetForTest());
 
   for (final initiallyEnabled in [false, true]) {
     testWidgets(
@@ -91,8 +100,10 @@ void main() {
         addTearDown(() => tester.binding.setSurfaceSize(null));
         final app = AppState()..setMode(AppMode.pgnViewer);
         addTearDown(app.dispose);
-        if (initiallyEnabled) await EngineLifecycle.instance.toggleOn();
-        await tester.pumpWidget(
+        if (initiallyEnabled) await engines.lifecycle.toggleOn();
+        await pumpRuntimeWidget(
+          tester,
+          _engineFixtureSettings ??= testRuntimeSettings(),
           ChangeNotifierProvider.value(
             value: app,
             child: MaterialApp(
@@ -118,19 +129,38 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
         await tester.pumpAndSettle();
         expect(find.byType(InlineEngineBar), findsOneWidget);
-        expect(InlineEngineBar.isEngineEnabled, isTrue);
+        expect(
+          InlineEngineBar.isEngineEnabled(
+            tester.element(find.byType(InlineEngineBar).first),
+          ),
+          isTrue,
+        );
         expect(find.byTooltip('Toggle engine (E)'), findsOneWidget);
 
         await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
         await tester.pumpAndSettle();
-        expect(InlineEngineBar.isEngineEnabled, isFalse);
+        expect(
+          InlineEngineBar.isEngineEnabled(
+            tester.element(find.byType(InlineEngineBar).first),
+          ),
+          isFalse,
+        );
         expect(find.byType(InlineEngineBar), findsOneWidget);
 
         await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
         await tester.pumpAndSettle();
-        expect(InlineEngineBar.isEngineEnabled, isTrue);
+        expect(
+          InlineEngineBar.isEngineEnabled(
+            tester.element(find.byType(InlineEngineBar).first),
+          ),
+          isTrue,
+        );
         expect(find.byType(InlineEngineBar), findsOneWidget);
-        await tester.pumpWidget(const SizedBox.shrink());
+        await pumpRuntimeWidget(
+          tester,
+          _engineFixtureSettings ??= testRuntimeSettings(),
+          const SizedBox.shrink(),
+        );
         await tester.runAsync(lifetime.shutdown);
         await tester.pumpAndSettle();
       },

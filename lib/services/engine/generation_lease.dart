@@ -5,27 +5,33 @@
 library;
 
 import 'engine_lifecycle.dart';
-import 'stockfish_pool.dart';
 
 class GenerationLease {
-  GenerationLease._();
+  GenerationLease({required this.lifecycle});
+  final EngineLifecycle lifecycle;
 
-  static bool get isBusy =>
-      EngineLifecycle.instance.state == EngineState.generating;
+  bool _held = false;
+  bool get isBusy => _held || lifecycle.state == EngineState.generating;
 
   /// Claim the generation engine, run [body], always release.
-  static Future<T> run<T>(Future<T> Function() body, {int threads = 1}) async {
+  Future<T> run<T>(Future<T> Function() body, {int threads = 1}) async {
     if (isBusy) {
       throw StateError(
         'Another engine job is running — wait for it to finish first.',
       );
     }
-    await EngineLifecycle.instance.enterGeneration(threads);
+    _held = true;
+    var entered = false;
     try {
-      await StockfishPool.instance.ensureWorkers(threads);
+      await lifecycle.enterGeneration(threads);
+      entered = true;
       return await body();
     } finally {
-      await EngineLifecycle.instance.exitGeneration();
+      try {
+        if (entered && !lifecycle.isDisposed) await lifecycle.exitGeneration();
+      } finally {
+        _held = false;
+      }
     }
   }
 }

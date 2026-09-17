@@ -16,8 +16,8 @@ import 'package:flutter/foundation.dart';
 
 import '../features/documents/repositories/viewer_analysis_port.dart';
 import '../constants/chess_constants.dart';
+import '../features/settings/models/bulk_analysis_configuration.dart';
 import '../chess_core/pgn/pgn_dummy_mainline.dart';
-import '../models/bulk_analysis_settings.dart';
 import '../utils/chess_utils.dart'
     show uciPvToSan, uciToSan, toStandardUci, isNullMoveSan;
 import '../utils/fen_utils.dart';
@@ -37,10 +37,18 @@ class GameAnalysisController extends ChangeNotifier
     with SafeChangeNotifier
     implements ViewerAnalysisPort {
   GameAnalysisController({
+    required this.pool,
+    required this.lifecycle,
     Future<CachedGameAnalysis?> Function(String pgnText)? cachedAnalysisLoader,
-  }) : _cachedAnalysisLoader =
+    int Function()? bulkDepth,
+  }) : _bulkDepth = bulkDepth ?? (() => BulkAnalysisConfiguration.defaultDepth),
+       _cachedAnalysisLoader =
            cachedAnalysisLoader ??
            ((pgnText) => compute(parseCachedEvals, pgnText));
+
+  final StockfishPool pool;
+  final EngineLifecycle lifecycle;
+  final int Function() _bulkDepth;
 
   final Future<CachedGameAnalysis?> Function(String pgnText)
   _cachedAnalysisLoader;
@@ -64,7 +72,7 @@ class GameAnalysisController extends ChangeNotifier
   /// Stockfish "Depth" setting — full-game analysis has no depth knob of its
   /// own; it follows the one in the Stockfish settings dialog.
   int? _activeDepth;
-  int get depth => _activeDepth ?? BulkAnalysisSettings.instance.depth;
+  int get depth => _activeDepth ?? _bulkDepth();
 
   bool _isCancelled = false;
 
@@ -133,12 +141,12 @@ class GameAnalysisController extends ChangeNotifier
     if (_isAnalyzing) return;
     final missing = movesMissingBestLine;
     if (missing.isEmpty) return;
-    if (EngineLifecycle.instance.state == EngineState.generating) return;
+    if (lifecycle.state == EngineState.generating) return;
     final generation = _generation;
 
     // The depth the graph was drawn at, so the lines agree with the scores
     // beside them; the engine setting when the series does not say.
-    var depth = BulkAnalysisSettings.instance.depth;
+    var depth = _bulkDepth();
     for (final e in missing) {
       final d = e.depth;
       if (d != null && d < depth) depth = d;
@@ -146,7 +154,6 @@ class GameAnalysisController extends ChangeNotifier
 
     final List<EvalResult> results;
     try {
-      final pool = StockfishPool.instance;
       await pool.ensureWorkers();
       if (pool.workerCount == 0) return;
       results = await pool.evaluateMany([
@@ -206,7 +213,7 @@ class GameAnalysisController extends ChangeNotifier
     _isCancelled = false;
     notifyListeners();
 
-    final depth = analysisDepth ?? BulkAnalysisSettings.instance.depth;
+    final depth = analysisDepth ?? _bulkDepth();
     _activeDepth = depth;
     bool runIsCurrent() =>
         !isDisposed && !_isCancelled && generation == _generation;
@@ -219,7 +226,6 @@ class GameAnalysisController extends ChangeNotifier
       notifyListeners();
       if (mainline.isEmpty) return;
 
-      final pool = StockfishPool.instance;
       await pool.ensureWorkers();
       if (!runIsCurrent()) return;
       final workerCount = pool.workerCount;
@@ -489,7 +495,7 @@ class GameAnalysisController extends ChangeNotifier
     _generation++;
     _isCancelled = true;
     _isAnalyzing = false;
-    StockfishPool.instance.stopAll();
+    pool.stopAll();
     notifyListeners();
   }
 

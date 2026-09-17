@@ -1,4 +1,7 @@
 import 'package:chess_auto_prep/models/pgn_game_entry.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
 import '../../support/fake_desktop_fullscreen_port.dart';
@@ -63,6 +66,7 @@ class FailingStorage extends IOStorageService {
 }
 
 class FakeAnalysis extends GameAnalysisController {
+  FakeAnalysis() : super(pool: engines.pool, lifecycle: engines.lifecycle);
   @override
   Future<bool> tryLoadFromPgn(String text) async => true;
   @override
@@ -114,7 +118,14 @@ Future<void> pausedWriter((String, SendPort) request) async {
   }
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory root;
   late PathProviderPlatform original;
@@ -472,7 +483,10 @@ void main() {
       StorageFactory.instanceForTest = UnreadableTactics();
       db.analyzedGameIds.add('game1');
       await expectLater(
-        TacticsImportService(database: db).pruneStoredPgns(),
+        TacticsImportService(
+          pool: engines.pool,
+          database: db,
+        ).pruneStoredPgns(),
         throwsStateError,
       );
       expect(store.count(GameCollections.tactics), 1);

@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/features/settings/widgets/display_settings_scope.dart';
+import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart' show kSecondaryButton;
@@ -5,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../models/board_annotation.dart';
-import '../models/board_display_settings.dart';
 import '../models/completed_move.dart';
 import '../theme/app_colors.dart';
 import '../utils/chess_utils.dart'
@@ -95,7 +96,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final display = BoardDisplaySettings.of(context);
+    final display = DisplaySettingsScope.of(context);
     final coordinates = widget.coordinates ?? display.coordinates;
     return LayoutBuilder(
       builder: (context, constraints) {

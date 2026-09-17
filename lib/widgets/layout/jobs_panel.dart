@@ -4,6 +4,9 @@
 /// usage, progress, and controls. Completed jobs use a simpler list tile.
 library;
 
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../features/audit/controllers/audit_session_controller.dart';
@@ -206,7 +209,10 @@ class JobsPanel extends StatelessWidget {
     final elapsed = formatCompactDuration(
       Duration(milliseconds: gc.progress.elapsedMs),
     );
-    final resourceLabel = generationResourceLabel(config);
+    final resourceLabel = generationResourceLabel(
+      config,
+      hashPerWorkerMb: context.read<StockfishPool>().effectiveSettings.hashMb,
+    );
     final configSummary = config?.summaryLabel;
     final accent = Theme.of(context).colorScheme.primary;
 

@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/app/generation_dependencies.dart';
+import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/app/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
@@ -59,6 +61,9 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
+            Provider<GenerationArtifacts>(
+              create: (_) => createGenerationArtifacts(documents: documents),
+            ),
             Provider<RepertoireDocumentRepository>(
               create: (_) => createRepertoireDocuments(documents: documents),
             ),

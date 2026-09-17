@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import '../../support/runtime_settings.dart';
 // Start refuses a numeric knob it cannot use and names it, instead of
 // quietly building with a default in its place.
 
@@ -13,12 +15,20 @@ Finder _field(String labelPrefix) => find.byWidgetPredicate(
       (w.decoration?.labelText?.startsWith(labelPrefix) ?? false),
 );
 
+RuntimeSettings? _settings;
+RuntimeSettings get settings => _settings ??= testRuntimeSettings();
 void main() {
+  setUp(() {
+    _settings = null;
+    addTearDown(() => _settings?.dispose());
+  });
   late GlobalKey<GenerationConfigFormState> formKey;
 
   Future<void> pumpForm(WidgetTester tester) async {
     formKey = GlobalKey<GenerationConfigFormState>();
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      settings,
       MultiProvider(
         providers: [
           ChangeNotifierProvider<EvalDatabaseSettings>.value(

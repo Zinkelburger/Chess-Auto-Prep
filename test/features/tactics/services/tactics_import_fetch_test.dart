@@ -15,6 +15,10 @@
 @TestOn('vm')
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../../support/runtime_settings.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -201,7 +205,14 @@ String archivesJson(List<String> urls) => json.encode({'archives': urls});
 const _chesscomBase = 'https://api.chess.com/pub/player/usera/games';
 const _archivesUrl = '$_chesscomBase/archives';
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final stub = _StubHttp();
@@ -237,7 +248,7 @@ void main() {
     await StorageFactory.instance.saveAnalyzedGameIds(analyzed);
     final db = TacticsDatabase();
     await db.loadPositions();
-    return TacticsImportService(database: db);
+    return TacticsImportService(pool: engines.pool, database: db);
   }
 
   Uri lichessRequest() =>

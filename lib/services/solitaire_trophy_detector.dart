@@ -52,6 +52,7 @@ typedef _BestAttempt = ({String san, int advantageCp, int userCpFromUser});
 /// [existing] are skipped, so re-running analysis on the same game doesn't
 /// duplicate the shelf.
 Future<List<SolitaireTrophy>> detectSolitaireTrophies({
+  required StockfishPool pool,
   required List<SolitaireGuess> guesses,
   required List<MoveEval> evals,
   required bool userIsWhite,
@@ -94,6 +95,7 @@ Future<List<SolitaireTrophy>> detectSolitaireTrophies({
       scoreMate: gameMove.scoreMate,
     );
     final best = await _bestAttempt(
+      pool: pool,
       before: before,
       fenBefore: gameMove.fenBefore,
       attempts: guess.wrongAttempts,
@@ -134,6 +136,7 @@ String _attemptKey(String fen, String san) => '$fen|$san';
 /// [minAdvantageCp]. Attempts already in [awarded] and unparseable or
 /// failing evaluations are skipped.
 Future<_BestAttempt?> _bestAttempt({
+  required StockfishPool pool,
   required Position before,
   required String fenBefore,
   required List<String> attempts,
@@ -143,7 +146,6 @@ Future<_BestAttempt?> _bestAttempt({
   required int depth,
   required int minAdvantageCp,
 }) async {
-  final pool = StockfishPool.instance;
   _BestAttempt? best;
   for (final san in attempts) {
     if (awarded.contains(_attemptKey(fenBefore, san))) continue;

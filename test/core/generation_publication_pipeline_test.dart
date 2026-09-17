@@ -1,9 +1,12 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+import '../support/generation_artifacts_fixture.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/core/generation_artifacts.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
@@ -51,7 +54,14 @@ BuildTree _completedTree() {
   return BuildTree(root: root, maxPlyReached: 1)..computeMetadata();
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final outcome in ['success', 'conflict', 'refresh failure']) {
     final conflict = outcome == 'conflict';
@@ -75,6 +85,7 @@ void main() {
         };
       }
       final controller = GenerationSessionController(
+        enginePool: engines.pool,
         publication: GenerationPublicationController(
           documents: documents,
           drafts: StorageGenerationDraftRepository(
@@ -82,7 +93,7 @@ void main() {
             prepareDirectory: (_) async {},
           ),
         ),
-        artifacts: GenerationArtifactStore(storage: () => storage),
+        artifacts: generationArtifactsFixture(),
         engineLifecycle: lifecycle,
       );
       addTearDown(controller.dispose);

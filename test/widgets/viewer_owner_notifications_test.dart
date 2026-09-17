@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/app/pgn_viewer_lifetime.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:chess_auto_prep/core/app_history.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
@@ -14,7 +15,6 @@ import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_library_repository.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/screens/pgn_viewer_screen.dart';
-import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/games_library/game_filter.dart'
     show dedupKeyForHeaders;
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
@@ -28,6 +28,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/board_engine_fixture.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import '../support/memory_workspace_recovery_store.dart';
+import '../support/runtime_settings.dart';
 
 class _Preferences extends SharedPreferencesViewerRepository {
   _Preferences() : super(SharedPreferences.getInstance);
@@ -139,6 +140,7 @@ void main() {
   late _DelayedRepository repository;
   late _ControlledStorage storage;
   late PgnViewerLifetime lifetime;
+  late RuntimeSettings runtimeSettings;
   late AppState app;
   late AppHistory history;
 
@@ -147,9 +149,10 @@ void main() {
       'game_view.auto_save': false,
       'pgn_viewer.auto_detect_openings': false,
     });
-    EngineLifecycle.instance.resetForTest();
-    EngineLifecycle.testMode = true;
     useScriptedBoardEngine();
+    runtimeSettings = testRuntimeSettings();
+    addTearDown(runtimeSettings.dispose);
+    final engines = testEngines(runtimeSettings);
     directory = Directory.systemTemp.createTempSync('viewer-owner-events-');
     path = '${directory.path}/games.pgn';
     File(path).writeAsStringSync(_games);
@@ -164,6 +167,8 @@ void main() {
     preferences = _Preferences();
     repository = _DelayedRepository(storage);
     lifetime = PgnViewerLifetime(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
       positionIndex: createViewerPositionIndex(),
       openings: createViewerOpenings(),
       solitaireRepository: createViewerSolitaire(),
@@ -191,7 +196,6 @@ void main() {
     history.dispose();
     app.dispose();
     StorageFactory.instanceForTest = null;
-    EngineLifecycle.instance.resetForTest();
     const channel = MethodChannel('plugins.flutter.io/path_provider');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
@@ -201,7 +205,9 @@ void main() {
   Future<void> mount(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: app),
@@ -224,7 +230,7 @@ void main() {
     if (statGate != null && !statGate.isCompleted) statGate.complete();
     final gate = repository.saveGate;
     if (gate != null && !gate.isCompleted) gate.complete();
-    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox.shrink());
     await tester.runAsync(lifetime.shutdown);
   }
 

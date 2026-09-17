@@ -56,7 +56,7 @@ class RepertoireAuditService {
   /// the live API, created per run when [AuditConfig.useChessDb] is on.
   RepertoireAuditService({
     ExternalMoveProvider? chessDbProvider,
-    StockfishPool? pool,
+    required StockfishPool pool,
     EvalCache? evalCache,
   }) : _chessDbOverride = chessDbProvider,
        _probe = EnginePositionProbe(pool: pool, evalCache: evalCache);

@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../../support/runtime_settings.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
@@ -47,7 +50,14 @@ String _prefixedGame(String prefixedId) =>
 
 1. d4 d5 0-1''';
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory tempDir;
@@ -66,7 +76,7 @@ void main() {
     await StorageFactory.instance.saveAnalyzedGameIds(ids);
     final db = TacticsDatabase();
     await db.loadPositions();
-    return TacticsImportService(database: db);
+    return TacticsImportService(pool: engines.pool, database: db);
   }
 
   group('pruneStoredPgns', () {

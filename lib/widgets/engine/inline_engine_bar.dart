@@ -8,17 +8,22 @@
 /// analysis is toggled off. Background jobs use their own on-demand pool.
 library;
 
+import 'package:chess_auto_prep/services/engine/board_engine.dart';
+
+import '../../features/settings/models/engine_configuration.dart';
+
+import 'package:provider/provider.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import '../../models/engine_settings.dart';
+import '../../features/settings/controllers/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/eval_cache.dart';
 import '../../services/engine/engine_lifecycle.dart';
-import '../../services/engine/board_engine.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart'
@@ -59,27 +64,35 @@ class InlineEngineBar extends StatefulWidget {
   });
 
   /// Whether the engine is currently enabled (static, shared across instances).
-  static bool get isEngineEnabled => _InlineEngineBarState._engineEnabled;
+  static bool isEngineEnabled(BuildContext context) =>
+      context.read<EngineLifecycle>().state != EngineState.off;
 
   /// Toggle engine on/off from outside (e.g. keyboard shortcut).
-  static void toggleEngine() => _InlineEngineBarState.toggleEngineExternal();
+  static void toggleEngine(BuildContext context) {
+    final lifecycle = context.read<EngineLifecycle>();
+    unawaited(
+      (lifecycle.state == EngineState.off
+              ? lifecycle.toggleOn()
+              : lifecycle.toggleOff())
+          .catchError(
+            (Object error) =>
+                debugPrint('[InlineEngine] Toggle failed: $error'),
+          ),
+    );
+  }
 
   @override
   State<InlineEngineBar> createState() => _InlineEngineBarState();
 }
 
 class _InlineEngineBarState extends State<InlineEngineBar> {
-  final EngineSettings _settings = EngineSettings.instance;
+  late final EngineSettings _settings = context.read<EngineSettings>();
+  late final _lifecycle = context.read<EngineLifecycle>();
 
-  static bool get _engineEnabled =>
-      EngineLifecycle.instance.state != EngineState.off;
+  bool get _engineEnabled => _lifecycle.state != EngineState.off;
 
-  static void toggleEngineExternal() {
-    _setEngineEnabled(!_engineEnabled);
-  }
-
-  static void _setEngineEnabled(bool value) {
-    final lifecycle = EngineLifecycle.instance;
+  void _setEngineEnabled(bool value) {
+    final lifecycle = _lifecycle;
     unawaited(
       (value ? lifecycle.toggleOn() : lifecycle.toggleOff()).catchError(
         (Object error) => debugPrint('[InlineEngine] Toggle failed: $error'),
@@ -96,7 +109,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     final generation = _generation;
     final fen = widget.fen;
     final uci =
-        !EngineGate.isLocked &&
+        !EngineGate.isLocked(context) &&
             _threatMode &&
             _engineEnabled &&
             _isActive &&
@@ -132,21 +145,15 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   Timer? _progressThrottle;
   DiscoveryResult? _pendingProgress;
 
-  // Settings fields that actually affect the inline search — a re-search runs
-  // only when one of these changes, not on every unrelated EngineSettings
-  // notify (column mutes, Maia toggles, explorer DB, …).
-  int _lastDepth = 0;
-  int _lastMultiPv = 0;
-  int _lastInlineThreads = 0;
-  int _lastHashMb = 0;
-
-  final _session = BoardEngine.instance.createSession();
-  bool _wasEnabled = _engineEnabled;
+  EngineConfiguration? _searchConfiguration;
+  int get _displayLines => _searchConfiguration?.multiPv ?? _settings.multiPv;
+  late final _session = context.read<BoardEngine>().createSession();
+  late bool _wasEnabled = _engineEnabled;
   bool _modeActive = true;
 
   bool get _isActive => widget.isActive && _modeActive;
 
-  bool _gateLocked = EngineGate.isLocked;
+  late bool _gateLocked = EngineGate.isLocked(context);
 
   /// Drives the floating mini-board shown when hovering PV moves.
   final BoardPreviewController _boardPreview = BoardPreviewController();
@@ -155,13 +162,11 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   @override
   void initState() {
     super.initState();
-    // Reconfigure the idle worker and restart when search settings change.
+    _wasEnabled = _engineEnabled;
+    _gateLocked = EngineGate.isLocked(context);
+    // Committed settings apply to the next explicit search.
     _settings.addListener(_onSettingsChanged);
-    _lastDepth = _settings.depth;
-    _lastMultiPv = _settings.multiPv;
-    _lastInlineThreads = _settings.cores;
-    _lastHashMb = _settings.hashMb;
-    EngineLifecycle.instance.addListener(_onEngineGateChanged);
+    _lifecycle.addListener(_onEngineGateChanged);
     if (_engineEnabled && _isActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _runDiscovery());
     }
@@ -171,7 +176,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   /// prepare and resume discovery when the build releases it.
   void _onEngineGateChanged() {
     if (!mounted) return;
-    final locked = EngineGate.isLocked;
+    final locked = EngineGate.isLocked(context);
     final enabled = _engineEnabled;
     final changed = locked != _gateLocked || enabled != _wasEnabled;
     _gateLocked = locked;
@@ -250,7 +255,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   void dispose() {
     _generation++;
     _progressThrottle?.cancel();
-    EngineLifecycle.instance.removeListener(_onEngineGateChanged);
+    _lifecycle.removeListener(_onEngineGateChanged);
     _settings.removeListener(_onSettingsChanged);
     _session.dispose();
     _boardPreview.dispose();
@@ -258,27 +263,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   void _onSettingsChanged() {
-    // Only depth / MultiPV / cores / memory changes affect the inline search;
-    // EngineSettings fires for ~30 unrelated fields and each one used to abort
-    // and restart the in-progress search.
-    final relevant =
-        _settings.depth != _lastDepth ||
-        _settings.multiPv != _lastMultiPv ||
-        _settings.cores != _lastInlineThreads ||
-        _settings.hashMb != _lastHashMb;
     if (!mounted) return;
+    // The next explicit search/position reads committed settings.
     setState(() {});
-    if (!relevant) return;
-    _lastDepth = _settings.depth;
-    _lastMultiPv = _settings.multiPv;
-    _lastInlineThreads = _settings.cores;
-    _lastHashMb = _settings.hashMb;
-
-    _lastAnalyzedFen = null;
-    _prepareEngine();
-    if (_engineEnabled && _isActive) {
-      unawaited(_runDiscovery());
-    }
   }
 
   /// Leading + trailing throttle for streamed search progress: paint the first
@@ -305,7 +292,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   void _prepareEngine() {
-    if (!_isActive || EngineGate.isLocked) return;
+    if (!_isActive || EngineGate.isLocked(context)) return;
     unawaited(
       _session.prepare().catchError((Object error) {
         if (kDebugMode) debugPrint('[InlineEngine] Preparation failed: $error');
@@ -314,12 +301,16 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   Future<void> _runDiscovery() async {
-    if (!mounted || !_isActive || !_engineEnabled || EngineGate.isLocked) {
+    if (!mounted ||
+        !_isActive ||
+        !_engineEnabled ||
+        EngineGate.isLocked(context)) {
       return;
     }
     if (_searchFen == _lastAnalyzedFen && _discovery.lines.isNotEmpty) return;
 
     final myGen = ++_generation;
+    final configuration = _searchConfiguration = _settings.committed;
     // Drop any pending throttled progress from the previous search so a stale
     // trailing flush can't paint over the new one.
     _progressThrottle?.cancel();
@@ -340,8 +331,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     try {
       final result = await _session.discover(
         fen: fen,
-        depth: _settings.depth,
-        multiPv: _settings.multiPv,
+        depth: configuration.depth,
+        multiPv: configuration.multiPv,
         whiteToMove: whiteToMove,
         onProgress: (intermediate) => _onDiscoveryProgress(intermediate, myGen),
       );
@@ -394,12 +385,12 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             // PGN below us as streamed lines disappear and arrive.
             ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight: EnginePvRow.lineHeight(context) * _settings.multiPv,
-                maxHeight: (EnginePvRow.lineHeight(context) * _settings.multiPv)
+                minHeight: EnginePvRow.lineHeight(context) * _displayLines,
+                maxHeight: (EnginePvRow.lineHeight(context) * _displayLines)
                     .clamp(240.0, double.infinity),
               ),
               child: SingleChildScrollView(
-                child: EngineGate.isLocked
+                child: EngineGate.isLocked(context)
                     ? const EngineBusyNotice(dense: true)
                     : _buildLines(context),
               ),
@@ -451,7 +442,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
           Expanded(
             child: _engineEnabled
                 ? Text(
-                    EngineGate.isLocked
+                    EngineGate.isLocked(context)
                         ? 'Engine busy'
                         : _isSearching
                         ? '${_threatMode ? 'Threat · ' : ''}Depth ${_discovery.depth} • '
@@ -487,7 +478,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             isSelected: _threatMode,
             onPressed:
                 _engineEnabled &&
-                    !EngineGate.isLocked &&
+                    !EngineGate.isLocked(context) &&
                     threatPositionFen(widget.fen) != null
                 ? _toggleThreat
                 : null,
@@ -528,7 +519,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                   ? 'Depth ${_discovery.depth} · ${formatNodes(_discovery.nodes)} nodes'
                   : 'Local engine',
               child: Text(
-                EngineGate.isLocked ? 'Engine busy' : 'Stockfish',
+                EngineGate.isLocked(context) ? 'Engine busy' : 'Stockfish',
                 style: AppTextStyles.muted.copyWith(
                   color: AppColors.onSurfaceMuted,
                 ),
@@ -553,7 +544,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                 checked: _threatMode,
                 enabled:
                     _engineEnabled &&
-                    !EngineGate.isLocked &&
+                    !EngineGate.isLocked(context) &&
                     threatPositionFen(widget.fen) != null,
                 child: const Text('Show threat'),
               ),
@@ -598,7 +589,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     final byRank = {for (final line in lines) line.pvNumber: line};
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: List.generate(_settings.multiPv, (index) {
+      children: List.generate(_displayLines, (index) {
         final line = byRank[index + 1];
         return line == null
             ? SizedBox(height: EnginePvRow.lineHeight(context))

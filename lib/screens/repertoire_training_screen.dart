@@ -2,6 +2,7 @@
 /// plus a tactics mode for training studies of custom puzzles.
 library;
 
+import '../features/generation/services/generation_artifacts.dart';
 import '../app/training_dependencies.dart';
 import '../features/training/models/training_configuration.dart';
 import '../features/training/repositories/training_settings_repository.dart';
@@ -94,6 +95,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     super.initState();
     _workspaceNavigation.addListener(_resumePendingHandoff);
     _training = createTrainingSession(
+      artifacts: context.read<GenerationArtifacts>().repository,
       configuration: context.read<TrainingSettingsRepository>(),
       session: RepertoireController(
         documents: context.read<RepertoireDocumentRepository>(),

@@ -17,7 +17,7 @@ import 'fen_map.dart';
 
 /// Encode a [BuildTree] as a JSON string matching the C v4 format.
 ///
-/// [indent] pretty-prints; the human-facing `_tree.json` artifact keeps it,
+/// [indent] pretty-prints; the complete tree artifact keeps it,
 /// while partial saves and failure dumps pass false — on a 30k-node tree the
 /// indented encode is several times the cost of the compact one.
 String serializeTree(BuildTree tree, {bool indent = true}) =>

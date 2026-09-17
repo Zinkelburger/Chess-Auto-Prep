@@ -1,3 +1,4 @@
+import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,7 +27,11 @@ Future<void> _pump(
   final appState = AppState();
   addTearDown(appState.dispose);
 
-  await tester.pumpWidget(
+  final settings = testRuntimeSettings();
+  addTearDown(settings.dispose);
+  await pumpRuntimeWidget(
+    tester,
+    settings,
     ChangeNotifierProvider<AppState>.value(
       value: appState,
       child: MaterialApp(

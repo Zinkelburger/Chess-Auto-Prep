@@ -4,13 +4,17 @@
 /// and never runs anything.
 library;
 
+import 'package:chess_auto_prep/services/engine/board_engine.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../core/generation_session_controller.dart';
 import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
-import '../models/engine_settings.dart';
+import '../features/settings/controllers/engine_settings.dart';
 import '../services/analysis_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../services/coherence_service.dart';
@@ -59,15 +63,18 @@ class RepertoireAnalysisDock extends StatefulWidget {
 }
 
 class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
-  final EngineSettings _settings = EngineSettings.instance;
-  final AnalysisService _analysis = AnalysisService();
+  late final EngineSettings _settings = context.read<EngineSettings>();
+  late final _lifecycle = context.read<EngineLifecycle>();
+  late final AnalysisService _analysis = AnalysisService(
+    engine: context.read<BoardEngine>(),
+  );
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_scheduleSetState);
     _settings.addListener(_scheduleSetState);
-    EngineLifecycle.instance.addListener(_scheduleSetState);
+    _lifecycle.addListener(_scheduleSetState);
     _analysis.discoveryResult.addListener(_scheduleSetState);
   }
 
@@ -75,7 +82,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   void dispose() {
     widget.controller.removeListener(_scheduleSetState);
     _settings.removeListener(_scheduleSetState);
-    EngineLifecycle.instance.removeListener(_scheduleSetState);
+    _lifecycle.removeListener(_scheduleSetState);
     _analysis.discoveryResult.removeListener(_scheduleSetState);
     _analysis.dispose();
     super.dispose();
@@ -262,7 +269,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
               try {
                 await widget.controller.setRootPosition();
                 if (!mounted) return;
-                EngineSettings.instance.probabilityStartMoves =
+                context.read<EngineSettings>().probabilityStartMoves =
                     widget.controller.rootMoves;
               } catch (error) {
                 if (!mounted) return;

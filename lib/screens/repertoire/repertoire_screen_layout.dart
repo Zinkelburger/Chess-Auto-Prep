@@ -179,7 +179,7 @@ mixin _RepertoireLayout
           startTrap: _trapSession.trapAtFen(_controller.fen),
         );
       },
-      onToggleEngine: InlineEngineBar.toggleEngine,
+      onToggleEngine: () => InlineEngineBar.toggleEngine(context),
       onFocusComment: PgnAnnotationPanel.focusActive,
       onGoBack: _sessionAwareGoBack,
       onGoForward: _sessionAwareGoForward,

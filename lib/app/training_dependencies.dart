@@ -1,3 +1,4 @@
+import '../features/generation/repositories/generation_artifact_repository.dart';
 import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../features/training/controllers/training_session_controller.dart';
 import '../features/training/controllers/training_settings_controller.dart';
@@ -14,6 +15,7 @@ TrainingSettingsController createTrainingSettings() =>
 /// Session bridges share the injected application configuration owner.
 TrainingSessionController createTrainingSession({
   required RepertoireController session,
+  required GenerationArtifactRepository artifacts,
   required TrainingSettingsRepository configuration,
   RepertoireService? repertoireService,
   RepertoireReviewService? reviewService,
@@ -26,6 +28,7 @@ TrainingSessionController createTrainingSession({
     session: session,
     headers: repertoire.files,
     source: TrainingSourceLoader(
+      artifacts: artifacts,
       repertoireService: repertoire,
       reviewService: reviews,
       askedQuestions: answers,

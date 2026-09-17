@@ -4,12 +4,14 @@
 /// summary stats, and classified move list with clickable best lines.
 library;
 
+import 'package:provider/provider.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../models/solitaire_trophy.dart';
-import '../models/bulk_analysis_settings.dart';
+import '../features/settings/controllers/bulk_analysis_settings.dart';
 import '../services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 import 'clickable_move_line.dart';
@@ -223,7 +225,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
   /// there is no graph at all, which is to say: none.
   Widget _buildDeepenBar(List<MoveEval> evals) {
     final stored = _storedDepth(evals);
-    final target = BulkAnalysisSettings.instance.depth;
+    final target = context.read<BulkAnalysisSettings>().depth;
     if (stored == null || stored >= target) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),

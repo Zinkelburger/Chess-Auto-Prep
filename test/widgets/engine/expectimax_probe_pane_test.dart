@@ -1,3 +1,7 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+import '../../support/generation_artifacts_fixture.dart';
 import '../../support/generation_publication_fixture.dart';
 // The expectimax pane with probe hooks: it offers to compute what the
 // database lacks and routes each request to the right position and move.
@@ -97,7 +101,14 @@ Widget _pane({
   ),
 );
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   const config = TreeBuildConfig(startFen: _startFen, playAsWhite: true);
   late GenerationSessionController generation;
   late _Recorder recorder;
@@ -105,6 +116,9 @@ void main() {
 
   setUp(() {
     generation = GenerationSessionController(
+      enginePool: engines.pool,
+      engineLifecycle: engines.lifecycle,
+      artifacts: generationArtifactsFixture(),
       publication: generationPublicationFixture(),
     );
     recorder = _Recorder();
@@ -118,7 +132,11 @@ void main() {
   testWidgets('with no database it offers to compute from here', (
     tester,
   ) async {
-    await tester.pumpWidget(_pane(fen: _startFen, hooks: hooks));
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
+      _pane(fen: _startFen, hooks: hooks),
+    );
     await tester.pump();
 
     expect(find.text('No expectimax database yet'), findsOneWidget);
@@ -131,7 +149,9 @@ void main() {
   testWidgets('a position the database lacks gets the same offer', (
     tester,
   ) async {
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
       _pane(
         fen: 'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1',
         hooks: hooks,
@@ -148,7 +168,9 @@ void main() {
   testWidgets('each row can compute the position after its move', (
     tester,
   ) async {
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
       _pane(fen: _startFen, hooks: hooks, tree: _tree(config), config: config),
     );
     await tester.pump();
@@ -171,7 +193,11 @@ void main() {
 
   testWidgets('a refusal is shown, not swallowed', (tester) async {
     recorder.error = 'A build is running — wait for it to finish first.';
-    await tester.pumpWidget(_pane(fen: _startFen, hooks: hooks));
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
+      _pane(fen: _startFen, hooks: hooks),
+    );
     await tester.pump();
 
     await tester.tap(find.text('Compute from here'));
@@ -181,7 +207,9 @@ void main() {
   });
 
   testWidgets('read-only without hooks: no compute controls', (tester) async {
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      _engineFixtureSettings ??= testRuntimeSettings(),
       MaterialApp(
         home: Scaffold(
           body: SizedBox(

@@ -66,6 +66,8 @@ abstract class PlanDataSource {
 
 class DefaultPlanDataSource implements PlanDataSource {
   DefaultPlanDataSource({
+    required this.pool,
+    required this.lifecycle,
     Future<EcoTrie>? trie,
     ExternalEvalProvider? evals,
     this.evalTimeout = const Duration(seconds: 6),
@@ -75,6 +77,8 @@ class DefaultPlanDataSource implements PlanDataSource {
   }
 
   /// Depth for on-demand Stockfish evaluations.
+  final StockfishPool pool;
+  final EngineLifecycle lifecycle;
   final int engineDepth;
 
   /// How long one database lookup may take before its cell stays blank.
@@ -285,9 +289,8 @@ class DefaultPlanDataSource implements PlanDataSource {
   @override
   Future<PlanEngineEval?> engineEval(String fen) async {
     // A running build owns the engine; don't fight it.
-    if (EngineLifecycle.instance.state == EngineState.generating) return null;
+    if (lifecycle.state == EngineState.generating) return null;
     try {
-      final pool = StockfishPool.instance;
       await pool.ensureWorkers(1);
       final result = await pool.evaluateFen(fen, engineDepth);
       final cp = isWhiteToMove(fen) ? result.effectiveCp : -result.effectiveCp;

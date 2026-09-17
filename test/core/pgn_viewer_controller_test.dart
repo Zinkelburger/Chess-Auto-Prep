@@ -1,4 +1,7 @@
 import 'package:chess_auto_prep/models/pgn_game_entry.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_collection_players.dart';
@@ -62,6 +65,8 @@ class _RecoveryStorage extends _GatedStorage {
 /// Stub analysis controller: no isolates, no engine, no IO. Lets us exercise
 /// `loadCurrentGame` (called by every navigation/slice method) deterministically.
 class _FakeAnalysisController extends GameAnalysisController {
+  _FakeAnalysisController()
+    : super(pool: engines.pool, lifecycle: engines.lifecycle);
   @override
   Future<bool> tryLoadFromPgn(String pgnText) async => true;
 
@@ -213,7 +218,14 @@ void _seed(ViewerDocumentController c, List<PgnGameEntry> games) {
   expect(c.adoptDecodedCollection(DecodedPgnCollection(games, '')), isNotNull);
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {

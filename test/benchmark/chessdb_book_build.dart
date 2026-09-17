@@ -16,6 +16,10 @@
 ///     --dart-define=PLAY_WHITE=false
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -116,7 +120,14 @@ void _say(String s) {
   stdout.writeln('[cdb] ${DateTime.now().toIso8601String()} $s');
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() {
@@ -334,7 +345,10 @@ void main() {
 
 /// The Phase 1 build, factored out so [_reexportTree] can skip it entirely.
 Future<BuildTree> _buildTree(TreeBuildConfig config, MasterGamesDb book) async {
-  final service = TreeBuildService();
+  final service = TreeBuildService(
+    pool: engines.pool,
+    lifecycle: engines.lifecycle,
+  );
   var lastReport = 0;
   final wall = Stopwatch()..start();
   final tree = await service.build(

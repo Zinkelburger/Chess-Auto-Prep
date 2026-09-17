@@ -4,6 +4,7 @@
 library;
 
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
 import 'package:chess_auto_prep/services/eval_cache.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';
 import 'package:chess_auto_prep/services/maia/maia_service.dart';
@@ -13,19 +14,23 @@ import 'scripted_engine.dart';
 
 /// Put [connection] behind the shared pool as its only worker.
 ///
-/// The hunts hold `StockfishPool.instance`, so injection is the only seam;
+/// The hunts hold `pool`, so injection is the only seam;
 /// [StockfishPool.setTargetCountForTest] keeps `ensureWorkers()` (used by the
 /// weakness finder) from deciding it should spawn a real Stockfish alongside.
-Future<EvalWorker> installScriptedWorker(ScriptedEngine connection) async {
-  final worker = EvalWorker(connection);
+Future<EvalWorker> installScriptedWorker(
+  ScriptedEngine connection, {
+  required StockfishPool pool,
+  required EngineSearchBudget budget,
+}) async {
+  final worker = EvalWorker(connection, budget: budget);
   await worker.init(hashMb: 16, threads: 1);
-  StockfishPool.instance.addWorkerForTest(worker);
-  StockfishPool.instance.setTargetCountForTest(1);
+  pool.addWorkerForTest(worker);
+  pool.setTargetCountForTest(1);
   return worker;
 }
 
 /// Drop every injected worker so the next test starts from an empty pool.
-void resetPool() => StockfishPool.instance.dispose();
+void resetPool(StockfishPool pool) => pool.releaseWorkers();
 
 /// SQLite for the eval cache the hunts write their discovery evals into.
 Future<void> initTestSqlite() async {

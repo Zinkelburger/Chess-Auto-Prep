@@ -86,8 +86,8 @@ class MasterImprovementProber {
     required this.config,
     required this.book,
     required this.gameById,
-    StockfishPool? pool,
-  }) : pool = pool ?? StockfishPool.instance;
+    required StockfishPool pool,
+  }) : pool = pool;
 
   final TreeBuildConfig config;
   final BookLookup book;

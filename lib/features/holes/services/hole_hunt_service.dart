@@ -83,14 +83,14 @@ class HoleHuntProgress {
 
 class HoleHuntService {
   HoleHuntService({
-    StockfishPool? pool,
+    required StockfishPool pool,
     EvalCache? evalCache,
-    this.probeTreeBuilder,
+    required this.probeTreeBuilder,
   }) : _probe = EnginePositionProbe(pool: pool, evalCache: evalCache);
 
   /// Where the trick probes get their expectimax trees. Null means a real
   /// [TrickProbe] default, i.e. a `TreeBuildService` run.
-  final ProbeTreeBuilder? probeTreeBuilder;
+  final ProbeTreeBuilder probeTreeBuilder;
 
   /// At most this many trick candidates per position enter the probe pool,
   /// so one hot position cannot eat the whole probe budget. An in-tree move

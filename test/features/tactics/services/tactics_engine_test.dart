@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
 import 'dart:async';
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
@@ -85,7 +86,8 @@ class _DummyConnection implements EngineConnection {
 class _StubEvalWorker extends EvalWorker {
   final List<EvalResult> _evalResults = [];
 
-  _StubEvalWorker() : super(_DummyConnection());
+  _StubEvalWorker()
+    : super(_DummyConnection(), budget: EngineSearchBudget(capacity: () => 1));
 
   void enqueue(EvalResult result) => _evalResults.add(result);
 

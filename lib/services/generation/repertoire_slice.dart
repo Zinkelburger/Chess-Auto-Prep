@@ -78,7 +78,7 @@ class RepertoireSlicer {
   /// Rank the lines of an already-selected tree.
   ///
   /// The tree must carry its repertoire-move flags — a saved
-  /// `<name>_tree.json` does, because selection runs before it is written.
+  /// artifact generation does, because selection runs before it is written.
   static RepertoireSlicer forTree(
     BuildTree tree, {
     required TreeBuildConfig config,

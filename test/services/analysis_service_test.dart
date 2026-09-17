@@ -4,9 +4,13 @@
 /// superseding request leaves behind in the public notifiers.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
+import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'dart:async';
 
-import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/services/analysis_service.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show playUciMove;
 import 'package:chess_auto_prep/utils/fen_utils.dart';
@@ -23,7 +27,14 @@ const _afterE4 = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
 const _whiteMatesIn1 = '6k1/5ppp/8/8/8/8/5PPP/1R4K1 w - - 0 1';
 const _blackMatesIn1 = '1r4k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1';
 
+late RuntimeSettings runtimeSettings;
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
+  setUp(() async {
+    runtimeSettings = testRuntimeSettings();
+    await runtimeSettings.load();
+    addTearDown(runtimeSettings.dispose);
+  });
   late ScriptedEngine engine;
   late AnalysisService service;
   late BoardEngine boardEngine;
@@ -58,9 +69,13 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     // Interactive analysis uses a single injected process.
-    EngineSettings.instance.cores = 1;
+    await runtimeSettings.engine.edit({'engine_settings.cores': 1});
     engine = ScriptedEngine();
-    boardEngine = BoardEngine(createConnection: () async => engine);
+    boardEngine = BoardEngine(
+      budget: engines.budget,
+      settings: () => runtimeSettings.engine.committed,
+      createConnection: () async => engine,
+    );
     service = AnalysisService(engine: boardEngine);
     await service.prepare();
   });

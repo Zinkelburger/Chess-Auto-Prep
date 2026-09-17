@@ -1,3 +1,6 @@
+import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+import '../features/settings/controllers/engine_settings.dart';
+import '../features/settings/controllers/bulk_analysis_settings.dart';
 import '../app/pgn_viewer_lifetime.dart';
 import 'dart:async';
 
@@ -52,6 +55,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
+  late final _engineLifecycle = context.read<EngineLifecycle>();
   static const List<AppMode> _supportedModes = [
     AppMode.tactics,
     AppMode.positionAnalysis,
@@ -172,9 +176,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final wasHeavy = previous?.usesInteractiveEngine ?? false;
     final isHeavy = current.usesInteractiveEngine;
     if (wasHeavy && !isHeavy) {
-      unawaited(EngineLifecycle.instance.suspend());
+      unawaited(_engineLifecycle.suspend());
     } else if (!wasHeavy && isHeavy) {
-      unawaited(EngineLifecycle.instance.resume());
+      unawaited(_engineLifecycle.resume());
     }
   }
 
@@ -202,7 +206,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         // user left the app.
         if (_appBackgrounded) return;
         setState(() => _appBackgrounded = true);
-        unawaited(EngineLifecycle.instance.suspend());
+        unawaited(_engineLifecycle.suspend());
       case AppLifecycleState.resumed:
         if (!_appBackgrounded) return;
         setState(() => _appBackgrounded = false);
@@ -212,7 +216,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         unawaited(_tournamentOpenWatcher?.check());
         final mode = _lastMode;
         if (mode != null && mode.usesInteractiveEngine) {
-          unawaited(EngineLifecycle.instance.resume());
+          unawaited(_engineLifecycle.resume());
         }
       case AppLifecycleState.inactive:
         break;
@@ -322,16 +326,30 @@ class _TacticsModeView extends StatelessWidget {
           create: (_) => TacticsDatabase(),
         ),
         ChangeNotifierProvider<TacticsSessionController>(
-          create: (ctx) => TacticsSessionController(
-            database: ctx.read<TacticsDatabase>(),
-            // "Accept other winning moves" asks Stockfish about a move
-            // that is not the stored answer; the session option gates it.
-            alternativeJudge: EngineAlternativeJudge().judge,
-          ),
+          create: (ctx) {
+            final pool = ctx.read<StockfishPool>();
+            final lifecycle = ctx.read<EngineLifecycle>();
+            return TacticsSessionController(
+              database: ctx.read<TacticsDatabase>(),
+              // "Accept other winning moves" asks Stockfish about a move
+              // that is not the stored answer; the session option gates it.
+              alternativeJudge: EngineAlternativeJudge(
+                evaluate: pool.evaluateFen,
+                engineReady: () async {
+                  if (lifecycle.state == EngineState.generating) return false;
+                  await pool.ensureWorkers(1);
+                  return pool.workerCount > 0;
+                },
+              ).judge,
+            );
+          },
         ),
         ChangeNotifierProvider<TacticsImportCoordinator>(
-          create: (ctx) =>
-              TacticsImportCoordinator(database: ctx.read<TacticsDatabase>()),
+          create: (ctx) => TacticsImportCoordinator(
+            database: ctx.read<TacticsDatabase>(),
+            pool: ctx.read<StockfishPool>(),
+            lifecycle: ctx.read<EngineLifecycle>(),
+          ),
         ),
         ChangeNotifierProvider<RecentGamesController>(
           create: (ctx) {
@@ -355,6 +373,8 @@ class _TacticsModeView extends StatelessWidget {
           create: (ctx) {
             final appState = ctx.read<AppState>();
             return HomeReviewRunner(
+              bulkSettings: ctx.read<BulkAnalysisSettings>(),
+              engine: ctx.read<EngineSettings>(),
               games: ctx.read<RecentGamesController>(),
               importCoordinator: ctx.read<TacticsImportCoordinator>(),
               lichessUsername: () => appState.lichessUsername,

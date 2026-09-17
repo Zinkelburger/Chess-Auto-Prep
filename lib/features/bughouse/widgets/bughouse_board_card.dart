@@ -1,7 +1,7 @@
+import 'package:chess_auto_prep/features/settings/widgets/display_settings_scope.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
-import '../../../models/board_display_settings.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_messages.dart';
@@ -494,7 +494,7 @@ class _PocketRow extends StatelessWidget {
           final margin = controller.mode == BughouseMode.setup
               ? 0.0
               : coordinateMargin(
-                  BoardDisplaySettings.of(context).coordinates,
+                  DisplaySettingsScope.of(context).coordinates,
                   width,
                 );
           return Align(

@@ -9,6 +9,10 @@
 @TestOn('linux || mac-os')
 library;
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
 import 'dart:io';
 
 import 'package:chess_auto_prep/chess_core/pgn/pgn_collection.dart';
@@ -137,7 +141,14 @@ TournamentConfig _config(
   adjudication: AdjudicationRules.none,
 );
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   late _Rig rig;
 
   setUp(() async {

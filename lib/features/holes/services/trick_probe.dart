@@ -26,7 +26,6 @@ import '../../../services/generation/generation_config.dart';
 import '../../../services/generation/tree_ease.dart';
 import '../../../services/maia/maia_factory.dart';
 import '../../../services/run_control.dart';
-import '../../../services/tree_build_service.dart';
 import '../../../utils/chess_utils.dart' as chess_utils;
 import '../../../utils/ease_utils.dart';
 import '../../audit/models/audit_finding.dart';
@@ -52,8 +51,8 @@ class TrickProbe {
     required this.config,
     required this.attackerIsWhite,
     required this.control,
-    ProbeTreeBuilder? buildTree,
-  }) : _buildTree = buildTree ?? TreeBuildService().build;
+    required ProbeTreeBuilder buildTree,
+  }) : _buildTree = buildTree;
 
   /// Wall-clock budget per probe build, enforced through the build's own
   /// isCancelled hook so the builder unwinds cleanly instead of being

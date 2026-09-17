@@ -9,7 +9,7 @@ import '../../utils/pgn_nags.dart';
 import 'package:flutter/material.dart';
 import '../../theme/app_text_styles.dart';
 import '../../theme/app_colors.dart';
-import '../../utils/san_display.dart';
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 
 /// Borderless move states shared by the editor, mainline and sidelines.
 /// A transparent border keeps the existing one-pixel inset in every state;

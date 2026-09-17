@@ -1,6 +1,11 @@
 /// The Play block: what is playable, and the button that plays it.
 library;
 
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+
+import '../../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,7 +24,7 @@ import 'package:chess_auto_prep/features/games/controllers/recent_games_controll
 import 'package:chess_auto_prep/features/games/services/home_review_runner.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_coordinator.dart';
 import 'package:chess_auto_prep/features/tactics/widgets/tactics_view_settings.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/engine_settings.dart';
 
 /// A puzzle mined today, so no expiry window can filter it out.
 TacticsPosition _position({required String id, String mistakeType = '??'}) {
@@ -41,7 +46,15 @@ TacticsPosition _position({required String id, String mistakeType = '??'}) {
   );
 }
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings =>
+    _runtimeSettings ??= testRuntimeSettings();
+EngineRuntime get engines => testEngines(runtimeSettings);
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -62,7 +75,9 @@ void main() {
       ),
       save: false,
     );
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       MultiProvider(
         providers: [
           ChangeNotifierProvider<AppState>(create: (_) => AppState()),
@@ -259,16 +274,21 @@ void main() {
     tester.view.physicalSize = const Size(1280, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final before = EngineSettings.instance.cores;
-    addTearDown(() => EngineSettings.instance.cores = before);
-    EngineSettings.instance.cores = 1;
+    final before = runtimeSettings.engine.cores;
+    addTearDown(() => runtimeSettings.engine.cores = before);
+    runtimeSettings.engine.cores = 1;
     final session = TacticsSessionController();
     final games = RecentGamesController(
       lichessUsername: () => null,
       chesscomUsername: () => null,
     );
-    final coordinator = TacticsImportCoordinator();
+    final coordinator = TacticsImportCoordinator(
+      pool: engines.pool,
+      lifecycle: engines.lifecycle,
+    );
     final runner = HomeReviewRunner(
+      bulkSettings: runtimeSettings.bulk,
+      engine: runtimeSettings.engine,
       games: games,
       importCoordinator: coordinator,
       lichessUsername: () => null,
@@ -278,7 +298,9 @@ void main() {
     addTearDown(games.dispose);
     addTearDown(coordinator.dispose);
     addTearDown(runner.dispose);
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      runtimeSettings,
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => AppState()),

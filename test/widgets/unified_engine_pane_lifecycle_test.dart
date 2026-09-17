@@ -1,8 +1,10 @@
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'dart:async';
 
-import 'package:chess_auto_prep/models/engine_settings.dart';
+import 'package:chess_auto_prep/features/settings/controllers/engine_settings.dart';
 import 'package:chess_auto_prep/services/analysis_service.dart';
-import 'package:chess_auto_prep/services/engine/board_engine.dart';
 import 'package:chess_auto_prep/services/engine/engine_connection.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_connection_factory.dart';
@@ -53,15 +55,25 @@ Future<void> pumpFrames(WidgetTester tester) async {
   }
 }
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings => _runtimeSettings ??= testRuntimeSettings(
+  values: {
+    'engine_settings.show_maia': false,
+    'engine_settings.show_stockfish': true,
+  },
+);
+EngineRuntime get engines => testEngines(runtimeSettings);
+EngineLifecycle get lifecycle => engines.lifecycle;
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
   late List<_Connection> connections;
-  final lifecycle = EngineLifecycle.instance;
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    lifecycle.resetForTest();
-    EngineLifecycle.testMode = true;
-    EngineSettings.instance.showMaia = false;
-    EngineSettings.instance.showStockfish = true;
+
     connections = [];
     StockfishConnectionFactory.createForTest = () async {
       final connection = _Connection();
@@ -70,7 +82,6 @@ void main() {
     };
   });
   tearDown(() {
-    lifecycle.resetForTest();
     StockfishConnectionFactory.createForTest = null;
   });
 
@@ -92,7 +103,7 @@ void main() {
   testWidgets('actual pane toggles, navigates and retains its paused process', (
     tester,
   ) async {
-    await tester.pumpWidget(pane());
+    await pumpRuntimeWidget(tester, runtimeSettings, pane());
     await pumpFrames(tester);
     expect(connections, hasLength(1));
     final connection = connections.single;
@@ -104,7 +115,7 @@ void main() {
     lifecycle.onAnalysisComplete();
     await pumpFrames(tester);
     expect(connection.commands.where((c) => c.startsWith('go ')), hasLength(1));
-    await tester.pumpWidget(pane(fen: _e4));
+    await pumpRuntimeWidget(tester, runtimeSettings, pane(fen: _e4));
     await pumpFrames(tester);
     expect(connection.commands.where((c) => c.startsWith('go ')), hasLength(2));
     expect(connection.commands, contains('position fen $_e4'));
@@ -115,7 +126,7 @@ void main() {
     await lifecycle.toggleOn();
     await pumpFrames(tester);
     expect(connection.commands.where((c) => c.startsWith('go ')), hasLength(3));
-    await tester.pumpWidget(const SizedBox());
+    await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
     await tester.pump();
     expect(connection.disposed, isTrue);
     expect(tester.takeException(), isNull);
@@ -124,21 +135,21 @@ void main() {
   testWidgets('replacing an injected service detaches the old session', (
     tester,
   ) async {
-    final first = AnalysisService();
-    final second = AnalysisService();
+    final first = AnalysisService(engine: engines.board);
+    final second = AnalysisService(engine: engines.board);
     addTearDown(first.dispose);
     addTearDown(second.dispose);
-    await tester.pumpWidget(pane(analysis: first));
+    await pumpRuntimeWidget(tester, runtimeSettings, pane(analysis: first));
     await pumpFrames(tester);
     await lifecycle.toggleOn();
     await pumpFrames(tester);
-    await tester.pumpWidget(pane(analysis: second));
+    await pumpRuntimeWidget(tester, runtimeSettings, pane(analysis: second));
     await pumpFrames(tester);
     final connection = connections.single;
     expect(connection.commands.where((c) => c.startsWith('go ')), hasLength(2));
     first.cancel();
     expect(connection.searching, isTrue);
-    await tester.pumpWidget(const SizedBox());
+    await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
     await pumpFrames(tester);
     // The pane detaches a borrowed service but leaves its notifier usable.
     expect(second.poolStatus.value.phase, PoolPhase.idle);
@@ -148,18 +159,22 @@ void main() {
   testWidgets(
     'inactive actual pane cannot cancel another session on settings changes',
     (tester) async {
-      final active = AnalysisService();
-      final inactive = AnalysisService();
+      final active = AnalysisService(engine: engines.board);
+      final inactive = AnalysisService(engine: engines.board);
       addTearDown(active.dispose);
       addTearDown(inactive.dispose);
       await active.prepare();
-      await tester.pumpWidget(pane(active: false, analysis: inactive));
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
+        pane(active: false, analysis: inactive),
+      );
       await pumpFrames(tester);
       final discovery = active.runDiscovery(fen: _fen, depth: 20, multiPv: 3);
       await pumpFrames(tester);
       final connection = connections.single;
       expect(connection.searching, isTrue);
-      EngineSettings.instance.toggleAnalysisColumnMuted(EngineSettings.colEval);
+      runtimeSettings.engine.toggleAnalysisColumnMuted(EngineSettings.colEval);
       await pumpFrames(tester);
       expect(connection.commands, isNot(contains('stop')));
       connection.output.add('info depth 20 multipv 1 score cp 25 pv e2e4');
@@ -167,9 +182,9 @@ void main() {
       connection.searching = false;
       await pumpFrames(tester);
       expect((await discovery).lines.single.scoreCp, 25);
-      await tester.pumpWidget(const SizedBox());
+      await pumpRuntimeWidget(tester, runtimeSettings, const SizedBox());
       await tester.pump();
-      expect(BoardEngine.instance.workerCount, 1);
+      expect(engines.board.workerCount, 1);
       expect(tester.takeException(), isNull);
     },
   );

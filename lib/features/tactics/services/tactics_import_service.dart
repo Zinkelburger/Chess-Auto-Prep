@@ -8,7 +8,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../constants/engine_defaults.dart';
-import '../../../models/engine_settings.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/game_store/game_store.dart';
 import '../../../services/game_store/game_store_service.dart';
@@ -94,7 +93,7 @@ class _RunListeners {
 typedef _GameTask = ({String gameText, String gameId});
 
 class TacticsImportService {
-  TacticsImportService({TacticsDatabase? database})
+  TacticsImportService({TacticsDatabase? database, required this.pool})
     : _database = database ?? TacticsDatabase();
 
   final TacticsDatabase _database;
@@ -105,7 +104,7 @@ class TacticsImportService {
   /// searches are skipped, what the annotated movetext says) is otherwise
   /// only reachable by starting real Stockfish processes.
   @visibleForTesting
-  StockfishPool pool = StockfishPool.instance;
+  final StockfishPool pool;
 
   /// Downloads games for [importGamesFromLichess] / [importGamesFromChessCom].
   final TacticsGameFetcher fetcher = const TacticsGameFetcher();
@@ -480,7 +479,7 @@ class TacticsImportService {
 
   /// Bring the shared pool up to [maxCores] single-threaded workers.
   Future<void> _preparePool(int? maxCores) async {
-    await pool.ensureWorkers(maxCores ?? EngineSettings.instance.cores);
+    await pool.ensureWorkers(maxCores);
     if (pool.workerCount == 0) {
       throw Exception(
         'Tactics analysis requires Stockfish, which is not available '

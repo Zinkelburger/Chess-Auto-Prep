@@ -24,6 +24,10 @@ import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 /// the reader: **a save may add, and may change the game it was told to
 /// change, but nothing else in the file may disappear.**
 
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
+
 import '../../support/fake_desktop_fullscreen_port.dart';
 
 import 'dart:async';
@@ -112,6 +116,8 @@ class _MemoryStorage implements StorageService {
 
 /// No engine, no isolates: `loadCurrentGame` runs on every navigation.
 class _FakeAnalysisController extends GameAnalysisController {
+  _FakeAnalysisController()
+    : super(pool: engines.pool, lifecycle: engines.lifecycle);
   @override
   Future<bool> tryLoadFromPgn(String pgnText) async => true;
 
@@ -213,7 +219,14 @@ Future<ViewerDocumentController> _openTheFile(_MemoryStorage storage) async {
   return controller;
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _MemoryStorage storage;

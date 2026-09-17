@@ -11,6 +11,8 @@
 /// way the rest of the app does: an [AppState] handoff.
 library;
 
+import '../support/generation_artifacts_fixture.dart';
+import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
 import '../support/generation_publication_fixture.dart';
 
@@ -125,6 +127,9 @@ Future<AppState> _pumpScreen(
     tester,
     MultiProvider(
       providers: [
+        Provider<GenerationArtifacts>(
+          create: (_) => generationArtifactsFixture(),
+        ),
         Provider<GenerationPublicationFactory>(
           create: (_) => generationPublicationFixture,
         ),

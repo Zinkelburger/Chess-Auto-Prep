@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
-import '../utils/san_display.dart';
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 
 /// Per-move annotation rendered inline after or before the move SAN.
 class MoveAnnotation {

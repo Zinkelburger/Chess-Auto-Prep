@@ -1,6 +1,9 @@
 /// Flat shared preferences and directly editable view settings.
 library;
 
+import '../features/settings/widgets/settings_section_status.dart';
+import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
+
 import '../app/legacy_theme_boundary.dart';
 import '../design_system/theme/app_typography.dart';
 import '../features/settings/widgets/appearance_settings.dart';
@@ -17,15 +20,15 @@ import '../features/updates/widgets/app_updates.dart';
 import '../constants/engine_defaults.dart';
 import '../core/app_state.dart';
 import '../features/games/widgets/my_repertoires_section.dart';
-import '../models/board_display_settings.dart';
-import '../models/engine_settings.dart';
-import '../models/bulk_analysis_settings.dart';
+import '../features/settings/controllers/board_display_settings.dart';
+import '../features/settings/controllers/engine_settings.dart';
+import '../features/settings/controllers/bulk_analysis_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/app_messages.dart';
 import '../utils/app_shortcuts.dart';
-import '../utils/san_display.dart';
+import 'package:chess_auto_prep/features/settings/widgets/san_display.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/analysis/stockfish_settings_dialog.dart';
 import '../widgets/analysis/analysis_panels_dialog.dart';
@@ -59,7 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static final _projectUri = Uri.parse(
     'https://github.com/Zinkelburger/Chess-Auto-Prep',
   );
-  final _engine = EngineSettings.instance;
+  late final _engine = context.read<EngineSettings>();
   late int _selected;
   AppMode? _mode;
   String _query = '';
@@ -538,38 +541,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// before the screen is left.
   Widget _buildDisplaySection() {
     return ListenableBuilder(
-      listenable: BoardDisplaySettings.instance,
+      listenable: context.read<BoardDisplaySettings>(),
       builder: (context, _) {
-        final display = BoardDisplaySettings.instance;
+        final display = context.read<BoardDisplaySettings>();
         return SettingsGroup(
           title: 'Board and moves',
           icon: Icons.grid_on_outlined,
           children: [
+            SettingsSectionStatus(
+              owner: display,
+              policy: 'Saved display changes apply to all boards immediately.',
+            ),
             SettingsChoiceTile<BoardCoordinates>(
               label: 'Board coordinates',
-              value: display.coordinates,
+              value: display.editing.coordinates,
               items: const [
                 (BoardCoordinates.none, 'Off'),
                 (BoardCoordinates.inside, 'Inside the board'),
                 (BoardCoordinates.outside, 'Outside the board'),
                 (BoardCoordinates.everySquare, 'Every square'),
               ],
-              onChanged: (v) => unawaited(display.setCoordinates(v)),
+              onChanged: (v) => unawaited(
+                display.setCoordinates(v).catchError((Object _) {}),
+              ),
             ),
             SettingsSwitchTile(
               label: 'Show legal moves',
               description: 'Show possible destinations when selecting a piece',
-              value: display.showLegalMoves,
-              onChanged: (value) => unawaited(display.setShowLegalMoves(value)),
+              value: display.editing.showLegalMoves,
+              onChanged: (value) => unawaited(
+                display.setShowLegalMoves(value).catchError((Object _) {}),
+              ),
             ),
             SettingsChoiceTile<PieceNotation>(
               label: 'Piece notation',
-              value: display.pieceNotation,
+              value: display.editing.pieceNotation,
               items: const [
                 (PieceNotation.letters, 'Letters (KQRBN)'),
                 (PieceNotation.figurines, 'Figurines (♔♕♖♗♘)'),
               ],
-              onChanged: (v) => unawaited(display.setPieceNotation(v)),
+              onChanged: (v) => unawaited(
+                display.setPieceNotation(v).catchError((Object _) {}),
+              ),
             ),
             const Divider(
               height: 1,
@@ -586,15 +599,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // ── Engine section ─────────────────────────────────────────────────────────
 
-  Widget _buildMaiaSection() => SettingsStepperTile(
-    label: 'Opponent rating for predictions',
-    description: 'Maia predictions',
-    value: _engine.maiaElo,
-    min: kMinMaiaElo,
-    max: kMaxMaiaElo,
-    step: 100,
-    suffix: 'Elo',
-    onChanged: (v) => _engine.maiaElo = v,
+  Widget _buildMaiaSection() => ListenableBuilder(
+    listenable: _engine,
+    builder: (context, _) => Column(
+      children: [
+        SettingsSectionStatus(
+          owner: _engine,
+          policy: 'Saved prediction changes apply to the next position.',
+        ),
+        SettingsStepperTile(
+          label: 'Opponent rating for predictions',
+          description: 'Maia predictions',
+          value: _engine.editing.maiaElo,
+          min: kMinMaiaElo,
+          max: kMaxMaiaElo,
+          step: 100,
+          suffix: 'Elo',
+          onChanged: (v) => _engine.maiaElo = v,
+        ),
+      ],
+    ),
   );
 
   // ── Reset button ───────────────────────────────────────────────────────────
@@ -613,13 +637,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       confirmLabel: 'Reset',
     );
     if (!confirmed) return;
-    _engine.resetToDefaults();
-    await BulkAnalysisSettings.instance.setDepth(
-      BulkAnalysisSettings.defaultDepth,
-    );
-    await EvalDatabaseSettings.instance.resetToDefaults();
-    await BoardDisplaySettings.instance.resetToDefaults();
-    if (mounted) showAppSnackBar(context, 'Settings restored to defaults');
+    if (!mounted) return;
+    final bulk = context.read<BulkAnalysisSettings>();
+    final display = context.read<BoardDisplaySettings>();
+    try {
+      await _engine.resetToDefaults();
+      await bulk.setDepth(BulkAnalysisSettings.defaultDepth);
+      await EvalDatabaseSettings.instance.resetToDefaults();
+      await display.resetToDefaults();
+      if (mounted) showAppSnackBar(context, 'Settings restored to defaults');
+    } catch (_) {
+      if (mounted)
+        showAppSnackBar(
+          context,
+          'Some preferences could not be saved. Retry the failed section.',
+        );
+    }
   }
 
   Widget _buildResetButton() {

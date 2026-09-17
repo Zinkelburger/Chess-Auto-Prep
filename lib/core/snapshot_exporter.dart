@@ -27,6 +27,7 @@ import 'generation_session_types.dart';
 
 class SnapshotExporter {
   SnapshotExporter({
+    required this.pool,
     required this._notify,
     required this._isGenerating,
     required this._isPaused,
@@ -38,6 +39,7 @@ class SnapshotExporter {
     required this._progress,
   });
 
+  final StockfishPool pool;
   final void Function() _notify;
   final bool Function() _isGenerating;
   final bool Function() _isPaused;
@@ -138,12 +140,10 @@ class SnapshotExporter {
           _setStatus(
             'Snapshot: verifying (depth ${config.resolvedVerifyDepth})…',
           );
-          if (StockfishPool.instance.workerCount == 0) {
-            await StockfishPool.instance.prepareForTreeBuild(
-              config.resolvedEngineThreads,
-            );
+          if (pool.workerCount == 0) {
+            await pool.prepareForTreeBuild(config.resolvedEngineThreads);
           }
-          final verifier = RepertoireVerifier(config: config);
+          final verifier = RepertoireVerifier(pool: pool, config: config);
           final report = await verifier.verify(
             snapTree,
             fenMap: fenMap,

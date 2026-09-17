@@ -1,3 +1,7 @@
+import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../../support/runtime_settings.dart';
 import 'package:chess_auto_prep/features/audit/controllers/audit_session_controller.dart';
 import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
 import 'package:chess_auto_prep/features/audit/models/audit_result.dart';
@@ -26,9 +30,20 @@ AuditResult _result(List<AuditFinding> findings) => AuditResult(
 /// memoised per position.  They cannot key that cache on the result object,
 /// because dismissing a finding edits it in place and hands the same object
 /// back; [AuditSessionController.resultVersion] is what tells them apart.
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= testRuntimeSettings());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   test('an in-place edit re-emitted as the same object bumps the version', () {
-    final controller = AuditSessionController();
+    final controller = AuditSessionController(
+      service: RepertoireAuditService(pool: engines.pool),
+      prepareEngine: () => engines.lifecycle.enterGeneration(1),
+      releaseEngine: engines.lifecycle.exitGeneration,
+    );
     final finding = _finding();
     final result = _result([finding]);
 
@@ -51,7 +66,11 @@ void main() {
   });
 
   test('replacing the result bumps it too', () {
-    final controller = AuditSessionController();
+    final controller = AuditSessionController(
+      service: RepertoireAuditService(pool: engines.pool),
+      prepareEngine: () => engines.lifecycle.enterGeneration(1),
+      releaseEngine: engines.lifecycle.exitGeneration,
+    );
     controller.onResultChanged(_result([_finding()]), null);
     final before = controller.resultVersion;
 
@@ -62,7 +81,11 @@ void main() {
   });
 
   test('a read does not bump it', () {
-    final controller = AuditSessionController();
+    final controller = AuditSessionController(
+      service: RepertoireAuditService(pool: engines.pool),
+      prepareEngine: () => engines.lifecycle.enterGeneration(1),
+      releaseEngine: engines.lifecycle.exitGeneration,
+    );
     controller.onResultChanged(_result([_finding()]), null);
     final version = controller.resultVersion;
 

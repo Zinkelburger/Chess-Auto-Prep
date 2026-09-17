@@ -11,7 +11,7 @@
 /// Collaborators own the parts that are not the running order:
 /// [GenerationProgress] (live stats), [SnapshotExporter] (mid-run export),
 /// [MasterGamesWait] (parking on a download), [ExpectimaxDatabase] (the
-/// published tree bundle and its probes) and [GenerationArtifactStore] (the
+/// published tree bundle and its probes) and [GenerationArtifacts] (the
 /// files beside the repertoire).
 library;
 
@@ -20,6 +20,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../features/generation/controllers/generation_publication_controller.dart';
+import '../features/generation/models/generation_artifacts.dart';
+import '../features/documents/models/pgn_document.dart';
 import '../features/generation/models/generation_publication.dart';
 import '../models/build_tree_node.dart';
 import '../models/eval_database_settings.dart';
@@ -58,7 +60,7 @@ import '../utils/safe_change_notifier.dart';
 import '../utils/time_format.dart';
 import 'expectimax_database.dart';
 import 'generated_repertoire.dart';
-import 'generation_artifacts.dart';
+import '../features/generation/services/generation_artifacts.dart';
 import 'generation_progress.dart';
 import 'generation_run_summary.dart';
 import 'generation_session_types.dart';
@@ -69,24 +71,30 @@ class GenerationSessionController extends ChangeNotifier
     with SafeChangeNotifier {
   GenerationSessionController({
     required GenerationPublicationController publication,
-    GenerationArtifactStore? artifacts,
-    StockfishPool? enginePool,
-    EngineLifecycle? engineLifecycle,
+    required GenerationArtifacts artifacts,
+    required StockfishPool enginePool,
+    required EngineLifecycle engineLifecycle,
+    TreeBuildService? treeBuilder,
   }) : _publication = publication,
-       _artifacts = artifacts ?? GenerationArtifactStore(),
-       _enginePool = enginePool ?? StockfishPool.instance,
-       _engineLifecycle = engineLifecycle ?? EngineLifecycle.instance;
+       _artifacts = artifacts,
+       _enginePool = enginePool,
+       _engineLifecycle = engineLifecycle,
+       buildService =
+           treeBuilder ??
+           TreeBuildService(pool: enginePool, lifecycle: engineLifecycle);
 
   static const String _logName = 'GenerationSession';
 
   final GenerationPublicationController _publication;
   GenerationSource? _publicationSource;
+  GenerationArtifactRun? _artifactRun;
+  PgnSnapshot? _publishedSource;
   Future<void> _partialSave = Future.value();
   Future<void> _engineControl = Future.value();
 
   final StockfishPool _enginePool;
   final EngineLifecycle _engineLifecycle;
-  final TreeBuildService buildService = TreeBuildService();
+  final TreeBuildService buildService;
   final CoherenceService coherenceService = CoherenceService();
 
   /// The master-games database, consulted when the config asks for it and
@@ -94,10 +102,10 @@ class GenerationSessionController extends ChangeNotifier
   /// this controller is constructed.
   MasterGamesService Function() masterGames = () => MasterGamesService.instance;
 
-  final GenerationArtifactStore _artifacts;
+  final GenerationArtifacts _artifacts;
   final MasterGamesWait _masterWait = MasterGamesWait();
   late final ExpectimaxDatabase _database = ExpectimaxDatabase(
-    store: _artifacts,
+    readSaved: _artifacts.readDatabase,
   );
 
   /// Live BFS / phase stats. The Jobs panel reads this; the pipeline writes it.
@@ -111,6 +119,7 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Mid-run export of lines found so far, without ending the build.
   late final SnapshotExporter snapshots = SnapshotExporter(
+    pool: _enginePool,
     notify: notifyListeners,
     isGenerating: () => _isGenerating,
     isPaused: () => _isPaused,
@@ -134,6 +143,7 @@ class GenerationSessionController extends ChangeNotifier
   /// Turns the extracted lines into the course document — the enrichment
   /// passes, the model games, the naming and the composition.
   late final CourseBuilder _courseBuilder = CourseBuilder(
+    pool: _enginePool,
     enrichment: _enrichment,
     gameDatabase: () => buildService.lastGameDatabase,
     masterDbFor: _masterDbFor,
@@ -154,7 +164,6 @@ class GenerationSessionController extends ChangeNotifier
 
   /// Context for saving partial tree state — set at build start so that
   /// pause/cancel from any source can persist the in-progress tree to disk.
-  String? _repertoireFilePath;
   List<String> _startMoveSequence = const [];
   String _startFen = '';
 
@@ -305,6 +314,18 @@ class GenerationSessionController extends ChangeNotifier
         );
         if (_cancelRequested) return;
       }
+      _artifactRun = await _artifacts.repository.begin(
+        filePath,
+        config.toJson(),
+        source: _publicationSource,
+        expectedGenerationId: request.artifactGeneration,
+      );
+      await _database.load(
+        filePath,
+        canApply: () => !isDisposed && !_cancelRequested,
+      );
+      if (!request.expectimaxOnly) _database.dropTree();
+      if (_cancelRequested || isDisposed) return;
       // Before the engine is claimed: an empty master-games database that
       // the config asked to fill is downloaded here, so the build that
       // wanted master practice actually gets it. Holding the engine across
@@ -362,8 +383,20 @@ class GenerationSessionController extends ChangeNotifier
       // Publish the bundle (tree + fen map + snapshot + trap index).
       onTreeBuilt(tree);
 
+      await _partialSave;
+      final proposal = await _artifacts.prepareBundle(
+        _artifactRun!,
+        tree: tree,
+        probes: _database.probes,
+        traps: _trapLinesOf(tree, config) ?? const [],
+      );
       await _exportLinesPhase(tree, extracted, request, prefix);
       if (_cancelRequested || isDisposed) return;
+      await _artifacts.repository.select(
+        _artifactRun!,
+        proposal,
+        publishedSource: _publishedSource,
+      );
       await _persistArtifactsPhase(tree, analysis, extracted, config, filePath);
       lastRunSummary = composeRunSummary(
         tree: tree,
@@ -388,7 +421,14 @@ class GenerationSessionController extends ChangeNotifier
             ? lastRunSummary
             : 'Build cancelled.';
       } else {
-        await _recordFailure(config, e);
+        await _recordFailure(
+          config,
+          _publishedSource != null && e is GenerationArtifactFailure
+              ? StateError(
+                  'Generated PGN saved to ${_publishedSource!.path}; $e',
+                )
+              : e,
+        );
       }
     } finally {
       await _endRun(engineEntered: engineEntered, filePath: filePath);
@@ -445,6 +485,7 @@ class GenerationSessionController extends ChangeNotifier
     final config = request.config;
     final existingTree = request.existingTree;
 
+    _publishedSource = null;
     _isGenerating = true;
     _isPaused = false;
     _cancelRequested = false;
@@ -464,7 +505,6 @@ class GenerationSessionController extends ChangeNotifier
     _pipelineSw = Stopwatch()..start();
     progress.startElapsedTicker();
 
-    _repertoireFilePath = request.repertoireFilePath;
     _startMoveSequence = List.unmodifiable(prefix);
     _startFen = existingTree?.root.fen ?? request.buildRootFen;
     _activeRequest = request;
@@ -513,8 +553,26 @@ class GenerationSessionController extends ChangeNotifier
     _publicationSource = null;
     // A discarded build leaves nothing to resume: drop the partial tree
     // that cancelBuild would otherwise have saved.
-    if (_discardRequested) {
-      await _artifacts.deletePartialTree(filePath);
+    final artifactRun = _artifactRun;
+    if (_discardRequested && artifactRun != null) {
+      try {
+        final proposal = await _artifacts.repository.prepare(artifactRun, {
+          GenerationArtifactKind.partial: null,
+        });
+        await _artifacts.repository.select(artifactRun, proposal);
+      } catch (error) {
+        lastError = 'Could not discard saved partial: $error';
+        currentJob?.fail(lastError!);
+      }
+    }
+    if (artifactRun != null) _artifacts.repository.close(artifactRun);
+    _artifactRun = null;
+    if (lastError != null && !isDisposed) {
+      try {
+        await _database.load(filePath, canApply: () => !isDisposed);
+      } catch (_) {
+        _database.clear();
+      }
     }
     // Release any dangling pause gate so nothing awaits it forever.
     buildService.resumeBuild();
@@ -549,7 +607,6 @@ class GenerationSessionController extends ChangeNotifier
     _cancelRequested = false;
     _discardRequested = false;
     _activeRequest = null;
-    _repertoireFilePath = null;
     activeConfig = null;
     progress.reset();
     progress.flushNotify();
@@ -709,7 +766,7 @@ class GenerationSessionController extends ChangeNotifier
     );
     try {
       await _ensureEnginePool();
-      final verifier = RepertoireVerifier(config: config);
+      final verifier = RepertoireVerifier(pool: _enginePool, config: config);
       final report = await verifier.verify(
         tree,
         fenMap: analysis.fenMap,
@@ -866,6 +923,7 @@ class GenerationSessionController extends ChangeNotifier
         :final snapshot,
         :final receiptError,
       ):
+        _publishedSource = snapshot;
         final path = staged.modelGamesPath;
         if (path != null) {
           lastModelGameNote = '$lastModelGameNote Model games saved to $path.';
@@ -913,7 +971,7 @@ class GenerationSessionController extends ChangeNotifier
   ) async {
     // The build is finished here (no concurrent mutator); the indented
     // encode of the whole tree runs off the UI isolate.
-    final treeJson = await _artifacts.writeTree(tree, filePath);
+    final treeJson = await serializeTreeInIsolate(tree);
 
     await writeRunDebugDump(
       log: buildService.runLog,
@@ -933,19 +991,6 @@ class GenerationSessionController extends ChangeNotifier
         'raw_extracted_lines': extracted.rawCount,
       },
     );
-
-    final trapLines = _trapLinesOf(tree, config);
-    if (trapLines != null) await _artifacts.writeTrapIndex(trapLines, filePath);
-
-    // A budget/finish-now stop leaves the tree resumable: keep the partial
-    // file so the Generate tab offers to continue it.  _savePartialTree
-    // reads buildService.currentTree, which the skip-build resume path
-    // never set — there the on-disk partial already holds this tree.
-    if (tree.buildComplete) {
-      await _artifacts.deletePartialTree(filePath);
-    } else if (identical(buildService.currentTree, tree)) {
-      await _savePartialTree();
-    }
   }
 
   /// Seed depth-layer counters so a resumed build doesn't show
@@ -992,24 +1037,35 @@ class GenerationSessionController extends ChangeNotifier
     );
   }
 
+  Future<({BuildTree tree, String generationId})?> readSavedPartial(
+    String path,
+  ) => _artifacts.readPartial(path);
+  Future<void> discardSavedPartial(String path, String generationId) =>
+      _artifacts.discardPartial(path, generationId);
+
   // ── Partial tree save ────────────────────────────────────────────────
 
-  /// Persist the in-progress tree to `{repertoire}_partial_tree.json`.
+  /// Select an immutable partial generation captured by the active run.
   Future<void> _savePartialTree() async {
     final tree = buildService.currentTree;
     if (tree == null) return;
-    final filePath = _repertoireFilePath;
-    if (filePath == null || filePath.isEmpty) return;
+    final run = _artifactRun;
+    if (run == null) return;
     if (tree.startMoves.isEmpty &&
         _startMoveSequence.isNotEmpty &&
         tree.root.fen == _startFen) {
       tree.startMoves = _startMoveSequence.join(' ');
     }
     final pending = _partialSave.then(
-      (_) => _artifacts.writePartialTree(tree, filePath),
+      (_) => _artifacts.writePartialTree(tree, run),
     );
-    _partialSave = pending;
-    await pending;
+    // Partial persistence errors are observed and visible; lifecycle cleanup
+    // must still drain and release the job after a failed checkpoint.
+    _partialSave = pending.catchError((Object error) {
+      lastError = 'Partial tree was not selected: $error';
+      currentJob?.fail(lastError!);
+    });
+    await _partialSave;
   }
 
   // ── Control methods (callable from anywhere) ────────────────────────
@@ -1178,7 +1234,6 @@ class GenerationSessionController extends ChangeNotifier
   /// for its saved analysis here means a fast click cannot replace a
   /// database whose background load has not finished yet.
   Future<String?> _ensureDatabaseFor(ExpectimaxProbeTarget target) async {
-    if (_database.isFor(target.repertoireFilePath)) return null;
     await loadSavedTreeFor(target.repertoireFilePath);
     if (isDisposed) return 'Generation was closed.';
     if (_isGenerating) return 'A generation is already running.';
@@ -1224,6 +1279,15 @@ class GenerationSessionController extends ChangeNotifier
     _beginRun(request, moves);
     var entered = false;
     try {
+      _artifactRun = await _artifacts.repository.begin(
+        target.repertoireFilePath,
+        config.toJson(),
+      );
+      await _database.load(
+        target.repertoireFilePath,
+        canApply: () => !isDisposed && !_cancelRequested,
+      );
+      if (_cancelRequested || isDisposed) return null;
       entered = await _enterEngineIfNeeded(config);
       if (_cancelRequested) {
         lastRunSummary = 'Move evaluation cancelled.';
@@ -1255,12 +1319,9 @@ class GenerationSessionController extends ChangeNotifier
         startMoves: moves,
         config: config,
       );
-      final mainTreeChanged = _database.recordEnginePv(probe);
+      _database.recordEnginePv(probe);
       notifyListeners();
-      await _database.persist(
-        target.repertoireFilePath,
-        mainTreeChanged: mainTreeChanged,
-      );
+      await _persistDatabase();
       lastRunSummary =
           '${target.moveSan ?? 'Position'} evaluated · engine depth ${config.evalDepth} · ${probe.root.enginePv.length} PV moves saved';
       return null;
@@ -1341,28 +1402,23 @@ class GenerationSessionController extends ChangeNotifier
     if (config.boundedDatabase) {
       _database.addBoundedProbe(probe, config: config, prefix: prefix);
       notifyListeners();
-      await _database.persist(
-        request.repertoireFilePath,
-        mainTreeChanged: false,
-      );
+      await _persistDatabase();
       lastRunSummary =
           '${probe.totalNodes} positions saved · depth ${probe.maxPlyReached}/${config.maxPly}';
       progress.setStatus(lastRunSummary, GenerationPhase.computingExpectimax);
       return;
     }
 
-    final (:added, :mainTreeChanged) = _database.landProbe(
+    final landing = _database.landProbe(
       probe,
       config: config,
       prefix: prefix,
       repertoireFilePath: request.repertoireFilePath,
     );
     notifyListeners();
-    await _database.persist(
-      request.repertoireFilePath,
-      mainTreeChanged: mainTreeChanged,
-    );
+    await _persistDatabase();
 
+    final added = landing.added;
     final elapsed = formatCompactDuration(_pipelineSw.elapsed);
     final where = prefix.isEmpty
         ? 'the start position'
@@ -1371,6 +1427,20 @@ class GenerationSessionController extends ChangeNotifier
         'Expectimax computed from $where in $elapsed: $added new '
         'position${added == 1 ? '' : 's'} (${probe.totalNodes} explored).';
     progress.setStatus(lastRunSummary, GenerationPhase.computingExpectimax);
+  }
+
+  Future<void> _persistDatabase() async {
+    final bundle = _database.current;
+    if (bundle == null) return;
+    await _artifacts.writeDatabase(
+      _artifactRun!,
+      probeTrees: [
+        if (_database.mainTreeIsProbe) bundle.tree,
+        ...bundle.probes,
+      ],
+      mainTree: _database.mainTreeIsProbe ? null : bundle.tree,
+      traps: bundle.traps.allTraps,
+    );
   }
 
   @override

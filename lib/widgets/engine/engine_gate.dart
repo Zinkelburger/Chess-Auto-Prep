@@ -11,6 +11,8 @@
 ///   render an [EngineBusyNotice] instead of analyzing.
 library;
 
+import 'package:provider/provider.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../services/engine/engine_lifecycle.dart';
@@ -22,11 +24,8 @@ class EngineGate {
 
   /// True while repertoire generation actively holds the engine. A paused
   /// build releases it, so this is false while paused.
-  static bool get isLocked =>
-      EngineLifecycle.instance.state == EngineState.generating;
-
-  /// Notifies when [isLocked] may have changed.
-  static Listenable get listenable => EngineLifecycle.instance;
+  static bool isLocked(BuildContext context) =>
+      context.read<EngineLifecycle>().state == EngineState.generating;
 
   static const lockedMessage =
       'Stockfish is busy building your repertoire. Pause the build or wait '
@@ -35,7 +34,7 @@ class EngineGate {
   /// Returns true when engine work may start. Otherwise shows the standard
   /// warning snackbar and returns false.
   static bool ensureAvailable(BuildContext context) {
-    if (!isLocked) return true;
+    if (!isLocked(context)) return true;
     showAppSnackBar(
       context,
       lockedMessage,

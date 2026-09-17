@@ -4,11 +4,13 @@
 /// if cancelled.
 library;
 
+import 'package:provider/provider.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../models/engine_settings.dart';
-import '../models/bulk_analysis_settings.dart';
+import '../features/settings/controllers/engine_settings.dart';
+import '../features/settings/controllers/bulk_analysis_settings.dart';
 import '../theme/app_colors.dart';
 import 'info_hint.dart';
 
@@ -66,11 +68,11 @@ class _EngineWeaknessConfigDialogState
   void _submit() {
     Navigator.of(context).pop(
       EngineWeaknessConfig(
-        depth: BulkAnalysisSettings.instance.depth,
+        depth: context.read<BulkAnalysisSettings>().depth,
         minGames: int.tryParse(_minGamesCtrl.text) ?? 3,
         whiteCp: int.tryParse(_whiteCpCtrl.text) ?? -50,
         blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
-        workers: EngineSettings.instance.cores,
+        workers: context.read<EngineSettings>().cores,
       ),
     );
   }

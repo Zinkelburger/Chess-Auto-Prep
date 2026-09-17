@@ -23,7 +23,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
   void _onLifecycleChanged() {
     if (!mounted) return;
     _syncBoardEngine();
-    final state = EngineLifecycle.instance.state;
+    final state = _lifecycle.state;
     final prev = _lastLifecycleState;
     _lastLifecycleState = state;
 
@@ -49,16 +49,12 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
   }
 
   void _onSettingsChanged() {
-    _syncBoardEngine();
     final revision = _settings.analysisConfigRevision;
-    final configChanged = revision != _analysisConfigRevision;
-    if (configChanged) {
+    if (revision != _analysisConfigRevision) {
       _analysisConfigRevision = revision;
-      _analysisCache.remove(widget.fen);
-      if (_isActive) {
-        _scheduleAnalysis();
-      }
+      _analysisCache.clear();
     }
+    // Committed changes apply on the next position or explicit analysis start.
     _scheduleSetState();
   }
 
@@ -68,7 +64,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       log.i('[Engine] ── _runAnalysis() for $shortFen ──');
     }
 
-    EngineLifecycle.instance.onPositionChanged(widget.fen);
+    _lifecycle.onPositionChanged(widget.fen);
     _trySaveCurrentToCache();
     _initialAnalysisStarted = false;
     unawaited(_startInitialAnalysis());
@@ -79,6 +75,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
   Future<void> _startInitialAnalysis() async {
     if (!mounted || !_isActive || _initialAnalysisStarted) return;
     _initialAnalysisStarted = true;
+    final configuration = _settings.committed;
     _selectedMoveUcis = [];
     _maiaProbs = null;
 
@@ -97,10 +94,10 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       return;
     }
 
-    final useStockfish = _settings.showStockfish;
+    final useStockfish = configuration.showStockfish;
     final useMaia =
-        _settings.showMaia &&
-        _settings.fetchMaiaForOpponent &&
+        configuration.showMaia &&
+        configuration.fetchMaiaForOpponent &&
         MaiaFactory.isAvailable &&
         MaiaFactory.instance != null;
 
@@ -114,13 +111,13 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       final discoveryFuture = useStockfish
           ? _analysis.runDiscovery(
               fen: widget.fen,
-              depth: _settings.depth,
-              multiPv: _settings.multiPv,
+              depth: configuration.depth,
+              multiPv: configuration.multiPv,
             )
           : Future.value(const DiscoveryResult());
 
       final maiaFuture = useMaia
-          ? _runMaiaAnalysis()
+          ? _runMaiaAnalysis(configuration.maiaElo)
           : Future.value(<String, double>{});
 
       // ── Await all ──
@@ -142,7 +139,12 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
           .where((u) => u.isNotEmpty)
           .toList();
 
-      final candidates = _filterCandidates(sfUcis, _maiaProbs!, dbData);
+      final candidates = _filterCandidates(
+        sfUcis,
+        _maiaProbs!,
+        dbData,
+        configuration.maxAnalysisMoves,
+      );
       _selectedMoveUcis = candidates;
 
       _perfLog(
@@ -156,7 +158,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
         _analysis.startEvaluation(
           baseFen: widget.fen,
           moveUcis: candidates,
-          evalDepth: _settings.depth,
+          evalDepth: configuration.depth,
         ),
       );
 
@@ -174,6 +176,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
     List<String> sfUcis,
     Map<String, double> maiaProbs,
     ExplorerResponse? dbData,
+    int maxAnalysisMoves,
   ) {
     final sfSet = sfUcis.toSet();
     final candidates = <String>[...sfUcis];
@@ -212,7 +215,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
     }
     scored.sort((a, b) => b.value.compareTo(a.value));
 
-    final extraSlots = _settings.maxAnalysisMoves - candidates.length;
+    final extraSlots = maxAnalysisMoves - candidates.length;
     for (int i = 0; i < scored.length && i < extraSlots; i++) {
       candidates.add(scored[i].key);
     }
@@ -222,16 +225,13 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
 
   // ── Source helpers ──────────────────────────────────────────────────────
 
-  Future<Map<String, double>> _runMaiaAnalysis() async {
+  Future<Map<String, double>> _runMaiaAnalysis(int maiaElo) async {
     if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
       return {};
     }
     _perfLog('Maia inference START');
     try {
-      final result = await MaiaFactory.instance!.evaluate(
-        widget.fen,
-        _settings.maiaElo,
-      );
+      final result = await MaiaFactory.instance!.evaluate(widget.fen, maiaElo);
       _perfLog('Maia inference DONE — ${result.policy.length} moves');
       return result.policy;
     } catch (e) {
@@ -300,7 +300,7 @@ mixin _EnginePaneAnalysis on _UnifiedEnginePaneStateBase {
       if (!mounted) return;
       final ps = _analysis.poolStatus.value;
       if (ps.isComplete) {
-        EngineLifecycle.instance.onAnalysisComplete();
+        _lifecycle.onAnalysisComplete();
         _perfLog(
           'Evaluation COMPLETE — ${_analysis.results.value.length} evals',
         );

@@ -1,4 +1,6 @@
-import 'package:chess_auto_prep/models/board_display_settings.dart';
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/features/settings/widgets/display_settings_scope.dart';
+import 'package:chess_auto_prep/features/settings/models/board_display_configuration.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/widgets/board/board_coordinates.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
@@ -218,9 +220,10 @@ void main() {
     testWidgets('follows the Display preference when no mode is given', (
       tester,
     ) async {
-      final settings = BoardDisplaySettings.fresh(
-        coordinates: BoardCoordinates.outside,
-      );
+      final settings = testRuntimeSettings(
+        values: {'display.board_coordinates': BoardCoordinates.outside.name},
+      ).display;
+      await settings.ensureLoaded();
       await tester.pumpWidget(
         DisplaySettingsScope(settings: settings, child: board(null)),
       );

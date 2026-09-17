@@ -1,3 +1,8 @@
+import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
+import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import '../support/runtime_settings.dart';
 import 'package:flutter/widgets.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'package:chess_auto_prep/services/engine/board_engine.dart';
@@ -8,14 +13,25 @@ import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 class _FailingPool extends StockfishPool {
-  _FailingPool() : super.fresh();
+  _FailingPool()
+    : super(
+        settings: EngineConfiguration.new,
+        budget: EngineSearchBudget(capacity: () => 1),
+      );
   @override
   Future<void> prepareForTreeBuild(int threadBudget) async {
     throw StateError('Provisioning failed');
   }
 }
 
+RuntimeSettings? _engineFixtureSettings;
+EngineRuntime get engines =>
+    testEngines(_engineFixtureSettings ??= RuntimeSettings.preferences());
 void main() {
+  setUp(() {
+    _engineFixtureSettings = null;
+    addTearDown(() => _engineFixtureSettings?.dispose());
+  });
   WidgetsFlutterBinding.ensureInitialized();
   late EngineLifecycle lifecycle;
   late int notificationCount;
@@ -23,9 +39,8 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    lifecycle = EngineLifecycle.instance;
-    lifecycle.resetForTest();
-    EngineLifecycle.testMode = true;
+    lifecycle = engines.lifecycle;
+
     notificationCount = 0;
     countNotifications = () => notificationCount++;
     lifecycle.addListener(countNotifications);
@@ -33,15 +48,19 @@ void main() {
 
   tearDown(() {
     lifecycle.removeListener(countNotifications);
-    lifecycle.resetForTest();
   });
 
   test(
     'failed generation restores state and does not poison future toggles',
     () async {
-      EngineLifecycle.testMode = false;
-      final board = BoardEngine(createConnection: () async => null);
-      final independent = EngineLifecycle.fresh(
+      final board = BoardEngine(
+        settings: EngineConfiguration.new,
+        budget: engines.budget,
+        createConnection: () async => null,
+      );
+      final independent = EngineLifecycle(
+        loadEnabled: () async => true,
+        saveEnabled: (_) async {},
         pool: _FailingPool(),
         board: board,
       );

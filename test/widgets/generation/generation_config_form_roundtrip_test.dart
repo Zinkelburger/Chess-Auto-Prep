@@ -24,9 +24,10 @@
 /// for in writing rather than appearing by omission.
 library;
 
+import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+
 import 'package:flutter/material.dart';
-import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
-import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -143,7 +144,9 @@ Future<TreeBuildConfig> _throughForm(
   bool playAsWhite = true,
 }) async {
   final formKey = GlobalKey<GenerationConfigFormState>();
-  await tester.pumpWidget(
+  await pumpRuntimeWidget(
+    tester,
+    runtimeSettings,
     MultiProvider(
       providers: [
         ChangeNotifierProvider<EvalDatabaseSettings>.value(
@@ -190,7 +193,14 @@ List<String> _lostKeys(
   return lost;
 }
 
+RuntimeSettings? _runtimeSettings;
+RuntimeSettings get runtimeSettings =>
+    _runtimeSettings ??= testRuntimeSettings();
 void main() {
+  setUp(() {
+    _runtimeSettings = null;
+    addTearDown(() => _runtimeSettings?.dispose());
+  });
   testWidgets('PGN metrics start unchecked and can be selected independently', (
     tester,
   ) async {
@@ -340,22 +350,14 @@ void main() {
       final result = await _throughForm(tester, seed);
 
       expect(result.minAcceptableEvalDepth, 0);
-      expect(result.evalDepth, BulkAnalysisSettings.instance.depth);
+      expect(result.evalDepth, runtimeSettings.bulk.depth);
     });
   });
 
   testWidgets('new builds capture global bulk depth and cores', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    final bulk = BulkAnalysisSettings.instance;
-    final engine = EngineSettings.instance;
-    final oldBulk = bulk.depth;
-    final oldBoard = engine.depth;
-    final oldCores = engine.cores;
-    addTearDown(() async {
-      await bulk.setDepth(oldBulk);
-      engine.depth = oldBoard;
-      engine.cores = oldCores;
-    });
+    final bulk = runtimeSettings.bulk;
+    final engine = runtimeSettings.engine;
     await bulk.setDepth(19);
     engine.depth = 12;
     engine.cores = 1;
@@ -506,7 +508,9 @@ void main() {
       tester,
     ) async {
       final formKey = GlobalKey<GenerationConfigFormState>();
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
         MultiProvider(
           providers: [
             ChangeNotifierProvider<EvalDatabaseSettings>.value(
@@ -636,7 +640,9 @@ void main() {
   group('an unseeded form', () {
     testWidgets('reads back its own declared defaults', (tester) async {
       final formKey = GlobalKey<GenerationConfigFormState>();
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        runtimeSettings,
         MultiProvider(
           providers: [
             ChangeNotifierProvider<EvalDatabaseSettings>.value(

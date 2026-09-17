@@ -40,7 +40,7 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 | **Models** | Immutable / serializable data | `models/` |
 | **Constants / utils / theme** | Shared helpers | `constants/`, `utils/`, `theme/` |
 
-**State management:** Provider (`ChangeNotifier`) — primarily `AppState`, `RepertoireController`, domain session controllers (`GenerationSessionController`, `AuditSessionController`, `CoverageController`), singletons (`EngineSettings`, `EngineLifecycle`, `EvalDatabaseSettings`).
+**State management:** Provider (`ChangeNotifier`) supplies `AppState`, feature/session controllers and application-owned engine/settings components. `AppDependencies` shares the committed settings owners and `EngineRuntime` components across views. Unmigrated areas such as `EvalDatabaseSettings` retain their existing ownership.
 
 **June 2026 remediation (7-phase refactor):** Repertoire metadata is typed (`RepertoireMetadata` replaces `Map<String, dynamic>`). `AppState` no longer tracks a global saved-games list. `RepertoireController` navigation funnels through `playMove` / `playMoveAtTreePath` (removed `userPlayedMove`, `_isInternalUpdate`). `GenerationSessionController.dispose()` stops an in-flight build. Lines browser uses typed `LineSortBy` / `LineMetricsFilter`, 300 ms search debounce, and lazy grouped `ListView.builder` rows. PGN editor memoizes move widgets and delegates clipboard/persist I/O to parent callbacks. Coherence FP-Growth runs in `Isolate.run`. `EngineLifecycle.enterGeneration` / `exitGeneration` are serialized via `_serialExec`. Startup failures surface via `runZonedGuarded` → `StartupErrorApp`; repertoire load failures via `RepertoireController.loadError`. Deleted unused `ease_calculator.dart`. New extractions: `GenerationConfigForm`, `RepertoireShortcuts`.
 
@@ -1144,7 +1144,8 @@ GenerationSessionController (owns TreeBuildService + CoherenceService)
   ← Config shown inline in Jobs tab (no dialog to pop); controller tracks progress stats
 
 RepertoireGenerationTab (config UI + build orchestration)
-  → cancelGeneration() → _savePartialTree() before cleanup (partial trees survive cancel)
+  → controller.cancelBuild() → drain owned partial staging before cleanup
+      (selected partial generation survives cancel)
   → EngineLifecycle.enterGeneration(threads)
   → controller.buildService.build(TreeBuildConfig)    [Phase 1 BFS — Stockfish/Maia modes]
     OR
@@ -1155,8 +1156,10 @@ RepertoireGenerationTab (config UI + build orchestration)
   → calculateTreeEase + EcaCalculator                 [Phase 2]
   → calculateMyEase                                     [myEase on our moves]
   → RepertoireSelector + LineExtractor
-  → TrapExtractor → *_traps.json
-  → tree.json persisted beside repertoire PGN
+  → TrapExtractor → in-memory trap index
+  → GenerationArtifacts.prepareBundle → immutable tree/probes/traps/partial proposal
+  → GenerationPublicationController → source PGN commit + Builder receipt
+  → GenerationArtifactRepository.select → matching current artifact generation
   → EngineLifecycle.exitGeneration()
 ```
 
@@ -1234,7 +1237,8 @@ Controller state:
 
 ```
 TrapExtractor (during generation)
-  → TrapLineInfo list → JSON
+  → TrapLineInfo list → GenerationArtifacts bundle staging
+  → GenerationArtifactRepository selects/loads the verified generation
   → TrapIndexService (FEN index, line prefix index, metrics)
   → TrapsBrowser, TrapDetailCard, TrapNavigationButtons, PGN trap dots
 ```
@@ -1997,17 +2001,43 @@ the receiver to its loaded chapter/session, drains pending edits and atomically
 adopts the current complete document. Stale or replayed callbacks cannot add
 lines twice. Ordinary line saves also refresh the complete baseline, opening
 tree and metadata, preserving newer actions and unrelated external game edits.
-Tree/probe/trap/partial caches still use the legacy artifact owner, and a recovery
-browser remains pending.
+`GenerationArtifactRepository` is the single saved tree/probe/trap/partial
+publication authority. Its injected `StorageGenerationArtifactRepository` stages
+immutable payloads and a source/run/config manifest under
+`.cap-generation/<chapter.pgn>/artifacts-<id>/`. One revision-checked
+`artifacts.current.json` selects the complete generation. Readers validate the
+manifest, payload hashes, source revision and current pointer before adoption;
+stale runs, edited payloads and interrupted selection cannot replace a newer
+selected generation. Old generations and failed proposals remain on disk.
+
+`GenerationArtifacts` owns typed serialization and complete-bundle staging.
+Generation, saved-tree reopening, probe updates, resumable partials, the active
+Builder tree panes, traps and training source loading use this repository.
+Resume/discard carries the observed generation ID. Chapter changes invalidate
+cached reads, and late trap loads cannot repopulate an outgoing chapter.
+`ExpectimaxDatabase` retains in-memory tree/probe operations and an injected
+reader; it no longer writes files. `GenerationArtifactStore`, its path/writer
+APIs, `ExpectimaxDatabase.persist`, trap filesystem helpers and obsolete eval-tree
+loader/tab implementations are deleted. `ExpectimaxProbeCodec` only encodes and
+decodes probes.
+
+Explicit infrastructure `readLegacy` decodes existing `_tree.json`,
+`_expectimax.json`, `_traps.json` and `_partial_tree.json` without modifying them.
+These lack source identity and are never silently selected, extended or resumed;
+the active readers consume verified generations. No legacy preview UI is added.
+PGN commit and artifact selection are separate transactions: if the PGN saves
+but cache selection fails, the job reports the saved PGN and retained proposal,
+fails completion, and rejects the old cache for the new source. A recovery
+browser, retention/garbage-collection policy and cross-file atomicity remain
+outside this cutover.
 
 ### `lib/core/`
 
 | File | Purpose | Public API / state |
 |------|---------|-------------------|
 | `app_state.dart` | Global app mode, usernames, board position, builder↔trainer↔study pending handoffs (`pendingTrainStudyPath` = "Train" in Study mode, `pendingStudyPath` = "Edit study" in the Trainer); **tactics auto-fetch preferences** (`tacticsAutoFetch`, `lichessLastFetch`, `chesscomLastFetch`) persisted via SharedPreferences; `AppMode.usesInteractiveEngine` names which IndexedStack children keep an engine pane | `setMode`, `switchToBuilder`/`switchToTrainer`/`switchToStudyTraining`/`switchToStudyEdit`/`switchToBuilderWithGeneration`, `setRepertoireGenerating`, `setTacticsAutoFetch`, `setLichessLastFetch`/`setChesscomLastFetch`, `notifyListeners` |
-| `generation_session_controller.dart` | **Generation session** — owns `TreeBuildService` + `CoherenceService`; pipeline, pause/resume/cancel/finishNow and probes; injected publication owner stages and commits source output. Disposal releases waits and drains owned commands. | `startBuild`, `pauseBuild`, `resumeBuild`, `cancelBuild`, `discardBuild`, `finishNow`, `onTreeBuilt`, `clearTree`, `loadSavedTreeFor`, `skipMasterGamesDownload`, `progress`, `snapshots`, `current` |
-| `expectimax_database.dart` | The published `GeneratedRepertoire` bundle and its probe trees: publish, load from disk, land a probe (graft or keep), record an engine PV, persist. Loads replace prior analysis; full builds retain probes and supersede pending loads. Main-tree mutations refresh derived artifacts; probe-only changes reuse them. Never notifies — the controller does | `publish`, `clear`, `dropTree`, `load` → `ExpectimaxLoadOutcome`, `addBoundedProbe`, `landProbe`, `recordEnginePv`, `persist`; `enginePvProbe` |
-| `generation_artifacts.dart` | `GenerationArtifactStore` — legacy derived files beside a repertoire: `_tree.json`, `_partial_tree.json`, `_expectimax.json`, `_traps.json`; tree and probe reads recover independently from damaged files; storage-backed for tests. Course/model PGN publication has a separate owner above. | `writeTree`, `writePartialTree`, `deletePartialTree`, `readDatabase`, `writeDatabase`, `writeTrapIndex`, `*PathFor` |
+| `generation_session_controller.dart` | **Generation session** — owns `TreeBuildService` + `CoherenceService`; pipeline, pause/resume/cancel/finishNow and probes; injected publication owner stages and commits source output, then selects the matching artifact generation. Captures artifact runs before builds/probes, drains partial staging and closes run capabilities. Disposal releases waits and drains owned commands. | `startBuild`, `pauseBuild`, `resumeBuild`, `cancelBuild`, `discardBuild`, `finishNow`, `onTreeBuilt`, `clearTree`, `loadSavedTreeFor`, `skipMasterGamesDownload`, `progress`, `snapshots`, `current` |
+| `expectimax_database.dart` | In-memory `GeneratedRepertoire` and probe trees; loads through injected `readSaved`, lands probes and records engine PVs. Loads replace prior analysis; full builds retain probes and supersede pending loads. Main-tree mutations refresh derived artifacts; probe-only changes reuse them. The session owns notifications and repository publication. | `publish`, `clear`, `dropTree`, `load` → `ExpectimaxLoadOutcome`, `addBoundedProbe`, `landProbe`, `recordEnginePv`; `enginePvProbe` |
 | `master_games_wait.dart` | `MasterGamesWait` — parks a run on the master-games download (start or join a sync, mirror its status, release on finish / "start now without them" / cancel); `MasterGamesSync` is the service slice it needs | `park`, `stopWaiting`, `decline`, `isWaiting`, `declined` |
 | `generation_run_summary.dart` | Pure wording of a finished run's outcome sentence | `composeRunSummary`, `courseNote`, `bookSourceNote` |
 | `generation_progress.dart` | Throttled BFS / phase stats for the Jobs panel; owned by the session controller | `update`, `setStatus`, `handleBuildProgress`, `flushNotify` |
@@ -2019,6 +2049,43 @@ browser remains pending.
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
 
+### Application-owned engine and display settings
+
+`app/runtime_settings.dart` constructs one application-scoped owner per section.
+Immutable configurations live in `features/settings/models/`;
+`controllers/settings_section_controller.dart` serializes field edits against
+fresh storage, confirms writes by rereading, and retains failed drafts for retry.
+`infrastructure/settings/preferences_section_storage.dart` preserves existing
+keys and migrations, including worker/thread settings and `tactics_import.depth`.
+Normal and inline controls share loading, saving, failure and retry state.
+
+Committed engine changes apply to the next search or job. Board requests capture
+configuration before queuing; pool provisioning and crash recovery retain their
+captured configuration. A running review keeps its depth/core settings across
+accounts. Board-display changes apply after successful persistence.
+`DisplaySettingsScope.of(context)` returns immutable committed configuration;
+bare board previews receive immutable defaults, never a fallback settings writer.
+The three owners are `features/settings/controllers/engine_settings.dart`,
+`bulk_analysis_settings.dart` and `board_display_settings.dart`; their old
+`models/` singleton files are deleted.
+
+`app/engine_runtime.dart` constructs and disposes `BoardEngine`, `StockfishPool`,
+`EngineSearchBudget`, `EngineLifecycle` and an instance `GenerationLease`. It
+exposes components without duplicating their operational APIs. Consumers receive
+components through constructors or application providers. Singleton accessors,
+static generation lease access and temporary settings-binding methods are
+deleted. Lifecycle toggle persistence delegates to the engine-settings owner.
+Runtime disposal retires active and starting workers, cancels queued budget
+admissions and prevents disposed owners from starting new work.
+
+Settings tests cover concurrent panels, invalid legacy values, late loading versus
+edits, partial writes, retained failures, retry and restart. Engine tests cover
+queued configuration and recovery; `test/app/engine_runtime_test.dart` covers
+shutdown, late startup retirement and lease exclusion. Native Linux checks cover
+complete runtime PID cleanup and a fresh runtime after disposal. Credentials,
+external evaluation-database settings and unrelated services remain separate
+renewal work; Windows/macOS native verification remains open.
+
 ### `lib/models/`
 
 | File | Purpose |
@@ -2028,10 +2095,8 @@ browser remains pending.
 | `analysis_player_info.dart` | Player metadata for analysis; `accounts` (the chess.com/lichess handles an opponent's merged game-set came from — what makes it re-downloadable) and `group` (event name); `displayName` is the first `;`-segment of the username |
 | `build_tree_node.dart` | **Generated tree node**: eval, ease, myEase, expectimax, traps, `pvContinuationMove`, `engineInjected`, children, serialization |
 | `engine_evaluation.dart` | Single eval result |
-| `engine_settings.dart` | **Singleton** engine/generation/explorer settings + SharedPreferences persistence; setters share `_assignIfChanged` / `_assignInRange`; persist is fire-and-forget via `_persist()` |
 | `engine_weakness_result.dart` | Weak square / position analysis output |
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
-| `board_display_settings.dart` | `BoardDisplaySettings` — global board and move preferences: `BoardCoordinates` (none / inside / outside / every square) `PieceNotation` (letters / figurines), and opt-in legal-move dots (off by default; explicit feature hints such as bughouse drop targets remain available). Persisted; reached through `BoardDisplaySettings.of(context)`, which rebuilds the caller when a `DisplaySettingsScope` (planted above `MaterialApp`) is present and falls back to the singleton in bare widget tests |
 | `explorer_response.dart` | Opening explorer answer shape: `LichessDatabase` (which database is being asked), moves with counts, plus the games a source lists for the position (`ExplorerGame`, tagged with the `ExplorerGameSource` it can be fetched from — Lichess, masters or the local TWIC database) |
 | `move_tree.dart` | Editable PGN move tree (`MoveNode`, `MoveTree`). FEN cached per node; Iterative fresh-ID adoption copies NAG lists and preserves cached positions. Cursor and read contracts live in `chess_core/moves/`. PGN parsing delegates to `move_tree_pgn.dart`; writing uses `chess_core/pgn/move_text_writer.dart`. Privately owned by `RepertoireBoardController` for Builder navigation and edits. |
 | `move_tree_pgn.dart` | `MoveTreePgnCodec` — iterative dartchess game-tree replay → editable `MoveNode`s, preserving variations, starting comments and NAGs |
@@ -2090,11 +2155,9 @@ browser remains pending.
 | **adapters/eval_tree_snapshot_adapter.dart** | `BuildTree` → lightweight snapshot for UI |
 | **controllers/eval_tree_controller.dart** | Graph selection, pan, focused window |
 | **models/eval_tree_snapshot.dart** | Serializable snapshot node |
-| **services/eval_tree_file_loader.dart** | Load tree JSON from disk (IO/stub) |
 | **services/eval_tree_layout_engine.dart** | Graph layout for focused window (~400 nodes) |
 | **services/eval_tree_line_metrics.dart** | Per-node / per-line metrics including `linePlayability` |
 | **tree_colors.dart** | Node coloring by eval/ease |
-| **widgets/eval_tree_tab.dart** | Tab hosting graph + explorer |
 | **widgets/eval_tree_details_pane.dart** | Selected node detail |
 | **widgets/eval_tree_node_chip.dart** | Graph node widget |
 | **widgets/eval_tree_toolbar.dart** | Graph controls |
@@ -2676,7 +2739,6 @@ release smoke testing. No release or update is triggered by these tests.
 | `test/features/engine_tournament/tournament_open_request_test.dart` | The request file the MCP side writes and the app consumes: round trip, read-and-clear, malformed and stale requests, and the watcher's already-waiting / written-live / stopped paths |
 | `test/features/engine_tournament/engine_registry_test.dart` | Bundled-first ordering, bundled settings persisted without its path, update/remove, corrupt-file tolerance |
 | `test/features/eval_tree/eval_tree_controller_test.dart` | Graph controller |
-| `test/features/eval_tree/eval_tree_tab_test.dart` | Tab widget |
 | `test/features/eval_tree/eval_tree_line_metrics_test.dart` | Line metrics |
 | `test/features/eval_tree/eval_tree_layout_engine_test.dart` | Layout performance |
 | `test/features/eval_tree/eval_tree_snapshot_adapter_test.dart` | Snapshot adapter |

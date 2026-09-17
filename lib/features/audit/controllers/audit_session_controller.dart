@@ -10,8 +10,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../services/engine/engine_lifecycle.dart';
-import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/jobs/notify_throttle.dart';
 import '../../../services/jobs/repertoire_job.dart';
 import '../../../utils/safe_change_notifier.dart';
@@ -23,18 +21,12 @@ import '../services/repertoire_audit_service.dart';
 
 class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   AuditSessionController({
-    RepertoireAuditService? service,
-    Future<void> Function()? prepareEngine,
-    Future<void> Function()? releaseEngine,
-  }) : _service = service ?? RepertoireAuditService(),
-       _prepareEngine = prepareEngine ?? _prepareStockfish,
-       _releaseEngine =
-           releaseEngine ?? EngineLifecycle.instance.exitGeneration;
-
-  static Future<void> _prepareStockfish() async {
-    await EngineLifecycle.instance.enterGeneration(1);
-    await StockfishPool.instance.ensureWorkers(1);
-  }
+    required RepertoireAuditService service,
+    required Future<void> Function() prepareEngine,
+    required Future<void> Function() releaseEngine,
+  }) : _service = service,
+       _prepareEngine = prepareEngine,
+       _releaseEngine = releaseEngine;
 
   final Future<void> Function() _prepareEngine;
   final Future<void> Function() _releaseEngine;

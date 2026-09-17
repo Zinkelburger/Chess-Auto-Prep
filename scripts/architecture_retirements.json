@@ -12,7 +12,15 @@
     "lib/services/training/",
     "lib/models/training_settings.dart",
     "lib/features/documents/controllers/pgn_viewer_controller.dart",
-    "lib/widgets/pgn/pgn_perspective_button.dart"
+    "lib/widgets/pgn/pgn_perspective_button.dart",
+    "lib/core/generation_artifacts.dart",
+    "lib/features/eval_tree/services/eval_tree_file_loader.dart",
+    "lib/features/eval_tree/services/eval_tree_file_loader_io.dart",
+    "lib/features/eval_tree/services/eval_tree_file_loader_stub.dart",
+    "lib/features/eval_tree/widgets/eval_tree_tab.dart",
+    "lib/models/board_display_settings.dart",
+    "lib/models/bulk_analysis_settings.dart",
+    "lib/models/engine_settings.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
