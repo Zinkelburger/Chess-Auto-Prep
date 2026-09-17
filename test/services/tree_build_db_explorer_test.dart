@@ -11,6 +11,7 @@ library;
 
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
+import '../support/eval_cache_fixture.dart';
 
 import 'dart:io';
 
@@ -84,6 +85,7 @@ List<BuildTreeNode> _nodesAtPly(BuildTreeNode node, int ply) => [
 ];
 
 void main() {
+  useIsolatedEvalCache();
   late EngineRuntime engines;
   setUp(() {
     final settings = testRuntimeSettings();

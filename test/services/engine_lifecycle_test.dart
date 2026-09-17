@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:chess_auto_prep/services/engine/engine_search_budget.dart';
 import 'package:chess_auto_prep/features/settings/models/engine_configuration.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
@@ -86,6 +87,83 @@ void main() {
     await lifecycle.exitGeneration();
     await lifecycle.resume();
     expect(lifecycle.state, EngineState.off);
+  });
+
+  test('startup read serializes with an early off toggle', () async {
+    final loading = Completer<bool>();
+    final saved = <bool>[];
+    final independent = EngineLifecycle(
+      pool: engines.pool,
+      board: engines.board,
+      loadEnabled: () => loading.future,
+      saveEnabled: (value) async => saved.add(value),
+    );
+    addTearDown(independent.dispose);
+    final startup = independent.loadPersistedState();
+    final toggle = independent.toggleOff();
+    await Future<void>.delayed(Duration.zero);
+    expect(saved, isEmpty);
+    loading.complete(true);
+    await Future.wait([startup, toggle]);
+    expect(independent.state, EngineState.off);
+    expect(saved, [false]);
+    await independent.loadPersistedState();
+    await independent.resume();
+    expect(independent.state, EngineState.off);
+  });
+
+  test('late startup cannot replace an explicit toggle', () async {
+    var reads = 0;
+    final independent = EngineLifecycle(
+      pool: engines.pool,
+      board: engines.board,
+      loadEnabled: () async {
+        reads++;
+        return true;
+      },
+      saveEnabled: (_) async {},
+    );
+    addTearDown(independent.dispose);
+    await independent.toggleOff();
+    await independent.loadPersistedState();
+    expect(reads, 0);
+    expect(independent.state, EngineState.off);
+  });
+
+  test('failed startup stays off through resume and permits retry', () async {
+    var fail = true;
+    var writes = 0;
+    final independent = EngineLifecycle(
+      pool: engines.pool,
+      board: engines.board,
+      loadEnabled: () async {
+        if (fail) throw StateError('preferences unavailable');
+        return true;
+      },
+      saveEnabled: (_) async {
+        writes++;
+      },
+    );
+    addTearDown(independent.dispose);
+    await expectLater(independent.loadPersistedState(), throwsStateError);
+    await independent.resume();
+    expect(independent.state, EngineState.off);
+    expect(writes, 0);
+    fail = false;
+    await independent.loadPersistedState();
+    expect(independent.state, EngineState.idle);
+    await independent.suspend();
+    await independent.resume();
+    expect(independent.state, EngineState.idle);
+    expect(writes, 0, reason: 'navigation must not rewrite the preference');
+  });
+
+  test('startup during generation preserves exclusive ownership', () async {
+    await lifecycle.enterGeneration(1);
+    await lifecycle.loadPersistedState();
+    expect(lifecycle.state, EngineState.generating);
+    await lifecycle.exitGeneration();
+    expect(lifecycle.state, EngineState.idle);
   });
 
   test('starts in off state', () {
