@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'support/memory_desktop_close_port.dart';
+import 'support/memory_study_recovery_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,7 +52,10 @@ void main() {
   testWidgets('App loads without crashing', (WidgetTester tester) async {
     await _pumpDesktopSizedWidget(
       tester,
-      ChessAutoPrepApp(closePort: MemoryDesktopClosePort()),
+      ChessAutoPrepApp(
+        closePort: MemoryDesktopClosePort(),
+        studyRecoveryStore: MemoryStudyRecoveryStore(),
+      ),
     );
 
     // Boots into the unified Tactics home: the app-bar title says Tactics,

@@ -433,9 +433,10 @@ of the name while preserving PGN and side.
 session and panel. The editor and destination field are fixture hosts, not a
 replacement production editor or OS picker. Legacy editor/generator/undo and
 chapter writers have not yet adopted this session. Retained drafts live only
-for the session lifetime; persisted drafts, complete workspace restoration,
-PGN validation and large-document inspection remain in the document workspace
-migration. No process-crash recovery is implied by draft retention.
+for the session lifetime unless its workspace installs a recovery owner. Study
+now checkpoints both current and retained drafts (below); other document hosts,
+complete workspace restoration, PGN validation and large-document inspection
+remain in the document workspace migration.
 
 #### Application close coordination
 
@@ -461,12 +462,51 @@ not implicitly replayed. PGN Viewer registers its save/session check and also
 retains an approved-for-discard draft until actual application exit. Repertoire
 registers pending line-comment saves; repeated failures continue to block closing.
 Builder drafts and long-running job shutdown are not yet covered by these guards.
-Persistent draft/restart recovery remains pending.
+Study restart recovery is implemented below; other document hosts remain pending.
 
 The bounded runner seeds fresh disposable profiles with a declined native desktop
 integration offer. This prevents GTK's modal first-run prompt (outside Flutter's
 layer-tree screenshots) from swallowing native input/close events. Explicit
 fixture choices remain intact; the user's desktop preferences are never touched.
+
+#### Study restart recovery
+
+`features/studies/models/study_workspace_snapshot.dart` captures name, source path,
+original save baseline, serialized PGN, retained drafts, uncertainty (including a
+pending copy destination), chapter, cursor and board orientation.
+`StudyController.captureWorkspace` serializes only at checkpoint boundaries;
+`restoreWorkspace` preserves displaced work and refuses to adopt after intervening
+edits during decoding. Restoration never reads a newer file baseline, writes the
+source, or resumes implicit autosave. An explicit save still uses the captured
+revision; an externally changed source conflicts. Retained drafts also survive
+opening another Study document.
+
+`features/studies/controllers/study_recovery_controller.dart` owns checkpoint
+scheduling, available recovery entries and failure/retry state. A one-second
+coalescing timer makes progress during continuous edits, with one in-flight write
+and one pending latest snapshot. Errors stop automatic retries and remain visible.
+App close awaits the pending checkpoint; shutdown releases its native lease.
+Edits made after the last acknowledged checkpoint can still be lost on abrupt
+termination before the next write completes; this is not per-keystroke durability.
+
+`StudyRecoveryStore` is the pure feature contract; startup injects
+`infrastructure/studies/file_study_recovery_store.dart`. Each app instance owns a
+random checkpoint under Support/`study-recovery-v1/`, written with the existing
+journaled atomic writer. Versioned JSON includes a payload checksum and the full
+original document revision. Linux flushes the checkpoint directory. A SQLite
+transaction held for the session lifetime excludes live sessions across stores,
+isolates and processes, and the OS releases it on process death. Directory
+recovery precedes discovery; unsupported/corrupt records remain untouched and
+are reported. These files contain user work and are not a disposable cache.
+
+`features/studies/widgets/study_recovery_host.dart` offers a localized, themed
+recovery banner in every mode. Review shows the source and local checkpoint time.
+Restore checkpoints the newly adopted draft before resolving the old entry and
+opens Study mode. Dismiss asks for confirmation and resolves only the selected
+revision. Resolution is idempotent and leaves archived bytes on disk; it does not
+purge work or affect another session. An archive retention/purge UI and full clean
+workspace restoration remain future work. Recovery-store errors expose Retry;
+known failed source-file writes are never replayed by the checkpoint service.
 
 #### Design system and component catalog
 
@@ -692,8 +732,8 @@ requests; dismissing their presentation, changing modes or disposing the editor
 cannot replay them. A confirmed explicit retry/copy or reload reconciles state.
 Reload decodes before adoption and retains the latest intervening draft. Restoring
 that draft exchanges it with any newer dirty draft without writing either.
-These retained drafts are in memory; the app-scoped Study close guard protects
-normal window closure, while restart restoration remains pending.
+The app-scoped Study close guard protects normal window closure. The recovery
+owner checkpoints current and retained drafts for restart restoration (below).
 
 Successful **Save a copy…** creates an exclusive new study and opens it. **Save
 study PGN as…** exports a captured snapshot through its own typed save session,

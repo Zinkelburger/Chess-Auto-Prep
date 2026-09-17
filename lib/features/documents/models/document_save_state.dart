@@ -12,8 +12,8 @@ enum DocumentSavePhase {
   reloading,
 }
 
-/// An explicitly retained in-memory draft. Persistence/restart restoration is
-/// owned by the document workspace; this value does not promise crash recovery.
+/// An explicitly retained draft. The workspace owns checkpoint persistence;
+/// constructing this value alone does not make its contents durable.
 class RetainedDocumentDraft {
   const RetainedDocumentDraft({
     required this.path,

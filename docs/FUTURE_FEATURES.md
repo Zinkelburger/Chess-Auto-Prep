@@ -40,8 +40,11 @@ native Linux revisions, exclusive copies/exports and retained reload/restore dra
 its controller/model and pure PGN text helpers have canonical feature/chess-core
 paths. App-owned close coordination now covers Study, PGN Viewer and pending
 repertoire line edits, preserving drafts if another owner cancels or changes.
-Other legacy editors, persisted drafts, builder-draft checks and job shutdown
-coordination are still pending.
+Study now checkpoints current/retained drafts, their original file revision and
+chapter/cursor/orientation, with startup review/restore and conflict-safe explicit
+saving. Recovery excludes live instances and preserves unreadable records.
+Other editors' persisted drafts, clean workspace/session restoration, archive
+purging, builder-draft checks and job shutdown coordination are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional
 splitting of existing chapters, remaining localization, legacy appearance migration/accessibility and full slice
 gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design

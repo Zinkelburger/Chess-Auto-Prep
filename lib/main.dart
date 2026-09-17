@@ -18,6 +18,9 @@ import 'core/app_history.dart';
 import 'core/app_state.dart';
 import 'features/studies/controllers/study_controller.dart';
 import 'features/studies/widgets/study_close_guard.dart';
+import 'features/studies/widgets/study_recovery_host.dart';
+import 'features/studies/controllers/study_recovery_controller.dart';
+import 'features/studies/repositories/study_recovery_store.dart';
 import 'features/bughouse/services/bughouse_bundle.dart';
 import 'debug/agent_driver.dart';
 import 'models/board_display_settings.dart';
@@ -174,9 +177,15 @@ class StartupErrorApp extends StatelessWidget {
 }
 
 class ChessAutoPrepApp extends StatelessWidget {
-  const ChessAutoPrepApp({super.key, this.settings, this.closePort});
+  const ChessAutoPrepApp({
+    super.key,
+    this.settings,
+    this.closePort,
+    this.studyRecoveryStore,
+  });
   final AppSettingsRepository? settings;
   final DesktopClosePort? closePort;
+  final StudyRecoveryStore? studyRecoveryStore;
 
   @override
   Widget build(BuildContext context) {
@@ -221,6 +230,12 @@ class ChessAutoPrepApp extends StatelessWidget {
           ChangeNotifierProvider<StudyController>(
             create: (_) => createStudyController(documents: documents),
           ),
+          ChangeNotifierProvider<StudyRecoveryController>(
+            create: (ctx) => StudyRecoveryController(
+              study: ctx.read<StudyController>(),
+              store: studyRecoveryStore ?? createStudyRecoveryStore(),
+            ),
+          ),
         ],
         // Boards and move lists read the Display preferences through this scope
         // so a change in Settings repaints them in place.
@@ -243,7 +258,12 @@ class ChessAutoPrepApp extends StatelessWidget {
               builder: (context) => AppUpdateHost(
                 child: StudyCloseGuard(
                   study: context.read<StudyController>(),
-                  child: const MainScreen(),
+                  child: StudyRecoveryHost(
+                    recovery: context.read<StudyRecoveryController>(),
+                    onRestored: () =>
+                        context.read<AppState>().setMode(AppMode.study),
+                    child: const MainScreen(),
+                  ),
                 ),
               ),
             ),

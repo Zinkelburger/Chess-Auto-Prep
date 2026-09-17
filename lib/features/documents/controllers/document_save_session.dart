@@ -26,6 +26,36 @@ class DocumentSaveSession implements DocumentSaveActions {
          phase: DocumentSavePhase.dirty,
        );
 
+  /// Rehydrate captured work without reading or adopting newer source bytes.
+  /// The structured editor keeps implicit autosave blocked until user action.
+  DocumentSaveSession.recovered(
+    this._store, {
+    required String path,
+    required String content,
+    PgnSnapshot? baseline,
+    bool uncertain = false,
+    String? uncertainPath,
+    List<RetainedDocumentDraft> retainedDrafts = const [],
+  }) : _state = DocumentSaveState(
+         path: path,
+         content: content,
+         baseline: baseline,
+         phase: uncertain
+             ? DocumentSavePhase.uncertain
+             : content == baseline?.content
+             ? DocumentSavePhase.clean
+             : DocumentSavePhase.dirty,
+         outcome: uncertain
+             ? PgnWriteUncertain(
+                 error: StateError('Recovered unresolved write'),
+                 before: baseline,
+                 observed: null,
+               )
+             : null,
+         uncertainPath: uncertainPath,
+         retainedDrafts: retainedDrafts,
+       );
+
   final PgnDocumentStore _store;
   final _changes = StreamController<DocumentSaveState>.broadcast(sync: true);
   DocumentSaveState _state;
@@ -108,7 +138,7 @@ class DocumentSaveSession implements DocumentSaveActions {
         baseline: state.baseline,
         phase: DocumentSavePhase.saving,
         outcome: state.outcome,
-        uncertainPath: state.uncertainPath,
+        uncertainPath: destination,
         retainedDrafts: state.retainedDrafts,
       ),
     );

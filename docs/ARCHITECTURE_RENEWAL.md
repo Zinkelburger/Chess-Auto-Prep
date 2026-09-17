@@ -913,6 +913,54 @@ shutdown; large-document budgets; complete workspace/theme/accessibility work;
 Windows/macOS native checks. Milestones 1/2 and 3 remain partial; this is not a
 full application migration or a completed PLAN-02 gate.
 
+### Study restart recovery checkpoint (2026-09-17)
+
+Following app-owned close coordination `2569bcb6`, Study now has a persisted
+workspace checkpoint under its canonical feature boundary. Its pure snapshot and
+repository contract preserve PGN content, original native revision, retained
+drafts, uncertain writes/copy destinations, chapter, cursor and orientation.
+Startup injects the file adapter and an app-lifetime recovery controller; a
+localized recovery banner is available from every mode.
+
+Recovery captures at a bounded one-second cadence, with one in-flight write and
+one coalesced pending snapshot. It does not serialize the tree for each cursor
+notification. Writes use the existing atomic journal and checksum a versioned JSON
+payload; Linux also flushes the checkpoint directory. This preserves the last
+acknowledged checkpoint after process death, not edits still waiting for their
+next checkpoint or a claim about power-loss behavior. Checkpoint failures remain
+visible and require an explicit retry.
+
+Separate random records and lifetime SQLite transactions isolate concurrent app
+sessions, including separate isolates in one process. Process death releases the
+lease without stale-lock deletion. Recovery discovers only inactive sessions;
+unknown/corrupt records remain on disk and surface a failure. Restore never adopts
+a newer disk revision or writes the original PGN, and blocks implicit autosave.
+A later explicit save still checks the captured baseline. A fresh checkpoint is
+acknowledged before the old entry is resolved. Dismissal is explicit and revision
+guarded; resolved bytes remain archived. Existing drafts displaced by recovery
+and retained drafts carried through ordinary Study opens are preserved.
+
+Validation on Linux:
+
+| Check | Evidence |
+| --- | --- |
+| Analyze and architecture/file-mutation lint | Pass; nine existing informational analyzer notices, no new notices. All 13 boundary checker tests pass. |
+| Focused Study/document/native-recovery/widget suite | All 122 tests pass, including continuous-edit checkpoint cadence, corruption, stale receipts, failed writes, retained drafts and recovery-before-resolution ordering. |
+| Native desktop integration | All ten tests pass across app navigation, Study save recovery, cross-mode close and startup recovery. Startup recovery preserves an externally modified source and saves a separate copy. |
+| Process death | A subprocess writes an acknowledged checkpoint, remains hidden while alive, then is killed with SIGKILL. A new reader discovers the exact retained draft after its lease releases. |
+| Full preview process restart | In a disposable headless profile, entered `e4` and a comment, confirmed checkpoint bytes, stopped and launched a new app process, restored via the startup banner and verified cursor/comment plus the separately saved PGN copy. |
+| Visual inspection | [Recovery review](images/renewal-study-restart-review.png) and [restored Study](images/renewal-study-restart-restored.png), captured from the production UI at 1280×720. |
+
+Early test-fixture failures (real-isolate work under the widget fake clock and
+Dart subprocess build-hook stderr) were corrected before the passing runs.
+This increment does not establish power-loss behavior or the full release gates.
+
+Remaining: other PGN editors' recovery/store migrations; automatic restoration of
+clean workspaces and their full UI state; archive retention/purge UX; document undo
+receipts and immutable projections; large-document performance measurements;
+builder and job shutdown; native Windows/macOS durability and release gates.
+Milestones 1/2 and 3 remain partial; later feature migrations are still required.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

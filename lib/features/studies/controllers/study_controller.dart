@@ -17,6 +17,7 @@ import '../../../models/move_tree.dart';
 import '../../../core/move_navigation.dart';
 import '../../repertoires/models/repertoire_metadata.dart';
 import '../models/study_document.dart';
+import '../models/study_workspace_snapshot.dart';
 import '../../../chess_core/pgn/pgn_text.dart'
     show splitPgnIntoGames, extractHeaders, stripBom, countPgnGames;
 import '../repositories/study_library_repository.dart';
@@ -180,6 +181,85 @@ class StudyController extends ChangeNotifier
     notifyListeners();
   }
 
+  /// Called only at bounded checkpoint/save boundaries, not for every repaint.
+  StudyWorkspaceSnapshot captureWorkspace() => StudyWorkspaceSnapshot(
+    name: _doc.name,
+    path: _doc.filePath ?? '',
+    content: _doc.toPgn(),
+    dirty: _dirty,
+    baseline: _session.state.baseline,
+    uncertain:
+        state.uncertain || _session.state.phase == DocumentSavePhase.saving,
+    uncertainPath: _session.state.uncertainPath,
+    retainedDrafts: _session.state.retainedDrafts,
+    chapter: _chapterIndex,
+    cursor: _path.toList(),
+    flipped: _flipped,
+  );
+
+  /// Restoring is a read-only editor operation. Preserve displaced work and the
+  /// original commit baseline; an explicit save must still validate that baseline.
+  Future<void> restoreWorkspace(StudyWorkspaceSnapshot snapshot) async {
+    if (isDisposed || _reloading || _relocating) {
+      throw StateError('Study is busy');
+    }
+    _reloading = true;
+    _autoSaveTimer?.cancel();
+    final generation = _docGeneration;
+    final revision = _editRevision;
+    notifyListeners();
+    try {
+      await _saveTail;
+      final loaded = await _decode(
+        snapshot.content,
+        snapshot.name,
+        snapshot.path,
+      );
+      if (isDisposed ||
+          generation != _docGeneration ||
+          revision != _editRevision) {
+        throw StateError('Study changed while recovering');
+      }
+      final retained = [
+        ...snapshot.retainedDrafts,
+        ..._session.state.retainedDrafts,
+      ];
+      if (_dirty) {
+        retained.add(
+          RetainedDocumentDraft(
+            path: _doc.filePath ?? '',
+            content: _doc.toPgn(),
+            baseline: _session.state.baseline,
+          ),
+        );
+      }
+      _adopting = true;
+      unawaited(_session.dispose());
+      _attachSession(
+        DocumentSaveSession.recovered(
+          _documents,
+          path: snapshot.path,
+          content: snapshot.content,
+          baseline: snapshot.baseline,
+          uncertain: snapshot.uncertain,
+          uncertainPath: snapshot.uncertainPath,
+          retainedDrafts: retained,
+        ),
+      );
+      loaded.filePath = snapshot.path.isEmpty ? null : snapshot.path;
+      _installReloaded(_freshIds(loaded), dirty: snapshot.dirty);
+      _autoSaveBlocked = true;
+      _chapterIndex = snapshot.chapter.clamp(0, _doc.chapters.length - 1);
+      final cursor = TreePath.from(snapshot.cursor);
+      _path = tree.isValidPath(cursor) ? cursor : TreePath.empty;
+      _flipped = snapshot.flipped;
+    } finally {
+      _adopting = false;
+      _reloading = false;
+      notifyListeners();
+    }
+  }
+
   /// Create a new study file named [name] and make it active.
   /// Throws [ArgumentError] when the name is taken.
   Future<void> newStudy(String name) async {
@@ -211,13 +291,13 @@ class StudyController extends ChangeNotifier
     unawaited(_session.dispose());
     _doc = doc;
     _attachSession(
-      snapshot == null
-          ? DocumentSaveSession.draft(
-              _documents,
-              path: doc.filePath ?? '',
-              content: doc.toPgn(),
-            )
-          : DocumentSaveSession.opened(_documents, snapshot),
+      DocumentSaveSession.recovered(
+        _documents,
+        path: doc.filePath ?? '',
+        content: snapshot?.content ?? doc.toPgn(),
+        baseline: snapshot,
+        retainedDrafts: _session.state.retainedDrafts,
+      ),
     );
     _reloadFailure = null;
     _recoveryPath = null;
@@ -904,8 +984,8 @@ class StudyController extends ChangeNotifier
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
-    // Retain the existing best-effort close behavior until the app close guard
-    // migrates. Disposal must never replay a known failed/uncertain write.
+    // Best-effort teardown follows app-owned close checks. Disposal must never
+    // replay a known failed/uncertain write or a restored recovery draft.
     if (_dirty &&
         !_reloading &&
         !_relocating &&
