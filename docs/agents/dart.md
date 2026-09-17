@@ -30,10 +30,25 @@
 ## State and lifecycle
 
 - Use `part` to separate types, never to spread one large class over files.
-  Extract a collaborator with its own constructor and tests instead.
-- If the owner reassigns state, pass a supplier callback to collaborators
-  rather than caching the old reference. Pass a value when intentionally
-  snapshotting state across an `await`.
+  Extract a collaborator only for a coherent responsibility; otherwise simplify
+  the existing flow. File length alone does not require another class/interface.
+- Give each mutable state and external effect one owner. Pass stable owners
+  directly and explicit immutable inputs to commands; capture values before an
+  `await` when the operation must use that snapshot. Use a supplier only for a
+  specific live value that cannot be passed at the call site. Do not wire a
+  collaborator through one supplier per field or a bag of forwarding callbacks.
+- Feature composition wires the owner graph. Leaf widgets receive the relevant
+  owner or immutable state and commands; they do not discover collaborators by
+  traversing other mutable owners. Ordinary `owner.state.value` access is fine.
+- Keep interfaces for coherent domain/external boundaries and meaningful
+  failure or lifecycle substitution. Internal pure algorithms normally use
+  concrete functions/classes. A one-method interface is neither required nor
+  forbidden; a single production adapter alone is not a reason to remove it.
+- Use explicit constructors for domain/workflow dependencies and Provider for
+  Flutter lookup/listening. Existing Riverpod catalog/settings consumers are
+  pending one complete retirement, not a pattern for new features. Keep actual
+  tree-local Flutter UI scopes; do not add a second generic dependency container.
+  See the [maintainability gate](../ARCHITECTURE_RENEWAL.md#maintainability-correction-and-next-cutovers).
 - A `ChangeNotifier` service that launches fire-and-forget work must mix in
   `SafeChangeNotifier` (`lib/utils/safe_change_notifier.dart`) to avoid notifying
   after disposal.
