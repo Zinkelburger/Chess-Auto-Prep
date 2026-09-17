@@ -1078,7 +1078,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     }
 
     final loadError = _controller.loadError;
-    if (loadError != null) {
+    if (loadError != null && _controller.currentRepertoire == null) {
       return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
@@ -1181,6 +1181,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         ),
       ),
       body: RepertoireLoadingFrame(
+        loadError: loadError,
+        onDismissError: _controller.dismissLoadError,
         isLoading: _controller.isLoading,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,

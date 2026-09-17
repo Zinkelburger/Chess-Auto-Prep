@@ -733,8 +733,9 @@ void main() {
 
       final gate = Completer<void>();
       final firstReached = Completer<void>();
-      final controller = testRepertoireController();
-      controller.debugAfterRepertoireRead = () async {
+      final decoder = GatedRepertoireDecoder();
+      final controller = testRepertoireController(decoder: decoder);
+      decoder.beforeBuild = () async {
         if (!firstReached.isCompleted) firstReached.complete();
         await gate.future;
       };
@@ -747,7 +748,7 @@ void main() {
         ),
       );
       await firstReached.future.timeout(const Duration(seconds: 5));
-      controller.debugAfterRepertoireRead = null;
+      decoder.beforeBuild = null;
 
       await controller.setRepertoire(
         RepertoireMetadata(

@@ -1,0 +1,639 @@
+/// Pure document-session owner for Builder loading, edits and chapter identity.
+/// Board navigation and Flutter notifications belong to the composing host.
+library;
+
+import 'dart:async';
+
+import '../../../chess_core/pgn/repertoire_headers.dart';
+import '../../../chess_core/pgn/repertoire_line_expansion.dart';
+import '../../../chess_core/pgn/repertoire_pgn_text.dart';
+import '../../../constants/chess_constants.dart';
+import '../../../models/opening_tree.dart';
+import '../../../models/repertoire_line.dart';
+import '../models/loaded_repertoire.dart';
+import '../models/repertoire_authoring.dart';
+import '../models/repertoire_metadata.dart';
+import '../repositories/repertoire_decoder.dart';
+import '../repositories/repertoire_document_repository.dart';
+
+class RepertoireDocumentSession {
+  RepertoireDocumentSession({
+    required this.documents,
+    required this.decoder,
+    required this.onChanged,
+    required this.onLoadStarted,
+    required this.onResetBoard,
+    required this.onClearSelectionAndTree,
+    required this.onNavigate,
+    required this.onNavigateToRoot,
+    required this.startingFen,
+    required this.currentMoveSequence,
+  });
+
+  final RepertoireDocumentRepository documents;
+  final RepertoireDecoder decoder;
+  final void Function() onChanged;
+  final void Function() onLoadStarted;
+  final void Function() onResetBoard;
+  final void Function() onClearSelectionAndTree;
+  final void Function(List<String>) onNavigate;
+  final void Function() onNavigateToRoot;
+  final String? Function() startingFen;
+  final List<String> Function() currentMoveSequence;
+
+  /// Pure PGN-authoring collaborator (game/line construction).
+  final RepertoireAuthoring _authoring = const RepertoireAuthoring();
+
+  RepertoireMetadata? _currentRepertoire;
+  RepertoireMetadata? get currentRepertoire => _currentRepertoire;
+
+  String? _repertoirePgn;
+  String? get repertoirePgn => _repertoirePgn;
+
+  OpeningTree? _openingTree;
+  OpeningTree? get openingTree => _openingTree;
+
+  List<RepertoireLine> _lines = const [];
+
+  /// The parsed lines of the loaded repertoire.
+  ///
+  /// Every assignment stores an unmodifiable copy, so the list can only ever
+  /// be *replaced*, never edited in place.  That matters: consumers such as
+  /// the lines browser and [OpeningTreeWidget] rebuild their display/search
+  /// indexes only when the list *identity* changes, and an in-place `add` or
+  /// `[i] =` would leave them showing stale rows.
+  List<RepertoireLine> get _repertoireLines => _lines;
+  set _repertoireLines(List<RepertoireLine> value) {
+    _lines = List.unmodifiable(value);
+  }
+
+  List<RepertoireLine> get repertoireLines => _lines;
+
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+
+  String? _loadError;
+  String? get loadError => _loadError;
+  void dismissLoadError() {
+    if (_disposed || _loadError == null) return;
+    _loadError = null;
+    onChanged();
+  }
+
+  bool _isRepertoireWhite = true;
+  bool get isRepertoireWhite => _isRepertoireWhite;
+
+  bool _needsColorSelection = false;
+  bool get needsColorSelection => _needsColorSelection;
+
+  /// Root position move string (e.g. "1. d4 d5 2. c4") persisted in the PGN.
+  String _rootMoves = '';
+  String get rootMoves => _rootMoves;
+
+  /// The loaded repertoire's file, or null when there is no repertoire or
+  /// it has no file to write to.
+  String? get _repertoireFilePath {
+    final path = _currentRepertoire?.filePath;
+    return path == null || path.isEmpty ? null : path;
+  }
+
+  // ── PGN line management ──────────────────────────────────────────
+
+  RepertoireLine? _selectedPgnLine;
+  RepertoireLine? get selectedPgnLine => _selectedPgnLine;
+
+  void clearSelectedPgnLine() {
+    _selectedPgnLine = null;
+    onChanged();
+  }
+
+  /// Deletes a line from the repertoire file and reloads.
+  Future<bool> deleteLine(RepertoireLine line) async {
+    final filePath = _repertoireFilePath;
+    if (_disposed || filePath == null) return false;
+
+    final generation = _loadGeneration;
+    final success = await documents.deleteLine(
+      filePath,
+      line.id,
+      expectedContent: line.fullPgn,
+    );
+    if (!success) return false;
+    if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
+      return true;
+    }
+
+    if (_selectedPgnLine?.id == line.id) onClearSelectionAndTree();
+
+    await loadRepertoire();
+    return true;
+  }
+
+  /// Deletes several lines in one pass and reloads once.
+  ///
+  /// Returns how many were removed. Lines with no recorded position in the
+  /// file are skipped rather than guessed at by id.
+  Future<int> deleteLines(Iterable<RepertoireLine> lines) async {
+    final filePath = _repertoireFilePath;
+    if (_disposed || filePath == null) return 0;
+
+    final generation = _loadGeneration;
+    final indexes = {
+      for (final line in lines)
+        if (line.gameIndex >= 0) line.gameIndex: line.fullPgn,
+    };
+    if (indexes.isEmpty) return 0;
+
+    final removed = await documents.deleteLinesAt(filePath, indexes);
+    if (removed == 0) return 0;
+    if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
+      return removed;
+    }
+
+    onClearSelectionAndTree();
+    await loadRepertoire();
+    return removed;
+  }
+
+  void Function()? _pendingLineSave;
+  Future<void> _lineSaveTail = Future.value();
+  Object? _lineSaveFailure;
+
+  /// The editor supplies its debounce flusher, or null once it is saved.
+  /// Keeping this callback separate from persistence lets core await pending
+  /// edits without depending on a widget or its lifecycle.
+  void setPendingLineSave(void Function()? flush) => _pendingLineSave = flush;
+
+  /// Await pending document edits without consuming a failure on a close retry.
+  Future<void> flushDocumentForClose() => _flushPendingLineSaves();
+  Object get closeRevision => (
+    _repertoireFilePath,
+    _loadGeneration,
+    _lineSaveTail,
+    _lineSaveFailure,
+    _pendingLineSave,
+  );
+
+  Future<void> _flushPendingLineSaves() async {
+    final flush = _pendingLineSave;
+    _pendingLineSave = null;
+    flush?.call();
+    await _lineSaveTail;
+    final failure = _lineSaveFailure;
+    if (failure != null) {
+      throw StateError('Could not save pending line edits: $failure');
+    }
+  }
+
+  /// Capture a save destination before a debounced editor edit can outlive
+  /// its chapter. A completed save may update the open chapter only if the
+  /// same load generation is still displayed.
+  Future<bool> Function(String)? get selectedLineSaver {
+    final selected = _selectedPgnLine;
+    final filePath = _repertoireFilePath;
+    if (_disposed || _isLoading || selected == null || filePath == null) {
+      return null;
+    }
+    final lineId = selected.id;
+    final generation = _loadGeneration;
+    final originals = _lineOriginals;
+    originals.putIfAbsent(lineId, () => selected.fullPgn);
+    return (newPgn) => _updateLineContent(
+      newPgn,
+      filePath: filePath,
+      lineId: lineId,
+      generation: generation,
+      originals: originals,
+    );
+  }
+
+  /// Persist edits made to the currently selected line.
+  Future<bool> updateSelectedLineContent(String newPgn) async {
+    return await selectedLineSaver?.call(newPgn) ?? false;
+  }
+
+  Future<bool> _updateLineContent(
+    String newPgn, {
+    required String filePath,
+    required String lineId,
+    required int generation,
+    required Map<String, String> originals,
+  }) {
+    if (_disposed) {
+      return Future.error(StateError('The document session is closed.'));
+    }
+    final result = _lineSaveTail.then(
+      (_) => _persistLineContent(
+        newPgn,
+        filePath: filePath,
+        lineId: lineId,
+        generation: generation,
+        originals: originals,
+      ),
+    );
+    _lineSaveTail = result.then<void>(
+      (saved) {
+        _lineSaveFailure = saved ? null : 'The original line is unavailable.';
+      },
+      onError: (Object error, StackTrace _) {
+        _lineSaveFailure = error;
+      },
+    );
+    return result;
+  }
+
+  Future<bool> _persistLineContent(
+    String newPgn, {
+    required String filePath,
+    required String lineId,
+    required int generation,
+    required Map<String, String> originals,
+  }) async {
+    final success = await documents.updateLineContent(
+      filePath,
+      lineId,
+      newPgn,
+      expectedContent: originals[lineId]!,
+    );
+    if (success == null) return false;
+    originals[lineId] = success;
+    if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
+      return true;
+    }
+
+    final idx = _repertoireLines.indexWhere((l) => l.id == lineId);
+    if (idx != -1) {
+      // Swap in a fresh list: consumers (lines browser) rebuild their
+      // display/search indexes only when the list identity changes.
+      final updated = List.of(_repertoireLines);
+      updated[idx] = _authoring.rebuildLine(updated[idx], success);
+      _repertoireLines = updated;
+      if (_selectedPgnLine?.id == lineId) {
+        _selectedPgnLine = updated[idx];
+      }
+    }
+
+    onChanged();
+    return true;
+  }
+
+  /// Append a newly saved line to the in-memory tree and lines list.
+  void appendNewLine(
+    List<String> moves,
+    String title,
+    String pgnContent, {
+    bool updateTree = true,
+    bool notify = true,
+  }) {
+    final next = List.of(_repertoireLines);
+    _appendLineInto(next, moves, title, pgnContent, updateTree: updateTree);
+    _commitAppendedLines(next);
+
+    if (notify) onChanged();
+  }
+
+  /// Append many lines with a single listener notification — generation can
+  /// produce hundreds of lines and per-line notifies rebuild every listener
+  /// each time.
+  void appendNewLines(
+    Iterable<({List<String> moves, String title, String pgn})> entries,
+  ) {
+    final next = List.of(_repertoireLines);
+    var any = false;
+    for (final e in entries) {
+      _appendLineInto(next, e.moves, e.title, e.pgn, updateTree: true);
+      any = true;
+    }
+    if (!any) return;
+    _commitAppendedLines(next);
+    onChanged();
+  }
+
+  /// Build one new line into [target] and mirror it into the opening tree.
+  ///
+  /// [target] is a scratch list, so a bulk append pays one list copy rather
+  /// than one per entry.
+  void _appendLineInto(
+    List<RepertoireLine> target,
+    List<String> moves,
+    String title,
+    String pgnContent, {
+    required bool updateTree,
+  }) {
+    if (updateTree) {
+      final startFen = startingFen() ?? kStandardStartFen;
+      _openingTree?.appendLineFromFen(startFen, moves);
+    }
+
+    target.add(
+      _authoring.buildNewLine(
+        moves: moves,
+        title: title,
+        pgnContent: pgnContent,
+        index: target.length,
+        isWhite: _isRepertoireWhite,
+        existingIds: target.map((l) => l.id),
+      ),
+    );
+  }
+
+  /// Swap in the grown list and keep the metadata game count in step.
+  void _commitAppendedLines(List<RepertoireLine> next) {
+    _repertoireLines = next;
+    if (_currentRepertoire != null) {
+      _currentRepertoire = _currentRepertoire!.copyWith(gameCount: next.length);
+    }
+  }
+
+  /// Extend an existing line after a one-click add.
+  void appendMoveToExistingLine(
+    List<String> prefix,
+    String newMove, {
+    String? updatedPgnContent,
+  }) {
+    if (updatedPgnContent != null) {
+      _repertoirePgn = updatedPgnContent;
+    }
+
+    final startFen = startingFen() ?? kStandardStartFen;
+    _openingTree?.appendLineFromFen(startFen, [...prefix, newMove]);
+
+    final lineIndex = _authoring.findLineIndexForPrefix(
+      _repertoireLines,
+      prefix,
+    );
+    if (lineIndex != null) {
+      final next = List.of(_repertoireLines);
+      next[lineIndex] = _authoring.extendLine(next[lineIndex], newMove);
+      _repertoireLines = next;
+      onChanged();
+      return;
+    }
+
+    final fullPath = [...prefix, newMove];
+    final pgnForLine = updatedPgnContent != null
+        ? _authoring.extractLastGamePgn(updatedPgnContent)
+        : buildMinimalGamePgn(
+            fullPath,
+            startingFen: startingFen(),
+            isWhiteRepertoire: _isRepertoireWhite,
+          );
+    appendNewLine(
+      fullPath,
+      _authoring.defaultLineTitle(fullPath),
+      pgnForLine,
+      updateTree: false,
+    );
+  }
+
+  // ── Repertoire file lifecycle ────────────────────────────────────
+  //
+  // Loading is epoch-guarded: every entry point that replaces the repertoire
+  // claims a generation up front, and whatever it computed is thrown away if
+  // a newer claim landed while it was awaiting.  The derivation itself lives
+  // in [RepertoireDecoder] precisely so the whole result can be discarded in
+  // one place — see the note there.
+
+  int _loadGeneration = 0;
+
+  final List<Completer<void>> _loadCompleters = [];
+
+  /// Sets a new repertoire and triggers loading.
+  Future<void> setRepertoire(RepertoireMetadata repertoire) async {
+    await _loadRepertoire(repertoire);
+  }
+
+  /// (Re)loads the PGN content for the current repertoire.
+  Future<void> loadRepertoire() async {
+    final repertoire = _requestedRepertoire ?? _currentRepertoire;
+    if (repertoire != null) await _loadRepertoire(repertoire);
+  }
+
+  RepertoireMetadata? _requestedRepertoire;
+
+  Future<void> _loadRepertoire(RepertoireMetadata repertoire) async {
+    if (_disposed) return;
+    _requestedRepertoire = repertoire;
+    final generation = ++_loadGeneration;
+    final filePath = repertoire.filePath;
+    onLoadStarted();
+    _loadError = null;
+    _setLoading(true);
+
+    try {
+      // Flush before reading, not when the widget receives the replacement
+      // tree. A same-file reload or a quick A → B → A must read saved edits.
+      await _flushPendingLineSaves();
+      if (!isCurrent(generation)) return;
+      final read = await documents.read(filePath);
+      if (!isCurrent(generation)) return;
+
+      if (!read.exists) {
+        _currentRepertoire = repertoire;
+        _applyLoaded(LoadedRepertoire.missing);
+        _resetTree();
+        return;
+      }
+
+      final loaded = await decoder.build(
+        read.pgn,
+        fallbackIsWhite: _isRepertoireWhite,
+      );
+      if (!isCurrent(generation)) return;
+
+      _currentRepertoire = repertoire;
+      _applyLoaded(loaded);
+      _resetTree();
+      onNavigateToRoot();
+    } catch (e) {
+      if (!isCurrent(generation)) return;
+      _requestedRepertoire = _currentRepertoire ?? repertoire;
+      _loadError = 'Failed to load repertoire: $e';
+    } finally {
+      if (isCurrent(generation)) {
+        _setLoading(false);
+      }
+    }
+  }
+
+  /// Restores repertoire state from a PGN snapshot (used by undo).
+  ///
+  /// Claims a load generation, so an in-flight [loadRepertoire] cannot land
+  /// its half of a different repertoire on top of the restored one.
+  Future<void> restoreRepertoireFromPgn(
+    String pgnContent, {
+    List<String>? syncPath,
+  }) async {
+    if (_disposed) return;
+    final generation = ++_loadGeneration;
+    _requestedRepertoire = _currentRepertoire;
+    try {
+      final loaded = await decoder.build(
+        pgnContent.isEmpty ? null : pgnContent,
+        fallbackIsWhite: _isRepertoireWhite,
+      );
+      if (!isCurrent(generation)) return;
+
+      // Unlike a load this keeps the editable move tree: undo reverts the
+      // saved PGN, not the nodes the user has navigated into.
+      _applyLoaded(loaded);
+      if (syncPath != null) {
+        onNavigate(syncPath);
+      } else {
+        onNavigateToRoot();
+      }
+      onChanged();
+    } finally {
+      // Claiming the generation above suppressed the in-flight load's own
+      // release, so this call owes any `awaitLoaded()` waiters theirs.
+      if (isCurrent(generation) && _isLoading) {
+        _setLoading(false);
+      }
+    }
+  }
+
+  /// Swap in one [LoadedRepertoire] wholesale.
+  ///
+  /// [LoadedRepertoire.headers] is null when the PGN never parsed far enough
+  /// to yield them (missing file, read failure, tree-build error); the current
+  /// headers are then kept rather than reset to a guess.
+  Map<String, String> _lineOriginals = {};
+
+  void _applyLoaded(LoadedRepertoire loaded) {
+    _lineOriginals = {for (final line in loaded.lines) line.id: line.fullPgn};
+    _repertoirePgn = loaded.pgn;
+    _openingTree = loaded.openingTree;
+    _repertoireLines = loaded.lines;
+
+    final headers = loaded.headers;
+    if (headers != null) {
+      _rootMoves = headers.rootMoves;
+      _needsColorSelection = headers.needsColorSelection;
+      _isRepertoireWhite = headers.isWhite;
+    }
+  }
+
+  /// Drop the editable move tree and park the cursor at the start.
+  void _resetTree() {
+    _selectedPgnLine = null;
+    onResetBoard();
+  }
+
+  /// Writes the color header to the PGN file and reloads.
+  Future<void> setRepertoireColor(bool isWhite) async {
+    if (_disposed || _currentRepertoire == null) return;
+    final filePath = _currentRepertoire!.filePath;
+    final generation = _loadGeneration;
+
+    final colorLabel = isWhite ? 'White' : 'Black';
+    final existing = (await documents.read(filePath)).pgn;
+    if (existing == null) {
+      throw StateError('The selected chapter is unavailable.');
+    }
+    final updated = upsertMetadataComment(existing, '// Color:', colorLabel);
+    await documents.replace(filePath, updated, expectedContent: existing);
+    if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
+      return;
+    }
+    _needsColorSelection = false;
+    await loadRepertoire();
+  }
+
+  /// Sets the current move sequence as the root position and persists it.
+  Future<void> setRootPosition() async {
+    if (_disposed || _currentRepertoire == null) return;
+    final filePath = _currentRepertoire!.filePath;
+    final generation = _loadGeneration;
+
+    final moveText = _authoring.numberedMovetext(
+      currentMoveSequence(),
+      startingFen: startingFen() ?? kStandardStartFen,
+    );
+    final existing = (await documents.read(filePath)).pgn;
+    if (existing == null) {
+      throw StateError('The selected chapter is unavailable.');
+    }
+    final updated = upsertMetadataComment(existing, '// Root:', moveText);
+    await documents.replace(filePath, updated, expectedContent: existing);
+    if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
+      return;
+    }
+    _rootMoves = moveText;
+    onChanged();
+  }
+
+  /// Imports PGN content into the current repertoire file.
+  Future<int> importPgnContent(String pgnContent) async {
+    if (_disposed || _currentRepertoire == null) return 0;
+
+    final filePath = _currentRepertoire!.filePath;
+    final generation = _loadGeneration;
+
+    // One game per line, the same way a new repertoire is seeded: a pasted
+    // study's variations become lines of their own, or the trainer and this
+    // screen's line list would never see them.
+    final expanded = expandVariationsIntoLines(pgnContent);
+    final gameCount = expanded.gameCount;
+
+    final existing = (await documents.read(filePath)).pgn;
+    if (existing == null) {
+      throw StateError('The selected chapter is unavailable.');
+    }
+    final separator = existing.endsWith('\n\n')
+        ? ''
+        : existing.endsWith('\n')
+        ? '\n'
+        : '\n\n';
+    await documents.replace(
+      filePath,
+      '$existing$separator${expanded.pgn}\n',
+      expectedContent: existing,
+    );
+
+    if (isCurrent(generation) && _currentRepertoire?.filePath == filePath) {
+      await loadRepertoire();
+    }
+
+    return gameCount > 0 ? gameCount : 1;
+  }
+
+  /// Returns a Future that completes when the current load finishes.
+  /// Resolves immediately if no load is in progress.
+  Future<void> awaitLoaded() {
+    if (!_isLoading) return Future.value();
+    final c = Completer<void>();
+    _loadCompleters.add(c);
+    return c.future;
+  }
+
+  void _setLoading(bool loading) {
+    if (_disposed) return;
+    _isLoading = loading;
+    if (!loading) {
+      for (final c in _loadCompleters) {
+        c.complete();
+      }
+      _loadCompleters.clear();
+    }
+    onChanged();
+  }
+
+  bool _disposed = false;
+  bool isCurrent(int generation) => !_disposed && generation == _loadGeneration;
+
+  void selectLine(RepertoireLine? line) => _selectedPgnLine = line;
+  void syncOpeningTree(List<String> moves, List<String> fens) =>
+      _openingTree?.syncToFens(moves, fens);
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _loadGeneration++;
+    _pendingLineSave = null;
+    _isLoading = false;
+    for (final completer in _loadCompleters) {
+      completer.complete();
+    }
+    _loadCompleters.clear();
+  }
+}
