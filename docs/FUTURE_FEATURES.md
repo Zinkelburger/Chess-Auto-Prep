@@ -38,7 +38,10 @@ chapter-picker colors adapt; fixed dark legacy interiors remain bounded until
 migration. Study now adopts the shared typed save protocol, injected storage,
 native Linux revisions, exclusive copies/exports and retained reload/restore drafts;
 its controller/model and pure PGN text helpers have canonical feature/chess-core
-paths. Other legacy editors, persisted drafts and close guards are still pending.
+paths. App-owned close coordination now covers Study, PGN Viewer and pending
+repertoire line edits, preserving drafts if another owner cancels or changes.
+Other legacy editors, persisted drafts, builder-draft checks and job shutdown
+coordination are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional
 splitting of existing chapters, remaining localization, legacy appearance migration/accessibility and full slice
 gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design

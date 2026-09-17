@@ -613,13 +613,26 @@ class RepertoireController
   /// edits without depending on a widget or its lifecycle.
   void setPendingLineSave(VoidCallback? flush) => _pendingLineSave = flush;
 
-  Future<void> _flushPendingLineSaves() async {
+  /// Await pending document edits without consuming a failure on a close retry.
+  Future<void> flushDocumentForClose() =>
+      _flushPendingLineSaves(retainFailure: true);
+  Object get closeRevision => (
+    _repertoireFilePath,
+    _loadGeneration,
+    _lineSaveTail,
+    _lineSaveFailure,
+    _pendingLineSave,
+    _tree,
+    _tree.version,
+  );
+
+  Future<void> _flushPendingLineSaves({bool retainFailure = false}) async {
     final flush = _pendingLineSave;
     _pendingLineSave = null;
     flush?.call();
     await _lineSaveTail;
     final failure = _lineSaveFailure;
-    _lineSaveFailure = null;
+    if (!retainFailure) _lineSaveFailure = null;
     if (failure != null) {
       throw StateError('Could not save pending line edits: $failure');
     }

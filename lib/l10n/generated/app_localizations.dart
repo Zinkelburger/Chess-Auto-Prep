@@ -843,6 +843,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter a file name without path separators or reserved characters.'**
   String get studyInvalidName;
+
+  /// Application document close interaction: closeApplicationTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Close application?'**
+  String get closeApplicationTitle;
+
+  /// Application document close interaction: keepApplicationOpen
+  ///
+  /// In en, this message translates to:
+  /// **'Keep app open'**
+  String get keepApplicationOpen;
+
+  /// Application document close interaction: documentChangedWhileClosing
+  ///
+  /// In en, this message translates to:
+  /// **'A document changed while closing. The app has stayed open so you can review the latest changes.'**
+  String get documentChangedWhileClosing;
+
+  /// Application document close interaction: documentCloseFailed
+  ///
+  /// In en, this message translates to:
+  /// **'The close request could not finish. The app has stayed open. Review any save or recovery errors, then try again.'**
+  String get documentCloseFailed;
+
+  /// Native close interception failed to initialize
+  ///
+  /// In en, this message translates to:
+  /// **'Close protection could not start. Save your changes before closing the window.'**
+  String get windowCloseUnavailable;
+
+  /// Application document close interaction: studyCloseUnsaved
+  ///
+  /// In en, this message translates to:
+  /// **'This study has unsaved changes or retained drafts. Save the work you want to keep before closing.'**
+  String get studyCloseUnsaved;
+
+  /// Study close confirmation after all changes and drafts are resolved
+  ///
+  /// In en, this message translates to:
+  /// **'Your study is saved. You can close the app.'**
+  String get studyCloseReady;
+
+  /// Application document close interaction: closeWithoutSaving
+  ///
+  /// In en, this message translates to:
+  /// **'Close without saving'**
+  String get closeWithoutSaving;
+
+  /// Application document close interaction: closeApplication
+  ///
+  /// In en, this message translates to:
+  /// **'Close application'**
+  String get closeApplication;
 }
 
 class _AppLocalizationsDelegate

@@ -5,6 +5,8 @@ library;
 import '../app/legacy_theme_boundary.dart';
 
 import 'dart:async';
+import '../features/documents/controllers/document_close_coordinator.dart';
+import '../features/documents/widgets/document_close_scope.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1015,7 +1017,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   @override
   Widget build(BuildContext context) {
     final root = _buildWorkspaceRoot(context);
-    return WorkspaceShell(
+    final shell = WorkspaceShell(
       navigation: _workspaceNavigation,
       appBar: PreferredSize(
         preferredSize: root.appBar.preferredSize,
@@ -1032,6 +1034,15 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         navigation: _workspaceNavigation,
       ),
       body: LegacyThemeBoundary(child: root.body),
+    );
+    return DocumentCloseRegistration(
+      revision: () => _controller.closeRevision,
+      prepare: () async {
+        await _controller.flushDocumentForClose();
+        if (!mounted) return null;
+        return DocumentCloseApproval(_controller.closeRevision);
+      },
+      child: shell,
     );
   }
 

@@ -148,6 +148,16 @@ def profile_env(checkout: Path) -> dict[str, str]:
         f'XDG_DOCUMENTS_DIR="{profile / "Documents"}"\n'
         f'XDG_DOWNLOAD_DIR="{profile / "Downloads"}"\n')
     env['BUGHOUSE_DB_HOME'] = str(profile / 'data/com.example.chess_auto_prep')
+    # Native GTK first-run setup is modal and invisible to Flutter screenshots.
+    # Fresh disposable profiles decline desktop integration so native close/input
+    # tests exercise the app window. Preserve explicit fixture choices.
+    desktop_choice = profile / 'data/chess_auto_prep/desktop-integration-choice'
+    desktop_choice.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with desktop_choice.open('x') as choice:
+            choice.write('no')
+    except FileExistsError:
+        pass
     env['CHESS_AUTO_PREP_NEW_INSTANCE'] = '1'
     env['OMP_NUM_THREADS'] = '1'
     env['OPENBLAS_NUM_THREADS'] = '1'

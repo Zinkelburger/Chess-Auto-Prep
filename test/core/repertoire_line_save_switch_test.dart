@@ -5,6 +5,8 @@ import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 
 const _pgn = '// Color: White\n\n[Event "Line"]\n[Result "*"]\n\n1. e4 e5 *\n';
 
@@ -15,6 +17,11 @@ void main() {
   late RepertoireMetadata second;
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('chapter_save_test');
+    StorageFactory.instanceForTest = IOStorageService(
+      documentsRoot: directory,
+      supportRoot: directory,
+      repertoiresRoot: directory,
+    );
     RepertoireMetadata chapter(String name) => RepertoireMetadata(
       name: name,
       filePath: p.join(directory.path, '$name.pgn'),
@@ -30,6 +37,7 @@ void main() {
   });
   tearDown(() async {
     controller.dispose();
+    StorageFactory.instanceForTest = null;
     await directory.delete(recursive: true);
   });
 
@@ -136,6 +144,24 @@ void main() {
         contains('Original chapter'),
       );
       expect(await File(second.filePath).readAsString(), _pgn);
+    },
+  );
+  test(
+    'close flushes pending comments and keeps repeated failures blocked',
+    () async {
+      final save = controller.selectedLineSaver!;
+      Future<bool>? write;
+      controller.setPendingLineSave(() {
+        write = save(_pgn.replaceFirst('e5', 'e5 {close note}'));
+      });
+      await controller.flushDocumentForClose();
+      expect(await write, isTrue);
+      expect(await File(first.filePath).readAsString(), contains('close note'));
+      // Remove the selected source game so its captured writer cannot apply.
+      await File(first.filePath).writeAsString('[Event "Other"]\n\n1. d4 d5 *');
+      expect(await controller.updateSelectedLineContent(_pgn), isFalse);
+      await expectLater(controller.flushDocumentForClose(), throwsStateError);
+      await expectLater(controller.flushDocumentForClose(), throwsStateError);
     },
   );
 }

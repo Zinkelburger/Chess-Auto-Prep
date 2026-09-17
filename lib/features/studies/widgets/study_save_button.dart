@@ -25,21 +25,28 @@ class StudySaveButton extends StatelessWidget {
           context,
           title: l10n.studySaveDialogTitle(study.doc.name),
           session: study,
-          chooseCopyDestination: (context) async {
-            final name = await showNameEntryDialog(
-              context,
-              title: l10n.saveCopy,
-              fieldLabel: l10n.studyCopyName,
-              prompt: l10n.studyCopyPrompt,
-              initialValue: l10n.studyCopyInitial(study.doc.name),
-              allowUnchanged: true,
-              confirmLabel: l10n.saveCopy,
-              cancelLabel: l10n.cancel,
-            );
-            return name == null ? null : study.copyDestination(name);
-          },
+          chooseCopyDestination: (context) =>
+              chooseStudyCopyDestination(context, study),
         ),
       );
     },
   );
+}
+
+Future<String?> chooseStudyCopyDestination(
+  BuildContext context,
+  StudyController study,
+) async {
+  final l10n = AppLocalizations.of(context);
+  final name = await showNameEntryDialog(
+    context,
+    title: l10n.saveCopy,
+    fieldLabel: l10n.studyCopyName,
+    prompt: l10n.studyCopyPrompt,
+    initialValue: l10n.studyCopyInitial(study.doc.name),
+    allowUnchanged: true,
+    confirmLabel: l10n.saveCopy,
+    cancelLabel: l10n.cancel,
+  );
+  return name == null ? null : study.copyDestination(name);
 }

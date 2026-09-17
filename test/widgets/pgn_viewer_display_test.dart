@@ -1,5 +1,8 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/features/documents/controllers/document_close_coordinator.dart';
+import 'package:chess_auto_prep/features/documents/widgets/document_close_scope.dart';
+
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/core/app_history.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
@@ -272,6 +275,59 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 200)),
       );
+      await _settleReader(tester);
+    },
+  );
+  testWidgets(
+    'cancelled application close retains a PGN approved for discard',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1280, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final app = AppState()..setMode(AppMode.pgnViewer);
+      final coordinator = DocumentCloseCoordinator();
+      addTearDown(app.dispose);
+      addTearDown(coordinator.dispose);
+      await tester.pumpWidget(
+        ChangeNotifierProvider.value(
+          value: app,
+          child: DocumentCloseScope(
+            coordinator: coordinator,
+            child: const MaterialApp(home: PgnViewerScreen()),
+          ),
+        ),
+      );
+      await _settleReader(tester);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await _settleReader(tester);
+      tester
+          .widget<PgnViewerWidget>(find.byType(PgnViewerWidget))
+          .onCommentsChanged!('1. d4 {Keep this draft} Nf6 *');
+      await _settleReader(tester);
+      coordinator.register(
+        key: 'other document',
+        revision: () => 1,
+        prepare: () async => null,
+      );
+      final close = coordinator.prepareClose();
+      await tester.pumpAndSettle();
+      expect(find.text('Save PGN changes?'), findsOneWidget);
+      await tester.tap(find.text('Discard'));
+      await _settleReader(tester);
+      expect((await close).disposition, DocumentCloseDisposition.cancelled);
+      expect(
+        tester.widget<PgnViewerWidget>(find.byType(PgnViewerWidget)).pgnText,
+        contains('Keep this draft'),
+      );
+      // The next close still asks about the retained work.
+      final retry = coordinator.prepareClose();
+      await tester.pumpAndSettle();
+      expect(find.text('Save PGN changes?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await _settleReader(tester);
+      expect((await retry).disposition, DocumentCloseDisposition.cancelled);
+      await tester.pumpWidget(const SizedBox.shrink());
       await _settleReader(tester);
     },
   );

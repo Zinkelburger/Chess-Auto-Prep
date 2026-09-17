@@ -10,6 +10,8 @@
 library;
 
 import 'dart:async';
+import '../features/documents/controllers/document_close_coordinator.dart';
+import '../features/documents/widgets/document_close_scope.dart';
 import '../design_system/components/name_entry_dialog.dart';
 import 'dart:convert';
 import 'package:dartchess/dartchess.dart'
@@ -221,7 +223,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _controller.addListener(_onControllerUpdate);
     MyRepertoireSettings.instance.addListener(_onRepertoireDesignationsChanged);
     windowManager.addListener(this);
-    unawaited(windowManager.setPreventClose(true));
     // Leaving the Book tab hands the board back to the game: the tab you are
     // reading owns the board, so flipping between them is a comparison of the
     // same position rather than two viewers fighting over one board.
@@ -728,7 +729,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _unregisterHistoryContext?.call();
     _appState?.removeListener(_onAppStateChanged);
     windowManager.removeListener(this);
-    unawaited(windowManager.setPreventClose(false));
     MyRepertoireSettings.instance.removeListener(
       _onRepertoireDesignationsChanged,
     );
@@ -742,21 +742,22 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     super.dispose();
   }
 
-  bool _confirmingWindowClose = false;
+  Object get _closeRevision => (
+    _controller.filePath,
+    _controller.collectionRevision,
+    _controller.hasUnsavedChanges,
+    _controller.isSaving,
+    _controller.currentGameIndex,
+  );
 
-  @override
-  Future<void> onWindowClose() async {
-    if (_confirmingWindowClose || !await windowManager.isPreventClose()) return;
-    _confirmingWindowClose = true;
-    try {
-      if (!await _confirmLeavePgn()) return;
-      await _controller.flushPendingMetadata();
-      await _controller.saveSession();
-      await windowManager.setPreventClose(false);
-      await windowManager.close();
-    } finally {
-      _confirmingWindowClose = false;
-    }
+  Future<DocumentCloseApproval?> _prepareWindowClose() async {
+    if (!await _confirmLeavePgn(forWindowClose: true) || !mounted) return null;
+    // Capture approval before awaiting other persistence. Later edits must
+    // invalidate it, including when the user chose to close without saving.
+    final approval = DocumentCloseApproval(_closeRevision);
+    await _controller.flushPendingMetadata();
+    await _controller.saveSession();
+    return mounted ? approval : null;
   }
 
   @override
@@ -880,11 +881,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     }
   }
 
-  Future<bool> _confirmLeavePgn() async {
+  Future<bool> _confirmLeavePgn({bool forWindowClose = false}) async {
     _pgnWidgetController.flushPendingComments();
     if (!_controller.hasUnsavedChanges) return true;
     if (_controller.autoSave && _controller.filePath != null) {
-      return _controller.saveChanges();
+      final saved = await _controller.saveChanges();
+      if (!saved && forWindowClose) {
+        throw StateError(
+          _controller.errorMessage ?? 'PGN save did not complete',
+        );
+      }
+      return saved;
     }
     if (!mounted) return false;
     final choice = await showDialog<String>(
@@ -912,7 +919,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
     if (!mounted || choice == null) return false;
     if (choice == 'save') return _savePgn();
-    _controller.discardChanges();
+    // Another document can still veto application closure. Keep this draft
+    // available until the app actually exits. File navigation still discards.
+    if (!forWindowClose) _controller.discardChanges();
     return true;
   }
 
@@ -1860,7 +1869,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Focus(
+    final content = Focus(
       focusNode: _focusNode,
       autofocus: true,
       onKeyEvent: _handleKeyEvent,
@@ -1904,6 +1913,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 ),
               ),
       ),
+    );
+    return DocumentCloseRegistration(
+      revision: () {
+        _pgnWidgetController.flushPendingComments();
+        return _closeRevision;
+      },
+      prepare: _prepareWindowClose,
+      child: content,
     );
   }
 }

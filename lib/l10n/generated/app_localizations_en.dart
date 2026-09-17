@@ -465,4 +465,35 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get studyInvalidName =>
       'Enter a file name without path separators or reserved characters.';
+
+  @override
+  String get closeApplicationTitle => 'Close application?';
+
+  @override
+  String get keepApplicationOpen => 'Keep app open';
+
+  @override
+  String get documentChangedWhileClosing =>
+      'A document changed while closing. The app has stayed open so you can review the latest changes.';
+
+  @override
+  String get documentCloseFailed =>
+      'The close request could not finish. The app has stayed open. Review any save or recovery errors, then try again.';
+
+  @override
+  String get windowCloseUnavailable =>
+      'Close protection could not start. Save your changes before closing the window.';
+
+  @override
+  String get studyCloseUnsaved =>
+      'This study has unsaved changes or retained drafts. Save the work you want to keep before closing.';
+
+  @override
+  String get studyCloseReady => 'Your study is saved. You can close the app.';
+
+  @override
+  String get closeWithoutSaving => 'Close without saving';
+
+  @override
+  String get closeApplication => 'Close application';
 }

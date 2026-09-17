@@ -580,5 +580,41 @@
   },
   "@studyInvalidName": {
     "description": "Study save and recovery interaction: studyInvalidName"
+  },
+  "closeApplicationTitle": "Close application?",
+  "@closeApplicationTitle": {
+    "description": "Application document close interaction: closeApplicationTitle"
+  },
+  "keepApplicationOpen": "Keep app open",
+  "@keepApplicationOpen": {
+    "description": "Application document close interaction: keepApplicationOpen"
+  },
+  "documentChangedWhileClosing": "A document changed while closing. The app has stayed open so you can review the latest changes.",
+  "@documentChangedWhileClosing": {
+    "description": "Application document close interaction: documentChangedWhileClosing"
+  },
+  "documentCloseFailed": "The close request could not finish. The app has stayed open. Review any save or recovery errors, then try again.",
+  "@documentCloseFailed": {
+    "description": "Application document close interaction: documentCloseFailed"
+  },
+  "windowCloseUnavailable": "Close protection could not start. Save your changes before closing the window.",
+  "@windowCloseUnavailable": {
+    "description": "Native close interception failed to initialize"
+  },
+  "studyCloseUnsaved": "This study has unsaved changes or retained drafts. Save the work you want to keep before closing.",
+  "@studyCloseUnsaved": {
+    "description": "Application document close interaction: studyCloseUnsaved"
+  },
+  "studyCloseReady": "Your study is saved. You can close the app.",
+  "@studyCloseReady": {
+    "description": "Study close confirmation after all changes and drafts are resolved"
+  },
+  "closeWithoutSaving": "Close without saving",
+  "@closeWithoutSaving": {
+    "description": "Application document close interaction: closeWithoutSaving"
+  },
+  "closeApplication": "Close application",
+  "@closeApplication": {
+    "description": "Application document close interaction: closeApplication"
   }
 }

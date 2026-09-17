@@ -5,7 +5,8 @@ import 'dart:async';
 
 import 'app/app_dependencies.dart';
 import 'app/study_dependencies.dart';
-import 'app/themed_application.dart';
+import 'app/desktop_application.dart';
+import 'features/documents/repositories/desktop_close_port.dart';
 import 'features/settings/repositories/app_settings_repository.dart';
 
 import 'package:flutter/material.dart';
@@ -16,6 +17,7 @@ import 'features/updates/widgets/app_updates.dart';
 import 'core/app_history.dart';
 import 'core/app_state.dart';
 import 'features/studies/controllers/study_controller.dart';
+import 'features/studies/widgets/study_close_guard.dart';
 import 'features/bughouse/services/bughouse_bundle.dart';
 import 'debug/agent_driver.dart';
 import 'models/board_display_settings.dart';
@@ -172,8 +174,9 @@ class StartupErrorApp extends StatelessWidget {
 }
 
 class ChessAutoPrepApp extends StatelessWidget {
-  const ChessAutoPrepApp({super.key, this.settings});
+  const ChessAutoPrepApp({super.key, this.settings, this.closePort});
   final AppSettingsRepository? settings;
+  final DesktopClosePort? closePort;
 
   @override
   Widget build(BuildContext context) {
@@ -223,7 +226,8 @@ class ChessAutoPrepApp extends StatelessWidget {
         // so a change in Settings repaints them in place.
         child: DisplaySettingsScope(
           settings: BoardDisplaySettings.instance,
-          child: ThemedApplication(
+          child: DesktopApplication(
+            closePort: closePort,
             // Keep the semantics tree empty unless explicitly enabled —
             // GNOME's accessibility bus can enable Flutter's semantics tree
             // and then assert every frame on our recognizer-per-span movetext
@@ -235,7 +239,14 @@ class ChessAutoPrepApp extends StatelessWidget {
               if (enableSemantics) return wrapped;
               return ExcludeSemantics(child: wrapped);
             },
-            home: const AppUpdateHost(child: MainScreen()),
+            home: Builder(
+              builder: (context) => AppUpdateHost(
+                child: StudyCloseGuard(
+                  study: context.read<StudyController>(),
+                  child: const MainScreen(),
+                ),
+              ),
+            ),
           ),
         ),
       ),

@@ -111,6 +111,16 @@ class StudyController extends ChangeNotifier
   int _editRevision = 0;
   Future<bool> _saveTail = Future.value(true);
   bool get dirty => _dirty;
+
+  /// Cheap equality for an approval to close; no whole-tree serialization.
+  Object get closeRevision => (
+    _docGeneration,
+    _editRevision,
+    _saveTail,
+    _session.state.baseline,
+    _session.state.outcome,
+    _session.state.retainedDrafts,
+  );
   bool get autoSaveEnabled => !_autoSaveBlocked && _doc.filePath != null;
 
   /// Whether the board shows Black at the bottom.  Follows the chapter's

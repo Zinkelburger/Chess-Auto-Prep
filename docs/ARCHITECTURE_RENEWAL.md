@@ -857,6 +857,62 @@ close guards; document-level undo receipts; the other PGN editors; resizable/sha
 workspace composition; complete Study localization/theme/accessibility; large-
 document budgets and non-Linux native gates. The full renewal remains active.
 
+### Application close ownership checkpoint (2026-09-17)
+
+After Study adoption `a011ceb2`, `app/desktop_application.dart` owns window close
+policy through an injected pure-Dart `DesktopClosePort` and native adapter.
+`DocumentCloseCoordinator` and its registration scope coordinate Study, PGN
+Viewer and pending repertoire line edits across retained workspaces. A feature
+unmount cannot disable application close prevention. Duplicate events share one
+attempt; every approval names its document revision, and later edits or changed
+membership require another attempt. A native close failure restores prevention.
+
+The app-scoped Study guard exists even before visiting Study mode. Its localized,
+themed dialog uses the production save/recovery panel for unsaved content,
+uncertain writes and retained drafts. Known failed/uncertain saves are not
+implicitly retried. Close without saving grants an exact approval but does not
+mutate the draft. PGN discard-on-application-close now has the same property:
+another owner cancelling cannot erase it. Pending raw viewer comments are flushed
+before the final revision check. Repertoire close attempts await pending line
+saves and do not consume a failure on repeated close requests.
+
+Native testing initially found GTK's first-run desktop integration modal blocked
+window-close events while remaining invisible to Flutter screenshots. The bounded
+runner now seeds only fresh disposable profiles with a declined offer, preserving
+explicit fixtures and leaving the user's desktop settings untouched. The native
+journey asserts receipt of the real close event, saves an exclusive Study copy,
+and observes the approved handoff without destroying the test host. Final native
+window destruction is checked separately in the headless preview.
+
+Evidence (Linux, this checkpoint):
+
+| ID | Scope/check | Result | Remaining limit |
+|---|---|---|---|
+| ARCH-01 | `scripts/ci.sh analyze lint`; 13 dependency regressions | Pass; 9 existing informational analyzer findings, no warnings/errors | Unmigrated workflows retain legacy ownership |
+| DATA-02, STATE-02, TEST-01 | 34 focused tests across close coordinator, Study guard, desktop host/adapter, repertoire pending saves, PGN viewer display/shortcuts and app widgets | Pass; duplicate requests, late revisions, owner disposal, failed native close, retained drafts and PGN discard followed by another owner's veto covered | Persistent drafts and full job shutdown remain pending |
+| OPS-01, TEST-01 | `scripts/ci.sh with -- python3 tools/test_agent_jobs.py` | Pass: 11 runner tests, including isolated desktop choice and preservation of explicit fixtures | Native Windows/macOS not exercised |
+| UI-01, TEST-01 | `integration_test/document_close_test.dart`, `integration_test/study_save_recovery_test.dart`, `integration_test/app_test.dart` | Pass: 9 desktop cases; actual native close request, save-copy bytes, conflicts/recovery and boot/navigation | Close test records the final handoff to keep its host alive; full release suite not run |
+
+Initial repertoire test failures came from a fixture reaching path-provider
+without an initialized binding. It now injects temporary native storage roots,
+so its existing five cases and new close-failure case run without desktop data.
+The initial Study guard fixtures also needed construction inside the widget-test
+clock; the corrected tests pass without a production timing workaround.
+Headless visual inspection at 1280×720 verified the
+[unsaved close dialog](images/renewal-study-close.png). Cancelling retained the
+move, saving a copy from another mode produced the expected PGN bytes, and the
+final confirmation terminated the actual preview process. Flutter logged an
+implicit-view removal warning during native teardown; this is recorded as a
+remaining native-platform concern, not a clean release-shutdown certification.
+Inspection also caught stale unsaved wording after a successful save; the dialog
+now says the study is saved, covered by its widget regression.
+
+Remaining: persistent document/draft recovery across restart; full PGN Viewer
+store adoption; document undo receipts; builder drafts and application-job
+shutdown; large-document budgets; complete workspace/theme/accessibility work;
+Windows/macOS native checks. Milestones 1/2 and 3 remain partial; this is not a
+full application migration or a completed PLAN-02 gate.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

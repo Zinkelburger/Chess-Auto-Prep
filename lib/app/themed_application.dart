@@ -8,8 +8,14 @@ import '../l10n/generated/app_localizations.dart';
 /// Appearance is an app-owned preference; feature widgets read the resolved
 /// Theme, including platform brightness, rather than platform callbacks.
 class ThemedApplication extends ConsumerWidget {
-  const ThemedApplication({super.key, required this.home, this.builder});
+  const ThemedApplication({
+    super.key,
+    required this.home,
+    this.builder,
+    this.navigatorKey,
+  });
   final Widget home;
+  final GlobalKey<NavigatorState>? navigatorKey;
   final TransitionBuilder? builder;
   static final _light = AppTheme.light();
   static final _dark = AppTheme.dark();
@@ -22,6 +28,7 @@ class ThemedApplication extends ConsumerWidget {
       ),
     );
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Chess Auto Prep',
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

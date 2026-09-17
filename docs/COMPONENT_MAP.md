@@ -433,9 +433,40 @@ of the name while preserving PGN and side.
 session and panel. The editor and destination field are fixture hosts, not a
 replacement production editor or OS picker. Legacy editor/generator/undo and
 chapter writers have not yet adopted this session. Retained drafts live only
-for the session lifetime; persisted drafts, close guards, complete workspace
-restoration, PGN validation and large-document inspection remain in the document
-workspace migration. No process-crash recovery is implied by draft retention.
+for the session lifetime; persisted drafts, complete workspace restoration,
+PGN validation and large-document inspection remain in the document workspace
+migration. No process-crash recovery is implied by draft retention.
+
+#### Application close coordination
+
+`app/desktop_application.dart` owns the native window close policy through the
+injected `DesktopClosePort`; `infrastructure/desktop/window_close_adapter.dart`
+implements it with `window_manager`. Screens never enable/disable prevention or
+close the app. The viewer retains its independent fullscreen listener.
+
+`features/documents/controllers/document_close_coordinator.dart` serializes one
+close attempt across registered document owners. Every approval carries an exact
+revision; changed membership or a later edit invalidates the attempt. Cancelled
+or failed checks leave the app open. `DocumentCloseScope` surrounds the navigator;
+`DocumentCloseRegistration` tracks each mounted owner, including hidden branches.
+Unmounting a feature removes its registration without changing native prevention.
+Failed native close restores prevention before surfacing the error.
+
+`StudyCloseGuard` is mounted at app scope because other modes can edit Study
+before its screen exists. It awaits queued saves and shows the shared localized
+save/recovery panel for dirty, uncertain or retained drafts. Cancel preserves
+work; explicit Close without saving approves a revision without mutating it, so
+another owner's veto cannot erase the draft. Known failed/uncertain autosaves are
+not implicitly replayed. PGN Viewer registers its save/session check and also
+retains an approved-for-discard draft until actual application exit. Repertoire
+registers pending line-comment saves; repeated failures continue to block closing.
+Builder drafts and long-running job shutdown are not yet covered by these guards.
+Persistent draft/restart recovery remains pending.
+
+The bounded runner seeds fresh disposable profiles with a declined native desktop
+integration offer. This prevents GTK's modal first-run prompt (outside Flutter's
+layer-tree screenshots) from swallowing native input/close events. Explicit
+fixture choices remain intact; the user's desktop preferences are never touched.
 
 #### Design system and component catalog
 
@@ -661,7 +692,8 @@ requests; dismissing their presentation, changing modes or disposing the editor
 cannot replay them. A confirmed explicit retry/copy or reload reconciles state.
 Reload decodes before adoption and retains the latest intervening draft. Restoring
 that draft exchanges it with any newer dirty draft without writing either.
-These retained drafts are in memory; restart restoration/close guards are pending.
+These retained drafts are in memory; the app-scoped Study close guard protects
+normal window closure, while restart restoration remains pending.
 
 Successful **Save a copy…** creates an exclusive new study and opens it. **Save
 study PGN as…** exports a captured snapshot through its own typed save session,
