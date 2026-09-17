@@ -32,6 +32,14 @@ class MemoryGenerationArtifacts implements GenerationArtifactRepository {
   Future<GenerationArtifactSnapshot> readLegacy(String path) async =>
       GenerationArtifactSnapshot(origin: GenerationArtifactOrigin.legacy);
   @override
+  Future<void> exportLegacy(
+    GenerationArtifactSnapshot snapshot,
+    GenerationArtifactKind kind,
+    String destination,
+  ) async =>
+      throw UnimplementedError('Recovery export requires an explicit fixture');
+
+  @override
   Future<GenerationArtifactRun> begin(
     String path,
     Map<String, dynamic> config, {

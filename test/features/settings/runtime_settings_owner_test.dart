@@ -1,6 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
+import 'package:chess_auto_prep/app/engine_runtime.dart';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/settings/controllers/engine_settings.dart';
@@ -20,8 +22,100 @@ class _RejectingPreferences extends InMemorySharedPreferencesStore {
   }
 }
 
+class _FailingRead extends MemorySettingsSection<EngineConfiguration> {
+  _FailingRead()
+    : super(EngineConfiguration({'engine_lifecycle.toggle_on': false}));
+  bool fail = true;
+  int reads = 0;
+  @override
+  Future<EngineConfiguration> read() async {
+    reads++;
+    if (fail) throw StateError('preferences unavailable');
+    return super.read();
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('failed initial reads cannot masquerade as loaded defaults', () async {
+    final storage = _FailingRead();
+    final owner = EngineSettings(storage);
+    addTearDown(owner.dispose);
+    await expectLater(owner.ensureLoaded(), throwsStateError);
+    await expectLater(owner.ensureLoaded(), throwsStateError);
+    expect(storage.reads, 2);
+    expect(owner.state.committed, isNull);
+    expect(owner.state.phase, SettingsPhase.failed);
+    storage.fail = false;
+    final gate = Completer<void>();
+    storage.readGate = gate.future;
+    final first = owner.ensureLoaded();
+    final concurrent = owner.ensureLoaded();
+    expect(concurrent, same(first));
+    gate.complete();
+    await Future.wait([first, concurrent]);
+    expect(storage.reads, 3);
+    expect(owner.committed.enabled, isFalse);
+    expect(owner.state.phase, SettingsPhase.ready);
+  });
+
+  test(
+    'runtime cannot enable from defaults after a failed settings read',
+    () async {
+      final storage = _FailingRead();
+      final owner = EngineSettings(storage);
+      final runtime = EngineRuntime(
+        settings: owner,
+        createConnection: () async => null,
+      );
+      addTearDown(owner.dispose);
+      addTearDown(runtime.dispose);
+      await expectLater(owner.ensureLoaded(), throwsStateError);
+      await expectLater(
+        runtime.lifecycle.loadPersistedState(),
+        throwsStateError,
+      );
+      await runtime.lifecycle.resume();
+      expect(runtime.lifecycle.state, EngineState.off);
+      expect(owner.state.committed, isNull);
+      storage.fail = false;
+      await runtime.lifecycle.loadPersistedState();
+      await runtime.lifecycle.resume();
+      expect(owner.committed.enabled, isFalse);
+      expect(runtime.lifecycle.state, EngineState.off);
+    },
+  );
+
+  test('setters and explicit edits share numeric normalization', () async {
+    final storage = MemorySettingsSection(EngineConfiguration(const {}, 4));
+    final owner = EngineSettings(storage, maxCores: 4);
+    addTearDown(owner.dispose);
+    await owner.ensureLoaded();
+    owner.cores = 9999;
+    owner.hashMb = 0;
+    owner.depth = 0;
+    owner.multiPv = 9999;
+    owner.maxAnalysisMoves = 0;
+    owner.maiaElo = 0;
+    owner.stockfishTopN = 0;
+    // Reload is queued after all submitted edits, including save confirmation.
+    await owner.reload();
+    final normalized = EngineConfiguration({
+      'engine_settings.cores': 9999,
+      'engine_settings.hash_mb': 0,
+      'engine_settings.depth': 0,
+      'engine_settings.multi_pv': 9999,
+      'engine_settings.max_analysis_moves': 0,
+      'engine_settings.maia_elo': 0,
+      'engine_settings.stockfish_top_n': 0,
+    }, 4);
+    expect(owner.committed, normalized);
+    final restarted = EngineSettings(storage, maxCores: 4);
+    addTearDown(restarted.dispose);
+    await restarted.ensureLoaded();
+    expect(restarted.committed, normalized);
+  });
+
   test(
     'platform adapter partial save is reconciled, retried and retained after restart',
     () async {

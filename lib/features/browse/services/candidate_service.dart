@@ -10,7 +10,7 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../models/build_tree_node.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
 import '../../../models/explorer_response.dart';
 import '../../../services/explorer_cache_service.dart';
 import '../../../services/generation/fen_map.dart';

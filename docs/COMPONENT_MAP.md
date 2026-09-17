@@ -175,8 +175,17 @@ The My books panel shows pending/failure state, keeps confirmed choices visible,
 and retries designation without recreating an already imported repertoire.
 The relocation operation maps path components and can retry a partial two-key
 update. Linux folder rename, deletion and restore invoke it through the directory
-journal above. Engine, display, training and credentials remain with
-their legacy owners. There is no cross-process preference transaction claim.
+journal above. Credentials and external evaluation-database settings retain
+legacy ownership. There is no cross-process preference transaction claim.
+
+`RuntimeSettings` composes the typed engine, bulk-analysis and board-display
+owners; their immutable configurations normalize both setter and explicit field
+edits. A failed initial read stays failed and retryable until a committed value
+exists. `EngineLifecycle` serializes preference initialization with toggles and
+generation transitions: unknown preferences do not enable analysis, late startup
+cannot undo a successful user toggle, and navigation resume does not rewrite
+preferences.
+
 Startup wraps legacy Linux/Windows preference backends in
 `FreshDesktopPreferencesStore`: serialized requests use fresh backend instances,
 so the plugin's second cache cannot confirm an unsaved value or flush a failed
@@ -2010,7 +2019,17 @@ manifest, payload hashes, source revision and current pointer before adoption;
 stale runs, edited payloads and interrupted selection cannot replace a newer
 selected generation. Old generations and failed proposals remain on disk.
 
-`GenerationArtifacts` owns typed serialization and complete-bundle staging.
+`GenerationArtifacts` owns snapshot capture, isolate scheduling and complete-bundle
+staging. The synchronous v3/v4 tree and versioned probe codecs and canonical
+`BuildTree`/`BuildTreeNode`, `TrapLineInfo` and `TrapReply` values live in
+`chess_core/generation/`. The shared persistent four-field FEN reducer lives in
+`chess_core/position/eval_canonicalize.dart`. This dependency closure contains no
+legacy services, Flutter, native I/O or isolate scheduling. Saved configuration
+stays historical JSON; the decoder does not consult operational `TreeBuildConfig`
+or current CPU limits. `tree_serialization.dart` preserves the existing wire
+format and metadata/index reconstruction; `expectimax_probe_codec.dart` composes
+that format without importing build/engine helpers. Probe graft/rescore and trap extraction remain generation
+algorithms outside the artifact codec boundary.
 Generation, saved-tree reopening, probe updates, resumable partials, the active
 Builder tree panes, traps and training source loading use this repository.
 Resume/discard carries the observed generation ID. Chapter changes invalidate
@@ -2021,15 +2040,33 @@ APIs, `ExpectimaxDatabase.persist`, trap filesystem helpers and obsolete eval-tr
 loader/tab implementations are deleted. `ExpectimaxProbeCodec` only encodes and
 decodes probes.
 
-Explicit infrastructure `readLegacy` decodes existing `_tree.json`,
-`_expectimax.json`, `_traps.json` and `_partial_tree.json` without modifying them.
-These lack source identity and are never silently selected, extended or resumed;
-the active readers consume verified generations. No legacy preview UI is added.
+Builder → Actions → **Recover older analysis…** opens the production
+`LegacyAnalysisDialog`. Its `LegacyAnalysisController` loads existing
+`_tree.json`, `_expectimax.json`, `_traps.json` and `_partial_tree.json` through
+`GenerationArtifactRepository.readLegacy`; `GenerationArtifacts.inspectLegacy`
+uses the existing tree/trap codecs off the UI isolate. Users browse tree/probe
+branches, evaluations, FENs, saved configuration and trap details. Each unreadable
+file/entry has its own localized failure; healthy siblings remain accessible.
+Technical diagnostics are optional.
+
+Native reads capture exact bytes with file identity checks. **Export original
+file…** chooses a destination folder and exclusively creates a new file from
+those captured bytes, preserving BOM, compression and even undecodable content.
+It never replaces a destination, changes the source files or selects an artifact
+generation. The view keeps its captured chapter identity; stale loads and closed
+file pickers cannot redirect an export. Refresh/reopen reads the originals again.
+
+Legacy files lack source revision evidence. The recovery view labels that
+provenance explicitly and does not transfer them into verified current analysis,
+training or the chapter. Legacy automatic resume is unsupported; unfinished
+positions/configuration remain inspectable/exportable, and users can start a
+fresh build. This is recovery access, not a claim of automatic-resume parity or
+lossless conversion of analysis into PGN.
 PGN commit and artifact selection are separate transactions: if the PGN saves
 but cache selection fails, the job reports the saved PGN and retained proposal,
-fails completion, and rejects the old cache for the new source. A recovery
-browser, retention/garbage-collection policy and cross-file atomicity remain
-outside this cutover.
+fails completion, and rejects the old cache for the new source. A browser for
+immutable failed proposals/current-generation history, retention/garbage-collection
+policy and cross-file atomicity remain outside this cutover.
 
 ### `lib/core/`
 
@@ -2093,7 +2130,7 @@ renewal work; Windows/macOS native verification remains open.
 | `analysis/discovery_result.dart` | Engine discovery lines (MultiPV) |
 | `analysis/move_analysis_result.dart` | Per-move analysis in game review |
 | `analysis_player_info.dart` | Player metadata for analysis; `accounts` (the chess.com/lichess handles an opponent's merged game-set came from — what makes it re-downloadable) and `group` (event name); `displayName` is the first `;`-segment of the username |
-| `build_tree_node.dart` | **Generated tree node**: eval, ease, myEase, expectimax, traps, `pvContinuationMove`, `engineInjected`, children, serialization |
+| `chess_core/generation/build_tree_node.dart` | **Generated tree node**: eval, ease, myEase, expectimax, traps, `pvContinuationMove`, `engineInjected`, children, serialization |
 | `engine_evaluation.dart` | Single eval result |
 | `engine_weakness_result.dart` | Weak square / position analysis output |
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
@@ -2138,8 +2175,8 @@ renewal work; Windows/macOS native verification remains open.
 
 | File | Purpose |
 |------|---------|
-| **models/trap_line_info.dart** | Trap metadata + optional `allReplies`, `fen`, `refutationMove`, `refutationEvalCp` |
-| **models/trap_reply.dart** | Opponent reply classification at trap position |
+| **chess_core/generation/trap_line_info.dart** | Trap metadata + optional `allReplies`, `fen`, `refutationMove`, `refutationEvalCp` |
+| **chess_core/generation/trap_reply.dart** | Opponent reply classification at trap position |
 | **services/trap_index_service.dart** | FEN/prefix indexes, repertoire & line metrics, ETV |
 | **widgets/trap_detail_card.dart** | Narrative trap UI, reply table, hoverable move path |
 | **widgets/trap_move_indicator.dart** | Orange dot for pre-trap PGN moves, enriched multi-line tooltip (mistake desc, popularity, reach, score) |
@@ -2368,7 +2405,6 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `eval/lichess_eval_provider.dart` | `ExternalEvalProvider` over the store, converting the published White-relative scores into the white-normalized cp / side-to-move mate the rest of the app uses |
 | `eval/lichess_eval_controller.dart` | Owns the two stages behind one progress bar — resumable range download, then the import isolate — with a free-space guard, Jobs-pane integration, and delete-the-archive / delete-everything. Points `EvalDatabaseSettings` at the store and switches it on when the build finishes |
 | `eval_cache.dart` | Eval cache facade (SQLite v2): Stockfish evals + `maia_cache` table keyed by `(fen, elo)` (policy JSON, win prob); `MaiaCache` get/put with L1 in-memory mirror; get/put await idempotent `init()` so background warm-up in `main` cannot leave early writes memory-only; fire-and-forget writes use `putEvalCpWhiteSoon`; shared by generation, audit, and interactive engine panes |
-| `eval/eval_canonicalize.dart` | FEN normalization for lookup |
 
 #### Generation pipeline
 
@@ -2388,7 +2424,6 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `generation/repertoire_selector.dart` | Mark repertoire moves on tree (3 objectives; novelty weight and tie-breaks on top) |
 | `generation/trap_extractor.dart` | Trap candidate collection |
 | `generation/fen_map.dart` | Transposition map keyed by 4-field canonical FEN (`canonicalizeFen`); `freeze()` after `GeneratedRepertoire.fromTree`; shared cycle helpers `isTranspositionCycle` / `enterFenPath` / `enterPositionOnce`; `resolveTransposition(node, fenMap)` follows canonical FEN when a leaf has children elsewhere |
-| `generation/tree_serialization.dart` | tree.json read/write (`pv_continuation_move`, `engine_injected`) |
 | `generation/tree_build_progress.dart` | Progress callbacks |
 
 #### Repertoire & PGN

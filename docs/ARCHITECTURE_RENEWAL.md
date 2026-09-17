@@ -60,10 +60,10 @@ ID when a requirement changes. IDs stay stable if milestones are rearranged.
 | DATA-05 | Measure lock wait/hold times; interrupted and synced-file operations preserve recoverable content with bounded retries and explicit durability limits. | [Filesystem contracts](#filesystem-and-cross-process-contracts) |
 | DATA-06 | Restore a consistent database/document backup into a disposable profile; migration and adapter rollback preserve new work and stable references. | [Coexistence](#data-preservation-and-coexistence) |
 | DATA-07 | Generation commits only against its source/run identity and preserves edited artifacts. Exercise stale completion and interrupted publication. | [Storage gate](#storage-baseline-and-overwrite-prevention-gate) |
-| STATE-01 | One action-state owner implements reject/coalesce/queue; retries, offscreen listeners and stale callbacks cannot duplicate jobs or publish stale state. | [Runtime state](#runtime-state-and-large-documents) |
+| STATE-01 | Each action scope has one state owner and an explicit reject/coalesce/queue policy; retries, offscreen listeners and stale callbacks cannot duplicate jobs or publish stale state. | [Runtime state](#runtime-state-and-large-documents) |
 | STATE-02 | Large projections are immutable, cheaply comparable and scoped to their dependencies; receive-side decoding and measured edits/rebuilds meet the baseline budgets. | [Runtime state](#runtime-state-and-large-documents) |
 | STATE-03 | Continuous analysis produces bounded periodic UI updates without losing terminal events; verify with fake-time burst tests. | [Runtime state](#runtime-state-and-large-documents) |
-| SET-01 | One writer per settings key; failed saves stay visible and active-job configuration is explicit. Test concurrent panels and restart. | [Settings](#settings-and-credentials) |
+| SET-01 | One writer per settings key; failed reads/saves stay visible, unknown preferences cannot authorize startup work, and active-job configuration is explicit. Test concurrent panels, startup/toggle ordering, retry and restart. | [Settings](#settings-and-credentials) |
 | SEC-01 | Before migrating Accounts, verify native vault migration, restart and disconnect with synthetic secrets; no silent plaintext fallback. | [Credentials](#settings-and-credentials) |
 | PROC-01 | Owned workers/ports/processes terminate on the specified cancellation/shutdown paths; test failed startup and return to resource baseline. | [Supervision](#worker-and-engine-supervision) |
 | PROC-02 | A verified containment or parent-liveness mechanism is active before engine work; forced app death cleans up the supported descendant tree on each verified host. | [Supervision](#worker-and-engine-supervision) |
@@ -108,16 +108,18 @@ facade merely to keep its tests green.
 |---|---|---|
 | Completed: Viewer owner cutover (`141b5271` ancestry) | Deleted `PgnViewerController`, forwarding methods and mirrored errors; all consumers use the collection/editor/filter/presentation/tree owners. One session transition contract owns abandonment across the six reviewed paths. | Zero class/API references; no replacement facade; delayed work cannot publish after replacement; open/edit/save/recovery/navigation/close parity through final app wiring. |
 | Completed: Builder history (`09aeb6ed`) | Native append/undo provenance and private opening graph ownership. Deleted decoded-only history authorization, old append APIs and mutable graph exposure. | Native revision/history conflicts, successive/per-move undo, failed mutation retention and all graph consumers use the final projection. Entire Builder remains unfinished until the later closure below. |
-| Now: generation agent | Finish versioned artifact publication and every production reader in one cutover. Delete old artifact writers/path ownership, persistence methods and loader shims. | One publication authority; stale/interrupted output cannot replace current artifacts; readers agree on the selected generation; existing user artifacts remain accessible through production wiring. Legacy files currently survive and decode, but lack an app access/import path; this parity gate is still open. |
+| Completed: generation publication, read-only recovery and pure artifact domain | Versioned publication and all authoritative readers use the artifact repository; old artifact writers/path ownership, persistence methods and loader shims are deleted. Builder Actions provides legacy tree/probe/trap/partial inspection and original-byte export through that final repository. Artifact codecs/models have one pure `chess_core/generation` home; the old serialization/model paths and mixed probe-codec dependency are removed. | Stale/interrupted output cannot replace current artifacts; existing files remain accessible and untouched. Legacy source identity is unproven, so automatic legacy resume/current-analysis adoption remain explicitly unsupported. Other Generation workflows, retained-proposal browsing and platform gates remain open. |
 | Completed: settings/engine (`f1109c5b`) | Typed engine/bulk/board settings and constructor-owned engines. Deleted the three old settings singletons, engine service global access and interim bind APIs; application composition injects BoardEngine, StockfishPool and EngineSearchBudget configuration. | One writer per key, serialized changes/failure/retry/restart, captured job configuration, production caller cutover and resource/scheduling parity. No temporary settings-to-engine binding. |
 | Next: finish existing migrated workflows | Close catalog, Study, Builder, Viewer and Training end to end: remaining host/provider/lifetime bridges, durable Builder recovery, final settings/session ownership, and all applicable UI/parity gates. Keep separate dependency-ordered cutovers where each deletes a complete responsibility. | No remaining temporary owner in each declared-complete workflow. Existing extracted code is reused or simplified; do not restart another extraction cycle. |
 | Then: engine/jobs and remaining domains | Replace each remaining workflow from the capability inventory, including actual worker/process ownership and all writers/readers. Consolidate singular `repertoire/` into its final domain as its remaining responsibilities retire. Adopt design-system controls while deleting each superseded control/theme dependency. | Dependency-ordered cutovers, shared-file parity and safety, native resource cleanup, feature and UI contracts; no second implementation or leftover theme owner for migrated surfaces. |
 | Last: application audit | Verify all features, formats, recovery, platforms, performance and release readiness. | No deferred retirement work, no hidden boundary exclusions, no production fallback; unverified host/release gates stay explicitly open. Publication still requires the user's request. |
 
 The rows identify replacement boundaries, not four new frameworks. Viewer
-ownership retirement is verified; remaining parallel work closes Builder
-workspace/scratch recovery with facade deletion, and production access to legacy
-generation artifacts. Do not count an infrastructure decoder as user-facing
+ownership retirement is verified; active parallel work closes Builder
+workspace/scratch recovery with facade deletion and Study import/publication.
+The generation publication/read-only recovery and pure artifact domain
+responsibilities are complete as specified above; it does not certify the whole Generation feature. Do not count
+an infrastructure decoder alone as user-facing
 migration parity. Each agent must report final runtime wiring, concrete deletions
 and behavior/failure evidence before integration.
 
@@ -159,6 +161,46 @@ legacy-theme-consumer checks remain active. These static checks do not prove
 runtime ownership or certify code outside their declared boundary rules. Moving
 code to `legacy_features/` alone earns no migration credit and is not a
 replacement for the full inventory and parity checks.
+
+**Review corrections to the completion gates (2026-09-17).** These requirements
+apply to the complete replacement, including its existing UI and helper files:
+
+- ARCH-01/ARCH-02: continue inventorying the whole production dependency graph,
+  including feature services and shared `lib/models/` types. Enforced/complete
+  feature `services/` folders now reject transitive legacy-service imports, exports,
+  conditional alternatives and parts; regression cases cover renamed/nested
+  service paths. Pure generation artifact codecs/models also pass the transitive
+  pure-Dart gate, closing that service loophole. Wider shared-model and workflow
+  coverage remains open: an `enforced` classification alone does not certify a
+  complete workflow. Close remaining edges through final pure algorithms or
+  injected contracts, move each canonical domain type with all consumers, and
+  never rename files to evade a rule or expand the debt baseline to claim success.
+- UI-01: controllers expose typed failure/status data; widgets resolve ARB copy,
+  including retry, empty, recovery and error states. Remove English error mirrors
+  and raw exception display in the same consumer cutover. Keep the ban on
+  localization imports in controllers. ARB message counts or a static boundary
+  pass are not localization evidence; exercise the rendered states, long labels
+  and text scaling. Existing controller English remains unfinished UI work.
+- STATE-01: document each action's owner, admission policy, invalidation events
+  and publication checks. Independent open/selection/cache revisions are allowed
+  when their scopes differ. Fewer integer counters alone neither prove nor
+  disprove correctness. Verify overlapping commands, invalidation before
+  cancellation, disposal and late results across the real owners; do not add a
+  generic token wrapper merely to conceal the same competing ownership.
+- SET-01: distinguish unavailable preferences from a successfully read absent
+  key. A failed initial read must remain retryable and cannot silently enable
+  analysis using defaults. Startup, toggles and generation transitions share
+  lifecycle ordering. Normalize edits once in the canonical configuration;
+  setters and explicit edit commands follow the same invalid-input policy.
+- TEST-01: every changed production provider must be installed by its affected
+  widget fixtures before integration. Cache/database fixtures select disposable
+  storage themselves, including direct test invocations, and test only their own
+  rows. The bounded runner's disposable XDG profile is additional containment;
+  its potentially warm cache is not test isolation. Never inspect or clear the
+  user's database to make a test pass. Record the test process's actual exit
+  status, not that of a trailing log command. Known failing affected tests block
+  integration. Focused repairs do not turn an earlier red full suite into a
+  green result; rerun the combined suite before claiming that result.
 
 **Definition of done per cutover.** Final production wiring + deleted old
 owner/APIs/callers + no temporary scaffolding + passing behavior/failure checks +
@@ -4055,10 +4097,11 @@ contexts and restart recovery. This includes the 49-test owner suite and its nav
 certification: the legacy screen/reader widgets, complete design-system gates,
 immutable game contents and unverified platform gates remain separate work.
 
-Legacy artifact decoding has no production caller yet. Legacy tree/trap/probe
-display and partial resume are not restored by the artifact cutover. Original
-files survive, but explicit provenance-reviewed access/import remains a DATA-07
-migration/parity gate; infrastructure decoding alone does not close it.
+The `7032e719` artifact cutover initially had no production legacy reader.
+The recovery follow-up below now supplies Builder Actions inspection/export for
+legacy trees, probes, traps and unfinished output through the final repository.
+Unproven source association still prevents automatic legacy resume or adoption
+as current analysis; read-only recovery is not full legacy workflow parity.
 
 Viewer production diff against integrated `f1109c5b`: 2,539 added and 2,405
 removed lines (net +134), separate from tests and documentation. The 1,609-line
@@ -4072,8 +4115,10 @@ workflow work must still remove remaining legacy ownership and UI debt.
 Combined verification: the full engine/artifact baseline at `f1109c5b` ran
 6,421 passing tests, 12 skips and four failures. The failures were two Builder
 settings fixtures, one settings contrast fixture, and a cache-only Explorer
-fixture that unintentionally gained a scripted engine. All four were repaired;
-the focused fixture suites passed 14 and 10 tests. The cache-only test now injects
+fixture that unintentionally gained a scripted engine and lacked explicit cache
+isolation. The scripted-engine source of false evaluations and the three provider
+fixtures were repaired in the Viewer integration; cache isolation follows below.
+The focused fixture suites passed 14 and 10 tests. The cache-only test now injects
 an unavailable engine and still asserts that uncached evaluations stay absent.
 This is full-baseline evidence plus focused repairs, not a claim of a green full
 suite on the final merged Viewer revision. The merged Viewer tests and six native
@@ -4085,3 +4130,145 @@ Production Linux screenshots were inspected for the
 profile left by the restart journey. The preview was stopped before the final
 checks. Existing leaf tests additionally cover active themes and 200% text scaling;
 these screenshots do not prove all UI-01 or non-Linux gates.
+
+
+### External review follow-up: startup and test isolation (2026-09-17)
+
+The supplied review describes the earlier `f1109c5b` baseline. Viewer facade
+retirement is now on local main at `8e5e5dcc`; the legacy theme ledger has 246
+entries, not 251. Whole UI renewal is still unfinished. The reported four test
+failures remain historical baseline evidence, with focused repairs recorded
+above; they must not be relabeled as a successful full-suite run.
+
+Confirmed startup findings are addressed in the existing final owners.
+`SettingsSectionController.ensureLoaded` retries when no committed value exists,
+including after failed reads. `EngineLifecycle` queues startup with toggles and
+generation, retains an unknown preference as off after failure, permits retry,
+and prevents a late startup call from overriding a successful explicit toggle.
+Navigation resume no longer rewrites preferences. Engine setters now submit
+fields directly to the existing canonical normalization; their duplicate
+normalization and inconsistent early-return guards are deleted.
+
+The cache-only Explorer and eval-cache suites now install their own fresh
+application-support directory before cache initialization, verify the expected
+database exists before clearing any rows, reset between tests and delete their
+own database at teardown. Our bounded test runner already overrides XDG data
+paths; that does not establish the source of another runner's cache rows. No
+user database was inspected or modified for this investigation. Retiring the
+production eval-cache singleton remains separate unfinished ownership work;
+this explicit test fixture does not certify that architectural replacement.
+
+Validation on the combined `8e5e5dcc` source plus these corrections: the full
+`scripts/ci.sh test` process exited 0 with **6,461 passing tests, 12 skips and zero
+failures**. The 62 focused settings/lifecycle/runtime/cache cases also pass.
+`scripts/ci.sh analyze lint` passes with 63 informational findings and no warnings
+or errors; all 94 local file links across this plan and the component map resolve.
+This full run includes the repaired provider fixtures and explicitly isolated
+Explorer cache fixture. The 12 skips are still skips; this does not establish
+unrun native/platform or whole-renewal acceptance gates. Production changes remove
+87 net lines from existing settings/lifecycle owners and add no transitional
+owner, facade or compatibility layer.
+
+### Legacy artifact recovery access (follow-up to `7032e719`)
+
+The artifact-authority cutover preserved sidecar files but left `readLegacy`
+without a production caller. This follow-up restores discoverable reading and
+export through Builder → Actions → Recover older analysis. One feature recovery
+controller and dialog consume the final artifact repository; no legacy owner,
+mutable sidecar writer, loader shim or forwarding facade returns. The retirement
+gate also forbids `GenerationArtifactStore` and `ExpectimaxProbeStore` symbols.
+
+The old capabilities were main-tree exploration/training metrics, probe/PV
+lookup, trap browsing and automatic partial resume/discard. Recovery now exposes
+tree/probe branches, saved evaluations/FENs/configuration, trap details and
+unfinished positions. Invalid files/entries fail independently. Native reads
+retain exact original bytes; explicit export uses exclusive native installation
+and preserves existing destinations. Export errors/uncertain acknowledgement are
+visible, technical detail is optional, and active exports keep the view open.
+Originals and selected current generations remain untouched; no export silently
+promotes old results to the current source.
+
+Legacy association cannot be proved from filenames, root FEN or configuration.
+Automatic legacy resume and insertion into current training/probe/trap data are
+therefore explicitly unsupported. Users can inspect/export old work or start a
+fresh build; only verified current-generation partials use the existing resume
+path. Export is the original artifact, not a PGN conversion that would lose
+analysis fields. This completes the production read-only recovery responsibility;
+it does not claim full legacy automatic-resume parity, cross-file atomicity, a
+browser for all retained generation proposals, or non-Linux certification.
+
+Validation: **58 focused tests passed**, spanning the native artifact repository,
+full generation publication/reopen pipeline, legacy recovery, race/lifetime
+controller cases, production Actions/dialog wiring and the complete Builder
+screen/toolbar fixtures. The final typed picker/read-failure correction passed
+all seven affected controller/widget tests. Native cases cover BOM/gzip/malformed
+byte preservation, external edits after capture, per-file/per-probe failures,
+exclusive destination collisions, interrupted staging and uncertain directory
+flush without replay or current-generation changes. Recovery widget journeys
+also pass at 640×480 and 800×600 with 200% text; failures have localized primary
+copy and optional diagnostics, and uncertain destinations are directly selectable.
+
+The headless Linux production app was inspected using only a disposable profile:
+[unfinished-build recovery](images/renewal-legacy-analysis-recovery.png),
+[isolated malformed-file failure](images/renewal-legacy-analysis-error.png), and
+saved probes reopened after a runtime restart. The preview was stopped before
+final checks. These checks do not certify Windows/macOS, native file-picker UI on
+other hosts, or large-artifact performance.
+
+Initial validation failures were corrected: localization import/nullability
+errors, one widget fixture timeout from asynchronous temporary-directory creation
+under the fake clock (its own runner was stopped; the second case was cancelled),
+and scaled-test scroll targeting. Compact recovery now has one scroll owner.
+Those interrupted/failed runs are not passing-suite evidence. The earlier full
+application suite at `0ee44d03` remains separate evidence; this follow-up uses
+focused regression checks rather than claiming a new full-suite run.
+
+Final `scripts/ci.sh analyze lint` passed with 63 existing informational findings,
+zero warnings/errors, no new boundary debt and the retirement gate passing. All
+96 local documentation links resolve; whitespace checks pass.
+
+
+### Generation artifact domain closure (2026-09-17)
+
+The final artifact service previously imported `services/generation/expectimax_probe.dart`
+for a codec, which also imported build-run/subtree and operational configuration
+owners. `tree_serialization.dart` combined the wire format with Flutter timing
+output, worker scheduling and an unused transposition-map population hook.
+
+The final pure `chess_core/generation/` owner now contains the canonical generated
+tree/trap values and synchronous tree/probe codecs. All production and test/tool
+consumers import those canonical paths. `GenerationArtifacts` captures the
+mutable tree synchronously and owns off-isolate encoding; the domain codec no
+longer schedules workers, logs Flutter diagnostics or mutates a caller's FenMap.
+The shared exact four-field persistent FEN reducer lives in `chess_core/position/`.
+Old `models/{build_tree_node,trap_line_info,trap_reply}.dart`,
+`services/generation/tree_serialization.dart`, `services/eval/eval_canonicalize.dart`
+and `serializeTreeInIsolate` are retired with no forwarding exports. The probe
+codec is removed from the graft/rescore library, so reading saved artifacts no
+longer imports the generation engine dependency closure.
+
+The checker follows owners in every enforced/complete feature `services/` folder through project
+imports, exports, conditional branches and parts, rejecting any legacy service
+owner. The pure artifact closure also rejects native, Flutter and isolate
+imports. New regression cases cover indirect dependencies, moved owner paths,
+retired forwarders and separate scheduling; the exact debt ledger is unchanged.
+
+Compatibility preserves existing v3/v4 tree defaults, parent/index identity,
+probe framing and tolerant legacy entries, trap/reply defaults, persistent FEN
+keys, and opaque historical configuration. Operational `TreeBuildConfig`,
+probe graft/rescore, trap extraction and build/engine orchestration remain
+unfinished responsibilities outside this codec cutover. This does not certify
+the complete Generation feature or add legacy resume/proposal-browser parity.
+
+Validation: `scripts/ci.sh analyze lint` passes with 63 pre-existing analyzer
+infos and no errors/warnings; 43 checker regressions pass with the exact 1,459
+entry debt ledger unchanged. The focused 20-file generation/algorithm/native
+artifact/recovery/FEN batch passes 134 tests (zero failures or skips). A plain
+Dart VM contract runner passes historical tree/probe/trap fixtures and 64 seeded
+evaluation/probability/PV round trips, independently proving the codec no longer
+requires Flutter to compile. The application-service regression confirms a tree
+edit after asynchronous encoding starts cannot change the captured output.
+The initial analyzer run found one unused legacy import and two new CLI-test
+infos; those were corrected before the passing rerun. No UI behavior changed,
+so this cutover reuses the preceding inspected recovery screenshots rather than
+claiming a new platform/UI validation. No full-suite or non-Linux gate is claimed.

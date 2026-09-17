@@ -9,6 +9,14 @@ abstract interface class GenerationArtifactRepository {
   /// for authoritative publication or an automatically resumed build.
   Future<GenerationArtifactSnapshot> readLegacy(String path);
 
+  /// Copy the captured original bytes to a new file; never replace a file or
+  /// select the legacy data as the chapter's current generation.
+  Future<void> exportLegacy(
+    GenerationArtifactSnapshot snapshot,
+    GenerationArtifactKind kind,
+    String destination,
+  );
+
   Future<GenerationArtifactRun> begin(
     String path,
     Map<String, dynamic> config, {

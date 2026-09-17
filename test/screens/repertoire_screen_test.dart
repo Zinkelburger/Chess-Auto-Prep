@@ -179,6 +179,25 @@ void main() {
     if (await storageRoot.exists()) await storageRoot.delete(recursive: true);
   });
 
+  testWidgets('loaded Builder exposes detached legacy analysis recovery', (
+    tester,
+  ) async {
+    final path = _writeRepertoire(tester);
+    await _pumpScreen(tester, repertoirePath: path);
+    await _settleUntil(tester, find.text('Italian Game'));
+    await tester.tap(find.text('Actions'));
+    await _settle(tester, cycles: 3);
+    await tester.tap(find.text('Recover older analysis…'));
+    await _settleUntil(
+      tester,
+      find.text('No older analysis files found beside this chapter.'),
+    );
+    expect(find.text(path), findsOneWidget);
+    await tester.tap(find.byTooltip('Close'));
+    await _settle(tester, cycles: 3);
+    expect(find.text('Italian Game'), findsWidgets);
+  });
+
   testWidgets('library handoff reloads edits to the already open chapter', (
     tester,
   ) async {

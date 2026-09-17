@@ -16,7 +16,7 @@ import 'package:dartchess/dartchess.dart';
 import '../../../utils/chess_utils.dart';
 import '../../../utils/fen_utils.dart';
 import '../../engine/stockfish_pool.dart';
-import '../../eval/eval_canonicalize.dart';
+import '../../../chess_core/position/eval_canonicalize.dart';
 import '../../master_games/master_games_db.dart';
 import '../export/move_annotation.dart';
 import '../generation_config.dart';

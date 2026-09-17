@@ -6,18 +6,137 @@ import 'dart:isolate';
 
 import '../models/generation_artifacts.dart';
 import '../repositories/generation_artifact_repository.dart';
-import '../../../models/build_tree_node.dart';
-import '../../../models/trap_line_info.dart';
-import '../../../services/generation/expectimax_probe.dart';
-import '../../../services/generation/tree_serialization.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
+import '../../../chess_core/generation/expectimax_probe_codec.dart';
+import '../../../chess_core/generation/trap_line_info.dart';
+import '../../../chess_core/generation/tree_serialization.dart';
 
 /// Authoritative saved trees; unverified legacy outputs require a separate,
 /// explicit preview and are never used to resume or extend a generated cache.
 typedef SavedExpectimaxDatabase = ({BuildTree? tree, List<BuildTree> probes});
 
+/// A detached, read-only inspection. Parsed values never enter the live
+/// generated database, resume path or repository publication protocol.
+class LegacyAnalysisInspection {
+  LegacyAnalysisInspection(this.snapshot, this.items);
+  final GenerationArtifactSnapshot snapshot;
+  final List<LegacyAnalysisItem> items;
+}
+
+class LegacyAnalysisItem {
+  const LegacyAnalysisItem({
+    required this.kind,
+    this.tree,
+    this.trap,
+    this.error,
+  });
+  final GenerationArtifactKind kind;
+  final BuildTree? tree;
+  final TrapLineInfo? trap;
+  final GenerationArtifactFailure? error;
+}
+
 class GenerationArtifacts {
   GenerationArtifacts(this.repository);
   final GenerationArtifactRepository repository;
+
+  /// Capture the mutable tree before yielding, then encode only its detached
+  /// document on a worker isolate. The codec itself is synchronous pure Dart.
+  static Future<String> encodeTreeSnapshot(
+    BuildTree tree, {
+    bool indent = true,
+  }) {
+    final document = serializeTreeJson(tree);
+    return Isolate.run(() => encodeTreeJson(document, indent: indent));
+  }
+
+  Future<LegacyAnalysisInspection> inspectLegacy(String path) async {
+    final snapshot = await repository.readLegacy(path);
+    final items = await Isolate.run(() {
+      final items = <LegacyAnalysisItem>[
+        for (final entry in snapshot.readFailures.entries)
+          LegacyAnalysisItem(kind: entry.key, error: entry.value),
+      ];
+      for (final entry in snapshot.payloads.entries) {
+        void decodeTree(String text) {
+          try {
+            items.add(
+              LegacyAnalysisItem(kind: entry.key, tree: deserializeTree(text)),
+            );
+          } catch (error) {
+            items.add(
+              LegacyAnalysisItem(
+                kind: entry.key,
+                error: GenerationArtifactFailure(
+                  '$error',
+                  kind: GenerationArtifactFailureKind.decode,
+                ),
+              ),
+            );
+          }
+        }
+
+        try {
+          switch (entry.key) {
+            case GenerationArtifactKind.tree:
+            case GenerationArtifactKind.partial:
+              decodeTree(entry.value);
+            case GenerationArtifactKind.probes:
+              final data = jsonDecode(entry.value) as Map<String, dynamic>;
+              for (final probe in data['trees'] as List) {
+                if (probe is String) {
+                  decodeTree(probe);
+                } else {
+                  items.add(
+                    LegacyAnalysisItem(
+                      kind: entry.key,
+                      error: const GenerationArtifactFailure(
+                        'Invalid saved probe entry',
+                        kind: GenerationArtifactFailureKind.decode,
+                      ),
+                    ),
+                  );
+                }
+              }
+            case GenerationArtifactKind.traps:
+              final data = jsonDecode(entry.value) as Map<String, dynamic>;
+              for (final trap in data['traps'] as List) {
+                try {
+                  items.add(
+                    LegacyAnalysisItem(
+                      kind: entry.key,
+                      trap: TrapLineInfo.fromJson(trap as Map<String, dynamic>),
+                    ),
+                  );
+                } catch (error) {
+                  items.add(
+                    LegacyAnalysisItem(
+                      kind: entry.key,
+                      error: GenerationArtifactFailure(
+                        '$error',
+                        kind: GenerationArtifactFailureKind.decode,
+                      ),
+                    ),
+                  );
+                }
+              }
+          }
+        } catch (error) {
+          items.add(
+            LegacyAnalysisItem(
+              kind: entry.key,
+              error: GenerationArtifactFailure(
+                '$error',
+                kind: GenerationArtifactFailureKind.decode,
+              ),
+            ),
+          );
+        }
+      }
+      return items;
+    });
+    return LegacyAnalysisInspection(snapshot, List.unmodifiable(items));
+  }
 
   Future<GenerationArtifactProposal> prepareBundle(
     GenerationArtifactRun run, {
@@ -25,7 +144,7 @@ class GenerationArtifacts {
     required List<BuildTree> probes,
     required List<TrapLineInfo> traps,
   }) async {
-    final treeJson = await serializeTreeInIsolate(tree);
+    final treeJson = await encodeTreeSnapshot(tree);
     final probesJson = await Isolate.run(
       () => ExpectimaxProbeCodec.encode(probes),
     );
@@ -43,7 +162,7 @@ class GenerationArtifacts {
     BuildTree tree,
     GenerationArtifactRun run,
   ) async {
-    final json = await serializeTreeInIsolate(tree, indent: false);
+    final json = await encodeTreeSnapshot(tree, indent: false);
     final proposal = await repository.prepare(run, {
       GenerationArtifactKind.partial: json,
     });
@@ -115,7 +234,7 @@ class GenerationArtifacts {
     );
     final treeJson = mainTree == null
         ? null
-        : await serializeTreeInIsolate(mainTree);
+        : await encodeTreeSnapshot(mainTree);
     final proposal = await repository.prepare(run, {
       GenerationArtifactKind.probes: probesJson,
       GenerationArtifactKind.tree: treeJson,

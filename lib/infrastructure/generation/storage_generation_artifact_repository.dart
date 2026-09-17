@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
+import 'package:document_file_io/document_file_io.dart';
 import 'package:path/path.dart' as p;
 
 import '../../features/documents/models/pgn_document.dart';
@@ -12,6 +14,9 @@ import '../../features/generation/models/generation_publication.dart';
 import '../../features/generation/repositories/generation_artifact_repository.dart';
 import '../../services/storage/storage_service.dart';
 import 'generation_namespace.dart';
+import '../../utils/atomic_file.dart';
+import '../../utils/file_text_reader.dart';
+import '../../utils/pgn_compression.dart';
 
 class _Run {
   _Run(this.source, this.pointer, this.payloads);
@@ -38,10 +43,15 @@ class StorageGenerationArtifactRepository
     required this.storage,
     required this.documents,
     this.nativePaths = true,
-  });
+    AtomicFileWriter? recoveryWriter,
+    Future<void> Function(String)? flushRecoveryDirectory,
+  }) : _recoveryWriter = recoveryWriter ?? AtomicFileWriter(),
+       _flushRecoveryDirectory = flushRecoveryDirectory ?? syncDirectory;
   final StorageService storage;
   final PgnDocumentStore documents;
   final bool nativePaths;
+  final AtomicFileWriter _recoveryWriter;
+  final Future<void> Function(String) _flushRecoveryDirectory;
   final _runs = <GenerationArtifactRun, _Run>{};
   final _proposals = <GenerationArtifactProposal, _Proposal>{};
 
@@ -186,25 +196,99 @@ class StorageGenerationArtifactRepository
 
   @override
   Future<GenerationArtifactSnapshot> readLegacy(String path) async {
-    // This separate entry point cannot feed begin(): no legacy bytes are ever
-    // silently copied into an authoritative new generation.
+    // These observations never feed begin(): neither naming nor a saved config
+    // proves the historical source revision. Keep exact bytes even if malformed.
     final base = p.withoutExtension(path);
     final payloads = <GenerationArtifactKind, String>{};
+    final bytes = <GenerationArtifactKind, List<int>>{};
+    final failures = <GenerationArtifactKind, GenerationArtifactFailure>{};
     for (final entry in {
       GenerationArtifactKind.tree: '${base}_tree.json',
       GenerationArtifactKind.probes: '${base}_expectimax.json',
       GenerationArtifactKind.traps: '${base}_traps.json',
       GenerationArtifactKind.partial: '${base}_partial_tree.json',
     }.entries) {
-      if (await storage.fileExists(entry.value)) {
-        payloads[entry.key] = await _readPayload(entry.value);
+      try {
+        if (nativePaths) {
+          final observed = await observeFile(entry.value);
+          if (observed.status == 1) continue;
+          if (observed.status != 0 || observed.bytes == null) {
+            throw GenerationArtifactFailure(
+              'Cannot safely read ${entry.value} (native error ${observed.error})',
+            );
+          }
+          bytes[entry.key] = observed.bytes!;
+          final captured = observed.bytes!;
+          payloads[entry.key] = await Isolate.run(
+            () => decodeTextBytes(maybeGunzip(captured)),
+          );
+        } else if (await storage.fileExists(entry.value)) {
+          final text = await _readPayload(entry.value);
+          payloads[entry.key] = text;
+          bytes[entry.key] = utf8.encode(text);
+        }
+      } catch (error) {
+        failures[entry.key] = GenerationArtifactFailure(
+          error.toString(),
+          kind: GenerationArtifactFailureKind.read,
+        );
       }
     }
     return GenerationArtifactSnapshot(
       origin: GenerationArtifactOrigin.legacy,
       payloads: payloads,
+      originalBytes: bytes,
+      readFailures: failures,
       notice: 'Legacy analysis has no recorded source identity. Preview only.',
     );
+  }
+
+  @override
+  Future<void> exportLegacy(
+    GenerationArtifactSnapshot snapshot,
+    GenerationArtifactKind kind,
+    String destination,
+  ) async {
+    final bytes = snapshot.originalBytes[kind];
+    if (snapshot.origin != GenerationArtifactOrigin.legacy || bytes == null) {
+      throw const GenerationArtifactFailure(
+        'No captured legacy bytes to export',
+      );
+    }
+    final target = File(destination);
+    var installed = false;
+    try {
+      await _recoveryWriter.transaction(target, (transaction) async {
+        await transaction.writeBytes(
+          bytes,
+          createOnly: true,
+          validate: (staged) async {
+            final observed = await observeFile(staged.path);
+            if (observed.status != 0 ||
+                observed.sha256Hex != sha256.convert(bytes).toString()) {
+              throw const GenerationArtifactFailure('Export staging changed');
+            }
+          },
+          installNew: (staged, target) async {
+            await installNewFile(staged.path, target.path);
+            installed = true;
+          },
+        );
+        await _flushRecoveryDirectory(target.parent.path);
+      });
+    } catch (error) {
+      throw GenerationArtifactFailure(
+        installed
+            ? 'Export may already exist; inspect it before retrying: $error'
+            : 'Export failed; an existing destination is never replaced: $error',
+        proposalPath: destination,
+        kind: installed
+            ? GenerationArtifactFailureKind.uncertain
+            : error is AtomicNameCollision || error is NativeNameCollision
+            ? GenerationArtifactFailureKind.collision
+            : GenerationArtifactFailureKind.export,
+      );
+    }
   }
 
   @override

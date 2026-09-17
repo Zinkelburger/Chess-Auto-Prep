@@ -7,7 +7,7 @@
 /// trees and game analysis.
 library;
 
-import 'move_tree_node_view.dart';
+import '../../models/move_tree_node_view.dart';
 
 // ── External eval skip mode ───────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 /// Re-evaluation for legacy saved trees; Pure uses uniform-depth construction.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../engine/stockfish_pool.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';

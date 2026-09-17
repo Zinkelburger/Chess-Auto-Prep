@@ -11,7 +11,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-import '../../../models/trap_line_info.dart';
+import '../../../chess_core/generation/trap_line_info.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../services/trap_index_service.dart';
 import '../services/trap_tour_order.dart';

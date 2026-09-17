@@ -14,7 +14,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/models/edit_context_layout.dart';
 import 'package:chess_auto_prep/services/edit_context_layout_prefs.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';

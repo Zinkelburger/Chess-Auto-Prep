@@ -5,7 +5,7 @@ import '../../../widgets/shortcut_tooltip.dart';
 
 import '../../repertoires/controllers/repertoire_controller.dart';
 import '../../../models/repertoire_line.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../services/trap_index_service.dart';
 

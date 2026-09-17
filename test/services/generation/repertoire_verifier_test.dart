@@ -6,7 +6,7 @@
 /// Black-to-move position, so "deep eval +X for us" is scripted as -X.
 library;
 
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/eca_calculator.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';

@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/chess_core/generation/expectimax_probe_codec.dart';
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
@@ -15,9 +16,8 @@ import 'package:chess_auto_prep/utils/chess_utils.dart';
 import '../services/generation/engine_fakes.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/core/generation_session_types.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';

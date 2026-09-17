@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import '../../../features/settings/controllers/bulk_analysis_settings.dart';
+import '../../settings/controllers/bulk_analysis_settings.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../theme/app_colors.dart';

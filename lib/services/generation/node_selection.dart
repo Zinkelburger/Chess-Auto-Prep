@@ -8,7 +8,7 @@
 /// whether it also guards the fallback pass) are parameters, not copies.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/eval_constants.dart';
 
 /// Highest [BuildTreeNode.evalForUs] among [children] that have an engine

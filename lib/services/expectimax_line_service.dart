@@ -8,7 +8,7 @@ library;
 
 import 'dart:collection' show Queue;
 
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../utils/ease_utils.dart' show expectedCpFromWinProb;
 import 'generation/eca_calculator.dart';
 import 'generation/fen_map.dart';

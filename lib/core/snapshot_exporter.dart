@@ -18,7 +18,7 @@ import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/repertoire_verifier.dart';
 import '../services/generation/snapshot_export.dart';
-import '../services/generation/tree_serialization.dart';
+import '../chess_core/generation/tree_serialization.dart';
 import '../services/jobs/generation_phase.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/tree_build_service.dart';

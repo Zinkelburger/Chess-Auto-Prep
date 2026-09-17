@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/course/model_game_selector.dart';
 import 'package:chess_auto_prep/services/generation/pgn_freq_map.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show fenAfterMoves;

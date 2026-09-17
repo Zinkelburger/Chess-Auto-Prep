@@ -6,7 +6,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../services/eval/eval_canonicalize.dart' show canonicalizeFen4;
+import '../chess_core/position/eval_canonicalize.dart' show canonicalizeFen4;
 import 'eval_constants.dart' show cpToMate;
 import 'lru_map.dart';
 

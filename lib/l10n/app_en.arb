@@ -1016,5 +1016,168 @@
   "studyListRetry": "Could not load studies. Retry",
   "@studyListRetry": {
     "description": "Retry a failed study library read"
+  },
+  "legacyAnalysisTitle": "Recover older analysis",
+  "@legacyAnalysisTitle": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisAction": "Recover older analysis…",
+  "@legacyAnalysisAction": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisProvenance": "These older files have no recorded source revision. Inspect or export them here; they do not replace the current chapter or its verified analysis. Original files stay unchanged.",
+  "@legacyAnalysisProvenance": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisTree": "Saved tree",
+  "@legacyAnalysisTree": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisProbes": "Saved probes",
+  "@legacyAnalysisProbes": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisTraps": "Saved traps",
+  "@legacyAnalysisTraps": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisPartial": "Unfinished build",
+  "@legacyAnalysisPartial": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisExport": "Export original file…",
+  "@legacyAnalysisExport": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisExportDirectory": "Choose a folder for the recovered file",
+  "@legacyAnalysisExportDirectory": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisEmpty": "No older analysis files found beside this chapter.",
+  "@legacyAnalysisEmpty": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisSelect": "Select a saved artifact to inspect its contents.",
+  "@legacyAnalysisSelect": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisNoEntries": "No saved entries",
+  "@legacyAnalysisNoEntries": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisUnreadable": "Could not read this entry",
+  "@legacyAnalysisUnreadable": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisResumeUnavailable": "Automatic resume is unavailable: this unfinished build has no verifiable source revision. You can inspect its explored positions, export the original file, or start a fresh build from the chapter.",
+  "@legacyAnalysisResumeUnavailable": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisConfig": "Saved configuration",
+  "@legacyAnalysisConfig": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisParent": "Previous position",
+  "@legacyAnalysisParent": {
+    "description": "Legacy generation artifact recovery"
+  },
+  "legacyAnalysisExported": "Original file exported to {path}",
+  "@legacyAnalysisExported": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "legacyAnalysisEntry": "Entry {number}",
+  "@legacyAnalysisEntry": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "legacyAnalysisNodes": "{nodes} saved nodes · depth {depth}",
+  "@legacyAnalysisNodes": {
+    "description": "Legacy generation artifact recovery",
+    "placeholders": {
+      "nodes": {
+        "type": "int"
+      },
+      "depth": {
+        "type": "int"
+      }
+    }
+  },
+  "legacyAnalysisDiagnostics": "Technical details",
+  "@legacyAnalysisDiagnostics": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisLoadFailed": "Older analysis could not be loaded. Try refreshing.",
+  "@legacyAnalysisLoadFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisReadFailed": "This file could not be read safely. Other saved files remain available.",
+  "@legacyAnalysisReadFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisDecodeFailed": "This entry could not be decoded. You can still export its original file.",
+  "@legacyAnalysisDecodeFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisCollision": "A file already exists at that destination. Choose a different location; nothing was replaced.",
+  "@legacyAnalysisCollision": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisExportFailed": "The original file could not be exported. Choose another location or try again.",
+  "@legacyAnalysisExportFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisExportUncertain": "The export may have been saved, but completion could not be confirmed. Inspect the destination below before trying again.",
+  "@legacyAnalysisExportUncertain": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisDestination": "Destination: {path}",
+  "@legacyAnalysisDestination": {
+    "description": "Legacy analysis inspection",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "legacyAnalysisPopularMove": "Popular reply",
+  "@legacyAnalysisPopularMove": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisBestMove": "Best reply",
+  "@legacyAnalysisBestMove": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisProbability": "Move probability",
+  "@legacyAnalysisProbability": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisGain": "Evaluation gain",
+  "@legacyAnalysisGain": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisEvaluation": "Evaluation (side to move)",
+  "@legacyAnalysisEvaluation": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisExpectedScore": "Expected score",
+  "@legacyAnalysisExpectedScore": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisPv": "Engine principal variation (UCI)",
+  "@legacyAnalysisPv": {
+    "description": "Legacy analysis inspection"
+  },
+  "legacyAnalysisNotSaved": "Not saved",
+  "@legacyAnalysisNotSaved": {
+    "description": "Legacy analysis inspection"
   }
 }

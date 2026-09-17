@@ -21,7 +21,12 @@
     "lib/models/board_display_settings.dart",
     "lib/models/bulk_analysis_settings.dart",
     "lib/models/engine_settings.dart",
-    "lib/services/study_import/"
+    "lib/services/study_import/",
+    "lib/models/build_tree_node.dart",
+    "lib/models/trap_line_info.dart",
+    "lib/models/trap_reply.dart",
+    "lib/services/generation/tree_serialization.dart",
+    "lib/services/eval/eval_canonicalize.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -31,6 +36,9 @@
     "rebuildLine",
     "reconcileInstalled",
     "PgnViewerController",
-    "PgnPerspectiveButton"
+    "PgnPerspectiveButton",
+    "GenerationArtifactStore",
+    "ExpectimaxProbeStore",
+    "serializeTreeInIsolate"
   ]
 }

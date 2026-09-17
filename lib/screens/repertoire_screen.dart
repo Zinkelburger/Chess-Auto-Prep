@@ -7,6 +7,7 @@ import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 
 import '../features/generation/services/generation_artifacts.dart';
+import '../app/generation_dependencies.dart' show showLegacyAnalysisRecovery;
 
 import '../features/repertoires/repositories/repertoire_document_repository.dart';
 import '../features/repertoires/repositories/repertoire_decoder.dart';
@@ -85,7 +86,7 @@ import '../features/repertoire/widgets/repertoire_lines_side_panel.dart';
 import '../features/repertoire/widgets/repertoire_database_pane.dart';
 import '../features/traps/controllers/trap_session_controller.dart';
 import '../features/traps/services/trap_line_builder.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
 import '../theme/app_colors.dart';
 import '../widgets/layout/jobs_tab_content.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
@@ -1194,6 +1195,13 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         onOpenAudit: _openAuditDialog,
         onImportPgn: _importPgn,
         onReload: _reloadRepertoire,
+        onRecoverAnalysis: () => unawaited(
+          showLegacyAnalysisRecovery(
+            context,
+            path: repertoire.filePath,
+            artifacts: context.read<GenerationArtifacts>(),
+          ),
+        ),
         onGenerationSettings: () =>
             showPositionGenerationSettings(context, _generationController),
         trapNavigation: _buildTrapNavigation(),
