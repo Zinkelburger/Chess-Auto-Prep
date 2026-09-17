@@ -6,7 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../core/repertoire_controller.dart';
+import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../models/build_tree_node.dart';
 import '../chess_core/moves/move_tree_view.dart';

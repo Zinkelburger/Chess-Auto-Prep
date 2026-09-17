@@ -3,7 +3,7 @@ import '../../../design_system/components/confirm_dialog.dart';
 import '../../../design_system/theme/app_spacing.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../controllers/document_close_coordinator.dart';
-import '../widgets/document_close_scope.dart';
+import 'document_close_scope.dart';
 import '../controllers/workspace_recovery_controller.dart';
 
 /// Startup recovery is discoverable before the workspace's reader is mounted.

@@ -15,7 +15,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../models/move_tree.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
-import '../../../core/move_navigation.dart';
+import '../../../chess_core/moves/move_navigation.dart';
 import '../../repertoires/models/repertoire_metadata.dart';
 import '../models/study_document.dart';
 import '../models/study_projection.dart';

@@ -3,7 +3,7 @@
 /// changes apart from cursor moves.  Screens scope their rebuilds on both.
 library;
 
-import '../support/repertoire_dependencies.dart';
+import '../../support/repertoire_dependencies.dart';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';

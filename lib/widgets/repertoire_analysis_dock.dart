@@ -8,7 +8,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../core/generation_session_controller.dart';
-import '../core/repertoire_controller.dart';
+import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/engine_settings.dart';
 import '../services/analysis_service.dart';

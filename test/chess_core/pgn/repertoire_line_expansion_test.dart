@@ -2,7 +2,7 @@
 /// builder's line list see what the deviation walker sees.
 library;
 
-import 'package:chess_auto_prep/services/repertoire_line_expansion.dart';
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_line_expansion.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 

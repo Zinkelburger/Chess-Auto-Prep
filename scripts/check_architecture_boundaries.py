@@ -9,6 +9,14 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTIVE = re.compile(r"^\s*(?:import|export)\s+['\"]([^'\"]+)['\"]", re.M)
 DEPENDENCIES = re.compile(r"^\s*(?:import|export|part)\s+([^;]+);", re.M)
+RETIRED_BUILDER_LIBRARIES = {
+    'lib/core/repertoire_controller.dart',
+    'lib/core/repertoire_writer.dart',
+    'lib/core/repertoire_authoring.dart',
+    'lib/core/move_navigation.dart',
+    'lib/services/repertoire_line_expansion.dart',
+    'lib/services/course_chapter_headers.dart',
+}
 
 
 def pure_dependency_violations(sources: dict[str, str], roots: list[str]) -> list[str]:
@@ -45,9 +53,11 @@ def violations(relative: str, source: str) -> list[str]:
     path = Path(relative)
     errors = []
     executable = re.sub(r'(?m)^\s*//.*$', '', source)
+    if relative in RETIRED_BUILDER_LIBRARIES:
+        errors.append(f'{relative}: retired Builder library; use the canonical feature/chess-core owner')
     if relative.startswith('lib/') and relative != 'lib/chess_core/pgn/pgn_parser.dart' and re.search(r'\bPgnGame\.parsePgn\s*\(', executable):
         errors.append(f'{relative}: single-game parsing must use chess_core/pgn/pgn_parser.dart')
-    if relative in ('lib/core/repertoire_controller.dart', 'lib/core/repertoire_writer.dart'):
+    if relative in ('lib/features/repertoires/controllers/repertoire_controller.dart', 'lib/features/repertoires/controllers/repertoire_writer.dart'):
         for uri in DIRECTIVE.findall(source):
             if uri.startswith(('dart:io', 'dart:isolate')) or any(part in uri for part in ('infrastructure/', 'services/storage/', 'repertoire_file_editor.dart')):
                 errors.append(f'{relative}: Builder document access must use injected contracts: {uri}')
@@ -107,6 +117,8 @@ def main() -> int:
         'lib/features/documents/controllers/viewer_filter_controller.dart',
         'lib/features/documents/controllers/viewer_presentation_controller.dart',
         'lib/features/documents/controllers/viewer_collection_controller.dart',
+        'lib/features/repertoires/controllers/repertoire_board_controller.dart',
+        'lib/features/repertoires/models/repertoire_authoring.dart',
         'lib/features/repertoires/models/loaded_repertoire.dart',
         'lib/features/repertoires/repositories/repertoire_decoder.dart',
         'lib/features/repertoires/repositories/repertoire_document_repository.dart',

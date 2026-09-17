@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 
 import '../../features/audit/controllers/audit_session_controller.dart';
 import '../../core/generation_session_controller.dart';
-import '../../core/repertoire_controller.dart';
+import '../../features/repertoires/controllers/repertoire_controller.dart';
 import '../../services/jobs/repertoire_job.dart';
 import '../../utils/app_messages.dart';
 import '../generation/snapshot_export_dialog.dart';

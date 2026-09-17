@@ -7,7 +7,7 @@
 /// the same way without parsing a move.
 library;
 
-import '../models/repertoire_line.dart' show isModelGameHeaders;
+import '../../models/repertoire_line.dart' show isModelGameHeaders;
 
 /// Headers a course export has been seen to carry its chapter titles in.
 const List<String> kChapterHeaderCandidates = ['White', 'Black', 'Event'];

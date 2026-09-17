@@ -8,20 +8,25 @@ library;
 
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:collection/collection.dart';
 
-import '../models/repertoire_line.dart';
-import '../chess_core/pgn/pgn_text.dart' as pgn;
-import '../chess_core/pgn/repertoire_line_ids.dart';
-import '../chess_core/pgn/repertoire_pgn_text.dart';
-import '../services/repertoire_service.dart';
-import '../utils/movetext_builder.dart';
+import '../../../models/repertoire_line.dart';
+import '../../../chess_core/pgn/pgn_text.dart' as pgn;
+import '../../../chess_core/pgn/repertoire_line_ids.dart';
+import '../../../chess_core/pgn/repertoire_pgn_text.dart';
+import '../../../chess_core/pgn/pgn_position_replay.dart';
+import '../../../utils/movetext_builder.dart';
 
 class RepertoireAuthoring {
-  final RepertoireService _service;
+  const RepertoireAuthoring();
 
-  RepertoireAuthoring([RepertoireService? service])
-    : _service = service ?? RepertoireService();
+  Position _startPosition(String pgn) {
+    try {
+      return startPositionFromGame(parsePgnGame(pgn));
+    } catch (_) {
+      return Chess.initial;
+    }
+  }
 
   /// Build a complete PGN game (headers + movetext) from [moveLines].
   /// Returns null when there are no moves.
@@ -74,7 +79,7 @@ class RepertoireAuthoring {
   /// Index of the line whose moves exactly equal [prefix], or null.
   int? findLineIndexForPrefix(List<RepertoireLine> lines, List<String> prefix) {
     for (int i = 0; i < lines.length; i++) {
-      if (listEquals(lines[i].moves, prefix)) return i;
+      if (const ListEquality<String>().equals(lines[i].moves, prefix)) return i;
     }
     return null;
   }
@@ -118,7 +123,7 @@ class RepertoireAuthoring {
       name: line.name,
       moves: [for (final node in mainline) node.san],
       color: line.color,
-      startPosition: _service.extractStartPositionFromPgn(newPgn),
+      startPosition: _startPosition(newPgn),
       fullPgn: newPgn,
       comments: comments,
       headers: Map<String, String>.from(parsed.headers),
@@ -151,9 +156,7 @@ class RepertoireAuthoring {
         : (moves.length >= 3
               ? 'Line: ${moves.take(3).join(' ')}'
               : 'Repertoire Line ${index + 1}');
-    final Position startPosition = _service.extractStartPositionFromPgn(
-      pgnContent,
-    );
+    final Position startPosition = _startPosition(pgnContent);
 
     return RepertoireLine(
       id: id,

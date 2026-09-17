@@ -1,6 +1,6 @@
 // MoveNavigation's shared helpers: resolving a SAN line to a tree path.
 
-import 'package:chess_auto_prep/core/move_navigation.dart';
+import 'package:chess_auto_prep/chess_core/moves/move_navigation.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:flutter_test/flutter_test.dart';

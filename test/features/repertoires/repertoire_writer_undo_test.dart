@@ -1,16 +1,17 @@
 import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
-import '../support/repertoire_dependencies.dart';
+import '../../support/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
 import 'dart:io';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
-import 'package:chess_auto_prep/core/repertoire_writer.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_writer.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 
 void main() {
   group('RepertoireWriter undo', () {
@@ -86,6 +87,21 @@ void main() {
       expect(writer.canUndo, isFalse);
       expect(await writer.undo(), isFalse);
     });
+
+    test(
+      'draft undo cannot restore into a newly adopted equal-looking board',
+      () async {
+        final persisted = await File(filePath).readAsString();
+        controller.loadMoveHistory(['e4', 'e5']);
+        controller.deleteAtPath(const TreePath([0, 0]));
+        controller.loadMoveHistory(['e4']);
+        final adopted = controller.tree;
+        await expectLater(writer.undo(), throwsStateError);
+        expect(controller.tree, same(adopted));
+        expect(controller.moveHistory, ['e4']);
+        expect(await File(filePath).readAsString(), persisted);
+      },
+    );
 
     test('duplicate add does not push undo entry', () async {
       controller.loadMoveHistory(['e4']);

@@ -1,11 +1,11 @@
 import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
-import '../support/repertoire_dependencies.dart';
+import '../../support/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
 import 'dart:async';
 import 'dart:io';
 
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';

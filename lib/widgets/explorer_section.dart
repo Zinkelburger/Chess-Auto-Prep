@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/browse/widgets/browse_panel.dart';
-import '../core/repertoire_controller.dart';
+import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';

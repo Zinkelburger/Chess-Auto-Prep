@@ -44,7 +44,7 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 
 **June 2026 remediation (7-phase refactor):** Repertoire metadata is typed (`RepertoireMetadata` replaces `Map<String, dynamic>`). `AppState` no longer tracks a global saved-games list. `RepertoireController` navigation funnels through `playMove` / `playMoveAtTreePath` (removed `userPlayedMove`, `_isInternalUpdate`). `GenerationSessionController.dispose()` stops an in-flight build. Lines browser uses typed `LineSortBy` / `LineMetricsFilter`, 300 ms search debounce, and lazy grouped `ListView.builder` rows. PGN editor memoizes move widgets and delegates clipboard/persist I/O to parent callbacks. Coherence FP-Growth runs in `Isolate.run`. `EngineLifecycle.enterGeneration` / `exitGeneration` are serialized via `_serialExec`. Startup failures surface via `runZonedGuarded` → `StartupErrorApp`; repertoire load failures via `RepertoireController.loadError`. Deleted unused `ease_calculator.dart`. New extractions: `GenerationConfigForm`, `RepertoireShortcuts`.
 
-**Repertoire navigation model:** `RepertoireController` privately owns a mutable `MoveTree` and a `TreePath` cursor. Its public `tree` is a cached immutable `MoveTreeSnapshot`; loading an annotated caller-owned tree adopts a detached copy with fresh node IDs. All navigation goes through `controller.jump(path)`. `controller.awaitLoaded()` returns a Future that completes when the current load finishes (Completer-based); used by `repertoire_screen` for deep-link line navigation and generation seeding instead of listener polling. The PGN editor (`InteractivePgnEditor`) is a pure view that receives `tree` + `currentPath` as props and fires `onJump` / `onCommentChanged` / `onDelete` / `onPromote` / `onMakeMainLine` callbacks. Clipboard writes wired in `EditMainZone` via `onCopyToClipboard`; debounced line saves use `onAutoSave` (falls back to `onLineEdited`) and optional `onDirty`. The "Save to Repertoire" button and `onLineSaved`/`onPersistNewLine` callbacks have been removed — lines are auto-saved. The editor's injected `snapshotForSave` supplier captures the owner's latest immutable revision synchronously after an edit, before the next widget rebuild. The supplier is scoped to the displayed tree identity; the pending save still captures its original content and destination before chapter changes.
+**Repertoire navigation model:** `RepertoireBoardController` in `features/repertoires/controllers/` privately owns the mutable `MoveTree`, cursor, cached position and immutable SAN/FEN paths. It has no Flutter or storage dependency. `RepertoireController` delegates board commands, synchronizes the opening graph, and publishes cursor versus structural notifications. The public `tree` is a cached immutable `MoveTreeSnapshot`; loading an annotated caller-owned tree adopts a detached copy with fresh node IDs. All navigation goes through `controller.jump(path)`. `controller.awaitLoaded()` returns a Future that completes when the current load finishes (Completer-based); used by `repertoire_screen` for deep-link line navigation and generation seeding instead of listener polling. The PGN editor (`InteractivePgnEditor`) is a pure view that receives `tree` + `currentPath` as props and fires `onJump` / `onCommentChanged` / `onDelete` / `onPromote` / `onMakeMainLine` callbacks. Clipboard writes wired in `EditMainZone` via `onCopyToClipboard`; debounced line saves use `onAutoSave` (falls back to `onLineEdited`) and optional `onDirty`. The "Save to Repertoire" button and `onLineSaved`/`onPersistNewLine` callbacks have been removed — lines are auto-saved. The editor's injected `snapshotForSave` supplier captures the owner's latest immutable revision synchronously after an edit, before the next widget rebuild. The supplier is scoped to the displayed tree identity; the pending save still captures its original content and destination before chapter changes.
 
 **Viewer game ownership:** `features/documents/controllers/viewer_game_controller.dart`
 privately owns the parsed game, mainline, variation forest and board cursor. Its
@@ -69,9 +69,12 @@ The shared annotation panel flushes pending prose before a glyph action emits a
 save. A same-target rebuild does not replace a pending draft just because focus
 has moved to a toolbar control.
 
-**PGN context menu (right-click):** Uses Flutter's built-in `showMenu` API (Overlay-based, avoids Stack/Positioned layout issues). Menu items: Add Comment (focuses comment TextField), Promote Variation (non-mainline only), Make Main Line (recursive promote to root, non-mainline only), Duplicate Line (copies full line to clipboard), Copy PGN from Here, View in Lines (existing-line only; switches to Lines tab), Delete from Here. When the context menu is open, all moves from root to the right-clicked position are highlighted (blueGrey background). Delete from Here records a draft-only undo via `RepertoireWriter.recordDraftUndo()`, making it reversible with Ctrl+Z without replacing the chapter on disk.
+**PGN context menu (right-click):** Uses Flutter's built-in `showMenu` API (Overlay-based, avoids Stack/Positioned layout issues). Menu items: Add Comment (focuses comment TextField), Promote Variation (non-mainline only), Make Main Line (recursive promote to root, non-mainline only), Duplicate Line (copies full line to clipboard), Copy PGN from Here, View in Lines (existing-line only; switches to Lines tab), Delete from Here. When the context menu is open, all moves from root to the right-clicked position are highlighted (blueGrey background). Delete from Here records a draft-only undo via `RepertoireWriter.recordDraftUndo()`, making it reversible with Ctrl+Z without replacing the chapter on disk. Its opaque board receipt validates both the adoption lifetime and expected movetext; adopting an equal-looking board cannot authorize restoring an old draft. Successive deletions remain undoable within their original lifetime.
 
-**Builder document boundary:** `RepertoireController` requires a
+**Builder document boundary:** `RepertoireController` and `RepertoireWriter` now
+live in `features/repertoires/controllers/`; their old `core/` libraries are
+removed. `RepertoireAuthoring` is a pure feature-model helper with no storage
+service construction. `RepertoireController` requires a
 `RepertoireDocumentRepository` and `RepertoireDecoder`; its writer receives the
 same repository. App startup supplies both through Provider, including the
 Trainer's board session. Screens and these hosts no longer resolve storage,
@@ -87,7 +90,7 @@ Linux uses the native store chosen at startup, including observed byte/file
 identity validation and retained history. Other hosts retain the legacy
 content-only adapter pending their platform gates. Repertoire text transforms,
 metadata headers, line IDs, document splitting and immutable append receipts
-have canonical libraries under `chess_core/pgn/`; the old service utility paths
+and course-header/variation-expansion helpers have canonical libraries under `chess_core/pgn/`; the old service utility paths
 are removed, with no re-export shims. Unmigrated callers of
 `RepertoireFileEditor` share those pure transforms but retain their existing I/O.
 
@@ -111,8 +114,8 @@ The import dialog keeps its draft on conflict/read/write failure. Missing
 destinations fail rather than reporting success. Undo still uses S0's
 decoded-content provenance and explicit exact-result reconciliation after an
 uncertain acknowledgement; persistent native undo receipts and Builder draft
-recovery are not complete. See `test/core/repertoire_mutation_safety_test.dart`,
-`test/core/repertoire_line_save_switch_test.dart` and
+recovery are not complete. See `test/features/repertoires/repertoire_mutation_safety_test.dart`,
+`test/features/repertoires/repertoire_line_save_switch_test.dart` and
 `test/infrastructure/repertoires/document_repertoire_repository_test.dart`.
 
 **Outline storage injection:** `RepertoireService(storage: ...)` routes file
@@ -963,7 +966,8 @@ line and annotations so Forward can continue through it.
 
 ```
 RepertoireScreen (composition root — wires controllers to widgets)
-  ├─ RepertoireController (MoveTree + TreePath cursor, opening tree, lines)
+  ├─ RepertoireController (document coordination, opening tree, lines)
+  │    └─ RepertoireBoardController (private MoveTree + cursor; pure Dart)
   ├─ RepertoireOutlineController (features/repertoire/controllers) — the repertoire folder as
   │     OutlineFolder/OutlineChapter/OutlineLine; every edit hits disk then rebuilds;
   │     fold state (expanded folders, unfolded chapters) lives in OutlineFoldState
@@ -1094,7 +1098,7 @@ RepertoireListBody (embedded inline or in RepertoireSelectionScreen)
   → RepertoireCatalogController → RepertoireCatalogRepository.listRepertoires()
   → injected legacy storage adapter → List<RepertoireMetadata>
   → user picks RepertoireMetadata → onSelected callback → setRepertoire / loadRepertoire
-  → RepertoireController (MoveTree + TreePath, OpeningTree, RepertoireLine list; loadError on failure)
+  → RepertoireController (pure board owner, OpeningTree, RepertoireLine list; loadError on failure)
   → InteractivePgnEditor (pure view: tree + path props, action callbacks; memoized move widgets; context-menu path highlighting)
   → EditMainZone (onAutoSave, onDirty, onCopyToClipboard, onViewInLines adapters)
   → OpeningTreeWidget (unchanged — read-only statistics tree)
@@ -1892,6 +1896,21 @@ Used by:
 | `engine_defaults.dart` | Defaults: interactive analysis depth (`kDefaultDepth` 15), **tree generation eval depth** (`kDefaultGenerationEvalDepth` 14), MultiPV | — |
 | `ui_breakpoints.dart` | Responsive layout width constants | — |
 
+### `lib/features/repertoires/` board/document owners
+
+| File | Responsibility |
+|------|----------------|
+| `controllers/repertoire_board_controller.dart` | Pure board, cursor, immutable projections, editing commands and adoption-bound draft undo receipts; no Flutter or I/O |
+| `controllers/repertoire_controller.dart` | Injected document/decoder coordination, selected line, opening-graph synchronization and Flutter notifications |
+| `controllers/repertoire_writer.dart` | Serialized append/undo with document preconditions and session guards |
+| `models/repertoire_authoring.dart` | Pure line construction/rebuilding, PGN numbering and prefix matching |
+
+Shared cursor navigation lives in `chess_core/moves/move_navigation.dart`.
+Course header interpretation and variation expansion live in `chess_core/pgn/`.
+The original libraries are retired, and tests mirror the new ownership paths.
+Full document-lifetime recovery, private opening-graph ownership and legacy
+screen migration remain pending.
+
 ### `lib/core/`
 
 | File | Purpose | Public API / state |
@@ -1906,7 +1925,6 @@ Used by:
 | `snapshot_exporter.dart` | Mid-run export of lines found so far to a new repertoire file | `export`, `nameSuggestion` |
 | `generation_session_types.dart` | `GenerationRequest` (+ `expectimaxProbe`, `resolveLinePrefix`), `GeneratedLineExport`, `TreeAnalysis`, `ExtractedLines`, `ExpectimaxProbeTarget` (+ `moves`, `probeConfig`, `movePvConfig`) | — |
 | `game_sorting.dart` | Comparators behind the PGN viewer's `GameSortMode`s | `sortGamesInPlace`, `compareGamesBy*` |
-| `move_navigation.dart` | `MoveNavigation` mixin (back/forward/start/end over `MoveTreeView` + `TreePath`) and `MoveTreeView.pathForSans` | `goBack`, `goForward`, `goToStart`, `goToEnd`, `pathForSans` |
 | `features/audit/controllers/audit_session_controller.dart` | **Audit session state** — owns `RepertoireAuditService` + result, live findings, progress, config, interrupted snapshot; handles persistence via `AuditPersistence`; `onLiveFinding` creates a new list on each addition (avoids stale-reference bugs in widget comparisons) | `pause`, `resume`, `cancel`, `saveProgress`, `tryRestore`, `launch`, `launchResume`, `startFresh`, `onAuditingChanged`, `onResultReady`, `onLiveFinding`, `onProgress` |
 | `features/coverage/controllers/coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
@@ -1916,8 +1934,6 @@ Used by:
 | `pgn/mainline_positions.dart` | Shared position replay memo over the owner's private mainline | The Viewer supplies the memo to movetext; standalone hosts use `ofSnapshots`. Annotation revisions do not replay SAN. |
 | `pgn/viewer_game_serializer.dart` | Mainline/sideline conversion for save and line export | Copies mainline annotations before synchronizing engine references; preserves variation starting comments before their move. |
 | `pgn/pgn_dummy_mainline.dart` | `promoteNullMoveDummyMainline` — splice a childless `Z0`/`--` dummy whose only sibling is the real lesson onto the mainline | used by the viewer, FEN index, and opening-tree walk |
-| `repertoire_controller.dart` | **Central repertoire session state**: owns `MoveTree` + `TreePath` cursor, `RepertoireMetadata? currentRepertoire`, lines, opening tree. Single navigation entry point `jump(path)`. Surfaces load failures via `loadError`. Move entry via `playMove` (replaces removed `userPlayedMove` / `_isInternalUpdate`). Opening-tree clicks call `playMove` so a transposing SAN keeps the board's move order. `deleteAtPath` pushes undo snapshot before deleting. | `jump`, `playMove`, `playMoveAtTreePath`, `userSelectedTreeMove` (opening-tree clicks), `goBack`/`goForward`/`goToStart`/`goToEnd`, `loadMoveSequence`, `navigateToLineMove`, `deleteAtPath`, `promoteVariation`, `makeMainLine`, `setCommentAtPath`, `deleteLine`, `setRepertoire`/`loadRepertoire` |
-| `repertoire_writer.dart` | Serialised PGN mutations + undo stack | `addMoveAtPosition`, `acceptSuggestion`, `pushUndo`, `undo`, `canUndo` |
 
 ### `lib/models/`
 
@@ -1933,7 +1949,7 @@ Used by:
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
 | `board_display_settings.dart` | `BoardDisplaySettings` — global board and move preferences: `BoardCoordinates` (none / inside / outside / every square) `PieceNotation` (letters / figurines), and opt-in legal-move dots (off by default; explicit feature hints such as bughouse drop targets remain available). Persisted; reached through `BoardDisplaySettings.of(context)`, which rebuilds the caller when a `DisplaySettingsScope` (planted above `MaterialApp`) is present and falls back to the singleton in bare widget tests |
 | `explorer_response.dart` | Opening explorer answer shape: `LichessDatabase` (which database is being asked), moves with counts, plus the games a source lists for the position (`ExplorerGame`, tagged with the `ExplorerGameSource` it can be fetched from — Lichess, masters or the local TWIC database) |
-| `move_tree.dart` | Editable PGN move tree (`MoveNode`, `MoveTree`). FEN cached per node; Iterative fresh-ID adoption copies NAG lists and preserves cached positions. Cursor and read contracts live in `chess_core/moves/`. PGN parsing delegates to `move_tree_pgn.dart`; writing uses `chess_core/pgn/move_text_writer.dart`. Used by `RepertoireController` as the single source of truth for the move cursor. |
+| `move_tree.dart` | Editable PGN move tree (`MoveNode`, `MoveTree`). FEN cached per node; Iterative fresh-ID adoption copies NAG lists and preserves cached positions. Cursor and read contracts live in `chess_core/moves/`. PGN parsing delegates to `move_tree_pgn.dart`; writing uses `chess_core/pgn/move_text_writer.dart`. Privately owned by `RepertoireBoardController` for Builder navigation and edits. |
 | `move_tree_pgn.dart` | `MoveTreePgnCodec` — iterative dartchess game-tree replay → editable `MoveNode`s, preserving variations, starting comments and NAGs |
 | `legal_destination_cache.dart` | `LegalDestinationCache` — bounded LRU of legal moves and their destination FENs per position, behind the opening tree's one-ply transposition scan |
 | `opening_tree_transfer.dart` | `OpeningTreeTransfer` — flat id-keyed encoding of an `OpeningTree` for isolate transfer (`toTransferJson` / `fromTransferJson` delegate here) |
@@ -2526,15 +2542,15 @@ release smoke testing. No release or update is triggered by these tests.
 |-----------|----------|
 | `test/core/board_preview_controller_test.dart` | Preview debounce, clear |
 | `test/core/generation_session_controller_test.dart` | Engine-free surface of `GenerationSessionController`: initial state, `onTreeBuilt`/`clearTree` bundle lifecycle, resume-mismatch refusal, `GenerationProgress` throttling, idle guards, dispose safety |
-| `test/core/repertoire_controller_test.dart` | Controller navigation (tree-path model), line sync, invariants |
+| `test/features/repertoires/repertoire_controller_test.dart` | Controller navigation (tree-path model), line sync, invariants |
 | `test/core/viewer_opening_tree_test.dart` | PGN-viewer opening tree: re-enter restores the tree line after a game remount; first open syncs to current FEN; app-bar back only after a games-at-position click |
 | `test/features/documents/controllers/viewer_game_controller_test.dart` | Viewer load/nav; Chessable dummy intro promoted onto the mainline |
 | `test/core/pgn/pgn_dummy_mainline_test.dart` | `promoteNullMoveDummyMainline` splice + idempotence |
 | `test/core/pgn/pgn_variation_extractor_test.dart` | Sideline extraction including Z0 passes (without dummy promotion) |
 | `test/core/pgn_viewer_controller_test.dart` | Game index nav, close-file reset, tree-landing FEN cleared on nextGame |
 | `test/models/move_tree_test.dart` | MoveTree: parse PGN, round-trip, addMove, navigation, variations, TreePath equality |
-| `test/core/repertoire_writer_test.dart` | Add move, PGN append |
-| `test/core/repertoire_writer_undo_test.dart` | Undo stack |
+| `test/features/repertoires/repertoire_writer_test.dart` | Add move, PGN append |
+| `test/features/repertoires/repertoire_writer_undo_test.dart` | Undo stack |
 | `test/features/browse/candidate_service_test.dart` | Candidate merge/sort |
 | `test/features/coverage/coverage_suggestion_service_test.dart` | Suggestions, coherence bonus |
 | `test/features/coverage/coverage_result_test.dart` | `CoverageResult.findNextGap` / `findBiggestGap` gap ordering |

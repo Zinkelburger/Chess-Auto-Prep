@@ -3,7 +3,7 @@ library;
 
 import '../models/pgn_game_entry.dart';
 import '../models/repertoire_line.dart' show isModelGameHeaders;
-import '../services/course_chapter_headers.dart';
+import '../chess_core/pgn/course_chapter_headers.dart';
 
 class GameNavItem {
   static final _chapterCache = Expando<_ChapterDetection>();

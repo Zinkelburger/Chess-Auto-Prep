@@ -1,37 +1,33 @@
 /// Centralized repertoire session state shared across board, PGN, engine, and tree.
 ///
-/// Owns a [MoveTree] and a [TreePath] cursor as the single source of truth.
-/// All UI components derive their chess position from this class.
-/// Navigation funnels through [jump] — there is no secondary state to sync.
+/// Coordinates document loading/writing with a pure [RepertoireBoardController].
+/// UI components read immutable board projections through this notifier.
 library;
-
-import 'package:chess_auto_prep/chess_core/pgn/repertoire_headers.dart';
-import 'package:chess_auto_prep/features/repertoires/models/loaded_repertoire.dart';
 
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../constants/chess_constants.dart';
-import '../models/move_tree.dart';
-import '../chess_core/moves/move_tree_projection_cache.dart';
-import '../chess_core/moves/move_tree_snapshot.dart';
-import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
-import '../models/opening_tree.dart';
-import '../models/repertoire_line.dart';
-import '../features/repertoires/models/repertoire_metadata.dart';
-import '../services/repertoire_line_expansion.dart';
-import '../chess_core/pgn/repertoire_pgn_text.dart';
-import '../features/repertoires/repositories/repertoire_document_repository.dart';
-import '../features/repertoires/repositories/repertoire_decoder.dart';
-import '../utils/fen_utils.dart';
-import '../utils/san_token_utils.dart';
-import 'move_navigation.dart';
-import 'repertoire_authoring.dart';
+import '../../../chess_core/moves/move_navigation.dart';
+import '../../../chess_core/moves/move_tree_snapshot.dart';
+import '../../../chess_core/moves/tree_path.dart';
+import '../../../chess_core/pgn/repertoire_headers.dart';
+import '../../../chess_core/pgn/repertoire_line_expansion.dart';
+import '../../../chess_core/pgn/repertoire_pgn_text.dart';
+import '../../../constants/chess_constants.dart';
+import '../../../models/move_tree.dart';
+import '../../../models/opening_tree.dart';
+import '../../../models/repertoire_line.dart';
+import '../../../utils/safe_change_notifier.dart';
+import '../../../utils/san_token_utils.dart';
+import '../models/loaded_repertoire.dart';
+import '../models/repertoire_authoring.dart';
+import '../models/repertoire_metadata.dart';
+import '../repositories/repertoire_decoder.dart';
+import '../repositories/repertoire_document_repository.dart';
+import 'repertoire_board_controller.dart';
 import 'repertoire_writer.dart';
-import '../utils/safe_change_notifier.dart';
-import '../utils/chess_utils.dart';
 
 /// Manages repertoire state and acts as the single source of truth.
 /// All UI components should derive their chess position from this class.
@@ -47,7 +43,7 @@ class RepertoireController
   );
 
   /// Pure PGN-authoring collaborator (game/line construction).
-  final RepertoireAuthoring _authoring = RepertoireAuthoring();
+  final RepertoireAuthoring _authoring = const RepertoireAuthoring();
 
   RepertoireMetadata? _currentRepertoire;
   RepertoireMetadata? get currentRepertoire => _currentRepertoire;
@@ -90,475 +86,154 @@ class RepertoireController
   String _rootMoves = '';
   String get rootMoves => _rootMoves;
 
-  // ── Tree + path (single source of truth) ─────────────────────────
-
-  /// The mutable draft is private; widgets only receive detached values.
-  MoveTree _tree = MoveTree();
-  final _treeProjection = MoveTreeProjectionCache();
+  final RepertoireBoardController _board = RepertoireBoardController();
   @override
-  MoveTreeSnapshot get tree => _treeProjection.read(_tree);
-
-  TreePath _cursor = TreePath.empty;
-
-  /// The nodes from the root to the cursor, refreshed with every cursor
-  /// assignment.  Everything derived from the cursor — the SAN history, the
-  /// FENs, the position — reads off this list, so a navigation costs one
-  /// O(depth) pointer walk and every later read is free.
-  List<MoveNode> _cursorNodes = const [];
-
-  /// SAN history at the cursor.  Unmodifiable and identity-stable between
-  /// cursor moves, so a widget can compare it by identity in
-  /// `didUpdateWidget` and rebuild its derived state only when the cursor
-  /// actually moved — the way lichess-mobile hands its UI immutable
-  /// snapshots rather than fresh lists on every read.
-  List<String> _moveHistory = const [];
-
-  /// Cursor into [_tree].  Empty = starting position.
-  ///
-  /// Assigning this always re-syncs [_openingTree], so no caller can move the
-  /// cursor and leave the opening-tree view pointing somewhere else.  Every
-  /// assignment below sets [_tree] first, which the sync reads.
-  TreePath get _path => _cursor;
-  set _path(TreePath value) {
-    _cursor = value;
-    _cursorNodes = _tree.nodeListAt(value);
-    _moveHistory = List.unmodifiable([for (final n in _cursorNodes) n.san]);
-    _syncOpeningTree();
-  }
-
+  MoveTreeSnapshot get tree => _board.tree;
   @override
-  TreePath get path => _cursor;
-
-  // ── Derived state (backward-compatible getters) ──────────────────
-
-  /// SAN sequence from root to cursor.  See [_moveHistory] for why this is
-  /// one stable list rather than a fresh copy per read.
-  List<String> get moveHistory => _moveHistory;
-
-  /// Alias — always identical to [moveHistory] now.
+  TreePath get path => _board.path;
+  List<String> get moveHistory => _board.moveHistory;
   List<String> get currentMoveSequence => moveHistory;
-
-  /// Ply index (replaces old _currentMoveIndex).
-  int get currentMoveIndex => _path.length - 1;
-
-  /// Board FEN at cursor.  O(1) — stored on each [MoveNode].
-  String get fen =>
-      _cursorNodes.isEmpty ? _tree.startingFen : _cursorNodes.last.fen;
-
-  /// Position at the cursor.  Read off the node, which parses its FEN at
-  /// most once; never re-parsed per read.
-  Position get position => _cursorNodes.isEmpty
-      ? _tree.startingPosition
-      : _cursorNodes.last.position;
-
-  /// From/to squares of the last [lastN] half-moves at the cursor — the
-  /// recent-move trail for [ChessBoardWidget]. Empty at the starting
-  /// position. Defaults to the single move that produced the position; the
-  /// trainer asks for 2 so your move and the reply are both marked.
-  Set<String> recentMoveTrail({int lastN = 1}) {
-    final len = _path.length;
-    if (len == 0) return const {};
-    final baseIdx = len > lastN ? len - lastN : 0;
-    final base = baseIdx == 0
-        ? _tree.startingPosition
-        : _cursorNodes[baseIdx - 1].position;
-    return recentMoveTrailSquares(
-      base,
-      _moveHistory.sublist(baseIdx),
-      lastN: lastN,
-    );
-  }
-
-  /// Starting FEN if different from standard position.
-  String? get startingFen {
-    final f = _tree.startingFen;
-    return f == kStandardStartFen ? null : f;
-  }
-
-  /// SAN moves of the saved root position (empty when no root is saved).
+  int get currentMoveIndex => _board.currentMoveIndex;
+  String get fen => _board.fen;
+  Position get position => _board.position;
+  String? get startingFen => _board.startingFen;
   List<String> get rootMoveSans => cleanSanTokens(_rootMoves);
+  String get rootFen => _board.rootFen(_rootMoves);
+  bool get isAtRootPosition => _board.isAtRootPosition(_rootMoves);
+  Set<String> recentMoveTrail({int lastN = 1}) =>
+      _board.recentMoveTrail(lastN: lastN);
 
-  /// FEN of the saved root position — the tree's starting position when no
-  /// root is saved.  Replayed once per (root moves, starting FEN) pair; it is
-  /// read on every rebuild through [isAtRootPosition].
-  String get rootFen {
-    final cached = _rootFen;
-    if (cached != null &&
-        cached.rootMoves == _rootMoves &&
-        cached.startingFen == _tree.startingFen) {
-      return cached.fen;
-    }
-    var pos = _tree.startingPosition;
-    for (final san in rootMoveSans) {
-      final next = playSanOrNullMove(pos, san);
-      if (next == null) break;
-      pos = next;
-    }
-    final fen = pos.fen;
-    _rootFen = (
-      rootMoves: _rootMoves,
-      startingFen: _tree.startingFen,
-      fen: fen,
-    );
-    return fen;
-  }
-
-  ({String rootMoves, String startingFen, String fen})? _rootFen;
-
-  /// Whether the cursor currently sits on the saved root position
-  /// (move counters ignored, so transpositions count).
-  bool get isAtRootPosition => normalizeFen(fen) == normalizeFen(rootFen);
-
-  // ── Navigation (single entry point) ──────────────────────────────
-
-  /// Jump the cursor to [target].  All navigation funnels here.
-  /// (goBack / goForward / goToStart / goToEnd come from [MoveNavigation].)
-  @override
-  void jump(TreePath target) {
-    if (_path == target) return;
-    if (!_tree.isValidPath(target)) return;
-    _path = target;
-    // A pure cursor move: listeners that only care about structure can
-    // compare [structureVersion] and skip their rebuild.
-    notifyListeners();
-  }
-
-  // ── Change classification ────────────────────────────────────────
-
-  /// Bumped by every notification that is *not* a pure cursor move: a load,
-  /// a tree replacement, an edit, a lines change, a loading-state flip.
-  ///
-  /// The screen rebuilds wholesale only when this changes; a cursor move
-  /// reaches the zones that show the position through their own listeners.
-  /// That is what keeps arrow-key navigation from rebuilding the toolbar,
-  /// the bottom pane and everything else that does not show the board.
-  int get structureVersion => _structureVersion;
   int _structureVersion = 0;
-
+  int get structureVersion => _structureVersion;
   void _notifyStructureChanged() {
     _structureVersion++;
     notifyListeners();
   }
 
-  // ── Move entry ───────────────────────────────────────────────────
-
-  /// Play a move from the current cursor position.
-  ///
-  /// If the SAN already exists as a child, jumps to it (no duplicate).
-  /// Otherwise adds a new node and jumps.  Replaces the old
-  /// the old `userPlayedMove*` wrappers and most uses of
-  /// `userSelectedTreeMove`.
-  void playMove(String sanMove) => playMoveAtTreePath(_path, sanMove);
-
-  /// Play a move from an explicit tree position (for opening-tree clicks
-  /// where the base is the tree widget's current node, not the controller
-  /// cursor).  Equivalent to old `userSelectedTreeMove`.
-  void playMoveAtTreePath(TreePath basePath, String sanMove) {
-    final versionBefore = _tree.version;
-    _treeProjection.changed(_tree, path: basePath);
-    final newPath = _tree.addMove(basePath, sanMove);
-    if (newPath == null) return;
-    if (_tree.version == versionBefore) {
-      jump(newPath); // An existing move: a pure cursor move.
-      return;
-    }
-    _path = newPath;
-    _notifyStructureChanged();
-  }
-
-  /// Called when user selects a move in the opening tree.
-  ///
-  /// Plays from the repertoire cursor (the board), not the opening-tree
-  /// node's book path, so a one-ply transposition keeps the user's move
-  /// order (1.d4 c5 2.e3 Nf6 rather than jumping to 1.d4 Nf6 2.e3 c5).
-  void userSelectedTreeMove(String sanMove) {
-    playMove(sanMove);
-  }
-
-  /// Atomically navigate to a specific position within a line.
-  void navigateToLineMove(List<String> fullPath, {int? targetIndex}) {
-    final versionBefore = _tree.version;
-    _ensureMovesInTree(fullPath);
-    final tp = _pathForMoveSequence(fullPath);
-    final target =
-        targetIndex != null && targetIndex >= 0 && targetIndex < tp.length
-        ? tp.take(targetIndex + 1)
-        : tp;
-    _jumpAfterLineEntry(target, versionBefore);
-  }
-
-  /// Append [lineMoves] from the current position and jump to [lineMoveIndex].
-  void applyLineFromCurrent(List<String> lineMoves, int lineMoveIndex) {
-    if (lineMoves.isEmpty) return;
-    final base = currentMoveSequence;
-    final full = [...base, ...lineMoves];
-    final versionBefore = _tree.version;
-    _ensureMovesInTree(full);
-    final clamped = lineMoveIndex.clamp(0, lineMoves.length - 1);
-    final tp = _pathForMoveSequence(full);
-    _jumpAfterLineEntry(tp.take(base.length + clamped + 1), versionBefore);
-  }
-
-  void _jumpAfterLineEntry(TreePath target, int versionBefore) {
-    if (_tree.version == versionBefore) {
-      jump(target);
-    } else {
-      _path = target;
+  /// The pure owner finishes the command before the host exposes its state.
+  void _changeBoard(void Function() action) {
+    final revision = _board.revision;
+    final structure = _board.structureVersion;
+    action();
+    if (_board.revision == revision) return;
+    _syncOpeningTree();
+    if (_board.structureVersion != structure) {
       _notifyStructureChanged();
+    } else {
+      notifyListeners();
     }
   }
 
-  /// Jump to a specific move index in the history.
-  void jumpToMoveIndex(int index) {
-    if (index < -1) return;
-    if (index == -1) {
-      jump(TreePath.empty);
-      return;
-    }
-    final clamped = index.clamp(0, _path.length - 1);
-    jump(_path.take(clamped + 1));
-  }
+  void _syncOpeningTree() =>
+      _openingTree?.syncToFens(_board.moveHistory, _board.cursorFens);
 
-  // ── Line / sequence loading ──────────────────────────────────────
+  @override
+  void jump(TreePath target) => _changeBoard(() => _board.jump(target));
+  void playMove(String san) => _changeBoard(() => _board.playMove(san));
+  void playMoveAtTreePath(TreePath path, String san) =>
+      _changeBoard(() => _board.playMoveAtTreePath(path, san));
+  void userSelectedTreeMove(String san) => playMove(san);
+  void navigateToLineMove(List<String> moves, {int? targetIndex}) =>
+      _changeBoard(
+        () => _board.navigateToLineMove(moves, targetIndex: targetIndex),
+      );
+  void applyLineFromCurrent(List<String> moves, int index) =>
+      _changeBoard(() => _board.applyLineFromCurrent(moves, index));
+  void jumpToMoveIndex(int index) =>
+      _changeBoard(() => _board.jumpToMoveIndex(index));
 
-  /// Replace current history with provided moves.
   void loadMoveHistory(List<String> moves) {
     _annotatedLineLabel = null;
-    _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
-    _path = _tree.mainlineEndFrom(TreePath.empty);
-    _notifyStructureChanged();
+    _changeBoard(() => _board.loadMoveHistory(moves));
   }
 
-  /// Clear the current line.
   void clearMoveHistory() {
     _annotatedLineLabel = null;
-    _tree = MoveTree(startingFen: _tree.startingFen);
-    _path = TreePath.empty;
-    _notifyStructureChanged();
+    _changeBoard(_board.clearMoveHistory);
   }
 
-  /// Set the board position from a FEN string.
   bool setPositionFromFen(String fen) {
-    try {
-      final trimmedFen = fen.trim();
-      if (trimmedFen.isEmpty) return false;
-      Chess.fromSetup(Setup.parseFen(trimmedFen));
-
-      _tree = MoveTree(startingFen: trimmedFen);
-      _path = TreePath.empty;
-      _selectedPgnLine = null;
-      _annotatedLineLabel = null;
-      _notifyStructureChanged();
-      return true;
-    } catch (e) {
-      debugPrint('Invalid FEN: $e');
-      return false;
-    }
+    var accepted = false;
+    _changeBoard(() {
+      accepted = _board.setPositionFromFen(fen);
+      if (accepted) {
+        _selectedPgnLine = null;
+        _annotatedLineLabel = null;
+      }
+    });
+    return accepted;
   }
 
-  /// Set the position from a move path, preserving history for PGN/tree sync.
   bool setPositionFromMoveHistory({
     required String fen,
     required List<String> moves,
     String? startingFen,
   }) {
-    try {
-      final trimmedFen = fen.trim();
-      if (trimmedFen.isEmpty) return false;
-      Chess.fromSetup(Setup.parseFen(trimmedFen));
-
-      final effStart = _normalizeStartingFen(startingFen) ?? kStandardStartFen;
-      _tree = MoveTree.fromMoves(moves, startingFen: effStart);
-      _path = _tree.mainlineEndFrom(TreePath.empty);
-      _selectedPgnLine = null;
-      _annotatedLineLabel = null;
-      _notifyStructureChanged();
-      return true;
-    } catch (e) {
-      debugPrint('Invalid move-history position: $e');
-      return false;
-    }
+    var accepted = false;
+    _changeBoard(() {
+      accepted = _board.setPositionFromMoveHistory(
+        fen: fen,
+        moves: moves,
+        startingFen: startingFen,
+      );
+      if (accepted) {
+        _selectedPgnLine = null;
+        _annotatedLineLabel = null;
+      }
+    });
+    return accepted;
   }
 
-  /// Loads a specific PGN line for editing.
   void loadPgnLine(RepertoireLine line) {
     _selectedPgnLine = line;
     _annotatedLineLabel = null;
-    // Build from the full PGN so comments and variations survive — the same
-    // comment-aware path the PGN viewer uses. Fall back to the flat SAN list
-    // for lines that have no PGN text (e.g. synthesized suggestions).
-    _tree = line.fullPgn.trim().isNotEmpty
-        ? MoveTree.fromPgn(line.fullPgn, startingFen: line.startPosition.fen)
-        : MoveTree.fromMoves(line.moves, startingFen: _tree.startingFen);
-    _path = _tree.mainlineEndFrom(TreePath.empty);
-    _notifyStructureChanged();
+    _changeBoard(() => _board.loadPgnLine(line));
   }
 
-  /// Load a raw move sequence onto the board.
   void loadMoveSequence(List<String> moves) {
     _selectedPgnLine = null;
     _annotatedLineLabel = null;
-    _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
-    _path = _tree.mainlineEndFrom(TreePath.empty);
-    _notifyStructureChanged();
+    _changeBoard(() => _board.loadMoveSequence(moves));
   }
 
-  /// Human-readable label for the loaded annotated line (e.g. "Trap #45").
-  /// Null whenever the tree came from a repertoire line or free navigation.
   String? _annotatedLineLabel;
   String? get annotatedLineLabel => _annotatedLineLabel;
-
-  /// Load a pre-built tree (e.g. an annotated trap line) and place the
-  /// cursor at [cursor], falling back to the mainline end when invalid.
-  /// [label] is surfaced as the PGN pane title while the tree is shown.
-  /// Adoption detaches all mutable nodes/lists from the caller.
   void loadAnnotatedTree(MoveTree tree, {TreePath? cursor, String? label}) {
     _selectedPgnLine = null;
     _annotatedLineLabel = label;
-    _tree = tree.copyWithFreshIds();
-    _path = cursor != null && _tree.isValidPath(cursor)
-        ? cursor
-        : _tree.mainlineEndFrom(TreePath.empty);
-    _notifyStructureChanged();
+    _changeBoard(() => _board.loadAnnotatedTree(tree, cursor: cursor));
   }
 
-  /// Syncs the game state from the PGN editor (still needed during transition).
-  void syncFromMoveIndex(int moveIndex, List<String> moves) {
-    _ensureMovesInTree(moves);
-    final tp = _pathForMoveSequence(moves);
-    final target = moveIndex < 0
-        ? TreePath.empty
-        : tp.take((moveIndex + 1).clamp(0, tp.length));
-    _path = target;
-    _notifyStructureChanged();
-  }
+  void syncFromMoveIndex(int index, List<String> moves) =>
+      _changeBoard(() => _board.syncFromMoveIndex(index, moves));
 
-  // ── Tree mutation (for PGN editor actions) ───────────────────────
-
-  /// Delete the subtree at [path] and adjust cursor.
-  /// Records a draft-only undo; this action does not write the chapter file.
   void deleteAtPath(TreePath target) {
-    if (!_tree.isValidPath(target)) return;
-
-    final before = _tree.toPgnMoveText();
-    final startingFen = _tree.startingFen;
-    final oldCursor = _path;
     final generation = _loadGeneration;
-    final newCursor = target.parent;
-    _treeProjection.changed(_tree, path: target.parent);
-    _tree.deleteAt(target);
-    _path = _tree.isValidPath(newCursor) ? newCursor : TreePath.empty;
-    final after = _tree.toPgnMoveText();
-    writer.recordDraftUndo(
-      isCurrent: () =>
-          _loadGeneration == generation && _tree.toPgnMoveText() == after,
-      restore: () {
-        _tree = MoveTree.fromPgn(before, startingFen: startingFen);
-        _path = _tree.isValidPath(oldCursor) ? oldCursor : TreePath.empty;
-        _notifyStructureChanged();
-      },
-    );
-    _notifyStructureChanged();
+    _changeBoard(() {
+      final edit = _board.deleteAtPath(target);
+      if (edit == null) return;
+      writer.recordDraftUndo(
+        isCurrent: () =>
+            _loadGeneration == generation && _board.canRestore(edit),
+        restore: () => _changeBoard(() {
+          _board.restore(edit);
+        }),
+      );
+    });
   }
 
-  /// Promote variation at [target] to mainline.
-  ///
-  /// Promotion reorders a sibling group, so *every* index-based path into that
-  /// group stops meaning what it meant — not just [target]'s.  A cursor parked
-  /// on an earlier sibling would silently come to point at a different move.
-  /// Remember the cursor as a move sequence and re-resolve it afterwards,
-  /// which is stable under any reordering.
-  void promoteVariation(TreePath target) {
-    final cursorSans = _tree.sanSequenceAt(_path);
-    _treeProjection.changed(_tree, path: target.parent);
-    _tree.promoteVariation(target);
-    _path = _pathForMoveSequence(cursorSans);
-    _notifyStructureChanged();
-  }
+  void promoteVariation(TreePath target) =>
+      _changeBoard(() => _board.promoteVariation(target));
+  void makeMainLine(TreePath target) =>
+      _changeBoard(() => _board.makeMainLine(target));
+  void setCommentAtPath(TreePath target, String? comment) =>
+      _changeBoard(() => _board.setCommentAtPath(target, comment));
+  void toggleNagAtPath(TreePath target, int nag) =>
+      _changeBoard(() => _board.toggleNagAtPath(target, nag));
 
-  /// Recursively promote a variation so it becomes the main line
-  /// from the root down to [target].
-  void makeMainLine(TreePath target) {
-    if (target.isEmpty) return;
-    final indices = target.toList();
-    for (int depth = 0; depth < indices.length; depth++) {
-      if (indices[depth] != 0) {
-        final pathAtDepth = TreePath(indices.sublist(0, depth + 1));
-        _treeProjection.changed(_tree, path: pathAtDepth.parent);
-        _tree.promoteVariation(pathAtDepth);
-        indices[depth] = 0;
-      }
-    }
-    _path = _pathForMoveSequence(moveHistory);
-    _notifyStructureChanged();
-  }
-
-  /// Update comment on the node at [target].
-  void setCommentAtPath(TreePath target, String? comment) {
-    _treeProjection.changed(_tree, path: target);
-    _tree.setComment(target, comment);
-    _notifyStructureChanged();
-  }
-
-  /// Toggle a move-quality NAG glyph on the node at [target].
-  void toggleNagAtPath(TreePath target, int nagId) {
-    _treeProjection.changed(_tree, path: target);
-    _tree.toggleNag(target, nagId);
-    _notifyStructureChanged();
-  }
-
-  // ── Private helpers ──────────────────────────────────────────────
-
-  String? _normalizeStartingFen(String? fen) {
-    final trimmedFen = fen?.trim();
-    if (trimmedFen == null ||
-        trimmedFen.isEmpty ||
-        trimmedFen == kStandardStartFen) {
-      return null;
-    }
-    return trimmedFen;
-  }
-
-  /// Sync the opening tree to match the cursor.
-  ///
-  /// Every node on the path already holds its FEN, so the tree cursor is
-  /// placed by FEN lookup rather than by replaying the line through
-  /// dartchess on every jump.
-  void _syncOpeningTree() {
-    final tree = _openingTree;
-    if (tree == null) return;
-    tree.syncToFens(_moveHistory, [for (final n in _cursorNodes) n.fen]);
-  }
-
-  /// Ensure a SAN sequence exists in the tree (adding nodes as needed).
-  void _ensureMovesInTree(List<String> moves) {
-    _treeProjection.changed(_tree, path: _tree.pathForSans(moves));
-    var parentPath = TreePath.empty;
-    for (final san in moves) {
-      final result = _tree.addMove(parentPath, san);
-      if (result == null) break;
-      parentPath = result;
-    }
-  }
-
-  /// Get the TreePath for a SAN sequence, assuming it exists in the tree.
-  TreePath _pathForMoveSequence(List<String> moves) => _tree.pathForSans(moves);
-
-  /// If a root position is set, navigate to it so the tree starts there.
   void _navigateToRootPosition() {
-    // A newly loaded repertoire always starts with fresh navigation state.
-    // Without this reset, a repertoire that omits a Root comment inherits the
-    // move path from whichever repertoire was loaded previously.
-    //
-    // Undo goes through here too, and resets the cursor on purpose: a restored
-    // snapshot can hold entirely different lines from the ones on screen, so
-    // the path the user was on may no longer mean anything. Both cases are
-    // covered by tests in test/core/repertoire_controller_test.dart.
-    _path = TreePath.empty;
-    final sanMoves = rootMoveSans;
-    if (sanMoves.isEmpty) return;
-    _ensureMovesInTree(sanMoves);
-    _path = _pathForMoveSequence(sanMoves);
+    _board.navigateToRootPosition(_rootMoves);
+    _syncOpeningTree();
   }
 
   /// The loaded repertoire's file, or null when there is no repertoire or
@@ -572,8 +247,8 @@ class RepertoireController
   void _clearSelectionAndTree() {
     _selectedPgnLine = null;
     _annotatedLineLabel = null;
-    _tree = MoveTree(startingFen: _tree.startingFen);
-    _path = TreePath.empty;
+    _board.clearMoveHistory();
+    _syncOpeningTree();
   }
 
   // ── PGN line management ──────────────────────────────────────────
@@ -654,8 +329,7 @@ class RepertoireController
     _lineSaveTail,
     _lineSaveFailure,
     _pendingLineSave,
-    _treeProjection.sessionFor(_tree),
-    _tree.version,
+    _board.closeRevision,
   );
 
   Future<void> _flushPendingLineSaves({bool retainFailure = false}) async {
@@ -1000,8 +674,8 @@ class RepertoireController
 
   /// Drop the editable move tree and park the cursor at the start.
   void _resetTree() {
-    _tree = MoveTree();
-    _path = TreePath.empty;
+    _board.reset();
+    _syncOpeningTree();
   }
 
   /// Writes the color header to the PGN file and reloads.
@@ -1033,7 +707,7 @@ class RepertoireController
 
     final moveText = _authoring.numberedMovetext(
       currentMoveSequence,
-      startingFen: _tree.startingFen,
+      startingFen: startingFen ?? kStandardStartFen,
     );
     final existing = (await documents.read(filePath)).pgn;
     if (existing == null) {

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../core/repertoire_controller.dart';
+import '../../features/repertoires/controllers/repertoire_controller.dart';
 import '../../models/line_status.dart';
 import '../../models/repertoire_line.dart';
 import '../../features/repertoires/models/repertoire_metadata.dart';

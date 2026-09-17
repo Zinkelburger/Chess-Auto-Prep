@@ -14,7 +14,7 @@ import 'dart:io';
 
 import '../features/repertoire/services/chapter_splitter.dart';
 import '../chess_core/pgn/pgn_text.dart' as pgn;
-import 'repertoire_line_expansion.dart';
+import '../chess_core/pgn/repertoire_line_expansion.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
 import 'storage/io_storage_service.dart';

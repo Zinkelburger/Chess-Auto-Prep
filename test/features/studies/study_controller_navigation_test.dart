@@ -1,5 +1,5 @@
 import '../../support/study_fixture.dart';
-import 'package:chess_auto_prep/core/move_navigation.dart';
+import 'package:chess_auto_prep/chess_core/moves/move_navigation.dart';
 import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:flutter_test/flutter_test.dart';

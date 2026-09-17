@@ -1,11 +1,11 @@
-import '../support/repertoire_dependencies.dart';
+import '../../support/repertoire_dependencies.dart';
 import 'dart:io';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
-import 'package:chess_auto_prep/core/repertoire_writer.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_writer.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 

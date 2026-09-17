@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';

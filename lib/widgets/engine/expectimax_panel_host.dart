@@ -12,7 +12,7 @@ import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../constants/chess_constants.dart';
 import '../../core/generation_session_controller.dart';
 import '../../core/generation_session_types.dart';
-import '../../core/repertoire_controller.dart';
+import '../../features/repertoires/controllers/repertoire_controller.dart';
 import '../../models/build_tree_node.dart';
 import '../../services/coherence_service.dart';
 import '../../services/generation/fen_map.dart';

@@ -21,11 +21,11 @@ library;
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
 
-import '../models/repertoire_line.dart' show isModelGameHeaders;
-import '../utils/fen_utils.dart' show plyFromFen;
-import '../utils/movetext_builder.dart' show formatMoveAtPly;
-import '../chess_core/pgn/pgn_text.dart' as pgn;
-import '../chess_core/pgn/repertoire_line_ids.dart' show RepertoireLineIds;
+import '../../models/repertoire_line.dart' show isModelGameHeaders;
+import '../../utils/fen_utils.dart' show plyFromFen;
+import '../../utils/movetext_builder.dart' show formatMoveAtPly;
+import 'pgn_text.dart' as pgn;
+import 'repertoire_line_ids.dart' show RepertoireLineIds;
 import 'course_chapter_headers.dart';
 
 /// [pgn] rewritten so that no game has a variation, and how many games it

@@ -5,10 +5,10 @@ import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart
 
 import 'package:dartchess/dartchess.dart';
 
-import '../features/coverage/services/coverage_suggestion_service.dart';
-import '../features/repertoires/repositories/repertoire_document_repository.dart';
-import '../utils/atomic_file.dart';
-import '../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
+import '../../coverage/services/coverage_suggestion_service.dart';
+import '../repositories/repertoire_document_repository.dart';
+import '../../../utils/atomic_file.dart';
+import '../../../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
 import 'repertoire_controller.dart';
 
 sealed class _UndoEntry {}

@@ -1,4 +1,4 @@
-import '../support/repertoire_dependencies.dart';
+import '../../support/repertoire_dependencies.dart';
 import 'dart:async';
 import 'dart:io' as io;
 
@@ -6,7 +6,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';

@@ -1,12 +1,12 @@
 // Phase 3: unit tests for the extracted RepertoireAuthoring collaborator.
 
-import 'package:chess_auto_prep/core/repertoire_authoring.dart';
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_authoring.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  final authoring = RepertoireAuthoring();
+  const authoring = RepertoireAuthoring();
 
   group('RepertoireAuthoring.buildGame', () {
     test('returns null for empty move lines', () {

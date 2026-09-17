@@ -94,7 +94,7 @@ contract. Native byte/file-identity revisions remain milestone 2 work; an S0
 pass does **not** establish DATA-04 or power-loss durability.
 
 The initial nine tests in
-[`repertoire_mutation_safety_test.dart`](../test/core/repertoire_mutation_safety_test.dart)
+[`repertoire_mutation_safety_test.dart`](../test/features/repertoires/repertoire_mutation_safety_test.dart)
 all failed on the starting implementation: color/root/import lost interleaved
 writes; external-before-append annotations were lost on single and batched
 undo; external-after-append and between-undo edits were overwritten; undo
@@ -2103,6 +2103,55 @@ drafts and complete native undo receipts remain pending. Milestones 1/2 and 3
 are partial; later feature, performance and cross-platform/release gates remain
 open.
 
+### Builder board ownership and canonical hierarchy checkpoint (2026-09-17)
+
+Following document-boundary checkpoint `428d48f5`, Builder now owns mutable board
+state in a pure `RepertoireBoardController` under
+`features/repertoires/controllers/`. It encapsulates the move tree, cursor,
+position/path caches, annotations, variations, root navigation and draft-edit
+receipts. Immutable projections and structural sharing remain intact. The host
+publishes notifications after a command completes and synchronizes the opening
+graph using immutable SAN/FEN paths, without replaying each move.
+
+`RepertoireController` and `RepertoireWriter` now have canonical feature-controller
+paths; their legacy `core/` libraries are removed. `RepertoireAuthoring` lives in
+feature models and no longer constructs `RepertoireService` or depends on Flutter.
+Shared navigation is in `chess_core/moves/`; course headers and variation expansion
+are in `chess_core/pgn/`. Consumers import these owners directly. The moved tests
+mirror feature/chess-core ownership. Architecture enforcement checks the board
+and authoring dependency closures and refuses reinstating the six retired
+libraries as forwarding shims.
+
+Draft deletion returns an opaque receipt bound to its board adoption and expected
+movetext. An equal-looking replacement board cannot revive an older draft undo;
+successive deletions in the same lifetime still restore comments, glyphs,
+variations and cursor. Root deletion continues to clear the board and can be
+undone. Invalid starting FEN adoption now refuses the operation without replacing
+state or invalidating its undo receipt. No persistent file undo semantics change.
+
+Verification: 205 feature/shared-navigation tests passed, followed by 81
+Builder/Trainer/widget/undo tests and 44 focused checks after the final review
+correction. These batches overlap. All four native cases passed across
+`builder_projection_test.dart`, `repertoire_mutation_test.dart` and
+`workspace_navigation_test.dart`. Analyze/lint passed with nine existing
+informational diagnostics, no warnings/errors, and 20 architecture checker
+regressions. A standalone Dart VM probe exercised board edit/undo plus pure line
+authoring/adoption without Flutter initialization. The existing 20,000-node test
+measured a 30.9 ms initial projection and 1.2 ms deep annotation projection in
+this run; these are focused debug measurements, not full profile-mode budgets.
+No selected tests were skipped; full-suite, engine, other-platform and release
+gates were not run.
+
+The private rebuilt preview reopened the native import fixture and navigated
+from the start to `e4`; the [inspected screenshot](images/renewal-builder-board-owner.png)
+shows the board, selected move and retained external annotation in sync. The
+headless preview used disposable data and was stopped after inspection.
+
+This remains milestone 3 progress: document/session recovery, private opening-graph ownership,
+remaining legacy presentation, outline/generation editors and complete native
+undo provenance are still unfinished. Later training, jobs, platform and release
+gates remain open.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
@@ -3131,7 +3180,7 @@ identity changes and shared-store fixtures):
 | Local edit, external edit, append, then two undo attempts | Undo only the append to its validated baseline; do not bridge the external edit into older snapshot history. |
 | Failed/uncertain undo, failed batch, duplicate add or malformed receipt | No false success, phantom entry or unsafe revision advance; retry/reconciliation preserves the actual commit outcome. |
 
-Extend [the existing writer undo tests](../test/core/repertoire_writer_undo_test.dart)
+Extend [the existing writer undo tests](../test/features/repertoires/repertoire_writer_undo_test.dart)
 without losing successive undo, bounded history, per-move suggestion undo or
 load/reset behavior. Adapt the missing-snapshot fixture to the explicit receipt
 failure contract rather than preserving its unsafe memory fallback. Also audit
@@ -3219,8 +3268,8 @@ limits rather than promise that atomic writes alone eliminate every loss mode.
 Implementation evidence lives in [DATA_INTEGRITY.md](DATA_INTEGRITY.md). Starting
 code references: [storage operations](../lib/services/storage/io_storage_service.dart),
 [atomic writer](../lib/utils/atomic_file.dart),
-[repertoire controller](../lib/core/repertoire_controller.dart),
-[undo writer](../lib/core/repertoire_writer.dart),
+[repertoire controller](../lib/features/repertoires/controllers/repertoire_controller.dart),
+[undo writer](../lib/features/repertoires/controllers/repertoire_writer.dart),
 [chapter creation](../lib/features/repertoire/services/chapter_store.dart),
 [game store](../lib/services/game_store/game_store.dart),
 [generation artifacts](../lib/core/generation_artifacts.dart) and

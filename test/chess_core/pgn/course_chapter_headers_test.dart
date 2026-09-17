@@ -2,7 +2,7 @@
 /// one names the line, and what disqualifies a file from being a course.
 library;
 
-import 'package:chess_auto_prep/services/course_chapter_headers.dart';
+import 'package:chess_auto_prep/chess_core/pgn/course_chapter_headers.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Map<String, String> _game({

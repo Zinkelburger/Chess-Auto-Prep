@@ -60,8 +60,12 @@ Production single-game PGN parsing now shares a guarded chess-core entry point;
 long annotated lines avoid quadratic upstream copying, and move replay/fresh-ID
 adoption handle deep lines iteratively. The native 20,000-node debug journey opens
 in 1.3 seconds, with profile-mode memory/frame gates still pending.
-Builder now publishes immutable cached move-tree views and detaches caller-owned
-trees at adoption. Study and Builder share the projection cache; Builder autosaves
+Builder now has a pure feature-owned board/cursor controller that publishes
+immutable cached move-tree views and detaches caller-owned trees at adoption.
+The feature document controller coordinates notifications and injected storage;
+its controller/writer and tests have moved out of `core/`. Draft undo receipts
+are bound to the original board adoption, including equal-looking replacements.
+Study and Builder share the projection cache; Builder autosaves
 capture the current owner revision before UI rebuilds and retain their destination
 across chapter changes. Viewer now detaches parsed input and exposes immutable
 headers/mainline annotations with stable move identities; stale mainline editor
@@ -105,7 +109,9 @@ filter wiring, remaining Builder session ownership and draft recovery, increment
 restoration and complete large-document performance evidence remain pending.
 Builder document reads/writes and decoding now use required injected contracts.
 Linux writes use the shared native PGN store; pure chapter text, headers, IDs and
-append receipts live in chess core. Line saves retain acknowledged originals;
+append receipts, course-header interpretation and variation expansion live in chess core.
+Line authoring is now pure and no longer constructs a storage service.
+Line saves retain acknowledged originals;
 external target edits and reordered bulk deletions conflict. Remaining legacy
 outline/generation editors, durable Builder recovery and native undo receipt
 ownership still need migration.
@@ -207,7 +213,7 @@ Design components are built on demand inside the first complete slice.
 | Entry: **Build manually** (empty repertoire, DB-only) | **Partial** | DB fallback in `CandidateService` works; no dedicated entry CTA |
 | Entry: **Browse Result** after generation | **Partial** | Tree loads; no explicit post-gen browse button |
 | PGN editor persistence ownership | **Partial** | Builder controller/writer now use injected document contracts and the shared native PGN store on Linux; durable draft recovery, native undo receipts and remaining outline/generation editor callers are pending |
-| Tree-path navigation (single source of truth) | **Done** | `MoveTree` + `TreePath` cursor in `RepertoireController`; PGN editor is a pure view; no `addPostFrameCallback` sync; arrow keys always go through controller |
+| Tree-path navigation (single source of truth) | **Done** | `MoveTree` + `TreePath` cursor privately owned by pure `RepertoireBoardController`; PGN editor is a pure view; no `addPostFrameCallback` sync; arrow keys always go through controller |
 
 ### Generation & bottom pane UX
 

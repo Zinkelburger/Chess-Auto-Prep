@@ -19,7 +19,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../features/studies/controllers/study_controller.dart';
-import '../core/repertoire_controller.dart';
+import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../core/generation_session_types.dart';
 import '../features/audit/controllers/audit_session_controller.dart';

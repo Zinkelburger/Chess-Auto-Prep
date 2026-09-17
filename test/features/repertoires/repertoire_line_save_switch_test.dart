@@ -1,9 +1,9 @@
 import 'package:chess_auto_prep/utils/atomic_file.dart';
-import '../support/repertoire_dependencies.dart';
+import '../../support/repertoire_dependencies.dart';
 import 'dart:async';
 import 'dart:io';
 
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

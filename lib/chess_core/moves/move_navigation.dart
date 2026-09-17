@@ -20,9 +20,9 @@
 ///    through it, so it inherits this mixin's behaviour already.
 library;
 
-import '../models/move_tree.dart';
+import '../../models/move_tree.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
-import '../chess_core/moves/move_tree_view.dart';
+import 'move_tree_view.dart';
 
 /// Resolving a SAN sequence to a [TreePath].
 extension MoveTreeSanPaths on MoveTreeView {

@@ -2,7 +2,7 @@
 /// plus a tactics mode for training studies of custom puzzles.
 library;
 
-import '../core/repertoire_controller.dart';
+import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../features/repertoires/repositories/repertoire_document_repository.dart';
 import '../features/repertoires/repositories/repertoire_decoder.dart';
 

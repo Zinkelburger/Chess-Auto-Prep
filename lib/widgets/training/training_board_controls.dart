@@ -3,7 +3,7 @@ import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart' show PgnNodeData, Side;
 import 'package:flutter/material.dart';
 
-import '../../core/repertoire_controller.dart';
+import '../../features/repertoires/controllers/repertoire_controller.dart';
 import '../../models/repertoire_line.dart';
 import '../../services/training/training_phase.dart';
 import '../../services/training/training_session_controller.dart';

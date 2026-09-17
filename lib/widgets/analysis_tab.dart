@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/browse/widgets/browse_panel.dart';
 import '../features/coverage/widgets/suggestion_panel.dart';
-import '../core/repertoire_controller.dart';
+import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/repertoire_line.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';

@@ -4,7 +4,7 @@ import '../../features/repertoires/models/repertoire_publication.dart';
 import '../../features/repertoire/services/course_chapter_partition.dart';
 import '../../features/repertoire/services/chapter_store.dart';
 import '../../services/repertoire_service.dart';
-import '../../services/repertoire_line_expansion.dart';
+import '../../chess_core/pgn/repertoire_line_expansion.dart';
 import '../../chess_core/pgn/repertoire_pgn_text.dart';
 import '../../utils/safe_file_name.dart';
 

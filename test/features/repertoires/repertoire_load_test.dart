@@ -6,7 +6,7 @@
 /// load is allowed to touch, and when `awaitLoaded()` is released.
 library;
 
-import '../support/repertoire_dependencies.dart';
+import '../../support/repertoire_dependencies.dart';
 
 import 'dart:async';
 

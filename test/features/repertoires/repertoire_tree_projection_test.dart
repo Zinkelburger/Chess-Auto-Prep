@@ -1,7 +1,7 @@
-import '../support/repertoire_dependencies.dart';
+import '../../support/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/chess_core/moves/move_tree_snapshot.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -163,14 +163,17 @@ void main() {
     () {
       load();
       final before = controller.tree;
+      final beforeRevision = controller.closeRevision;
+      controller.goToStart();
+      expect(controller.closeRevision, beforeRevision);
       controller.loadAnnotatedTree(MoveTree.fromPgn(before.toPgnMoveText()));
       expect(controller.tree.identity, isNot(same(before.identity)));
       expect(controller.tree.roots.single.id, isNot(before.roots.single.id));
-      final revision =
-          controller.closeRevision
-              as (String?, int, Future<void>, Object?, Object?, Object, int);
-      expect(revision.$6, same(controller.tree.identity));
-      expect(revision.$6, isNot(isA<MoveTree>()));
+      expect(controller.closeRevision, isNot(beforeRevision));
+      final adoptedRevision = controller.closeRevision;
+      controller.setCommentAtPath(TreePath.empty, 'Changed introduction');
+      expect(controller.closeRevision, isNot(adoptedRevision));
+      expect(controller.tree.identity, isNot(isA<MoveTree>()));
     },
   );
 }
