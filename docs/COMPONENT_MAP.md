@@ -812,7 +812,7 @@ document editing and generation. Existing picker and codec helpers are retained 
 slice migrates; the catalog uses the shared design system above. Boundary checks in local
 lint prevent migrated catalog code from importing storage/infrastructure or
 accessing global singletons. This is a partial first slice; remaining renewal
-gates are tracked in [the execution record](ARCHITECTURE_RENEWAL.md#catalog-boundary-checkpoint--first-slice-in-progress).
+gates are tracked in [the execution record](ARCHITECTURE_RENEWAL_EVIDENCE.md#catalog-boundary-checkpoint--first-slice-in-progress).
 
 `RepertoireLibraryScreen` is available under **Library → Repertoires**. It
 reuses `RepertoireListBody` for search, direct file/paste imports and repertoire
@@ -852,7 +852,7 @@ parent's `.cap-pgn-history/`; post-install failures require reconciliation.
 Linux new-repertoire creation uses the staged publication path below; the remaining
 chapter/editor/generation APIs and other operating systems retain their documented
 legacy adapters. This is partial adoption, not a repository-wide migration.
-See [native-store evidence and limits](ARCHITECTURE_RENEWAL.md#native-document-store-checkpoint--linux-adoption-started).
+See [native-store evidence and limits](ARCHITECTURE_RENEWAL_EVIDENCE.md#native-document-store-checkpoint--linux-adoption-started).
 
 #### Staged repertoire publication (Linux)
 
