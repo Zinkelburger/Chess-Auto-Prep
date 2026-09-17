@@ -71,6 +71,7 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
     return Column(
       children: [
         Container(
+          width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             border: Border(
@@ -79,18 +80,15 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
               ),
             ),
           ),
-          child: Row(
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 12,
+            runSpacing: 4,
             children: [
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  '${widget.gameCount} games',
-                  style: AppTypography.bodyStrong(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              Text(
+                '${widget.gameCount} games',
+                style: AppTypography.bodyStrong(context),
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -104,47 +102,22 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      if (!mounted) return;
-                      widget.onIncludeVariationsChanged(
-                        !widget.includeVariations,
-                      );
-                    },
-                    child: Text(
-                      'Include variations',
-                      style: AppTypography.secondary(context),
+                  Flexible(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (!mounted) return;
+                        widget.onIncludeVariationsChanged(
+                          !widget.includeVariations,
+                        );
+                      },
+                      child: Text(
+                        'Include variations',
+                        style: AppTypography.secondary(context),
+                      ),
                     ),
                   ),
                 ],
               ),
-              if (widget.building)
-                Flexible(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          widget.total > 0
-                              ? 'Building ${widget.processed} / ${widget.total}'
-                              : 'Building tree...',
-                          style: AppTypography.caption(context).copyWith(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
             ],
           ),
         ),
@@ -199,9 +172,15 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
   Widget _buildTreeAndGames() {
     final tree = OpeningTreeWidget(
       tree: widget.tree!,
-      onMoveSelected: widget.onMoveSelected,
-      onGoBack: widget.onGoBack,
-      onGoForward: widget.onGoForward,
+      onMoveSelected: (move) {
+        if (mounted) widget.onMoveSelected(move);
+      },
+      onGoBack: () {
+        if (mounted) widget.onGoBack();
+      },
+      onGoForward: () {
+        if (mounted) widget.onGoForward();
+      },
       currentMoveSequence: widget.currentMoveSequence,
       wdlPerspective: widget.wdlPerspective,
     );
@@ -236,7 +215,9 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
                 games: matching,
                 currentFen: widget.tree!.currentFen,
                 currentIndex: widget.currentMatchingIndex,
-                onGameSelected: (i) => widget.onGameSelected(matching[i]),
+                onGameSelected: (i) {
+                  if (mounted) widget.onGameSelected(matching[i]);
+                },
                 onSearch: () => openTreePositionGameSearch(
                   context: context,
                   games: matching,
@@ -272,7 +253,7 @@ Future<bool> openTreePositionGameSearch({
   required ValueChanged<PgnGameEntry> onSelected,
 }) async {
   final captured = List<PgnGameEntry>.of(games);
-  if (captured.isEmpty) return false;
+  if (!context.mounted || captured.isEmpty) return false;
   final selected = await showGameSearchDialog(
     context: context,
     games: [for (final game in captured) GameNavItem.fromEntry(game)],
