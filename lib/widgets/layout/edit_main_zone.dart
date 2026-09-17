@@ -16,7 +16,6 @@ class EditMainZone extends StatelessWidget {
     super.key,
     required this.tree,
     required this.currentPath,
-    this.snapshotForSave,
     this.onJump,
     this.onCommentChanged,
     this.onToggleNag,
@@ -24,11 +23,8 @@ class EditMainZone extends StatelessWidget {
     this.onPromote,
     this.onMakeMainLine,
     this.lineTitle,
-    required this.repertoireColor,
     required this.isEditingExistingLine,
-    this.onLineEdited,
     this.onTitleChanged,
-    this.onAutoSave,
     this.onDirty,
     this.onCopyToClipboard,
     this.onViewInLines,
@@ -36,7 +32,6 @@ class EditMainZone extends StatelessWidget {
   });
 
   final MoveTreeView tree;
-  final MoveTreeView Function()? snapshotForSave;
   final TreePath currentPath;
   final ValueChanged<TreePath>? onJump;
   final void Function(TreePath path, String? comment)? onCommentChanged;
@@ -45,11 +40,8 @@ class EditMainZone extends StatelessWidget {
   final void Function(TreePath path)? onPromote;
   final void Function(TreePath path)? onMakeMainLine;
   final String? lineTitle;
-  final String repertoireColor;
   final bool isEditingExistingLine;
-  final void Function(String updatedPgn)? onLineEdited;
   final ValueChanged<String>? onTitleChanged;
-  final ValueChanged<String>? onAutoSave;
   final VoidCallback? onDirty;
   final void Function(String text, String successMessage)? onCopyToClipboard;
   final VoidCallback? onViewInLines;
@@ -62,7 +54,6 @@ class EditMainZone extends StatelessWidget {
   Widget build(BuildContext context) {
     return InteractivePgnEditor(
       tree: tree,
-      snapshotForSave: snapshotForSave,
       currentPath: currentPath,
       onJump: onJump,
       onCommentChanged: onCommentChanged,
@@ -71,11 +62,8 @@ class EditMainZone extends StatelessWidget {
       onPromote: onPromote,
       onMakeMainLine: onMakeMainLine,
       lineTitle: lineTitle,
-      repertoireColor: repertoireColor,
       isEditingExistingLine: isEditingExistingLine,
-      onLineEdited: onLineEdited,
       onTitleChanged: onTitleChanged,
-      onAutoSave: onAutoSave,
       onDirty: onDirty,
       onCopyToClipboard:
           onCopyToClipboard ??

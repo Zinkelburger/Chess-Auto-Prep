@@ -1,5 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/widgets.dart';
+import '../features/documents/widgets/workspace_recovery_host.dart';
+import '../features/documents/widgets/document_close_scope.dart';
+import '../features/documents/controllers/document_close_coordinator.dart';
 import 'package:path/path.dart' as p;
 import '../features/repertoires/controllers/builder_workspace_controller.dart';
 import '../features/repertoires/models/builder_workspace_snapshot.dart';
@@ -63,3 +67,34 @@ WorkspaceRecoveryStore<BuilderWorkspaceSnapshot> createBuilderRecoveryStore() =>
       ),
       codec: const BuilderWorkspaceCodec(),
     );
+
+/// Always mounted by the application, including before Builder is first opened.
+class BuilderWorkspaceHost extends StatelessWidget {
+  const BuilderWorkspaceHost({
+    super.key,
+    required this.lifetime,
+    required this.onRestored,
+    required this.child,
+  });
+  final BuilderLifetime lifetime;
+  final VoidCallback onRestored;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => DocumentCloseRegistration(
+    revision: () => lifetime.workspace.closeRevision,
+    prepare: () async {
+      await lifetime.flushForClose();
+      return DocumentCloseApproval(lifetime.workspace.closeRevision);
+    },
+    child: WorkspaceRecoveryHost<BuilderWorkspaceSnapshot>(
+      recovery: lifetime.recovery,
+      onRestored: onRestored,
+      id: 'builder',
+      workspaceName: 'Builder',
+      title: (snapshot) => snapshot.drafts.firstOrNull?.title ?? 'Builder',
+      path: (snapshot) =>
+          snapshot.drafts.firstOrNull?.repertoire?.filePath ?? '',
+      child: child,
+    ),
+  );
+}

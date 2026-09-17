@@ -31,7 +31,6 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final void Function(TreePath)? onDelete;
   final void Function(TreePath)? onPromote;
   final void Function(TreePath)? onMakeMainLine;
-  final String repertoireColor;
   final bool isEditingExistingLine;
   final VoidCallback onImportPgn;
   final VoidCallback? onViewInLines;
@@ -63,7 +62,6 @@ class PgnWithAnalysisPane extends StatefulWidget {
     this.onDelete,
     this.onPromote,
     this.onMakeMainLine,
-    required this.repertoireColor,
     required this.isEditingExistingLine,
     required this.onImportPgn,
     this.onViewInLines,
@@ -230,16 +228,8 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
   }
 
   Widget _buildPgnEditor() {
-    final displayedTree = widget.tree;
-    final owner = widget.controller;
     return EditMainZone(
-      tree: displayedTree,
-      snapshotForSave: () {
-        final current = owner.board.tree;
-        return identical(current.identity, displayedTree.identity)
-            ? current
-            : displayedTree;
-      },
+      tree: widget.tree,
       currentPath: widget.currentPath,
       lineTitle: widget.controller.title,
       onJump: widget.onJump,
@@ -248,7 +238,6 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       onDelete: widget.onDelete,
       onPromote: widget.onPromote,
       onMakeMainLine: widget.onMakeMainLine,
-      repertoireColor: widget.repertoireColor,
       isEditingExistingLine: widget.isEditingExistingLine,
       onTitleChanged: widget.controller.setTitle,
       onViewInLines: widget.onViewInLines,

@@ -98,7 +98,7 @@ class TrapNavigationButtons extends StatelessWidget {
         _isPrefix(trap.movesSan, lineMoves)) {
       if (!_isPrefix(lineMoves, controller.board.moveHistory) ||
           controller.board.moveHistory.length != lineMoves.length) {
-        controller.board.loadMoveHistory(lineMoves);
+        controller.board.navigateToLineMove(lineMoves);
       }
       controller.board.jumpToMoveIndex(trap.movesSan.length - 1);
       return;

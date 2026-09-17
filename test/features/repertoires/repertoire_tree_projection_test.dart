@@ -162,13 +162,13 @@ void main() {
   );
 
   test(
-    'replacement rotates editing identity and close revision stays opaque',
+    'replacement rotates editing identity and recovery close revision tracks cursor',
     () {
       load();
       final before = controller.board.tree;
       final beforeRevision = controller.closeRevision;
       controller.board.goToStart();
-      expect(controller.closeRevision, beforeRevision);
+      expect(controller.closeRevision, isNot(beforeRevision));
       controller.inspectAnnotatedTree(MoveTree.fromPgn(before.toPgnMoveText()));
       expect(controller.board.tree.identity, isNot(same(before.identity)));
       expect(

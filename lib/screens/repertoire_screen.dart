@@ -3,7 +3,6 @@
 library;
 
 import '../app/builder_lifetime.dart';
-import '../features/documents/widgets/workspace_recovery_host.dart';
 import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
@@ -14,8 +13,6 @@ import '../app/legacy_theme_boundary.dart';
 import '../features/generation/controllers/generation_publication_controller.dart';
 
 import 'dart:async';
-import '../features/documents/controllers/document_close_coordinator.dart';
-import '../features/documents/widgets/document_close_scope.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1071,86 +1068,64 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       ),
       body: LegacyThemeBoundary(child: root.body),
     );
-    return DocumentCloseRegistration(
-      revision: () => _controller.closeRevision,
-      prepare: () async {
-        await context.read<BuilderLifetime>().flushForClose();
-        if (!mounted) return null;
-        return DocumentCloseApproval(_controller.closeRevision);
-      },
-      child: WorkspaceRecoveryHost(
-        recovery: context.read<BuilderLifetime>().recovery,
-        onRestored: () {
-          if (mounted) setState(() {});
-        },
-        id: 'builder',
-        workspaceName: 'Builder',
-        title: (snapshot) => snapshot.drafts.firstOrNull?.title ?? 'Builder',
-        path: (snapshot) =>
-            snapshot.drafts.firstOrNull?.repertoire?.filePath ?? '',
-        child: ListenableBuilder(
-          listenable: _controller,
-          builder: (context, _) => Material(
-            child: Column(
-              children: [
-                if (_controller.saveError != null)
-                  MaterialBanner(
-                    content: const Text(
-                      'Line edits are retained. Saving failed.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () =>
-                            unawaited(_controller.saveActiveLine()),
-                        child: const Text('Retry'),
-                      ),
-                    ],
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) => Material(
+        child: Column(
+          children: [
+            if (_controller.saveError != null)
+              MaterialBanner(
+                content: const Text('Line edits are retained. Saving failed.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => unawaited(_controller.saveActiveLine()),
+                    child: const Text('Retry'),
                   ),
-                if (_controller.sourceChanged)
-                  const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Text(
-                      'The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.',
-                    ),
-                  ),
-                if (_controller.captureWorkspace().activeKey != null)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      key: const ValueKey('save-builder-draft-copy'),
-                      onPressed: _saveCurrentDraft,
-                      icon: const Icon(Icons.save_as),
-                      label: const Text('Save draft as a new line…'),
-                    ),
-                  ),
-                if (_controller.retainedDrafts.isNotEmpty)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: PopupMenuButton(
-                      tooltip: 'Retained Builder drafts',
-                      itemBuilder: (context) => [
-                        for (final draft in _controller.retainedDrafts)
-                          PopupMenuItem(
-                            value: draft,
-                            child: Text(
-                              '${draft.repertoire?.name ?? 'Scratch'} · ${draft.title}',
-                            ),
-                          ),
-                      ],
-                      onSelected: (draft) =>
-                          unawaited(_controller.openRetainedDraft(draft)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
+                ],
+              ),
+            if (_controller.sourceChanged)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text(
+                  'The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.',
+                ),
+              ),
+            if (_controller.captureWorkspace().activeKey != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey('save-builder-draft-copy'),
+                  onPressed: _saveCurrentDraft,
+                  icon: const Icon(Icons.save_as),
+                  label: const Text('Save draft as a new line…'),
+                ),
+              ),
+            if (_controller.retainedDrafts.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: PopupMenuButton(
+                  tooltip: 'Retained Builder drafts',
+                  itemBuilder: (context) => [
+                    for (final draft in _controller.retainedDrafts)
+                      PopupMenuItem(
+                        value: draft,
                         child: Text(
-                          'Retained drafts (${_controller.retainedDrafts.length})',
+                          '${draft.repertoire?.name ?? 'Scratch'} · ${draft.title}',
                         ),
                       ),
+                  ],
+                  onSelected: (draft) =>
+                      unawaited(_controller.openRetainedDraft(draft)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text(
+                      'Retained drafts (${_controller.retainedDrafts.length})',
                     ),
                   ),
-                Expanded(child: shell),
-              ],
-            ),
-          ),
+                ),
+              ),
+            Expanded(child: shell),
+          ],
         ),
       ),
     );

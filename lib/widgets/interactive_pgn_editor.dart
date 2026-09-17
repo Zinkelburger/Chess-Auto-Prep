@@ -36,11 +36,6 @@ class InteractivePgnEditor extends StatefulWidget {
   /// The move tree to display (owned by controller).
   final MoveTreeView tree;
 
-  /// Read the owner's latest revision synchronously after a mutation callback.
-  /// Autosave captures it before a widget rebuild or chapter switch can occur.
-  /// The supplier must remain scoped to the displayed editing session.
-  final MoveTreeView Function()? snapshotForSave;
-
   /// Current cursor path (owned by controller).
   final TreePath currentPath;
 
@@ -63,13 +58,7 @@ class InteractivePgnEditor extends StatefulWidget {
   /// Called to recursively promote a variation to the main line.
   final void Function(TreePath path)? onMakeMainLine;
 
-  /// Called when the user edits an existing line.
-  final void Function(String updatedPgn)? onLineEdited;
   final ValueChanged<String>? onTitleChanged;
-
-  /// Called after debounced edits while [isEditingExistingLine] is true.
-  /// Falls back to [onLineEdited] when null.
-  final ValueChanged<String>? onAutoSave;
 
   /// Called when comment edits mark the line dirty.
   final VoidCallback? onDirty;
@@ -84,40 +73,33 @@ class InteractivePgnEditor extends StatefulWidget {
   final bool isEditingExistingLine;
 
   /// Title of the line being edited (the PGN Event header). Shown in the
-  /// title field and written back on save so autosaves don't clobber it.
+  /// title field; edits are sent to the owning workspace immediately.
   final String? lineTitle;
-
-  final String? repertoireColor;
 
   /// Read-only header shown instead of the title field for ephemeral lines
   /// (e.g. "Trap #45 · Sicilian Defense").
   final String? ephemeralTitle;
 
   /// Show the persistent annotation panel (comment field, NAG glyphs, puzzle
-  /// markers) even when this host saves through a controller rather than the
-  /// editor's own line-save callbacks (which imply the panel on their own).
+  /// markers) independently of the title field.
   final bool showAnnotationPanel;
 
   const InteractivePgnEditor({
     super.key,
     required this.tree,
     required this.currentPath,
-    this.snapshotForSave,
     this.onJump,
     this.onCommentChanged,
     this.onToggleNag,
     this.onDelete,
     this.onPromote,
     this.onMakeMainLine,
-    this.onLineEdited,
     this.onTitleChanged,
-    this.onAutoSave,
     this.onDirty,
     this.onCopyToClipboard,
     this.onViewInLines,
     this.isEditingExistingLine = false,
     this.lineTitle,
-    this.repertoireColor,
     this.ephemeralTitle,
     this.showAnnotationPanel = false,
   });
@@ -137,10 +119,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   TreePath? _editingCommentPath;
   String? _inlineCommentDraft;
   String? _inlineOriginalComment;
-
-  Timer? _autoSaveTimer;
-  VoidCallback? _pendingAutoSave;
-  static const _autoSaveDelay = Duration(seconds: 2);
 
   // Cache only visible/recent rows. The pure index contains no widget trees,
   // and linked addresses avoid copying every ancestor path during indexing.
@@ -172,7 +150,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       _titleController.text = widget.lineTitle ?? '';
     }
     if (widget.tree.identity != oldWidget.tree.identity) {
-      _flushAutoSave();
       _editingCommentPath = null;
     } else if (_editingCommentPath != null &&
         oldWidget.tree.nodeAt(_editingCommentPath!)?.id !=
@@ -193,10 +170,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   @override
   void dispose() {
-    _flushAutoSave();
     _titleController.dispose();
     _selection.dispose();
-    _autoSaveTimer?.cancel();
     super.dispose();
   }
 
@@ -223,7 +198,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final trimmed = comment.trim();
     widget.onCommentChanged?.call(path, trimmed.isEmpty ? null : trimmed);
     widget.onDirty?.call();
-    _scheduleAutoSave();
     if (!mounted) return;
     setState(() => _editingCommentPath = null);
   }
@@ -242,7 +216,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (raw == merged) return;
     widget.onCommentChanged?.call(path, normalized);
     widget.onDirty?.call();
-    _scheduleAutoSave();
     if (mounted) setState(() {});
   }
 
@@ -252,7 +225,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (onToggle == null) return;
     onToggle(path, nagId);
     widget.onDirty?.call();
-    _scheduleAutoSave();
     setState(() {});
   }
 
@@ -271,7 +243,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       },
     );
     widget.onDirty?.call();
-    _scheduleAutoSave();
     setState(() {});
   }
 
@@ -340,52 +311,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       startIsWhite: white,
     );
     widget.onCopyToClipboard?.call(text, AppMessages.pgnCopied);
-  }
-
-  void _scheduleAutoSave() {
-    if (!widget.isEditingExistingLine) return;
-    _autoSaveTimer?.cancel();
-    // Capture both the content and destination now. Navigation may replace
-    // the widget's tree and callbacks before this debounce expires.
-    final onSave = widget.onAutoSave ?? widget.onLineEdited;
-    if (onSave == null) return;
-    final pgn = _buildFullPgnForSave();
-    _pendingAutoSave = () => onSave(pgn);
-    _autoSaveTimer = Timer(_autoSaveDelay, _flushAutoSave);
-  }
-
-  void _flushAutoSave() {
-    _autoSaveTimer?.cancel();
-    _autoSaveTimer = null;
-    final save = _pendingAutoSave;
-    _pendingAutoSave = null;
-    save?.call();
-  }
-
-  String _buildFullPgnForSave() {
-    final typed = _titleController.text.trim();
-    final title = typed.isNotEmpty
-        ? typed
-        : (widget.lineTitle?.trim().isNotEmpty ?? false)
-        ? widget.lineTitle!.trim()
-        : 'Repertoire Line';
-    final tree = widget.snapshotForSave?.call() ?? widget.tree;
-    return tree.toPgn(
-      event: title,
-      white: _whiteHeader(),
-      black: _blackHeader(),
-      result: '*',
-    );
-  }
-
-  String _whiteHeader() {
-    final c = (widget.repertoireColor ?? 'White').trim().toLowerCase();
-    return c == 'black' ? 'Training' : 'Me';
-  }
-
-  String _blackHeader() {
-    final c = (widget.repertoireColor ?? 'White').trim().toLowerCase();
-    return c == 'black' ? 'Me' : 'Training';
   }
 
   // ── Context menu ──────────────────────────────────────────────────
@@ -538,11 +463,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   /// The title field only makes sense where the editor persists whole lines
   /// (repertoire builder). Hosts with their own naming UI (study chapters)
   /// pass no save callbacks and get a clean movetext-only surface.
-  bool get _showTitleField =>
-      widget.isEditingExistingLine ||
-      widget.onLineEdited != null ||
-      widget.onAutoSave != null ||
-      widget.onTitleChanged != null;
+  bool get _showTitleField => widget.onTitleChanged != null;
 
   @override
   Widget build(BuildContext context) {
@@ -622,7 +543,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                             onChanged: (title) {
                               widget.onTitleChanged?.call(title);
                               widget.onDirty?.call();
-                              _scheduleAutoSave();
                             },
                           ),
                         ),
@@ -834,7 +754,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         if (!mounted) return;
         widget.onCommentChanged?.call(path, _inlineOriginalComment);
         widget.onDirty?.call();
-        _scheduleAutoSave();
         setState(() => _editingCommentPath = null);
       },
     );

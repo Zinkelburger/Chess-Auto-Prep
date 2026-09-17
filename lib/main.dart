@@ -354,7 +354,13 @@ class ChessAutoPrepApp extends StatelessWidget {
                         context.read<AppState>().setMode(AppMode.pgnViewer),
                     child: PgnViewerCloseHost(
                       lifetime: context.read<PgnViewerLifetime>(),
-                      child: const MainScreen(),
+                      child: BuilderWorkspaceHost(
+                        lifetime: context.read<BuilderLifetime>(),
+                        onRestored: () => context.read<AppState>().setMode(
+                          AppMode.repertoire,
+                        ),
+                        child: const MainScreen(),
+                      ),
                     ),
                   ),
                 ),

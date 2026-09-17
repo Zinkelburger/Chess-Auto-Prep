@@ -287,9 +287,6 @@ mixin _RepertoireTabContent
       onDelete: (path) => _controller.deleteDraftBranch(path),
       onPromote: (path) => _controller.board.promoteVariation(path),
       onMakeMainLine: (path) => _controller.board.makeMainLine(path),
-      repertoireColor: _controller.document.isRepertoireWhite
-          ? 'White'
-          : 'Black',
       isEditingExistingLine: _controller.document.selectedPgnLine != null,
       onImportPgn: _importPgn,
       onViewInLines: _showLinesSurface,
