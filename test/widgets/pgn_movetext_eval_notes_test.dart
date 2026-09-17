@@ -19,10 +19,16 @@ import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Future<void> pumpPgn(WidgetTester tester, String pgn) async {
+  Future<void> pumpPgn(
+    WidgetTester tester,
+    String pgn, {
+    PgnViewerWidgetController? controller,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(body: PgnViewerWidget(pgnText: pgn)),
+        home: Scaffold(
+          body: PgnViewerWidget(pgnText: pgn, controller: controller),
+        ),
       ),
     );
     // Not pumpAndSettle: the viewer keeps a progress indicator spinning while
@@ -104,12 +110,9 @@ void main() {
       MoveClassification.mistake,
       MoveClassification.blunder,
     ]);
-    await pumpPgn(tester, pgn);
-    final text = renderedText(tester);
-    for (final label in ['Inaccuracy', 'Mistake', 'Blunder', 'Interesting']) {
-      expect(label.allMatches(text).length, 2, reason: label);
-    }
-    for (final move in [
+    final control = PgnViewerWidgetController();
+    await pumpPgn(tester, pgn, controller: control);
+    const moves = [
       'e4?!',
       'e5?',
       'Nf3??',
@@ -118,8 +121,47 @@ void main() {
       'a6?!',
       'Ba4?',
       'Nf6??',
-    ]) {
-      expect(text, contains(move));
+    ];
+    const labels = [
+      'Inaccuracy',
+      'Mistake',
+      'Blunder',
+      'Interesting',
+      'Interesting',
+      'Inaccuracy',
+      'Mistake',
+      'Blunder',
+    ];
+    final verdicts = <String, Color?>{};
+    for (var i = 0; i < moves.length; i++) {
+      control.goToMainLineIndex(i + 1);
+      await tester.pump();
+      final text = renderedText(tester);
+      expect(text, contains(moves[i]));
+      expect(text, isNot(contains('Best:')));
+      final verdict = find.byKey(ValueKey('pgn-analysis-line-$i'));
+      expect(verdict, findsOneWidget);
+      final rich = tester.widget<RichText>(
+        find.descendant(of: verdict, matching: find.byType(RichText)).first,
+      );
+      expect(rich.text.toPlainText(), startsWith(labels[i]));
+      rich.text.visitChildren((span) {
+        if (span is TextSpan &&
+            (span.text?.startsWith('${labels[i]} ') ?? false)) {
+          verdicts[labels[i]] = span.style?.color;
+        }
+        return true;
+      });
+      for (final chip in tester.widgetList<MoveChip>(find.byType(MoveChip))) {
+        final expected = switch (chip.nagSuffix) {
+          '?!' => AppColors.nagDubious,
+          '?' => AppColors.nagMistake,
+          '??' => AppColors.nagBlunder,
+          '!?' => AppColors.nagInteresting,
+          _ => null,
+        };
+        if (expected != null) expect(chip.nagStyle.color, expected);
+      }
     }
     const colors = {
       'Inaccuracy': AppColors.nagDubious,
@@ -127,31 +169,7 @@ void main() {
       'Blunder': AppColors.nagBlunder,
       'Interesting': AppColors.nagInteresting,
     };
-    final verdicts = <String, Color?>{};
-    for (final rich in tester.widgetList<RichText>(find.byType(RichText))) {
-      rich.text.visitChildren((span) {
-        if (span is TextSpan) {
-          for (final label in colors.keys) {
-            if (span.text?.startsWith('$label ') ?? false) {
-              verdicts[label] = span.style?.color;
-            }
-          }
-        }
-        return true;
-      });
-    }
     expect(verdicts, colors);
-    for (final chip in tester.widgetList<MoveChip>(find.byType(MoveChip))) {
-      final expected = switch (chip.nagSuffix) {
-        '?!' => AppColors.nagDubious,
-        '?' => AppColors.nagMistake,
-        '??' => AppColors.nagBlunder,
-        '!?' => AppColors.nagInteresting,
-        _ => null,
-      };
-      if (expected != null) expect(chip.nagStyle.color, expected);
-    }
-    expect(text, isNot(contains('Best:')));
   });
 
   testWidgets('analysis preserves author glyphs and positional annotations', (

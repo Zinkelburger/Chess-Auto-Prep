@@ -22,7 +22,19 @@ class AnchoredDocumentViewport extends StatefulWidget {
     required this.selectedRow,
     required this.rowBuilder,
     required this.selectionKey,
+    this.controller,
+    this.scrollViewKey,
+    this.revealSelection = true,
+    this.restoreAnchor,
+    this.onAnchorChanged,
   });
+  final ScrollController? controller;
+  final Key? scrollViewKey;
+
+  /// Hosts with a layout-time reading policy own exact-item reveal.
+  final bool revealSelection;
+  final Object? restoreAnchor;
+  final ValueChanged<Object?>? onAnchorChanged;
   final DocumentRows rows;
   final GlobalKey selectionKey;
   final Object session;
@@ -39,7 +51,7 @@ class AnchoredDocumentViewport extends StatefulWidget {
 }
 
 class _AnchoredDocumentViewportState extends State<AnchoredDocumentViewport> {
-  final _center = GlobalKey();
+  final _center = UniqueKey();
   final _mountedRows = <Object, BuildContext>{};
   int _anchor = 0;
   int _generation = 0;
@@ -53,7 +65,9 @@ class _AnchoredDocumentViewportState extends State<AnchoredDocumentViewport> {
   @override
   void initState() {
     super.initState();
-    _anchor = _selectedRow;
+    _anchor =
+        widget.rows.indexOfKey(widget.restoreAnchor ?? Object()) ??
+        _selectedRow;
     _scheduleReveal();
   }
 
@@ -69,12 +83,21 @@ class _AnchoredDocumentViewportState extends State<AnchoredDocumentViewport> {
           : oldWidget.rows.keyAt(_anchor.clamp(0, oldWidget.rows.length - 1));
       _anchor = widget.rows.indexOfKey(oldKey ?? Object()) ?? _selectedRow;
     }
+    if (widget.restoreAnchor != null &&
+        widget.restoreAnchor != oldWidget.restoreAnchor) {
+      _anchor = widget.rows.indexOfKey(widget.restoreAnchor!) ?? _selectedRow;
+      _generation++;
+    }
     if (widget.selection != oldWidget.selection ||
         widget.session != oldWidget.session) {
-      // Mount a distant target in this build. Waiting until after its first
-      // frame would paint the new selection at the previous page's offset.
-      if (widget.rows.length > 0 &&
-          !_mountedRows.containsKey(widget.rows.keyAt(_selectedRow))) {
+      // Mount a distant target in this build. Also move reverse-side targets
+      // to the forward sliver: a host resolving the exact child origin during
+      // layout must not read a reverse sliver child's height. Waiting until
+      // after the first frame would paint at the previous page's offset.
+      if (widget.restoreAnchor == null &&
+          widget.rows.length > 0 &&
+          (_selectedRow < _anchor ||
+              !_mountedRows.containsKey(widget.rows.keyAt(_selectedRow)))) {
         _anchor = _selectedRow;
         _generation++;
       }
@@ -83,7 +106,7 @@ class _AnchoredDocumentViewportState extends State<AnchoredDocumentViewport> {
   }
 
   void _scheduleReveal() {
-    if (_revealScheduled) return;
+    if (!widget.revealSelection || _revealScheduled) return;
     _revealScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _revealScheduled = false;
@@ -128,31 +151,40 @@ class _AnchoredDocumentViewportState extends State<AnchoredDocumentViewport> {
   }
 
   @override
-  Widget build(BuildContext context) => CustomScrollView(
-    key: ValueKey((widget.session, _generation)),
-    primary: false,
-    center: _center,
-    scrollCacheExtent: const ScrollCacheExtent.pixels(240),
-    slivers: [
-      SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) => _row(context, _anchor - index - 1),
-          childCount: _anchor,
-          addAutomaticKeepAlives: false,
-          findChildIndexCallback: (key) => _indexForKey(key, before: true),
-        ),
+  Widget build(BuildContext context) {
+    widget.onAnchorChanged?.call(
+      widget.rows.length == 0 ? null : widget.rows.keyAt(_anchor),
+    );
+    return KeyedSubtree(
+      key: ValueKey((widget.session, _generation)),
+      child: CustomScrollView(
+        key: widget.scrollViewKey,
+        controller: widget.controller,
+        primary: false,
+        center: _center,
+        scrollCacheExtent: const ScrollCacheExtent.pixels(240),
+        slivers: [
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _row(context, _anchor - index - 1),
+              childCount: _anchor,
+              addAutomaticKeepAlives: false,
+              findChildIndexCallback: (key) => _indexForKey(key, before: true),
+            ),
+          ),
+          SliverList(
+            key: _center,
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _row(context, _anchor + index),
+              childCount: widget.rows.length - _anchor,
+              addAutomaticKeepAlives: false,
+              findChildIndexCallback: (key) => _indexForKey(key, before: false),
+            ),
+          ),
+        ],
       ),
-      SliverList(
-        key: _center,
-        delegate: SliverChildBuilderDelegate(
-          (context, index) => _row(context, _anchor + index),
-          childCount: widget.rows.length - _anchor,
-          addAutomaticKeepAlives: false,
-          findChildIndexCallback: (key) => _indexForKey(key, before: false),
-        ),
-      ),
-    ],
-  );
+    );
+  }
 
   int? _indexForKey(Key key, {required bool before}) {
     if (key is! ValueKey<(Object, Object)> || key.value.$1 != widget.session) {

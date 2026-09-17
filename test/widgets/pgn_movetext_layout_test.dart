@@ -35,22 +35,20 @@ void main() {
     return tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: SingleChildScrollView(
-            child: PgnMovetextView(
-              game: null,
-              moveHistory: moveHistory.map(PgnMoveSnapshot.capture).toList(),
-              variationsByPly: variationsByPly,
-              mainLineIndex: 0,
-              analysisPath: const [],
-              editingCommentIndex: null,
-              canEditComments: false,
-              editMode: editMode,
-              onMainLineMoveClicked: (_) {},
-              onShowMoveContextMenu: (_, _) {},
-              onSaveComment: (_, _) {},
-              onCancelEditingComment: () {},
-              onGoToAnalysisNode: (_, _) {},
-            ),
+          body: PgnMovetextView(
+            game: null,
+            moveHistory: moveHistory.map(PgnMoveSnapshot.capture).toList(),
+            variationsByPly: variationsByPly,
+            mainLineIndex: 0,
+            analysisPath: const [],
+            editingCommentIndex: null,
+            canEditComments: false,
+            editMode: editMode,
+            onMainLineMoveClicked: (_) {},
+            onShowMoveContextMenu: (_, _) {},
+            onSaveComment: (_, _) {},
+            onCancelEditingComment: () {},
+            onGoToAnalysisNode: (_, _) {},
           ),
         ),
       ),

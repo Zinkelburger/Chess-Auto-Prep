@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'dart:async';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:provider/provider.dart';
@@ -76,6 +77,8 @@ void main() {
   });
 
   Widget harness({required bool active}) => MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: TickerMode(
         enabled: active,
@@ -89,6 +92,8 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: InlineEngineBar(fen: fen, compactChrome: true)),
         ),
       );
@@ -164,6 +169,8 @@ void main() {
     const pgnKey = ValueKey('pgn-content');
 
     Widget viewer(String position, {double textScale = 1}) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: MediaQuery(
         data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
         child: Scaffold(
@@ -271,6 +278,8 @@ void main() {
     int? clicked;
     await tester.pumpWidget(
       MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SizedBox(
             width: 360,
@@ -315,6 +324,8 @@ void main() {
   ) async {
     StockfishConnectionFactory.createForTest = () async => _Connection();
     Widget previewHarness(bool flipped) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: InlineEngineBar(fen: fen, previewFlipped: flipped),
       ),
@@ -384,6 +395,8 @@ void main() {
       var inserted = false;
       await tester.pumpWidget(
         MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: InlineEngineBar(
               fen: fen,
@@ -454,6 +467,8 @@ void main() {
     expect(find.byTooltip('Hide threat'), findsOneWidget);
     await tester.pumpWidget(
       const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: TickerMode(
             enabled: true,

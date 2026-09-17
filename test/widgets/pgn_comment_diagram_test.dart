@@ -40,6 +40,7 @@ void main() {
     expect(find.textContaining('@@', findRichText: true), findsNothing);
     final move = find.text('Nf3', findRichText: true);
     await tester.ensureVisible(move);
+    await tester.pumpAndSettle();
     final beforeTap = tester.getTopLeft(move).dy;
     await tester.tap(move);
     await tester.pumpAndSettle();

@@ -600,8 +600,8 @@ matched by occurrence, never merged into one identity. Validation and applicatio
 are iterative, including deep variations.
 
 Riverpod/legacy bridge retirement, undo receipts, bulk/decode allocation and
-native frame measurements remain unfinished. Viewer still needs windowed movetext
-and migration of collection/widget orchestration.
+native frame measurements remain unfinished. Viewer uses the shared bounded
+viewport; collection/widget orchestration migration remains unfinished.
 Builder still owns legacy storage/session collaborators and needs the remaining
 feature ownership, draft recovery and presentation migrations.
 
@@ -1455,11 +1455,32 @@ to its parent, restoring any parent focus and reading position. **Esc** first
 returns to a manually scrolled reading position, then returns to the parent
 variation, then follows the existing mode-exit behavior. Parent and focus
 controls use quiet text buttons with registry-backed shortcut tooltips.
+The Viewer indexes its reading document with the pure
+`features/documents/models/viewer_document_layout.dart`. The iterative index
+preserves mainline/variation order, folded branch heads, solitaire visibility,
+engine suggestions and repeated prose references. Move runs contain at most 24
+plies; comments stay with their move. `PgnMovetextView` builds only viewport rows
+through the shared `design_system/layout/anchored_document_viewport.dart`, also
+used by Study and Builder. Navigation reuses the index; document, disclosure or
+visible-branch changes rebuild it. Prose parsing and widgets are created only for
+mounted rows, and inline comment drafts survive row eviction. Very large single
+comments remain whole passages; this is not a paragraph-size or memory-budget
+certification.
+
+`PgnReadingPane` supplies its scroll controller and layout-time anchor policy.
+Parent bookmarks retain a stable row key plus an offset relative to that row's
+viewport origin, so distant re-anchoring does not invalidate focus/return history.
+The renderer preserves the 900px reading column, prose widths, diagrams, inline
+move previews and selected passage headings. `MainlinePositions.positions` now
+shares one immutable list per replay revision instead of copying the entire
+mainline for each rendered comment.
+
 Move navigation anchors during viewport layout, before the new selection paints,
 without a scroll animation or a frame at the previous scroll offset,
 so vertical jumps across long notes stay in step with the board cursor.
-Move anchoring is bounded by the document with a 32px bottom margin: games
-whose title, moves and notes fit stay at the top for every anchor setting.
+Move anchoring is bounded by the document with bottom clearance for the floating
+controls (32px when none are shown): games whose title, moves and notes fit stay
+at the top for every anchor setting.
 Long chapters retain the selected anchor while content remains below it;
 near the end, scrolling stops at the document boundary instead of revealing
 a screen of blank space.

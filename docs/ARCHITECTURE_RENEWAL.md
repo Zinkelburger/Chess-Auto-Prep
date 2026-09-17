@@ -1613,6 +1613,64 @@ Milestones 1/2 and 3 remain partial. Viewer adoption, document/session/undo/
 performance parity, hierarchy/bridge retirement, milestones 4–7 and non-Linux/
 release gates remain unfinished.
 
+### Viewer bounded-rendering checkpoint (2026-09-17)
+
+Viewer now uses the shared document viewport in production. The pure
+`features/documents/models/viewer_document_layout.dart` indexes visible mainline
+and variation runs iteratively, with a maximum of 24 moves per run and constant
+time move/node/key lookup. Nested alternatives keep their source reading order;
+folded branch heads, focused scopes, solitaire reveal boundaries, repeated prose
+references and engine suggestions retain their distinct behavior. Selection-only
+mainline updates reuse the index. The recursive variation widget traversal and
+eager whole-document Column are retired; prose, diagrams and move widgets are
+built for mounted rows. Engine-only scores do not force one row per move.
+
+The reading pane supplies an external controller and applies its exact anchor
+during layout, including the second sliver layout needed after pixel correction.
+Reverse-side destinations are re-anchored before layout, avoiding forbidden
+reads of descendant heights. Short games stay at the top; final moves respect
+the actual document end. Focus bookmarks store a stable viewport-origin row key
+and relative pixel offset. Inline prose previews preserve browsing position;
+inline comment drafts survive eviction and save to the original move. Training
+uses this viewport without an outer scroll view, keeps lesson prose scrollable,
+and shares its snapshot identities across unchanged presentation updates.
+`MainlinePositions.positions` shares an immutable list until replay changes.
+
+Verification: the 137-test focused regression batch passes, including reading
+anchors in the first painted frame, focus/parent bookmarks, long sticky passages,
+engine suggestions and extension/save, diagrams and legal inline previews,
+loading/recovery, Study/Builder viewport behavior and mainline memo invalidation.
+New cases exercise 20,000 annotated mainline plies, a 20,000-ply sideline,
+20,000 nested branch indexing/folding and draft eviction. Large Viewer navigation
+mounts fewer than 300 move chips and keeps the same mainline index revision.
+All 15 selected Linux native cases pass: two large Viewer journeys, twelve
+loading/annotation journeys and Builder edit/save/mode-change/reload.
+
+The full unit/widget run also completed: 6,231 passed, five failed and eleven
+were skipped. All five failures came from older settings test hosts missing
+localization delegates after the settings migration; their hosts now use the
+production delegates. The eleven skips are pre-existing native-engine availability
+and documented behavior/expectimax review cases. This is not a clean full-suite
+result; all 40 cases in the follow-up files pass after repair, including the five
+previously failing settings cases, lesson scrolling/rebuild stability and engine
+suggestion interaction. No cases in those focused files or native journeys were
+skipped. Analyze/lint passes with nine pre-existing informational notices and all
+18 architecture-checker regression cases. Initial layout/anchor failures and
+obsolete eager-widget assertions were corrected during development; a new lesson
+test also initially omitted its required PGN fixture field.
+
+The headless production app opened the disposable 20,000-ply PGN, jumped to move
+10,000 and returned to its opening annotation. Inspected screenshots show the
+[final selected move](images/renewal-viewer-bounded-end.png) and the
+[opening prose and board](images/renewal-viewer-bounded-prose.png). Recovery banners
+belong to the disposable profile. The preview was stopped before final checks.
+
+These are correctness and bounded-widget checks, not completed frame/allocation
+or release certification. Individual large comments remain whole passages.
+Collection/widget ownership, scoped presentation, session/undo parity, remaining
+feature migrations, bridge retirement and non-Linux/release gates remain open.
+Milestones 1/2 and 3 remain partial; milestones 4–7 remain unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

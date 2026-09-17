@@ -34,6 +34,7 @@ class MainlinePositions {
 
   /// Normalised FENs of [_positions], filled on first use by [indexOfFen].
   List<String>? _normalizedFens;
+  List<Position>? _positionsView;
 
   /// How many mainline entries have been consumed, legal or not.  Equals the
   /// mainline length once every ply has been tried.
@@ -76,10 +77,12 @@ class MainlinePositions {
   void _sync() {
     if (_length() < _consumed) {
       _positions.length = 1;
+      _positionsView = null;
       _normalizedFens = null;
       _consumed = 0;
     }
     if (_consumed == _length()) return;
+    _positionsView = null;
     // A ply that failed to play leaves everything after it unreachable; the
     // positions stop there, but the plies still count as consumed so the
     // same illegal move is not retried on every read.
@@ -116,7 +119,8 @@ class MainlinePositions {
       ply >= 0 && ply < _positions.length ? _positions[ply] : null;
 
   /// Read-only view of every reachable position, `[k]` after `k` plies.
-  List<Position> get positions => List.unmodifiable(_positions);
+  List<Position> get positions =>
+      _positionsView ??= List.unmodifiable(_positions);
 
   /// Ply whose position matches [normalizedFen] (4-field), or null.  Ply 0
   /// is [start].

@@ -681,50 +681,48 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
     GlobalKey currentMoveKey,
     PgnReadingBranch? scope,
     bool expandAll,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      if (scope == null && _headerText.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: _buildGameHeader(context),
-        ),
-      PgnMovetextView(
-        readingScope: scope,
-        expandAll: expandAll,
-        game: _game,
-        moveHistory: _moveHistory,
-        mainlinePositions: _m.mainline,
-        variationsByPly: _variationsByPly,
-        mainLineIndex: _mainLineIndex,
-        currentMoveKey: currentMoveKey,
-        analysisPath: _analysisPath,
-        editingCommentIndex: _editingCommentIndex,
-        canEditComments: widget.onCommentsChanged != null,
-        editMode: widget.editMode,
-        bookFormatting: widget.bookFormatting,
-        startingMoveNumber: _startPosition.fullmoves,
-        startingWhiteTurn: _startPosition.turn == Side.white,
-        startPosition: _startPosition,
-        onMainLineMoveClicked: _onMainLineMoveClicked,
-        onShowMoveContextMenu: _showMoveContextMenu,
-        onSaveComment: _saveComment,
-        onCancelEditingComment: _cancelEditingComment,
-        onGoToAnalysisNode: _goToAnalysisNode,
-        onShowVariationContextMenu: _showVariationContextMenu,
-        reveal: _m.reveal,
-        onPlayInlineLine: _playInlineLine,
-        activeInlineLine: _inlineActive
-            ? (
-                firstMoveNumber: _inlineFirstMoveNumber,
-                firstIsWhite: _inlineFirstIsWhite,
-                sans: _inlineSans,
-                cursor: _inlineCursor,
-                anchorFen: _inlineAnchorFen,
-              )
-            : null,
-      ),
-    ],
+    PgnReadingViewport viewport,
+  ) => PgnMovetextView(
+    viewport: viewport,
+    header: scope == null && _headerText.isNotEmpty
+        ? Padding(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: _buildGameHeader(context),
+          )
+        : null,
+    readingScope: scope,
+    expandAll: expandAll,
+    game: _game,
+    moveHistory: _moveHistory,
+    mainlinePositions: _m.mainline,
+    variationsByPly: _variationsByPly,
+    mainLineIndex: _mainLineIndex,
+    currentMoveKey: currentMoveKey,
+    analysisPath: _analysisPath,
+    editingCommentIndex: _editingCommentIndex,
+    canEditComments: widget.onCommentsChanged != null,
+    editMode: widget.editMode,
+    bookFormatting: widget.bookFormatting,
+    startingMoveNumber: _startPosition.fullmoves,
+    startingWhiteTurn: _startPosition.turn == Side.white,
+    startPosition: _startPosition,
+    onMainLineMoveClicked: _onMainLineMoveClicked,
+    onShowMoveContextMenu: _showMoveContextMenu,
+    onSaveComment: _saveComment,
+    onCancelEditingComment: _cancelEditingComment,
+    onGoToAnalysisNode: _goToAnalysisNode,
+    onShowVariationContextMenu: _showVariationContextMenu,
+    reveal: _m.reveal,
+    onPlayInlineLine: _playInlineLine,
+    activeInlineLine: _inlineActive
+        ? (
+            firstMoveNumber: _inlineFirstMoveNumber,
+            firstIsWhite: _inlineFirstIsWhite,
+            sans: _inlineSans,
+            cursor: _inlineCursor,
+            anchorFen: _inlineAnchorFen,
+          )
+        : null,
   );
 
   @override

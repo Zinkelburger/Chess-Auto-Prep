@@ -27,7 +27,12 @@ Future<PgnViewerWidgetController> _pumpViewer(
 }
 
 Finder _bestMove(String san) => find.descendant(
-  of: find.byKey(const ValueKey('pgn-analysis-line-2')),
+  of: find.byWidgetPredicate((widget) {
+    final key = widget.key;
+    return key is ValueKey<(String, int?, int)> &&
+        key.value.$1 == 'pgn-analysis-variation' &&
+        key.value.$2 == 2;
+  }),
   matching: find.byWidgetPredicate(
     (widget) => widget is MoveChip && widget.san == san,
   ),

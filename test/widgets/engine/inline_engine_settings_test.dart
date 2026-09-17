@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/models/bulk_analysis_settings.dart';
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:provider/provider.dart';
@@ -26,7 +27,11 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => AppState(),
-        child: const MaterialApp(home: Scaffold(body: InlineEngineSettings())),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: InlineEngineSettings()),
+        ),
       ),
     );
     await tester.tap(find.byTooltip('Engine settings'));

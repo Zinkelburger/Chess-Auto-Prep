@@ -1,11 +1,5 @@
 part of 'pgn_movetext_view.dart';
 
-/// Deepest sideline level rendered unconditionally. Alternatives that would
-/// land deeper are folded behind their first move, which the reader can open.
-/// Machine-generated repertoire trees routinely nest far past anything a human
-/// wants to read in one pass; without a fold they bury the mainline.
-const _kAlwaysVisibleDepth = 2;
-
 /// A single, unannotated alternative this many plies long is faster to read in
 /// place than as a separate block. Anything longer, commented, or branching
 /// gets the full-width treatment below. Four plies is enough to answer the
@@ -24,29 +18,8 @@ List<InlineSpan>? _buildInlineVariationAtPly(
   int ply, {
   bool Function(MoveNodeView node)? nodeVisible,
 }) {
-  var roots = view.variationsByPly[ply];
-  if (roots == null || roots.length != 1) return null;
-
-  var node = roots.single;
-  if (nodeVisible != null && !nodeVisible(node)) return null;
-
-  final line = <MoveNodeView>[];
-  while (true) {
-    if ((node.comment?.trim().isNotEmpty ?? false) ||
-        (node.startingComment?.trim().isNotEmpty ?? false)) {
-      return null;
-    }
-    line.add(node);
-    if (line.length > _kMaxInlineVariationPlies) return null;
-
-    final visibleChildren = nodeVisible == null
-        ? node.children
-        : node.children.where(nodeVisible).toList();
-    if (visibleChildren.isEmpty) break;
-    if (visibleChildren.length != 1) return null;
-    node = visibleChildren.single;
-  }
-
+  final line = _inlineVariationNodes(view, ply, nodeVisible: nodeVisible);
+  if (line == null) return null;
   final spans = <InlineSpan>[
     TextSpan(text: '(', style: PgnTextStyles.parenthesisAt(1)),
   ];
@@ -78,31 +51,36 @@ List<InlineSpan>? _buildInlineVariationAtPly(
   return spans;
 }
 
-/// Render sidelines as ordinary paragraphs, with a disclosure arrow beside
-/// the first real move. Nesting never changes the size of the explanation.
-List<Widget> _buildVariationRowsAtPly(
+List<MoveNodeView>? _inlineVariationNodes(
   PgnMovetextView view,
   int ply, {
-  bool Function(MoveNodeView node)? nodeVisible,
-  required Map<int, bool> branchVisibility,
-  required ValueChanged<int> onToggleBranch,
-}) => [
-  for (final root in view.variationsByPly[ply] ?? <MoveNodeView>[])
-    if (nodeVisible == null || nodeVisible(root))
-      if (_isRepeatedProseReference(view, root, ply))
-        _buildProseReference(view, root, ply)
-      else
-        _buildVariationDocument(
-          view,
-          root,
-          ply: ply,
-          branchPly: ply,
-          depth: 1,
-          branchVisibility: branchVisibility,
-          onToggleBranch: onToggleBranch,
-          nodeVisible: nodeVisible,
-        ),
-];
+  bool Function(MoveNodeView)? nodeVisible,
+}) {
+  var roots = view.variationsByPly[ply];
+  if (roots == null || roots.length != 1) return null;
+
+  var node = roots.single;
+  if (nodeVisible != null && !nodeVisible(node)) return null;
+
+  final line = <MoveNodeView>[];
+  while (true) {
+    if ((node.comment?.trim().isNotEmpty ?? false) ||
+        (node.startingComment?.trim().isNotEmpty ?? false)) {
+      return null;
+    }
+    line.add(node);
+    if (line.length > _kMaxInlineVariationPlies) return null;
+
+    final visibleChildren = nodeVisible == null
+        ? node.children
+        : node.children.where(nodeVisible).toList();
+    if (visibleChildren.isEmpty) break;
+    if (visibleChildren.length != 1) return null;
+    node = visibleChildren.single;
+  }
+
+  return line;
+}
 
 // Course exporters encode clickable mentions as duplicate one-move RAVs.
 // Keep the nodes intact, but read a leaf repeating the principal move as prose.
@@ -117,7 +95,7 @@ bool _isRepeatedProseReference(
     node.children.isEmpty &&
     (node.nags?.isEmpty ?? true) &&
     (node.startingComment?.trim().isEmpty ?? true) &&
-    _metricsSpans(node.comment ?? '').isEmpty &&
+    MoveMetrics.parse(node.comment ?? '').summary.isEmpty &&
     ply < view.moveHistory.length &&
     node.san == view.moveHistory[ply].san &&
     filterDisplayComment(node.comment ?? '').isNotEmpty;
@@ -135,23 +113,21 @@ Widget _buildProseReference(PgnMovetextView view, MoveNodeView node, int ply) {
   );
 }
 
-Widget _buildVariationDocument(
+Widget _buildVariationRow(
   PgnMovetextView view,
-  MoveNodeView root, {
-  required int ply,
-  required int branchPly,
-  required int depth,
-  required Map<int, bool> branchVisibility,
+  ViewerVariationRow row, {
   required ValueChanged<int> onToggleBranch,
-  bool Function(MoveNodeView)? nodeVisible,
-  String? leadingLabel,
 }) {
-  final containsCurrent = view.analysisPath.any((n) => n.id == root.id);
-  final defaultOpen = branchVisibility.putIfAbsent(
-    root.id,
-    () => view.expandAll || depth <= _kAlwaysVisibleDepth,
-  );
-  final open = depth == 0 || containsCurrent || defaultOpen;
+  if (row.proseReference) return _buildProseReference(view, row.root, row.ply);
+  final root = row.root;
+  final ply = row.ply;
+  final branchPly = row.branchPly;
+  final depth = row.depth;
+  final containsCurrent = row.containsCurrent;
+  final open = row.open;
+  final leadingLabel = row.engineMove != null && row.first && depth == 1
+      ? 'Best: '
+      : null;
   final coords = _coordsAtPly(view, ply);
   final label =
       '${coords.moveNumber}${coords.isWhite ? '.' : '...'} ${root.san}';
@@ -185,7 +161,7 @@ Widget _buildVariationDocument(
           padding: EdgeInsets.only(left: indent),
           child: text,
         );
-  var firstRun = true;
+  var firstRun = row.first;
   final run = <InlineSpan>[
     if (leadingLabel != null)
       TextSpan(text: leadingLabel, style: PgnTextStyles.metricsAt(depth)),
@@ -211,11 +187,8 @@ Widget _buildVariationDocument(
   }
 
   if (open) {
-    MoveNodeView? cursor = root;
     var index = ply;
-    var alternatives = <MoveNodeView>[];
-    while (cursor != null) {
-      final node = cursor;
+    for (final node in row.nodes) {
       final introduction = node.startingComment;
       if (introduction != null && introduction.trim().isNotEmpty) {
         flush();
@@ -316,31 +289,6 @@ Widget _buildVariationDocument(
           ),
         );
       }
-      if (alternatives.isNotEmpty) {
-        flush();
-        for (final alternative in alternatives) {
-          children.add(
-            Padding(
-              padding: EdgeInsets.only(left: indent),
-              child: _buildVariationDocument(
-                view,
-                alternative,
-                ply: index,
-                branchPly: branchPly,
-                depth: depth + 1,
-                branchVisibility: branchVisibility,
-                onToggleBranch: onToggleBranch,
-                nodeVisible: nodeVisible,
-              ),
-            ),
-          );
-        }
-      }
-      final next = nodeVisible == null
-          ? node.children
-          : node.children.where(nodeVisible).toList();
-      alternatives = next.skip(1).toList();
-      cursor = next.firstOrNull;
       index++;
     }
     flush();
@@ -388,9 +336,14 @@ Widget _buildVariationDocument(
             ),
           ],
   );
-  if (depth == 0) return content;
+  final ancestorIndent =
+      (depth - 1).clamp(0, PgnTextStyles.maxStyledDepth) * 24.0;
   return Padding(
-    padding: const EdgeInsets.only(top: 6, bottom: 8),
+    padding: EdgeInsets.only(
+      left: ancestorIndent,
+      top: depth > 0 && row.first ? 6 : 0,
+      bottom: depth > 0 ? 8 : 0,
+    ),
     child: content,
   );
 }
