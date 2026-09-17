@@ -20,7 +20,7 @@ import '../features/documents/widgets/document_save_dialog.dart';
 import '../design_system/components/name_entry_dialog.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../chess_core/moves/tree_path.dart';
-import '../services/repertoire_line_ids.dart';
+import '../chess_core/pgn/repertoire_line_ids.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/study_import/study_import_controller.dart';

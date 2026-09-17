@@ -1,3 +1,4 @@
+import '../../support/repertoire_dependencies.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
@@ -27,6 +28,7 @@ void main() {
     repService = FakeRepertoireService();
     reviewService = FakeReviewService();
     controller = TrainingSessionController(
+      session: testRepertoireController(),
       repertoireService: repService,
       reviewService: reviewService,
     )..settings = fastSettings(wrongMoveReplay: false);

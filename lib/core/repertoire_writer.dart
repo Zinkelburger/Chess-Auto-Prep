@@ -1,12 +1,12 @@
 /// Serialized repertoire mutations and storage-derived undo history.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
+
 import 'package:dartchess/dartchess.dart';
 
 import '../features/coverage/services/coverage_suggestion_service.dart';
-import '../services/repertoire_file_editor.dart';
-import '../services/repertoire_service.dart';
-import '../services/storage/storage_factory.dart';
+import '../features/repertoires/repositories/repertoire_document_repository.dart';
 import '../utils/atomic_file.dart';
 import '../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
 import 'repertoire_controller.dart';
@@ -41,12 +41,11 @@ class _DraftUndo extends _UndoEntry {
 }
 
 class RepertoireWriter {
-  RepertoireWriter(this._controller, {RepertoireService? service})
-    : _service = service ?? RepertoireService();
+  RepertoireWriter(this._controller, {required this.documents});
 
   static const int _maxUndoOperations = 20;
   final RepertoireController _controller;
-  final RepertoireService _service;
+  final RepertoireDocumentRepository documents;
   Future<void> _queueTail = Future.value();
   final List<_UndoEntry> _undoStack = [];
   int _session = 0;
@@ -119,7 +118,7 @@ class RepertoireWriter {
               startingFen: startingFen,
               isWhiteRepertoire: isWhite,
             )
-          : await _service.files.appendMovesAtPath(
+          : await documents.append(
               filePath,
               appendPrefix,
               newMoves,
@@ -226,22 +225,12 @@ class RepertoireWriter {
       if (expected == null) throw AtomicWriteConflict(op.filePath ?? 'draft');
       final filePath = op.filePath;
       if (filePath != null) {
-        final storage = StorageFactory.instance;
-        try {
-          await storage.writeFile(
-            filePath,
-            op.before,
-            expectedContent: expected,
-          );
-        } on AtomicWriteConflict {
-          rethrow;
-        } catch (_) {
-          // A transport/finalization error may follow installation. Under
-          // S0's decoded-content contract, reconcile only this attempted
-          // result, never a different current value or a fresh expectation.
-          final actual = await storage.readFile(filePath);
-          if (actual != op.before) rethrow;
-        }
+        await documents.replace(
+          filePath,
+          op.before,
+          expectedContent: expected,
+          reconcileInstalled: true,
+        );
       } else if (_controller.repertoirePgn != expected) {
         throw const AtomicWriteConflict('draft');
       }

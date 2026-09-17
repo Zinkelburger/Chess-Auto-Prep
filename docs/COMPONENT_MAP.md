@@ -71,30 +71,58 @@ has moved to a toolbar control.
 
 **PGN context menu (right-click):** Uses Flutter's built-in `showMenu` API (Overlay-based, avoids Stack/Positioned layout issues). Menu items: Add Comment (focuses comment TextField), Promote Variation (non-mainline only), Make Main Line (recursive promote to root, non-mainline only), Duplicate Line (copies full line to clipboard), Copy PGN from Here, View in Lines (existing-line only; switches to Lines tab), Delete from Here. When the context menu is open, all moves from root to the right-clicked position are highlighted (blueGrey background). Delete from Here records a draft-only undo via `RepertoireWriter.recordDraftUndo()`, making it reversible with Ctrl+Z without replacing the chapter on disk.
 
+**Builder document boundary:** `RepertoireController` requires a
+`RepertoireDocumentRepository` and `RepertoireDecoder`; its writer receives the
+same repository. App startup supplies both through Provider, including the
+Trainer's board session. Screens and these hosts no longer resolve storage,
+construct a file editor or schedule decoder isolates. The old
+`core/repertoire_loader.dart` is retired: its result lives in
+`features/repertoires/models/loaded_repertoire.dart`, its contract in
+`features/repertoires/repositories/repertoire_decoder.dart`, and its isolate
+implementation in `infrastructure/repertoires/isolate_repertoire_decoder.dart`.
+
+`DocumentRepertoireRepository` adapts the shared `PgnDocumentStore` for chapter
+reads, line edits/deletion, imports, metadata replacement, append and undo.
+Linux uses the native store chosen at startup, including observed byte/file
+identity validation and retained history. Other hosts retain the legacy
+content-only adapter pending their platform gates. Repertoire text transforms,
+metadata headers, line IDs, document splitting and immutable append receipts
+have canonical libraries under `chess_core/pgn/`; the old service utility paths
+are removed, with no re-export shims. Unmigrated callers of
+`RepertoireFileEditor` share those pure transforms but retain their existing I/O.
+
 **Repertoire mutation safety:** `setRepertoireColor`, `setRootPosition` and
-`importPgnContent` validate their decoded-content baseline before replacement.
-`RepertoireFileEditor` prepares immutable `AppendMovesResult` receipts containing
-the validated before-content and actual added-move steps; a batch commits once.
+`importPgnContent` require their observed decoded-content baseline. A line saver
+retains its original game's bytes across debounce and chapter switches; queued
+saves advance only from acknowledged stored game text. An external edit of that
+game conflicts, while unrelated games and missing custom headers survive. A
+structural edit that changes a derived line ID can resolve its exact acknowledged
+game only when unique. Replacements contain exactly one game. Bulk deletion
+validates every captured index/game pair before changing anything; late single
+and bulk deletion results cannot clear the newly selected chapter.
+
 `RepertoireWriter` serializes append/undo, captures its document session before
-queueing, and rejects stale queued work. File-backed undo validates its expected
-content and advances only its proven predecessor after commit. Conflicts and
-failed writes retain history; post-install errors reconcile only the attempted
-content. External annotations preceding an append survive undo, and disk
-no-ops create no undo entries. Draft tree deletion is independent of file
-mutation. The import dialog waits for the commit and keeps its draft on conflict/read/write
-failure; color/root failures are surfaced without changing the committed state.
-Missing destinations fail instead of reporting success. Native byte/file-identity
-revision checking is still planned, not provided by these decoded-text guards. Regression coverage lives in
-`test/core/repertoire_mutation_safety_test.dart` and the existing writer suites.
+queueing and rejects stale queued work. Append preparation returns immutable
+`AppendMovesResult` receipts containing the observed before-content and actual
+added-move steps; a batch commits once. File-backed undo validates its expected
+content and advances only its proven predecessor after commit. Conflicts/failures
+retain history. Scratch-tree deletion undo remains independent of file mutation.
+The import dialog keeps its draft on conflict/read/write failure. Missing
+destinations fail rather than reporting success. Undo still uses S0's
+decoded-content provenance and explicit exact-result reconciliation after an
+uncertain acknowledgement; persistent native undo receipts and Builder draft
+recovery are not complete. See `test/core/repertoire_mutation_safety_test.dart`,
+`test/core/repertoire_line_save_switch_test.dart` and
+`test/infrastructure/repertoires/document_repertoire_repository_test.dart`.
 
 **Outline storage injection:** `RepertoireService(storage: ...)` routes file
 parsing and course discovery through its supplied storage. `RepertoireOutlineService`
 and `ChapterSplitter` pass their storage owner into their default parser, so a
 fixture or alternate profile is not silently read through `StorageFactory`.
 Pure text parsing does not resolve storage; the legacy default remains for
-unmigrated callers. Editor mutation migration is still pending.
+unmigrated callers. Remaining outline/generation file-editor callers still need migration.
 
-**Line deletion:** `RepertoireService.deleteLine(filePath, lineId)` removes a game from the PGN file on disk. `RepertoireController.deleteLine(line)` calls the service and reloads. `LineItemRow` shows a trash icon with a confirmation dialog; callbacks thread through `LinesListPanel` → `RepertoireLinesBrowser` → `repertoire_screen`.
+**Line deletion:** `RepertoireController.deleteLine(line)` validates the loaded game through its injected document repository and reloads only the same active chapter. `LineItemRow` shows a trash icon with a confirmation dialog; callbacks thread through `LinesListPanel` → `RepertoireLinesBrowser` → `repertoire_screen`.
 
 **Chess logic:** `dartchess` for rules/FEN; `flutter_chess_board` for display.
 
@@ -1070,7 +1098,8 @@ RepertoireListBody (embedded inline or in RepertoireSelectionScreen)
   → InteractivePgnEditor (pure view: tree + path props, action callbacks; memoized move widgets; context-menu path highlighting)
   → EditMainZone (onAutoSave, onDirty, onCopyToClipboard, onViewInLines adapters)
   → OpeningTreeWidget (unchanged — read-only statistics tree)
-  → disk writes via RepertoireService / RepertoireWriter (browse adds; line edits use _findGameIndexByLineId + _reassembleDocument)
+  → injected RepertoireDocumentRepository → DocumentRepertoireRepository → shared PgnDocumentStore (native on Linux)
+  → injected RepertoireDecoder → IsolateRepertoireDecoder → atomic application of chapter load results
 ```
 
 ### Native engines (Stockfish + Maia)

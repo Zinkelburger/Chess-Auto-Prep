@@ -6,11 +6,12 @@
 /// load is allowed to touch, and when `awaitLoaded()` is released.
 library;
 
+import '../support/repertoire_dependencies.dart';
+
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
@@ -106,7 +107,7 @@ void main() {
   group('loadRepertoire outcomes', () {
     test('a missing file clears the PGN, tree and lines', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/a.pgn'));
       expect(controller.repertoireLines, isNotEmpty);
 
@@ -121,7 +122,7 @@ void main() {
 
     test('a missing file leaves the colour headers of the last load', () async {
       storage.files['/b.pgn'] = _blackPgn;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/b.pgn'));
       expect(controller.isRepertoireWhite, isFalse);
       expect(controller.rootMoves, '1. d4 Nf6');
@@ -136,7 +137,7 @@ void main() {
     test('a read failure is reported through loadError', () async {
       storage.files['/a.pgn'] = _whitePgn;
       storage.failingReads.add('/a.pgn');
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       await controller.setRepertoire(_meta('/a.pgn'));
 
@@ -150,7 +151,7 @@ void main() {
     test('a later successful load clears a previous loadError', () async {
       storage.files['/a.pgn'] = _whitePgn;
       storage.failingReads.add('/a.pgn');
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/a.pgn'));
       expect(controller.loadError, isNotNull);
 
@@ -163,7 +164,7 @@ void main() {
 
     test('an empty file yields an empty opening tree and no lines', () async {
       storage.files['/empty.pgn'] = '';
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       await controller.setRepertoire(_meta('/empty.pgn'));
 
@@ -175,7 +176,7 @@ void main() {
 
     test('a PGN with no // Color: comment asks for colour selection', () async {
       storage.files['/n.pgn'] = '[Event "A"]\n[Result "*"]\n\n1. e4 e5 *\n';
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       await controller.setRepertoire(_meta('/n.pgn'));
 
@@ -188,7 +189,7 @@ void main() {
       'a // Color: Black header flips the side and clears the prompt',
       () async {
         storage.files['/b.pgn'] = _blackPgn;
-        final controller = RepertoireController();
+        final controller = testRepertoireController();
 
         await controller.setRepertoire(_meta('/b.pgn'));
 
@@ -200,7 +201,7 @@ void main() {
 
     test('a load navigates to the saved // Root: position', () async {
       storage.files['/b.pgn'] = _blackPgn;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       await controller.setRepertoire(_meta('/b.pgn'));
 
@@ -210,7 +211,7 @@ void main() {
 
     test('a load drops the undo stack', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       controller.writer.recordDraftUndo(isCurrent: () => true, restore: () {});
       expect(controller.writer.canUndo, isTrue);
 
@@ -222,7 +223,7 @@ void main() {
     test('a headerless PGN body still builds a tree', () async {
       // No [Event] tags at all: the game-splitter still yields movetext.
       storage.files['/m.pgn'] = '// Color: White\n\n1. e4 e5 2. Nf3 Nc6 *\n';
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       await controller.setRepertoire(_meta('/m.pgn'));
 
@@ -233,7 +234,7 @@ void main() {
 
   group('awaitLoaded', () {
     test('resolves immediately when no load is in flight', () async {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.awaitLoaded().timeout(const Duration(seconds: 1));
     });
 
@@ -241,7 +242,7 @@ void main() {
       storage.files['/a.pgn'] = _whitePgn;
       final gate = Completer<void>();
       storage.readGates['/a.pgn'] = gate;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       final load = controller.setRepertoire(_meta('/a.pgn'));
       await pumpEventQueue();
@@ -268,7 +269,7 @@ void main() {
       final gateB = Completer<void>();
       storage.readGates['/a.pgn'] = gateA;
       storage.readGates['/b.pgn'] = gateB;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       final loadA = controller.setRepertoire(_meta('/a.pgn'));
       await pumpEventQueue();
@@ -298,7 +299,7 @@ void main() {
   group('metadata comment upsert', () {
     test('setRootPosition inserts // Root: above the first [Event]', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/a.pgn'));
       controller.loadMoveHistory(['e4', 'e5']);
 
@@ -316,7 +317,7 @@ void main() {
 
     test('an existing // Root: line is replaced, not duplicated', () async {
       storage.files['/b.pgn'] = _blackPgn;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/b.pgn'));
       controller.loadMoveHistory(['d4', 'Nf6', 'c4']);
 
@@ -332,7 +333,7 @@ void main() {
 
     test('a comment is prepended when the file has no [Event] tag', () async {
       storage.files['/m.pgn'] = '1. e4 e5 *\n';
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/m.pgn'));
       controller.loadMoveHistory(['e4']);
 
@@ -343,7 +344,7 @@ void main() {
 
     test('setRepertoireColor writes the header and reloads', () async {
       storage.files['/n.pgn'] = '[Event "A"]\n[Result "*"]\n\n1. e4 e5 *\n';
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/n.pgn'));
       expect(controller.needsColorSelection, isTrue);
 
@@ -358,7 +359,7 @@ void main() {
     test(
       'setRepertoireColor reports a missing file without changing state',
       () async {
-        final controller = RepertoireController();
+        final controller = testRepertoireController();
         await controller.setRepertoire(_meta('/gone.pgn'));
 
         await expectLater(
@@ -375,7 +376,7 @@ void main() {
   group('importPgnContent', () {
     test('appends to the file, reloads, and returns the game count', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/a.pgn'));
       expect(controller.repertoireLines, hasLength(1));
 
@@ -390,7 +391,7 @@ void main() {
 
     test('a pasted study\'s variations are appended as lines', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/a.pgn'));
 
       final added = await controller.importPgnContent(
@@ -408,7 +409,7 @@ void main() {
 
     test('separates the appended games with a blank line', () async {
       storage.files['/a.pgn'] = '[Event "A"]\n[Result "*"]\n\n1. e4 *';
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(_meta('/a.pgn'));
 
       await controller.importPgnContent('[Event "C"]\n[Result "*"]\n\n1. d4 *');
@@ -420,7 +421,7 @@ void main() {
     test(
       'reports failure and writes nothing when the file is missing',
       () async {
-        final controller = RepertoireController();
+        final controller = testRepertoireController();
         await controller.setRepertoire(_meta('/gone.pgn'));
 
         await expectLater(
@@ -436,7 +437,7 @@ void main() {
     test('the winner keeps its lines, tree and headers', () async {
       storage.files['/a.pgn'] = _whitePgn;
       storage.files['/b.pgn'] = _blackPgn;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       final reached = Completer<void>();
       final gate = Completer<void>();
@@ -476,7 +477,7 @@ void main() {
       storage.files['/a.pgn'] = _whitePgn;
       storage.files['/b.pgn'] = _blackPgn;
       storage.failingReads.add('/a.pgn');
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       final gateA = Completer<void>();
       storage.readGates['/a.pgn'] = gateA;
@@ -498,7 +499,7 @@ void main() {
       storage.files['/a.pgn'] = _whitePgn;
       final gateA = Completer<void>();
       storage.readGates['/a.pgn'] = gateA;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       final loadA = controller.setRepertoire(_meta('/a.pgn'));
       await pumpEventQueue();
@@ -517,7 +518,7 @@ void main() {
       storage.files['/a.pgn'] = _whitePgn;
       final gateA = Completer<void>();
       storage.readGates['/a.pgn'] = gateA;
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       final loadA = controller.setRepertoire(_meta('/a.pgn'));
       await pumpEventQueue();
@@ -538,7 +539,7 @@ void main() {
     });
 
     test('a restore with no load in flight does not touch isLoading', () async {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       var notifications = 0;
       controller.addListener(() => notifications++);
 

@@ -2,12 +2,15 @@
 /// draft, retries against the newer chapter, and survives closing/reopening.
 library;
 
+import 'package:chess_auto_prep/app/app_dependencies.dart';
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/documents/repositories/pgn_document_store.dart';
+import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
+
 import 'dart:io';
 
 import 'package:chess_auto_prep/core/app_state.dart';
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
-import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
-import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,11 +53,12 @@ void main() {
       await folder.create(recursive: true);
       final file = File(p.join(folder.path, 'Main.pgn'));
       await file.writeAsString(_original);
-      final storage = StorageFactory.instance;
-      addTearDown(() {
-        StorageFactory.instanceForTest = storage;
-      });
-      await pumpApp(tester);
+      final documents = _InterleavingDocuments(
+        createPlatformDocumentStore()!,
+        file.path,
+      );
+      final repository = DocumentRepertoireRepository(documents);
+      await pumpApp(tester, repertoireDocuments: repository);
       getAppState(tester).handOff(OpenBuilder(repertoirePath: file.path));
       await _waitFor(tester, find.byType(InteractivePgnEditor));
       await tester.tap(find.text('Actions'));
@@ -67,7 +71,7 @@ void main() {
       );
       await tester.enterText(draft, _import);
       await tester.pump();
-      StorageFactory.instanceForTest = _InterleavingStorage(file.path);
+      documents.armed = true;
       await tester.tap(find.widgetWithText(FilledButton, 'Add to repertoire'));
       await _waitFor(
         tester,
@@ -76,7 +80,7 @@ void main() {
       expect(tester.widget<TextField>(draft).controller!.text, _import);
       expect(await file.readAsString(), contains('{External annotation}'));
       expect(await file.readAsString(), isNot(contains('Imported safely')));
-      StorageFactory.instanceForTest = storage;
+      documents.armed = false;
       await tester.tap(find.widgetWithText(FilledButton, 'Add to repertoire'));
       await _waitFor(tester, find.text('Imported safely'));
       await tester.pumpAndSettle();
@@ -88,7 +92,7 @@ void main() {
       expect(RegExp('Imported safely').allMatches(committed), hasLength(1));
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
-      await pumpApp(tester);
+      await pumpApp(tester, repertoireDocuments: repository);
       getAppState(tester).handOff(OpenBuilder(repertoirePath: file.path));
       await _waitFor(tester, find.text('Imported safely'));
       expect(await file.readAsString(), committed);
@@ -97,27 +101,24 @@ void main() {
   );
 }
 
-class _InterleavingStorage extends IOStorageService {
-  _InterleavingStorage(this.destination);
+class _InterleavingDocuments implements PgnDocumentStore {
+  _InterleavingDocuments(this.delegate, this.destination);
+  final PgnDocumentStore delegate;
   final String destination;
+  bool armed = false;
 
   @override
-  Future<void> writeFile(
-    String path,
-    String content, {
-    bool createOnly = false,
-    String? expectedContent,
-  }) async {
-    if (path == destination) {
+  Future<PgnOpenResult> open(String path) => delegate.open(path);
+  @override
+  Future<PgnWriteResult> create(String path, String content) =>
+      delegate.create(path, content);
+  @override
+  Future<PgnWriteResult> save(PgnSnapshot before, String content) async {
+    if (armed && before.path == destination) {
       await File(
-        path,
+        destination,
       ).writeAsString(_original.replaceFirst('e5', 'e5 {External annotation}'));
     }
-    await super.writeFile(
-      path,
-      content,
-      createOnly: createOnly,
-      expectedContent: expectedContent,
-    );
+    return delegate.save(before, content);
   }
 }

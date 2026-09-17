@@ -11,6 +11,11 @@
 /// way the rest of the app does: an [AppState] handoff.
 library;
 
+import 'package:chess_auto_prep/infrastructure/repertoires/isolate_repertoire_decoder.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
+import '../support/repertoire_dependencies.dart';
+
 import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/widgets/escape_to_pop_scope.dart';
@@ -114,8 +119,16 @@ Future<AppState> _pumpScreen(
   addTearDown(appState.dispose);
   await pumpCatalogWidget(
     tester,
-    ChangeNotifierProvider<AppState>.value(
-      value: appState,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AppState>.value(value: appState),
+        Provider<RepertoireDocumentRepository>.value(
+          value: testRepertoireDocuments(),
+        ),
+        Provider<RepertoireDecoder>.value(
+          value: const IsolateRepertoireDecoder(),
+        ),
+      ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,

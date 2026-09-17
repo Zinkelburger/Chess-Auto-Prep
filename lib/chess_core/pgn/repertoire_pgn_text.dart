@@ -14,7 +14,7 @@
 /// number — could not be tested without a file on disk.
 library;
 
-import '../utils/movetext_builder.dart';
+import '../../utils/movetext_builder.dart';
 
 /// `[Event "..."]`, for replacing a line's title in place.
 final RegExp _eventTagRe = RegExp(r'\[Event\s+"[^"]*"\]');

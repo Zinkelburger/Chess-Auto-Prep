@@ -25,7 +25,7 @@ import '../models/repertoire_line.dart' show isModelGameHeaders;
 import '../utils/fen_utils.dart' show plyFromFen;
 import '../utils/movetext_builder.dart' show formatMoveAtPly;
 import '../chess_core/pgn/pgn_text.dart' as pgn;
-import 'repertoire_line_ids.dart' show RepertoireLineIds;
+import '../chess_core/pgn/repertoire_line_ids.dart' show RepertoireLineIds;
 import 'course_chapter_headers.dart';
 
 /// [pgn] rewritten so that no game has a variation, and how many games it

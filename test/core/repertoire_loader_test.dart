@@ -7,7 +7,12 @@
 /// casing, where the block may live) and what a partly broken PGN yields.
 library;
 
-import 'package:chess_auto_prep/core/repertoire_loader.dart';
+import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
+
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_headers.dart';
+
+import 'package:chess_auto_prep/infrastructure/repertoires/isolate_repertoire_decoder.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart' as pgn;
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
@@ -155,7 +160,7 @@ void main() {
     });
   });
 
-  group('RepertoireLoader.read', () {
+  group('RepertoireDocumentRepository.read', () {
     late _MemoryStorage storage;
     setUp(() {
       storage = _MemoryStorage();
@@ -165,7 +170,9 @@ void main() {
 
     test('distinguishes a missing file from an empty one', () async {
       storage.files['/empty.pgn'] = '';
-      final loader = RepertoireLoader();
+      final loader = DocumentRepertoireRepository(
+        LegacyPgnDocumentStore(storage),
+      );
       expect(await loader.read('/gone.pgn'), (exists: false, pgn: null));
       expect(await loader.read('/empty.pgn'), (exists: true, pgn: ''));
     });
@@ -173,7 +180,7 @@ void main() {
 
   group('RepertoireLoader.build', () {
     test('null and empty text yield an empty tree and no headers', () async {
-      final loader = RepertoireLoader();
+      const loader = IsolateRepertoireDecoder();
       for (final text in [null, '']) {
         final loaded = await loader.build(text, fallbackIsWhite: true);
         expect(loaded.pgn, text);
@@ -191,7 +198,7 @@ void main() {
             '// Color: Black\n// Root: 1. d4 Nf6\n\n'
             '[Event "A"]\n[Result "*"]\n\n1. d4 Nf6 2. c4 g6 *\n\n'
             '[Event "B"]\n[Result "*"]\n\n1. d4 Nf6 2. c4 e6 *\n';
-        final loaded = await RepertoireLoader().build(
+        final loaded = await const IsolateRepertoireDecoder().build(
           text,
           fallbackIsWhite: true,
         );
@@ -208,7 +215,7 @@ void main() {
 
     test('a BOM does not hide the colour block or the games', () async {
       const text = '\uFEFF// Color: Black\n\n$_game';
-      final loaded = await RepertoireLoader().build(
+      final loaded = await const IsolateRepertoireDecoder().build(
         text,
         fallbackIsWhite: true,
       );
@@ -223,7 +230,7 @@ void main() {
           '// Color: White\n\n'
           '[Event "Bad"]\n[Result "*"]\n\n1. e4 e5 2. Ke2 Ke7 3. Qh5 *\n\n'
           '[Event "Good"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 *\n';
-      final loaded = await RepertoireLoader().build(
+      final loaded = await const IsolateRepertoireDecoder().build(
         text,
         fallbackIsWhite: true,
       );
@@ -236,7 +243,7 @@ void main() {
 
     test('a game with no moves is not a line and not a tree game', () async {
       const text = '// Color: White\n\n[Event "Empty"]\n[Result "*"]\n\n*\n';
-      final loaded = await RepertoireLoader().build(
+      final loaded = await const IsolateRepertoireDecoder().build(
         text,
         fallbackIsWhite: true,
       );

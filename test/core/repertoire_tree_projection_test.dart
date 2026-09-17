@@ -1,3 +1,4 @@
+import '../support/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/chess_core/moves/move_tree_snapshot.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
@@ -6,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late RepertoireController controller;
-  setUp(() => controller = RepertoireController());
+  setUp(() => controller = testRepertoireController());
   tearDown(() => controller.dispose());
 
   void load() => controller.loadAnnotatedTree(

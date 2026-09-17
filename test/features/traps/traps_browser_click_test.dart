@@ -1,8 +1,8 @@
+import '../../support/repertoire_dependencies.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/models/trap_reply.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_line_builder.dart';
@@ -152,7 +152,7 @@ void main() {
   testWidgets('tapping a trap row loads the annotated line onto the board', (
     tester,
   ) async {
-    final controller = RepertoireController();
+    final controller = testRepertoireController();
     final trap = _scandiTrap();
 
     await tester.pumpWidget(

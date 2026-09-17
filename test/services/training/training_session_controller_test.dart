@@ -1,3 +1,4 @@
+import '../../support/repertoire_dependencies.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/models/repertoire_line.dart';
@@ -35,6 +36,7 @@ void main() {
 
   TrainingSessionController buildController() {
     return TrainingSessionController(
+      session: testRepertoireController(),
       repertoireService: repService,
       reviewService: reviewService,
     )..settings = fastSettings();

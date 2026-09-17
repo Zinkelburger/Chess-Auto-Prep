@@ -112,6 +112,20 @@ void main() {
   tearDown(() => tmp.deleteSync(recursive: true));
 
   group('build', () {
+    test('excludes native recovery storage at every chapter level', () async {
+      for (final parent in [root, p.join(root, 'Sidelines')]) {
+        final history = Directory(p.join(parent, '.cap-pgn-history'));
+        history.createSync();
+        File(
+          p.join(history.path, 'recovered.pgn'),
+        ).writeAsStringSync(_game('Recovery only', '1. e4 e5'));
+      }
+      final outline = await service.build(root, trainingColor: 'black');
+      expect(outline.folders.map((f) => f.name), ['Sidelines']);
+      expect(outline.folders.single.folders, isEmpty);
+      expect(outline.lineCount, 3);
+    });
+
     test('mirrors folders, chapters and lines', () async {
       final outline = await service.build(root, trainingColor: 'black');
       expect(outline.name, 'French');

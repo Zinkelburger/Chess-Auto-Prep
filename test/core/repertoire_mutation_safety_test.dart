@@ -1,12 +1,13 @@
+import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
+import '../support/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
 import 'dart:async';
 import 'dart:io';
 
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
-import 'package:chess_auto_prep/services/repertoire_service.dart';
-import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
-import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:chess_auto_prep/utils/atomic_file.dart';
@@ -20,6 +21,7 @@ void main() {
   late File file;
   late RepertoireController controller;
   late StorageService storage;
+  late _InterleavingStorage gateway;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('mutation-safety-');
@@ -29,8 +31,10 @@ void main() {
       documentsRoot: directory,
       supportRoot: Directory(p.join(directory.path, 'support')),
     );
-    StorageFactory.instanceForTest = storage;
-    controller = RepertoireController();
+    gateway = _InterleavingStorage(storage, () async {});
+    controller = testRepertoireController(
+      documents: DocumentRepertoireRepository(LegacyPgnDocumentStore(gateway)),
+    );
     await controller.setRepertoire(
       RepertoireMetadata(
         name: 'Chapter',
@@ -42,7 +46,6 @@ void main() {
   });
 
   tearDown(() async {
-    StorageFactory.instanceForTest = null;
     controller.dispose();
     await directory.delete(recursive: true);
   });
@@ -53,7 +56,7 @@ void main() {
   for (final action in ['color', 'root', 'import']) {
     test('DATA-01: $action refuses an interleaved replacement', () async {
       const newer = '$original\n{external annotation}\n';
-      StorageFactory.instanceForTest = _InterleavingStorage(storage, () async {
+      gateway.delegate = _InterleavingStorage(storage, () async {
         await file.writeAsString(newer);
       });
       final Future<Object?> operation;
@@ -178,7 +181,7 @@ void main() {
   test('DATA-03: failed undo keeps history for a successful retry', () async {
     await add();
     final committed = await file.readAsString();
-    StorageFactory.instanceForTest = _InterleavingStorage(storage, () async {
+    gateway.delegate = _InterleavingStorage(storage, () async {
       throw const FileSystemException('injected disk failure');
     });
     await expectLater(
@@ -187,18 +190,16 @@ void main() {
     );
     expect(controller.writer.canUndo, isTrue);
     expect(await file.readAsString(), committed);
-    StorageFactory.instanceForTest = storage;
+    gateway.delegate = storage;
     expect(await controller.writer.undo(), isTrue);
     expect(await file.readAsString(), original);
   });
   test(
     'STATE-01: an in-flight append cannot acknowledge success to a new chapter',
     () async {
-      final editor = _PausedEditor();
+      final editor = _PausedRepository(LegacyPgnDocumentStore(gateway));
       controller.dispose();
-      controller = RepertoireController(
-        repertoireService: _PausedService(editor),
-      );
+      controller = testRepertoireController(documents: editor);
       await controller.setRepertoire(
         RepertoireMetadata(
           name: 'Chapter',
@@ -230,6 +231,53 @@ void main() {
       expect(writer.canUndo, isFalse);
     },
   );
+
+  for (final bulk in [false, true]) {
+    test(
+      'a late ${bulk ? 'bulk' : 'single'} deletion cannot clear a new chapter',
+      () async {
+        final repository = _PausedDeletionRepository(
+          LegacyPgnDocumentStore(gateway),
+        );
+        controller.dispose();
+        controller = testRepertoireController(documents: repository);
+        await controller.setRepertoire(
+          RepertoireMetadata(
+            name: 'First',
+            filePath: file.path,
+            lastModified: DateTime(2026),
+          ),
+        );
+        final line = controller.repertoireLines.single;
+        final deletion = bulk
+            ? controller.deleteLines([line])
+            : controller.deleteLine(line);
+        await repository.committed.future;
+        final other = File(p.join(directory.path, 'other.pgn'));
+        await other.writeAsString(original);
+        await controller.setRepertoire(
+          RepertoireMetadata(
+            name: 'Other',
+            filePath: other.path,
+            lastModified: DateTime(2026),
+          ),
+        );
+        controller.loadPgnLine(controller.repertoireLines.single);
+        final tree = controller.tree;
+        final selected = controller.selectedPgnLine;
+        repository.resume.complete();
+        await deletion;
+        expect(controller.tree, same(tree));
+        expect(controller.selectedPgnLine, same(selected));
+        expect(controller.currentRepertoire!.filePath, other.path);
+        expect(await other.readAsString(), original);
+        expect(
+          await file.readAsString(),
+          isNot(contains('[Event "Original"]')),
+        );
+      },
+    );
+  }
 
   test('TEST-01: transposed book moves remain no-ops', () async {
     const pgn =
@@ -285,7 +333,11 @@ void main() {
   test(
     'DATA-03: fileless batches have distinct logical per-move undo',
     () async {
-      final memory = RepertoireController();
+      final memory = testRepertoireController(
+        documents: DocumentRepertoireRepository(
+          LegacyPgnDocumentStore(gateway),
+        ),
+      );
       addTearDown(memory.dispose);
       await memory.restoreRepertoireFromPgn(original);
       await memory.writer.addMovesAtPosition(
@@ -304,10 +356,10 @@ void main() {
     'DATA-03: post-install failure reconciles without replaying undo',
     () async {
       await add(['Nf3', 'Nc6']);
-      StorageFactory.instanceForTest = _AfterWriteFailure(storage);
+      gateway.delegate = _AfterWriteFailure(storage);
       expect(await controller.writer.undo(), isTrue);
       expect(controller.repertoireLines.single.moves, ['e4', 'e5', 'Nf3']);
-      StorageFactory.instanceForTest = storage;
+      gateway.delegate = storage;
       expect(await controller.writer.undo(), isTrue);
       expect(await file.readAsString(), original);
       expect(controller.writer.canUndo, isFalse);
@@ -353,7 +405,7 @@ void main() {
 
 class _InterleavingStorage implements StorageService {
   _InterleavingStorage(this.delegate, this.beforeWrite);
-  final StorageService delegate;
+  StorageService delegate;
   final Future<void> Function() beforeWrite;
 
   @override
@@ -400,32 +452,55 @@ class _AfterWriteFailure extends _InterleavingStorage {
   }
 }
 
-class _PausedService extends RepertoireService {
-  _PausedService(this.editor);
-  final RepertoireFileEditor editor;
-  @override
-  RepertoireFileEditor get files => editor;
-}
-
-class _PausedEditor extends RepertoireFileEditor {
+class _PausedRepository extends DocumentRepertoireRepository {
+  _PausedRepository(super.documents);
   final committed = Completer<void>();
   final resume = Completer<void>();
 
   @override
-  Future<AppendMovesResult> appendMovesAtPath(
+  Future<AppendMovesResult> append(
     String filePath,
     List<String> pathFromRoot,
     List<String> newSans, {
     String? startingFen,
     bool isWhiteRepertoire = true,
   }) async {
-    final result = await super.appendMovesAtPath(
+    final result = await super.append(
       filePath,
       pathFromRoot,
       newSans,
       startingFen: startingFen,
       isWhiteRepertoire: isWhiteRepertoire,
     );
+    committed.complete();
+    await resume.future;
+    return result;
+  }
+}
+
+class _PausedDeletionRepository extends DocumentRepertoireRepository {
+  _PausedDeletionRepository(super.documents);
+  final committed = Completer<void>();
+  final resume = Completer<void>();
+  @override
+  Future<bool> deleteLine(
+    String path,
+    String lineId, {
+    required String expectedContent,
+  }) async {
+    final result = await super.deleteLine(
+      path,
+      lineId,
+      expectedContent: expectedContent,
+    );
+    committed.complete();
+    await resume.future;
+    return result;
+  }
+
+  @override
+  Future<int> deleteLinesAt(String path, Map<int, String> expectedGames) async {
+    final result = await super.deleteLinesAt(path, expectedGames);
     committed.complete();
     await resume.future;
     return result;

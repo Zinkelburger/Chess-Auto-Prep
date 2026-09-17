@@ -1,3 +1,4 @@
+import '../support/repertoire_dependencies.dart';
 import 'dart:async';
 import 'dart:io' as io;
 
@@ -81,7 +82,7 @@ void main() {
     test(
       'setPositionFromMoveHistory preserves full move history from startpos',
       () {
-        final controller = RepertoireController();
+        final controller = testRepertoireController();
         const fen =
             'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2';
         const moves = ['e4', 'e5', 'Nf3'];
@@ -100,7 +101,7 @@ void main() {
     );
 
     test('setPositionFromMoveHistory supports custom starting positions', () {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       const startingFen =
           'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
       const fen =
@@ -122,7 +123,7 @@ void main() {
 
   group('appendNewLine', () {
     test('appendNewLine preserves custom start positions from PGN headers', () {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       const startingFen =
           'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
       final pgn = [
@@ -143,7 +144,7 @@ void main() {
   group('promoteVariation', () {
     /// A tree with two replies to 2.c4: mainline e6, then g6 as a sibling.
     RepertoireController controllerWithVariation() {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       controller.loadMoveHistory(['d4', 'Nf6', 'c4', 'e6']);
       controller.jumpToMoveIndex(2); // cursor after 2.c4
       controller.playMove('g6'); // adds g6 as the second child
@@ -176,7 +177,7 @@ void main() {
     });
 
     test('the opening tree cursor is re-synced after a promotion', () async {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.restoreRepertoireFromPgn('''
 [Event "A"]
 [Result "*"]
@@ -205,7 +206,7 @@ void main() {
 
   group('repertoireLines identity', () {
     test('appendNewLine swaps the list rather than mutating it', () {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       controller.appendNewLine(['e4'], 'One', '1. e4 *');
       final first = controller.repertoireLines;
 
@@ -218,7 +219,7 @@ void main() {
     });
 
     test('appendMoveToExistingLine swaps the list rather than mutating it', () {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       controller.appendNewLine(['e4'], 'One', '1. e4 *');
       final before = controller.repertoireLines;
 
@@ -230,7 +231,7 @@ void main() {
     });
 
     test('the exposed list rejects in-place mutation', () {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       controller.appendNewLine(['e4'], 'One', '1. e4 *');
 
       expect(
@@ -244,7 +245,7 @@ void main() {
     late RepertoireController controller;
 
     setUp(() {
-      controller = RepertoireController();
+      controller = testRepertoireController();
     });
 
     test('goBack at start position is identity', () {
@@ -362,7 +363,7 @@ void main() {
     late RepertoireController controller;
 
     setUp(() {
-      controller = RepertoireController();
+      controller = testRepertoireController();
     });
 
     test(
@@ -512,7 +513,7 @@ void main() {
     test(
       'restoreRepertoireFromPgn rebuilds parsed lines from PGN snapshot',
       () async {
-        final controller = RepertoireController();
+        final controller = testRepertoireController();
 
         const newPgn = '''
 // Color: White
@@ -537,7 +538,7 @@ void main() {
     test(
       'restoreRepertoireFromPgn without Root comment resets navigation to start',
       () async {
-        final controller = RepertoireController();
+        final controller = testRepertoireController();
         controller.loadMoveHistory(['d4', 'd5', 'c4']);
 
         const newPgn = '''
@@ -562,7 +563,7 @@ void main() {
     test(
       'restoreRepertoireFromPgn with empty syncPath resets navigation to start',
       () async {
-        final controller = RepertoireController();
+        final controller = testRepertoireController();
         controller.loadMoveHistory(['d4', 'd5', 'c4']);
 
         const newPgn = '''
@@ -588,7 +589,7 @@ void main() {
     );
 
     test('setRepertoireColor flips side and resets navigation state', () async {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       await controller.setRepertoire(
         RepertoireMetadata(
           name: 'Test',
@@ -610,7 +611,7 @@ void main() {
     });
 
     test('loadMoveHistory with empty history produces start position FEN', () {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       controller.loadMoveHistory([]);
 
@@ -623,7 +624,7 @@ void main() {
 
   group('saved root position', () {
     test('defaults to the starting position when no root is saved', () {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
 
       expect(controller.rootMoveSans, isEmpty);
       expect(controller.rootFen, kStandardStartFen);
@@ -634,7 +635,7 @@ void main() {
     });
 
     test('follows the // Root: header and tracks the cursor', () async {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       const pgnWithRoot = '''
 // Color: Black
 // Root: 1. d4 Nf6 2. c4 c5
@@ -665,7 +666,7 @@ void main() {
     late RepertoireController controller;
 
     setUp(() {
-      controller = RepertoireController();
+      controller = testRepertoireController();
     });
 
     test('no operation changes FEN without also updating moveIndex', () {
@@ -732,7 +733,7 @@ void main() {
 
       final gate = Completer<void>();
       final firstReached = Completer<void>();
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       controller.debugAfterRepertoireRead = () async {
         if (!firstReached.isCompleted) firstReached.complete();
         await gate.future;

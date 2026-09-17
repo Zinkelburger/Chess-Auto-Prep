@@ -2032,6 +2032,77 @@ undo/panel parity,
 Builder recovery, later feature migrations and full performance/platform/release
 gates remain open. Milestones 1/2 and 3 are partial; 4–7 remain unfinished.
 
+### Builder document-boundary checkpoint (2026-09-17)
+
+Following Viewer edit-context checkpoint `0dcd6d23`, Builder now requires injected
+`RepertoireDocumentRepository` and `RepertoireDecoder` contracts under
+`features/repertoires/repositories/`. App startup supplies them through Provider;
+the Trainer receives its board session explicitly. The controller and writer no
+longer resolve `StorageFactory`, construct `RepertoireFileEditor` or create the
+old concrete loader. A focused architecture rule rejects those regressions.
+
+The old loader is retired. `LoadedRepertoire` lives in feature models, PGN
+metadata parsing lives in `chess_core/pgn/repertoire_headers.dart`, and worker
+scheduling lives in `infrastructure/repertoires/isolate_repertoire_decoder.dart`.
+Pure text editing, line IDs, document splitting and immutable append receipts
+have canonical chess-core libraries. Imports move directly; no forwarding
+libraries remain. Transitive purity enforcement covers the new contracts and
+load values as well as chess core.
+
+`DocumentRepertoireRepository` routes Builder reads, line edits/deletions,
+metadata changes, imports, appends and undo through the shared PGN document store.
+Linux uses the native revision/history protocol selected at startup. Other hosts
+retain the content-only compatibility store. The existing logical per-move undo
+chain and queued session checks remain intact. Undo's exact decoded-result
+reconciliation is explicit; this does not graduate native persistent undo receipt
+provenance or other-platform commit protocols.
+
+A new regression reproduced an external-before-save overwrite: editing a loaded
+line replaced a newer annotation on disk. Each line saver now captures its
+loaded original and advances it only to an acknowledged stored game. Queued and
+retained callbacks share that collection's originals; unrelated games and custom
+headers survive. A changed derived ID can resolve the exact acknowledged game
+only when unique. Replacement input is normalized to one game, keeping chapter
+preambles out of its movetext; multi-game line replacements are rejected. This
+also fixed a follow-up sequential-save regression. Bulk deletion validates all
+captured index/game pairs atomically, and late single/bulk deletion cannot clear
+the new chapter's selected tree.
+
+The native import-conflict fixture now injects a document-store decorator before
+app construction and interleaves a real filesystem edit before native commit.
+It no longer changes a global storage singleton underneath a running controller.
+Legacy unit fixture composition still captures disposable storage in a test
+helper; new repository contract tests use an injected scripted store directly.
+
+Verification: the initial focused batch passed 189 tests, the broader
+Builder/Trainer batch passed 109, the targeted follow-up passed 41, and the
+final affected screen/repository/controller batch passed 55. These batches
+overlap and are not a distinct-test total. Four native cases passed across
+`builder_projection_test.dart`, `repertoire_mutation_test.dart` and
+`workspace_navigation_test.dart`: annotation/glyph persistence, import conflict
+and retry, navigation and draft retention. Analyze/lint passed with nine
+existing informational diagnostics, no warnings/errors, and 19 architecture
+checker regressions. No selected tests were skipped. An incorrectly combined
+runner invocation started the full suite; it was deliberately cancelled and
+does not count as a suite pass. Engine, other-platform and release gates were
+not run.
+
+The private preview reopened the native import fixture with both games and the
+external annotation intact. Visual inspection also caught the internal
+`.cap-pgn-history` directory in the chapter outline; recursive outline loading
+now excludes that reserved directory, with a real-filesystem regression.
+All 23 outline tests and analyze/lint passed after that correction. The rebuilt
+app's [inspected screenshot](images/renewal-builder-document-boundary.png)
+shows the two chapter lines and retained external annotation without exposing
+the internal history folder. The headless preview used disposable data and was
+stopped before handoff.
+
+This is milestone 3 progress, not full Builder migration. The legacy host/presentation, outline and
+generation file-editor callers, app-lifetime Builder recovery, retained scratch
+drafts and complete native undo receipts remain pending. Milestones 1/2 and 3
+are partial; later feature, performance and cross-platform/release gates remain
+open.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
@@ -2175,9 +2246,10 @@ software-engineering practices; they are not a purported canonical list of
 
 ## Target layout and dependency rules
 
-Proposed paths are relative to the repository; adopt them for migrated slices,
-and update the canonical Dart/UI guides and their generated references when
-implementation starts. Until then, current placement rules remain in force.
+Paths are relative to the repository. Migrated slices already use this layout
+under the canonical Dart/UI guides. Remaining legacy owners move as their
+workflows migrate; the feature directories below describe the target hierarchy,
+not a claim that every workflow is complete.
 
 ```text
 lib/

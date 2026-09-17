@@ -102,7 +102,9 @@ class RepertoireOutlineService {
     final (folders, chapterNodes) = await (
       Future.wait([
         for (final dir in subdirs)
-          build(dir, loadLines: loadLines, trainingColor: trainingColor),
+          // Native document recovery bytes are not user chapter folders.
+          if (p.basename(dir) != '.cap-pgn-history')
+            build(dir, loadLines: loadLines, trainingColor: trainingColor),
       ]),
       Future.wait([
         for (final chapter in chapters)

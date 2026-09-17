@@ -101,9 +101,14 @@ substitutions, original bytes and pending save outcomes; returning cannot silent
 rebase a draft. Save Copy forks its destination baseline from the source context.
 Durable navigation history and private game-entry values remain unfinished.
 Legacy collection presentation/widget ownership, generation inline
-filter wiring, remaining Builder storage/
-session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/panel
+filter wiring, remaining Builder session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/panel
 restoration and complete large-document performance evidence remain pending.
+Builder document reads/writes and decoding now use required injected contracts.
+Linux writes use the shared native PGN store; pure chapter text, headers, IDs and
+append receipts live in chess core. Line saves retain acknowledged originals;
+external target edits and reordered bulk deletions conflict. Remaining legacy
+outline/generation editors, durable Builder recovery and native undo receipt
+ownership still need migration.
 Study now has independent cursor/metadata projections and scoped subscriptions;
 metadata reads avoid tree materialization and ordinary annotation edits leave the
 board/engine/sidebar unchanged. Its existing Provider bridge still needs retirement
@@ -201,7 +206,7 @@ Design components are built on demand inside the first complete slice.
 | `RepertoireTreeExplorer` DB frequency columns | **Not started** | Explorer shows engine metrics, not Lichess W/D/B |
 | Entry: **Build manually** (empty repertoire, DB-only) | **Partial** | DB fallback in `CandidateService` works; no dedicated entry CTA |
 | Entry: **Browse Result** after generation | **Partial** | Tree loads; no explicit post-gen browse button |
-| PGN editor writes exclusively through `RepertoireWriter` | **Partial** | Clipboard/persist I/O extracted to `EditMainZone` callbacks (`onAutoSave`, `onCopyToClipboard`, `onDirty`); structural edits still via controller/service |
+| PGN editor persistence ownership | **Partial** | Builder controller/writer now use injected document contracts and the shared native PGN store on Linux; durable draft recovery, native undo receipts and remaining outline/generation editor callers are pending |
 | Tree-path navigation (single source of truth) | **Done** | `MoveTree` + `TreePath` cursor in `RepertoireController`; PGN editor is a pure view; no `addPostFrameCallback` sync; arrow keys always go through controller |
 
 ### Generation & bottom pane UX

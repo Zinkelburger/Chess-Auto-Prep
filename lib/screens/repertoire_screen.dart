@@ -2,6 +2,9 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
+import '../features/repertoires/repositories/repertoire_document_repository.dart';
+import '../features/repertoires/repositories/repertoire_decoder.dart';
+
 import '../app/legacy_theme_boundary.dart';
 
 import 'dart:async';
@@ -478,7 +481,10 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _layout.addListener(_onLayoutChanged);
     unawaited(_layout.load());
     _workspaceNavigation.addListener(_onAppStateChanged);
-    _controller = RepertoireController();
+    _controller = RepertoireController(
+      documents: context.read<RepertoireDocumentRepository>(),
+      decoder: context.read<RepertoireDecoder>(),
+    );
     _controller.addListener(_onRepertoireChanged);
     _generationController.addListener(_onGenerationChanged);
     _auditController.addListener(_onAuditChanged);

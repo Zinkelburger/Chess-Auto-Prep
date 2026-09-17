@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import '../support/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +8,7 @@ void main() {
   testWidgets(
     'immutable edits save latest revision before rebuild or chapter switch',
     (tester) async {
-      final owner = RepertoireController()..loadMoveHistory(['e4']);
+      final owner = testRepertoireController()..loadMoveHistory(['e4']);
       addTearDown(owner.dispose);
       final firstSaves = <String>[];
       final secondSaves = <String>[];

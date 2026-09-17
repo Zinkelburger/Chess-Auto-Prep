@@ -7,6 +7,8 @@
 /// `course_chapter_headers.dart`.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
+
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'dart:isolate';
 
@@ -22,7 +24,7 @@ import '../chess_core/pgn/mainline_lexer.dart' as pgn;
 import '../chess_core/pgn/pgn_text.dart' as pgn;
 import 'repertoire_color_inference.dart';
 import 'repertoire_file_editor.dart';
-import 'repertoire_line_ids.dart';
+import '../chess_core/pgn/repertoire_line_ids.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
 import 'training/chapter_layout.dart' show ChapterSummary;

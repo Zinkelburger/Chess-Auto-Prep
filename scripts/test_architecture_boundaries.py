@@ -47,6 +47,13 @@ class BoundariesTest(unittest.TestCase):
         self.assertTrue(violations('lib/features/documents/controllers/session.dart', frame))
         self.assertTrue(violations('lib/features/documents/widgets/viewport.dart', 'Engine.instance.start();'))
 
+    def test_builder_hosts_use_injected_document_boundaries(self):
+        for path in ('lib/core/repertoire_controller.dart', 'lib/core/repertoire_writer.dart'):
+            for uri in ('dart:io', 'dart:isolate', '../services/storage/storage_factory.dart', '../services/repertoire_file_editor.dart', '../infrastructure/repertoires/store.dart'):
+                self.assertTrue(violations(path, f"import '{uri}';"))
+            self.assertTrue(violations(path, 'StorageFactory.instance.readFile(path);'))
+            self.assertFalse(violations(path, "import '../features/repertoires/repositories/repertoire_document_repository.dart';"))
+
     def test_models_and_contracts_stay_pure(self):
         for area in ('models', 'repositories'):
             path = f'lib/features/repertoires/{area}/example.dart'

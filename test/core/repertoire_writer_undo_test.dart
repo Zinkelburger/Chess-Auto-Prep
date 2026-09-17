@@ -1,3 +1,7 @@
+import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
+import '../support/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
 import 'dart:io';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
@@ -7,8 +11,6 @@ import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/core/repertoire_writer.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
-import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
-import 'package:chess_auto_prep/services/repertoire_service.dart';
 
 void main() {
   group('RepertoireWriter undo', () {
@@ -37,7 +39,7 @@ void main() {
 1. e4 e5
 ''');
 
-      controller = RepertoireController();
+      controller = testRepertoireController();
       await controller.setRepertoire(
         RepertoireMetadata(
           name: 'Test',
@@ -196,7 +198,9 @@ void main() {
         controller.loadMoveHistory(['e4', 'e5']);
         final noSnapshots = RepertoireWriter(
           controller,
-          service: _NoSnapshotService(),
+          documents: _NoSnapshotRepository(
+            LegacyPgnDocumentStore(StorageFactory.instance),
+          ),
         );
         await expectLater(
           noSnapshots.addMovesAtPosition(
@@ -215,26 +219,19 @@ void main() {
   });
 }
 
-/// A service whose editor writes the file but hands back no per-ply
-/// snapshots — the shape [RepertoireFileEditor.appendMovesAtPath] returns
-/// for a repertoire with no file path behind it.
-class _NoSnapshotService extends RepertoireService {
-  @override
-  RepertoireFileEditor get files => const _NoSnapshotEditor();
-}
-
-class _NoSnapshotEditor extends RepertoireFileEditor {
-  const _NoSnapshotEditor();
+/// A broken adapter commits but drops the logical per-ply receipt.
+class _NoSnapshotRepository extends DocumentRepertoireRepository {
+  _NoSnapshotRepository(super.documents);
 
   @override
-  Future<AppendMovesResult> appendMovesAtPath(
+  Future<AppendMovesResult> append(
     String filePath,
     List<String> pathFromRoot,
     List<String> newSans, {
     String? startingFen,
     bool isWhiteRepertoire = true,
   }) async {
-    final real = await super.appendMovesAtPath(
+    final real = await super.append(
       filePath,
       pathFromRoot,
       newSans,

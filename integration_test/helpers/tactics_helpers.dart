@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/widgets/clickable_move_line.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,7 +39,10 @@ Future<void> switchToMode(WidgetTester tester, String label) async {
 }
 
 /// Boot the app and wait for it to settle.
-Future<void> pumpApp(WidgetTester tester) async {
+Future<void> pumpApp(
+  WidgetTester tester, {
+  RepertoireDocumentRepository? repertoireDocuments,
+}) async {
   tester.view.physicalSize = const Size(1600, 1000);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
@@ -46,7 +50,9 @@ Future<void> pumpApp(WidgetTester tester) async {
     tester.view.resetDevicePixelRatio();
   });
 
-  await tester.pumpWidget(const ChessAutoPrepApp());
+  await tester.pumpWidget(
+    ChessAutoPrepApp(repertoireDocuments: repertoireDocuments),
+  );
   await tester.pumpAndSettle();
 }
 

@@ -5,6 +5,9 @@
 /// Navigation funnels through [jump] — there is no secondary state to sync.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_headers.dart';
+import 'package:chess_auto_prep/features/repertoires/models/loaded_repertoire.dart';
+
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
@@ -19,15 +22,13 @@ import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
 import '../features/repertoires/models/repertoire_metadata.dart';
 import '../services/repertoire_line_expansion.dart';
-import '../services/repertoire_service.dart';
-import '../services/repertoire_pgn_text.dart';
-import '../services/repertoire_file_editor.dart';
-import '../services/storage/storage_factory.dart';
+import '../chess_core/pgn/repertoire_pgn_text.dart';
+import '../features/repertoires/repositories/repertoire_document_repository.dart';
+import '../features/repertoires/repositories/repertoire_decoder.dart';
 import '../utils/fen_utils.dart';
 import '../utils/san_token_utils.dart';
 import 'move_navigation.dart';
 import 'repertoire_authoring.dart';
-import 'repertoire_loader.dart';
 import 'repertoire_writer.dart';
 import '../utils/safe_change_notifier.dart';
 import '../utils/chess_utils.dart';
@@ -36,13 +37,13 @@ import '../utils/chess_utils.dart';
 /// All UI components should derive their chess position from this class.
 class RepertoireController
     with ChangeNotifier, MoveNavigation, SafeChangeNotifier {
-  RepertoireController({RepertoireService? repertoireService})
-    : _repertoireService = repertoireService ?? RepertoireService();
+  RepertoireController({required this.documents, required this.decoder});
 
-  final RepertoireService _repertoireService;
+  final RepertoireDocumentRepository documents;
+  final RepertoireDecoder decoder;
   late final RepertoireWriter writer = RepertoireWriter(
     this,
-    service: _repertoireService,
+    documents: documents,
   );
 
   /// Pure PGN-authoring collaborator (game/line construction).
@@ -590,11 +591,17 @@ class RepertoireController
     final filePath = _repertoireFilePath;
     if (filePath == null) return false;
 
-    final success = await const RepertoireFileEditor().deleteLine(
+    final generation = _loadGeneration;
+    final success = await documents.deleteLine(
       filePath,
       line.id,
+      expectedContent: line.fullPgn,
     );
     if (!success) return false;
+    if (generation != _loadGeneration ||
+        _currentRepertoire?.filePath != filePath) {
+      return true;
+    }
 
     if (_selectedPgnLine?.id == line.id) _clearSelectionAndTree();
 
@@ -610,17 +617,19 @@ class RepertoireController
     final filePath = _repertoireFilePath;
     if (filePath == null) return 0;
 
+    final generation = _loadGeneration;
     final indexes = {
       for (final line in lines)
-        if (line.gameIndex >= 0) line.gameIndex,
+        if (line.gameIndex >= 0) line.gameIndex: line.fullPgn,
     };
     if (indexes.isEmpty) return 0;
 
-    final removed = await const RepertoireFileEditor().deleteLinesAt(
-      filePath,
-      indexes,
-    );
+    final removed = await documents.deleteLinesAt(filePath, indexes);
     if (removed == 0) return 0;
+    if (generation != _loadGeneration ||
+        _currentRepertoire?.filePath != filePath) {
+      return removed;
+    }
 
     _clearSelectionAndTree();
     await loadRepertoire();
@@ -670,11 +679,14 @@ class RepertoireController
     if (_isLoading || selected == null || filePath == null) return null;
     final lineId = selected.id;
     final generation = _loadGeneration;
+    final originals = _lineOriginals;
+    originals.putIfAbsent(lineId, () => selected.fullPgn);
     return (newPgn) => _updateLineContent(
       newPgn,
       filePath: filePath,
       lineId: lineId,
       generation: generation,
+      originals: originals,
     );
   }
 
@@ -688,6 +700,7 @@ class RepertoireController
     required String filePath,
     required String lineId,
     required int generation,
+    required Map<String, String> originals,
   }) {
     final result = _lineSaveTail.then(
       (_) => _persistLineContent(
@@ -695,6 +708,7 @@ class RepertoireController
         filePath: filePath,
         lineId: lineId,
         generation: generation,
+        originals: originals,
       ),
     );
     _lineSaveTail = result.then<void>(
@@ -713,13 +727,16 @@ class RepertoireController
     required String filePath,
     required String lineId,
     required int generation,
+    required Map<String, String> originals,
   }) async {
-    final success = await const RepertoireFileEditor().updateLineContent(
+    final success = await documents.updateLineContent(
       filePath,
       lineId,
       newPgn,
+      expectedContent: originals[lineId]!,
     );
-    if (!success) return false;
+    if (success == null) return false;
+    originals[lineId] = success;
     if (generation != _loadGeneration ||
         _currentRepertoire?.filePath != filePath) {
       return true;
@@ -730,7 +747,7 @@ class RepertoireController
       // Swap in a fresh list: consumers (lines browser) rebuild their
       // display/search indexes only when the list identity changes.
       final updated = List.of(_repertoireLines);
-      updated[idx] = _authoring.rebuildLine(updated[idx], newPgn);
+      updated[idx] = _authoring.rebuildLine(updated[idx], success);
       _repertoireLines = updated;
       if (_selectedPgnLine?.id == lineId) {
         _selectedPgnLine = updated[idx];
@@ -855,10 +872,8 @@ class RepertoireController
   // Loading is epoch-guarded: every entry point that replaces the repertoire
   // claims a generation up front, and whatever it computed is thrown away if
   // a newer claim landed while it was awaiting.  The derivation itself lives
-  // in [RepertoireLoader] precisely so the whole result can be discarded in
+  // in [RepertoireDecoder] precisely so the whole result can be discarded in
   // one place — see the note there.
-
-  final RepertoireLoader _loader = RepertoireLoader();
 
   int _loadGeneration = 0;
 
@@ -894,7 +909,7 @@ class RepertoireController
       // tree. A same-file reload or a quick A → B → A must read saved edits.
       await _flushPendingLineSaves();
       if (generation != _loadGeneration) return;
-      final read = await _loader.read(filePath);
+      final read = await documents.read(filePath);
       await debugAfterRepertoireRead?.call();
       if (generation != _loadGeneration) return;
 
@@ -904,7 +919,7 @@ class RepertoireController
         return;
       }
 
-      final loaded = await _loader.build(
+      final loaded = await decoder.build(
         read.pgn,
         fallbackIsWhite: _isRepertoireWhite,
       );
@@ -937,7 +952,7 @@ class RepertoireController
   }) async {
     final generation = ++_loadGeneration;
     try {
-      final loaded = await _loader.build(
+      final loaded = await decoder.build(
         pgnContent.isEmpty ? null : pgnContent,
         fallbackIsWhite: _isRepertoireWhite,
       );
@@ -967,7 +982,10 @@ class RepertoireController
   /// [LoadedRepertoire.headers] is null when the PGN never parsed far enough
   /// to yield them (missing file, read failure, tree-build error); the current
   /// headers are then kept rather than reset to a guess.
+  Map<String, String> _lineOriginals = {};
+
   void _applyLoaded(LoadedRepertoire loaded) {
+    _lineOriginals = {for (final line in loaded.lines) line.id: line.fullPgn};
     _repertoirePgn = loaded.pgn;
     _openingTree = loaded.openingTree;
     _repertoireLines = loaded.lines;
@@ -991,15 +1009,14 @@ class RepertoireController
     if (_currentRepertoire == null) return;
     final filePath = _currentRepertoire!.filePath;
     final generation = _loadGeneration;
-    final storage = StorageFactory.instance;
 
     final colorLabel = isWhite ? 'White' : 'Black';
-    final existing = await storage.readFile(filePath);
+    final existing = (await documents.read(filePath)).pgn;
     if (existing == null) {
       throw StateError('The selected chapter is unavailable.');
     }
     final updated = upsertMetadataComment(existing, '// Color:', colorLabel);
-    await storage.writeFile(filePath, updated, expectedContent: existing);
+    await documents.replace(filePath, updated, expectedContent: existing);
     if (_loadGeneration != generation ||
         _currentRepertoire?.filePath != filePath) {
       return;
@@ -1013,18 +1030,17 @@ class RepertoireController
     if (_currentRepertoire == null) return;
     final filePath = _currentRepertoire!.filePath;
     final generation = _loadGeneration;
-    final storage = StorageFactory.instance;
 
     final moveText = _authoring.numberedMovetext(
       currentMoveSequence,
       startingFen: _tree.startingFen,
     );
-    final existing = await storage.readFile(filePath);
+    final existing = (await documents.read(filePath)).pgn;
     if (existing == null) {
       throw StateError('The selected chapter is unavailable.');
     }
     final updated = upsertMetadataComment(existing, '// Root:', moveText);
-    await storage.writeFile(filePath, updated, expectedContent: existing);
+    await documents.replace(filePath, updated, expectedContent: existing);
     if (_loadGeneration != generation ||
         _currentRepertoire?.filePath != filePath) {
       return;
@@ -1039,7 +1055,6 @@ class RepertoireController
 
     final filePath = _currentRepertoire!.filePath;
     final generation = _loadGeneration;
-    final storage = StorageFactory.instance;
 
     // One game per line, the same way a new repertoire is seeded: a pasted
     // study's variations become lines of their own, or the trainer and this
@@ -1047,7 +1062,7 @@ class RepertoireController
     final expanded = expandVariationsIntoLines(pgnContent);
     final gameCount = expanded.gameCount;
 
-    final existing = await storage.readFile(filePath);
+    final existing = (await documents.read(filePath)).pgn;
     if (existing == null) {
       throw StateError('The selected chapter is unavailable.');
     }
@@ -1056,7 +1071,7 @@ class RepertoireController
         : existing.endsWith('\n')
         ? '\n'
         : '\n\n';
-    await storage.writeFile(
+    await documents.replace(
       filePath,
       '$existing$separator${expanded.pgn}\n',
       expectedContent: existing,

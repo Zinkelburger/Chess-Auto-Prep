@@ -3,6 +3,8 @@
 /// `repertoire_service_move_games_test.dart`.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/repertoire_document_mutation.dart';
+
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/repertoire_file_editor.dart';

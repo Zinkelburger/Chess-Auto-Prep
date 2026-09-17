@@ -42,6 +42,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   final AskedQuestionsStore askedQuestions;
 
   TrainingSessionController({
+    required this.session,
     RepertoireService? repertoireService,
     RepertoireReviewService? reviewService,
     AskedQuestionsStore? askedQuestions,
@@ -71,7 +72,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     askedQuestions: askedQuestions,
   );
 
-  final RepertoireController session = RepertoireController();
+  final RepertoireController session;
 
   // -- Data --
   RepertoireMetadata? repertoire;

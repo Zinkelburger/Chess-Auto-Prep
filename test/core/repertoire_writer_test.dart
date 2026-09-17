@@ -1,3 +1,4 @@
+import '../support/repertoire_dependencies.dart';
 import 'dart:io';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
@@ -35,7 +36,7 @@ void main() {
 1. e4 e5
 ''');
 
-      controller = RepertoireController();
+      controller = testRepertoireController();
       await controller.setRepertoire(
         RepertoireMetadata(
           name: 'Test',

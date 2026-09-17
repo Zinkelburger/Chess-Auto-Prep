@@ -2,6 +2,10 @@
 /// plus a tactics mode for training studies of custom puzzles.
 library;
 
+import '../core/repertoire_controller.dart';
+import '../features/repertoires/repositories/repertoire_document_repository.dart';
+import '../features/repertoires/repositories/repertoire_decoder.dart';
+
 import '../app/legacy_theme_boundary.dart';
 
 import '../models/repertoire_review_entry.dart' show ReviewRating;
@@ -85,7 +89,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   void initState() {
     super.initState();
     _workspaceNavigation.addListener(_resumePendingHandoff);
-    _training = TrainingSessionController();
+    _training = TrainingSessionController(
+      session: RepertoireController(
+        documents: context.read<RepertoireDocumentRepository>(),
+        decoder: context.read<RepertoireDecoder>(),
+      ),
+    );
     _training.onLineStarted = () {
       _pgnRevealedLineId = null;
       _showPgn = false;

@@ -1,5 +1,5 @@
+import '../support/repertoire_dependencies.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../support/large_study_fixture.dart';
@@ -8,7 +8,7 @@ void main() {
   test(
     '20000-node Builder adoption shares untouched branches on a deep annotation',
     () {
-      final controller = RepertoireController();
+      final controller = testRepertoireController();
       addTearDown(controller.dispose);
       final source = MoveTree.fromPgn(largeStudyPgn());
       controller.loadAnnotatedTree(source);

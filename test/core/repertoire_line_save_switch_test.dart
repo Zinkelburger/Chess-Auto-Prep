@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/utils/atomic_file.dart';
+import '../support/repertoire_dependencies.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -31,7 +33,7 @@ void main() {
     second = chapter('Second');
     await File(first.filePath).writeAsString(_pgn);
     await File(second.filePath).writeAsString(_pgn);
-    controller = RepertoireController();
+    controller = testRepertoireController();
     await controller.setRepertoire(first);
     controller.loadPgnLine(controller.repertoireLines.single);
   });
@@ -40,6 +42,45 @@ void main() {
     StorageFactory.instanceForTest = null;
     await directory.delete(recursive: true);
   });
+
+  test(
+    'a line save rejects an external edit made before the save begins',
+    () async {
+      final external = _pgn.replaceFirst('e5', 'e5 {external note}');
+      await File(first.filePath).writeAsString(external);
+      await expectLater(
+        controller.updateSelectedLineContent(
+          _pgn.replaceFirst('e5', 'e5 {my note}'),
+        ),
+        throwsA(isA<AtomicWriteConflict>()),
+      );
+      expect(await File(first.filePath).readAsString(), external);
+      await expectLater(controller.flushDocumentForClose(), throwsStateError);
+    },
+  );
+
+  test(
+    'queued saves from old and refreshed callbacks advance the acknowledged line',
+    () async {
+      final save = controller.selectedLineSaver!;
+      final firstSave = save(_pgn.replaceFirst('e5', 'e5 {first note}'));
+      final newerSave = controller.selectedLineSaver!;
+      final secondSave = newerSave(_pgn.replaceFirst('e5', 'e5 {second note}'));
+      expect(await firstSave, isTrue);
+      expect(await secondSave, isTrue);
+      expect(
+        await File(first.filePath).readAsString(),
+        contains('{second note}'),
+      );
+      expect(controller.selectedPgnLine!.fullPgn, contains('{second note}'));
+      expect(await save(_pgn.replaceFirst('e5', 'e5 {third note}')), isTrue);
+      expect(
+        await File(first.filePath).readAsString(),
+        contains('{third note}'),
+      );
+      await controller.flushDocumentForClose();
+    },
+  );
 
   test(
     'a pending chapter keeps its loaded tree until atomic replacement',

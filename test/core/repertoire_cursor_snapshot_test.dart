@@ -3,17 +3,18 @@
 /// changes apart from cursor moves.  Screens scope their rebuilds on both.
 library;
 
+import '../support/repertoire_dependencies.dart';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';
 
 void main() {
   group('cursor snapshot', () {
     test('moveHistory keeps its identity until the cursor moves', () {
-      final c = RepertoireController();
+      final c = testRepertoireController();
       c.loadMoveHistory(['e4', 'e5', 'Nf3']);
 
       final first = c.moveHistory;
@@ -28,7 +29,7 @@ void main() {
     });
 
     test('position is the cursor node\'s, never re-parsed', () {
-      final c = RepertoireController();
+      final c = testRepertoireController();
       c.loadMoveHistory(['d4', 'Nf6', 'c4']);
       expect(c.position.fen, c.fen);
       expect(identical(c.position, c.position), isTrue);
@@ -41,7 +42,7 @@ void main() {
     });
 
     test('recentMoveTrail marks the move that produced the position', () {
-      final c = RepertoireController();
+      final c = testRepertoireController();
       c.loadMoveHistory(['e4', 'e5', 'Nf3']);
       expect(c.recentMoveTrail(), {'g1', 'f3'});
       expect(c.recentMoveTrail(lastN: 2), {'e7', 'e5', 'g1', 'f3'});
@@ -52,7 +53,7 @@ void main() {
     });
 
     test('a promotion keeps the cursor on the same moves', () {
-      final c = RepertoireController();
+      final c = testRepertoireController();
       c.loadMoveHistory(['e4', 'e5']);
       c.goBack();
       c.playMove('c5'); // variation at ply 1
@@ -66,7 +67,7 @@ void main() {
 
   group('structureVersion', () {
     test('a cursor move notifies without bumping it', () {
-      final c = RepertoireController();
+      final c = testRepertoireController();
       c.loadMoveHistory(['e4', 'e5', 'Nf3']);
       final version = c.structureVersion;
       var notified = 0;
@@ -81,7 +82,7 @@ void main() {
     });
 
     test('edits and loads bump it', () {
-      final c = RepertoireController();
+      final c = testRepertoireController();
       final v0 = c.structureVersion;
 
       c.loadMoveHistory(['e4']);
@@ -98,7 +99,7 @@ void main() {
     });
 
     test('playing an existing move is a pure cursor move', () {
-      final c = RepertoireController();
+      final c = testRepertoireController();
       c.loadMoveHistory(['e4', 'e5']);
       c.goToStart();
       final version = c.structureVersion;
@@ -111,7 +112,7 @@ void main() {
 
   group('rootFen', () {
     test('is replayed once per starting position and root moves', () {
-      final c = RepertoireController();
+      final c = testRepertoireController();
       final fen = c.rootFen;
       expect(fen, Chess.initial.fen);
       expect(identical(c.rootFen, fen), isTrue);

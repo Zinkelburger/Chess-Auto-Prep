@@ -12,8 +12,8 @@ import 'package:flutter/foundation.dart' show listEquals;
 
 import '../models/repertoire_line.dart';
 import '../chess_core/pgn/pgn_text.dart' as pgn;
-import '../services/repertoire_line_ids.dart';
-import '../services/repertoire_pgn_text.dart';
+import '../chess_core/pgn/repertoire_line_ids.dart';
+import '../chess_core/pgn/repertoire_pgn_text.dart';
 import '../services/repertoire_service.dart';
 import '../utils/movetext_builder.dart';
 

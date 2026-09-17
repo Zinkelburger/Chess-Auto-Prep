@@ -1,3 +1,6 @@
+import 'app/repertoire_dependencies.dart';
+import 'features/repertoires/repositories/repertoire_document_repository.dart';
+import 'features/repertoires/repositories/repertoire_decoder.dart';
 import 'dart:async';
 
 import 'package:path/path.dart' as p;
@@ -189,7 +192,9 @@ class ChessAutoPrepApp extends StatelessWidget {
     this.closePort,
     this.studyRecoveryStore,
     this.pgnRecoveryStore,
+    this.repertoireDocuments,
   });
+  final RepertoireDocumentRepository? repertoireDocuments;
   final AppSettingsRepository? settings;
   final DesktopClosePort? closePort;
   final WorkspaceRecoveryStore<StudyWorkspaceSnapshot>? studyRecoveryStore;
@@ -203,6 +208,12 @@ class ChessAutoPrepApp extends StatelessWidget {
       documentStore: documents,
       child: MultiProvider(
         providers: [
+          Provider<RepertoireDocumentRepository>(
+            create: (_) =>
+                repertoireDocuments ??
+                createRepertoireDocuments(documents: documents),
+          ),
+          Provider<RepertoireDecoder>(create: (_) => createRepertoireDecoder()),
           Provider<PgnCollectionRepository>(
             create: (_) => createPgnCollectionRepository(documents: documents),
           ),

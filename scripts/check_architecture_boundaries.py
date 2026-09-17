@@ -47,6 +47,12 @@ def violations(relative: str, source: str) -> list[str]:
     executable = re.sub(r'(?m)^\s*//.*$', '', source)
     if relative.startswith('lib/') and relative != 'lib/chess_core/pgn/pgn_parser.dart' and re.search(r'\bPgnGame\.parsePgn\s*\(', executable):
         errors.append(f'{relative}: single-game parsing must use chess_core/pgn/pgn_parser.dart')
+    if relative in ('lib/core/repertoire_controller.dart', 'lib/core/repertoire_writer.dart'):
+        for uri in DIRECTIVE.findall(source):
+            if uri.startswith(('dart:io', 'dart:isolate')) or any(part in uri for part in ('infrastructure/', 'services/storage/', 'repertoire_file_editor.dart')):
+                errors.append(f'{relative}: Builder document access must use injected contracts: {uri}')
+        if re.search(r'\b\w+\.instance\b', executable):
+            errors.append(f'{relative}: Builder bypasses injected document dependencies')
     feature = relative.startswith(('lib/features/repertoires/', 'lib/features/documents/', 'lib/features/settings/', 'lib/features/studies/'))
     chess = relative.startswith('lib/chess_core/')
     infrastructure = relative.startswith('lib/infrastructure/')
@@ -101,6 +107,9 @@ def main() -> int:
         'lib/features/documents/controllers/viewer_filter_controller.dart',
         'lib/features/documents/controllers/viewer_presentation_controller.dart',
         'lib/features/documents/controllers/viewer_collection_controller.dart',
+        'lib/features/repertoires/models/loaded_repertoire.dart',
+        'lib/features/repertoires/repositories/repertoire_decoder.dart',
+        'lib/features/repertoires/repositories/repertoire_document_repository.dart',
     ])
     errors.extend(pure_dependency_violations(sources, pure_roots))
     for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/features/settings', 'lib/features/studies', 'lib/chess_core', 'lib/infrastructure', 'lib/design_system', 'widgetbook'):
