@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
-import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/builder_workspace_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
@@ -14,7 +14,7 @@ void main() {
   late Directory root;
   late File file;
   late NativePgnDocumentStore store;
-  late RepertoireController owner;
+  late BuilderWorkspaceController owner;
   var failFlush = false;
   var failStage = false;
   const original =
@@ -43,11 +43,11 @@ void main() {
         await syncDirectory(path);
       },
     );
-    owner = RepertoireController(
+    owner = BuilderWorkspaceController(
       documents: DocumentRepertoireRepository(store),
       decoder: const IsolateRepertoireDecoder(),
     );
-    await owner.setRepertoire(
+    await owner.document.setRepertoire(
       RepertoireMetadata(
         name: 'Native',
         filePath: file.path,
@@ -75,7 +75,7 @@ void main() {
     final a2 = await current();
     expect(a2.content, a.content);
     expect(a2.revision, isNot(a.revision));
-    expect(owner.repertoirePgn, a.content);
+    expect(owner.document.repertoirePgn, a.content);
     expect(owner.writer.canUndo, isFalse);
   });
 
@@ -95,8 +95,8 @@ void main() {
         for (var remaining = moves.length - 1; remaining >= 0; remaining--) {
           expect(await owner.writer.undo(), isTrue);
           expect(file.readAsStringSync(), contains('{external annotation}'));
-          expect(owner.repertoirePgn, file.readAsStringSync());
-          expect(owner.repertoireLines.single.moves, [
+          expect(owner.document.repertoirePgn, file.readAsStringSync());
+          expect(owner.document.repertoireLines.single.moves, [
             'e4',
             'e5',
             ...moves.take(remaining),
@@ -155,7 +155,7 @@ void main() {
       await append(['e4', 'e5'], ['Nf3', 'Nc6']);
       failFlush = true;
       expect(await owner.writer.undo(), isTrue);
-      expect(owner.repertoireLines.single.moves, ['e4', 'e5', 'Nf3']);
+      expect(owner.document.repertoireLines.single.moves, ['e4', 'e5', 'Nf3']);
       failFlush = false;
       expect(await owner.writer.undo(), isTrue);
       expect(file.readAsStringSync(), original);
@@ -195,7 +195,12 @@ void main() {
       failFlush = true;
       await append(['e4', 'e5'], ['Nf3', 'Nc6']);
       failFlush = false;
-      expect(owner.repertoireLines.single.moves, ['e4', 'e5', 'Nf3', 'Nc6']);
+      expect(owner.document.repertoireLines.single.moves, [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+      ]);
       expect(await owner.writer.undo(), isTrue);
       expect(await owner.writer.undo(), isTrue);
       expect(file.readAsStringSync(), original);

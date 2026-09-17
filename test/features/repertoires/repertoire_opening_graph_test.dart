@@ -33,19 +33,19 @@ void main() {
     'Builder owns decoder graph and exposes only protected query projections',
     () async {
       final decoder = _Decoder();
-      final owner = testRepertoireController(
+      final owner = testBuilderWorkspace(
         documents: _Documents(),
         decoder: decoder,
       );
       addTearDown(owner.dispose);
-      await owner.setRepertoire(
+      await owner.document.setRepertoire(
         RepertoireMetadata(
           name: 'Graph',
           filePath: '/graph',
           lastModified: DateTime(2026),
         ),
       );
-      final graph = owner.openingGraph!;
+      final graph = owner.document.openingGraph!;
       expect(graph, isNot(isA<OpeningTree>()));
       expect(graph.root, isNot(isA<OpeningTreeNode>()));
       expect(() => graph.root.children.clear(), throwsUnsupportedError);
@@ -64,12 +64,12 @@ void main() {
       decoder.source.root.children.clear();
       decoder.source.fenToNodes.clear();
       expect(graph.root.children.keys, ['d4']);
-      owner.loadMoveHistory(['d4', 'c5', 'e3']);
+      owner.board.loadMoveHistory(['d4', 'c5', 'e3']);
       expect(graph.currentMovePath, ['d4', 'c5', 'e3']);
       expect(graph.inBook, isFalse);
       expect(graph.continuations.single.move, 'Nf6');
       expect(graph.continuations.single.viaTransposition, isTrue);
-      expect(graph.currentFen, owner.fen);
+      expect(graph.currentFen, owner.board.fen);
       expect(graph.root.children['d4']!.parent, same(graph.root));
     },
   );

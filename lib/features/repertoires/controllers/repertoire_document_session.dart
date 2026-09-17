@@ -112,6 +112,24 @@ class RepertoireDocumentSession {
     onChanged();
   }
 
+  Future<bool> renameLine(RepertoireLine line, String title) async {
+    final filePath = _repertoireFilePath;
+    if (_disposed || filePath == null) return false;
+    final original = line.fullPgn;
+    final generation = _loadGeneration;
+    final result = await runDocumentMutation(
+      () => documents.updateLineContent(
+        filePath,
+        line.id,
+        withEventTitle(original, title),
+        expectedContent: original,
+      ),
+    );
+    if (result == null) return false;
+    if (isCurrent(generation)) await loadRepertoire();
+    return true;
+  }
+
   /// Deletes a line from the repertoire file and reloads.
   Future<bool> deleteLine(RepertoireLine line) async {
     final filePath = _repertoireFilePath;
@@ -164,22 +182,10 @@ class RepertoireDocumentSession {
     return removed;
   }
 
-  void Function()? _pendingLineSave;
   Future<void> _lineSaveTail = Future.value();
   Object? _lineSaveFailure;
 
-  /// The editor supplies its debounce flusher, or null once it is saved.
-  /// Keeping this callback separate from persistence lets core await pending
-  /// edits without depending on a widget or its lifecycle.
-  void setPendingLineSave(void Function()? flush) => _pendingLineSave = flush;
-
-  /// All Builder writes and their acknowledgements share the editor queue.
-  /// Flush a pending debounce before joining it; flushing inside the queued
-  /// callback would deadlock on the save it schedules behind itself.
   Future<T> runDocumentMutation<T>(Future<T> Function() action) {
-    final flush = _pendingLineSave;
-    _pendingLineSave = null;
-    flush?.call();
     final result = _lineSaveTail.then((_) {
       if (_disposed) throw StateError('The document session is closed.');
       if (_lineSaveFailure != null) {
@@ -198,18 +204,10 @@ class RepertoireDocumentSession {
 
   /// Await pending document edits without consuming a failure on a close retry.
   Future<void> flushDocumentForClose() => _flushPendingLineSaves();
-  Object get closeRevision => (
-    _repertoireFilePath,
-    _loadGeneration,
-    _lineSaveTail,
-    _lineSaveFailure,
-    _pendingLineSave,
-  );
+  Object get closeRevision =>
+      (_repertoireFilePath, _loadGeneration, _lineSaveTail, _lineSaveFailure);
 
   Future<void> _flushPendingLineSaves() async {
-    final flush = _pendingLineSave;
-    _pendingLineSave = null;
-    flush?.call();
     await _lineSaveTail;
     final failure = _lineSaveFailure;
     if (failure != null) {
@@ -676,6 +674,25 @@ class RepertoireDocumentSession {
     onChanged();
   }
 
+  /// An explicit new line keeps the editable variation tree and annotations.
+  Future<void> appendDraft(String pgn) async {
+    final filePath = _repertoireFilePath;
+    if (_disposed || filePath == null)
+      throw StateError('Choose a chapter first.');
+    final generation = _loadGeneration;
+    await runDocumentMutation(() async {
+      final existing = (await documents.read(filePath)).pgn;
+      if (existing == null)
+        throw StateError('The selected chapter is unavailable.');
+      await documents.replace(
+        filePath,
+        '$existing\n\n$pgn\n',
+        expectedContent: existing,
+      );
+    });
+    if (isCurrent(generation)) await loadRepertoire();
+  }
+
   /// Imports PGN content into the current repertoire file.
   Future<int> importPgnContent(String pgnContent) async {
     if (_disposed || _currentRepertoire == null) return 0;
@@ -745,7 +762,6 @@ class RepertoireDocumentSession {
     if (_disposed) return;
     _disposed = true;
     _loadGeneration++;
-    _pendingLineSave = null;
     _isLoading = false;
     for (final completer in _loadCompleters) {
       completer.complete();

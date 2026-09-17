@@ -1,4 +1,4 @@
-/// The expectimax pane wired to a [RepertoireController]: follows the cursor
+/// The expectimax pane wired to a [BuilderWorkspaceController]: follows the cursor
 /// (or a caller-supplied FEN) and plays moves back into the controller.
 ///
 /// Shared by [RepertoireAnalysisDock], [InlineExpectimaxBar] and
@@ -12,7 +12,7 @@ import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../constants/chess_constants.dart';
 import '../../core/generation_session_controller.dart';
 import '../../core/generation_session_types.dart';
-import '../../features/repertoires/controllers/repertoire_controller.dart';
+import '../../features/repertoires/controllers/builder_workspace_controller.dart';
 import '../../models/build_tree_node.dart';
 import '../../services/coherence_service.dart';
 import '../../services/generation/fen_map.dart';
@@ -21,7 +21,7 @@ import 'expectimax_lines_pane.dart';
 import 'expectimax_probe_hooks.dart';
 
 class ExpectimaxPanelHost extends StatelessWidget {
-  final RepertoireController controller;
+  final BuilderWorkspaceController controller;
   final BuildTree? tree;
   final TreeBuildConfig? treeConfig;
   final FenMap? fenMap;
@@ -57,38 +57,38 @@ class ExpectimaxPanelHost extends StatelessWidget {
   ExpectimaxProbeHooks? _hooks() {
     final gen = generation;
     if (gen == null || fenOverride != null) return null;
-    final repertoire = controller.currentRepertoire;
+    final repertoire = controller.document.currentRepertoire;
     if (repertoire == null) return null;
     return ExpectimaxProbeHooks(
       generation: gen,
       compute: ({String? moveSan, required int plies}) => gen.computeExpectimax(
         ExpectimaxProbeTarget(
           repertoireFilePath: repertoire.filePath,
-          repertoireStartFen: controller.startingFen ?? kStandardStartFen,
-          movesFromStart: List.of(controller.currentMoveSequence),
+          repertoireStartFen: controller.board.startingFen ?? kStandardStartFen,
+          movesFromStart: List.of(controller.board.currentMoveSequence),
           moveSan: moveSan,
           plies: plies,
-          playAsWhite: controller.isRepertoireWhite,
+          playAsWhite: controller.document.isRepertoireWhite,
         ),
       ),
     );
   }
 
   Widget _pane(ExpectimaxProbeHooks? hooks) => ExpectimaxLinesPane(
-    fen: fenOverride ?? controller.fen,
+    fen: fenOverride ?? controller.board.fen,
     tree: tree,
     config: treeConfig,
     fenMap: fenMap,
-    isWhiteRepertoire: controller.isRepertoireWhite,
+    isWhiteRepertoire: controller.document.isRepertoireWhite,
     boardPreview: boardPreview,
     coherenceResult: coherenceResult,
     compact: compact,
     hooks: hooks,
-    onMoveSelected: onMoveSelected ?? controller.playMove,
+    onMoveSelected: onMoveSelected ?? controller.board.playMove,
     onLineMoveClicked:
         onLineMoveClicked ??
         (sanMoves, index) {
-          controller.applyLineFromCurrent(sanMoves, index);
+          controller.board.applyLineFromCurrent(sanMoves, index);
           boardPreview.clearPreview();
         },
   );

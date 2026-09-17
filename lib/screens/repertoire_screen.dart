@@ -2,14 +2,13 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
+import '../app/builder_lifetime.dart';
+import '../features/documents/widgets/workspace_recovery_host.dart';
 import 'package:chess_auto_prep/features/audit/services/repertoire_audit_service.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 
 import '../features/generation/services/generation_artifacts.dart';
-
-import '../features/repertoires/repositories/repertoire_document_repository.dart';
-import '../features/repertoires/repositories/repertoire_decoder.dart';
 
 import '../app/legacy_theme_boundary.dart';
 import '../features/generation/controllers/generation_publication_controller.dart';
@@ -26,7 +25,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../features/studies/controllers/study_controller.dart';
-import '../features/repertoires/controllers/repertoire_controller.dart';
+import '../features/repertoires/controllers/builder_workspace_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../core/generation_session_types.dart';
 import '../features/audit/controllers/audit_session_controller.dart';
@@ -34,7 +33,6 @@ import '../features/coverage/controllers/coverage_controller.dart';
 import '../features/settings/controllers/engine_settings.dart';
 import '../models/repertoire_line.dart';
 import '../features/repertoires/models/repertoire_metadata.dart';
-import '../services/repertoire_file_editor.dart';
 import '../utils/app_messages.dart';
 import '../utils/log.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -133,7 +131,7 @@ const _kGenRebuildInterval = Duration(milliseconds: 250);
 /// see the `part` directives at the top of this file.
 abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     with TickerProviderStateMixin {
-  late final RepertoireController _controller;
+  late final BuilderWorkspaceController _controller;
   final _workspaceNavigation = WorkspaceNavigationController();
   AppState? _appState;
   late final GenerationSessionController _generationController =
@@ -222,7 +220,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   String? _outlineRoot;
 
   /// Identity of the last PGN text the outline was refreshed for. A save
-  /// replaces [RepertoireController.repertoirePgn], which is the signal that
+  /// replaces [BuilderWorkspaceController.repertoirePgn], which is the signal that
   /// the chapter's lines may have changed.
   String? _outlinePgnSeen;
 
@@ -278,7 +276,8 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
 
   /// Name shown in a config route's app bar — the chapter's own name, which
   /// is what the breadcrumb title shows too.
-  String get _configRouteTitle => _controller.currentRepertoire?.name ?? '';
+  String get _configRouteTitle =>
+      _controller.document.currentRepertoire?.name ?? '';
 
   /// Reveal generation beside the board at its current position.
   Future<void> _openGenerateTab() async {
@@ -315,24 +314,26 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
             key: _generationTabKey,
             cutOnly: cutOnly,
             initialConfig: initialConfig,
-            fen: _controller.fen,
-            isWhiteRepertoire: _controller.isRepertoireWhite,
-            currentRepertoire: _controller.currentRepertoire,
-            currentMoveSequence: _controller.currentMoveSequence,
-            repertoireStartFen: _controller.startingFen ?? kStandardStartFen,
+            fen: _controller.board.fen,
+            isWhiteRepertoire: _controller.document.isRepertoireWhite,
+            currentRepertoire: _controller.document.currentRepertoire,
+            currentMoveSequence: _controller.board.currentMoveSequence,
+            repertoireStartFen:
+                _controller.board.startingFen ?? kStandardStartFen,
             generationController: _generationController,
             existingLineMoves: [
-              for (final line in _controller.repertoireLines) line.moves,
+              for (final line in _controller.document.repertoireLines)
+                line.moves,
             ],
-            onTrimLines: (droppedKeys) => _controller.deleteLines([
-              for (final line in _controller.repertoireLines)
+            onTrimLines: (droppedKeys) => _controller.document.deleteLines([
+              for (final line in _controller.document.repertoireLines)
                 // Match on the same identity the export writes with, so a
                 // line the user added by hand is never caught by a cut of
                 // the generated ones.
                 if (droppedKeys.contains(line.moves.join(' '))) line,
             ]),
             createPublicationReceiver: () =>
-                _controller.publishedDocumentReceiver,
+                _controller.document.publishedDocumentReceiver,
             onCreateStudy: (name, pgn) async {
               final study = context.read<StudyController>();
               final app = context.read<AppState>();
@@ -355,10 +356,10 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   Future<void> _openAuditConfigRoute() async {
     if (_configRouteOpen) return;
     _configRouteOpen = true;
-    final tree = _controller.openingGraph;
+    final tree = _controller.document.openingGraph;
     final path = _repertoireFilePath;
-    final isWhite = _controller.isRepertoireWhite;
-    final label = _controller.currentRepertoire?.name;
+    final isWhite = _controller.document.isRepertoireWhite;
+    final label = _controller.document.currentRepertoire?.name;
     await _workspaceNavigation.push(
       LegacyPageRoute<void>(
         builder: (_) => BuildConfigScreen(
@@ -367,10 +368,10 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
           startSignal: _auditController,
           hasStarted: () => _auditController.isAuditing,
           child: AuditConfigPanel(
-            openingTree: _controller.openingGraph,
-            isWhiteRepertoire: _controller.isRepertoireWhite,
-            currentFen: _controller.fen,
-            currentMoveSequence: _controller.currentMoveSequence,
+            openingTree: _controller.document.openingGraph,
+            isWhiteRepertoire: _controller.document.isRepertoireWhite,
+            currentFen: _controller.board.fen,
+            currentMoveSequence: _controller.board.currentMoveSequence,
             repertoireFilePath: _repertoireFilePath,
             onStart: (config, startFen) {
               if (!mounted || tree == null) return;
@@ -443,7 +444,8 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     }
   }
 
-  String? get _repertoireFilePath => _controller.currentRepertoire?.filePath;
+  String? get _repertoireFilePath =>
+      _controller.document.currentRepertoire?.filePath;
 
   /// Run [action] on the findings panel, but only while the findings panel is
   /// the thing on screen — the bottom pane open, showing the Findings tab.
@@ -495,10 +497,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _layout.addListener(_onLayoutChanged);
     unawaited(_layout.load());
     _workspaceNavigation.addListener(_onAppStateChanged);
-    _controller = RepertoireController(
-      documents: context.read<RepertoireDocumentRepository>(),
-      decoder: context.read<RepertoireDecoder>(),
-    );
+    _controller = context.read<BuilderLifetime>().workspace;
     _controller.addListener(_onRepertoireChanged);
     _generationController.addListener(_onGenerationChanged);
     _auditController.addListener(_onAuditChanged);
@@ -544,10 +543,10 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     if (handoff == null) return;
 
     // A library handoff reloads structural edits even for the current file.
-    final currentPath = _controller.currentRepertoire?.filePath;
+    final currentPath = _controller.document.currentRepertoire?.filePath;
     if (currentPath != handoff.repertoirePath || handoff.reloadFromDisk) {
       unawaited(
-        _controller.setRepertoire(
+        _controller.document.setRepertoire(
           RepertoireMetadata(
             filePath: handoff.repertoirePath,
             name: p.basenameWithoutExtension(handoff.repertoirePath),
@@ -570,24 +569,24 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   /// Navigate the board to a SAN sequence once the repertoire is loaded
   /// ("Explore this position" hand-off from the trainer).
   Future<void> _openMovesAfterLoad(List<String> moves) async {
-    await _controller.awaitLoaded();
+    await _controller.document.awaitLoaded();
     if (!mounted) return;
-    _controller.loadMoveSequence(moves);
+    _controller.composeMoves(moves);
   }
 
   Future<void> _openLineAfterLoad(String lineId) async {
-    await _controller.awaitLoaded();
+    await _controller.document.awaitLoaded();
     if (!mounted) return;
-    final line = _controller.repertoireLines
+    final line = _controller.document.repertoireLines
         .where((l) => l.id == lineId)
         .firstOrNull;
     if (line != null) {
-      _controller.loadPgnLine(line);
+      _controller.selectLine(line);
     }
   }
 
   Future<void> _seedGenerationAfterLoad(List<String> pgnPaths) async {
-    await _controller.awaitLoaded();
+    await _controller.document.awaitLoaded();
     if (!mounted) return;
     unawaited(_openLineBuildDialog());
     _seedGenerationWhenReady(pgnPaths: pgnPaths, autoStart: true);
@@ -601,7 +600,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     if (mounted) setState(() {});
   }
 
-  /// [RepertoireController.structureVersion] the screen last rebuilt for.
+  /// [BuilderWorkspaceController.structureVersion] the screen last rebuilt for.
   /// A notification that leaves it unchanged is a cursor move, which only
   /// the position zones need to hear about.
   int _structureSeen = -1;
@@ -640,12 +639,13 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       // Clear ephemeral state when the user navigates normally (not via finding).
       if (!_navigatingToFinding) _ephemeralPreview = null;
 
-      if (_controller.currentRepertoire != null && !_controller.isLoading) {
-        final currentId = _controller.currentRepertoire!.filePath;
+      if (_controller.document.currentRepertoire != null &&
+          !_controller.document.isLoading) {
+        final currentId = _controller.document.currentRepertoire!.filePath;
         if (currentId != _lastRepertoireId) {
           _auditController.onRepertoireSwitching(_lastRepertoireId);
           _lastRepertoireId = currentId;
-          _boardFlipped = !_controller.isRepertoireWhite;
+          _boardFlipped = !_controller.document.isRepertoireWhite;
           // Drop the old repertoire's trees now, then bring in whatever this
           // one saved — the last full build and every probe since.
           _generationController.clearTree();
@@ -654,12 +654,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           // A tour from the previous repertoire's traps makes no sense here.
           _trapSession.endTourForRepertoireSwitch();
           context.read<EngineSettings>().probabilityStartMoves =
-              _controller.rootMoves;
+              _controller.document.rootMoves;
           unawaited(_trapSession.loadFromFile(currentId));
           newRepertoireId = currentId;
         }
 
-        final source = _controller.repertoirePgn;
+        final source = _controller.document.repertoirePgn;
         if (!_generationController.isGenerating &&
             source != _lastArtifactSource) {
           _lastArtifactSource = source;
@@ -671,7 +671,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           }
         }
 
-        if (_controller.needsColorSelection &&
+        if (_controller.document.needsColorSelection &&
             !_colorPromptOpen &&
             _colorPromptAskedFor != currentId) {
           _colorPromptAskedFor = currentId;
@@ -696,10 +696,10 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   /// Called from every controller notification, so it returns immediately
   /// unless the chapter or its PGN text actually changed.
   void _syncOutline() {
-    final current = _controller.currentRepertoire;
-    if (current == null || _controller.isLoading) return;
+    final current = _controller.document.currentRepertoire;
+    if (current == null || _controller.document.isLoading) return;
     final chapterPath = current.filePath;
-    final pgn = _controller.repertoirePgn;
+    final pgn = _controller.document.repertoirePgn;
     final sameChapter =
         _outlineChapterSeen != null &&
         p.equals(_outlineChapterSeen!, chapterPath);
@@ -722,7 +722,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         await _outline.open(
           rootPath: root,
           activeChapterPath: chapterPath,
-          isWhite: _controller.isRepertoireWhite,
+          isWhite: _controller.document.isRepertoireWhite,
         );
       } else {
         if (_outline.activeChapterPath == null ||
@@ -766,12 +766,12 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       unawaited(_loadChapters());
       return;
     }
-    final current = _controller.currentRepertoire;
+    final current = _controller.document.currentRepertoire;
     if (current != null && p.equals(current.filePath, newPath)) {
       // Same file, new contents (a line moved in or out): reload in place.
       // Silent, not the reload dialog — we already know what changed, and a
       // summary window over a move the user just made would be noise.
-      unawaited(_controller.loadRepertoire());
+      unawaited(_controller.document.loadRepertoire());
       return;
     }
     unawaited(_openChapterPath(newPath));
@@ -781,7 +781,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   /// Switch the board/editor to the chapter file at [path].
   @override
   Future<void> _openChapterPath(String path) async {
-    final current = _controller.currentRepertoire;
+    final current = _controller.document.currentRepertoire;
     if (current != null && p.equals(current.filePath, path)) return;
     final known = _chapters.where((c) => p.equals(c.filePath, path));
     final meta = known.isNotEmpty
@@ -791,7 +791,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
             name: p.basenameWithoutExtension(path),
             lastModified: DateTime.now(),
           );
-    await _controller.setRepertoire(meta);
+    await _controller.document.setRepertoire(meta);
     _reclaimFocus();
   }
 
@@ -801,15 +801,15 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     await _openChapterPath(chapterPath);
     if (!mounted) return;
     // setRepertoire loads asynchronously; wait for the lines to be there.
-    await _controller.awaitLoaded();
+    await _controller.document.awaitLoaded();
     if (!mounted) return;
-    final match = _controller.repertoireLines
+    final match = _controller.document.repertoireLines
         .where((l) => l.gameIndex == line.gameIndex)
         .firstOrNull;
     if (match != null) {
       _selectLine(match);
     } else {
-      _controller.loadMoveSequence(line.moves);
+      _controller.composeMoves(line.moves);
     }
   }
 
@@ -822,10 +822,10 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   Future<void> _generateIntoChapter(String chapterPath) async {
     await _openChapterPath(chapterPath);
     if (!mounted) return;
-    await _controller.awaitLoaded();
+    await _controller.document.awaitLoaded();
     if (!mounted) return;
-    _controller.loadMoveSequence(
-      _commonPrefix(_controller.repertoireLines.map((l) => l.moves)),
+    _controller.composeMoves(
+      _commonPrefix(_controller.document.repertoireLines.map((l) => l.moves)),
     );
     unawaited(_openGenerateTab());
   }
@@ -870,16 +870,16 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     if (!mounted) return;
     unawaited(_outline.refresh());
     unawaited(_loadChapters());
-    final current = _controller.currentRepertoire;
+    final current = _controller.document.currentRepertoire;
     if (current != null && p.equals(current.filePath, chapterPath)) {
-      unawaited(_controller.loadRepertoire());
+      unawaited(_controller.document.loadRepertoire());
     }
   }
 
   /// Full-width planning mode: answer the forks, get chapters, generate.
   @override
   Future<void> _openPlanner() async {
-    if (_controller.currentRepertoire == null) return;
+    if (_controller.document.currentRepertoire == null) return;
     if (_planRunner.isRunning || _generationController.isGenerating) {
       showAppSnackBar(
         context,
@@ -891,7 +891,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     final root = _outlineRoot;
     if (root == null) return;
     final appState = _appState ?? context.read<AppState>();
-    final isWhite = _controller.isRepertoireWhite;
+    final isWhite = _controller.document.isRepertoireWhite;
     // Reuse the last run's settings only when they were for this colour.
     // With `relativeEval` off the eval window is absolute, so a White window
     // carried onto a Black repertoire prunes every line that is merely equal.
@@ -912,7 +912,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           isWhite: isWhite,
           repertoireName: p.basename(root),
           outline: _outline.outline,
-          initialMoves: List.of(_controller.currentMoveSequence),
+          initialMoves: List.of(_controller.board.currentMoveSequence),
           baseConfig: base,
           chesscomUsername: appState.chesscomUsername,
           lichessUsername: appState.lichessUsername,
@@ -952,7 +952,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
   }
 
   Future<void> _askRepertoireColor() async {
-    final name = _controller.currentRepertoire?.name ?? 'this repertoire';
+    final name =
+        _controller.document.currentRepertoire?.name ?? 'this repertoire';
     final isWhite = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -996,14 +997,14 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       // with no colour happens before the colour is known. Re-apply it now
       // rather than leaving a Black repertoire looking at White's side.
       if (mounted) {
-        setState(() => _boardFlipped = !_controller.isRepertoireWhite);
+        setState(() => _boardFlipped = !_controller.document.isRepertoireWhite);
       }
     }
   }
 
   Future<void> _setRepertoireSide(bool isWhite) async {
     try {
-      await _controller.setRepertoireColor(isWhite);
+      await _controller.document.setRepertoireColor(isWhite);
     } catch (error) {
       if (!mounted) return;
       showAppSnackBar(
@@ -1040,7 +1041,6 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     _generationController.removeListener(_onGenerationChanged);
     _generationController.dispose();
     _controller.removeListener(_onRepertoireChanged);
-    _controller.dispose();
 
     _appState?.removeListener(_onAppStateChanged);
     _appState = null;
@@ -1056,9 +1056,11 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       appBar: PreferredSize(
         preferredSize: root.appBar.preferredSize,
         child: AbsorbPointer(
-          absorbing: _controller.isLoading && _lastRepertoireId != null,
+          absorbing:
+              _controller.document.isLoading && _lastRepertoireId != null,
           child: ExcludeFocus(
-            excluding: _controller.isLoading && _lastRepertoireId != null,
+            excluding:
+                _controller.document.isLoading && _lastRepertoireId != null,
             child: LegacyThemeBoundary(child: root.appBar),
           ),
         ),
@@ -1072,18 +1074,80 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
     return DocumentCloseRegistration(
       revision: () => _controller.closeRevision,
       prepare: () async {
-        await _controller.flushDocumentForClose();
+        await context.read<BuilderLifetime>().flushForClose();
         if (!mounted) return null;
         return DocumentCloseApproval(_controller.closeRevision);
       },
-      child: shell,
+      child: WorkspaceRecoveryHost(
+        recovery: context.read<BuilderLifetime>().recovery,
+        onRestored: () => setState(() {}),
+        id: 'builder',
+        workspaceName: 'Builder',
+        title: (snapshot) => snapshot.drafts.firstOrNull?.title ?? 'Builder',
+        path: (snapshot) =>
+            snapshot.drafts.firstOrNull?.repertoire?.filePath ?? '',
+        child: ListenableBuilder(
+          listenable: _controller,
+          builder: (context, _) => Material(
+            child: Column(
+              children: [
+                if (_controller.saveError != null)
+                  MaterialBanner(
+                    content: const Text(
+                      'Line edits are retained. Saving failed.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () =>
+                            unawaited(_controller.saveActiveLine()),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                if (_controller.sourceChanged)
+                  const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text(
+                      'The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.',
+                    ),
+                  ),
+                if (_controller.retainedDrafts.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: PopupMenuButton(
+                      tooltip: 'Retained Builder drafts',
+                      itemBuilder: (context) => [
+                        for (final draft in _controller.retainedDrafts)
+                          PopupMenuItem(
+                            value: draft,
+                            child: Text(
+                              '${draft.repertoire?.name ?? 'Scratch'} · ${draft.title}',
+                            ),
+                          ),
+                      ],
+                      onSelected: (draft) =>
+                          unawaited(_controller.openRetainedDraft(draft)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text(
+                          'Retained drafts (${_controller.retainedDrafts.length})',
+                        ),
+                      ),
+                    ),
+                  ),
+                Expanded(child: shell),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   ({PreferredSizeWidget appBar, Widget body}) _buildWorkspaceRoot(
     BuildContext context,
   ) {
-    if (_controller.isLoading && _lastRepertoireId == null) {
+    if (_controller.document.isLoading && _lastRepertoireId == null) {
       return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
@@ -1102,8 +1166,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       );
     }
 
-    final loadError = _controller.loadError;
-    if (loadError != null && _controller.currentRepertoire == null) {
+    final loadError = _controller.document.loadError;
+    if (loadError != null && _controller.document.currentRepertoire == null) {
       return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
@@ -1126,7 +1190,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                 Text(loadError, textAlign: TextAlign.center),
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  onPressed: () => unawaited(_controller.loadRepertoire()),
+                  onPressed: () =>
+                      unawaited(_controller.document.loadRepertoire()),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Retry'),
                 ),
@@ -1137,7 +1202,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       );
     }
 
-    if (_controller.currentRepertoire == null) {
+    if (_controller.document.currentRepertoire == null) {
       return (
         appBar: RepertoireToolbar(
           title: const Text('Repertoire Builder'),
@@ -1152,19 +1217,19 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
             );
             if (!mounted) return;
             if (chapters.isNotEmpty) {
-              await _controller.setRepertoire(chapters.first);
+              await _controller.document.setRepertoire(chapters.first);
             }
             _reclaimFocus();
           },
           onSelected: (repertoire) async {
-            await _controller.setRepertoire(repertoire);
+            await _controller.document.setRepertoire(repertoire);
             _reclaimFocus();
           },
         ),
       );
     }
 
-    final repertoire = _controller.currentRepertoire!;
+    final repertoire = _controller.document.currentRepertoire!;
     return (
       appBar: RepertoireToolbar(
         title: RepertoireBreadcrumbTitle(
@@ -1198,7 +1263,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
             showPositionGenerationSettings(context, _generationController),
         trapNavigation: _buildTrapNavigation(),
         repertoireSettingsBuilder: (_) => RepertoireSettingsBody(
-          isWhiteRepertoire: _controller.isRepertoireWhite,
+          isWhiteRepertoire: _controller.document.isRepertoireWhite,
           sideChangeEnabled: !_generationController.isGenerating,
           onSideChanged: _setRepertoireSide,
           boardSize: _layout.boardSize,
@@ -1207,8 +1272,8 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       ),
       body: RepertoireLoadingFrame(
         loadError: loadError,
-        onDismissError: _controller.dismissLoadError,
-        isLoading: _controller.isLoading,
+        onDismissError: _controller.document.dismissLoadError,
+        isLoading: _controller.document.isLoading,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: _reclaimFocus,

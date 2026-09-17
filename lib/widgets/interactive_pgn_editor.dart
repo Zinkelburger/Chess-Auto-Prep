@@ -65,14 +65,11 @@ class InteractivePgnEditor extends StatefulWidget {
 
   /// Called when the user edits an existing line.
   final void Function(String updatedPgn)? onLineEdited;
+  final ValueChanged<String>? onTitleChanged;
 
   /// Called after debounced edits while [isEditingExistingLine] is true.
   /// Falls back to [onLineEdited] when null.
   final ValueChanged<String>? onAutoSave;
-
-  /// Exposes the pending debounce to hosts that must save before reading a
-  /// replacement chapter. Null clears the registration after a flush.
-  final ValueChanged<VoidCallback?>? onPendingAutoSaveChanged;
 
   /// Called when comment edits mark the line dirty.
   final VoidCallback? onDirty;
@@ -113,8 +110,8 @@ class InteractivePgnEditor extends StatefulWidget {
     this.onPromote,
     this.onMakeMainLine,
     this.onLineEdited,
+    this.onTitleChanged,
     this.onAutoSave,
-    this.onPendingAutoSaveChanged,
     this.onDirty,
     this.onCopyToClipboard,
     this.onViewInLines,
@@ -348,11 +345,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     _autoSaveTimer?.cancel();
     // Capture both the content and destination now. Navigation may replace
     // the widget's tree and callbacks before this debounce expires.
-    final pgn = _buildFullPgnForSave();
     final onSave = widget.onAutoSave ?? widget.onLineEdited;
-    _pendingAutoSave = onSave == null ? null : () => onSave(pgn);
+    if (onSave == null) return;
+    final pgn = _buildFullPgnForSave();
+    _pendingAutoSave = () => onSave(pgn);
     _autoSaveTimer = Timer(_autoSaveDelay, _flushAutoSave);
-    widget.onPendingAutoSaveChanged?.call(_flushAutoSave);
   }
 
   void _flushAutoSave() {
@@ -360,7 +357,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     _autoSaveTimer = null;
     final save = _pendingAutoSave;
     _pendingAutoSave = null;
-    widget.onPendingAutoSaveChanged?.call(null);
     save?.call();
   }
 
@@ -543,7 +539,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   bool get _showTitleField =>
       widget.isEditingExistingLine ||
       widget.onLineEdited != null ||
-      widget.onAutoSave != null;
+      widget.onAutoSave != null ||
+      widget.onTitleChanged != null;
 
   @override
   Widget build(BuildContext context) {
@@ -620,7 +617,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                               fontWeight: FontWeight.w600,
                               color: AppColors.inkSoft,
                             ),
-                            onChanged: (_) {
+                            onChanged: (title) {
+                              widget.onTitleChanged?.call(title);
                               widget.onDirty?.call();
                               _scheduleAutoSave();
                             },

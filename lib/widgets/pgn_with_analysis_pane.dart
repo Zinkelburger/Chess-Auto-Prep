@@ -6,7 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../features/repertoires/controllers/repertoire_controller.dart';
+import '../features/repertoires/controllers/builder_workspace_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../models/build_tree_node.dart';
 import '../chess_core/moves/move_tree_view.dart';
@@ -16,15 +16,13 @@ import '../services/coherence_service.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../theme/app_colors.dart';
-import '../utils/lines_filter_helpers.dart' show isPlaceholderLineTitle;
-import '../utils/pgn_utils.dart' as pgn_utils;
 import 'analysis/analysis_panels_dialog.dart';
 import 'layout/edit_main_zone.dart';
 import 'repertoire_analysis_dock.dart';
 
 /// Analysis dock on top, PGN editor below (resizable split).
 class PgnWithAnalysisPane extends StatefulWidget {
-  final RepertoireController controller;
+  final BuilderWorkspaceController controller;
   final MoveTreeView tree;
   final TreePath currentPath;
   final ValueChanged<TreePath>? onJump;
@@ -35,7 +33,6 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final void Function(TreePath)? onMakeMainLine;
   final String repertoireColor;
   final bool isEditingExistingLine;
-  final void Function(String updatedPgn)? onLineEdited;
   final VoidCallback onImportPgn;
   final VoidCallback? onViewInLines;
   final VoidCallback onReload;
@@ -68,7 +65,6 @@ class PgnWithAnalysisPane extends StatefulWidget {
     this.onMakeMainLine,
     required this.repertoireColor,
     required this.isEditingExistingLine,
-    this.onLineEdited,
     required this.onImportPgn,
     this.onViewInLines,
     required this.onReload,
@@ -233,28 +229,19 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
     );
   }
 
-  /// Title of the selected line (its PGN Event header, falling back to the
-  /// display name), or null when composing a new line.
-  String? _selectedLineTitle() {
-    final line = widget.controller.selectedPgnLine;
-    if (line == null) return null;
-    final event = pgn_utils.extractEventTitle(line.fullPgn);
-    return isPlaceholderLineTitle(event) ? line.name : event;
-  }
-
   Widget _buildPgnEditor() {
     final displayedTree = widget.tree;
     final owner = widget.controller;
     return EditMainZone(
       tree: displayedTree,
       snapshotForSave: () {
-        final current = owner.tree;
+        final current = owner.board.tree;
         return identical(current.identity, displayedTree.identity)
             ? current
             : displayedTree;
       },
       currentPath: widget.currentPath,
-      lineTitle: _selectedLineTitle(),
+      lineTitle: widget.controller.title,
       onJump: widget.onJump,
       onCommentChanged: widget.onCommentChanged,
       onToggleNag: widget.onToggleNag,
@@ -263,8 +250,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       onMakeMainLine: widget.onMakeMainLine,
       repertoireColor: widget.repertoireColor,
       isEditingExistingLine: widget.isEditingExistingLine,
-      onLineEdited: widget.onLineEdited,
-      onPendingAutoSaveChanged: widget.controller.setPendingLineSave,
+      onTitleChanged: widget.controller.setTitle,
       onViewInLines: widget.onViewInLines,
       ephemeralTitle: widget.ephemeralTitle,
     );

@@ -3,7 +3,7 @@ import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart' show PgnNodeData, Side;
 import 'package:flutter/material.dart';
 
-import '../../features/repertoires/controllers/repertoire_controller.dart';
+import '../../features/repertoires/controllers/repertoire_board_controller.dart';
 import '../../models/repertoire_line.dart';
 import '../../features/training/models/training_phase.dart';
 import '../../features/training/controllers/training_session_controller.dart';
@@ -23,7 +23,7 @@ import 'move_input_widget.dart';
 /// [showMoveInput] off — as the idle board that keeps the browse screens
 /// looking like the rest of the app instead of a bare list.
 class TrainingBoardPane extends StatelessWidget {
-  final RepertoireController session;
+  final RepertoireBoardController session;
   final bool boardFlipped;
   final bool waitingForUser;
   final void Function(CompletedMove move)? onMove;

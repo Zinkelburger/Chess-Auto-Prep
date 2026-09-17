@@ -11,6 +11,7 @@
 /// way the rest of the app does: an [AppState] handoff.
 library;
 
+import 'package:chess_auto_prep/app/builder_lifetime.dart';
 import '../support/generation_artifacts_fixture.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
 import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
@@ -138,6 +139,13 @@ Future<AppState> _pumpScreen(
           value: testRepertoireDocuments(),
         ),
         Provider<RepertoireDecoder>.value(value: decoder),
+        Provider<BuilderLifetime>(
+          create: (ctx) => testBuilderLifetime(
+            documents: ctx.read<RepertoireDocumentRepository>(),
+            decoder: ctx.read<RepertoireDecoder>(),
+          ),
+          dispose: (_, lifetime) => lifetime.dispose(),
+        ),
       ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -443,20 +451,20 @@ void main() {
           .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
           .controller;
       final editor = tester.state(find.byType(InteractivePgnEditor));
-      final board = controller.tree;
-      final current = controller.currentRepertoire;
+      final board = controller.board.tree;
+      final current = controller.document.currentRepertoire;
       decoder.afterBuild = () async =>
           throw StateError('Chapter temporarily unavailable');
-      unawaited(controller.loadRepertoire());
+      unawaited(controller.document.loadRepertoire());
       await _settleUntil(tester, find.byType(MaterialBanner));
-      expect(controller.currentRepertoire, current);
-      expect(controller.tree, same(board));
+      expect(controller.document.currentRepertoire, current);
+      expect(controller.board.tree, same(board));
       expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
       await tester.tap(find.text('Dismiss'));
       await tester.pump();
       expect(find.byType(MaterialBanner), findsNothing);
       expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
-      controller.playMove('d3');
+      controller.board.playMove('d3');
       await tester.pump();
       expect(tester.takeException(), isNull);
     },
@@ -492,7 +500,7 @@ void main() {
     expect(titleField, findsOneWidget);
     final gate = Completer<void>();
     decoder.afterBuild = () => gate.future;
-    unawaited(controller.loadRepertoire());
+    unawaited(controller.document.loadRepertoire());
     await tester.pump();
     expect(find.text('Loading repertoire...'), findsNothing);
     expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));
@@ -508,9 +516,9 @@ void main() {
         (widget) => widget is RepertoireLoadingFrame && !widget.isLoading,
       ),
     );
-    expect(controller.isLoading, isFalse);
+    expect(controller.document.isLoading, isFalse);
     expect(
-      controller.repertoireLines.single.fullPgn,
+      controller.document.repertoireLines.single.fullPgn,
       contains('Save this before reloading'),
     );
     expect(tester.state(find.byType(InteractivePgnEditor)), same(editor));

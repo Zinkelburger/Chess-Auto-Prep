@@ -1,5 +1,8 @@
+import 'package:chess_auto_prep/app/builder_lifetime.dart';
+import 'package:chess_auto_prep/features/repertoires/models/builder_workspace_snapshot.dart';
+import 'package:chess_auto_prep/features/documents/repositories/workspace_recovery_store.dart';
 import 'package:chess_auto_prep/features/repertoires/models/loaded_repertoire.dart';
-import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/builder_workspace_controller.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
 import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
@@ -9,10 +12,10 @@ import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 
 /// Legacy test fixtures install disposable storage. Capture it once here;
 /// production controllers never resolve the global, even during later writes.
-RepertoireController testRepertoireController({
+BuilderWorkspaceController testBuilderWorkspace({
   RepertoireDocumentRepository? documents,
   RepertoireDecoder decoder = const IsolateRepertoireDecoder(),
-}) => RepertoireController(
+}) => BuilderWorkspaceController(
   documents: documents ?? testRepertoireDocuments(),
   decoder: decoder,
 );
@@ -40,3 +43,33 @@ class GatedRepertoireDecoder implements RepertoireDecoder {
     return result;
   }
 }
+
+class MemoryBuilderRecoveryStore
+    implements WorkspaceRecoveryStore<BuilderWorkspaceSnapshot> {
+  BuilderWorkspaceSnapshot? snapshot;
+  Object? failure;
+  @override
+  Future<WorkspaceRecoveryListing<BuilderWorkspaceSnapshot>> list() async =>
+      WorkspaceRecoveryListing([]);
+  @override
+  Future<void> write(BuilderWorkspaceSnapshot value) async {
+    if (failure != null) throw failure!;
+    snapshot = value;
+  }
+
+  @override
+  Future<void> resolve(
+    WorkspaceRecoveryEntry<BuilderWorkspaceSnapshot> entry,
+  ) async {}
+  @override
+  Future<void> close() async {}
+}
+
+BuilderLifetime testBuilderLifetime({
+  RepertoireDocumentRepository? documents,
+  RepertoireDecoder decoder = const IsolateRepertoireDecoder(),
+}) => BuilderLifetime(
+  documents: documents ?? testRepertoireDocuments(),
+  decoder: decoder,
+  store: MemoryBuilderRecoveryStore(),
+);

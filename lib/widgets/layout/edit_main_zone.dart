@@ -27,8 +27,8 @@ class EditMainZone extends StatelessWidget {
     required this.repertoireColor,
     required this.isEditingExistingLine,
     this.onLineEdited,
+    this.onTitleChanged,
     this.onAutoSave,
-    this.onPendingAutoSaveChanged,
     this.onDirty,
     this.onCopyToClipboard,
     this.onViewInLines,
@@ -48,8 +48,8 @@ class EditMainZone extends StatelessWidget {
   final String repertoireColor;
   final bool isEditingExistingLine;
   final void Function(String updatedPgn)? onLineEdited;
+  final ValueChanged<String>? onTitleChanged;
   final ValueChanged<String>? onAutoSave;
-  final ValueChanged<VoidCallback?>? onPendingAutoSaveChanged;
   final VoidCallback? onDirty;
   final void Function(String text, String successMessage)? onCopyToClipboard;
   final VoidCallback? onViewInLines;
@@ -74,8 +74,8 @@ class EditMainZone extends StatelessWidget {
       repertoireColor: repertoireColor,
       isEditingExistingLine: isEditingExistingLine,
       onLineEdited: onLineEdited,
+      onTitleChanged: onTitleChanged,
       onAutoSave: onAutoSave,
-      onPendingAutoSaveChanged: onPendingAutoSaveChanged,
       onDirty: onDirty,
       onCopyToClipboard:
           onCopyToClipboard ??

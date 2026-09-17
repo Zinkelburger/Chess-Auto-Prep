@@ -107,115 +107,121 @@ void main() {
   group('loadRepertoire outcomes', () {
     test('a missing file clears the PGN, tree and lines', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/a.pgn'));
-      expect(controller.repertoireLines, isNotEmpty);
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/a.pgn'));
+      expect(controller.document.repertoireLines, isNotEmpty);
 
-      await controller.setRepertoire(_meta('/gone.pgn'));
+      await controller.document.setRepertoire(_meta('/gone.pgn'));
 
-      expect(controller.repertoirePgn, isNull);
-      expect(controller.openingGraph, isNull);
-      expect(controller.repertoireLines, isEmpty);
-      expect(controller.moveHistory, isEmpty);
-      expect(controller.loadError, isNull);
+      expect(controller.document.repertoirePgn, isNull);
+      expect(controller.document.openingGraph, isNull);
+      expect(controller.document.repertoireLines, isEmpty);
+      expect(controller.board.moveHistory, isEmpty);
+      expect(controller.document.loadError, isNull);
     });
 
     test('a missing file leaves the colour headers of the last load', () async {
       storage.files['/b.pgn'] = _blackPgn;
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/b.pgn'));
-      expect(controller.isRepertoireWhite, isFalse);
-      expect(controller.rootMoves, '1. d4 Nf6');
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/b.pgn'));
+      expect(controller.document.isRepertoireWhite, isFalse);
+      expect(controller.document.rootMoves, '1. d4 Nf6');
 
-      await controller.setRepertoire(_meta('/gone.pgn'));
+      await controller.document.setRepertoire(_meta('/gone.pgn'));
 
       // The missing-file branch never re-derives the headers, so they survive.
-      expect(controller.isRepertoireWhite, isFalse);
-      expect(controller.rootMoves, '1. d4 Nf6');
+      expect(controller.document.isRepertoireWhite, isFalse);
+      expect(controller.document.rootMoves, '1. d4 Nf6');
     });
 
     test('a read failure is reported through loadError', () async {
       storage.files['/a.pgn'] = _whitePgn;
       storage.failingReads.add('/a.pgn');
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
-      await controller.setRepertoire(_meta('/a.pgn'));
+      await controller.document.setRepertoire(_meta('/a.pgn'));
 
-      expect(controller.loadError, startsWith('Failed to load repertoire:'));
-      expect(controller.repertoirePgn, isNull);
-      expect(controller.openingGraph, isNull);
-      expect(controller.repertoireLines, isEmpty);
-      expect(controller.isLoading, isFalse);
+      expect(
+        controller.document.loadError,
+        startsWith('Failed to load repertoire:'),
+      );
+      expect(controller.document.repertoirePgn, isNull);
+      expect(controller.document.openingGraph, isNull);
+      expect(controller.document.repertoireLines, isEmpty);
+      expect(controller.document.isLoading, isFalse);
     });
 
     test('a later successful load clears a previous loadError', () async {
       storage.files['/a.pgn'] = _whitePgn;
       storage.failingReads.add('/a.pgn');
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/a.pgn'));
-      expect(controller.loadError, isNotNull);
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/a.pgn'));
+      expect(controller.document.loadError, isNotNull);
 
       storage.failingReads.clear();
-      await controller.loadRepertoire();
+      await controller.document.loadRepertoire();
 
-      expect(controller.loadError, isNull);
-      expect(controller.repertoireLines, hasLength(1));
+      expect(controller.document.loadError, isNull);
+      expect(controller.document.repertoireLines, hasLength(1));
     });
 
     test('an empty file yields an empty opening tree and no lines', () async {
       storage.files['/empty.pgn'] = '';
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
-      await controller.setRepertoire(_meta('/empty.pgn'));
+      await controller.document.setRepertoire(_meta('/empty.pgn'));
 
-      expect(controller.repertoirePgn, '');
-      expect(controller.openingGraph, isNotNull);
-      expect(controller.openingGraph!.totalGames, 0);
-      expect(controller.repertoireLines, isEmpty);
+      expect(controller.document.repertoirePgn, '');
+      expect(controller.document.openingGraph, isNotNull);
+      expect(controller.document.openingGraph!.totalGames, 0);
+      expect(controller.document.repertoireLines, isEmpty);
     });
 
     test('a PGN with no // Color: comment asks for colour selection', () async {
       storage.files['/n.pgn'] = '[Event "A"]\n[Result "*"]\n\n1. e4 e5 *\n';
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
-      await controller.setRepertoire(_meta('/n.pgn'));
+      await controller.document.setRepertoire(_meta('/n.pgn'));
 
-      expect(controller.needsColorSelection, isTrue);
+      expect(controller.document.needsColorSelection, isTrue);
       // Absent a header the repertoire is treated as White.
-      expect(controller.isRepertoireWhite, isTrue);
+      expect(controller.document.isRepertoireWhite, isTrue);
     });
 
     test(
       'a // Color: Black header flips the side and clears the prompt',
       () async {
         storage.files['/b.pgn'] = _blackPgn;
-        final controller = testRepertoireController();
+        final controller = testBuilderWorkspace();
 
-        await controller.setRepertoire(_meta('/b.pgn'));
+        await controller.document.setRepertoire(_meta('/b.pgn'));
 
-        expect(controller.needsColorSelection, isFalse);
-        expect(controller.isRepertoireWhite, isFalse);
-        expect(controller.repertoireLines.single.color, 'black');
+        expect(controller.document.needsColorSelection, isFalse);
+        expect(controller.document.isRepertoireWhite, isFalse);
+        expect(controller.document.repertoireLines.single.color, 'black');
       },
     );
 
     test('a load navigates to the saved // Root: position', () async {
       storage.files['/b.pgn'] = _blackPgn;
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
-      await controller.setRepertoire(_meta('/b.pgn'));
+      await controller.document.setRepertoire(_meta('/b.pgn'));
 
-      expect(controller.moveHistory, ['d4', 'Nf6']);
-      expect(controller.isAtRootPosition, isTrue);
+      expect(controller.board.moveHistory, ['d4', 'Nf6']);
+      expect(
+        controller.board.isAtRootPosition(controller.document.rootMoves),
+        isTrue,
+      );
     });
 
     test('a load drops the undo stack', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
       controller.writer.recordDraftUndo(isCurrent: () => true, restore: () {});
       expect(controller.writer.canUndo, isTrue);
 
-      await controller.setRepertoire(_meta('/a.pgn'));
+      await controller.document.setRepertoire(_meta('/a.pgn'));
 
       expect(controller.writer.canUndo, isFalse);
     });
@@ -223,33 +229,35 @@ void main() {
     test('a headerless PGN body still builds a tree', () async {
       // No [Event] tags at all: the game-splitter still yields movetext.
       storage.files['/m.pgn'] = '// Color: White\n\n1. e4 e5 2. Nf3 Nc6 *\n';
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
-      await controller.setRepertoire(_meta('/m.pgn'));
+      await controller.document.setRepertoire(_meta('/m.pgn'));
 
-      expect(controller.openingGraph, isNotNull);
-      expect(controller.needsColorSelection, isFalse);
+      expect(controller.document.openingGraph, isNotNull);
+      expect(controller.document.needsColorSelection, isFalse);
     });
   });
 
   group('awaitLoaded', () {
     test('resolves immediately when no load is in flight', () async {
-      final controller = testRepertoireController();
-      await controller.awaitLoaded().timeout(const Duration(seconds: 1));
+      final controller = testBuilderWorkspace();
+      await controller.document.awaitLoaded().timeout(
+        const Duration(seconds: 1),
+      );
     });
 
     test('is held open for the duration of a load', () async {
       storage.files['/a.pgn'] = _whitePgn;
       final gate = Completer<void>();
       storage.readGates['/a.pgn'] = gate;
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
-      final load = controller.setRepertoire(_meta('/a.pgn'));
+      final load = controller.document.setRepertoire(_meta('/a.pgn'));
       await pumpEventQueue();
-      expect(controller.isLoading, isTrue);
+      expect(controller.document.isLoading, isTrue);
 
       var released = false;
-      unawaited(controller.awaitLoaded().then((_) => released = true));
+      unawaited(controller.document.awaitLoaded().then((_) => released = true));
       await pumpEventQueue();
       expect(released, isFalse, reason: 'the load has not finished yet');
 
@@ -258,8 +266,8 @@ void main() {
       await pumpEventQueue();
 
       expect(released, isTrue);
-      expect(controller.isLoading, isFalse);
-      expect(controller.repertoireLines, hasLength(1));
+      expect(controller.document.isLoading, isFalse);
+      expect(controller.document.repertoireLines, hasLength(1));
     });
 
     test('a superseded load does not release the waiters early', () async {
@@ -269,41 +277,41 @@ void main() {
       final gateB = Completer<void>();
       storage.readGates['/a.pgn'] = gateA;
       storage.readGates['/b.pgn'] = gateB;
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
-      final loadA = controller.setRepertoire(_meta('/a.pgn'));
+      final loadA = controller.document.setRepertoire(_meta('/a.pgn'));
       await pumpEventQueue();
-      final loadB = controller.setRepertoire(_meta('/b.pgn'));
+      final loadB = controller.document.setRepertoire(_meta('/b.pgn'));
       await pumpEventQueue();
 
       var released = false;
-      unawaited(controller.awaitLoaded().then((_) => released = true));
+      unawaited(controller.document.awaitLoaded().then((_) => released = true));
 
       // A loses the race and must not clear `isLoading` out from under B.
       gateA.complete();
       await loadA;
       await pumpEventQueue();
       expect(released, isFalse);
-      expect(controller.isLoading, isTrue);
+      expect(controller.document.isLoading, isTrue);
 
       gateB.complete();
       await loadB;
       await pumpEventQueue();
 
       expect(released, isTrue);
-      expect(controller.isLoading, isFalse);
-      expect(controller.repertoirePgn, contains('1. d4'));
+      expect(controller.document.isLoading, isFalse);
+      expect(controller.document.repertoirePgn, contains('1. d4'));
     });
   });
 
   group('metadata comment upsert', () {
     test('setRootPosition inserts // Root: above the first [Event]', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/a.pgn'));
-      controller.loadMoveHistory(['e4', 'e5']);
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/a.pgn'));
+      controller.board.loadMoveHistory(['e4', 'e5']);
 
-      await controller.setRootPosition();
+      await controller.document.setRootPosition();
 
       final written = storage.files['/a.pgn']!;
       final lines = written.split('\n');
@@ -312,16 +320,16 @@ void main() {
       expect(rootIdx, greaterThanOrEqualTo(0));
       expect(rootIdx, lessThan(eventIdx));
       expect(lines[rootIdx], '// Root: 1. e4 e5');
-      expect(controller.rootMoves, '1. e4 e5');
+      expect(controller.document.rootMoves, '1. e4 e5');
     });
 
     test('an existing // Root: line is replaced, not duplicated', () async {
       storage.files['/b.pgn'] = _blackPgn;
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/b.pgn'));
-      controller.loadMoveHistory(['d4', 'Nf6', 'c4']);
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/b.pgn'));
+      controller.board.loadMoveHistory(['d4', 'Nf6', 'c4']);
 
-      await controller.setRootPosition();
+      await controller.document.setRootPosition();
 
       final lines = storage.files['/b.pgn']!.split('\n');
       expect(lines.where((l) => l.startsWith('// Root:')), hasLength(1));
@@ -333,41 +341,41 @@ void main() {
 
     test('a comment is prepended when the file has no [Event] tag', () async {
       storage.files['/m.pgn'] = '1. e4 e5 *\n';
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/m.pgn'));
-      controller.loadMoveHistory(['e4']);
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/m.pgn'));
+      controller.board.loadMoveHistory(['e4']);
 
-      await controller.setRootPosition();
+      await controller.document.setRootPosition();
 
       expect(storage.files['/m.pgn'], startsWith('// Root: 1. e4\n'));
     });
 
     test('setRepertoireColor writes the header and reloads', () async {
       storage.files['/n.pgn'] = '[Event "A"]\n[Result "*"]\n\n1. e4 e5 *\n';
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/n.pgn'));
-      expect(controller.needsColorSelection, isTrue);
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/n.pgn'));
+      expect(controller.document.needsColorSelection, isTrue);
 
-      await controller.setRepertoireColor(false);
+      await controller.document.setRepertoireColor(false);
 
       expect(storage.files['/n.pgn'], contains('// Color: Black'));
-      expect(controller.isRepertoireWhite, isFalse);
-      expect(controller.needsColorSelection, isFalse);
-      expect(controller.repertoireLines.single.color, 'black');
+      expect(controller.document.isRepertoireWhite, isFalse);
+      expect(controller.document.needsColorSelection, isFalse);
+      expect(controller.document.repertoireLines.single.color, 'black');
     });
 
     test(
       'setRepertoireColor reports a missing file without changing state',
       () async {
-        final controller = testRepertoireController();
-        await controller.setRepertoire(_meta('/gone.pgn'));
+        final controller = testBuilderWorkspace();
+        await controller.document.setRepertoire(_meta('/gone.pgn'));
 
         await expectLater(
-          controller.setRepertoireColor(false),
+          controller.document.setRepertoireColor(false),
           throwsStateError,
         );
 
-        expect(controller.isRepertoireWhite, isTrue);
+        expect(controller.document.isRepertoireWhite, isTrue);
         expect(storage.files, isEmpty);
       },
     );
@@ -376,43 +384,45 @@ void main() {
   group('importPgnContent', () {
     test('appends to the file, reloads, and returns the game count', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/a.pgn'));
-      expect(controller.repertoireLines, hasLength(1));
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/a.pgn'));
+      expect(controller.document.repertoireLines, hasLength(1));
 
-      final added = await controller.importPgnContent(
+      final added = await controller.document.importPgnContent(
         '[Event "C"]\n[Result "*"]\n\n1. d4 d5 *\n',
       );
 
       expect(added, 1);
       expect(storage.files['/a.pgn'], contains('1. d4 d5'));
-      expect(controller.repertoireLines, hasLength(2));
+      expect(controller.document.repertoireLines, hasLength(2));
     });
 
     test('a pasted study\'s variations are appended as lines', () async {
       storage.files['/a.pgn'] = _whitePgn;
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/a.pgn'));
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/a.pgn'));
 
-      final added = await controller.importPgnContent(
+      final added = await controller.document.importPgnContent(
         '[Event "C"]\n[Result "*"]\n\n1. d4 d5 (1... Nf6 2. c4) 2. c4 *\n',
       );
 
       expect(added, 2);
       expect(storage.files['/a.pgn'], isNot(contains('(')));
-      expect(controller.repertoireLines, hasLength(3));
+      expect(controller.document.repertoireLines, hasLength(3));
       expect(
-        controller.repertoireLines.map((l) => l.moves.join(' ')),
+        controller.document.repertoireLines.map((l) => l.moves.join(' ')),
         containsAll(['d4 d5 c4', 'd4 Nf6 c4']),
       );
     });
 
     test('separates the appended games with a blank line', () async {
       storage.files['/a.pgn'] = '[Event "A"]\n[Result "*"]\n\n1. e4 *';
-      final controller = testRepertoireController();
-      await controller.setRepertoire(_meta('/a.pgn'));
+      final controller = testBuilderWorkspace();
+      await controller.document.setRepertoire(_meta('/a.pgn'));
 
-      await controller.importPgnContent('[Event "C"]\n[Result "*"]\n\n1. d4 *');
+      await controller.document.importPgnContent(
+        '[Event "C"]\n[Result "*"]\n\n1. d4 *',
+      );
 
       // No trailing newline on the original: two are inserted.
       expect(storage.files['/a.pgn'], contains('1. e4 *\n\n[Event "C"]'));
@@ -421,11 +431,11 @@ void main() {
     test(
       'reports failure and writes nothing when the file is missing',
       () async {
-        final controller = testRepertoireController();
-        await controller.setRepertoire(_meta('/gone.pgn'));
+        final controller = testBuilderWorkspace();
+        await controller.document.setRepertoire(_meta('/gone.pgn'));
 
         await expectLater(
-          controller.importPgnContent('1. e4 *'),
+          controller.document.importPgnContent('1. e4 *'),
           throwsStateError,
         );
         expect(storage.files, isEmpty);
@@ -438,7 +448,7 @@ void main() {
       storage.files['/a.pgn'] = _whitePgn;
       storage.files['/b.pgn'] = _blackPgn;
       final decoder = GatedRepertoireDecoder();
-      final controller = testRepertoireController(decoder: decoder);
+      final controller = testBuilderWorkspace(decoder: decoder);
 
       final reached = Completer<void>();
       final gate = Completer<void>();
@@ -447,51 +457,54 @@ void main() {
         await gate.future;
       };
 
-      final loadA = controller.setRepertoire(_meta('/a.pgn'));
+      final loadA = controller.document.setRepertoire(_meta('/a.pgn'));
       await reached.future.timeout(const Duration(seconds: 5));
       decoder.afterBuild = null;
 
-      await controller.setRepertoire(_meta('/b.pgn'));
-      final winnerLines = controller.repertoireLines;
-      final winnerTree = controller.openingGraph;
+      await controller.document.setRepertoire(_meta('/b.pgn'));
+      final winnerLines = controller.document.repertoireLines;
+      final winnerTree = controller.document.openingGraph;
 
       gate.complete();
       await loadA;
 
       // A had a full LoadedRepertoire in hand and had to drop all of it —
       // not just the parts an epoch check happened to sit in front of.
-      expect(identical(controller.repertoireLines, winnerLines), isTrue);
-      expect(identical(controller.openingGraph, winnerTree), isTrue);
-      expect(controller.repertoireLines.single.moves, [
+      expect(
+        identical(controller.document.repertoireLines, winnerLines),
+        isTrue,
+      );
+      expect(identical(controller.document.openingGraph, winnerTree), isTrue);
+      expect(controller.document.repertoireLines.single.moves, [
         'd4',
         'Nf6',
         'c4',
         'e6',
       ]);
-      expect(controller.repertoirePgn, contains('1. d4'));
-      expect(controller.isRepertoireWhite, isFalse);
-      expect(controller.rootMoves, '1. d4 Nf6');
-      expect(controller.moveHistory, ['d4', 'Nf6']);
+      expect(controller.document.repertoirePgn, contains('1. d4'));
+      expect(controller.document.isRepertoireWhite, isFalse);
+      expect(controller.document.rootMoves, '1. d4 Nf6');
+      expect(controller.board.moveHistory, ['d4', 'Nf6']);
     });
 
     test('a superseded failing load leaves no error behind', () async {
       storage.files['/a.pgn'] = _whitePgn;
       storage.files['/b.pgn'] = _blackPgn;
       storage.failingReads.add('/a.pgn');
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
       final gateA = Completer<void>();
       storage.readGates['/a.pgn'] = gateA;
 
-      final loadA = controller.setRepertoire(_meta('/a.pgn'));
+      final loadA = controller.document.setRepertoire(_meta('/a.pgn'));
       await pumpEventQueue();
-      await controller.setRepertoire(_meta('/b.pgn'));
+      await controller.document.setRepertoire(_meta('/b.pgn'));
 
       gateA.complete();
       await loadA;
 
-      expect(controller.loadError, isNull);
-      expect(controller.repertoirePgn, contains('1. d4'));
+      expect(controller.document.loadError, isNull);
+      expect(controller.document.repertoirePgn, contains('1. d4'));
     });
   });
 
@@ -500,53 +513,53 @@ void main() {
       storage.files['/a.pgn'] = _whitePgn;
       final gateA = Completer<void>();
       storage.readGates['/a.pgn'] = gateA;
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
-      final loadA = controller.setRepertoire(_meta('/a.pgn'));
+      final loadA = controller.document.setRepertoire(_meta('/a.pgn'));
       await pumpEventQueue();
-      expect(controller.isLoading, isTrue);
+      expect(controller.document.isLoading, isTrue);
 
-      await controller.restoreRepertoireFromPgn(_restoredPgn);
+      await controller.document.restoreRepertoireFromPgn(_restoredPgn);
 
       gateA.complete();
       await loadA;
 
-      expect(controller.repertoirePgn, contains('1. c4'));
-      expect(controller.repertoireLines.single.moves, ['c4', 'e5']);
+      expect(controller.document.repertoirePgn, contains('1. c4'));
+      expect(controller.document.repertoireLines.single.moves, ['c4', 'e5']);
     });
 
     test('the restore releases the waiters of the discarded load', () async {
       storage.files['/a.pgn'] = _whitePgn;
       final gateA = Completer<void>();
       storage.readGates['/a.pgn'] = gateA;
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
 
-      final loadA = controller.setRepertoire(_meta('/a.pgn'));
+      final loadA = controller.document.setRepertoire(_meta('/a.pgn'));
       await pumpEventQueue();
       var released = false;
-      unawaited(controller.awaitLoaded().then((_) => released = true));
+      unawaited(controller.document.awaitLoaded().then((_) => released = true));
 
-      await controller.restoreRepertoireFromPgn(_restoredPgn);
+      await controller.document.restoreRepertoireFromPgn(_restoredPgn);
       await pumpEventQueue();
 
       // The load can no longer clear `isLoading` — it lost the epoch — so the
       // restore owes the waiters their completion.
       expect(released, isTrue);
-      expect(controller.isLoading, isFalse);
+      expect(controller.document.isLoading, isFalse);
 
       gateA.complete();
       await loadA;
-      expect(controller.isLoading, isFalse);
+      expect(controller.document.isLoading, isFalse);
     });
 
     test('a restore with no load in flight does not touch isLoading', () async {
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
       var notifications = 0;
       controller.addListener(() => notifications++);
 
-      await controller.restoreRepertoireFromPgn(_restoredPgn);
+      await controller.document.restoreRepertoireFromPgn(_restoredPgn);
 
-      expect(controller.isLoading, isFalse);
+      expect(controller.document.isLoading, isFalse);
       expect(notifications, 1, reason: 'one notify for the restore itself');
     });
   });

@@ -1,3 +1,4 @@
+import 'app/builder_lifetime.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
 import 'app/engine_runtime.dart';
 import 'app/runtime_settings.dart';
@@ -237,6 +238,14 @@ class ChessAutoPrepApp extends StatelessWidget {
                 createRepertoireDocuments(documents: documents),
           ),
           Provider<RepertoireDecoder>(create: (_) => createRepertoireDecoder()),
+          Provider<BuilderLifetime>(
+            create: (ctx) => BuilderLifetime(
+              documents: ctx.read<RepertoireDocumentRepository>(),
+              decoder: ctx.read<RepertoireDecoder>(),
+              store: createBuilderRecoveryStore(),
+            ),
+            dispose: (_, lifetime) => lifetime.dispose(),
+          ),
           Provider<PgnCollectionRepository>(
             create: (_) => createPgnCollectionRepository(documents: documents),
           ),

@@ -57,7 +57,7 @@ void main() {
     final owner = tester
         .widget<PgnWithAnalysisPane>(find.byType(PgnWithAnalysisPane))
         .controller;
-    expect(owner.openingGraph, isNot(isA<OpeningTree>()));
+    expect(owner.document.openingGraph, isNot(isA<OpeningTree>()));
 
     await owner.writer.addMovesAtPosition(
       pathFromRoot: ['e4', 'e5'],
@@ -65,13 +65,16 @@ void main() {
     );
     await tester.pump();
     expect(
-      owner.openingGraph!.nodeAtPath(['e4', 'e5', 'Nf3', 'Nc6']),
+      owner.document.openingGraph!.nodeAtPath(['e4', 'e5', 'Nf3', 'Nc6']),
       isNotNull,
     );
     await _undo(tester);
-    await _wait(tester, () => !owner.repertoirePgn!.contains('Nc6'));
+    await _wait(tester, () => !owner.document.repertoirePgn!.contains('Nc6'));
     expect(await file.readAsString(), contains('Nf3'));
-    expect(owner.openingGraph!.nodeAtPath(['e4', 'e5', 'Nf3', 'Nc6']), isNull);
+    expect(
+      owner.document.openingGraph!.nodeAtPath(['e4', 'e5', 'Nf3', 'Nc6']),
+      isNull,
+    );
     await _undo(tester);
     await _wait(tester, () => !owner.writer.canUndo);
     expect(await file.readAsString(), original);
@@ -82,8 +85,8 @@ void main() {
     );
     await tester.pump();
     final committed = await file.readAsString();
-    final board = owner.fen;
-    final graph = owner.openingGraph;
+    final board = owner.board.fen;
+    final graph = owner.document.openingGraph;
     final replacement = File(p.join(folder.path, 'external.pgn'));
     await replacement.writeAsString(committed);
     await replacement.rename(file.path);
@@ -93,10 +96,10 @@ void main() {
       () => find.textContaining('Undo failed:').evaluate().isNotEmpty,
     );
     expect(await file.readAsString(), committed);
-    expect(owner.repertoirePgn, committed);
-    expect(owner.currentRepertoire!.filePath, file.path);
-    expect(owner.fen, board);
-    expect(owner.openingGraph, same(graph));
+    expect(owner.document.repertoirePgn, committed);
+    expect(owner.document.currentRepertoire!.filePath, file.path);
+    expect(owner.board.fen, board);
+    expect(owner.document.openingGraph, same(graph));
     expect(owner.writer.canUndo, isTrue);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

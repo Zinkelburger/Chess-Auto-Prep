@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../core/generation_session_controller.dart';
-import '../../features/repertoires/controllers/repertoire_controller.dart';
+import '../../features/repertoires/controllers/builder_workspace_controller.dart';
 import '../../models/build_tree_node.dart';
 import '../../services/coherence_service.dart';
 import '../../services/generation/fen_map.dart';
@@ -20,7 +20,7 @@ import '../../theme/app_text_styles.dart';
 import 'expectimax_panel_host.dart';
 
 class InlineExpectimaxBar extends StatefulWidget {
-  final RepertoireController controller;
+  final BuilderWorkspaceController controller;
   final BuildTree? tree;
   final TreeBuildConfig? treeConfig;
   final FenMap? fenMap;

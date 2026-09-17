@@ -172,9 +172,7 @@ void main() {
       session.selectLine(session.repertoireLines.single);
       final save = session.selectedLineSaver!;
       documents.failure = StateError('disk unavailable');
-      session.setPendingLineSave(() {
-        unawaited(save('edited').catchError((_) => false));
-      });
+      unawaited(save('edited').catchError((_) => false));
       await session.setRepertoire(metadata('/b'));
       expect(session.currentRepertoire!.filePath, '/a');
       expect(resets, 1);

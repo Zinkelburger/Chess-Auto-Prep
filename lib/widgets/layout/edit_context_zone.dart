@@ -13,7 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_controller.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/builder_workspace_controller.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/models/edit_context_layout.dart';
 import 'package:chess_auto_prep/services/edit_context_layout_prefs.dart';
@@ -56,7 +56,7 @@ class EditContextZone extends StatefulWidget {
   final bool tabsLocked;
 
   /// Delegate mode: build default panes when content slots are null.
-  final RepertoireController? controller;
+  final BuilderWorkspaceController? controller;
   final BuildTree? tree;
   final TreeBuildConfig? treeConfig;
   final FenMap? fenMap;
@@ -526,22 +526,22 @@ class _EditContextZoneState extends State<EditContextZone> {
     if (controller == null || preview == null) return null;
 
     return UnifiedEnginePane(
-      fen: controller.fen,
+      fen: controller.board.fen,
       isActive: !widget.isGenerating || widget.isGenerationPaused,
       isUserTurn:
-          controller.position.turn ==
-          (controller.isRepertoireWhite ? Side.white : Side.black),
-      currentMoveSequence: controller.currentMoveSequence,
-      isWhiteRepertoire: controller.isRepertoireWhite,
+          controller.board.position.turn ==
+          (controller.document.isRepertoireWhite ? Side.white : Side.black),
+      currentMoveSequence: controller.board.currentMoveSequence,
+      isWhiteRepertoire: controller.document.isRepertoireWhite,
       boardPreview: preview,
       onMoveSelected: (uciMove) {
-        final san = uciToSan(controller.fen, uciMove);
+        final san = uciToSan(controller.board.fen, uciMove);
         if (san != uciMove) {
-          controller.playMove(san);
+          controller.board.playMove(san);
         }
       },
       onLineMoveTapped: (sanMoves, index) {
-        controller.applyLineFromCurrent(sanMoves, index);
+        controller.board.applyLineFromCurrent(sanMoves, index);
         preview.clearPreview();
       },
     );
@@ -558,9 +558,9 @@ class _EditContextZoneState extends State<EditContextZone> {
       treeConfig: widget.treeConfig,
       fenMap: widget.fenMap,
       boardPreview: preview,
-      onMoveSelected: controller.playMove,
+      onMoveSelected: controller.board.playMove,
       onLineMoveClicked: (sanMoves, index) {
-        controller.applyLineFromCurrent(sanMoves, index);
+        controller.board.applyLineFromCurrent(sanMoves, index);
         preview.clearPreview();
       },
     );
@@ -573,27 +573,27 @@ class _EditContextZoneState extends State<EditContextZone> {
     if (widget.tree != null) {
       return CompactTreeOutline(
         tree: widget.tree!,
-        playAsWhite: controller.isRepertoireWhite,
-        currentFen: controller.fen,
+        playAsWhite: controller.document.isRepertoireWhite,
+        currentFen: controller.board.fen,
         onNodeTapped: (node) {
           final startMoves = widget.tree!.startMoves.trim().isEmpty
               ? const <String>[]
               : widget.tree!.startMoves.trim().split(RegExp(r'\s+'));
           final movePath = [...startMoves, ...node.getLineSan()];
-          controller.navigateToLineMove(movePath);
+          controller.board.navigateToLineMove(movePath);
         },
       );
     }
 
-    if (controller.openingGraph == null) return null;
+    if (controller.document.openingGraph == null) return null;
 
     return OpeningTreeWidget(
-      tree: controller.openingGraph!,
-      repertoireLines: controller.repertoireLines,
-      currentMoveSequence: controller.currentMoveSequence,
-      onMoveSelected: controller.userSelectedTreeMove,
-      onGoBack: controller.goBack,
-      onGoForward: controller.goForward,
+      tree: controller.document.openingGraph!,
+      repertoireLines: controller.document.repertoireLines,
+      currentMoveSequence: controller.board.currentMoveSequence,
+      onMoveSelected: controller.board.userSelectedTreeMove,
+      onGoBack: controller.board.goBack,
+      onGoForward: controller.board.goForward,
     );
   }
 }

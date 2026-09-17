@@ -8,26 +8,26 @@ void main() {
   testWidgets(
     'immutable edits save latest revision before rebuild or chapter switch',
     (tester) async {
-      final owner = testRepertoireController()..loadMoveHistory(['e4']);
+      final owner = testBuilderWorkspace()..board.loadMoveHistory(['e4']);
       addTearDown(owner.dispose);
       final firstSaves = <String>[];
       final secondSaves = <String>[];
       Widget host(List<String> saves) {
-        final displayed = owner.tree;
+        final displayed = owner.board.tree;
         return MaterialApp(
           home: Scaffold(
             body: InteractivePgnEditor(
               tree: displayed,
               snapshotForSave: () {
-                final current = owner.tree;
+                final current = owner.board.tree;
                 return identical(current.identity, displayed.identity)
                     ? current
                     : displayed;
               },
-              currentPath: owner.path,
+              currentPath: owner.board.path,
               isEditingExistingLine: true,
-              onCommentChanged: owner.setCommentAtPath,
-              onToggleNag: owner.toggleNagAtPath,
+              onCommentChanged: owner.board.setCommentAtPath,
+              onToggleNag: owner.board.toggleNagAtPath,
               onAutoSave: saves.add,
             ),
           ),
@@ -35,7 +35,7 @@ void main() {
       }
 
       await tester.pumpWidget(host(firstSaves));
-      final before = owner.tree;
+      final before = owner.board.tree;
       expect(PgnAnnotationPanel.focusActive(), isTrue);
       await tester.pump();
       await tester.pump();
@@ -45,8 +45,8 @@ void main() {
       );
       await tester.enterText(field, 'First comment');
       // No host rebuild: its projection still holds the pre-edit values.
-      expect(before.commentAt(owner.path), isNull);
-      owner.loadMoveHistory(['d4']);
+      expect(before.commentAt(owner.board.path), isNull);
+      owner.board.loadMoveHistory(['d4']);
       await tester.pumpWidget(host(secondSaves));
       expect(firstSaves, hasLength(1));
       expect(firstSaves.single, contains('e4 {First comment}'));

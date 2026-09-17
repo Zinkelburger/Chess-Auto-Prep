@@ -8,20 +8,20 @@ void main() {
   test(
     '20000-node Builder adoption shares untouched branches on a deep annotation',
     () {
-      final controller = testRepertoireController();
+      final controller = testBuilderWorkspace();
       addTearDown(controller.dispose);
       final source = MoveTree.fromPgn(largeStudyPgn());
-      controller.loadAnnotatedTree(source);
+      controller.inspectAnnotatedTree(source);
       final watch = Stopwatch()..start();
-      final initial = controller.tree;
+      final initial = controller.board.tree;
       watch.stop();
       final initialMicros = watch.elapsedMicroseconds;
       final target = TreePath([99, ...List.filled(199, 0)]);
       watch
         ..reset()
         ..start();
-      controller.setCommentAtPath(target, 'Updated final note');
-      final changed = controller.tree;
+      controller.board.setCommentAtPath(target, 'Updated final note');
+      final changed = controller.board.tree;
       watch.stop();
       // ignore: avoid_print
       print(
@@ -32,10 +32,10 @@ void main() {
       for (var i = 0; i < 99; i++) {
         expect(changed.roots[i], same(initial.roots[i]));
       }
-      controller.jump(target);
-      expect(controller.tree, same(changed));
+      controller.board.jump(target);
+      expect(controller.board.tree, same(changed));
       source.roots.clear();
-      expect(controller.tree.roots, hasLength(100));
+      expect(controller.board.tree.roots, hasLength(100));
     },
   );
 }

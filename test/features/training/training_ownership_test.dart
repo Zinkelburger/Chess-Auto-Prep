@@ -17,7 +17,7 @@ import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
 import 'package:chess_auto_prep/models/repertoire_review_history_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/features/repertoires/controllers/repertoire_board_controller.dart';
 import '../../services/training/training_fakes.dart' show fakeLine;
 
 class _Reviews implements TrainingReviewRepository {
@@ -154,7 +154,7 @@ void main() {
     config = MemoryTrainingSettings();
     settingsOwner = TrainingSettingsController(config);
     controller = TrainingSessionController(
-      session: testRepertoireController(),
+      session: RepertoireBoardController(),
       headers: headers,
       source: source,
       configuration: settingsOwner,
