@@ -33,7 +33,8 @@ class ChapterScope {
   });
 
   final TrainingAnswers askedQuestions;
-  final Future<void> Function(TrainingSettings) saveSettings;
+  final Future<void> Function(TrainingSettings before, TrainingSettings after)
+  saveSettings;
 
   /// Read through suppliers rather than held copies: the owner reassigns its
   /// `settings` and `lines` fields wholesale (a settings reload, a new file),
@@ -187,7 +188,6 @@ class ChapterScope {
   /// The chapter grouping source changed — the old filter may not exist under
   /// the new scheme, so drop it and re-detect.
   void onSettingsChanged() {
-    cancelPending();
     activeChapter = null;
     // The delimiter feeds name-prefix detection, so what the file *could* be
     // grouped by can change with the setting.
@@ -257,8 +257,9 @@ class ChapterScope {
 
   Future<void> _applyMode(ChapterGroupingMode mode) async {
     if (settings.chapterGrouping == mode) return;
-    settings.chapterGrouping = mode;
-    await saveSettings(settings);
+    final before = settings.snapshot();
+    final after = before.snapshot()..chapterGrouping = mode;
+    await saveSettings(before, after);
   }
 
   /// Answer the "sort into chapters?" prompt. The choice is remembered per

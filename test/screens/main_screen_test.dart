@@ -1,3 +1,10 @@
+import 'package:chess_auto_prep/app/repertoire_dependencies.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_decoder.dart';
+import 'package:chess_auto_prep/features/training/controllers/training_settings_controller.dart';
+import '../support/scripted_document_store.dart';
+import '../support/training_settings.dart';
+import '../support/board_engine_fixture.dart';
 import 'package:flutter/material.dart';
 import 'package:chess_auto_prep/app/app_dependencies.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
@@ -18,12 +25,19 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    useScriptedBoardEngine();
   });
 
   testWidgets(
     'analysis screen is created lazily and kept alive across mode switches',
     (tester) async {
       final appState = AppState();
+      final documents = Store();
+      final trainingSettings = TrainingSettingsController(
+        MemoryTrainingSettings(),
+      );
+      await trainingSettings.ensureLoaded();
+      addTearDown(trainingSettings.dispose);
 
       Future<void> pumpNavigation() async {
         // First visit shows a one-frame loading placeholder, then constructs
@@ -45,6 +59,12 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
+            Provider<RepertoireDocumentRepository>(
+              create: (_) => createRepertoireDocuments(documents: documents),
+            ),
+            Provider<RepertoireDecoder>(
+              create: (_) => createRepertoireDecoder(),
+            ),
             ChangeNotifierProvider<AppState>.value(value: appState),
             ChangeNotifierProvider<AppHistory>(
               lazy: false,
@@ -52,6 +72,8 @@ void main() {
             ),
           ],
           child: AppDependencies(
+            documentStore: documents,
+            trainingSettings: trainingSettings,
             repertoireCatalog: FixtureRepertoireRepository(
               CatalogScenario.empty,
             ),

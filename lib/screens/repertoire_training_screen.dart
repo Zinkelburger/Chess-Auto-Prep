@@ -3,6 +3,8 @@
 library;
 
 import '../app/training_dependencies.dart';
+import '../features/training/models/training_configuration.dart';
+import '../features/training/repositories/training_settings_repository.dart';
 
 import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../features/repertoires/repositories/repertoire_document_repository.dart';
@@ -92,6 +94,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     super.initState();
     _workspaceNavigation.addListener(_resumePendingHandoff);
     _training = createTrainingSession(
+      configuration: context.read<TrainingSettingsRepository>(),
       session: RepertoireController(
         documents: context.read<RepertoireDocumentRepository>(),
         decoder: context.read<RepertoireDecoder>(),
@@ -307,11 +310,24 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
     ),
     ...KeyBinding.forShortcut(
       AppShortcut.autoAdvance,
-      'Toggle manual advance',
+      'Toggle manual advance for next sitting',
       () {
-        final settings = _training.settings;
-        settings.learnRequiresClick = !settings.learnRequiresClick;
-        unawaited(_training.saveSettings());
+        final configuration = _training.configuration;
+        final before =
+            configuration.state.draft ?? configuration.state.committed;
+        if (before == null) return;
+        final draft = before.toSettings();
+        draft.learnRequiresClick = !draft.learnRequiresClick;
+        unawaited(
+          configuration
+              .apply(
+                TrainingSettingsPatch.between(
+                  before,
+                  TrainingConfiguration(draft),
+                ),
+              )
+              .catchError((Object _) {}),
+        );
         setState(() {});
       },
     ),
@@ -984,13 +1000,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
 
   Widget _buildSettingsPanel({VoidCallback? onOpenAppSettings}) {
     return TrainingSettingsPanel(
-      saveSettings: _training.saveSettings,
-      settings: _training.settings,
-      onQueueSettingsChanged: _training.updateDueQueue,
-      onSettingsChanged: () {
-        if (mounted) setState(() {});
-      },
-      onChapterSettingsChanged: _training.onChapterSettingsChanged,
+      configuration: _training.configuration,
+      applyNextSitting: _training.settingsApplyNextSitting,
       trainingMode: _training.trainingMode,
       repetitionMode: _training.repetitionMode,
       onTrainingModeChanged: _training.setTrainingMode,
