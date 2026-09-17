@@ -1,9 +1,11 @@
 # Architecture renewal
 
-**Status: Partial — S0 verified on Linux; milestones 1/2 and 3 in progress; milestones 4–7 not started.** Planning baseline: 2026-09-16. This is the canonical
+**Status: Partial — S0 verified on Linux; milestones 1/2–5 in progress; milestones 6–7 not started.** Planning baseline: 2026-09-16. This is the canonical
 rewrite plan. [FUTURE_FEATURES.md](FUTURE_FEATURES.md) tracks feature backlog;
 [COMPONENT_MAP.md](COMPONENT_MAP.md) describes implemented behavior. Update
-milestone evidence and selected decisions here as work proceeds.
+milestone evidence and selected decisions here as work proceeds. The active
+cutover plan comes first; historical checkpoint evidence is retained at the end
+and does not authorize new transitional layers.
 
 The new hierarchy is implemented for migrated owners: `app/`, `design_system/`,
 `chess_core/`, `infrastructure/`, and feature-local controllers, models,
@@ -49,7 +51,8 @@ ID when a requirement changes. IDs stay stable if milestones are rearranged.
 |----|-------------------------------|-----------------|
 | PLAN-01 | Record authorized scope, parity inventory, named owners, defaults and bounded time/performance budgets before widening implementation. | [Working method](#working-method-checks-and-sizing) |
 | PLAN-02 | After the first slice, record continue, bounded repair or stop against the baseline; unresolved gates are not passes. | [Continuation](#continuation-decision-after-milestone-2) |
-| ARCH-01 | Migrated widgets/controllers cannot bypass injected domain boundaries; legacy singleton access is confined to injected bridge adapters. Verify import boundaries and feature wiring. | [Dependencies](#target-layout-and-dependency-rules) |
+| ARCH-01 | Completed replacements use injected final owners throughout their production call graph; widgets/controllers cannot bypass domain boundaries. No newly introduced bridge to a superseded singleton is an accepted cutover. Verify imports and actual runtime wiring. | [Dependencies](#target-layout-and-dependency-rules) |
+| ARCH-02 | A completed workflow deletes its superseded owners, forwarding APIs and production consumers; no re-export shims, duplicate writers or permanent legacy bridge remain. All feature directories are covered by the final boundary gate. Report concrete deletions and parity evidence; line counts alone are not proof. | [Retirement gate](#retirement-is-part-of-each-workflow) |
 | DATA-01 | Reproduce each reported overwrite/undo race on current code; independently fix confirmed cases and retain regressions before rewrite-dependent writes. | [Safety prerequisite](#safety-prerequisite-on-current-code) |
 | DATA-02 | Create never replaces; every save/update validates its baseline through the shared mutation boundary. Exercise concurrent creation, stale saves and competing writers. | [PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction) |
 | DATA-03 | Undo snapshots come from the validated mutation baseline; only a proven history chain may advance its expected revision after undo. Preserve external edits and per-move/successive undo; test conflicts and failures. | [Undo receipts](#undo-receipt-provenance-and-history) |
@@ -77,7 +80,1567 @@ result | commit | remaining limitation`. Results are pass, fail or unverified;
 mark genuinely inapplicable requirements with a reason. No test coverage or
 implementation is implied by this empty evidence template.
 
+## Current execution order: complete replacements
+
+This section supersedes the sequencing and temporary-bridge allowances in the
+historical execution record. Milestone numbers and acceptance IDs remain stable
+for traceability; they are outcome groups, not permission to land partial layers.
+The current work is consolidation: finish existing replacements before widening
+into more features. Whole renewal is still Partial.
+
+**Integration unit.** Replace a complete production responsibility, including its
+entry points, state/writers, consumers and lifecycle. A large screen may contain
+several independent responsibilities, but extracting a class while retaining its
+forwarding owner is not a cutover. Final infrastructure adapters are useful
+boundaries; adapters whose only purpose is keeping a superseded owner alive are
+scaffolding. Preserve proven algorithms without rebuilding them for appearance.
+
+**Before coding.** Inspect the owner/caller graph, write the final dependency
+shape and deletion list, and identify unresolved behavior. Reuse existing final
+contracts; add an abstraction only for a concrete responsibility or external
+boundary. If a dependency prevents deletion, complete it first or include it in
+the cutover. Do not plan an interface, wrapper, error mirror or second writer
+whose deletion is already the intended next step. Tests should exercise user
+behavior, contract failures and actual production wiring, not encode the old
+facade merely to keep its tests green.
+
+| Order / owner | Complete replacement and required deletions | Integration proof |
+|---|---|---|
+| Now: parent, Viewer | Delete `PgnViewerController`, forwarding methods and mirrored errors; connect all consumers to the substantial collection/editor/filter/presentation/tree owners. One session transition contract owns abandonment across the six reviewed paths. | Zero class/API references; no replacement facade; delayed work cannot publish after replacement; open/edit/save/recovery/navigation/close parity through final app wiring. |
+| Now: Builder agent | Finish native append/undo provenance and private opening graph ownership. Delete decoded-only history authorization, old append APIs and mutable graph exposure. | Native revision/history conflicts, successive/per-move undo, failed mutation retention and all graph consumers use the final projection. Entire Builder remains unfinished until the later closure below. |
+| Now: generation agent | Finish versioned artifact publication and every production reader in one cutover. Delete old artifact writers/path ownership, persistence methods and loader shims. | One publication authority; stale/interrupted output cannot replace current artifacts; readers agree on the selected generation; existing user artifacts remain readable. |
+| Now: settings/engine agent | Finish typed engine/bulk/board settings and the engine composition needed to consume them without transitional bindings. Delete the three old settings singletons, engine service global access and interim bind APIs; app-construct BoardEngine, StockfishPool and EngineSearchBudget with injected configuration. | One writer per key, serialized changes/failure/retry/restart, captured job configuration, production caller cutover and resource/scheduling parity. No temporary settings-to-engine binding. |
+| Next: finish existing migrated workflows | Close catalog, Study, Builder, Viewer and Training end to end: remaining host/provider/lifetime bridges, durable Builder recovery, final settings/session ownership, and all applicable UI/parity gates. Keep separate dependency-ordered cutovers where each deletes a complete responsibility. | No remaining temporary owner in each declared-complete workflow. Existing extracted code is reused or simplified; do not restart another extraction cycle. |
+| Then: engine/jobs and remaining domains | Replace each remaining workflow from the capability inventory, including actual worker/process ownership and all writers/readers. Consolidate singular `repertoire/` into its final domain as its remaining responsibilities retire. Adopt design-system controls while deleting each superseded control/theme dependency. | Dependency-ordered cutovers, shared-file parity and safety, native resource cleanup, feature and UI contracts; no second implementation or leftover theme owner for migrated surfaces. |
+| Last: application audit | Verify all features, formats, recovery, platforms, performance and release readiness. | No deferred retirement work, no hidden boundary exclusions, no production fallback; unverified host/release gates stay explicitly open. Publication still requires the user's request. |
+
+The parallel rows are the current work allocation, not four new frameworks.
+Each agent must report a completed deletion boundary before requesting
+integration. The settings/engine dependency expands that task by four active
+hours, including one validation reserve; midpoint is the actual service caller
+inventory and constructor wiring. This supersedes the earlier permission to
+retain app-level legacy engine bindings. The parent reconciles shared composition files and validates the
+combined callers. At a budget limit, back up the branch and revise the remaining
+work; do not land an incomplete layer just to report a checkpoint.
+
+**Make incompleteness visible.** The architecture checker now discovers every
+`lib/features/` directory and checks its imports, singleton access and widget
+theme boundaries. [The explicit debt ledger](../scripts/architecture_feature_debt.json)
+classifies all 23 existing directories: six `enforced` directories retain their
+zero-debt gate, and 17 are `unfinished`. No directory is declared `complete`.
+`enforced` certifies only these static boundaries, not workflow completion or
+runtime wiring. The ledger records 1,493 exact existing dependency/offending-line
+entries at initialization; repeated lines retain their occurrence counts. This
+replaces file-wide singleton/theme allowances, so another violation in an
+already indebted file still fails. The baseline records debt, not certification.
+
+Unknown directories, new violations, stale classifications and resolved entries
+left in the baseline fail `scripts/ci.sh lint`. Remove resolved entries with the
+code change; do not expand the ledger to silence a regression. When a source-line
+fingerprint changes without resolving its existing violation, review that exact
+entry rather than regenerating the baseline. New directories require an explicit
+classification and start without debt. Both `enforced` and `complete` require
+zero baseline entries. Completion additionally requires the production/parity
+proof below; the final application gate requires an empty baseline.
+
+[The retirement manifest](../scripts/architecture_retirements.json) rejects
+restored library paths (including forwarding shims), imports of those paths,
+and retired API names anywhere in production Dart outside comments. A trailing
+slash retires a whole directory. Retirement is unconditional and cannot be
+accepted into the debt ledger. Add each deleted path/API with its completed
+cutover. Existing transitive purity, infrastructure, design-system, catalog and
+legacy-theme-consumer checks remain active. These static checks do not prove
+runtime ownership or certify code outside their declared boundary rules. Moving
+code to `legacy_features/` alone earns no migration credit and is not a
+replacement for the full inventory and parity checks.
+
+**Definition of done per cutover.** Final production wiring + deleted old
+owner/APIs/callers + no temporary scaffolding + passing behavior/failure checks +
+required visible-workflow evidence + committed, verified local-main integration.
+Report owners and dependency edges removed, with production line additions and
+deletions as supporting information. Do not impose a raw line-ratio quota that
+can be met by code compression or unrelated deletions. No feature is complete
+merely because it has a new path, constructor injection or passing unit tests.
+
+## Reading map
+
+- [Principles](#engineering-principles-and-useful-abstraction),
+  [boundaries](#target-layout-and-dependency-rules),
+  [packages](#package-decisions), [settings](#settings-and-credentials) and
+  [runtime state](#runtime-state-and-large-documents).
+- [Desktop foundations](#early-desktop-foundations) and
+  [engine supervision](#worker-and-engine-supervision).
+- [Human factors](#frontend-principles-human-factors-as-acceptance-criteria),
+  [dark UI](#visual-direction-a-calm-responsive-dark-workspace),
+  [UI experiments](#presentation-experiments-without-data-model-churn) and
+  [shell and panels](#persistent-shell-and-reusable-panels).
+- [Data coexistence](#data-preservation-and-coexistence),
+  [shared PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction),
+  [overwrite gates](#storage-baseline-and-overwrite-prevention-gate) and
+  [OS storage contracts](#filesystem-and-cross-process-contracts).
+- [Milestones](#milestones-and-exit-gates),
+  [continuation decision](#continuation-decision-after-milestone-2) and
+  [working method](#working-method-checks-and-sizing).
+
+## Outcome and scope
+
+### Retirement is part of each workflow
+
+The product owner's 2026-09-17 direction is explicit: retain the new architecture,
+demolish the old one. Ownership extraction and removal of an old *path* are
+checkpoints, not retirement when the same forwarding owner survives elsewhere.
+Every workflow declared complete must satisfy ARCH-02:
+
+- Name its superseded owner types, APIs and production callers before editing.
+  Delete them at cutover, with zero remaining imports, re-exports or callers.
+- Route widgets to the substantial state/command owners they actually use.
+  Composition and cross-owner transactions may have a small lifetime owner;
+  it must not reproduce the old forwarding facade under a different name.
+- Keep one state authority and writer. Old on-disk formats may be decoded by the
+  new infrastructure adapter; this does not require retaining the old service.
+- Run failure/lifecycle and user-workflow parity checks against the new wiring,
+  and add guards against restoring retired owner paths/types.
+- Publish production additions/deletions separately from tests and generated
+  files. A mandatory added-lines/deleted-lines ratio is not the gate: it rewards
+  compressed code, unrelated deletions and missing tests. Actual retired owners,
+  callers, writers and dependency edges are the required evidence.
+
+Remaining transitional bridges make their replacement unfinished and block its
+integration into local main. Milestone 7 audits retirement already completed
+within each cutover. Temporary working checkpoints may be committed and backed
+up on isolated task branches; finish and delete their scaffolding before
+integration. Existing integrated scaffolding is retirement debt, not precedent
+for adding more. A standalone safety fix that adds no transitional architecture
+may still land independently with its regression evidence.
+
+Immediate Viewer removal scope: delete `PgnViewerController` itself, migrate
+screen/widget consumers to collection/editor/filter/presentation/tree/Solitaire
+owners, and consolidate document-session cancellation before or with cutover.
+Invalidation must precede cancellation; cleanup must be idempotent, terminate
+owned workers/timers and prevent late publication while preserving pending save
+and recovery semantics. A single helper must not indiscriminately reset unrelated
+state or pretend an in-flight storage commit has been cancelled. The supplied
+six-row review identifies recovery adoption, file open, decoded adoption, pasted
+content load, retained-context replacement and close. Exercise every path with
+delayed collection/game/filter/index/analysis work, autoplay and Solitaire setup;
+verify the shared cancellation contract plus each path's explicit retained state.
+Keep data/cache revisions distinct from cancellation tokens. Remove mirrored
+editor/presentation errors with the facade so consumers observe the owning state.
+Parent owns this slice from `d6abb6d1`, with five active hours including one
+validation reserve; midpoint is direct consumer wiring with the facade removed.
+
+The Viewer host was still 1,609 lines after its path move. The initial
+read-only audit applied the six-feature checker's direct rules to all 23
+directories and found 414 coarse file/rule diagnostics. The implemented
+whole-feature gate above replaces that hidden exclusion with an exact debt
+ledger; its 1,493 initial entries count individual offending lines and duplicate
+occurrences, so the counts use different units. Neither passing the ratchet nor
+moving code to `legacy_features/` certifies migration. The named owners and
+consumers still have to be deleted with the actual workflow cutovers.
+
+Make the entire first-party application understandable, testable and consistent:
+each workflow has a clear owner, each datum has one authoritative writer, and
+each recurring interaction uses a documented component. Every existing module
+will eventually be reviewed, moved, replaced or explicitly retired. A complete
+architectural replacement does not require retyping correct algorithms or
+rewriting third-party chess engines and libraries.
+
+Deliver complete replacements incrementally in the existing product. Parallel
+agents own independent cutovers with disjoint write ownership and agreed final
+contracts. A dependency between cutovers is completed first or included in the
+same integration batch; it is not solved by adding a transitional adapter. The
+working application and its data remain usable throughout.
+
+The capability inventory must cover all current modes: Tactics, Player analysis,
+Repertoire builder, Repertoire trainer, PGN Viewer, Study, Engine tournament,
+Bughouse lab, Databases, Repertoires, and Players & prep. Also inventory accounts,
+settings, OS file opening, navigation history, imports/exports, background work,
+recovery, offline behavior, optional assets, installers and updates. Include
+first-party MCP/offline tools and their shared-file contracts in the migration
+review; do not rewrite their runtime merely to match Flutter folders.
+Use [the component map](COMPONENT_MAP.md) and actual code as starting evidence;
+historical documentation and existing tests are not unquestionable specifications.
+
+## Engineering principles and useful abstraction
+
+Knuth's literate-programming emphasis is on programs understandable to people.
+The following are this project's practical interpretation, combined with modern
+software-engineering practices; they are not a purported canonical list of
+"Knuth principles" or a requirement to adopt WEB/CWEB.
+
+- Explain the problem, representation, invariants and reason for a non-obvious
+  algorithm close to the code. Include a small worked example where it makes
+  the reasoning inspectable. Comments should explain decisions, not paraphrase
+  assignments. Keep long algorithm explanations in [ALGORITHM.md](ALGORITHM.md).
+- Choose data structures deliberately. Document units and score perspective,
+  ordering, identity, ownership, mutation rules and expected complexity where
+  relevant. Use names such as `DocumentRevision` and `Centipawns` when they
+  prevent real mistakes; do not wrap every primitive reflexively.
+- Establish correctness before clever optimization. Measure realistic workload
+  time, allocation and memory; optimize demonstrated bottlenecks. Keep a simple
+  reference implementation or invariant tests for optimized algorithms.
+- Abstract a coherent concept or external boundary. A repository exposes
+  `renameChapter` or `saveDocument(expectedRevision: ...)`, not a bag of generic
+  database operations. Extract collaborators with their own responsibilities
+  instead of splitting one oversized class across files.
+- Prefer composition and explicit constructors. Add an interface when it
+  isolates an external dependency, protects a domain boundary or supports a
+  meaningful alternate implementation. Avoid generic base controllers,
+  all-purpose managers, global event buses and widget APIs with many unrelated
+  Boolean switches.
+- Keep feature-specific code local. Share concepts when their semantics and
+  lifecycle match, rather than extracting visually similar snippets too early.
+  Each concept has one canonical type and import path after migration.
+- Optimize for a maintainer tracing one user action. A reviewer should be able
+  to identify its state owner, persistence boundary, failure behavior and tests
+  without following a chain of pass-through classes.
+
+## Target layout and dependency rules
+
+Paths are relative to the repository. Migrated slices already use this layout
+under the canonical Dart/UI guides. Remaining legacy owners move as their
+workflows migrate; the feature directories below describe the target hierarchy,
+not a claim that every workflow is complete.
+
+```text
+lib/
+  app/                    # startup, dependency wiring, routes, app lifetime
+  design_system/          # theme, design values, controls, layout primitives
+  diagnostics/            # narrow logging/failure contracts, no vendor SDK
+  chess_core/             # pure Dart chess concepts and algorithms
+  infrastructure/         # filesystem, SQLite, HTTP, engine-process adapters
+  features/
+    repertoires/
+      models/             # feature values and validated state
+      controllers/        # actions and presentation state
+      repositories/       # domain-facing contracts and data orchestration
+      widgets/            # screens and feature-specific composition
+    training/
+    analysis/
+    ...
+widgetbook/               # developer catalog using production widgets
+test/                     # mirrors ownership; shared contract fixtures
+```
+
+Start with directories, not a separate package for every feature. Extract a
+pure Dart package only when shared CLI use or enforceable isolation warrants
+it. Do not create a new catch-all `core` or `utils` directory.
+
+Terminology mapping: infrastructure adapters perform the external-access role
+called services in Flutter's architecture guide; repositories own domain data
+and caching/retry policy. Retain the infrastructure name for a clear I/O
+boundary. Connections and process supervisors necessarily have resource state;
+do not force them into a stateless API solely for vocabulary alignment.
+
+A separate internal Flutter package for the design system is an option after
+the first catalog proves its API. Its dependency graph must exclude the app and
+features; package boundaries still need import enforcement. Keep contracts near
+the concept they serve: repository contracts with their domain, diagnostic
+contracts in `diagnostics/`. Add a common result type only when callers share
+its semantics, rather than creating a miscellaneous directory of interfaces.
+
+Dependencies follow these rules:
+
+1. App startup constructs final infrastructure, repositories and state owners
+   and injects them. A replacement must not acquire an old singleton through a
+   newly introduced wrapper. Follow dependencies to their actual owner: either
+   an existing implementation meets the final contract and remains as final
+   infrastructure, or replace it and its affected callers in the same cutover
+   (or a completed prerequisite). An injected legacy bridge is still legacy.
+2. Feature widgets use their controllers, models and the design system. Shared
+   design-system widgets receive values/callbacks, never feature repositories.
+3. Controllers call repository contracts or substantial workflow collaborators.
+   They do not open files, execute SQL, start processes or depend on widgets.
+4. Repositories orchestrate domain data through injected adapter contracts.
+   Concrete infrastructure implementations are selected at app startup.
+   Cross-feature workflows use explicit public contracts; dependency cycles
+   and imports of another feature's private controller state are rejected.
+5. Pure Dart services, repositories and infrastructure receive dependencies
+   explicitly through constructors; factories may assemble them. They do not
+   accept `Ref`/`ProviderContainer` or look up dependencies globally. Provider
+   declarations wire dependencies at the app boundary; feature notifiers and
+   widgets may use Riverpod for presentation. Test domain classes without a
+   provider container so hidden service-location cannot creep in.
+6. Chess core and domain values do not depend on Flutter, Riverpod or concrete
+   I/O. File-format codecs and transport models stay at their boundaries unless
+   their representation is itself a domain concept.
+
+Use immutable feature state and explicit alternatives such as idle, running,
+failed, cancelled and completed. Keep widget-local focus/hover state local.
+Document state belongs to a document session; persisted entities belong to a
+repository; application jobs belong to an app-lifetime job service. Screen
+navigation must not accidentally cancel an ongoing import or retain an unused
+interactive engine. Define cancellation, progress, resource limits, shutdown
+and stale-result rejection for each job type. Reuse existing lifecycle and
+RunControl behavior until the replacement passes its contract tests.
+
+Riverpod may compose dependencies and expose repository streams as well as own
+presentation state. It is never a second durable source of truth: repositories
+own persistence through the appropriate document, database or preference adapter.
+Controllers translate user intent into repository/workflow calls; JSON parsing,
+SQL execution and isolate/process supervision belong behind those boundaries.
+
+## Package decisions
+
+Use these defaults for the first slice. Resolve SDK-compatible versions only
+when needed, recording desktop support, license, transitive dependencies and
+code removed. Retain already-working dependencies outside the migrated slice.
+The implementing agent owns each technical check and fallback under PLAN-01.
+
+| Decision | Default | Rejection check | Fallback / revisit trigger |
+|----------|---------|-----------------|----------------------------|
+| Catalog | Widgetbook with only first-slice production controls and fixtures. | Cannot run isolated/headless on the pinned SDK within the spike budget. | Use an isolated Flutter catalog harness temporarily; record the blocker and keep Widgetbook as the target. |
+| Visual checks | Native Flutter widget/golden tests with readable bundled fonts. | Fixtures become costly to maintain or miss required scenarios. | Add Alchemist only if the same scenarios are simpler; retain native host checks. |
+| State/DI | Stable Riverpod 3 public APIs with manual providers/notifiers, one presentation action state per operation. | First-slice lifecycle/retry/override tests fail or integration exceeds its budget. | Retain injected current controllers for that slice; record why, with no second competing state library. |
+| Database | Existing SQLite adapters, schemas and migrations; defer Drift. | A scoped new store or replacement demonstrably needs safer typed queries/migrations. | Evaluate Drift for that ownership boundary only, with one schema/migration owner and migration/performance fixtures. |
+| Models/codegen | Plain immutable Dart values/sealed classes and manual providers; retain existing codecs. Flutter ARB generation is allowed. | Boilerplate produces evidenced defects or excessive maintenance cost. | Introduce only the relevant Freezed or JSON generator after a timed clean/incremental build check; no blanket codegen stack. |
+| Files | Retain atomic writer; inject narrow filesystem adapters with deterministic fakes and real OS tests. | Failure injection needs extensive ad hoc fake filesystem behavior. | Add package:file inside adapters; keep the native contract suite. |
+| Network | Keep http behind existing API clients with one retry owner. | A concrete cancellation/streaming/auth contract cannot be met economically. | Trial Dio on that client with the same fixtures; no global replacement. |
+| Navigation | App-owned typed destinations using existing Navigator under a persistent shell. | Back, deep-link/file-open or restoration fixtures require substantial custom routing machinery. | Evaluate go_router against the same session fixtures. It is not inherently incompatible with explicit session ownership. |
+| Credentials | flutter_secure_storage behind CredentialStore when Accounts migration starts. | Native vault/restart/packaging tests fail on a supported host. | Preserve unmigrated credentials for recovery; defer that Accounts migration or implement a native adapter. Never downgrade new secrets to plaintext. |
+| Panels | Defer splitting until workspace 3; then trial flutter_resizable_container behind SplitPane. | Bounds, keyboard, semantics or restoration checks fail within the spike budget. | Keep accessible fixed/reflowing panels; implement a narrow splitter only if the actual workspace needs it. |
+| Stream shaping | stream_transform for periodic latest snapshots when analysis migrates. | Burst/terminal/cancellation tests fail or required semantics need awkward workarounds. | Small tested transformer; RxDart only for demonstrated wider needs. |
+| Diagnostics/testing | Existing logging through a narrow interface, injected clock and hand-written boundary fakes. | Deterministic time or useful fake behavior requires excess plumbing. | Add clock/mocktail for that need; remote reporting and leak tooling remain separately justified. |
+
+Retaining an adapter is not permission to write a routing framework, ORM or
+code generator. In milestone 0, compare actual first-slice needs against these
+rejection checks; include a bounded Drift query/migration spike only if that
+slice needs a database change. Keep existing schema ownership otherwise. If
+navigation starts accumulating generic URL parsing, restoration or branch-stack
+machinery, trigger the go_router comparison before expanding the wrapper.
+[Router restoration still needs explicit configuration](https://pub.dev/documentation/go_router/latest/topics/State%20restoration-topic.html)
+and cannot restore arbitrary document/engine state for the app.
+[Riverpod generation is optional](https://riverpod.dev/docs/concepts/about_code_generation);
+measure its benefit/cost on this checkout rather than assuming either manual
+code or generation is always cheaper. Apply the recorded default until evidence
+triggers a change; external reviews alone do not restart package selection.
+
+Do not combine Provider, Riverpod and Bloc as permanent parallel choices.
+Experimental Riverpod mutation/persistence APIs are excluded from migrated
+production code. No riverpod_generator or go_router_builder is needed for the
+first slice. A future
+codegen exception records iteration cost and generated-file policy; it does not
+change resource ownership or input validation.
+
+Riverpod 3 is a released major version; the
+[package release listing](https://pub.dev/packages/flutter_riverpod) and
+[Riverpod documentation](https://riverpod.dev/docs/whats_new) distinguish stable
+public APIs from opt-in experimental features. At adoption, record the tested
+Flutter/Dart SDK alongside the committed package lockfile; no prerelease,
+git-branch dependency or automatic major upgrade is part of this plan. Test
+retry, disposal, pausing and equality on that exact combination under STATE-01.
+Use the existing-controller fallback if it fails; choose v2 only for a concrete
+compatibility constraint, not because v3 is assumed unreleased.
+
+## Settings and credentials
+
+Introduce one injected `AppSettingsRepository` entry point with typed engine,
+eval-database, training and display sections. Separate sections are useful;
+duplicate ownership of the same setting is the problem. Each persisted key has
+one writer, validation/default rules and an observable committed value. Retain
+existing keys through adapters until each section migrates; legacy and new
+callers must reach that same owner. Avoid a giant mutable settings object and
+whole-app rebuilds: callers observe only the section they use. Keep account
+secrets out of settings snapshots, serialization and diagnostic exports.
+
+Define loading, draft, saving and failed states; do not show a failed write as
+saved. Serialize updates or apply field-level changes against the latest state
+so two open panels cannot overwrite unrelated values. Engine jobs capture a
+validated effective configuration at start. Changing a preference during a job
+must follow an explicit apply-now, queue or next-run rule; distinguish pending
+preferences from the active job's configuration. Test conflicting panel edits,
+load failure, invalid/legacy keys, save failure/retry, restart and a preference
+change during a job. Establish the owner in milestone 1; prove the settings
+used by the first slice in milestone 2 and migrate the rest with their features.
+
+Use a separate `CredentialStore` for OAuth/PAT secrets. Evaluate
+[flutter_secure_storage](https://pub.dev/packages/flutter_secure_storage) on
+Linux, Windows and macOS, including Linux libsecret/keyring availability,
+macOS Keychain configuration and the actual packaged Windows application.
+Mobile platform support does not establish desktop readiness. Test a locked or
+unavailable vault; keep offline features usable and show an actionable account
+state. Do not silently fall back to plaintext for new credentials.
+
+Before migrating the Accounts UI, implement an idempotent per-account migration:
+read existing preferences, write and read back the vault entry, then remove
+legacy secret keys only after verification. Persist progress without secrets;
+restart after any step must neither lose the account nor restore a stale token
+over a newer vault value. Serialize migration with login, refresh and disconnect;
+disconnect clears both locations and any migration state so old tokens cannot
+reappear. A failed transfer preserves the original for explicit retry rather
+than pretending migration succeeded. Use synthetic credentials to test every
+failure boundary and native restart. Exclude secrets from logs, Widgetbook and
+ordinary settings backups. Define legacy-backup cleanup and old-app behavior
+explicitly; migration cannot erase already-created external backups. Evaluate
+the vault immediately before Accounts migration and complete its gate first,
+even if the full settings/accounts UI remains in milestone 6.
+
+## Runtime state and large documents
+
+If Riverpod is selected, disable implicit provider retry at the composition
+root (`retry: (retryCount, error) => null`); opt in only for bounded idempotent
+reads with one retry owner. Riverpod supports both
+[scope/container and per-provider policies](https://riverpod.dev/docs/concepts2/retry).
+The callback returning null disables retries; merely passing `retry: null` does
+not specify that policy. Test provider overrides too. This controls failed
+provider computations, not arbitrary commands or retries inside an adapter.
+Provider computations must not start jobs or perform document
+mutations. A dependency provider can expose an explicitly owned service, but
+visibility, rebuilds and listener counts must not own its active work.
+Test a failed observation, repeated clicks and route departure: one requested
+job starts once and continues or stops according to its declared policy.
+Observe paused/offscreen subscriptions under `TickerMode`, then return and
+verify the latest job state without duplicated work or unbounded buffering.
+
+Use the feature notifier/controller as the sole UI action-state owner, with
+an explicit repeated-execution policy (reject, coalesce or queue). Use typed
+operation state within it, or AsyncValue for a simple load; do not wrap the same
+operation in an independently mutable Command state machine. Shared helpers may
+implement execution policy without owning a second copy of state. Domain
+results remain typed; long jobs expose a job handle and progress. After
+an async gap, validate the notifier's `ref.mounted` and captured session/request
+identity before updating presentation. Persisted writes independently validate
+the document revision. A liveness check alone does not reject a stale request
+within the same still-mounted controller.
+
+Shape engine presentation updates before they reach presentation state, after
+protocol parsing and authoritative job-state updates. Keep completion, errors,
+`bestmove`, cancellation and persistence events lossless and prompt. For a
+continuous analysis stream, publish the latest accumulated analysis snapshot
+on a bounded cadence (start by measuring approximately 200 ms), with immediate
+terminal delivery and no delayed timer able to overwrite terminal state. A
+snapshot must retain the latest relevant MultiPV lines, not just the last raw
+protocol message. Clear pending output on position/job changes and reject stale
+IDs. This limits UI notifications without slowing engine protocol consumption.
+
+For a backend already running in a worker, aggregate presentation snapshots
+in that worker before `SendPort` delivery. Do not send every raw engine line
+only to discard it on the UI isolate. Keep protocol completion/errors and
+explicit job results on a lossless control path; presentation messages carry
+job/position/revision IDs and bounded payloads. Test send counts/bytes, slow
+consumers and pending-message bounds as well as UI rebuilds. A cadence alone
+does not bound queues when the receiver stalls: allow one in-flight snapshot
+and coalesce the next until acknowledged, or prove an equivalent bounded design.
+For direct async subprocess adapters, apply shaping at their producer boundary;
+move parsing into a worker when profiling warrants it, not solely to add an
+isolate. STATE-03 covers both backends and preserves terminal-event ordering.
+
+Pure trailing [debounceTime](https://pub.dev/documentation/rxdart/latest/rx/DebounceExtensions/debounceTime.html)
+waits for a quiet interval and can starve updates during continuous search;
+reserve that behavior for inputs such as search text. Evaluate a tested
+[stream_transform](https://pub.dev/packages/stream_transform) audit/sampling
+operator or a small equivalent against the required leading/trailing behavior.
+Use fake time to test an endless burst, sparse output, final output, errors,
+position switches, cancellation and re-subscription. Assert bounded buffering
+and periodic progress; widgets should not each implement their own timer.
+
+Riverpod 3 filters updates using equality. For every large document state,
+record the cost of copying, equality and selector evaluation. Prefer a private
+session-owned mutable document core with immutable revision-keyed projections
+for the first workspace experiment; structural sharing is an alternative to
+benchmark. Neither design may expose an old "snapshot" that changes later via
+an aliased mutable tree. Keep immutable values for small configuration/state.
+Do not deep-copy or structurally compare a whole move tree for every hover or
+cursor change. Emit a new immutable projection when its observed data changes;
+equality uses session ID, projection kind/key and its relevant revision, never
+tree structure. A document revision alone is insufficient for cursor/filter-only
+changes: use a separate view revision or small selection value. Different
+projections from one document revision must not compare equal accidentally.
+Never place an aliased mutable tree inside a Freezed value. The storage
+baseline is a separate content-sensitive revision used at commit.
+
+Mutations enter through explicit session methods; the mutable core is never
+exposed as provider/UI state. After an accepted change, build the immutable
+projection and assign it to notifier `state` (or `AsyncData(projection)` for
+async state). State assignment and the equality contract drive notification;
+do not mutate an exposed object and compensate with manual `ref.notifyListeners()`
+or introduce a second ChangeNotifier around the same state. STATE-02 checks
+edit/cursor updates, unchanged projections and old snapshots: meaningful changes
+notify, old snapshots remain unchanged, and unrelated projections stay stable.
+
+Include receive-side decoding, object construction, projection building and
+garbage collection in STATE-02 measurements, not just message-send time. For
+large documents, the session may own its heavy mutable tree through a persistent
+worker; keep parsing, indexing and expensive traversal there and request bounded
+visible-node/ancestor projections by stable IDs. Do not reconstruct the entire
+tree on the UI isolate after every worker response. Add paging and bounded
+prefetch for expansion/search, ordered edit commands, revision-tagged responses
+and stale-response rejection. The UI holds immutable projections and small
+interaction state; the worker is not a second independent document authority.
+Choose worker residency when the profile shows UI decoding/traversal exceeds the
+budget; retain the simpler session-local implementation for small documents if
+it passes. Test rapid navigation, edits during pending requests, worker restart
+and rehydration from committed data plus explicitly retained unsaved commands;
+a worker restart must not silently discard a draft.
+
+Milestone 3 must benchmark annotated PGNs with tens of thousands of nodes,
+wide/deep variations and repeated edits/undo/navigation. Capture per-edit time,
+allocations, retained memory and frame timings against milestone 0 budgets.
+Choose data structures from those results; no collection package, rope or
+piece table is mandated without a measured need. Profile rebuild/repaint scope:
+watch small projections, isolate expensive board/graph repainting where it
+helps, and virtualize long lists with lazy builders/slivers and stable keys.
+Use `itemExtent` or `prototypeItem` only for uniformly sized rows. Wrapped PGN
+comments, variations and enlarged text need variable-height layout; fixed
+extents are not a blanket performance requirement. Test scrolling and selecting
+across those cases without truncation or eager construction of the full list.
+
+Profile image memory alongside STATE-02's tree benchmarks. Flutter's
+[ImageCache](https://api.flutter.dev/flutter/painting/ImageCache-class.html) already
+has entry/byte limits; its live-image references and total process/GPU memory
+need separate measurement. Retain defaults until representative piece sets,
+textures and avatars justify a different budget. Decode near display size,
+bound prefetch and release owned listeners/resources; tune maximumSize and
+maximumSizeBytes at startup only with evidence, not as a substitute for fixing
+retained images. Test repeated asset/theme changes for memory growth.
+
+## Early desktop foundations
+
+Inventory these requirements in milestone 0 and prove those used by the first
+slice in combined milestones 1/2; defer unrelated foundations to their feature.
+
+**Localization readiness (milestone 1).** Start with Flutter's standard
+`flutter_localizations` and `gen_l10n`/ARB workflow unless a measured requirement
+justifies an alternative. English is the initial source locale; translating
+other languages is separately scoped. Migrated user-facing copy, validation,
+tooltips and accessibility labels use localized messages with typed placeholders
+and plural rules. Design-system controls accept resolved labels from callers.
+Use locale-aware UI numbers/dates and directional layout. Keep inexpensive
+long-label and text-scaling checks in the first slice; full pseudo-localization
+and RTL catalog matrices wait until another/RTL locale is scoped. Keep PGN/FEN,
+engine protocols,
+stored IDs and canonical formats locale-independent, and preserve the chess
+board's explicit orientation rather than mirroring its rules with UI direction.
+
+**Native execution contracts (milestones 0 and 2).** Inventory each engine,
+FFI library and native plugin, including architecture/ABI, packaging, memory
+ownership, thread affinity, callbacks, initialization, shutdown and license.
+Generated bindings and process wrappers live in `infrastructure/`; an adapter
+owns handles, buffers and disposal. Use worker isolates or appropriate native
+workers for blocking/CPU-heavy calls, respecting library threading constraints.
+An asynchronous `Process.start` wrapper does not inherently need a Dart worker:
+the executable already runs separately. Bound stdout/stderr buffering and move
+expensive protocol parsing off the UI isolate when measurements warrant it.
+An isolate cannot contain a fatal in-process native crash. Prefer existing
+subprocess engine boundaries when crash isolation matters. Specify cooperative
+cancel, graceful stop, timeout escalation and disposal for every backend; do
+not report cancellation as complete while native work still owns resources.
+
+**Failure diagnostics (milestones 0 and 2).** Define a vendor-neutral reporting
+contract and a per-platform coverage matrix for Flutter errors, unhandled Dart
+errors, worker-isolate failures, app-native crashes and child-engine exits.
+Forward worker errors explicitly; retain engine identity, job ID, exit status
+and bounded diagnostic output in the supervisor. Sentry is a candidate, subject
+to verifying native support and symbolication on each actual desktop target.
+Installing its Flutter SDK does not automatically produce native crash dumps
+for independently launched Stockfish or other executables. Retain matching
+release symbols/build IDs and prove a deliberately induced failure is useful
+to diagnose. Provide bounded local diagnostics and user-controlled export;
+remote reporting requires an explicit product/privacy decision, redaction,
+retention limits and offline behavior.
+
+Use structured diagnostic records (JSON Lines or typed key/value events) with
+schema version, timestamp, severity, event name, operation/run ID and error cause.
+Keep human-readable messages alongside stable fields; tools must not parse them
+with regex to discover state. Redact secrets and sensitive user content before
+writing/export, bound record size and test malformed/truncated log handling.
+
+Wire framework errors through `FlutterError.onError`, uncaught root-isolate
+errors through the SDK-compatible `PlatformDispatcher.onError`/zone setup, and
+worker errors/exits through explicit error and exit ports. Preserve stack
+traces, deduplicate reports and test asynchronous startup failures. The root
+hook does not directly catch worker errors or every fatal native failure;
+do not remove existing zone behavior without checking SDK initialization and
+error routing. The process supervisor records `Process.exitCode` with platform
+interpretation and engine/run identity.
+
+**Build and distribution rehearsal (milestones 0 and 2).** Inventory host
+builders, native dependencies, certificates/accounts and release artifacts in
+milestone 0. Build/package the first new slice on Linux, Windows and macOS and
+smoke-test a small real-engine job with disposable data, cancellation and restart.
+Exercise install/launch/update and native-library loading early. For the intended
+signed macOS distribution, plan Developer ID signing, appropriate entitlements,
+notarization and stapling, including embedded native code. For Windows, select
+a suitable trusted signing route; an EV certificate is not a universal app
+requirement or a guarantee of no SmartScreen warning. Keep credentials out of
+source and ordinary test jobs. Mark unavailable host/signing checks explicitly
+unverified, and complete actual signed-artifact checks before the corresponding
+release. Preserve release-tag-only GitHub CI and user-requested publication.
+
+Include native macOS menus where supported, scoped `Shortcuts`/`Actions`/
+`Intent`s, focus traversal groups for workspace zones, and focus restoration.
+Text editing takes precedence over mode commands and needs actual tests even
+with framework shortcut routing. Validate saved window bounds when monitors
+change. Record screen-reader coverage, renderer and rendering-test setup per
+desktop target instead of assuming identical behavior. Include Flatpak file
+portals, engine execution and platform-owned updating in the distribution
+matrix; record a policy for user-supplied/quarantined executables on macOS.
+
+Keep existing `integration_test` and headless driver coverage, and extend real
+desktop journeys rather than assuming a new runner is necessary. Native OS
+dialogs, signing and installers need host-specific checks beyond Flutter widget
+automation. Patrol can be evaluated for a supported target, but its currently
+listed targets do not include Linux or Windows, so it is not the default
+three-desktop test harness.
+
+## Worker and engine supervision
+
+Own child processes and their descendants through one supervisor. Its shutdown
+contract includes unexpected parent death, not just orderly disposal. For each
+bundled and supported custom engine, test stdin EOF while searching and idle;
+do not assume all UCI implementations exit promptly. Keep stdout and stderr
+drained even with no visible UI, retaining bounded ring buffers and dropping
+diagnostic excess. Test a chatty fake engine so output cannot deadlock search.
+
+Before adding a native launcher, run a bounded PROC-02 spike against the
+existing Dart Process/engine-lifecycle path and supported engine versions.
+Test forced parent termination during startup, idle and search, stdin EOF,
+descendants and redirected-output handling on available hosts. Reuse that path
+where it passes; reuse a maintained adapter/helper where it meets the same
+contract before writing new native code. A cleanup callback in the app cannot
+run after the app is killed, so orderly `dispose`/Process.kill tests alone are
+not enough. Record exact engine/host coverage, gaps and spike effort under
+PLAN-01; no fixed multiweek native project is implied by this plan.
+
+If existing mechanisms fail, the following are fallback designs for the affected
+backend, not a prerequisite to unrelated first-slice UI work. A helper is scoped
+to launching/supervising an engine; it is not an installed background daemon.
+
+Windows fallback: a native engine-launch adapter creates children inside
+a kill-on-close Job Object before execution, using a creation-time job list
+on supported Windows versions or suspended creation, assignment and resume.
+Keep the owning job handle non-inheritable. A failed assignment must terminate
+the still-suspended child, not run it uncontained. Exercise nested-job and
+launcher constraints. This avoids attaching the entire app (including external
+openers/updaters) to an engine job or killing the app when its job handle closes.
+App-level membership is an alternative only after those lifecycle effects are
+accepted. [Microsoft's creation-time job design](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812)
+is a native alternative to the race in start-then-assign wrappers.
+
+Linux/macOS fallback: a small persistent supervisor launches the engine
+in a separate process group and monitors a dedicated parent-liveness pipe.
+Only the app owns the write end; engines/descendants must not inherit it. EOF
+triggers group TERM, bounded wait, then KILL and reaping. The supervisor must
+remain alive outside the killed group; it cannot exec into the engine and
+still watch the pipe. Test startup handshakes, parent death before launch,
+normal shutdown and inherited-descriptor leaks. Linux
+[parent-death signals](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)
+are thread-parent-sensitive and are only a supplemental mechanism.
+
+Process groups do not contain descendants that escape via a new session/group.
+Linux [subreaper mode](https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html)
+helps adopt/reap orphans; it does not automatically signal all escaped children
+and is not a macOS API. Engines using this fallback must remain in its
+supervised group. Explicitly test engines requiring stronger containment and
+withhold support until their tracked-descendant strategy passes. Package/sign the helper
+on macOS and exercise Flatpak engine permissions. Keep engines inside the
+sandbox by default; host spawning needs a separately justified support policy.
+
+Scope forced-exit tests to the disposable app's tracked process tree. Establish
+the verified containment or parent-liveness mechanism before useful work, then
+kill the app during idle and active search; verify the bounded cleanup deadline and document/lock recovery on restart.
+If a host mechanism fails its acceptance tests, retain an already-proven backend
+or mark that backend unavailable; never claim cleanup coverage without the
+verified mechanism. Failed checks stay explicit while unrelated work proceeds.
+Record native checks not yet run as unverified, and never kill by process name.
+
+Give every worker, `ReceivePort`, subscription and timer a named owner and an
+idempotent shutdown path for success, failure, cancellation and partial startup.
+Use a lifecycle table to distinguish view subscriptions, document-session
+resources and app-owned jobs. Widget disposal releases view resources; it must
+not kill a shared worker or continuing job. Job/session/app shutdown cancels
+work cooperatively, escalates if needed, observes worker exit and closes ports
+and subscriptions in an order that still permits shutdown acknowledgement.
+Repeated open/close, failed startup and cancelled-job tests must return resource
+counts to baseline, while route changes preserve deliberately continuing jobs.
+
+Measure worker startup, input serialization, transfer and output costs before
+moving large trees between isolates. `TransferableTypedData` makes transfer
+cheap but constructing the buffer still costs proportional to its size;
+immutable objects and `Isolate.exit` have different transfer behavior. Repeated
+work may justify a persistent worker and typed protocol, with bounded queues and
+cooperative cancellation. A worker isolate is not an OS memory-limit boundary.
+
+Native handles have deterministic close/release owners. Use `NativeFinalizer`
+only as an eligible cleanup backstop; it cannot guarantee cleanup on app crash.
+Choose callbacks according to the library's thread and return-value contract:
+`NativeCallable.listener` supports asynchronous void callbacks from foreign
+threads, with argument memory kept alive until delivery. Record close ordering
+and thread-local constraints; do not assume an isolate pins work to one OS
+thread. Evaluate Dart/Flutter native build hooks against the pinned SDK and
+actual libraries before replacing existing native packaging glue.
+
+## Frontend principles: human factors as acceptance criteria
+
+Start with user tasks and observed difficulties, not a component shopping list.
+Use consistent chess vocabulary and visible context: current game/repertoire,
+side, board orientation, selected line, active filters, data source and save
+state. Avoid exposing architecture vocabulary in ordinary product controls.
+
+| Human-factors concern | Design requirement | Evidence before a slice graduates |
+|-----------------------|--------------------|----------------------------------|
+| Working-memory load | Keep the board, relevant moves and current task context available; preserve selection and filters across navigation. Prefer recognition through visible choices and recent destinations. | Complete a task, leave it, and resume without reconstructing context. |
+| Perception and visual hierarchy | Use semantic color/typography/spacing tokens, proximity for grouping, consistent alignment and restrained emphasis. Essential state has text or shape as well as color. | Inspect real data, long labels, disabled states and error states in Widgetbook. |
+| Action discoverability | Label important actions, show shortcut hints, give controls clear affordances and visible focus. Hover previews have focus/click equivalents. | Keyboard-only completion and focus-order checks; no essential hover-only action. |
+| Motor effort and accidental activation | Provide comfortable hit areas and spacing, keyboard alternatives, and deliberate placement of destructive actions. Keep controls stable when progress text changes. | Pointer, keyboard, window-scaling and long-text checks on desktop. |
+| Feedback and trust | Distinguish unsaved, saving, saved, failed and conflicted. Report job phase and progress; show indeterminate progress when totals are unknown. | Slow/failing storage and jobs remain understandable without false completion or invented ETA. |
+| Error prevention and recovery | Validate before committing, preserve drafts, explain conflicts, support undo/quarantine where meaningful and make recovery actionable. | Inject a failed save, cancel work, undo a supported action, and recover after restart. |
+| Expert efficiency | Keep common actions direct; use progressive disclosure for advanced options without hiding current values or critical state. Standardize shortcut scope and text-entry guards. | Compare common-task steps and completion time with the baseline; test shortcuts while typing. |
+| Accessibility and adaptability | Use semantic labels, readable contrast, text scaling, reduced motion and layouts that reflow or scroll appropriately. Preserve a legible board/movetext relationship. | Semantics tests, contrast checks, 100/150/200% text-scale cases and native assistive-technology smoke checks. |
+
+Use WCAG 2.2 as an accessibility design/testing reference, not as a claim that
+a Flutter desktop app is automatically web-conformant. Translate web CSS-pixel
+guidance into verified desktop logical hit areas; retain the current 12px UI
+type floor and prefer comfortable body text above it. Check actual target
+spacing, contrast and platform scaling. Historical HTML wireframes are
+inspiration, not a second authority for production fonts or tokens.
+
+Evaluate representative scenarios with the product owner and, when feasible, chess
+players unfamiliar with the app. Record completion, assistance, mistakes,
+recovery, time and perceived effort. Scripted UI tests and heuristic review
+cannot substitute for observing a person. Set numerical targets after measuring
+the baseline; do not invent improvement percentages or count clicks as the
+only measure of usability.
+
+Under UI-01/UI-03, exercise the migrated workflow with NVDA on Windows,
+VoiceOver on macOS and Orca on Linux before declaring that host verified. Record
+OS/Flutter/reader versions, keyboard operation, focus and announcements; missing
+host access remains unverified. For the board, expose square, piece, selection
+and available actions (for example, “e4, white pawn, selected”); for splitters,
+expose label, value and increase/decrease actions. Use Flutter
+[Semantics](https://api.flutter.dev/flutter/widgets/Semantics-class.html) and
+appropriate actions or render-object semantics. Do not merge a board or several
+independent controls into one node: [MergeSemantics](https://api.flutter.dev/flutter/widgets/MergeSemantics-class.html)
+is for content representing one semantic control. Widget semantics tests
+complement real-reader checks; neither a class name nor default labels establish
+usability. Preserve a keyboard-accessible path for custom pointer interactions.
+
+## Visual direction: a calm, responsive dark workspace
+
+The rewrite should feel clean, modern, minimal and
+pleasant to operate. Treat these as reviewable product qualities alongside
+correctness. Preserve information needed for chess decisions and visible
+affordances when simplifying a screen. Removing decoration should not require
+users to memorize hidden commands or open menus for every common action.
+
+The proposed direction is a quiet charcoal workspace with clearly separated
+surfaces, comfortable typography, restrained accent color and crisp feedback.
+The board, moves and user's current task receive visual priority. Establish
+the direction in milestone 1 before rolling it across feature migrations.
+
+| Concern | Proposed design contract |
+|---------|--------------------------|
+| Dark surfaces | Give workspace, panel, input and floating surface explicit semantic roles. Tune a small set of neutral tones together; use tonal separation and selective outlines where shadows are insufficient. Start from existing AppColors/ColorScheme rather than inventing screen-local palettes. |
+| Readability | Use legible foreground and secondary text on every actual surface. Test ordinary text at at least 4.5:1 contrast, with stronger contrast for small text where practical. Muted labels remain readable; opacity stacking must not silently erase contrast. |
+| Accent and meaning | Choose one principal interaction accent after comparing prototypes. Keep error/success/warning and chess evaluation colors semantically separate. Selected, hovered, focused and disabled controls need distinct treatments beyond hue alone. |
+| Composition | Use a consistent spacing scale and alignment. Prefer grouping and whitespace to repeated card-inside-card borders. Keep forms at readable widths and let analytical workspaces use available space. Avoid making every number, chip and action equally prominent. |
+| Typography and symbols | Retain a compact type hierarchy and one icon family. Align numerical columns and use tabular figures; moves/FEN use the shared mono style. Keep important actions labelled and make tooltips supplementary. |
+| Board and data | Validate both piece colors on both square colors, coordinates, last-move highlights, arrows, selection and evaluation graphics against the surrounding dark UI. Check user-selected board themes and dense tables, not just empty mockups. |
+| Interaction feel | Every actionable component has designed rest, hover, pressed, keyboard-focus, disabled and busy states. Provide immediate acknowledgement, stable geometry and predictable focus return. Loading indicators must describe actual work and never imply that an uncommitted save succeeded. |
+| Motion and delight | Use short transitions to connect actions with outcomes: selection changes, opening a panel, dropping a piece, completing a training step. Reuse AppMotion timings as a starting point and tune through interaction tests. Respect reduced motion and keep repeated training input responsive. |
+| Pleasant details | Give a valid drop a clear landing response; make a completed exercise feel resolved; show a compact copy acknowledgement; reveal useful previews without changing the committed position. Avoid repeated modal praise, compulsory sound or decorative motion that interrupts concentration. |
+
+Implement custom theme roles with a typed
+[ThemeExtension](https://api.flutter.dev/flutter/material/ThemeExtension-class.html),
+registered in every production/catalog theme with `copyWith` and `lerp`.
+Keep standard roles in `ColorScheme` and `TextTheme`; extend only app-specific
+roles such as evaluation colors and workspace surfaces. Supply explicit light
+and dark values: the extension does not choose accessible colors automatically.
+A shared accessor resolves the current theme instead of reading a global color
+constant. Keep invariant spacing in shared tokens without forcing it into an
+extension. Migrate each component completely and retire its obsolete constants;
+new migrated code must not introduce screen-local colors or text sizes. Maintain
+a shrinking legacy exception list with owners. Widgetbook and focused checks
+cover theme switching, contrast, interpolation and enlarged text using the same
+production widgets; token types alone do not prove visual consistency.
+
+Wire the shared appearance preference to `MaterialApp.theme`, `darkTheme` and
+[themeMode](https://api.flutter.dev/flutter/material/MaterialApp/themeMode.html).
+System mode follows OS brightness; explicit light/dark choices remain stable
+when the OS changes. Preserve the product's chosen default. Widgets read the
+resolved theme rather than each subscribing to platformDispatcher. Test OS
+brightness changes, explicit overrides and restart, with the same ThemeExtension
+roles present in both themes and no loss of focus or document state.
+
+Dark appearance is a design preference, not a universal claim of reduced eye
+strain. Inspect the actual app on ordinary displays in both dim and bright
+rooms, with platform scaling and larger text. Large bright surfaces and dense
+low-contrast gray text both need deliberate review. Ensure diagrams and images
+remain legible; do not invert chess piece assets or illustrations automatically.
+
+Milestone 1 is the design work inside the first slice, not a separate framework
+phase. Build/catalog only controls used by that slice. Keep the following visual
+loop within its estimate; defer unused widgets, vault and split-pane spikes:
+
+1. Start with one restrained visual treatment; compare a second only if a
+   concrete usability/style question remains. Use the same repertoire task with
+   real-looking long names, counts, selection and error states. Compare density,
+   surface separation and accent treatment without changing the task itself.
+2. Review the working slice or unresolved alternatives with the product owner, including
+   keyboard use. Choose one direction and record the decision here before
+   migrating its appearance across the app.
+3. Encode the selected values in the production theme and reusable components.
+   Include interactive examples for the state combinations above in Widgetbook.
+   The catalog consumes production code; it must not maintain prettier copies.
+4. For each migrated screen, review an actual workflow with representative data,
+   a narrow window, enlarged text, failed/slow work and repeated clicks. Check
+   task clarity and interaction feel as well as screenshots. Record usability
+   findings and fix shared causes in the component/theme owner.
+
+Use these references for complementary purposes. The reading shortlist was
+selected from author/publisher descriptions and publicly available material.
+
+- **[Refactoring UI — Adam Wathan and Steve Schoger](https://refactoringui.com/):**
+  primary practical visual-design reference for hierarchy, spacing, typography
+  and finishing details. Its web examples need adaptation to desktop chess
+  workflows; it is not a dark-mode-specific standard.
+- **[Don't Make Me Think, Revisited — Steve Krug](https://sensible.com/dont-make-me-think/):**
+  usability companion for understandable navigation and evaluating whether
+  people can identify and complete the next action.
+- **[Microinteractions — Dan Saffer](https://www.oreilly.com/library/view/microinteractions/9781449342760/):**
+  reference for the small interactions that make controls feel responsive and
+  satisfying, complementing whole-workflow usability evaluation.
+- **[Apple Human Interface Guidelines: Dark Mode](https://developer.apple.com/design/human-interface-guidelines/dark-mode)**
+  and **[Flutter ColorScheme](https://api.flutter.dev/flutter/material/ColorScheme-class.html):**
+  free dark-appearance and implementation references. Use semantic colors,
+  legible assets and tested surface contrast; preserve desktop platform
+  conventions without mechanically copying another platform's visual effects.
+
+## Persistent shell and reusable panels
+
+Keep Actions/View/Settings and the owning mode context available while opening
+repertoire/chapter pickers or generation planning within that mode. Compose
+these destinations under a persistent shell; compare a body switch/nested
+Navigator by default. Use the package-decision rejection checks before a
+[go_router ShellRoute](https://pub.dev/documentation/go_router/latest/go_router/ShellRoute-class.html)
+trial. Deliberate modal tasks may cover the shell, but ordinary
+navigation should not discard it. Route retention alone does not preserve a
+document: sessions own board position, drafts, selection and history, while
+features own scroll/filter state with an explicit restore policy. Define Back,
+picker cancel/results, deep links, focus return and unsaved-work handling once.
+Test opening a picker, cancelling it, switching modes and returning with the
+same position/draft; toolbar commands must target the visible destination.
+Include the persistent shell in milestone 2 and full workspace restoration in
+milestone 3. Hidden branches still follow the job/visibility policies above.
+
+If the routing fallback adopts go_router, distinguish shell chrome from branch
+history. [StatefulShellRoute](https://pub.dev/documentation/go_router/latest/go_router/StatefulShellRoute-class.html)
+provides independent branch navigators; prefer its indexed-stack form when
+modes need retained nested stacks. A plain ShellRoute alone is not evidence of
+that retention, and retained widgets do not replace session ownership or restart
+restoration. Under UI-02, test a nested destination, scroll/filter selection and
+board draft across a mode round trip, then separately test disposal/recreation
+from the session. Bound retained-branch memory and keep hidden interactive
+resources subject to visibility policy. The current Navigator-based default
+must satisfy the same tests without adopting a router merely for its name.
+
+In milestones 2/3, profile navigation with DevTools frame/rebuild evidence
+under STATE-02/UI-02, using the selected Navigator or router. Keep dependencies
+scoped to the panels that need them and use const constructors where useful.
+The goal is bounded work and preserved state, not zero shell builds: theme or
+layout changes legitimately rebuild it. Auto-dispose follows resource ownership;
+it is not a remedy for rebuilds and must not discard retained sessions/jobs.
+
+Create one reusable `SplitPane` with named panel slots, minimum usable sizes,
+resize commands, focus/semantics and an optional layout-change callback. Evaluate
+[flutter_resizable_container](https://pub.dev/packages/flutter_resizable_container)
+behind that boundary so feature widgets do not depend on its controller/types.
+It provides sizing constraints and programmatic resizing; keyboard behavior
+and accessibility must be demonstrated by the shared component. Allow arrow-key
+adjustment with visible focus, an announced value and a discoverable reset;
+respect text-field shortcut scope. Prevent accidental zero-width panels and
+support deliberate collapse with a clear reopen action where useful.
+
+When minimum sizes no longer fit, reflow/collapse/scroll deliberately rather
+than forcing a four-column layout at a fixed breakpoint. Restore validated
+layout preferences by workspace and available size, clamping stale values when
+monitors or text scale change. Persist at resize completion or a bounded cadence,
+not on every pointer event. Catalog/test nested splits and long labels,
+keyboard-only resizing, pointer drags, cancellation, small/ultrawide windows,
+200% text and saved-layout recovery; add RTL when scoped. Prototype and prove
+the control with the workspace in milestone 3; keep panel composition
+flexible for later UX experiments.
+
+## Presentation experiments without data-model churn
+
+Revisit how expectimax, generated lines, chapters,
+saved analysis and training sources are explained and arranged. Their present
+labels, tabs and folder-shaped navigation are not a product specification for
+the rewrite. Test alternative task flows before committing to terminology or
+layout; retain accurate score meaning, source identity and save behavior.
+
+- Keep domain operations and data identities stable while changing their
+  presentation. A chapter's display name, panel location or UI grouping must
+  not become its persistent identity. Renaming a concept on screen must not
+  implicitly rename files, rewrite PGN tags or move training progress.
+- Give UI collaborators immutable presentation models and narrow commands such
+  as preview, start analysis, cancel, save a selected result and open a document.
+  They must not infer storage operations from label text, tab indexes or paths.
+- Provide Widgetbook/full-workflow fixtures for empty, existing, running,
+  completed, stale, failed and conflicted data. Multiple visual prototypes
+  consume the same fixtures and command contracts with fake repositories.
+- Lower-cost models can explore copy, layout and interactions within that
+  sandbox. Persistence, concurrency, score interpretation and migrations remain
+  separately reviewed engineering work. Any prototype command wiring receives
+  real integration checks before it becomes production UI.
+- Compare at least two representations of the same task, such as inspecting a
+  suggested continuation and saving it into a chapter. Show the user clickable
+  alternatives and assess comprehension, effort and recoverability. Record the
+  selected direction and retire rejected prototypes; avoid permanent duplicate
+  navigation modes or configurable layouts without a demonstrated need.
+
+This expands milestone 1's prototype work and milestone 5's analysis UX. A
+visual redesign can be substantial while the repository/storage contracts stay
+unchanged.
+
+## Data preservation and coexistence
+
+Use [DATA_INTEGRITY.md](DATA_INTEGRITY.md) as the starting safety contract.
+Inventory every persisted format and distinguish user-authored documents,
+authoritative structured records, credentials, preferences and rebuildable
+caches. Record external tools/readers, stable IDs and references, schema versions,
+file locations and migration ownership. Work only on disposable copies during
+automatic validation; never inspect or migrate the user's real databases as a
+test fixture.
+
+- Initially keep formats and the existing storage adapters; changing UI/state
+  architecture does not require changing the on-disk format simultaneously.
+- Give each document/data domain exactly one writer. Route old and new entry
+  points through that owner. Shadow comparisons are read-only; never dual-write
+  real user data to old and new persistence implementations.
+- For necessary format changes, copy/stage, validate counts, identities and
+  content, then switch the authority with a recoverable commit point. SQLite
+  transactions cannot atomically commit unrelated filesystem writes; use an
+  explicit publication/recovery protocol for cross-store operations.
+- Preserve PGN comments, variations, NAGs, unknown headers, line identities and
+  progress references. Compare verbatim bytes where required and semantic
+  equivalence only where normalization is intentional and documented.
+- A rollback must preserve work created after migration. Once formats diverge,
+  implement a tested reverse/export path or make the old reader refuse the
+  unsupported schema. Restoring an old snapshot alone loses new work and is
+  not an acceptable rollback procedure.
+
+**Adapter cutover and rollback (DATA-06).** Drift is deferred, so the first slice
+has no Drift/legacy production cutover. Any later adoption must first rehearse
+this procedure on disposable database copies. Share one connection owner and
+migration authority for the file; don't run independent old/new writer pools
+or migration hooks. Coordinated SQLite connections are not inherently invalid,
+but busy handling and cache invalidation must be explicit. Drift documents that
+[independent instances do not synchronize stream queries](https://drift.simonbinder.eu/isolates/);
+external/legacy writes therefore need a tested refresh path if allowed.
+
+On repeated contention or a failed cutover, stop admitting mutations for that
+store, retain pending intents/drafts, and let tracked transactions finish or
+roll back before closing the replacement connections. Verify the actual schema
+and latest committed data. A separately invoked recovery tool or previous application version may reopen
+through its adapter only if it is compatible with the current schema, then
+reconcile pending operation IDs before retry so committed work is not duplicated.
+Do not retain the old adapter as a runtime fallback in the replacement app. Never delete live WAL/SHM files to
+clear a lock or switch adapters while the old pool still owns transactions.
+If quiescence or compatibility cannot be established, keep that store in a
+recoverable unavailable/read-only state; use the tested reverse migration/export
+path or a forward repair. Do not restore a pre-cutover backup over newer commits.
+Inject held-reader/writer contention, failures during switching, process restart
+and post-cutover writes, and verify recovered records and subscription freshness
+before enabling this migration in a normal profile.
+
+## One safe PGN mutation API and shared save interaction
+
+Centralization is the intended solution to the PGN
+overwrite concern. Callers should not need to remember a checklist of locking,
+existence, revision, backup and error-handling steps. Implement one injectable
+`PgnDocumentStore` (working name) as the domain-facing boundary for every
+user-document PGN mutation. It delegates to the tested atomic filesystem
+adapter; it does not duplicate its low-level implementation or absorb unrelated
+database/cache responsibilities.
+
+```text
+Feature action / editor / import / generated result
+                -> PgnDocumentStore
+                   -> atomic filesystem adapter
+                <- typed outcome, validated before-content and committed revision
+                -> shared save status / conflict interaction
+```
+
+The public API expresses intent. These are proposed operations to refine with
+the first slice, not implemented method signatures:
+
+| Intent | Safe contract |
+|--------|---------------|
+| Open a document | Return a snapshot containing document identity, revision and content. Distinguish absence from unreadable or malformed content. |
+| Create a document or save a copy | Exclusively create at the requested destination; return a name collision without replacing anything. |
+| Save an edited snapshot | Require the loaded identity/revision; reject replacement if the persisted baseline changed. There is no optional revision or default overwrite flag. |
+| Append/import games or apply an edit | Use a bounded locked transformation or validate a prepared snapshot at commit. Return its validated before-content/baseline and committed content/revision together; never derive undo from stale controller memory. Check source-game/line preconditions and preserve unrelated text. |
+| Undo a committed edit | Validate current storage against the history head's expected revision, initially the mutation's committed revision. On mismatch reject, retain history and offer a copy. After a confirmed commit, consume the entry and advance only a proven predecessor using the returned revision (DATA-03). No implicit merge or operational inverse. |
+| Rename, move or recoverably delete | Use the same document ownership boundary, with collision checks and an explicit protocol for associated references/artifacts. Coordinate with saves so a queued edit cannot recreate or target the wrong chapter. |
+
+The store owns validation, serialization against other app mutations, commit
+checks, recoverable prior versions, failure propagation and committed revision
+receipts. Protect the read-to-commit baseline through either a locked bounded
+transformation or optimistic preparation with commit-time revision validation.
+Parse/transform large snapshots outside the critical section; reject a changed
+baseline or recompute against a fresh one under the operation's bounded policy. Do not claim
+that in-app locks exclude arbitrary external editors.
+
+Expose distinct outcomes such as saved, conflict, name collision, invalid
+document and I/O failure, including enough information to preserve the user's
+draft and offer recovery. Only a saved outcome advances the session's baseline
+or clears dirty state. Features receive the store via repository/session
+dependencies; raw `writeFile`, `File.writeAsString` and generic overwrite APIs
+are unavailable to migrated PGN callers. Enforce this with import/API checks
+and switch every affected entry point to the final store contract in the same
+cutover; delete superseded write APIs rather than leaving a temporary adapter.
+
+Build a reusable save-status component and conflict/collision interaction on
+top of these outcomes. They show consistent saving/saved/unsaved states and
+appropriate actions such as keep editing, save a copy, or inspect/reload the
+newer document. Reload must preserve or explicitly resolve the dirty draft.
+Any user-requested replacement is an explicit command checked against the
+latest revision; dismissing a dialog never grants overwrite permission.
+The UI receives state and callbacks and performs no disk operations itself,
+so its appearance can be changed freely in Widgetbook. Background jobs consume
+the same outcomes and surface them through job state without opening dialogs.
+
+Test the central contract once thoroughly, then test that each feature calls
+it correctly. The shared contract suite covers exclusive creation, stale saves,
+concurrent append, lossless edits, conflicting undo, rename/delete versus queued
+saves, interrupted commit/recovery and disk/read failure using disposable real
+files and deterministic failure injection. Run relevant cases on native desktop
+platforms. Fakes make feature tests fast but do not establish filesystem safety.
+Separately test the reusable widget's actions, draft preservation, keyboard
+focus and failure states with scripted outcomes; expose them in Widgetbook.
+
+Add focused feature wiring tests for editor save, import, generation, undo and
+chapter operations. They must prove that the correct captured document/revision
+reaches the store and that failure is not reported as success. Do not copy the
+atomic-write algorithm or its entire suite into every feature. Milestone 2
+establishes this boundary and shared interaction; subsequent document-writing
+slices must adopt it before their old writer is retired.
+
+## Undo receipt provenance and history
+
+DATA-03 has two separate guarantees: a valid expected revision prevents undoing
+over later work, and a valid before-snapshot prevents undo itself from deleting
+work that preceded the mutation. Require both at the shared mutation boundary.
+
+A successful undoable mutation returns one storage-produced receipt containing
+operation/document identity, the actual validated before-content and baseline,
+committed content/revision, and any ordered logical step snapshots. Produce
+these from the same accepted transformation/commit, including when preparation
+occurs outside the lock. If validation causes a recompute, replace the receipt's
+before-content and steps too. Do not reread after the operation to manufacture
+a receipt from a different writer's content, or fill missing before-content from
+controller memory. S0 uses exact decoded content under the existing storage
+contract; the later native revision adapter preserves exact bytes/identity as
+specified by DATA-04. An in-memory-only document instead uses its session's
+validated state; it must never supply a fallback for a file-backed mutation.
+
+Keep immutable mutation provenance separate from the undo history's current
+expected-storage revision. Link a new receipt to the prior history head only
+when its validated before-baseline matches that head's expected revision and
+its before-content matches the predecessor's logical after-content. Record that
+link when accepting the mutation. An intervening external edit or unrelated
+mutation breaks the link; equal-looking content alone cannot repair it.
+
+Example: edits produce A -> B -> C, and the current storage revision is rC.
+Undo C validates rC and restores its actual before-snapshot B, returning rB2
+because atomic replacement may change file identity. After confirmed success,
+consume C and set B's undo expectation to rB2 only if the recorded predecessor
+link and restored content prove B is the next logical state. Keep B's original
+commit revision as provenance. The next undo validates rB2 inside the storage
+mutation; an intervening write still conflicts. Never rebase an expectation by
+reading arbitrary current disk content or attaching a fresh revision to old
+snapshots. If C started from an external edit E instead of B, undo C restores E
+and cannot re-arm the older B entry, even though C's own undo succeeded.
+
+For a batched suggestion, the storage transformation creates logical states
+S0 -> S1 -> ... -> Sn from the validated S0, but commits only Sn. Only the top
+undo entry initially expects that commit revision; intermediate steps have
+logical identities, not invented native file revisions. Each successful undo
+commits the preceding logical snapshot and arms its proven predecessor with
+the newly returned storage revision. Preserve one undo per actual added move;
+duplicates/no-ops create no invented history. Validate complete ordered step
+metadata before publishing the batch. Missing/short metadata must not silently
+fall back to stale memory or leave a partially installed history; reject before
+commit, or explicitly reconcile an already-committed result as a recoverable
+contract failure. Preserve non-file-backed behavior through a separate session
+contract rather than fabricating disk receipts.
+
+Serialize mutation, undo and history publication in the owning document session.
+A definite write failure/conflict neither pops entries nor advances expectations.
+Reconcile an uncertain commit before changing history or replaying work. Once
+a commit is confirmed, a later UI refresh failure must not replay the undo:
+retain the committed outcome and recover presentation from it. Publish receipt
+and stack changes coherently before accepting another session action.
+
+Required DATA-03 regressions (S0 with content guards; later repeat with native
+identity changes and shared-store fixtures):
+
+| Scenario | Required observation |
+|----------|----------------------|
+| Controller loads A; external annotation produces E; single append produces C; undo | Restore E, including the annotation, on disk and in the session; never restore stale A. |
+| External edit before a multi-move suggestion; undo every added move | All intermediate undos retain the external content and the final undo returns to validated E; no extra per-ply forward disk commits. |
+| A -> B -> C; undo twice, changing native identity on every replace | Return to B then A without a false conflict; expect each actual returned commit revision. |
+| External edit after append or between successive undos | Reject the affected undo, preserve external content and history; do not refresh its expectation to bypass conflict. |
+| Local edit, external edit, append, then two undo attempts | Undo only the append to its validated baseline; do not bridge the external edit into older snapshot history. |
+| Failed/uncertain undo, failed batch, duplicate add or malformed receipt | No false success, phantom entry or unsafe revision advance; retry/reconciliation preserves the actual commit outcome. |
+
+Extend [the existing writer undo tests](../test/features/repertoires/repertoire_writer_undo_test.dart)
+without losing successive undo, bounded history, per-move suggestion undo or
+load/reset behavior. Adapt the missing-snapshot fixture to the explicit receipt
+failure contract rather than preserving its unsafe memory fallback. Also audit
+all pushUndo callers, including deletes, for the same baseline provenance.
+These are required future tests, not claims of reproduced runtime failures.
+
+## Safety prerequisite on current code
+
+**S0 — Complete for the scoped Linux/current-code cases; see exit evidence above.** Recheck the findings below on
+current code. Reproduce all three controller actions and snapshot undo with
+interleaved writes and failure injection; record any finding already fixed with
+its regression evidence. Fix confirmed lost updates using the existing locked
+update/expected-content API. Verify conflicts propagate and preserve drafts;
+for undo, implement DATA-03's storage-derived before-snapshots, verified history
+links and successive/per-move expectation advancement. Include external edit
+before append, as well as after append and between undos. Return the validated
+before-content and committed baseline together through the existing editor API;
+consume history only after a confirmed commit. Adding expectedContent alone
+cannot fix a stale before-snapshot. Keep existing formats and dependencies.
+
+Deliver this as a focused maintenance increment on local main with its backup,
+before any rewrite slice changes document writes. It does not depend on new
+providers, a byte-revision FFI adapter or a design system. Publishing remains
+user-requested. Scope/estimate comes from reproduction, not an assumption that
+all fixes are small. Broader inventory can proceed independently; no runtime
+fix or test execution is authorized by this planning-document edit.
+
+## Storage baseline and overwrite-prevention gate
+
+The following records the starting inspection at `e477dc58` on 2026-09-16.
+The controller/undo findings were reproduced and repaired in S0 (evidence above);
+generation artifact publication remains unverified. Complete the ownership
+inventory in milestone 0 and retain evidence for every migrated writer.
+
+| Data | Current representation and ownership evidence | Rewrite requirement |
+|------|-----------------------------------------------|---------------------|
+| Repertoires and chapters | Documents `repertoires/` folders with chapter PGNs; `ChapterStore` creates files with `createOnly`. Studies use multi-chapter PGNs in Documents `studies/`. | Keep user-authored text, annotations and stable references; separate user-visible grouping from physical storage decisions. |
+| User/source games | Support `app_games.db`, with collection-scoped games and position indexes. Some tactics source games have no remaining standalone PGN copy. Player-analysis PGN generations also have an authoritative manifest. | Classify authority per collection; never treat the whole database or Support directory as disposable merely because some indexes can be rebuilt. |
+| Analysis/build artifacts | Chapter-adjacent tree, partial-tree, expectimax and trap JSON, plus a model-games PGN companion, are owned by `GenerationArtifactStore`. | Track document revision, run/config identity and publication state. Expensive saved analyses and resumable work need an explicit retention policy; user edits to a companion PGN cannot be silently discarded as cache. |
+| Training state | Review/progress/history CSV files and their document/line references are covered by existing migration and concurrency protections. | Preserve scheduling/history and reference identity through chapter rename, move, split and import. Inventory all newer stores as well as legacy CSVs. |
+| Recovery and upgrades | Atomic-write journals/backups, quarantined files, PGN recovery snapshots, SQL `game_trash`, and schema-upgrade backups serve different recovery purposes. | Define retention, restore and user-export behavior for each; do not equate temporary atomic replacement with a permanent version history. |
+
+The shared atomic writer already supports exclusive creation, expected-content
+checks, locked read/modify/write, and interrupted-write recovery. Those protect
+only callers that use the correct operation. An atomic replacement can still
+atomically install stale content over a newer edit.
+
+Specific call sites to reproduce in S0 or the indicated artifact inventory:
+
+| Inspection finding | Failure scenario to test | Required behavior |
+|--------------------|--------------------------|-------------------|
+| `RepertoireController.setRepertoireColor`, `setRootPosition` and `importPgnContent` read content then call `writeFile` without `expectedContent`. | Another writer commits between the read and replacement. | Apply a narrowly scoped change to current content under the storage transaction, or reject a stale revision without replacing the newer document. |
+| `RepertoireWriter.addMoveAtPosition` and the first batch snapshot use controller-memory previousPgn, while the editor appends to freshly read disk content. | An external annotation precedes append; undo restores the older controller snapshot even if a post-append guard passes. | DATA-03: return validated before-content and committed baseline together from the mutation; derive every batch step from that baseline. |
+| `RepertoireWriter.undo` removes its entry and writes an unguarded snapshot; the planned native revision adds identity changes on replacement. | A later annotation is overwritten, a failed write consumes history, or successive/per-move undo falsely conflicts under the proposed identity checks. | DATA-03: preserve receipts on failure, validate the history head and advance only proven predecessor expectations after a confirmed commit. |
+| Generation artifacts include a replaceable `_model_games.pgn` companion and independently written analysis files. | Regeneration encounters an edited companion, or a crash/stale run leaves artifacts from different revisions. | Distinguish generated ownership from user edits, validate run/document identity at commit, and expose recoverable or stale output rather than replacing newer work. |
+
+These are observable code patterns and plausible failure cases; they are not
+proof of which incident the user previously experienced. Review exports, Save
+As, study saves, generation completion, chapter moves and database imports too;
+these examples are not an exhaustive inventory.
+
+Before accepting a replacement storage path, require disposable-fixture tests
+for: concurrent creation of the same name; stale editor save; two app writers;
+failed decode; interrupted replacement/rollback; undo after another edit; queued
+save after switching chapters; generation finishing after its source changes;
+destination collisions; and failed migration or database/file publication.
+Assert preservation of original and newer content, comments/variations/unknown
+headers, stable IDs and progress, with truthful unsaved/conflict state. Test
+both semantic round-trips and exact text preservation where the contract needs
+it. Only a committed save may clear dirty state or announce completion.
+
+Stage derived results separately from source documents. Default generated output
+to a new owned artifact; replacing an existing user document must be an explicit
+operation checked against its current revision, with a recoverable prior version.
+Audit generic overwrite APIs so migrated document callers must select create,
+revision-checked replace or atomic update. UI prototypes cannot bypass them.
+
+Backup and restore are part of this gate: test a consistent SQLite snapshot
+including committed WAL data, the associated authoritative PGNs/manifests and
+references, then restore into an empty disposable profile. A database transaction
+does not commit filesystem changes, and app locks cannot force arbitrary external
+editors to cooperate. Preserve revisions/recovery copies and document those
+limits rather than promise that atomic writes alone eliminate every loss mode.
+
+Implementation evidence lives in [DATA_INTEGRITY.md](DATA_INTEGRITY.md). Starting
+code references: [storage operations](../lib/services/storage/io_storage_service.dart),
+[atomic writer](../lib/utils/atomic_file.dart),
+[repertoire controller](../lib/features/repertoires/controllers/repertoire_controller.dart),
+[undo writer](../lib/features/repertoires/controllers/repertoire_writer.dart),
+[chapter creation](../lib/features/repertoire/services/chapter_store.dart),
+[game store](../lib/services/game_store/game_store.dart),
+[generation artifacts](../lib/core/generation_artifacts.dart) and
+[schema guards/backups](../lib/services/storage/schema_guard.dart).
+
+## Filesystem and cross-process contracts
+
+In milestone 0, give each store a permitted-writer matrix: app instances,
+workers, MCP/offline tools and external editors. "One writer" means one mutation
+contract with serialization across cooperating processes, not one Dart singleton.
+Current file mutations use a SQLite-transaction mutex across isolates/processes,
+and `GameStore` already sets a busy timeout. Preserve those guarantees; do not
+replace them with an in-memory lock or POSIX record lock without equivalent
+tests. Tools documented as read-only keep read-only connections. Define bounded
+contention handling, lock identity/order and supported filesystems for writers.
+
+Measure lock wait and hold time separately with large PGNs and delayed I/O;
+set budgets in milestone 0. The existing mutex is per normalized directory,
+not the application data database: unrelated directories need not wait behind
+one global lock. Prepare decoding/transforms and unique staged output outside
+the lock when safe, then validate current bytes/identity, publish and record
+recovery state within the transaction. Keep validation-to-replace serialized;
+don't release a lock on timeout while its I/O can still complete. Budget digest,
+flush and rename costs too; never skip validation to meet a latency target.
+A one-app-per-profile policy is deferred unless the product owner selects it;
+it cannot replace contracts for tools, external editors or multiple isolates.
+
+V1 does not implement CFAPI/NSFileProvider hydration handlers or a cloud-sync
+engine. Use normal [asynchronous file I/O](https://api.dart.dev/dart-io/File-class.html),
+truthful pending/error state and the preservation contract below; waiting for
+remote data is not by itself synchronous UI-isolate blocking. Keep outstanding
+I/O bounded: a UI timeout may abandon a result but does not necessarily cancel
+the underlying operation. Reject late results and do not launch unbounded retries.
+
+Known sync-folder/capability hints may support actionable guidance to make a
+file available offline or save a copy locally; path-name heuristics are not
+reliable detection and cannot replace commit checks. Do not ban or relocate
+user PGNs automatically. Live SQLite remains subject to the separate local-store
+policy below. Native placeholder cases may use fault-injected fixtures plus
+manual host checks; provider-specific APIs require a demonstrated requirement
+and a separately budgeted increment. A warning does not make a failed save safe.
+
+Treat Documents and external PGNs as potentially synced, remote or redirected.
+Test unavailable/delayed placeholder reads, interrupted hydration, disk-full
+errors, Windows sharing violations and independently created conflict copies.
+Use bounded cancellable retries only for classified transient errors; access
+denied can be permanent, and any retry must revalidate the source/destination.
+Never treat a failed read as empty, automatically merge/delete similarly named
+files or infer a conflict solely from a filename suffix. Show unresolved copies
+for inspection. Watcher events are refresh hints; commit validation is required
+even when no event arrived. Detect location capabilities where feasible and
+handle failures safely when sync-provider detection is unavailable.
+
+Choose an explicitly local, non-synced location for live SQLite stores and
+cross-process locks; a folder called Support is not proof of that property if
+the user/system redirects it. Existing locations need a separate copy/verify/
+switch migration if unsuitable. Do not run WAL on unsupported shared-network
+storage. Specify busy handling, transaction duration, long-reader/checkpoint
+behavior and background query ownership. Any later Drift trial must retain a
+single schema/migration owner and pass background-query and migration fixtures.
+Backup through SQLite's snapshot
+facilities; copying a live db/WAL/SHM file set is not a consistent backup protocol.
+
+Distinguish UI revisions from persisted content identity. For the new typed
+revision API, default to SHA-256 over exact stored PGN bytes (including BOM and
+line endings, before decoding), together with the observed native file identity
+and the app's document identity. Use device/inode on POSIX and volume serial plus
+128-bit [FileIdInfo](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info)
+on Windows. [Dart FileStat](https://api.dart.dev/dart-io/FileStat-class.html)
+does not expose those IDs; implement the probe in an infrastructure native
+adapter. Read bytes and identity from the same open object and revalidate the
+path binding before commit. A mismatch, disappearance or unavailable identity
+requires conflict/re-verification or save-as-copy; it never grants overwrite.
+
+Native identity is an observation, not a permanent app document ID: replacement
+and sync hydration can change it, and IDs can be reused after deletion. Test
+same-byte replacement, symlink/hardlink aliases, BOM changes and unavailable
+identity; define unsupported cases rather than promise detection of every
+historical delete/recreate. Track cooperating app deletion/recreation using the
+document lifecycle. External editors can still race between validation and
+replacement; native IDs do not turn an ordinary rename into filesystem CAS.
+Capture the new revision after each successful app replacement. The current
+`expectedContent` compares decoded text; S0 uses that existing contract, never
+passes a digest in its place, and does not wait for this native adapter.
+
+Baseline durability remains recovery from app/worker termination, with a
+specific flush protocol for the new adapter rather than an implied power-loss
+promise. Preserve recovery artifacts until outcome is known:
+
+| Platform | Planned commit protocol and validation |
+|----------|----------------------------------------|
+| POSIX local filesystems | Same-filesystem temp, write, fsync temp, validated rename, fsync parent directory; include both affected directories for moves. Use native support where Dart lacks directory flush. Inject failures at each step, including unsupported directory sync. [fsync reference](https://man7.org/linux/man-pages/man2/fsync.2.html). |
+| macOS | Same recovery/namespace protocol; measure and explicitly select fsync versus F_FULLFSYNC for the data flush. Default full-sync for committed user-document saves where supported; exclude rebuildable caches. Record unsupported cases and latency before broad adoption. [Apple flush semantics](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html). |
+| Windows | Flush the staged file, use same-volume ReplaceFileW for replacement with tested backup/ACL behavior, and a separate exclusive-create path. Reconcile documented partial-failure states before retry. REPLACEFILE_WRITE_THROUGH is unsupported; MoveFileExW WRITE_THROUGH documents copy/delete flushing and is not by itself a same-volume namespace durability proof. [ReplaceFileW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew), [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw). |
+
+A flush failure after replacement may mean content was installed but durability
+is uncertain. Reconcile the actual file and preserve recovery data; don't report
+an ordinary pre-commit failure and blindly retry an append. Classify Windows
+sharing/lock violations separately from permanent access denial. For retryable
+replacement failures, use cancellable capped exponential backoff with a total
+attempt/time budget and renewed revision checks; inject time in tests. A unique
+same-directory temp avoids naming collisions/cross-volume publication, but does
+not remove destination sharing violations. Test transient recovery, exhausted
+retries and a destination edit during backoff. Reconcile uncertain commits before
+retrying; never repeat the entire logical append blindly.
+Filesystem/device/remote-cache guarantees
+remain explicit. Current SQLite WAL/NORMAL settings can lose latest commits
+after power loss; any stronger guarantee needs a separate measured policy.
+Use deterministic crash points and seeded process-termination tests; killing
+a process does not simulate lost hardware caches.
+
+## Milestones and exit gates
+
+S0 is **complete for the scoped Linux cases** and milestone 0 has a
+**partial inventory** in the historical execution record.
+Milestone 1/2 is **Partial**; milestone 3 is **Partial**; milestones
+4–5 are **Partial** (parallel ownership repairs below); 6–7 are **Not started**. Each row yields a reviewable result; later
+rows depend on the contracts established earlier, not on an unbounded framework
+build. Reorder later feature slices after the dependency inventory, with a
+recorded reason. No current mode is silently dropped.
+
+The implementing agent must revisit the storage baseline against the code at
+the time of implementation, turn the overwrite-prevention cases above into
+passing regression evidence, and report any unresolved cases explicitly. This
+is a required acceptance gate for every slice that writes user data, including
+UI work that introduces or changes save/import/generate/undo commands. Planning
+entries and visual approval are not evidence that data safety has been tested.
+
+| Milestone | Deliverable | Exit gate / evidence IDs |
+|-----------|-------------|--------------------------|
+| S0. Current-code safety prerequisite | Reproduce controller and undo findings; fix confirmed races independently using existing storage primitives. | DATA-01, DATA-03, TEST-01: external-before-append, successive/per-move undo and caller failure regressions pass; unresolved cases explicit; integrated/backed up without waiting for rewrite. |
+| 0. Inventory and baseline | Parity/data/owner maps, host prerequisites, authorized scope, default decisions, first-slice effort/spike caps, validation reserve, midpoint checkpoint and performance/usability budgets. | PLAN-01: evidence report and bounded next increment; record platform gaps under OPS-01/OPS-02. S0 may proceed independently. |
+| 1/2. First complete slice with its design foundation | Repertoire list/search/create/rename/open/recoverable delete, persistent shell, injected contracts and only the theme, ARB, settings and catalog components this workflow uses. Retain formats; rehearse the desktop/native paths it invokes. | ARCH-01; DATA-01 through DATA-06 for paths used; STATE-01; SET-01; PROC-01/PROC-02 on applicable hosts; UI-01/UI-02/UI-04; OPS-01/OPS-02; TEST-01. Product-owner visual review recorded, duplicated slice code retired, PLAN-02 continuation decision recorded. |
+| 3. Document workspace | PGN editing/studies/chapters, board navigation, retained sessions and shared resizable panels built on demand. | ARCH-01; DATA-02 through DATA-06; STATE-02; UI-01 through UI-04; TEST-01: round-trip, undo/conflict, context and large-document budget evidence. |
+| 4. Training | Training/tactics/scheduling/history on stable identities; a storage migration only if separately justified. | ARCH-01; DATA-06; SET-01; UI-01/UI-04; TEST-01: preserved history and deterministic scheduling, cancellation and resume. |
+| 5. Analysis and long jobs | Analysis/generation/audit/ingestion through owned jobs and bounded presentation updates. | ARCH-01; DATA-02/DATA-05/DATA-07; STATE-01 through STATE-03; PROC-01/PROC-02; UI-01/UI-04; OPS-01; TEST-01: stale-result, burst, cleanup and resource-budget checks. |
+| 6. Remaining workflows and platform surface | Remaining modes, accounts/settings, tools, assets and distribution complete the inventory. Perform vault feasibility/migration before Accounts. | PLAN-01; ARCH-01; SET-01; SEC-01; OPS-01/OPS-02; TEST-01, plus applicable data/process/UI IDs from the inventory. Every retained capability has evidence or an explicit scope decision. |
+| 7. Whole-application verification and release readiness | Verify retirement already completed in each cutover; no deferred cleanup phase. Update current-state docs and finish cross-workflow/platform checks. | PLAN-01; ARCH-01/ARCH-02; DATA-06; OPS-02; TEST-01: every feature covered, no transitional bridges or retired production owners, parity/recovery evidence complete, full release gates pass before requested publication. |
+
+Milestone numbers are retained for existing references: “milestone 1” now means
+the on-demand design work within milestone 2, not a separate foundation project.
+ARCH-02 blocks integration of every implementation cutover in milestones 1–6.
+All applicable IDs remain binding on later slices; the table highlights checks
+introduced there. In milestone 0 enumerate inherited IDs per workflow/host;
+use explicit ID rows in evidence rather than leaving ranges unexpanded.
+Unfamiliar-player studies are optional when feasible under UI-04; record whether
+the product owner or another end user completed the representative task.
+
+A module is not considered migrated because it moved folders. Each completed
+slice must demonstrate the new ownership, tests, UX behavior and removal of its
+superseded code. Preserve existing data compatibility in the final codec or
+infrastructure implementation. Compatibility is not permission to retain the old
+application owner, writer, forwarding API or runtime fallback.
+
+## Continuation decision after milestone 2
+
+PLAN-01 requires a filled budget record before combined milestones 1/2 start:
+implementation-effort cap in hours, a separate cap for each spike, validation
+reserve, owner and a midpoint checkpoint. Milestone 0 supplies the numbers from
+scope and baseline evidence; a missing cap fails readiness rather than implying
+unlimited time. Record active effort separately from queued tools or unavailable
+host checks. Count design experiments and framework integration within the cap.
+
+At the midpoint, compare completed acceptance scenarios with remaining effort
+and narrow optional work if needed. At the cap, stop expanding implementation,
+complete a safe checkpoint with drafts/data preserved, and record PLAN-02's
+continue-with-revised-scope, bounded repair or stop decision. An extension must
+state the added budget, scope and reason within the product owner's authorized
+scope; it cannot be silently renewed. Never cut safety gates or interrupt a
+storage commit to meet a timebox. This is an effort limit, not a calendar promise.
+
+Compare the first complete slice with its baseline: task success/effort,
+save/recovery reliability, feature-test setup, implementation effort, amount of
+legacy code removed, runtime cost and unresolved platform dependencies. Continue
+only with evidence that the pattern is tractable and improves maintainability
+without worsening essential workflows or safety.
+
+Stop expansion if the slice cannot remove its old owner, needs pervasive
+cross-layer exceptions, regresses accepted data/performance requirements, or
+costs substantially more than its bounded estimate without a credible fix.
+Record the reason and narrow the next work to a time-bounded repair/evaluation.
+If that does not resolve the evidence, end the broad renewal program and retain
+useful shared components/safety boundaries through ordinary incremental
+refactoring. Preserve all user data and valuable completed work. Sunk effort
+and new-folder coverage are not reasons to continue. Set the estimate and
+acceptance budgets before implementing the slice, then report actual results.
+
+## Working method, checks and sizing
+
+For each slice, keep a compact execution brief with its milestone evidence in
+this document; do not duplicate the whole plan into a new prompt. The brief is:
+
+- Exact starting commit, complete responsibility being replaced and observable
+  user behavior; explicit non-goals cannot exclude a dependency required to
+  delete that responsibility’s old owner.
+- Final owner graph and contracts, all production callers/writers, and exact
+  legacy types/APIs/files/dependency edges to delete. Inspect transitive wiring.
+- Required acceptance IDs, failure scenarios, fixtures/UI examples, bounded
+  check commands and required hosts; exercise the final production composition.
+- Effort/spike caps, dependency order and data-format compatibility in final
+  infrastructure. If deletion does not fit, revise the cutover before coding.
+- Integration evidence: final wiring, zero references to retired APIs, no
+  temporary layers, parity/failure results, production additions/deletions and
+  exact committed branch. An incomplete checkpoint stays on its task branch.
+
+Refresh the brief when the code or accepted scope changes. An agent resuming work
+reads it, the linked contracts and applicable repository guidance, then verifies
+the checkout; a stale prompt cannot override current code/evidence. Present a
+reviewable diff and evidence at each milestone, identifying native or data-safety
+uncertainties for review. Product-owner UX/scope decisions follow the existing
+gates; routine already-authorized work needs no extra per-edit approval.
+Implement the smallest end-to-end case, exercise failure paths, inspect it, and
+then widen coverage.
+
+Record substantial choices with status, alternatives, evidence and consequences
+beside their owning section. Create a short ADR only when a cross-cutting choice
+has actually been selected and needs its own history; do not predeclare every
+candidate package as an accepted ADR. Update the component map only when a
+change actually exists.
+
+Estimate test work from a reuse inventory under PLAN-01: existing ci.sh checks,
+headless driver, integration_test, storage fixtures and engine doubles first;
+list only missing tests/harness changes for the slice. Separate feature, test,
+packaging and host-validation effort within the cap and keep a validation reserve.
+Do not mandate a 40–50% split without evidence or require every candidate tool
+before the first workflow. Widgetbook grows with its controls; Alchemist and new
+runners remain conditional. Reduce optional scope if validation does not fit;
+never drop preservation or lifecycle checks to meet the budget.
+
+Enforce architecture with import checks and analyzer rules: no widget I/O, no
+domain-to-UI dependencies, no new singleton access in migrated code and no
+unreviewed control styling outside the design system. Discover every feature
+and ratchet exact existing violations; unknown features and new violations fail,
+completed features have no exemptions, and the final baseline is empty. Do not
+normalize violations by growing allowlists. Code generation must be reproducible and validated for drift.
+
+Prefer an analyzer-based import/export check if regex guards cannot express
+the boundary reliably. Verify the actual rules and SDK compatibility of any
+Riverpod lint/plugin; linting does not prove async lifetime correctness. Choose
+one generated-file policy and validate regeneration in the existing bounded
+checks/release pipeline. When generators are actually adopted, run their pinned
+commands in a clean disposable check worktree (including gen_l10n where used),
+then reject modified, deleted or newly untracked expected generated files.
+`git diff --exit-code` alone misses untracked output. Use build_runner only when
+needed; `--delete-conflicting-outputs` belongs only in that disposable check,
+never as a cleanup shortcut on a shared dirty checkout. Do not regenerate/rewrite
+approved golden images during verification or add branch-triggered CI here.
+
+Use the existing bounded headless Linux environment for golden verification;
+pin SDK, fonts, locale, scale, renderer and assets. Containerization is optional,
+not proof of deterministic rendering. If native Windows/macOS goldens are added,
+keep separate host baselines and enforce them on their configured hosts; missing
+hosts are unverified rather than silently passing. Alchemist normalization does
+not replace readable-text baselines or real interaction/semantics checks.
+
+Under TEST-01, changes to chess codecs/rules need bounded seeded property tests
+alongside explicit regressions. Generate legal move sequences and annotated
+PGNs, verify agreed semantic round-trips and undo/invariants, then separately
+mutate inputs to test invalid/truncated data. Align variant, en-passant, castling,
+promotion, null-move and FEN normalization policies; exact-byte preservation is
+required only by the relevant storage contract. Retain/minimize failing seeds
+and inputs and keep independent reference fixtures so matching encoder/decoder
+bugs cannot validate each other. Choose a generator/shrinker only if useful;
+package:checks is an assertion API, not a property-input generator
+([package documentation](https://pub.dev/packages/checks)). Evaluate leak tracking
+for owned controllers/subscriptions alongside explicit lifecycle tests.
+
+Retain the lockfile and native asset manifest, with a deliberate dependency
+update/vulnerability-review process and a clear owner. Check existing bundled
+license registration and distribution/source obligations during native packaging
+changes; license UI alone is not the complete release obligation. No new
+dependency, scanner, schedule or platform plugin is required solely because it
+appeared in external review. Apply the package defaults and record deviations
+against their rejection checks.
+
+Use layered evidence: pure algorithm tests; repository contract/failure tests;
+real filesystem and schema-migration fixtures; deterministic engine doubles;
+widget interaction/semantics tests; selected screenshot comparisons; headless
+end-to-end journeys; native platform integration and measured performance.
+Compare semantic results against the old implementation where it is correct;
+do not require identical nondeterministic engine output. Preserve existing
+storage and engine regression tests until equivalent coverage is established.
+
+Follow the normal task-worktree, bounded-check and automatic local-main
+integration workflow. Each completed cutover remains independently usable and backed up. Backing up
+an unfinished task branch does not authorize integrating its scaffolding.
+Run documentation lint/link checks for this plan; implementation requires
+analyze/lint, relevant tests and headless screenshot inspection for visible
+changes. Full release, offline-tool, integration and engine gates are required
+before a separately requested publication; branch pushes do not run release CI.
+
+Do not promise a calendar completion date from line count. Treat this as a
+multi-milestone program; estimate after milestone 0 and recalibrate after the
+first two migrated slices using measured effort, uncovered compatibility work
+and user feedback. Stop expanding a slice when it needs unrelated abstractions;
+record that dependency and return to the smallest usable workflow. Track
+completed user journeys, removed legacy owners, data-safety evidence and UX
+results rather than generated code volume or number of new classes.
+
+## Design references
+
+- [Riverpod 3 migration semantics](https://riverpod.dev/docs/3.0_migration),
+  [Flutter commands](https://docs.flutter.dev/app-architecture/design-patterns/command),
+  [transferable buffers](https://api.dart.dev/dart-isolate/TransferableTypedData-class.html),
+  [native callbacks](https://api.dart.dev/dart-ffi/NativeCallable/NativeCallable.listener.html),
+  [native finalizers](https://api.dart.dev/dart-ffi/NativeFinalizer-class.html),
+  [root error handling](https://api.flutter.dev/flutter/dart-ui/PlatformDispatcher/onError.html)
+  and [Windows process jobs](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects):
+  runtime/lifecycle constraints verified during review.
+- [SQLite corruption pitfalls](https://www.sqlite.org/howtocorrupt.html),
+  [WAL](https://www.sqlite.org/wal.html),
+  [synchronous settings](https://www.sqlite.org/pragma.html#pragma_synchronous),
+  [Windows cloud-file placeholders](https://learn.microsoft.com/en-us/windows/win32/cfapi/build-a-cloud-file-sync-engine)
+  and [Pillai et al., OSDI 2014](https://www.usenix.org/conference/osdi14/technical-sessions/presentation/pillai):
+  storage/backup and crash-consistency references.
+- [Flutter internationalization](https://docs.flutter.dev/ui/internationalization),
+  [Riverpod generation](https://riverpod.dev/docs/concepts/about_code_generation),
+  [typed routing](https://pub.dev/packages/go_router_builder),
+  [Dart subprocesses](https://api.dart.dev/dart-io/Process/start.html),
+  [Sentry Flutter](https://pub.dev/packages/sentry_flutter),
+  [Patrol targets](https://pub.dev/packages/patrol),
+  [Windows signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)
+  and [macOS notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution):
+  primary references used to qualify external architecture feedback on 2026-09-16.
+- [Knuth: Literate Programming](https://cs.stanford.edu/~knuth/lp.html):
+  human-readable program explanation and algorithmic reasoning.
+- [Flutter architecture recommendations](https://docs.flutter.dev/app-architecture/recommendations):
+  separation, dependency injection, immutable models and conditional use cases.
+- [Nielsen's usability heuristics](https://www.nngroup.com/articles/ten-usability-heuristics/):
+  feedback, consistency, control, recognition and recovery.
+- [WCAG 2.2](https://www.w3.org/TR/WCAG22/),
+  [target size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html)
+  and [text resizing](https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html):
+  accessibility references to adapt and test on desktop.
+- [Widgetbook](https://pub.dev/packages/widgetbook),
+  [Alchemist](https://pub.dev/packages/alchemist),
+  [Riverpod 3 behavior](https://riverpod.dev/docs/whats_new) and
+  [Drift migrations](https://drift.simonbinder.eu/migrations/):
+  primary documentation for selected defaults and deferred alternatives.
+
+
+### Builder native history and private graph cutover (2026-09-17)
+
+Source `09aeb6ed` replaces Builder append/history authorization with validated
+native revision receipts and one session edit/history queue. Deletes
+`AppendMovesResult`, `appendMoveAtPath`, `appendMovesAtPath`, `rebuildLine`,
+`reconcileInstalled`, the duplicate writer queue and Builder's public mutable
+`openingTree`. All Builder graph consumers use the protected query projection;
+the decoder's mutable graph is copied into exclusive session ownership. Zero
+remaining retired API references were verified in `lib/` and `test/`.
+
+515 focused tests and three Linux native journeys passed: batched append and
+successive UI undo, equal-text external replacement refusing undo while retaining
+the document/board/graph/history, annotation/reload and import conflict. Merged
+analyze/lint passed with 13 informational findings, no warnings/errors. This
+completes the named history/graph responsibility without a compatibility shim.
+Whole Builder still requires durable scratch recovery, host retirement and
+remaining non-history edit contracts. Undo restores decoded PGN; original
+encoding/raw bytes remain in native recovery archives. Other-host gates remain
+unverified.
+
 ## Execution record — 2026-09-16
+
+Historical evidence and decisions follow. Earlier temporary-bridge and
+checkpoint sequencing is superseded by the current execution order above;
+recorded test results retain only their original scope and limitations.
 
 The product owner explicitly authorized the **whole renewal and end-to-end
 validation**, not merely a planning update. Starting commit: `e477dc58`.
@@ -2152,6 +3715,207 @@ remaining legacy presentation, outline/generation editors and complete native
 undo provenance are still unfinished. Later training, jobs, platform and release
 gates remain open.
 
+### Parallel renewal execution brief (2026-09-17)
+
+The product owner renewed authorization to **finish the whole plan**, explicitly
+requested subagents, larger completed workflows, improved testability/safety and
+legacy removal. Starting integration baseline: `9036708c`. The goal remains the
+complete acceptance register, not a count of extracted classes. Local `main` and
+its verified backup are the deliverable; publication is not requested.
+
+**PLAN-02 decision: bounded repair and consolidation.** The first slice remains
+partial. Its controller/repository overrides, native document mutations, catalog
+recovery, shared save interaction and retained shell are exercised by the earlier
+checkpoints. However, there is no recorded product-owner visual acceptance,
+complete profile-mode budget, full-profile restore rehearsal or native
+Windows/macOS evidence. These are unresolved gates, not implicit passes. The
+large accumulation of checkpoints has not retired whole legacy workflows. The
+renewed instruction authorizes independent repairs in later owners while these
+gaps are closed; it does not graduate milestone 2 or waive an acceptance ID.
+
+| Owner | Bounded outcome | Required evidence | Budget / midpoint |
+|-------|-----------------|-------------------|-------------------|
+| `builder_renewal` | Builder document loading, destination and queued edits have one injected session owner; failed switches retain the current document; remove superseded host ownership/test hooks | ARCH-01, DATA-02/03, STATE-01/02, TEST-01; current Builder/Trainer callers remain functional | 4 active hours: 2 implementation, 1 regression tests, 1 integration reserve; midpoint after production wiring |
+| `training_renewal` | Training source, progress and preference dependencies are injected; session phases own lifecycle; preserve persisted history and retire migrated `services/training` owners | ARCH-01, DATA-06, SET-01, STATE-01, TEST-01; deterministic source/settings/cancellation failure tests | 6 active hours: 3 implementation, 2 parity tests, 1 integration reserve; midpoint after source/session cutover |
+| `generation_renewal` | Generation stages recoverable run output and validates source revision before publication; edited companion files survive; pending writes cannot outlive their run | ARCH-01, DATA-02/05/07, STATE-01, PROC-01, TEST-01; stale source, interrupted publication, disposal and duplicate-job tests | 6 active hours: 3 implementation, 2 failure tests, 1 integration reserve; midpoint after publication wiring |
+| Integrating agent | Reconcile source-backed inventory and acceptance register, rehearse cross-store restore, enforce new boundaries, validate merged production code and integrate local main | PLAN-01/02, DATA-06, ARCH-01, TEST-01; exact committed branch/backup evidence | 4 active hours: 1 inventory, 1 restore rehearsal, 2 review/integration reserve; midpoint after restore result |
+
+No package spike or visual redesign is part of this repair batch. Queue/build
+waits are not active effort. Owners report their midpoint, removed production
+owners, exact checks and remaining compatibility dependencies. At a budget cap,
+finish and back up the safe checkpoint; record a revised bounded scope before
+further expansion. Full renewal remains active until every applicable gate has
+current evidence. Platform and visual-review gaps remain explicitly unverified.
+
+The integration midpoint restore rehearsal passed on Linux:
+`test/infrastructure/profile_restore_rehearsal_test.dart` closes all fixture
+writers, copies Documents/Support plus synthetic book preferences, restores into
+a different disposable profile, and deletes the source. It verifies exact PGN
+bytes (BOM, variations, NAGs, custom tags), SQLite integrity/foreign keys/schema,
+source-game IDs and position rows, then explicitly relocates chapter/history/book
+references. Native-to-compatible-adapter rollback reopens current data and
+preserves annotations and new SQL games written after cutover; the original
+backup stays unchanged. This is DATA-06 evidence for the tested **stopped-profile
+protocol**, not a live backup feature, native preference export, crash-consistent
+cross-store snapshot or proof for all remaining domain formats. No user data or
+credentials enter the fixture. A formatting parse failure in the new PGN fixture
+was corrected before the passing run.
+
+Profile-mode baseline budgets, selected before measurement: the existing
+20,000-node annotated Study fixture must open/decode/receive within 5 seconds;
+30 warm distant-navigation commands and 30 comment-edit/projection commands
+must each have p95 at most 50 ms; RSS growth over
+that bounded sequence must stay within 64 MiB. These are initial regression
+ceilings on the two-CPU Linux runner, not a claim of 60 Hz rendering. Frame
+build/raster times and GC counts are captured separately by the native Flutter
+performance binding. `scripts/ci.sh profile` uses the existing bounded headless
+runner and writes `build/renewal_performance.json`, including failure evidence.
+It refuses a debug run. Undo, allocation attribution, image memory and
+other hosts remain additional STATE-02 measurements; navigation does not certify
+them. This extends the integrating agent's scope by one active hour (half an
+hour harness, half an hour validation) to replace debug-only evidence.
+
+The first profile run exposed an unmet frame budget despite passing command
+latencies: distant navigation built below 7 ms, while repeated comment edits
+built near 398 ms. The existing stage diagnostic isolated full row-index
+comment filtering at 363 ms. The repair preserves filtered paragraphs for
+unchanged move nodes with weak cache keys and checks source text for mutable
+legacy callers. The profile gate now requires p99 frame builds within 32 ms on
+the bounded headless host, in addition to command/memory budgets. This is a
+regression ceiling, not a 60 Hz/GPU claim: headless raster timings reported
+near zero and cannot establish production GPU latency. Study performance repair
+adds one active hour within the authorized scope. The second profile's Dart
+assertions passed, but its shell wrapper failed because the wrapper was edited
+while executing; the complete command must pass on the final source.
+
+The final complete profile command **passed** after immutable annotation
+revisions began reusing unchanged rows and the redundant document-wide row-key
+map was removed. Structural/paragraph-count changes still use full indexing;
+mutable legacy callers never enter the snapshot reuse path. On the recorded
+fixture, open/decode/receive took 302 ms and first frame 987 ms; navigation p95
+was 0.153 ms, edit/projection p95 0.304 ms, navigation frame p99 6.913 ms and
+edit frame p99 **9.346 ms** (worst 11.951 ms). RSS decreased during the bounded
+sequence. [Recorded scalar report](evidence/renewal-linux-profile.json) retains
+budgets and scope limitations. Eighteen focused layout/editor tests passed,
+including annotation parity, structural fallback, paragraph keys, immutable
+rows, 20,000-node navigation, 200% wrapping and draft eviction/autosave behavior.
+
+### Larger ownership completions (2026-09-17)
+
+| Source commit / requirement | Production change and retired owner | Evidence and remaining scope |
+|-----------------------------|-------------------------------------|------------------------------|
+| `b4c22ad1` / ARCH-01, DATA-02/03, STATE-01/02, TEST-01 | `RepertoireDocumentSession` owns load epochs, destination, parsed document/metadata and pending edit queue. Host shrinks from 781 to 281 lines; production test hooks removed. Public line collections are defensive immutable copies. | 243 focused tests, six final session tests, four native journeys and a standalone Dart VM probe passed. Failed loads retain destination, board, selection, color/root and undo together; pending save failures keep blocking navigation/close. [Inspected recovery screenshot](images/renewal-builder-document-recovery.png). Opening graph privacy, scratch recovery and native undo provenance remain. |
+| `1e104097` / ARCH-01, DATA-06, STATE-01, TEST-01 | All 14 `services/training/` libraries retired. Session/phase/progress owners and pure settings have canonical training paths; app composition injects source/review/header/answers/config ports, with filesystem/preferences adapters under infrastructure. | 232 focused tests passed, including source/chapter/settings/rating races, duplicate completion, partial-write retry and failed header mirror. Analyze/lint passed with nine existing infos. [Inspected production Retry component](images/renewal-training-retry.png). Existing CSV/JSONL formats and identities retained. In-memory retry is not crash-resume or cross-file atomicity; ordinary settings still require one app-scoped writer and explicit active-sitting policy. |
+| `a7d8dfd7` / DATA-02/07, PROC-01, ARCH-01, TEST-01 | Per-session generation publication captures source/config before work; stages complete course/model output and a manifest in a retained run directory; commits once through the document store and records a separate receipt. `PgnBatchWriter`, blind companion overwrite/delete and public partial-tree save are retired. | 99 affected tests passed, including actual full-pipeline source conflicts, native staging and cancellation/disposal/engine failure lifecycles. Analyze/lint passed with 12 infos. Old companions survive; conflicts/uncertain writes report retained manifests and never auto-replay. Tree/probe/trap/partial caches and a recovery browser remain. |
+| `8231b2bc` / ARCH-01, STATE-01, PROC-01, TEST-01 | Retired `core/pgn_viewer_controller.dart` and all `core/pgn/` owners after injecting index storage, cancellable computation, opening data, Solitaire settings/trophies and analysis ports. Removed unused collection merge helper and its obsolete mirror tests. | 339 broad tests passed; five transient load failures were fixed and the affected files passed in a 48-test rerun. Four native Viewer workflows passed, plus adapter failure checks and analyze/lint. [Inspected tree/board screenshot](images/renewal-viewer-workspace.png). Disposable `.fenidx` v1 is rebuilt as source-fingerprinted v2. Concrete reader/analysis construction remains an explicit app bridge. |
+| `c83a895d` / DATA-02/07, STATE-01, TEST-01 | Removed `GeneratedLineExport`, `onLinesSaved` and `appendNewLines`. Generation awaits a complete committed-document receipt; Builder validates the receiving session and atomically refreshes it. Ordinary line saves now return a complete document baseline and refresh it before later actions. | 125 affected tests and 34 final receipt/adapter/pipeline tests passed; analyze/lint passed. Replayed callbacks, A→B→A handoffs, late decode, failed refresh, external other-game edits and line-save→append→undo are covered. Full decode per acknowledged line edit is a remaining large-chapter cost. |
+| `a455747d` / SET-01, STATE-01, TEST-01 | One app-scoped training settings owner serializes immutable field patches. Concurrent panels share committed/draft/failure state and retry. Running sittings, including auto-next, freeze their effective configuration; edits apply to the next sitting. | 204 focused tests passed with no skips; analyze/lint passed. Native production panels exercised save failure→Retry→persist→restart with synthetic preferences. [Inspected failure UI](images/renewal-training-settings-failed.png). Legacy keys/defaults preserved. Drafts remain in memory, cross-process serialization and atomic multi-key preferences are not claimed. |
+
+An accidentally broad training test command was interrupted after roughly
+4,000 passes, eight skips and one unidentified failure. A captured integration
+run subsequently completed with **6,396 passes, 11 skips and one failure**:
+the MainScreen test fixture lacked the newly required training document
+dependency. `a455747d` fixes that fixture through production boundaries; the
+final combined suite **passed with 6,408 tests and 11 skips**. Those skips include
+opt-in engine/live-network checks and documented existing algorithm cases, not
+11 newly passing release gates. Merged analyze/lint passed with 13 informational
+findings and no warnings/errors; boundary regressions (23), check-dispatch
+regressions and the worktree helper's six tests passed. The check launcher
+now rejects misplaced focused targets
+before starting any named step; `scripts/ci.sh analyze lint` and
+`scripts/ci.sh test <targets>` are separate commands.
+
+The next independent bounded owners are Viewer host retirement (five active
+hours including one validation reserve, based on `9036708c`) and completion of
+training SET-01 (four active hours including one reserve, explicit dependency
+`1e104097`). The Viewer slice must replace implicit FEN-index/classification/
+Solitaire collaborators before retiring its remaining `core/` host. Training
+must serialize field edits through one app-scoped committed owner and prove
+concurrent panels, failure/retry/restart and current-sitting configuration.
+Midpoint is production wiring. These scopes continue the original whole-plan
+objective; they do not graduate milestones or erase the residual gates above.
+
+The generation follow-up extends the same document-authority repair by one
+active hour, including validation: generation hands Builder a committed document
+receipt rather than appended line deltas, and ordinary line saves must advance
+the whole-document baseline before a subsequent edit. The confirmed stale
+baseline is not left behind as an unrelated cleanup.
+
+After Viewer handoff, the next Builder owner has six active hours including one
+validation reserve for native-revision append/undo provenance and private opening
+graph ownership (DATA-03/04, STATE-02, ARCH-01). Its dependencies are `b4c22ad1`
+and the generation receipt follow-up; midpoint is production wiring. Durable
+scratch recovery remains a separate open requirement. The integrating owner's
+Study frame repair gets one further active hour to reuse immutable annotation
+rows after caching alone reduced, but did not meet, the 32 ms frame gate.
+
+The next two independent owners each have five active hours including one
+validation reserve. Generation completes DATA-07 for tree/probe/trap/partial
+artifacts through versioned bundles and one validated current manifest, wiring
+both producers and actual readers; it depends on `c83a895d` and the current
+training adapter. Settings completes SET-01 for engine, bulk-analysis and
+board-display keys through section owners and captured active-job configuration;
+it depends on `a455747d`, excludes credentials/external-eval database settings,
+and retains explicit injected read-only bridges for legacy engine lifetimes.
+Midpoint for each is production wiring. Parent integration owns shared docs,
+boundary gates and the combined checks; neither agent independently advances main.
+
+### Persisted authority and native inventory (2026-09-17)
+
+This ledger supplements the workflow map below. It is based on source at
+`9036708c`; it does not inspect the user's profile. Stable reference contracts,
+not filenames alone, determine what a restore must preserve.
+
+| Authority / owner | Format and location | References, migration and restore contract |
+|-------------------|---------------------|---------------------------------------------|
+| Repertoire catalog and document adapters | `Documents/repertoires/<book>/<chapter>.pgn`; course/color comments and standard/custom PGN tags | Absolute chapter/folder paths plus `[LineID]`; directory journals relocate four training files and both book selections. Preserve BOM, annotations, variations, NAGs and unknown headers; old readers retain PGN compatibility. |
+| Study and Viewer document repositories | `Documents/studies/*.pgn`, `pgn_collections/` and user-selected PGNs | `[GameId]` links to saved games; document snapshots/recovery manifests carry edit context and revision. Retain unsaved recovery separately from committed PGNs. External files require a separately selected backup source. |
+| Saved game store | `Support/app_games.db`, `gameStoreSchemaVersion = 2` | `games.id`, `(collection, game_key)` and `positions.game_id`; `game_trash` is recovery authority. Tactics source games may have no PGN copy. Upgrade snapshots use SQLite `VACUUM INTO`; newer schemas are refused. Stop all writers for a cross-store filesystem copy. |
+| Master games | `Support/master_games.db`, schema 4 | Downloaded game/book index; may be rebuilt from available inputs. User-imported offline inputs must be retained separately before declaring their database disposable. Preserve schema guard and importer/reader compatibility. |
+| Repertoire review service and move attempts | Three `Documents/repertoire_*.csv` files plus `repertoire_move_attempts.jsonl` | Chapter path, line ID and move index; CSV quoting/version-2 backup protects punctuation/multiline fields. Row merging rejects competing edits. JSONL unknown fields survive reference migration. No scheduling/schema change is authorized by an ownership move. |
+| Tactics database | `Documents/tactics_sets/*.pgn`; legacy CSV inputs | Puzzle provenance and scheduling fields; `ChessAutoPrep-Analyzed-v1` completion marker and source GameId commit together. Preserve source archive and legacy input until migration verifies; failed decode cannot authorize pruning. |
+| Player corpus | `Documents/analysis_games/player-<sha256>/current.json` and retained `versions/` | Identity hashes platform plus normalized username; current manifest chooses PGN+metadata generation. Derived indexes/evals are keyed by corpus fingerprint; tombstones must survive restore. |
+| Opponents | `Documents/opponents/people.json` (`chess-auto-prep/people@1`) and `tournaments/<id>.json` | Tournament fields refer to person IDs. Preserve those IDs and unknown/unreadable originals; MCP handoff is a separate import file, not a second writer. |
+| Engine/bughouse tournaments | `Documents/engine_tournaments/<id>/tournament.json`, `games.pgn`, `engines.json`; `Documents/bughouse_matches/<id>/match.json` | Tournament IDs, game order and custom engine paths; external executables/assets are dependencies, not embedded user data. Keep partially completed runs and their metadata together. |
+| Generation and audit | Chapter-adjacent generation artifacts, source PGN and hunt report store | Source/run/config identity and companion PGN provenance are required. Existing unguarded writers are a repair target, not certified safe by this inventory. |
+| Recovery namespaces | `.cap-pgn-history/`, directory staging/trash, `repertoire-mutations/`, `.cap-reference-history/`, workspace recovery | Preserve unfinished journals with payloads and exact original bytes; do not purge them or copy just the current PGN while a writer is active. |
+| Preferences | Platform SharedPreferences file | Typed book/appearance owners coexist with legacy engine, eval, display, training and Viewer keys. Retain current names; do not run old/new writers for the same key. See key ledger below. |
+| Credentials | Legacy SharedPreferences OAuth/PAT keys | `lichess_access_token`, `lichess_refresh_token`, expiry, username and PAT flag remain owned by `LichessAuthService`. These are **not ordinary settings backup data**. Vault migration/restart/disconnect is still SEC-01 work; no new plaintext credential path is introduced. |
+
+Preference key ownership is explicit at each migration boundary:
+
+- Books: `my_repertoire_white_paths` and `my_repertoire_black_paths`, through
+  `PersistedRepertoireBooks`; appearance through `PersistedAppearance`.
+- Training: `trainer_*` keys and `trainer_uncapped_default_v1`; move persistence
+  out of `TrainingSettings` into the injected training adapter without changing
+  keys, defaults or scheduling semantics.
+- Engine: `engine_settings.*`; bulk depth uses `engine_settings.bulk_depth` with
+  legacy `tactics_import.depth` read compatibility. Effective job configuration
+  must be captured once; remaining whole-object writes need SET-01 migration.
+- Eval: `eval.cdbdirect.*`, `eval.lichess.*`, `expectimax.chessdb_api` and
+  `expectimax.probe_plies`; display: `display.board_coordinates`,
+  `display.piece_notation`, `display.legal_moves`.
+- Viewer: the key ledger in `SharedPreferencesViewerRepository` retains file,
+  game and recent-session identity. Game review counts use `game_review.counts`.
+  Account labels/fetch times remain in `AppState`; secrets stay out of this owner.
+
+| Native dependency / source of truth | Ownership and host prerequisite | Current evidence limit |
+|-------------------------------------|---------------------------------|------------------------|
+| Stockfish executable; `tools/assets.lock.json` | UCI process/worker owner, bounded stop/kill; target-specific bundled artifact and source/license obligations | Linux engine fixtures/native journeys exist; forced-parent-death and packaged host matrix are not complete |
+| Hivemind + ONNX Runtime/network; same asset lock | Separate engine process; optional assets, Windows private runtime package, retained model/engine licenses | Source/payload hashes are pinned. Host loader and descendant termination remain host-specific gates |
+| Maia ONNX Runtime plugin | FFI session/tensor handles with worker ownership; target ABI/plugin bundle | App/native memory and shutdown budget is still unverified; process isolation cannot protect an in-process FFI crash |
+| `document_file_io` private package | Native identity/read/flush handles behind document adapter; repository AGPL-3.0 | Linux package/journeys verified in earlier checkpoints. Windows replacement and macOS full-sync remain unavailable locally |
+| SQLite and cdbdirect | Database/FFI handle owners; pinned lockfile/native asset build | Saved-game schemas/upgrade guards exist; full backup and host ABI checks are scoped separately |
+| Desktop plugins | File picker, path provider, preferences, window manager/screen retriever, launcher/share/package info and JNI; exact versions in `pubspec.lock` | Generated plugin registrants enumerate Linux/Windows/macOS builds. Registration is not install/signing/vault/screen-reader evidence |
+| Proposed credential vault | [flutter_secure_storage desktop prerequisites](https://pub.dev/packages/flutter_secure_storage#linux) | Linux preflight found `gnome-keyring-daemon`, but `pkg-config libsecret-1` lacks its development package and noninteractive sudo is unavailable. No vault dependency/migration has been installed or certified. |
+
+The available verification host is Linux. Windows/macOS signed installation,
+vault availability, native screen reader, forced-parent-death and update checks
+are unverified. No certificate/account or remote telemetry is introduced.
+Full-profile restore, measured profile-mode edit/frame/memory budgets, user-task
+timing and visual acceptance must still receive executable or human evidence;
+this inventory alone does not pass PLAN-01, DATA-06 or OPS-02.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
@@ -2213,1390 +3977,3 @@ safe identity fails DATA-04 and narrows work to a bounded repair, not a silent
 weaker implementation. No later feature slice starts before PLAN-02 records
 the first-slice result. Product-owner visual review remains required before
 propagating a new appearance across the application.
-
-## Reading map
-
-- [Principles](#engineering-principles-and-useful-abstraction),
-  [boundaries](#target-layout-and-dependency-rules),
-  [packages](#package-decisions), [settings](#settings-and-credentials) and
-  [runtime state](#runtime-state-and-large-documents).
-- [Desktop foundations](#early-desktop-foundations) and
-  [engine supervision](#worker-and-engine-supervision).
-- [Human factors](#frontend-principles-human-factors-as-acceptance-criteria),
-  [dark UI](#visual-direction-a-calm-responsive-dark-workspace),
-  [UI experiments](#presentation-experiments-without-data-model-churn) and
-  [shell and panels](#persistent-shell-and-reusable-panels).
-- [Data coexistence](#data-preservation-and-coexistence),
-  [shared PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction),
-  [overwrite gates](#storage-baseline-and-overwrite-prevention-gate) and
-  [OS storage contracts](#filesystem-and-cross-process-contracts).
-- [Milestones](#milestones-and-exit-gates),
-  [continuation decision](#continuation-decision-after-milestone-2) and
-  [working method](#working-method-checks-and-sizing).
-
-## Outcome and scope
-
-Make the entire first-party application understandable, testable and consistent:
-each workflow has a clear owner, each datum has one authoritative writer, and
-each recurring interaction uses a documented component. Every existing module
-will eventually be reviewed, moved, replaced or explicitly retired. A complete
-architectural replacement does not require retyping correct algorithms or
-rewriting third-party chess engines and libraries.
-
-Deliver complete workflows incrementally in the existing product. Keep at most
-one feature slice actively migrating until the first two slices establish a
-repeatable method. Temporary legacy adapters have named callers, contract tests
-and an explicit removal milestone. They must not become a second permanent
-architecture. The working application and its data remain usable throughout.
-
-The capability inventory must cover all current modes: Tactics, Player analysis,
-Repertoire builder, Repertoire trainer, PGN Viewer, Study, Engine tournament,
-Bughouse lab, Databases, Repertoires, and Players & prep. Also inventory accounts,
-settings, OS file opening, navigation history, imports/exports, background work,
-recovery, offline behavior, optional assets, installers and updates. Include
-first-party MCP/offline tools and their shared-file contracts in the migration
-review; do not rewrite their runtime merely to match Flutter folders.
-Use [the component map](COMPONENT_MAP.md) and actual code as starting evidence;
-historical documentation and existing tests are not unquestionable specifications.
-
-## Engineering principles and useful abstraction
-
-Knuth's literate-programming emphasis is on programs understandable to people.
-The following are this project's practical interpretation, combined with modern
-software-engineering practices; they are not a purported canonical list of
-"Knuth principles" or a requirement to adopt WEB/CWEB.
-
-- Explain the problem, representation, invariants and reason for a non-obvious
-  algorithm close to the code. Include a small worked example where it makes
-  the reasoning inspectable. Comments should explain decisions, not paraphrase
-  assignments. Keep long algorithm explanations in [ALGORITHM.md](ALGORITHM.md).
-- Choose data structures deliberately. Document units and score perspective,
-  ordering, identity, ownership, mutation rules and expected complexity where
-  relevant. Use names such as `DocumentRevision` and `Centipawns` when they
-  prevent real mistakes; do not wrap every primitive reflexively.
-- Establish correctness before clever optimization. Measure realistic workload
-  time, allocation and memory; optimize demonstrated bottlenecks. Keep a simple
-  reference implementation or invariant tests for optimized algorithms.
-- Abstract a coherent concept or external boundary. A repository exposes
-  `renameChapter` or `saveDocument(expectedRevision: ...)`, not a bag of generic
-  database operations. Extract collaborators with their own responsibilities
-  instead of splitting one oversized class across files.
-- Prefer composition and explicit constructors. Add an interface when it
-  isolates an external dependency, protects a domain boundary or supports a
-  meaningful alternate implementation. Avoid generic base controllers,
-  all-purpose managers, global event buses and widget APIs with many unrelated
-  Boolean switches.
-- Keep feature-specific code local. Share concepts when their semantics and
-  lifecycle match, rather than extracting visually similar snippets too early.
-  Each concept has one canonical type and import path after migration.
-- Optimize for a maintainer tracing one user action. A reviewer should be able
-  to identify its state owner, persistence boundary, failure behavior and tests
-  without following a chain of pass-through classes.
-
-## Target layout and dependency rules
-
-Paths are relative to the repository. Migrated slices already use this layout
-under the canonical Dart/UI guides. Remaining legacy owners move as their
-workflows migrate; the feature directories below describe the target hierarchy,
-not a claim that every workflow is complete.
-
-```text
-lib/
-  app/                    # startup, dependency wiring, routes, app lifetime
-  design_system/          # theme, design values, controls, layout primitives
-  diagnostics/            # narrow logging/failure contracts, no vendor SDK
-  chess_core/             # pure Dart chess concepts and algorithms
-  infrastructure/         # filesystem, SQLite, HTTP, engine-process adapters
-  features/
-    repertoires/
-      models/             # feature values and validated state
-      controllers/        # actions and presentation state
-      repositories/       # domain-facing contracts and data orchestration
-      widgets/            # screens and feature-specific composition
-    training/
-    analysis/
-    ...
-widgetbook/               # developer catalog using production widgets
-test/                     # mirrors ownership; shared contract fixtures
-```
-
-Start with directories, not a separate package for every feature. Extract a
-pure Dart package only when shared CLI use or enforceable isolation warrants
-it. Do not create a new catch-all `core` or `utils` directory.
-
-Terminology mapping: infrastructure adapters perform the external-access role
-called services in Flutter's architecture guide; repositories own domain data
-and caching/retry policy. Retain the infrastructure name for a clear I/O
-boundary. Connections and process supervisors necessarily have resource state;
-do not force them into a stateless API solely for vocabulary alignment.
-
-A separate internal Flutter package for the design system is an option after
-the first catalog proves its API. Its dependency graph must exclude the app and
-features; package boundaries still need import enforcement. Keep contracts near
-the concept they serve: repository contracts with their domain, diagnostic
-contracts in `diagnostics/`. Add a common result type only when callers share
-its semantics, rather than creating a miscellaneous directory of interfaces.
-
-Dependencies follow these rules:
-
-1. App startup constructs infrastructure, repositories and state owners and
-   injects them. Singleton access is confined to the temporary legacy bridge.
-   For unmigrated services, startup injects adapters wrapping their existing
-   singleton; a new feature never reaches `.instance` directly. Each adapter
-   records callers and a removal milestone and passes the same contract tests.
-2. Feature widgets use their controllers, models and the design system. Shared
-   design-system widgets receive values/callbacks, never feature repositories.
-3. Controllers call repository contracts or substantial workflow collaborators.
-   They do not open files, execute SQL, start processes or depend on widgets.
-4. Repositories orchestrate domain data through injected adapter contracts.
-   Concrete infrastructure implementations are selected at app startup.
-   Cross-feature workflows use explicit public contracts; dependency cycles
-   and imports of another feature's private controller state are rejected.
-5. Pure Dart services, repositories and infrastructure receive dependencies
-   explicitly through constructors; factories may assemble them. They do not
-   accept `Ref`/`ProviderContainer` or look up dependencies globally. Provider
-   declarations wire dependencies at the app boundary; feature notifiers and
-   widgets may use Riverpod for presentation. Test domain classes without a
-   provider container so hidden service-location cannot creep in.
-6. Chess core and domain values do not depend on Flutter, Riverpod or concrete
-   I/O. File-format codecs and transport models stay at their boundaries unless
-   their representation is itself a domain concept.
-
-Use immutable feature state and explicit alternatives such as idle, running,
-failed, cancelled and completed. Keep widget-local focus/hover state local.
-Document state belongs to a document session; persisted entities belong to a
-repository; application jobs belong to an app-lifetime job service. Screen
-navigation must not accidentally cancel an ongoing import or retain an unused
-interactive engine. Define cancellation, progress, resource limits, shutdown
-and stale-result rejection for each job type. Reuse existing lifecycle and
-RunControl behavior until the replacement passes its contract tests.
-
-Riverpod may compose dependencies and expose repository streams as well as own
-presentation state. It is never a second durable source of truth: repositories
-own persistence through the appropriate document, database or preference adapter.
-Controllers translate user intent into repository/workflow calls; JSON parsing,
-SQL execution and isolate/process supervision belong behind those boundaries.
-
-## Package decisions
-
-Use these defaults for the first slice. Resolve SDK-compatible versions only
-when needed, recording desktop support, license, transitive dependencies and
-code removed. Retain already-working dependencies outside the migrated slice.
-The implementing agent owns each technical check and fallback under PLAN-01.
-
-| Decision | Default | Rejection check | Fallback / revisit trigger |
-|----------|---------|-----------------|----------------------------|
-| Catalog | Widgetbook with only first-slice production controls and fixtures. | Cannot run isolated/headless on the pinned SDK within the spike budget. | Use an isolated Flutter catalog harness temporarily; record the blocker and keep Widgetbook as the target. |
-| Visual checks | Native Flutter widget/golden tests with readable bundled fonts. | Fixtures become costly to maintain or miss required scenarios. | Add Alchemist only if the same scenarios are simpler; retain native host checks. |
-| State/DI | Stable Riverpod 3 public APIs with manual providers/notifiers, one presentation action state per operation. | First-slice lifecycle/retry/override tests fail or integration exceeds its budget. | Retain injected current controllers for that slice; record why, with no second competing state library. |
-| Database | Existing SQLite adapters, schemas and migrations; defer Drift. | A scoped new store or replacement demonstrably needs safer typed queries/migrations. | Evaluate Drift for that ownership boundary only, with one schema/migration owner and migration/performance fixtures. |
-| Models/codegen | Plain immutable Dart values/sealed classes and manual providers; retain existing codecs. Flutter ARB generation is allowed. | Boilerplate produces evidenced defects or excessive maintenance cost. | Introduce only the relevant Freezed or JSON generator after a timed clean/incremental build check; no blanket codegen stack. |
-| Files | Retain atomic writer; inject narrow filesystem adapters with deterministic fakes and real OS tests. | Failure injection needs extensive ad hoc fake filesystem behavior. | Add package:file inside adapters; keep the native contract suite. |
-| Network | Keep http behind existing API clients with one retry owner. | A concrete cancellation/streaming/auth contract cannot be met economically. | Trial Dio on that client with the same fixtures; no global replacement. |
-| Navigation | App-owned typed destinations using existing Navigator under a persistent shell. | Back, deep-link/file-open or restoration fixtures require substantial custom routing machinery. | Evaluate go_router against the same session fixtures. It is not inherently incompatible with explicit session ownership. |
-| Credentials | flutter_secure_storage behind CredentialStore when Accounts migration starts. | Native vault/restart/packaging tests fail on a supported host. | Preserve unmigrated credentials for recovery; defer that Accounts migration or implement a native adapter. Never downgrade new secrets to plaintext. |
-| Panels | Defer splitting until workspace 3; then trial flutter_resizable_container behind SplitPane. | Bounds, keyboard, semantics or restoration checks fail within the spike budget. | Keep accessible fixed/reflowing panels; implement a narrow splitter only if the actual workspace needs it. |
-| Stream shaping | stream_transform for periodic latest snapshots when analysis migrates. | Burst/terminal/cancellation tests fail or required semantics need awkward workarounds. | Small tested transformer; RxDart only for demonstrated wider needs. |
-| Diagnostics/testing | Existing logging through a narrow interface, injected clock and hand-written boundary fakes. | Deterministic time or useful fake behavior requires excess plumbing. | Add clock/mocktail for that need; remote reporting and leak tooling remain separately justified. |
-
-Retaining an adapter is not permission to write a routing framework, ORM or
-code generator. In milestone 0, compare actual first-slice needs against these
-rejection checks; include a bounded Drift query/migration spike only if that
-slice needs a database change. Keep existing schema ownership otherwise. If
-navigation starts accumulating generic URL parsing, restoration or branch-stack
-machinery, trigger the go_router comparison before expanding the wrapper.
-[Router restoration still needs explicit configuration](https://pub.dev/documentation/go_router/latest/topics/State%20restoration-topic.html)
-and cannot restore arbitrary document/engine state for the app.
-[Riverpod generation is optional](https://riverpod.dev/docs/concepts/about_code_generation);
-measure its benefit/cost on this checkout rather than assuming either manual
-code or generation is always cheaper. Apply the recorded default until evidence
-triggers a change; external reviews alone do not restart package selection.
-
-Do not combine Provider, Riverpod and Bloc as permanent parallel choices.
-Experimental Riverpod mutation/persistence APIs are excluded from migrated
-production code. No riverpod_generator or go_router_builder is needed for the
-first slice. A future
-codegen exception records iteration cost and generated-file policy; it does not
-change resource ownership or input validation.
-
-Riverpod 3 is a released major version; the
-[package release listing](https://pub.dev/packages/flutter_riverpod) and
-[Riverpod documentation](https://riverpod.dev/docs/whats_new) distinguish stable
-public APIs from opt-in experimental features. At adoption, record the tested
-Flutter/Dart SDK alongside the committed package lockfile; no prerelease,
-git-branch dependency or automatic major upgrade is part of this plan. Test
-retry, disposal, pausing and equality on that exact combination under STATE-01.
-Use the existing-controller fallback if it fails; choose v2 only for a concrete
-compatibility constraint, not because v3 is assumed unreleased.
-
-## Settings and credentials
-
-Introduce one injected `AppSettingsRepository` entry point with typed engine,
-eval-database, training and display sections. Separate sections are useful;
-duplicate ownership of the same setting is the problem. Each persisted key has
-one writer, validation/default rules and an observable committed value. Retain
-existing keys through adapters until each section migrates; legacy and new
-callers must reach that same owner. Avoid a giant mutable settings object and
-whole-app rebuilds: callers observe only the section they use. Keep account
-secrets out of settings snapshots, serialization and diagnostic exports.
-
-Define loading, draft, saving and failed states; do not show a failed write as
-saved. Serialize updates or apply field-level changes against the latest state
-so two open panels cannot overwrite unrelated values. Engine jobs capture a
-validated effective configuration at start. Changing a preference during a job
-must follow an explicit apply-now, queue or next-run rule; distinguish pending
-preferences from the active job's configuration. Test conflicting panel edits,
-load failure, invalid/legacy keys, save failure/retry, restart and a preference
-change during a job. Establish the owner in milestone 1; prove the settings
-used by the first slice in milestone 2 and migrate the rest with their features.
-
-Use a separate `CredentialStore` for OAuth/PAT secrets. Evaluate
-[flutter_secure_storage](https://pub.dev/packages/flutter_secure_storage) on
-Linux, Windows and macOS, including Linux libsecret/keyring availability,
-macOS Keychain configuration and the actual packaged Windows application.
-Mobile platform support does not establish desktop readiness. Test a locked or
-unavailable vault; keep offline features usable and show an actionable account
-state. Do not silently fall back to plaintext for new credentials.
-
-Before migrating the Accounts UI, implement an idempotent per-account migration:
-read existing preferences, write and read back the vault entry, then remove
-legacy secret keys only after verification. Persist progress without secrets;
-restart after any step must neither lose the account nor restore a stale token
-over a newer vault value. Serialize migration with login, refresh and disconnect;
-disconnect clears both locations and any migration state so old tokens cannot
-reappear. A failed transfer preserves the original for explicit retry rather
-than pretending migration succeeded. Use synthetic credentials to test every
-failure boundary and native restart. Exclude secrets from logs, Widgetbook and
-ordinary settings backups. Define legacy-backup cleanup and old-app behavior
-explicitly; migration cannot erase already-created external backups. Evaluate
-the vault immediately before Accounts migration and complete its gate first,
-even if the full settings/accounts UI remains in milestone 6.
-
-## Runtime state and large documents
-
-If Riverpod is selected, disable implicit provider retry at the composition
-root (`retry: (retryCount, error) => null`); opt in only for bounded idempotent
-reads with one retry owner. Riverpod supports both
-[scope/container and per-provider policies](https://riverpod.dev/docs/concepts2/retry).
-The callback returning null disables retries; merely passing `retry: null` does
-not specify that policy. Test provider overrides too. This controls failed
-provider computations, not arbitrary commands or retries inside an adapter.
-Provider computations must not start jobs or perform document
-mutations. A dependency provider can expose an explicitly owned service, but
-visibility, rebuilds and listener counts must not own its active work.
-Test a failed observation, repeated clicks and route departure: one requested
-job starts once and continues or stops according to its declared policy.
-Observe paused/offscreen subscriptions under `TickerMode`, then return and
-verify the latest job state without duplicated work or unbounded buffering.
-
-Use the feature notifier/controller as the sole UI action-state owner, with
-an explicit repeated-execution policy (reject, coalesce or queue). Use typed
-operation state within it, or AsyncValue for a simple load; do not wrap the same
-operation in an independently mutable Command state machine. Shared helpers may
-implement execution policy without owning a second copy of state. Domain
-results remain typed; long jobs expose a job handle and progress. After
-an async gap, validate the notifier's `ref.mounted` and captured session/request
-identity before updating presentation. Persisted writes independently validate
-the document revision. A liveness check alone does not reject a stale request
-within the same still-mounted controller.
-
-Shape engine presentation updates before they reach presentation state, after
-protocol parsing and authoritative job-state updates. Keep completion, errors,
-`bestmove`, cancellation and persistence events lossless and prompt. For a
-continuous analysis stream, publish the latest accumulated analysis snapshot
-on a bounded cadence (start by measuring approximately 200 ms), with immediate
-terminal delivery and no delayed timer able to overwrite terminal state. A
-snapshot must retain the latest relevant MultiPV lines, not just the last raw
-protocol message. Clear pending output on position/job changes and reject stale
-IDs. This limits UI notifications without slowing engine protocol consumption.
-
-For a backend already running in a worker, aggregate presentation snapshots
-in that worker before `SendPort` delivery. Do not send every raw engine line
-only to discard it on the UI isolate. Keep protocol completion/errors and
-explicit job results on a lossless control path; presentation messages carry
-job/position/revision IDs and bounded payloads. Test send counts/bytes, slow
-consumers and pending-message bounds as well as UI rebuilds. A cadence alone
-does not bound queues when the receiver stalls: allow one in-flight snapshot
-and coalesce the next until acknowledged, or prove an equivalent bounded design.
-For direct async subprocess adapters, apply shaping at their producer boundary;
-move parsing into a worker when profiling warrants it, not solely to add an
-isolate. STATE-03 covers both backends and preserves terminal-event ordering.
-
-Pure trailing [debounceTime](https://pub.dev/documentation/rxdart/latest/rx/DebounceExtensions/debounceTime.html)
-waits for a quiet interval and can starve updates during continuous search;
-reserve that behavior for inputs such as search text. Evaluate a tested
-[stream_transform](https://pub.dev/packages/stream_transform) audit/sampling
-operator or a small equivalent against the required leading/trailing behavior.
-Use fake time to test an endless burst, sparse output, final output, errors,
-position switches, cancellation and re-subscription. Assert bounded buffering
-and periodic progress; widgets should not each implement their own timer.
-
-Riverpod 3 filters updates using equality. For every large document state,
-record the cost of copying, equality and selector evaluation. Prefer a private
-session-owned mutable document core with immutable revision-keyed projections
-for the first workspace experiment; structural sharing is an alternative to
-benchmark. Neither design may expose an old "snapshot" that changes later via
-an aliased mutable tree. Keep immutable values for small configuration/state.
-Do not deep-copy or structurally compare a whole move tree for every hover or
-cursor change. Emit a new immutable projection when its observed data changes;
-equality uses session ID, projection kind/key and its relevant revision, never
-tree structure. A document revision alone is insufficient for cursor/filter-only
-changes: use a separate view revision or small selection value. Different
-projections from one document revision must not compare equal accidentally.
-Never place an aliased mutable tree inside a Freezed value. The storage
-baseline is a separate content-sensitive revision used at commit.
-
-Mutations enter through explicit session methods; the mutable core is never
-exposed as provider/UI state. After an accepted change, build the immutable
-projection and assign it to notifier `state` (or `AsyncData(projection)` for
-async state). State assignment and the equality contract drive notification;
-do not mutate an exposed object and compensate with manual `ref.notifyListeners()`
-or introduce a second ChangeNotifier around the same state. STATE-02 checks
-edit/cursor updates, unchanged projections and old snapshots: meaningful changes
-notify, old snapshots remain unchanged, and unrelated projections stay stable.
-
-Include receive-side decoding, object construction, projection building and
-garbage collection in STATE-02 measurements, not just message-send time. For
-large documents, the session may own its heavy mutable tree through a persistent
-worker; keep parsing, indexing and expensive traversal there and request bounded
-visible-node/ancestor projections by stable IDs. Do not reconstruct the entire
-tree on the UI isolate after every worker response. Add paging and bounded
-prefetch for expansion/search, ordered edit commands, revision-tagged responses
-and stale-response rejection. The UI holds immutable projections and small
-interaction state; the worker is not a second independent document authority.
-Choose worker residency when the profile shows UI decoding/traversal exceeds the
-budget; retain the simpler session-local implementation for small documents if
-it passes. Test rapid navigation, edits during pending requests, worker restart
-and rehydration from committed data plus explicitly retained unsaved commands;
-a worker restart must not silently discard a draft.
-
-Milestone 3 must benchmark annotated PGNs with tens of thousands of nodes,
-wide/deep variations and repeated edits/undo/navigation. Capture per-edit time,
-allocations, retained memory and frame timings against milestone 0 budgets.
-Choose data structures from those results; no collection package, rope or
-piece table is mandated without a measured need. Profile rebuild/repaint scope:
-watch small projections, isolate expensive board/graph repainting where it
-helps, and virtualize long lists with lazy builders/slivers and stable keys.
-Use `itemExtent` or `prototypeItem` only for uniformly sized rows. Wrapped PGN
-comments, variations and enlarged text need variable-height layout; fixed
-extents are not a blanket performance requirement. Test scrolling and selecting
-across those cases without truncation or eager construction of the full list.
-
-Profile image memory alongside STATE-02's tree benchmarks. Flutter's
-[ImageCache](https://api.flutter.dev/flutter/painting/ImageCache-class.html) already
-has entry/byte limits; its live-image references and total process/GPU memory
-need separate measurement. Retain defaults until representative piece sets,
-textures and avatars justify a different budget. Decode near display size,
-bound prefetch and release owned listeners/resources; tune maximumSize and
-maximumSizeBytes at startup only with evidence, not as a substitute for fixing
-retained images. Test repeated asset/theme changes for memory growth.
-
-## Early desktop foundations
-
-Inventory these requirements in milestone 0 and prove those used by the first
-slice in combined milestones 1/2; defer unrelated foundations to their feature.
-
-**Localization readiness (milestone 1).** Start with Flutter's standard
-`flutter_localizations` and `gen_l10n`/ARB workflow unless a measured requirement
-justifies an alternative. English is the initial source locale; translating
-other languages is separately scoped. Migrated user-facing copy, validation,
-tooltips and accessibility labels use localized messages with typed placeholders
-and plural rules. Design-system controls accept resolved labels from callers.
-Use locale-aware UI numbers/dates and directional layout. Keep inexpensive
-long-label and text-scaling checks in the first slice; full pseudo-localization
-and RTL catalog matrices wait until another/RTL locale is scoped. Keep PGN/FEN,
-engine protocols,
-stored IDs and canonical formats locale-independent, and preserve the chess
-board's explicit orientation rather than mirroring its rules with UI direction.
-
-**Native execution contracts (milestones 0 and 2).** Inventory each engine,
-FFI library and native plugin, including architecture/ABI, packaging, memory
-ownership, thread affinity, callbacks, initialization, shutdown and license.
-Generated bindings and process wrappers live in `infrastructure/`; an adapter
-owns handles, buffers and disposal. Use worker isolates or appropriate native
-workers for blocking/CPU-heavy calls, respecting library threading constraints.
-An asynchronous `Process.start` wrapper does not inherently need a Dart worker:
-the executable already runs separately. Bound stdout/stderr buffering and move
-expensive protocol parsing off the UI isolate when measurements warrant it.
-An isolate cannot contain a fatal in-process native crash. Prefer existing
-subprocess engine boundaries when crash isolation matters. Specify cooperative
-cancel, graceful stop, timeout escalation and disposal for every backend; do
-not report cancellation as complete while native work still owns resources.
-
-**Failure diagnostics (milestones 0 and 2).** Define a vendor-neutral reporting
-contract and a per-platform coverage matrix for Flutter errors, unhandled Dart
-errors, worker-isolate failures, app-native crashes and child-engine exits.
-Forward worker errors explicitly; retain engine identity, job ID, exit status
-and bounded diagnostic output in the supervisor. Sentry is a candidate, subject
-to verifying native support and symbolication on each actual desktop target.
-Installing its Flutter SDK does not automatically produce native crash dumps
-for independently launched Stockfish or other executables. Retain matching
-release symbols/build IDs and prove a deliberately induced failure is useful
-to diagnose. Provide bounded local diagnostics and user-controlled export;
-remote reporting requires an explicit product/privacy decision, redaction,
-retention limits and offline behavior.
-
-Use structured diagnostic records (JSON Lines or typed key/value events) with
-schema version, timestamp, severity, event name, operation/run ID and error cause.
-Keep human-readable messages alongside stable fields; tools must not parse them
-with regex to discover state. Redact secrets and sensitive user content before
-writing/export, bound record size and test malformed/truncated log handling.
-
-Wire framework errors through `FlutterError.onError`, uncaught root-isolate
-errors through the SDK-compatible `PlatformDispatcher.onError`/zone setup, and
-worker errors/exits through explicit error and exit ports. Preserve stack
-traces, deduplicate reports and test asynchronous startup failures. The root
-hook does not directly catch worker errors or every fatal native failure;
-do not remove existing zone behavior without checking SDK initialization and
-error routing. The process supervisor records `Process.exitCode` with platform
-interpretation and engine/run identity.
-
-**Build and distribution rehearsal (milestones 0 and 2).** Inventory host
-builders, native dependencies, certificates/accounts and release artifacts in
-milestone 0. Build/package the first new slice on Linux, Windows and macOS and
-smoke-test a small real-engine job with disposable data, cancellation and restart.
-Exercise install/launch/update and native-library loading early. For the intended
-signed macOS distribution, plan Developer ID signing, appropriate entitlements,
-notarization and stapling, including embedded native code. For Windows, select
-a suitable trusted signing route; an EV certificate is not a universal app
-requirement or a guarantee of no SmartScreen warning. Keep credentials out of
-source and ordinary test jobs. Mark unavailable host/signing checks explicitly
-unverified, and complete actual signed-artifact checks before the corresponding
-release. Preserve release-tag-only GitHub CI and user-requested publication.
-
-Include native macOS menus where supported, scoped `Shortcuts`/`Actions`/
-`Intent`s, focus traversal groups for workspace zones, and focus restoration.
-Text editing takes precedence over mode commands and needs actual tests even
-with framework shortcut routing. Validate saved window bounds when monitors
-change. Record screen-reader coverage, renderer and rendering-test setup per
-desktop target instead of assuming identical behavior. Include Flatpak file
-portals, engine execution and platform-owned updating in the distribution
-matrix; record a policy for user-supplied/quarantined executables on macOS.
-
-Keep existing `integration_test` and headless driver coverage, and extend real
-desktop journeys rather than assuming a new runner is necessary. Native OS
-dialogs, signing and installers need host-specific checks beyond Flutter widget
-automation. Patrol can be evaluated for a supported target, but its currently
-listed targets do not include Linux or Windows, so it is not the default
-three-desktop test harness.
-
-## Worker and engine supervision
-
-Own child processes and their descendants through one supervisor. Its shutdown
-contract includes unexpected parent death, not just orderly disposal. For each
-bundled and supported custom engine, test stdin EOF while searching and idle;
-do not assume all UCI implementations exit promptly. Keep stdout and stderr
-drained even with no visible UI, retaining bounded ring buffers and dropping
-diagnostic excess. Test a chatty fake engine so output cannot deadlock search.
-
-Before adding a native launcher, run a bounded PROC-02 spike against the
-existing Dart Process/engine-lifecycle path and supported engine versions.
-Test forced parent termination during startup, idle and search, stdin EOF,
-descendants and redirected-output handling on available hosts. Reuse that path
-where it passes; reuse a maintained adapter/helper where it meets the same
-contract before writing new native code. A cleanup callback in the app cannot
-run after the app is killed, so orderly `dispose`/Process.kill tests alone are
-not enough. Record exact engine/host coverage, gaps and spike effort under
-PLAN-01; no fixed multiweek native project is implied by this plan.
-
-If existing mechanisms fail, the following are fallback designs for the affected
-backend, not a prerequisite to unrelated first-slice UI work. A helper is scoped
-to launching/supervising an engine; it is not an installed background daemon.
-
-Windows fallback: a native engine-launch adapter creates children inside
-a kill-on-close Job Object before execution, using a creation-time job list
-on supported Windows versions or suspended creation, assignment and resume.
-Keep the owning job handle non-inheritable. A failed assignment must terminate
-the still-suspended child, not run it uncontained. Exercise nested-job and
-launcher constraints. This avoids attaching the entire app (including external
-openers/updaters) to an engine job or killing the app when its job handle closes.
-App-level membership is an alternative only after those lifecycle effects are
-accepted. [Microsoft's creation-time job design](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812)
-is a native alternative to the race in start-then-assign wrappers.
-
-Linux/macOS fallback: a small persistent supervisor launches the engine
-in a separate process group and monitors a dedicated parent-liveness pipe.
-Only the app owns the write end; engines/descendants must not inherit it. EOF
-triggers group TERM, bounded wait, then KILL and reaping. The supervisor must
-remain alive outside the killed group; it cannot exec into the engine and
-still watch the pipe. Test startup handshakes, parent death before launch,
-normal shutdown and inherited-descriptor leaks. Linux
-[parent-death signals](https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html)
-are thread-parent-sensitive and are only a supplemental mechanism.
-
-Process groups do not contain descendants that escape via a new session/group.
-Linux [subreaper mode](https://man7.org/linux/man-pages/man2/PR_SET_CHILD_SUBREAPER.2const.html)
-helps adopt/reap orphans; it does not automatically signal all escaped children
-and is not a macOS API. Engines using this fallback must remain in its
-supervised group. Explicitly test engines requiring stronger containment and
-withhold support until their tracked-descendant strategy passes. Package/sign the helper
-on macOS and exercise Flatpak engine permissions. Keep engines inside the
-sandbox by default; host spawning needs a separately justified support policy.
-
-Scope forced-exit tests to the disposable app's tracked process tree. Establish
-the verified containment or parent-liveness mechanism before useful work, then
-kill the app during idle and active search; verify the bounded cleanup deadline and document/lock recovery on restart.
-If a host mechanism fails its acceptance tests, retain an already-proven backend
-or mark that backend unavailable; never claim cleanup coverage without the
-verified mechanism. Failed checks stay explicit while unrelated work proceeds.
-Record native checks not yet run as unverified, and never kill by process name.
-
-Give every worker, `ReceivePort`, subscription and timer a named owner and an
-idempotent shutdown path for success, failure, cancellation and partial startup.
-Use a lifecycle table to distinguish view subscriptions, document-session
-resources and app-owned jobs. Widget disposal releases view resources; it must
-not kill a shared worker or continuing job. Job/session/app shutdown cancels
-work cooperatively, escalates if needed, observes worker exit and closes ports
-and subscriptions in an order that still permits shutdown acknowledgement.
-Repeated open/close, failed startup and cancelled-job tests must return resource
-counts to baseline, while route changes preserve deliberately continuing jobs.
-
-Measure worker startup, input serialization, transfer and output costs before
-moving large trees between isolates. `TransferableTypedData` makes transfer
-cheap but constructing the buffer still costs proportional to its size;
-immutable objects and `Isolate.exit` have different transfer behavior. Repeated
-work may justify a persistent worker and typed protocol, with bounded queues and
-cooperative cancellation. A worker isolate is not an OS memory-limit boundary.
-
-Native handles have deterministic close/release owners. Use `NativeFinalizer`
-only as an eligible cleanup backstop; it cannot guarantee cleanup on app crash.
-Choose callbacks according to the library's thread and return-value contract:
-`NativeCallable.listener` supports asynchronous void callbacks from foreign
-threads, with argument memory kept alive until delivery. Record close ordering
-and thread-local constraints; do not assume an isolate pins work to one OS
-thread. Evaluate Dart/Flutter native build hooks against the pinned SDK and
-actual libraries before replacing existing native packaging glue.
-
-## Frontend principles: human factors as acceptance criteria
-
-Start with user tasks and observed difficulties, not a component shopping list.
-Use consistent chess vocabulary and visible context: current game/repertoire,
-side, board orientation, selected line, active filters, data source and save
-state. Avoid exposing architecture vocabulary in ordinary product controls.
-
-| Human-factors concern | Design requirement | Evidence before a slice graduates |
-|-----------------------|--------------------|----------------------------------|
-| Working-memory load | Keep the board, relevant moves and current task context available; preserve selection and filters across navigation. Prefer recognition through visible choices and recent destinations. | Complete a task, leave it, and resume without reconstructing context. |
-| Perception and visual hierarchy | Use semantic color/typography/spacing tokens, proximity for grouping, consistent alignment and restrained emphasis. Essential state has text or shape as well as color. | Inspect real data, long labels, disabled states and error states in Widgetbook. |
-| Action discoverability | Label important actions, show shortcut hints, give controls clear affordances and visible focus. Hover previews have focus/click equivalents. | Keyboard-only completion and focus-order checks; no essential hover-only action. |
-| Motor effort and accidental activation | Provide comfortable hit areas and spacing, keyboard alternatives, and deliberate placement of destructive actions. Keep controls stable when progress text changes. | Pointer, keyboard, window-scaling and long-text checks on desktop. |
-| Feedback and trust | Distinguish unsaved, saving, saved, failed and conflicted. Report job phase and progress; show indeterminate progress when totals are unknown. | Slow/failing storage and jobs remain understandable without false completion or invented ETA. |
-| Error prevention and recovery | Validate before committing, preserve drafts, explain conflicts, support undo/quarantine where meaningful and make recovery actionable. | Inject a failed save, cancel work, undo a supported action, and recover after restart. |
-| Expert efficiency | Keep common actions direct; use progressive disclosure for advanced options without hiding current values or critical state. Standardize shortcut scope and text-entry guards. | Compare common-task steps and completion time with the baseline; test shortcuts while typing. |
-| Accessibility and adaptability | Use semantic labels, readable contrast, text scaling, reduced motion and layouts that reflow or scroll appropriately. Preserve a legible board/movetext relationship. | Semantics tests, contrast checks, 100/150/200% text-scale cases and native assistive-technology smoke checks. |
-
-Use WCAG 2.2 as an accessibility design/testing reference, not as a claim that
-a Flutter desktop app is automatically web-conformant. Translate web CSS-pixel
-guidance into verified desktop logical hit areas; retain the current 12px UI
-type floor and prefer comfortable body text above it. Check actual target
-spacing, contrast and platform scaling. Historical HTML wireframes are
-inspiration, not a second authority for production fonts or tokens.
-
-Evaluate representative scenarios with the product owner and, when feasible, chess
-players unfamiliar with the app. Record completion, assistance, mistakes,
-recovery, time and perceived effort. Scripted UI tests and heuristic review
-cannot substitute for observing a person. Set numerical targets after measuring
-the baseline; do not invent improvement percentages or count clicks as the
-only measure of usability.
-
-Under UI-01/UI-03, exercise the migrated workflow with NVDA on Windows,
-VoiceOver on macOS and Orca on Linux before declaring that host verified. Record
-OS/Flutter/reader versions, keyboard operation, focus and announcements; missing
-host access remains unverified. For the board, expose square, piece, selection
-and available actions (for example, “e4, white pawn, selected”); for splitters,
-expose label, value and increase/decrease actions. Use Flutter
-[Semantics](https://api.flutter.dev/flutter/widgets/Semantics-class.html) and
-appropriate actions or render-object semantics. Do not merge a board or several
-independent controls into one node: [MergeSemantics](https://api.flutter.dev/flutter/widgets/MergeSemantics-class.html)
-is for content representing one semantic control. Widget semantics tests
-complement real-reader checks; neither a class name nor default labels establish
-usability. Preserve a keyboard-accessible path for custom pointer interactions.
-
-## Visual direction: a calm, responsive dark workspace
-
-The rewrite should feel clean, modern, minimal and
-pleasant to operate. Treat these as reviewable product qualities alongside
-correctness. Preserve information needed for chess decisions and visible
-affordances when simplifying a screen. Removing decoration should not require
-users to memorize hidden commands or open menus for every common action.
-
-The proposed direction is a quiet charcoal workspace with clearly separated
-surfaces, comfortable typography, restrained accent color and crisp feedback.
-The board, moves and user's current task receive visual priority. Establish
-the direction in milestone 1 before rolling it across feature migrations.
-
-| Concern | Proposed design contract |
-|---------|--------------------------|
-| Dark surfaces | Give workspace, panel, input and floating surface explicit semantic roles. Tune a small set of neutral tones together; use tonal separation and selective outlines where shadows are insufficient. Start from existing AppColors/ColorScheme rather than inventing screen-local palettes. |
-| Readability | Use legible foreground and secondary text on every actual surface. Test ordinary text at at least 4.5:1 contrast, with stronger contrast for small text where practical. Muted labels remain readable; opacity stacking must not silently erase contrast. |
-| Accent and meaning | Choose one principal interaction accent after comparing prototypes. Keep error/success/warning and chess evaluation colors semantically separate. Selected, hovered, focused and disabled controls need distinct treatments beyond hue alone. |
-| Composition | Use a consistent spacing scale and alignment. Prefer grouping and whitespace to repeated card-inside-card borders. Keep forms at readable widths and let analytical workspaces use available space. Avoid making every number, chip and action equally prominent. |
-| Typography and symbols | Retain a compact type hierarchy and one icon family. Align numerical columns and use tabular figures; moves/FEN use the shared mono style. Keep important actions labelled and make tooltips supplementary. |
-| Board and data | Validate both piece colors on both square colors, coordinates, last-move highlights, arrows, selection and evaluation graphics against the surrounding dark UI. Check user-selected board themes and dense tables, not just empty mockups. |
-| Interaction feel | Every actionable component has designed rest, hover, pressed, keyboard-focus, disabled and busy states. Provide immediate acknowledgement, stable geometry and predictable focus return. Loading indicators must describe actual work and never imply that an uncommitted save succeeded. |
-| Motion and delight | Use short transitions to connect actions with outcomes: selection changes, opening a panel, dropping a piece, completing a training step. Reuse AppMotion timings as a starting point and tune through interaction tests. Respect reduced motion and keep repeated training input responsive. |
-| Pleasant details | Give a valid drop a clear landing response; make a completed exercise feel resolved; show a compact copy acknowledgement; reveal useful previews without changing the committed position. Avoid repeated modal praise, compulsory sound or decorative motion that interrupts concentration. |
-
-Implement custom theme roles with a typed
-[ThemeExtension](https://api.flutter.dev/flutter/material/ThemeExtension-class.html),
-registered in every production/catalog theme with `copyWith` and `lerp`.
-Keep standard roles in `ColorScheme` and `TextTheme`; extend only app-specific
-roles such as evaluation colors and workspace surfaces. Supply explicit light
-and dark values: the extension does not choose accessible colors automatically.
-A shared accessor resolves the current theme instead of reading a global color
-constant. Keep invariant spacing in shared tokens without forcing it into an
-extension. Migrate each component completely and retire its obsolete constants;
-new migrated code must not introduce screen-local colors or text sizes. Maintain
-a shrinking legacy exception list with owners. Widgetbook and focused checks
-cover theme switching, contrast, interpolation and enlarged text using the same
-production widgets; token types alone do not prove visual consistency.
-
-Wire the shared appearance preference to `MaterialApp.theme`, `darkTheme` and
-[themeMode](https://api.flutter.dev/flutter/material/MaterialApp/themeMode.html).
-System mode follows OS brightness; explicit light/dark choices remain stable
-when the OS changes. Preserve the product's chosen default. Widgets read the
-resolved theme rather than each subscribing to platformDispatcher. Test OS
-brightness changes, explicit overrides and restart, with the same ThemeExtension
-roles present in both themes and no loss of focus or document state.
-
-Dark appearance is a design preference, not a universal claim of reduced eye
-strain. Inspect the actual app on ordinary displays in both dim and bright
-rooms, with platform scaling and larger text. Large bright surfaces and dense
-low-contrast gray text both need deliberate review. Ensure diagrams and images
-remain legible; do not invert chess piece assets or illustrations automatically.
-
-Milestone 1 is the design work inside the first slice, not a separate framework
-phase. Build/catalog only controls used by that slice. Keep the following visual
-loop within its estimate; defer unused widgets, vault and split-pane spikes:
-
-1. Start with one restrained visual treatment; compare a second only if a
-   concrete usability/style question remains. Use the same repertoire task with
-   real-looking long names, counts, selection and error states. Compare density,
-   surface separation and accent treatment without changing the task itself.
-2. Review the working slice or unresolved alternatives with the product owner, including
-   keyboard use. Choose one direction and record the decision here before
-   migrating its appearance across the app.
-3. Encode the selected values in the production theme and reusable components.
-   Include interactive examples for the state combinations above in Widgetbook.
-   The catalog consumes production code; it must not maintain prettier copies.
-4. For each migrated screen, review an actual workflow with representative data,
-   a narrow window, enlarged text, failed/slow work and repeated clicks. Check
-   task clarity and interaction feel as well as screenshots. Record usability
-   findings and fix shared causes in the component/theme owner.
-
-Use these references for complementary purposes. The reading shortlist was
-selected from author/publisher descriptions and publicly available material.
-
-- **[Refactoring UI — Adam Wathan and Steve Schoger](https://refactoringui.com/):**
-  primary practical visual-design reference for hierarchy, spacing, typography
-  and finishing details. Its web examples need adaptation to desktop chess
-  workflows; it is not a dark-mode-specific standard.
-- **[Don't Make Me Think, Revisited — Steve Krug](https://sensible.com/dont-make-me-think/):**
-  usability companion for understandable navigation and evaluating whether
-  people can identify and complete the next action.
-- **[Microinteractions — Dan Saffer](https://www.oreilly.com/library/view/microinteractions/9781449342760/):**
-  reference for the small interactions that make controls feel responsive and
-  satisfying, complementing whole-workflow usability evaluation.
-- **[Apple Human Interface Guidelines: Dark Mode](https://developer.apple.com/design/human-interface-guidelines/dark-mode)**
-  and **[Flutter ColorScheme](https://api.flutter.dev/flutter/material/ColorScheme-class.html):**
-  free dark-appearance and implementation references. Use semantic colors,
-  legible assets and tested surface contrast; preserve desktop platform
-  conventions without mechanically copying another platform's visual effects.
-
-## Persistent shell and reusable panels
-
-Keep Actions/View/Settings and the owning mode context available while opening
-repertoire/chapter pickers or generation planning within that mode. Compose
-these destinations under a persistent shell; compare a body switch/nested
-Navigator by default. Use the package-decision rejection checks before a
-[go_router ShellRoute](https://pub.dev/documentation/go_router/latest/go_router/ShellRoute-class.html)
-trial. Deliberate modal tasks may cover the shell, but ordinary
-navigation should not discard it. Route retention alone does not preserve a
-document: sessions own board position, drafts, selection and history, while
-features own scroll/filter state with an explicit restore policy. Define Back,
-picker cancel/results, deep links, focus return and unsaved-work handling once.
-Test opening a picker, cancelling it, switching modes and returning with the
-same position/draft; toolbar commands must target the visible destination.
-Include the persistent shell in milestone 2 and full workspace restoration in
-milestone 3. Hidden branches still follow the job/visibility policies above.
-
-If the routing fallback adopts go_router, distinguish shell chrome from branch
-history. [StatefulShellRoute](https://pub.dev/documentation/go_router/latest/go_router/StatefulShellRoute-class.html)
-provides independent branch navigators; prefer its indexed-stack form when
-modes need retained nested stacks. A plain ShellRoute alone is not evidence of
-that retention, and retained widgets do not replace session ownership or restart
-restoration. Under UI-02, test a nested destination, scroll/filter selection and
-board draft across a mode round trip, then separately test disposal/recreation
-from the session. Bound retained-branch memory and keep hidden interactive
-resources subject to visibility policy. The current Navigator-based default
-must satisfy the same tests without adopting a router merely for its name.
-
-In milestones 2/3, profile navigation with DevTools frame/rebuild evidence
-under STATE-02/UI-02, using the selected Navigator or router. Keep dependencies
-scoped to the panels that need them and use const constructors where useful.
-The goal is bounded work and preserved state, not zero shell builds: theme or
-layout changes legitimately rebuild it. Auto-dispose follows resource ownership;
-it is not a remedy for rebuilds and must not discard retained sessions/jobs.
-
-Create one reusable `SplitPane` with named panel slots, minimum usable sizes,
-resize commands, focus/semantics and an optional layout-change callback. Evaluate
-[flutter_resizable_container](https://pub.dev/packages/flutter_resizable_container)
-behind that boundary so feature widgets do not depend on its controller/types.
-It provides sizing constraints and programmatic resizing; keyboard behavior
-and accessibility must be demonstrated by the shared component. Allow arrow-key
-adjustment with visible focus, an announced value and a discoverable reset;
-respect text-field shortcut scope. Prevent accidental zero-width panels and
-support deliberate collapse with a clear reopen action where useful.
-
-When minimum sizes no longer fit, reflow/collapse/scroll deliberately rather
-than forcing a four-column layout at a fixed breakpoint. Restore validated
-layout preferences by workspace and available size, clamping stale values when
-monitors or text scale change. Persist at resize completion or a bounded cadence,
-not on every pointer event. Catalog/test nested splits and long labels,
-keyboard-only resizing, pointer drags, cancellation, small/ultrawide windows,
-200% text and saved-layout recovery; add RTL when scoped. Prototype and prove
-the control with the workspace in milestone 3; keep panel composition
-flexible for later UX experiments.
-
-## Presentation experiments without data-model churn
-
-Revisit how expectimax, generated lines, chapters,
-saved analysis and training sources are explained and arranged. Their present
-labels, tabs and folder-shaped navigation are not a product specification for
-the rewrite. Test alternative task flows before committing to terminology or
-layout; retain accurate score meaning, source identity and save behavior.
-
-- Keep domain operations and data identities stable while changing their
-  presentation. A chapter's display name, panel location or UI grouping must
-  not become its persistent identity. Renaming a concept on screen must not
-  implicitly rename files, rewrite PGN tags or move training progress.
-- Give UI collaborators immutable presentation models and narrow commands such
-  as preview, start analysis, cancel, save a selected result and open a document.
-  They must not infer storage operations from label text, tab indexes or paths.
-- Provide Widgetbook/full-workflow fixtures for empty, existing, running,
-  completed, stale, failed and conflicted data. Multiple visual prototypes
-  consume the same fixtures and command contracts with fake repositories.
-- Lower-cost models can explore copy, layout and interactions within that
-  sandbox. Persistence, concurrency, score interpretation and migrations remain
-  separately reviewed engineering work. Any prototype command wiring receives
-  real integration checks before it becomes production UI.
-- Compare at least two representations of the same task, such as inspecting a
-  suggested continuation and saving it into a chapter. Show the user clickable
-  alternatives and assess comprehension, effort and recoverability. Record the
-  selected direction and retire rejected prototypes; avoid permanent duplicate
-  navigation modes or configurable layouts without a demonstrated need.
-
-This expands milestone 1's prototype work and milestone 5's analysis UX. A
-visual redesign can be substantial while the repository/storage contracts stay
-unchanged.
-
-## Data preservation and coexistence
-
-Use [DATA_INTEGRITY.md](DATA_INTEGRITY.md) as the starting safety contract.
-Inventory every persisted format and distinguish user-authored documents,
-authoritative structured records, credentials, preferences and rebuildable
-caches. Record external tools/readers, stable IDs and references, schema versions,
-file locations and migration ownership. Work only on disposable copies during
-automatic validation; never inspect or migrate the user's real databases as a
-test fixture.
-
-- Initially keep formats and the existing storage adapters; changing UI/state
-  architecture does not require changing the on-disk format simultaneously.
-- Give each document/data domain exactly one writer. Route old and new entry
-  points through that owner. Shadow comparisons are read-only; never dual-write
-  real user data to old and new persistence implementations.
-- For necessary format changes, copy/stage, validate counts, identities and
-  content, then switch the authority with a recoverable commit point. SQLite
-  transactions cannot atomically commit unrelated filesystem writes; use an
-  explicit publication/recovery protocol for cross-store operations.
-- Preserve PGN comments, variations, NAGs, unknown headers, line identities and
-  progress references. Compare verbatim bytes where required and semantic
-  equivalence only where normalization is intentional and documented.
-- A rollback must preserve work created after migration. Once formats diverge,
-  implement a tested reverse/export path or make the old reader refuse the
-  unsupported schema. Restoring an old snapshot alone loses new work and is
-  not an acceptable rollback procedure.
-
-**Adapter cutover and rollback (DATA-06).** Drift is deferred, so the first slice
-has no Drift/legacy production cutover. Any later adoption must first rehearse
-this procedure on disposable database copies. Share one connection owner and
-migration authority for the file; don't run independent old/new writer pools
-or migration hooks. Coordinated SQLite connections are not inherently invalid,
-but busy handling and cache invalidation must be explicit. Drift documents that
-[independent instances do not synchronize stream queries](https://drift.simonbinder.eu/isolates/);
-external/legacy writes therefore need a tested refresh path if allowed.
-
-On repeated contention or a failed cutover, stop admitting mutations for that
-store, retain pending intents/drafts, and let tracked transactions finish or
-roll back before closing the replacement connections. Verify the actual schema
-and latest committed data. Reopen through the previous adapter only if it is
-compatible with that current schema, then reconcile pending operation IDs before
-retry so committed work is not duplicated. Never delete live WAL/SHM files to
-clear a lock or switch adapters while the old pool still owns transactions.
-If quiescence or compatibility cannot be established, keep that store in a
-recoverable unavailable/read-only state; use the tested reverse migration/export
-path or a forward repair. Do not restore a pre-cutover backup over newer commits.
-Inject held-reader/writer contention, failures during switching, process restart
-and post-cutover writes, and verify recovered records and subscription freshness
-before enabling this migration in a normal profile.
-
-## One safe PGN mutation API and shared save interaction
-
-Centralization is the intended solution to the PGN
-overwrite concern. Callers should not need to remember a checklist of locking,
-existence, revision, backup and error-handling steps. Implement one injectable
-`PgnDocumentStore` (working name) as the domain-facing boundary for every
-user-document PGN mutation. It delegates to the tested atomic filesystem
-adapter; it does not duplicate its low-level implementation or absorb unrelated
-database/cache responsibilities.
-
-```text
-Feature action / editor / import / generated result
-                -> PgnDocumentStore
-                   -> atomic filesystem adapter
-                <- typed outcome, validated before-content and committed revision
-                -> shared save status / conflict interaction
-```
-
-The public API expresses intent. These are proposed operations to refine with
-the first slice, not implemented method signatures:
-
-| Intent | Safe contract |
-|--------|---------------|
-| Open a document | Return a snapshot containing document identity, revision and content. Distinguish absence from unreadable or malformed content. |
-| Create a document or save a copy | Exclusively create at the requested destination; return a name collision without replacing anything. |
-| Save an edited snapshot | Require the loaded identity/revision; reject replacement if the persisted baseline changed. There is no optional revision or default overwrite flag. |
-| Append/import games or apply an edit | Use a bounded locked transformation or validate a prepared snapshot at commit. Return its validated before-content/baseline and committed content/revision together; never derive undo from stale controller memory. Check source-game/line preconditions and preserve unrelated text. |
-| Undo a committed edit | Validate current storage against the history head's expected revision, initially the mutation's committed revision. On mismatch reject, retain history and offer a copy. After a confirmed commit, consume the entry and advance only a proven predecessor using the returned revision (DATA-03). No implicit merge or operational inverse. |
-| Rename, move or recoverably delete | Use the same document ownership boundary, with collision checks and an explicit protocol for associated references/artifacts. Coordinate with saves so a queued edit cannot recreate or target the wrong chapter. |
-
-The store owns validation, serialization against other app mutations, commit
-checks, recoverable prior versions, failure propagation and committed revision
-receipts. Protect the read-to-commit baseline through either a locked bounded
-transformation or optimistic preparation with commit-time revision validation.
-Parse/transform large snapshots outside the critical section; reject a changed
-baseline or recompute against a fresh one under the operation's bounded policy. Do not claim
-that in-app locks exclude arbitrary external editors.
-
-Expose distinct outcomes such as saved, conflict, name collision, invalid
-document and I/O failure, including enough information to preserve the user's
-draft and offer recovery. Only a saved outcome advances the session's baseline
-or clears dirty state. Features receive the store via repository/session
-dependencies; raw `writeFile`, `File.writeAsString` and generic overwrite APIs
-are unavailable to migrated PGN callers. Enforce this with import/API checks
-and route legacy entry points through a temporary adapter during migration.
-
-Build a reusable save-status component and conflict/collision interaction on
-top of these outcomes. They show consistent saving/saved/unsaved states and
-appropriate actions such as keep editing, save a copy, or inspect/reload the
-newer document. Reload must preserve or explicitly resolve the dirty draft.
-Any user-requested replacement is an explicit command checked against the
-latest revision; dismissing a dialog never grants overwrite permission.
-The UI receives state and callbacks and performs no disk operations itself,
-so its appearance can be changed freely in Widgetbook. Background jobs consume
-the same outcomes and surface them through job state without opening dialogs.
-
-Test the central contract once thoroughly, then test that each feature calls
-it correctly. The shared contract suite covers exclusive creation, stale saves,
-concurrent append, lossless edits, conflicting undo, rename/delete versus queued
-saves, interrupted commit/recovery and disk/read failure using disposable real
-files and deterministic failure injection. Run relevant cases on native desktop
-platforms. Fakes make feature tests fast but do not establish filesystem safety.
-Separately test the reusable widget's actions, draft preservation, keyboard
-focus and failure states with scripted outcomes; expose them in Widgetbook.
-
-Add focused feature wiring tests for editor save, import, generation, undo and
-chapter operations. They must prove that the correct captured document/revision
-reaches the store and that failure is not reported as success. Do not copy the
-atomic-write algorithm or its entire suite into every feature. Milestone 2
-establishes this boundary and shared interaction; subsequent document-writing
-slices must adopt it before their old writer is retired.
-
-## Undo receipt provenance and history
-
-DATA-03 has two separate guarantees: a valid expected revision prevents undoing
-over later work, and a valid before-snapshot prevents undo itself from deleting
-work that preceded the mutation. Require both at the shared mutation boundary.
-
-A successful undoable mutation returns one storage-produced receipt containing
-operation/document identity, the actual validated before-content and baseline,
-committed content/revision, and any ordered logical step snapshots. Produce
-these from the same accepted transformation/commit, including when preparation
-occurs outside the lock. If validation causes a recompute, replace the receipt's
-before-content and steps too. Do not reread after the operation to manufacture
-a receipt from a different writer's content, or fill missing before-content from
-controller memory. S0 uses exact decoded content under the existing storage
-contract; the later native revision adapter preserves exact bytes/identity as
-specified by DATA-04. An in-memory-only document instead uses its session's
-validated state; it must never supply a fallback for a file-backed mutation.
-
-Keep immutable mutation provenance separate from the undo history's current
-expected-storage revision. Link a new receipt to the prior history head only
-when its validated before-baseline matches that head's expected revision and
-its before-content matches the predecessor's logical after-content. Record that
-link when accepting the mutation. An intervening external edit or unrelated
-mutation breaks the link; equal-looking content alone cannot repair it.
-
-Example: edits produce A -> B -> C, and the current storage revision is rC.
-Undo C validates rC and restores its actual before-snapshot B, returning rB2
-because atomic replacement may change file identity. After confirmed success,
-consume C and set B's undo expectation to rB2 only if the recorded predecessor
-link and restored content prove B is the next logical state. Keep B's original
-commit revision as provenance. The next undo validates rB2 inside the storage
-mutation; an intervening write still conflicts. Never rebase an expectation by
-reading arbitrary current disk content or attaching a fresh revision to old
-snapshots. If C started from an external edit E instead of B, undo C restores E
-and cannot re-arm the older B entry, even though C's own undo succeeded.
-
-For a batched suggestion, the storage transformation creates logical states
-S0 -> S1 -> ... -> Sn from the validated S0, but commits only Sn. Only the top
-undo entry initially expects that commit revision; intermediate steps have
-logical identities, not invented native file revisions. Each successful undo
-commits the preceding logical snapshot and arms its proven predecessor with
-the newly returned storage revision. Preserve one undo per actual added move;
-duplicates/no-ops create no invented history. Validate complete ordered step
-metadata before publishing the batch. Missing/short metadata must not silently
-fall back to stale memory or leave a partially installed history; reject before
-commit, or explicitly reconcile an already-committed result as a recoverable
-contract failure. Preserve non-file-backed behavior through a separate session
-contract rather than fabricating disk receipts.
-
-Serialize mutation, undo and history publication in the owning document session.
-A definite write failure/conflict neither pops entries nor advances expectations.
-Reconcile an uncertain commit before changing history or replaying work. Once
-a commit is confirmed, a later UI refresh failure must not replay the undo:
-retain the committed outcome and recover presentation from it. Publish receipt
-and stack changes coherently before accepting another session action.
-
-Required DATA-03 regressions (S0 with content guards; later repeat with native
-identity changes and shared-store fixtures):
-
-| Scenario | Required observation |
-|----------|----------------------|
-| Controller loads A; external annotation produces E; single append produces C; undo | Restore E, including the annotation, on disk and in the session; never restore stale A. |
-| External edit before a multi-move suggestion; undo every added move | All intermediate undos retain the external content and the final undo returns to validated E; no extra per-ply forward disk commits. |
-| A -> B -> C; undo twice, changing native identity on every replace | Return to B then A without a false conflict; expect each actual returned commit revision. |
-| External edit after append or between successive undos | Reject the affected undo, preserve external content and history; do not refresh its expectation to bypass conflict. |
-| Local edit, external edit, append, then two undo attempts | Undo only the append to its validated baseline; do not bridge the external edit into older snapshot history. |
-| Failed/uncertain undo, failed batch, duplicate add or malformed receipt | No false success, phantom entry or unsafe revision advance; retry/reconciliation preserves the actual commit outcome. |
-
-Extend [the existing writer undo tests](../test/features/repertoires/repertoire_writer_undo_test.dart)
-without losing successive undo, bounded history, per-move suggestion undo or
-load/reset behavior. Adapt the missing-snapshot fixture to the explicit receipt
-failure contract rather than preserving its unsafe memory fallback. Also audit
-all pushUndo callers, including deletes, for the same baseline provenance.
-These are required future tests, not claims of reproduced runtime failures.
-
-## Safety prerequisite on current code
-
-**S0 — Complete for the scoped Linux/current-code cases; see exit evidence above.** Recheck the findings below on
-current code. Reproduce all three controller actions and snapshot undo with
-interleaved writes and failure injection; record any finding already fixed with
-its regression evidence. Fix confirmed lost updates using the existing locked
-update/expected-content API. Verify conflicts propagate and preserve drafts;
-for undo, implement DATA-03's storage-derived before-snapshots, verified history
-links and successive/per-move expectation advancement. Include external edit
-before append, as well as after append and between undos. Return the validated
-before-content and committed baseline together through the existing editor API;
-consume history only after a confirmed commit. Adding expectedContent alone
-cannot fix a stale before-snapshot. Keep existing formats and dependencies.
-
-Deliver this as a focused maintenance increment on local main with its backup,
-before any rewrite slice changes document writes. It does not depend on new
-providers, a byte-revision FFI adapter or a design system. Publishing remains
-user-requested. Scope/estimate comes from reproduction, not an assumption that
-all fixes are small. Broader inventory can proceed independently; no runtime
-fix or test execution is authorized by this planning-document edit.
-
-## Storage baseline and overwrite-prevention gate
-
-The following records the starting inspection at `e477dc58` on 2026-09-16.
-The controller/undo findings were reproduced and repaired in S0 (evidence above);
-generation artifact publication remains unverified. Complete the ownership
-inventory in milestone 0 and retain evidence for every migrated writer.
-
-| Data | Current representation and ownership evidence | Rewrite requirement |
-|------|-----------------------------------------------|---------------------|
-| Repertoires and chapters | Documents `repertoires/` folders with chapter PGNs; `ChapterStore` creates files with `createOnly`. Studies use multi-chapter PGNs in Documents `studies/`. | Keep user-authored text, annotations and stable references; separate user-visible grouping from physical storage decisions. |
-| User/source games | Support `app_games.db`, with collection-scoped games and position indexes. Some tactics source games have no remaining standalone PGN copy. Player-analysis PGN generations also have an authoritative manifest. | Classify authority per collection; never treat the whole database or Support directory as disposable merely because some indexes can be rebuilt. |
-| Analysis/build artifacts | Chapter-adjacent tree, partial-tree, expectimax and trap JSON, plus a model-games PGN companion, are owned by `GenerationArtifactStore`. | Track document revision, run/config identity and publication state. Expensive saved analyses and resumable work need an explicit retention policy; user edits to a companion PGN cannot be silently discarded as cache. |
-| Training state | Review/progress/history CSV files and their document/line references are covered by existing migration and concurrency protections. | Preserve scheduling/history and reference identity through chapter rename, move, split and import. Inventory all newer stores as well as legacy CSVs. |
-| Recovery and upgrades | Atomic-write journals/backups, quarantined files, PGN recovery snapshots, SQL `game_trash`, and schema-upgrade backups serve different recovery purposes. | Define retention, restore and user-export behavior for each; do not equate temporary atomic replacement with a permanent version history. |
-
-The shared atomic writer already supports exclusive creation, expected-content
-checks, locked read/modify/write, and interrupted-write recovery. Those protect
-only callers that use the correct operation. An atomic replacement can still
-atomically install stale content over a newer edit.
-
-Specific call sites to reproduce in S0 or the indicated artifact inventory:
-
-| Inspection finding | Failure scenario to test | Required behavior |
-|--------------------|--------------------------|-------------------|
-| `RepertoireController.setRepertoireColor`, `setRootPosition` and `importPgnContent` read content then call `writeFile` without `expectedContent`. | Another writer commits between the read and replacement. | Apply a narrowly scoped change to current content under the storage transaction, or reject a stale revision without replacing the newer document. |
-| `RepertoireWriter.addMoveAtPosition` and the first batch snapshot use controller-memory previousPgn, while the editor appends to freshly read disk content. | An external annotation precedes append; undo restores the older controller snapshot even if a post-append guard passes. | DATA-03: return validated before-content and committed baseline together from the mutation; derive every batch step from that baseline. |
-| `RepertoireWriter.undo` removes its entry and writes an unguarded snapshot; the planned native revision adds identity changes on replacement. | A later annotation is overwritten, a failed write consumes history, or successive/per-move undo falsely conflicts under the proposed identity checks. | DATA-03: preserve receipts on failure, validate the history head and advance only proven predecessor expectations after a confirmed commit. |
-| Generation artifacts include a replaceable `_model_games.pgn` companion and independently written analysis files. | Regeneration encounters an edited companion, or a crash/stale run leaves artifacts from different revisions. | Distinguish generated ownership from user edits, validate run/document identity at commit, and expose recoverable or stale output rather than replacing newer work. |
-
-These are observable code patterns and plausible failure cases; they are not
-proof of which incident the user previously experienced. Review exports, Save
-As, study saves, generation completion, chapter moves and database imports too;
-these examples are not an exhaustive inventory.
-
-Before accepting a replacement storage path, require disposable-fixture tests
-for: concurrent creation of the same name; stale editor save; two app writers;
-failed decode; interrupted replacement/rollback; undo after another edit; queued
-save after switching chapters; generation finishing after its source changes;
-destination collisions; and failed migration or database/file publication.
-Assert preservation of original and newer content, comments/variations/unknown
-headers, stable IDs and progress, with truthful unsaved/conflict state. Test
-both semantic round-trips and exact text preservation where the contract needs
-it. Only a committed save may clear dirty state or announce completion.
-
-Stage derived results separately from source documents. Default generated output
-to a new owned artifact; replacing an existing user document must be an explicit
-operation checked against its current revision, with a recoverable prior version.
-Audit generic overwrite APIs so migrated document callers must select create,
-revision-checked replace or atomic update. UI prototypes cannot bypass them.
-
-Backup and restore are part of this gate: test a consistent SQLite snapshot
-including committed WAL data, the associated authoritative PGNs/manifests and
-references, then restore into an empty disposable profile. A database transaction
-does not commit filesystem changes, and app locks cannot force arbitrary external
-editors to cooperate. Preserve revisions/recovery copies and document those
-limits rather than promise that atomic writes alone eliminate every loss mode.
-
-Implementation evidence lives in [DATA_INTEGRITY.md](DATA_INTEGRITY.md). Starting
-code references: [storage operations](../lib/services/storage/io_storage_service.dart),
-[atomic writer](../lib/utils/atomic_file.dart),
-[repertoire controller](../lib/features/repertoires/controllers/repertoire_controller.dart),
-[undo writer](../lib/features/repertoires/controllers/repertoire_writer.dart),
-[chapter creation](../lib/features/repertoire/services/chapter_store.dart),
-[game store](../lib/services/game_store/game_store.dart),
-[generation artifacts](../lib/core/generation_artifacts.dart) and
-[schema guards/backups](../lib/services/storage/schema_guard.dart).
-
-## Filesystem and cross-process contracts
-
-In milestone 0, give each store a permitted-writer matrix: app instances,
-workers, MCP/offline tools and external editors. "One writer" means one mutation
-contract with serialization across cooperating processes, not one Dart singleton.
-Current file mutations use a SQLite-transaction mutex across isolates/processes,
-and `GameStore` already sets a busy timeout. Preserve those guarantees; do not
-replace them with an in-memory lock or POSIX record lock without equivalent
-tests. Tools documented as read-only keep read-only connections. Define bounded
-contention handling, lock identity/order and supported filesystems for writers.
-
-Measure lock wait and hold time separately with large PGNs and delayed I/O;
-set budgets in milestone 0. The existing mutex is per normalized directory,
-not the application data database: unrelated directories need not wait behind
-one global lock. Prepare decoding/transforms and unique staged output outside
-the lock when safe, then validate current bytes/identity, publish and record
-recovery state within the transaction. Keep validation-to-replace serialized;
-don't release a lock on timeout while its I/O can still complete. Budget digest,
-flush and rename costs too; never skip validation to meet a latency target.
-A one-app-per-profile policy is deferred unless the product owner selects it;
-it cannot replace contracts for tools, external editors or multiple isolates.
-
-V1 does not implement CFAPI/NSFileProvider hydration handlers or a cloud-sync
-engine. Use normal [asynchronous file I/O](https://api.dart.dev/dart-io/File-class.html),
-truthful pending/error state and the preservation contract below; waiting for
-remote data is not by itself synchronous UI-isolate blocking. Keep outstanding
-I/O bounded: a UI timeout may abandon a result but does not necessarily cancel
-the underlying operation. Reject late results and do not launch unbounded retries.
-
-Known sync-folder/capability hints may support actionable guidance to make a
-file available offline or save a copy locally; path-name heuristics are not
-reliable detection and cannot replace commit checks. Do not ban or relocate
-user PGNs automatically. Live SQLite remains subject to the separate local-store
-policy below. Native placeholder cases may use fault-injected fixtures plus
-manual host checks; provider-specific APIs require a demonstrated requirement
-and a separately budgeted increment. A warning does not make a failed save safe.
-
-Treat Documents and external PGNs as potentially synced, remote or redirected.
-Test unavailable/delayed placeholder reads, interrupted hydration, disk-full
-errors, Windows sharing violations and independently created conflict copies.
-Use bounded cancellable retries only for classified transient errors; access
-denied can be permanent, and any retry must revalidate the source/destination.
-Never treat a failed read as empty, automatically merge/delete similarly named
-files or infer a conflict solely from a filename suffix. Show unresolved copies
-for inspection. Watcher events are refresh hints; commit validation is required
-even when no event arrived. Detect location capabilities where feasible and
-handle failures safely when sync-provider detection is unavailable.
-
-Choose an explicitly local, non-synced location for live SQLite stores and
-cross-process locks; a folder called Support is not proof of that property if
-the user/system redirects it. Existing locations need a separate copy/verify/
-switch migration if unsuitable. Do not run WAL on unsupported shared-network
-storage. Specify busy handling, transaction duration, long-reader/checkpoint
-behavior and background query ownership. Any later Drift trial must retain a
-single schema/migration owner and pass background-query and migration fixtures.
-Backup through SQLite's snapshot
-facilities; copying a live db/WAL/SHM file set is not a consistent backup protocol.
-
-Distinguish UI revisions from persisted content identity. For the new typed
-revision API, default to SHA-256 over exact stored PGN bytes (including BOM and
-line endings, before decoding), together with the observed native file identity
-and the app's document identity. Use device/inode on POSIX and volume serial plus
-128-bit [FileIdInfo](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info)
-on Windows. [Dart FileStat](https://api.dart.dev/dart-io/FileStat-class.html)
-does not expose those IDs; implement the probe in an infrastructure native
-adapter. Read bytes and identity from the same open object and revalidate the
-path binding before commit. A mismatch, disappearance or unavailable identity
-requires conflict/re-verification or save-as-copy; it never grants overwrite.
-
-Native identity is an observation, not a permanent app document ID: replacement
-and sync hydration can change it, and IDs can be reused after deletion. Test
-same-byte replacement, symlink/hardlink aliases, BOM changes and unavailable
-identity; define unsupported cases rather than promise detection of every
-historical delete/recreate. Track cooperating app deletion/recreation using the
-document lifecycle. External editors can still race between validation and
-replacement; native IDs do not turn an ordinary rename into filesystem CAS.
-Capture the new revision after each successful app replacement. The current
-`expectedContent` compares decoded text; S0 uses that existing contract, never
-passes a digest in its place, and does not wait for this native adapter.
-
-Baseline durability remains recovery from app/worker termination, with a
-specific flush protocol for the new adapter rather than an implied power-loss
-promise. Preserve recovery artifacts until outcome is known:
-
-| Platform | Planned commit protocol and validation |
-|----------|----------------------------------------|
-| POSIX local filesystems | Same-filesystem temp, write, fsync temp, validated rename, fsync parent directory; include both affected directories for moves. Use native support where Dart lacks directory flush. Inject failures at each step, including unsupported directory sync. [fsync reference](https://man7.org/linux/man-pages/man2/fsync.2.html). |
-| macOS | Same recovery/namespace protocol; measure and explicitly select fsync versus F_FULLFSYNC for the data flush. Default full-sync for committed user-document saves where supported; exclude rebuildable caches. Record unsupported cases and latency before broad adoption. [Apple flush semantics](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html). |
-| Windows | Flush the staged file, use same-volume ReplaceFileW for replacement with tested backup/ACL behavior, and a separate exclusive-create path. Reconcile documented partial-failure states before retry. REPLACEFILE_WRITE_THROUGH is unsupported; MoveFileExW WRITE_THROUGH documents copy/delete flushing and is not by itself a same-volume namespace durability proof. [ReplaceFileW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew), [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw). |
-
-A flush failure after replacement may mean content was installed but durability
-is uncertain. Reconcile the actual file and preserve recovery data; don't report
-an ordinary pre-commit failure and blindly retry an append. Classify Windows
-sharing/lock violations separately from permanent access denial. For retryable
-replacement failures, use cancellable capped exponential backoff with a total
-attempt/time budget and renewed revision checks; inject time in tests. A unique
-same-directory temp avoids naming collisions/cross-volume publication, but does
-not remove destination sharing violations. Test transient recovery, exhausted
-retries and a destination edit during backoff. Reconcile uncertain commits before
-retrying; never repeat the entire logical append blindly.
-Filesystem/device/remote-cache guarantees
-remain explicit. Current SQLite WAL/NORMAL settings can lose latest commits
-after power loss; any stronger guarantee needs a separate measured policy.
-Use deterministic crash points and seeded process-termination tests; killing
-a process does not simulate lost hardware caches.
-
-## Milestones and exit gates
-
-S0 is **complete for the scoped Linux cases** and milestone 0 has a
-**partial inventory** above.
-Milestone 1/2 is **Partial** (implementation checkpoints above); milestone 3 is **Partial** (Study adoption checkpoint above); milestones
-4–7 are **Not started**. Each row yields a reviewable result; later
-rows depend on the contracts established earlier, not on an unbounded framework
-build. Reorder later feature slices after the dependency inventory, with a
-recorded reason. No current mode is silently dropped.
-
-The implementing agent must revisit the storage baseline against the code at
-the time of implementation, turn the overwrite-prevention cases above into
-passing regression evidence, and report any unresolved cases explicitly. This
-is a required acceptance gate for every slice that writes user data, including
-UI work that introduces or changes save/import/generate/undo commands. Planning
-entries and visual approval are not evidence that data safety has been tested.
-
-| Milestone | Deliverable | Exit gate / evidence IDs |
-|-----------|-------------|--------------------------|
-| S0. Current-code safety prerequisite | Reproduce controller and undo findings; fix confirmed races independently using existing storage primitives. | DATA-01, DATA-03, TEST-01: external-before-append, successive/per-move undo and caller failure regressions pass; unresolved cases explicit; integrated/backed up without waiting for rewrite. |
-| 0. Inventory and baseline | Parity/data/owner maps, host prerequisites, authorized scope, default decisions, first-slice effort/spike caps, validation reserve, midpoint checkpoint and performance/usability budgets. | PLAN-01: evidence report and bounded next increment; record platform gaps under OPS-01/OPS-02. S0 may proceed independently. |
-| 1/2. First complete slice with its design foundation | Repertoire list/search/create/rename/open/recoverable delete, persistent shell, injected contracts and only the theme, ARB, settings and catalog components this workflow uses. Retain formats; rehearse the desktop/native paths it invokes. | ARCH-01; DATA-01 through DATA-06 for paths used; STATE-01; SET-01; PROC-01/PROC-02 on applicable hosts; UI-01/UI-02/UI-04; OPS-01/OPS-02; TEST-01. Product-owner visual review recorded, duplicated slice code retired, PLAN-02 continuation decision recorded. |
-| 3. Document workspace | PGN editing/studies/chapters, board navigation, retained sessions and shared resizable panels built on demand. | ARCH-01; DATA-02 through DATA-06; STATE-02; UI-01 through UI-04; TEST-01: round-trip, undo/conflict, context and large-document budget evidence. |
-| 4. Training | Training/tactics/scheduling/history on stable identities; a storage migration only if separately justified. | ARCH-01; DATA-06; SET-01; UI-01/UI-04; TEST-01: preserved history and deterministic scheduling, cancellation and resume. |
-| 5. Analysis and long jobs | Analysis/generation/audit/ingestion through owned jobs and bounded presentation updates. | ARCH-01; DATA-02/DATA-05/DATA-07; STATE-01 through STATE-03; PROC-01/PROC-02; UI-01/UI-04; OPS-01; TEST-01: stale-result, burst, cleanup and resource-budget checks. |
-| 6. Remaining workflows and platform surface | Remaining modes, accounts/settings, tools, assets and distribution complete the inventory. Perform vault feasibility/migration before Accounts. | PLAN-01; ARCH-01; SET-01; SEC-01; OPS-01/OPS-02; TEST-01, plus applicable data/process/UI IDs from the inventory. Every retained capability has evidence or an explicit scope decision. |
-| 7. Retirement and release readiness | Retire bridges/duplicate dependencies and obsolete readers where compatible; update current-state docs. | PLAN-01; ARCH-01; DATA-06; OPS-02; TEST-01: parity and recovery evidence complete, no production fallback to legacy, full release gates pass before requested publication. |
-
-Milestone numbers are retained for existing references: “milestone 1” now means
-the on-demand design work within milestone 2, not a separate foundation project.
-All applicable IDs remain binding on later slices; the table highlights checks
-introduced there. In milestone 0 enumerate inherited IDs per workflow/host;
-use explicit ID rows in evidence rather than leaving ranges unexpanded.
-Unfamiliar-player studies are optional when feasible under UI-04; record whether
-the product owner or another end user completed the representative task.
-
-A module is not considered migrated because it moved folders. Each completed
-slice must demonstrate the new ownership, tests, UX behavior and removal of its
-superseded code. Keep the old module only when a documented compatibility need
-requires it, with a removal condition and owning milestone.
-
-## Continuation decision after milestone 2
-
-PLAN-01 requires a filled budget record before combined milestones 1/2 start:
-implementation-effort cap in hours, a separate cap for each spike, validation
-reserve, owner and a midpoint checkpoint. Milestone 0 supplies the numbers from
-scope and baseline evidence; a missing cap fails readiness rather than implying
-unlimited time. Record active effort separately from queued tools or unavailable
-host checks. Count design experiments and framework integration within the cap.
-
-At the midpoint, compare completed acceptance scenarios with remaining effort
-and narrow optional work if needed. At the cap, stop expanding implementation,
-complete a safe checkpoint with drafts/data preserved, and record PLAN-02's
-continue-with-revised-scope, bounded repair or stop decision. An extension must
-state the added budget, scope and reason within the product owner's authorized
-scope; it cannot be silently renewed. Never cut safety gates or interrupt a
-storage commit to meet a timebox. This is an effort limit, not a calendar promise.
-
-Compare the first complete slice with its baseline: task success/effort,
-save/recovery reliability, feature-test setup, implementation effort, amount of
-legacy code removed, runtime cost and unresolved platform dependencies. Continue
-only with evidence that the pattern is tractable and improves maintainability
-without worsening essential workflows or safety.
-
-Stop expansion if the slice cannot remove its old owner, needs pervasive
-cross-layer exceptions, regresses accepted data/performance requirements, or
-costs substantially more than its bounded estimate without a credible fix.
-Record the reason and narrow the next work to a time-bounded repair/evaluation.
-If that does not resolve the evidence, end the broad renewal program and retain
-useful shared components/safety boundaries through ordinary incremental
-refactoring. Preserve all user data and valuable completed work. Sunk effort
-and new-folder coverage are not reasons to continue. Set the estimate and
-acceptance budgets before implementing the slice, then report actual results.
-
-## Working method, checks and sizing
-
-For each slice, keep a compact execution brief with its milestone evidence in
-this document; do not duplicate the whole plan into a new prompt. The brief is:
-
-- Exact starting commit and authorized user-visible outcome; explicit non-goals.
-- Required IDs and links to their owning sections, current entry points,
-  state/storage owners, interfaces and legacy files to retire.
-- Ordered smallest end-to-end change, failure cases, fixtures/UI examples,
-  exact bounded check commands and required hosts.
-- Effort/spike caps, unresolved decisions, stop conditions and compatibility plan.
-- Handoff checkpoint: commit, files changed, checks/results and next action.
-
-Refresh the brief when the code or accepted scope changes. An agent resuming work
-reads it, the linked contracts and applicable repository guidance, then verifies
-the checkout; a stale prompt cannot override current code/evidence. Present a
-reviewable diff and evidence at each milestone, identifying native or data-safety
-uncertainties for review. Product-owner UX/scope decisions follow the existing
-gates; routine already-authorized work needs no extra per-edit approval.
-Implement the smallest end-to-end case, exercise failure paths, inspect it, and
-then widen coverage.
-
-Record substantial choices with status, alternatives, evidence and consequences
-beside their owning section. Create a short ADR only when a cross-cutting choice
-has actually been selected and needs its own history; do not predeclare every
-candidate package as an accepted ADR. Update the component map only when a
-change actually exists.
-
-Estimate test work from a reuse inventory under PLAN-01: existing ci.sh checks,
-headless driver, integration_test, storage fixtures and engine doubles first;
-list only missing tests/harness changes for the slice. Separate feature, test,
-packaging and host-validation effort within the cap and keep a validation reserve.
-Do not mandate a 40–50% split without evidence or require every candidate tool
-before the first workflow. Widgetbook grows with its controls; Alchemist and new
-runners remain conditional. Reduce optional scope if validation does not fit;
-never drop preservation or lifecycle checks to meet the budget.
-
-Enforce architecture with import checks and analyzer rules: no widget I/O, no
-domain-to-UI dependencies, no new singleton access in migrated code and no
-unreviewed control styling outside the design system. Ratchet migrated paths
-first with explicit legacy scope; do not normalize violations by growing
-allowlists. Code generation must be reproducible and validated for drift.
-
-Prefer an analyzer-based import/export check if regex guards cannot express
-the boundary reliably. Verify the actual rules and SDK compatibility of any
-Riverpod lint/plugin; linting does not prove async lifetime correctness. Choose
-one generated-file policy and validate regeneration in the existing bounded
-checks/release pipeline. When generators are actually adopted, run their pinned
-commands in a clean disposable check worktree (including gen_l10n where used),
-then reject modified, deleted or newly untracked expected generated files.
-`git diff --exit-code` alone misses untracked output. Use build_runner only when
-needed; `--delete-conflicting-outputs` belongs only in that disposable check,
-never as a cleanup shortcut on a shared dirty checkout. Do not regenerate/rewrite
-approved golden images during verification or add branch-triggered CI here.
-
-Use the existing bounded headless Linux environment for golden verification;
-pin SDK, fonts, locale, scale, renderer and assets. Containerization is optional,
-not proof of deterministic rendering. If native Windows/macOS goldens are added,
-keep separate host baselines and enforce them on their configured hosts; missing
-hosts are unverified rather than silently passing. Alchemist normalization does
-not replace readable-text baselines or real interaction/semantics checks.
-
-Under TEST-01, changes to chess codecs/rules need bounded seeded property tests
-alongside explicit regressions. Generate legal move sequences and annotated
-PGNs, verify agreed semantic round-trips and undo/invariants, then separately
-mutate inputs to test invalid/truncated data. Align variant, en-passant, castling,
-promotion, null-move and FEN normalization policies; exact-byte preservation is
-required only by the relevant storage contract. Retain/minimize failing seeds
-and inputs and keep independent reference fixtures so matching encoder/decoder
-bugs cannot validate each other. Choose a generator/shrinker only if useful;
-package:checks is an assertion API, not a property-input generator
-([package documentation](https://pub.dev/packages/checks)). Evaluate leak tracking
-for owned controllers/subscriptions alongside explicit lifecycle tests.
-
-Retain the lockfile and native asset manifest, with a deliberate dependency
-update/vulnerability-review process and a clear owner. Check existing bundled
-license registration and distribution/source obligations during native packaging
-changes; license UI alone is not the complete release obligation. No new
-dependency, scanner, schedule or platform plugin is required solely because it
-appeared in external review. Apply the package defaults and record deviations
-against their rejection checks.
-
-Use layered evidence: pure algorithm tests; repository contract/failure tests;
-real filesystem and schema-migration fixtures; deterministic engine doubles;
-widget interaction/semantics tests; selected screenshot comparisons; headless
-end-to-end journeys; native platform integration and measured performance.
-Compare semantic results against the old implementation where it is correct;
-do not require identical nondeterministic engine output. Preserve existing
-storage and engine regression tests until equivalent coverage is established.
-
-Follow the normal task-worktree, bounded-check and automatic local-main
-integration workflow. Each slice remains independently usable and backed up.
-Run documentation lint/link checks for this plan; implementation requires
-analyze/lint, relevant tests and headless screenshot inspection for visible
-changes. Full release, offline-tool, integration and engine gates are required
-before a separately requested publication; branch pushes do not run release CI.
-
-Do not promise a calendar completion date from line count. Treat this as a
-multi-milestone program; estimate after milestone 0 and recalibrate after the
-first two migrated slices using measured effort, uncovered compatibility work
-and user feedback. Stop expanding a slice when it needs unrelated abstractions;
-record that dependency and return to the smallest usable workflow. Track
-completed user journeys, removed legacy owners, data-safety evidence and UX
-results rather than generated code volume or number of new classes.
-
-## Design references
-
-- [Riverpod 3 migration semantics](https://riverpod.dev/docs/3.0_migration),
-  [Flutter commands](https://docs.flutter.dev/app-architecture/design-patterns/command),
-  [transferable buffers](https://api.dart.dev/dart-isolate/TransferableTypedData-class.html),
-  [native callbacks](https://api.dart.dev/dart-ffi/NativeCallable/NativeCallable.listener.html),
-  [native finalizers](https://api.dart.dev/dart-ffi/NativeFinalizer-class.html),
-  [root error handling](https://api.flutter.dev/flutter/dart-ui/PlatformDispatcher/onError.html)
-  and [Windows process jobs](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects):
-  runtime/lifecycle constraints verified during review.
-- [SQLite corruption pitfalls](https://www.sqlite.org/howtocorrupt.html),
-  [WAL](https://www.sqlite.org/wal.html),
-  [synchronous settings](https://www.sqlite.org/pragma.html#pragma_synchronous),
-  [Windows cloud-file placeholders](https://learn.microsoft.com/en-us/windows/win32/cfapi/build-a-cloud-file-sync-engine)
-  and [Pillai et al., OSDI 2014](https://www.usenix.org/conference/osdi14/technical-sessions/presentation/pillai):
-  storage/backup and crash-consistency references.
-- [Flutter internationalization](https://docs.flutter.dev/ui/internationalization),
-  [Riverpod generation](https://riverpod.dev/docs/concepts/about_code_generation),
-  [typed routing](https://pub.dev/packages/go_router_builder),
-  [Dart subprocesses](https://api.dart.dev/dart-io/Process/start.html),
-  [Sentry Flutter](https://pub.dev/packages/sentry_flutter),
-  [Patrol targets](https://pub.dev/packages/patrol),
-  [Windows signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)
-  and [macOS notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution):
-  primary references used to qualify external architecture feedback on 2026-09-16.
-- [Knuth: Literate Programming](https://cs.stanford.edu/~knuth/lp.html):
-  human-readable program explanation and algorithmic reasoning.
-- [Flutter architecture recommendations](https://docs.flutter.dev/app-architecture/recommendations):
-  separation, dependency injection, immutable models and conditional use cases.
-- [Nielsen's usability heuristics](https://www.nngroup.com/articles/ten-usability-heuristics/):
-  feedback, consistency, control, recognition and recovery.
-- [WCAG 2.2](https://www.w3.org/TR/WCAG22/),
-  [target size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html)
-  and [text resizing](https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html):
-  accessibility references to adapt and test on desktop.
-- [Widgetbook](https://pub.dev/packages/widgetbook),
-  [Alchemist](https://pub.dev/packages/alchemist),
-  [Riverpod 3 behavior](https://riverpod.dev/docs/whats_new) and
-  [Drift migrations](https://drift.simonbinder.eu/migrations/):
-  primary documentation for selected defaults and deferred alternatives.

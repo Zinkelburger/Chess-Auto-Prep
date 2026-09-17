@@ -3,6 +3,7 @@
 /// or failed with the error. The analysis itself is scripted out.
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'package:chess_auto_prep/features/coverage/controllers/coverage_controller.dart';
 import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
@@ -22,7 +23,7 @@ class _ScriptedCoverageController extends CoverageController {
   @override
   Future<CoverageResult?> calculate({
     required CoverageConfig config,
-    required OpeningTree tree,
+    required OpeningGraph tree,
     required bool isWhiteRepertoire,
     _OnProgress? onProgress,
   }) => _script(onProgress);

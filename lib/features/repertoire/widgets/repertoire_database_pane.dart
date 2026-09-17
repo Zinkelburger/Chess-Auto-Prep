@@ -2,6 +2,7 @@
 /// The pane owns and disposes its live explorer client and debounce timer.
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,7 +16,6 @@ import '../../../services/explorer_game_opener.dart';
 import '../../../models/pgn_game_entry.dart';
 import '../../../chess_core/pgn/pgn_text.dart';
 import '../../../utils/app_messages.dart';
-import '../../../models/opening_tree.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../widgets/opening_tree_widget.dart';
 import '../../../services/live_explorer_service.dart';
@@ -45,7 +45,7 @@ class RepertoireDatabasePane extends StatefulWidget {
   final int? source;
   final ValueChanged<int>? onSourceChanged;
   final Widget Function(Widget sourceMenu, bool chessDb)? evaluationsBuilder;
-  final OpeningTree? tree;
+  final OpeningGraph? tree;
   final List<RepertoireLine> repertoireLines;
   final ValueChanged<String?>? onHoverTreeMove;
   final VoidCallback? onGoBack;

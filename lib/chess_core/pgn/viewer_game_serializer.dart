@@ -10,10 +10,10 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../chess_core/moves/move_tree_view.dart';
-import '../../chess_core/pgn/pgn_game_copy.dart';
+import '../moves/move_tree_view.dart';
+import 'pgn_game_copy.dart';
 import 'pgn_analysis_variations.dart';
-import 'sideline_tree.dart';
+import '../moves/sideline_tree.dart';
 
 /// Rebuild a dartchess move tree from [moveHistory] plus [sidelines]:
 /// sidelines keyed at ply `p` become siblings of the mainline move at index

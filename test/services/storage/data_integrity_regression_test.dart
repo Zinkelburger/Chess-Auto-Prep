@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
 import '../../support/fake_desktop_fullscreen_port.dart';
 import 'dart:io';
@@ -32,7 +33,7 @@ import 'package:chess_auto_prep/services/analysis_games_service.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/utils/atomic_file.dart';
-import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/pgn_viewer_controller.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
@@ -337,6 +338,9 @@ void main() {
       await file.writeAsString(originalGame);
       final analysis = FakeAnalysis();
       final c = PgnViewerController(
+        positionIndex: createViewerPositionIndex(),
+        openings: createViewerOpenings(),
+        solitaireRepository: createViewerSolitaire(),
         window: FakeDesktopFullscreenPort(),
         collectionDecoder: const IsolatePgnCollectionDecoder(),
         collectionFilter: const IsolatePgnCollectionFilter(),

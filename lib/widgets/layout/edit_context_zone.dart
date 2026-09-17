@@ -508,7 +508,7 @@ class _EditContextZoneState extends State<EditContextZone> {
     if (widget.treeContent != null) return widget.treeContent!;
     final built = _buildDefaultTree();
     if (built != null) return built;
-    return _missingSlot('Tree', 'treeContent or EvalTreeTab');
+    return _missingSlot('Tree', 'treeContent');
   }
 
   Widget _missingSlot(String label, String hint) {
@@ -585,10 +585,10 @@ class _EditContextZoneState extends State<EditContextZone> {
       );
     }
 
-    if (controller.openingTree == null) return null;
+    if (controller.openingGraph == null) return null;
 
     return OpeningTreeWidget(
-      tree: controller.openingTree!,
+      tree: controller.openingGraph!,
       repertoireLines: controller.repertoireLines,
       currentMoveSequence: controller.currentMoveSequence,
       onMoveSelected: controller.userSelectedTreeMove,

@@ -7,6 +7,8 @@ import 'package:dartchess/dartchess.dart';
 
 import '../../coverage/services/coverage_suggestion_service.dart';
 import '../repositories/repertoire_document_repository.dart';
+import '../models/repertoire_mutation_receipt.dart';
+import '../../documents/models/pgn_document.dart';
 import '../../../utils/atomic_file.dart';
 import '../../../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
 import 'repertoire_controller.dart';
@@ -22,6 +24,7 @@ class _SavedUndo extends _UndoEntry {
     required this.filePath,
     required this.id,
     required this.predecessorId,
+    required this.provenance,
   });
 
   final String before;
@@ -30,7 +33,12 @@ class _SavedUndo extends _UndoEntry {
   final String? filePath;
   final int id;
   final int? predecessorId;
-  String? expectedContent;
+
+  /// Null only for an in-memory document. Every batch step shares the actual
+  /// immutable native receipt; intermediate logical states invent no revision.
+  final RepertoireMutationReceipt? provenance;
+  PgnSnapshot? expectedNative;
+  String? expectedMemoryContent;
 }
 
 /// A scratch-tree edit never authorizes replacing a file-backed document.
@@ -46,7 +54,6 @@ class RepertoireWriter {
   static const int _maxUndoOperations = 20;
   final RepertoireController _controller;
   final RepertoireDocumentRepository documents;
-  Future<void> _queueTail = Future.value();
   final List<_UndoEntry> _undoStack = [];
   int _session = 0;
   int _nextUndoId = 0;
@@ -71,11 +78,8 @@ class RepertoireWriter {
     if (_undoStack.length > _maxUndoOperations) _undoStack.removeAt(0);
   }
 
-  Future<T> _serialExec<T>(Future<T> Function() fn) {
-    final result = _queueTail.then((_) => fn());
-    _queueTail = result.then((_) {}, onError: (_) {});
-    return result;
-  }
+  Future<T> _serialExec<T>(Future<T> Function() fn) =>
+      _controller.runDocumentMutation(fn);
 
   /// Invocations capture the document session before joining the queue.
   /// A load/reset invalidates queued actions, even for an A -> B -> A switch.
@@ -103,7 +107,7 @@ class RepertoireWriter {
       var position = _positionAtPath(prefix);
       var firstNew = 0;
       while (firstNew < moves.length &&
-          (_controller.openingTree?.hasMove(position.fen, moves[firstNew]) ??
+          (_controller.openingGraph?.hasMove(position.fen, moves[firstNew]) ??
               false)) {
         final next = playSanOrNullMove(position, moves[firstNew]);
         if (next == null) break;
@@ -113,14 +117,8 @@ class RepertoireWriter {
       if (firstNew == moves.length) return [...prefix, ...moves];
       final appendPrefix = [...prefix, ...moves.take(firstNew)];
       final newMoves = moves.sublist(firstNew);
-      final result = filePath == null
-          ? prepareAppendMoves(
-              _controller.repertoirePgn ?? '',
-              appendPrefix,
-              newMoves,
-              startingFen: startingFen,
-              isWhiteRepertoire: isWhite,
-            )
+      final nativeReceipt = filePath == null
+          ? null
           : await documents.append(
               filePath,
               appendPrefix,
@@ -128,15 +126,24 @@ class RepertoireWriter {
               startingFen: startingFen,
               isWhiteRepertoire: isWhite,
             );
-      if (!result.success) throw StateError('The repertoire is unavailable.');
+      nativeReceipt?.validate(
+        path: filePath!,
+        requestedPath: [...prefix, ...moves],
+      );
+      final result =
+          nativeReceipt?.mutation ??
+          prepareAppendMoves(
+            _controller.repertoirePgn ?? '',
+            appendPrefix,
+            newMoves,
+            startingFen: startingFen,
+            isWhiteRepertoire: isWhite,
+          );
       // The adapter already validates before commit. Defensively reject broken
       // receipts here without inventing undo from stale controller memory.
       result.validate(requestedPath: [...prefix, ...moves]);
-      _requireSession(
-        session,
-        committed: filePath != null && result.steps.isNotEmpty,
-      );
-      _acceptReceipt(result, filePath);
+      _requireSession(session);
+      _acceptReceipt(result, filePath, nativeReceipt);
       if (result.previousContent == _controller.repertoirePgn) {
         // Preserve the existing incremental presentation path when the
         // session really owns the validated baseline. External changes need
@@ -155,10 +162,7 @@ class RepertoireWriter {
           syncPath: _controller.currentMoveSequence,
         );
       }
-      _requireSession(
-        session,
-        committed: filePath != null && result.steps.isNotEmpty,
-      );
+      _requireSession(session);
       return [...prefix, ...moves];
     });
   }
@@ -168,25 +172,36 @@ class RepertoireWriter {
     return path == null || path.isEmpty ? null : path;
   }
 
-  void _requireSession(int session, {bool committed = false}) {
+  void _requireSession(int session) {
     if (session != _session || _controller.isLoading) {
       throw StateError('The repertoire changed before the action could run.');
     }
   }
 
-  void _acceptReceipt(AppendMovesResult receipt, String? filePath) {
+  void _acceptReceipt(
+    RepertoireAppendPlan receipt,
+    String? filePath,
+    RepertoireMutationReceipt? provenance,
+  ) {
     if (receipt.steps.isEmpty) return;
     final head = _undoStack.lastOrNull;
     int? predecessorId;
     if (head is _SavedUndo &&
         head.filePath == filePath &&
-        head.expectedContent == receipt.previousContent &&
-        head.after == receipt.previousContent) {
+        head.after == receipt.previousContent &&
+        (provenance == null
+            ? head.provenance == null &&
+                  head.expectedMemoryContent == receipt.previousContent
+            : head.expectedNative?.revision == provenance.before.revision &&
+                  head.expectedNative?.content == provenance.before.content)) {
       predecessorId = head.id;
     }
     // An unrelated edit breaks the chain permanently. Even a later undo
     // restoring equal-looking content must not re-arm the old history.
-    if (head is _SavedUndo) head.expectedContent = null;
+    if (head is _SavedUndo) {
+      head.expectedNative = null;
+      head.expectedMemoryContent = null;
+    }
     var before = receipt.previousContent;
     for (final step in receipt.steps) {
       final entry = _SavedUndo(
@@ -196,12 +211,18 @@ class RepertoireWriter {
         filePath: filePath,
         id: _nextUndoId++,
         predecessorId: predecessorId,
+        provenance: provenance,
       );
       _push(entry);
       predecessorId = entry.id;
       before = step.content;
     }
-    (_undoStack.last as _SavedUndo).expectedContent = receipt.updatedContent;
+    final top = _undoStack.last as _SavedUndo;
+    if (provenance == null) {
+      top.expectedMemoryContent = receipt.updatedContent;
+    } else {
+      top.expectedNative = provenance.after;
+    }
   }
 
   /// Only a confirmed commit consumes history. Failures and conflicts retain
@@ -224,18 +245,17 @@ class RepertoireWriter {
         return true;
       }
       final op = entry as _SavedUndo;
-      final expected = op.expectedContent;
-      if (expected == null) throw AtomicWriteConflict(op.filePath ?? 'draft');
+      PgnSnapshot? restored;
       final filePath = op.filePath;
       if (filePath != null) {
-        await documents.replace(
-          filePath,
-          op.before,
-          expectedContent: expected,
-          reconcileInstalled: true,
-        );
-      } else if (_controller.repertoirePgn != expected) {
-        throw const AtomicWriteConflict('draft');
+        final expected = op.expectedNative;
+        if (expected == null) throw AtomicWriteConflict(filePath);
+        restored = await documents.restore(expected, op.before);
+      } else {
+        final expected = op.expectedMemoryContent;
+        if (expected == null || _controller.repertoirePgn != expected) {
+          throw const AtomicWriteConflict('draft');
+        }
       }
       if (session != _session) return true;
       if (!identical(_undoStack.lastOrNull, op)) {
@@ -249,7 +269,11 @@ class RepertoireWriter {
       if (predecessor is _SavedUndo &&
           predecessor.id == op.predecessorId &&
           predecessor.after == op.before) {
-        predecessor.expectedContent = op.before;
+        if (filePath == null) {
+          predecessor.expectedMemoryContent = op.before;
+        } else {
+          predecessor.expectedNative = restored;
+        }
       }
       // Publish history before refreshing UI: a failed refresh must never
       // replay an already committed undo on retry.

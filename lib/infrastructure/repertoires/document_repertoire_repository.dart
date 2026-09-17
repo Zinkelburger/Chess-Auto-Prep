@@ -1,12 +1,12 @@
 import '../../chess_core/pgn/repertoire_pgn_text.dart';
 import '../../chess_core/pgn/repertoire_document_mutation.dart';
 import '../../features/documents/models/pgn_document.dart';
+import '../../features/repertoires/models/repertoire_mutation_receipt.dart';
 import '../../features/documents/repositories/pgn_document_store.dart';
 import '../../features/repertoires/repositories/repertoire_document_repository.dart';
 import '../../utils/atomic_file.dart' show AtomicWriteConflict;
 
-/// Adapts the shared PGN store to the Builder's existing decoded-content undo
-/// contract. The app chooses the native or legacy store at its composition root.
+/// Adapts the shared PGN store to validated Builder mutation receipts. The app chooses the native or legacy store at its composition root.
 /// There is no storage singleton or direct file access here.
 class DocumentRepertoireRepository implements RepertoireDocumentRepository {
   const DocumentRepertoireRepository(this.documents);
@@ -34,22 +34,15 @@ class DocumentRepertoireRepository implements RepertoireDocumentRepository {
     String path,
     String content, {
     required String expectedContent,
-    bool reconcileInstalled = false,
   }) async {
     final before = await _openRequired(path);
     if (before.content != expectedContent) throw AtomicWriteConflict(path);
     final result = await documents.save(before, content);
-    // Only undo opts into S0's exact decoded-result reconciliation. No new
-    // expectation is taken from disk, and logical append is never replayed.
-    if (reconcileInstalled && result is PgnWriteUncertain) {
-      final observed = await documents.open(path);
-      if (observed is PgnOpened && observed.snapshot.content == content) return;
-    }
     _requireSaved(path, result);
   }
 
   @override
-  Future<AppendMovesResult> append(
+  Future<RepertoireMutationReceipt> append(
     String path,
     List<String> prefix,
     List<String> moves, {
@@ -68,10 +61,59 @@ class DocumentRepertoireRepository implements RepertoireDocumentRepository {
       isWhiteRepertoire: isWhiteRepertoire,
     );
     result.validate(requestedPath: [...pathFromRoot, ...newMoves]);
-    if (result.steps.isNotEmpty) {
-      _requireSaved(path, await documents.save(before, result.updatedContent));
+    final after = result.steps.isEmpty
+        ? before
+        : await _confirm(
+            before,
+            result.updatedContent,
+            await documents.save(before, result.updatedContent),
+          );
+    final receipt = RepertoireMutationReceipt(
+      requestedDocumentPath: path,
+      before: before,
+      after: after,
+      mutation: result,
+    );
+    receipt.validate(path: path, requestedPath: [...pathFromRoot, ...newMoves]);
+    return receipt;
+  }
+
+  @override
+  Future<PgnSnapshot> restore(PgnSnapshot expected, String content) async =>
+      _confirm(expected, content, await documents.save(expected, content));
+
+  Future<PgnSnapshot> _confirm(
+    PgnSnapshot expected,
+    String content,
+    PgnWriteResult result,
+  ) async {
+    if (result is PgnWriteUncertain) {
+      // Installation proof must come from the store's staged identity and
+      // digest. A later read of equal text cannot manufacture that proof.
+      final installed = result.installedRevision;
+      if (installed != null &&
+          installed.documentId == expected.revision.documentId &&
+          result.before?.content == expected.content &&
+          result.observed?.path == expected.path &&
+          result.before?.revision == expected.revision &&
+          result.observed?.revision == installed &&
+          result.observed?.content == content) {
+        final current = await documents.open(expected.path);
+        if (current is PgnOpened &&
+            current.snapshot.path == expected.path &&
+            current.snapshot.revision == installed &&
+            current.snapshot.content == content) {
+          return current.snapshot;
+        }
+      }
     }
-    return result;
+    final saved = _requireSaved(expected.path, result, expected: expected);
+    if (saved.content != content ||
+        saved.path != expected.path ||
+        saved.revision.documentId != expected.revision.documentId) {
+      throw StateError('Invalid native mutation acknowledgement');
+    }
+    return saved;
   }
 
   Future<PgnSnapshot?> _optional(String path) async =>
@@ -177,10 +219,19 @@ class DocumentRepertoireRepository implements RepertoireDocumentRepository {
     return document.games.length - kept.length;
   }
 
-  void _requireSaved(String path, PgnWriteResult result) {
+  PgnSnapshot _requireSaved(
+    String path,
+    PgnWriteResult result, {
+    PgnSnapshot? expected,
+  }) {
     switch (result) {
-      case PgnSaved():
-        return;
+      case PgnSaved(:final before, :final after):
+        if (expected != null &&
+            (before?.revision != expected.revision ||
+                before?.content != expected.content)) {
+          throw StateError('Invalid mutation baseline acknowledgement');
+        }
+        return after;
       case PgnConflict():
       case PgnNameCollision():
         throw AtomicWriteConflict(path);

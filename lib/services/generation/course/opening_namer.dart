@@ -1,15 +1,17 @@
+library;
+
+import 'package:chess_auto_prep/chess_core/pgn/opening_book.dart';
+
 /// Naming move sequences from the bundled ECO opening book.
 ///
 /// The book is FEN-keyed, so a line is named by the deepest book position it
 /// passes through — transpositions get the right name for free, and a line
 /// that leaves book keeps the last name it earned.
-library;
 
 import 'package:dartchess/dartchess.dart';
 
 import '../../../utils/fen_utils.dart';
 import '../../../utils/chess_utils.dart' show playSanOrNullMove;
-import '../../opening_book_service.dart';
 import '../../../utils/movetext_builder.dart';
 
 /// An ECO code and opening name, e.g. `B36` / `Sicilian Defense: Accelerated

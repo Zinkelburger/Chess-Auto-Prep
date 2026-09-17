@@ -105,35 +105,6 @@ class RepertoireAuthoring {
     );
   }
 
-  /// [line] with its game text replaced by [newPgn]: moves, comments,
-  /// headers and start position are re-read from the text; identity, name,
-  /// colour, importance, chapter and file position are kept.
-  RepertoireLine rebuildLine(RepertoireLine line, String newPgn) {
-    final parsed = parsePgnGame(newPgn);
-    final mainline = parsed.moves.mainline().toList();
-    final comments = <String, String>{};
-    for (final (i, node) in mainline.indexed) {
-      final comment = node.comments?.join(' ').trim() ?? '';
-      if (comment.isNotEmpty) comments['$i'] = comment;
-    }
-    return RepertoireLine(
-      id: line.id,
-      sourcePath: line.sourcePath,
-      sourceLineId: line.sourceLineId,
-      name: line.name,
-      moves: [for (final node in mainline) node.san],
-      color: line.color,
-      startPosition: _startPosition(newPgn),
-      fullPgn: newPgn,
-      comments: comments,
-      headers: Map<String, String>.from(parsed.headers),
-      importance: line.importance,
-      chapter: line.chapter,
-      isModelGame: line.isModelGame,
-      gameIndex: line.gameIndex,
-    );
-  }
-
   /// Construct a brand-new [RepertoireLine] for [moves].
   ///
   /// [index] is the position in the current lines list (used for id + default

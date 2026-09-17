@@ -85,10 +85,16 @@ final class PgnWriteUncertain extends PgnWriteResult {
     required this.error,
     required this.before,
     required this.observed,
+    this.installedRevision,
     this.recoveryPath,
   });
   final Object error;
   final PgnSnapshot? before;
   final PgnSnapshot? observed;
+
+  /// Proven identity and bytes of this operation's staged artifact after it
+  /// reached the destination. Equal decoded text alone is not installation
+  /// proof. Null means callers must not infer provenance from [observed].
+  final PgnRevision? installedRevision;
   final String? recoveryPath;
 }

@@ -11,6 +11,8 @@
 /// conversion back to PGN in `viewer_game_serializer.dart`.
 library;
 
+import '../models/solitaire_script.dart' show SolitaireGameView;
+
 import 'package:dartchess/dartchess.dart';
 import 'viewer_sideline_adoption.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_game_copy.dart';
@@ -28,13 +30,13 @@ import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show buildGameMovetext, joinComments;
 import 'package:chess_auto_prep/chess_core/pgn/quality_nags.dart';
-import 'package:chess_auto_prep/core/pgn/mainline_positions.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_analysis_variations.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_dummy_mainline.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_variation_extractor.dart';
-import 'package:chess_auto_prep/core/pgn/sideline_tree.dart';
-import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
-import 'package:chess_auto_prep/core/pgn/viewer_game_serializer.dart'
+import 'package:chess_auto_prep/chess_core/pgn/mainline_positions.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_analysis_variations.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_dummy_mainline.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_variation_extractor.dart';
+import 'package:chess_auto_prep/chess_core/moves/sideline_tree.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_reveal.dart';
+import 'package:chess_auto_prep/chess_core/pgn/viewer_game_serializer.dart'
     as serializer;
 
 /// What [ViewerGameController.addMove] did with the move.
@@ -52,7 +54,7 @@ enum ViewerMoveKind {
   variation,
 }
 
-class ViewerGameController {
+class ViewerGameController implements SolitaireGameView {
   Position get startPosition => _startPosition;
   Position get currentPosition => _currentPosition;
   int get mainLineIndex => _mainLineIndex;
@@ -69,6 +71,7 @@ class ViewerGameController {
   final _moveSnapshots = <PgnNodeData, PgnMoveSnapshot>{};
   Expando<Object> _moveIdentities = Expando('Viewer move identities');
 
+  @override
   List<PgnMoveSnapshot> get moveHistory =>
       _moveView ??= List.unmodifiable(_moveHistory.map(_snapshotOf));
 
@@ -105,6 +108,7 @@ class ViewerGameController {
   SidelineForest _variationsByPly = {};
   final _sidelineViews = SidelineProjectionCache();
 
+  @override
   Map<int, List<MoveNodeSnapshot>> get variationsByPly =>
       _sidelineViews.read(_variationsByPly);
 
@@ -191,6 +195,7 @@ class ViewerGameController {
   /// The board after each mainline ply, computed once and extended as the
   /// mainline grows.  Every navigation reads from here instead of replaying
   /// the game from the start.
+  @override
   MainlinePositions get mainline =>
       MainlinePositions.of(_moveHistory, _startPosition);
 

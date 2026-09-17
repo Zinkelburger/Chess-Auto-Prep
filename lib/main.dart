@@ -4,6 +4,7 @@ import 'app/runtime_settings.dart';
 import 'features/generation/services/generation_artifacts.dart';
 import 'app/generation_dependencies.dart';
 import 'features/generation/controllers/generation_publication_controller.dart';
+import 'app/viewer_dependencies.dart';
 import 'app/repertoire_dependencies.dart';
 import 'features/repertoires/repositories/repertoire_document_repository.dart';
 import 'features/repertoires/repositories/repertoire_decoder.dart';
@@ -244,6 +245,9 @@ class ChessAutoPrepApp extends StatelessWidget {
               pool: ctx.read<StockfishPool>(),
               lifecycle: ctx.read<EngineLifecycle>(),
               bulkDepth: () => ctx.read<BulkAnalysisSettings>().depth,
+              positionIndex: createViewerPositionIndex(),
+              openings: createViewerOpenings(),
+              solitaireRepository: createViewerSolitaire(),
               window: createViewerWindowPort(),
               preferences: createViewerPreferencesRepository(),
               collectionDecoder: createPgnCollectionDecoder(),

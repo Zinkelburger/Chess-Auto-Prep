@@ -14,7 +14,7 @@
 library;
 
 import 'package:dartchess/dartchess.dart';
-import '../../chess_core/pgn/pgn_game_view.dart';
+import 'pgn_game_view.dart';
 
 import '../../utils/chess_utils.dart' show playSanOrNullMove;
 import '../../utils/fen_utils.dart';

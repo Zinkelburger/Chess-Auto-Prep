@@ -1,7 +1,7 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/solitaire_script.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_script.dart';
 import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 
 ViewerGameController _load(String movetext) {

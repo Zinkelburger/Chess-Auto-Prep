@@ -8,6 +8,7 @@ import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../../support/runtime_settings.dart';
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -64,7 +65,7 @@ class _GatedAudit extends RepertoireAuditService {
   final starts = <String?>[];
   @override
   Future<AuditResult> audit({
-    required OpeningTree tree,
+    required OpeningGraph tree,
     required bool isWhiteRepertoire,
     required AuditConfig config,
     String? startFen,

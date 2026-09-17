@@ -1,14 +1,16 @@
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
-import 'package:chess_auto_prep/core/pgn/solitaire_controller.dart';
-import 'package:chess_auto_prep/core/pgn/solitaire_script.dart' as scripts;
+import 'package:chess_auto_prep/features/documents/repositories/pgn_viewer_handle.dart';
+import 'package:chess_auto_prep/features/documents/controllers/solitaire_controller.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_script.dart'
+    as scripts;
 import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
-import 'package:chess_auto_prep/core/pgn/viewer_solitaire_session.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_solitaire_session.dart';
 import 'package:chess_auto_prep/chess_core/moves/move_tree_view.dart';
 
 class _NoTrophiesStorage extends IOStorageService {
@@ -158,6 +160,8 @@ _build({
   var bottomIsWhite = true;
   var changes = 0;
   final session = ViewerSolitaireSession(
+    repository: createViewerSolitaire(),
+    onError: (_) {},
     handle: handle,
     hasGames: () => games,
     userPlaysWhite: () => bottomIsWhite,

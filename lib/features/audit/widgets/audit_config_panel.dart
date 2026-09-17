@@ -4,12 +4,12 @@ library;
 
 import 'package:provider/provider.dart';
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../../features/settings/controllers/bulk_analysis_settings.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../models/opening_tree.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../widgets/engine/engine_gate.dart';
@@ -19,7 +19,7 @@ import '../../../utils/movetext_builder.dart';
 import 'hunt_controls.dart';
 
 class AuditConfigPanel extends StatefulWidget {
-  final OpeningTree? openingTree;
+  final OpeningGraph? openingTree;
   final bool isWhiteRepertoire;
   final String currentFen;
   final List<String> currentMoveSequence;

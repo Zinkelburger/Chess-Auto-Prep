@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import 'dart:io';
 
@@ -72,6 +73,9 @@ void main() {
     lifetime = PgnViewerLifetime(
       pool: engines.pool,
       lifecycle: engines.lifecycle,
+      positionIndex: createViewerPositionIndex(),
+      openings: createViewerOpenings(),
+      solitaireRepository: createViewerSolitaire(),
       window: FakeDesktopFullscreenPort(),
       collectionDecoder: const IsolatePgnCollectionDecoder(),
       collectionFilter: const IsolatePgnCollectionFilter(),

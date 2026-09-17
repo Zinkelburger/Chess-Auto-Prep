@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dart';
@@ -14,7 +15,7 @@ import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_
 import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 
-import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/pgn_viewer_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart' as pgn;
@@ -89,6 +90,9 @@ void main() {
     StorageFactory.instanceForTest = storage;
     final analysis = _Analysis();
     controller = PgnViewerController(
+      positionIndex: createViewerPositionIndex(),
+      openings: createViewerOpenings(),
+      solitaireRepository: createViewerSolitaire(),
       window: FakeDesktopFullscreenPort(),
       collectionDecoder: const IsolatePgnCollectionDecoder(),
       collectionFilter: const IsolatePgnCollectionFilter(),

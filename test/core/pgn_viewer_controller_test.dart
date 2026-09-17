@@ -1,6 +1,7 @@
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
 import '../support/runtime_settings.dart';
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_collection_players.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dart';
@@ -23,7 +24,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/pgn_viewer_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
@@ -60,6 +61,9 @@ class _FakeAnalysisController extends GameAnalysisController {
 class _GatedOpeningController extends PgnViewerController {
   _GatedOpeningController()
     : super(
+        positionIndex: createViewerPositionIndex(),
+        openings: createViewerOpenings(),
+        solitaireRepository: createViewerSolitaire(),
         window: FakeDesktopFullscreenPort(),
         collectionDecoder: const IsolatePgnCollectionDecoder(),
         collectionFilter: const IsolatePgnCollectionFilter(),
@@ -151,6 +155,9 @@ PgnViewerController _makeController({
   // A detached widget controller behaves as a no-op stub (its methods guard on
   // a null attached state), so it is safe to use without mounting a widget.
   return PgnViewerController(
+    positionIndex: createViewerPositionIndex(),
+    openings: createViewerOpenings(),
+    solitaireRepository: createViewerSolitaire(),
     window: window ?? FakeDesktopFullscreenPort(),
     collectionDecoder: decoder,
     collectionFilter: matcher,

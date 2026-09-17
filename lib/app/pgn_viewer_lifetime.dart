@@ -1,5 +1,8 @@
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/engine/stockfish_pool.dart';
+import '../features/documents/repositories/viewer_position_index_repository.dart';
+import '../features/documents/repositories/viewer_opening_repository.dart';
+import '../features/documents/repositories/viewer_solitaire_repository.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -7,7 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 
-import '../core/pgn_viewer_controller.dart';
+import '../features/documents/controllers/pgn_viewer_controller.dart';
 import '../features/documents/controllers/workspace_recovery_controller.dart';
 import '../features/documents/models/pgn_workspace_snapshot.dart';
 import '../features/documents/repositories/desktop_fullscreen_port.dart';
@@ -25,11 +28,15 @@ import '../services/game_analysis_controller.dart';
 import '../services/storage/app_paths.dart';
 import '../widgets/pgn_viewer_widget.dart';
 
-/// App-lifetime wiring for the remaining legacy viewer host. The screen borrows
+/// App-lifetime composition for the document-feature Viewer host. The screen borrows
 /// these owners; route visibility does not destroy its draft or recovery lease.
-/// Retire this bridge as the reader/analysis interfaces migrate to the feature.
+/// The concrete reader/analysis bridge remains until their widgets and engine
+/// lifecycle migrate; the feature host uses PgnViewerHandle/ViewerAnalysisPort.
 class PgnViewerLifetime {
   PgnViewerLifetime({
+    required ViewerPositionIndexRepository positionIndex,
+    required ViewerOpeningRepository openings,
+    required ViewerSolitaireRepository solitaireRepository,
     required DesktopFullscreenPort window,
     int Function()? bulkDepth,
     required StockfishPool pool,
@@ -47,6 +54,9 @@ class PgnViewerLifetime {
       lifecycle: lifecycle,
     );
     controller = PgnViewerController(
+      positionIndex: positionIndex,
+      openings: openings,
+      solitaireRepository: solitaireRepository,
       window: window,
       collectionRepository: repository,
       collectionDecoder: collectionDecoder,

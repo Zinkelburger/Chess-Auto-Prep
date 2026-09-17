@@ -1,7 +1,7 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/viewer_game_serializer.dart';
+import 'package:chess_auto_prep/chess_core/pgn/viewer_game_serializer.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 
 MoveNode _node(

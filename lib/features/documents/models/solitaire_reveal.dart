@@ -7,7 +7,7 @@
 /// wrong tries — are always shown.
 library;
 
-import '../../chess_core/moves/move_tree_view.dart';
+import '../../../chess_core/moves/move_tree_view.dart';
 
 class SolitaireReveal {
   /// Mainline moves at index `< mainlinePly` are visible.

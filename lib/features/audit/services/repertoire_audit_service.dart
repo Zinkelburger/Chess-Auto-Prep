@@ -8,12 +8,12 @@
 /// has choices.
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 
-import '../../../models/opening_tree.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/eval/chessdb_api_provider.dart';
 import '../../../services/eval/db_move_list.dart';
@@ -95,7 +95,7 @@ class RepertoireAuditService {
   /// interrupted audit. Nodes whose FEN is in [skipFens] are traversed
   /// (so their children are enqueued) but not re-checked.
   Future<AuditResult> audit({
-    required OpeningTree tree,
+    required OpeningGraph tree,
     required bool isWhiteRepertoire,
     required AuditConfig config,
     String? startFen,
@@ -342,14 +342,14 @@ class RepertoireAuditService {
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  /// Build a merged [OpeningTree] from the configured clash PGN paths.
+  /// Build a merged [OpeningGraph] from the configured clash PGN paths.
   ///
   /// With [AuditConfig.clashUsername] empty this merges every game in the
   /// files, which is what a book or course PGN wants. With a username set it
   /// filters to that player's games on [AuditConfig.clashUserIsWhite], which
   /// is what modeling a specific opponent's archive requires — their games on
   /// the other color say nothing about how they meet our repertoire.
-  Future<OpeningTree> _buildClashTree(
+  Future<OpeningGraph> _buildClashTree(
     AuditConfig config,
     bool isWhiteRepertoire,
   ) async {
@@ -376,7 +376,7 @@ class RepertoireAuditService {
     );
   }
 
-  OpeningTreeNode? _resolveStartNode(OpeningTree tree, String? startFen) {
+  OpeningNodeView? _resolveStartNode(OpeningGraph tree, String? startFen) {
     if (startFen == null) return tree.root;
     final key = normalizeFen(startFen);
     final nodes = tree.fenToNodes[key];

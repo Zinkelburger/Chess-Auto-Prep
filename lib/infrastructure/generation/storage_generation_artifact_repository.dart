@@ -295,10 +295,17 @@ class StorageGenerationArtifactRepository
         );
       }
       if (!identical(_runs[run], state)) {
-        throw const GenerationArtifactFailure('Artifact run was closed during staging');
+        throw const GenerationArtifactFailure(
+          'Artifact run was closed during staging',
+        );
       }
       final proposal = GenerationArtifactProposal(manifestPath);
-      _proposals[proposal] = _Proposal(run, expectedPointer, payloads, manifest);
+      _proposals[proposal] = _Proposal(
+        run,
+        expectedPointer,
+        payloads,
+        manifest,
+      );
       return proposal;
     } catch (error) {
       throw GenerationArtifactFailure(

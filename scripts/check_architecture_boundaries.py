@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Enforce renewal boundaries as slices migrate; legacy paths are not certified."""
+"""Check every feature and ratchet exact, explicitly recorded architecture debt."""
+from collections import Counter
 from pathlib import Path
 import re
 import json
@@ -9,14 +10,53 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTIVE = re.compile(r"^\s*(?:import|export)\s+['\"]([^'\"]+)['\"]", re.M)
 DEPENDENCIES = re.compile(r"^\s*(?:import|export|part)\s+([^;]+);", re.M)
-RETIRED_BUILDER_LIBRARIES = {
-    'lib/core/repertoire_controller.dart',
-    'lib/core/repertoire_writer.dart',
-    'lib/core/repertoire_authoring.dart',
-    'lib/core/move_navigation.dart',
-    'lib/services/repertoire_line_expansion.dart',
-    'lib/services/course_chapter_headers.dart',
-}
+FEATURE_STATES = {'unfinished', 'enforced', 'complete'}
+THEME_USE = re.compile(r'\b(?:AppColors|AppTextStyles|AppPalette)\b|\bColors\.|\bColor(?:\.fromARGB|\.fromRGBO)?\s*\(|\bfontSize\s*:')
+SINGLETON_USE = re.compile(r'\b(\w+)\.instance\b')
+# Preserve source lines while ignoring comments. Retired names in interpolated
+# strings can still be executable references, so literals are kept conservatively.
+DART_TRIVIA = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|//[^\n]*|/\*[\s\S]*?\*/")
+RETIREMENTS = json.loads((ROOT / 'scripts/architecture_retirements.json').read_text())
+
+
+def without_comments(source: str) -> str:
+    return DART_TRIVIA.sub(
+        lambda match: re.sub(r'[^\n]', ' ', match.group())
+        if match.group().startswith(('//', '/*')) else match.group(), source)
+
+
+
+def project_target(relative: str, uri: str) -> str:
+    if uri.startswith('package:chess_auto_prep/'):
+        return posixpath.normpath('lib/' + uri.split('/', 1)[1])
+    if ':' not in uri:
+        return posixpath.normpath(posixpath.join(posixpath.dirname(relative), uri))
+    return ''
+
+
+def dependency_uris(source: str):
+    for directive in DEPENDENCIES.findall(source):
+        yield from re.findall(r"['\"]([^'\"]+)['\"]", directive)
+
+
+def retirement_violations(relative: str, source: str, retirements: dict) -> list[str]:
+    if not relative.startswith('lib/'):
+        return []
+    errors = []
+    executable = without_comments(source)
+    dependencies = [(uri, project_target(relative, uri)) for uri in dependency_uris(executable)]
+    for path in retirements['paths']:
+        def retired(target):
+            return target == path or path.endswith('/') and target.startswith(path)
+        if retired(relative):
+            errors.append(f'{relative}: retired library {path}; use its final owner')
+        for uri, target in dependencies:
+            if retired(target):
+                errors.append(f'{relative}: dependency on retired library {uri}; use its final owner')
+    for symbol in retirements['symbols']:
+        if re.search(rf'\b{re.escape(symbol)}\b', executable):
+            errors.append(f'{relative}: retired API {symbol}; use its final owner')
+    return errors
 
 
 def pure_dependency_violations(sources: dict[str, str], roots: list[str]) -> list[str]:
@@ -49,21 +89,20 @@ def pure_dependency_violations(sources: dict[str, str], roots: list[str]) -> lis
     return errors
 
 
-def violations(relative: str, source: str) -> list[str]:
+def violations(relative: str, source: str, *, include_retirements: bool = True) -> list[str]:
     path = Path(relative)
-    errors = []
-    executable = re.sub(r'(?m)^\s*//.*$', '', source)
-    if relative in RETIRED_BUILDER_LIBRARIES:
-        errors.append(f'{relative}: retired Builder library; use the canonical feature/chess-core owner')
+    errors = retirement_violations(relative, source, RETIREMENTS) if include_retirements else []
+    executable = without_comments(source)
     if relative.startswith('lib/') and relative != 'lib/chess_core/pgn/pgn_parser.dart' and re.search(r'\bPgnGame\.parsePgn\s*\(', executable):
         errors.append(f'{relative}: single-game parsing must use chess_core/pgn/pgn_parser.dart')
     if relative in ('lib/features/repertoires/controllers/repertoire_controller.dart', 'lib/features/repertoires/controllers/repertoire_writer.dart'):
-        for uri in DIRECTIVE.findall(source):
+        for uri in dependency_uris(without_comments(source)):
             if uri.startswith(('dart:io', 'dart:isolate')) or any(part in uri for part in ('infrastructure/', 'services/storage/', 'repertoire_file_editor.dart')):
                 errors.append(f'{relative}: Builder document access must use injected contracts: {uri}')
         if re.search(r'\b\w+\.instance\b', executable):
             errors.append(f'{relative}: Builder bypasses injected document dependencies')
-    feature = relative.startswith(('lib/features/repertoires/', 'lib/features/documents/', 'lib/features/settings/', 'lib/features/studies/'))
+    feature = relative.startswith('lib/features/')
+    widget = feature and 'widgets' in path.parts[3:-1]
     chess = relative.startswith('lib/chess_core/')
     infrastructure = relative.startswith('lib/infrastructure/')
     design = relative.startswith('lib/design_system/')
@@ -72,18 +111,12 @@ def violations(relative: str, source: str) -> list[str]:
         return errors
     pure = chess or feature and any(part in ('models', 'repositories') for part in path.parts[3:-1])
     controller = feature and 'controllers' in path.parts[3:-1]
-    for uri in DIRECTIVE.findall(source):
-        if uri.startswith('package:chess_auto_prep/'):
-            target = ROOT / 'lib' / uri.split('/', 1)[1]
-        elif ':' not in uri:
-            target = (ROOT / path.parent / uri).resolve()
-        else:
-            target = None
-        local = target.relative_to(ROOT).as_posix() if target and target.is_relative_to(ROOT) else ''
+    for uri in dependency_uris(without_comments(source)):
+        local = project_target(relative, uri)
         forbidden = (
             design and (uri.startswith(('dart:io', 'dart:ffi', 'package:provider/', 'package:flutter_riverpod/', 'package:widgetbook/')) or (local and not local.startswith('lib/design_system/')))
             or catalog and (uri.startswith(('dart:io', 'dart:ffi')) or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
-            or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/', 'lib/features/settings/widgets/', 'lib/features/studies/widgets/')) and local.startswith('lib/theme/')
+            or widget and local.startswith('lib/theme/')
             or pure and (uri.startswith(('dart:io', 'dart:isolate', 'dart:ffi', 'package:flutter', 'package:riverpod')) or local.startswith(('lib/services/', 'lib/infrastructure/', 'lib/app/')))
             or feature and (uri.startswith(('dart:io', 'dart:ffi', 'package:document_file_io/', 'package:shared_preferences/')) or local.startswith(('lib/infrastructure/', 'lib/app/', 'lib/services/storage/')))
             or controller and ('/widgets/' in local or '/screens/' in local or local.startswith('lib/services/'))
@@ -92,22 +125,52 @@ def violations(relative: str, source: str) -> list[str]:
         )
         if forbidden:
             errors.append(f'{relative}: forbidden dependency {uri}')
-    if (design and not relative.startswith('lib/design_system/theme/') or relative.startswith(('lib/features/repertoires/widgets/', 'lib/features/documents/widgets/', 'lib/features/settings/widgets/', 'lib/features/studies/widgets/'))) and re.search(r'\b(?:AppColors|AppTextStyles|AppPalette)\b|\bColors\.|\bColor(?:\.fromARGB|\.fromRGBO)?\s*\(|\bfontSize\s*:', source):
-        errors.append(f'{relative}: widget bypasses active theme/typography')
-    # A widget's frame scheduling is framework lifecycle, not an application
-    # service locator. Keep this exception narrow; domain owners still inject
-    # their schedulers, and storage/engine singletons remain forbidden in UI.
-    singleton_access = re.findall(r'\b(\w+)\.instance\b', source)
-    if feature and 'widgets' in path.parts[3:-1]:
-        singleton_access = [name for name in singleton_access if name != 'WidgetsBinding']
-    if (feature or catalog) and singleton_access:
-        errors.append(f'{relative}: global singleton access bypasses injection')
+    if design and not relative.startswith('lib/design_system/theme/') or widget:
+        for line, code in zip(source.splitlines(), executable.splitlines()):
+            if THEME_USE.search(code):
+                errors.append(f'{relative}: widget bypasses active theme/typography: {line.strip()}')
+    # Keep every offending source line, including repeated lines. A file-level
+    # exemption would silently allow new calls in already indebted files.
+    if feature or catalog:
+        for line, code in zip(source.splitlines(), executable.splitlines()):
+            names = SINGLETON_USE.findall(code)
+            if widget:
+                names = [name for name in names if name != 'WidgetsBinding']
+            if names:
+                errors.append(f'{relative}: global singleton access bypasses injection: {line.strip()}')
     return errors
 
 
-def main() -> int:
+def feature_debt_violations(observed: set[str], findings: list[str], ledger: dict) -> list[str]:
+    """An exact multiset ratchet: debt may disappear only with ledger removal."""
     errors = []
-    sources = {path.relative_to(ROOT).as_posix(): path.read_text() for path in (ROOT / 'lib').rglob('*.dart')}
+    features = ledger['features']
+    baseline = ledger['baseline']
+    for feature in sorted(observed - features.keys()):
+        errors.append(f'lib/features/{feature}/: unclassified feature directory')
+    for feature in sorted(features.keys() - observed):
+        errors.append(f'lib/features/{feature}/: remove stale feature classification')
+    for feature, state in features.items():
+        if state not in FEATURE_STATES:
+            errors.append(f'lib/features/{feature}/: invalid feature state {state!r}')
+    for entry in baseline:
+        path = entry.split(': ', 1)[0]
+        parts = path.split('/')
+        if len(parts) < 4 or parts[:2] != ['lib', 'features']:
+            errors.append(f'{entry}: debt baseline may contain only feature findings')
+        elif features.get(parts[2]) != 'unfinished':
+            errors.append(f'{entry}: only unfinished features may retain baseline debt')
+    current, recorded = Counter(findings), Counter(baseline)
+    for entry, count in sorted((current - recorded).items()):
+        errors.extend([f'{entry} [new violation; replace the dependency]'] * count)
+    for entry, count in sorted((recorded - current).items()):
+        errors.extend([f'{entry} [stale baseline; remove resolved debt]'] * count)
+    return errors
+
+
+def check(root: Path) -> tuple[list[str], int, int]:
+    errors = []
+    sources = {path.relative_to(root).as_posix(): path.read_text() for path in (root / 'lib').rglob('*.dart')}
     pure_roots = [path for path in sources if path.startswith('lib/chess_core/')]
     pure_roots.extend([
         'lib/features/documents/controllers/viewer_game_controller.dart',
@@ -118,24 +181,37 @@ def main() -> int:
         'lib/features/documents/controllers/viewer_presentation_controller.dart',
         'lib/features/documents/controllers/viewer_collection_controller.dart',
         'lib/features/repertoires/controllers/repertoire_board_controller.dart',
+        'lib/features/repertoires/controllers/repertoire_document_session.dart',
+        'lib/features/generation/controllers/generation_publication_controller.dart',
         'lib/features/repertoires/models/repertoire_authoring.dart',
         'lib/features/repertoires/models/loaded_repertoire.dart',
         'lib/features/repertoires/repositories/repertoire_decoder.dart',
         'lib/features/repertoires/repositories/repertoire_document_repository.dart',
     ])
+    pure_roots.extend(path for path in sources if path.startswith(('lib/features/training/models/', 'lib/features/training/repositories/', 'lib/features/generation/models/', 'lib/features/generation/repositories/')))
     errors.extend(pure_dependency_violations(sources, pure_roots))
-    for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/features/settings', 'lib/features/studies', 'lib/chess_core', 'lib/infrastructure', 'lib/design_system', 'widgetbook'):
-        for path in (ROOT / folder).rglob('*.dart'):
-            errors.extend(violations(path.relative_to(ROOT).as_posix(), path.read_text()))
-    checked_roots = ('lib/features/repertoires/', 'lib/features/documents/', 'lib/features/settings/', 'lib/features/studies/', 'lib/chess_core/', 'lib/infrastructure/', 'lib/design_system/')
-    for path in (ROOT / 'lib').rglob('*.dart'):
-        relative = path.relative_to(ROOT).as_posix()
-        if not relative.startswith(checked_roots):
-            errors.extend(violations(relative, path.read_text()))
-    legacy = json.loads((ROOT / 'scripts/legacy_theme_consumers.json').read_text())
+    ledger = json.loads((root / 'scripts/architecture_feature_debt.json').read_text())
+    retirements = json.loads((root / 'scripts/architecture_retirements.json').read_text())
+    observed_features = {path.name for path in (root / 'lib/features').iterdir() if path.is_dir()}
+    feature_findings = []
+    for relative, source in sources.items():
+        # Retirement cannot be accepted as baseline debt, even in an unfinished
+        # feature. Check it independently of the ratchet.
+        errors.extend(retirement_violations(relative, source, retirements))
+        findings = violations(relative, source, include_retirements=False)
+        if relative.startswith('lib/features/'):
+            if len(relative.split('/')) < 4:
+                errors.append(f'{relative}: feature source must belong to a classified directory')
+            feature_findings.extend(findings)
+        else:
+            errors.extend(findings)
+    errors.extend(feature_debt_violations(observed_features, feature_findings, ledger))
+    for path in (root / 'widgetbook').rglob('*.dart'):
+        errors.extend(violations(path.relative_to(root).as_posix(), path.read_text()))
+    legacy = json.loads((root / 'scripts/legacy_theme_consumers.json').read_text())
     observed = set()
-    for path in (ROOT / 'lib').rglob('*.dart'):
-        relative = path.relative_to(ROOT).as_posix()
+    for path in (root / 'lib').rglob('*.dart'):
+        relative = path.relative_to(root).as_posix()
         if relative.startswith('lib/theme/'):
             continue
         if any(uri.endswith(('/theme/app_colors.dart', '/theme/app_text_styles.dart', '/theme/pgn_text_styles.dart')) for uri in DIRECTIVE.findall(path.read_text())):
@@ -144,11 +220,18 @@ def main() -> int:
         errors.append(f'{relative}: new legacy theme consumer; migrate to design_system')
     for relative in sorted(legacy.keys() - observed):
         errors.append(f'{relative}: remove retired consumer from legacy_theme_consumers.json')
+    return errors, len(observed_features), len(ledger['baseline'])
+
+
+def main() -> int:
+    errors, feature_count, debt_count = check(ROOT)
     for error in errors:
         print(error, file=sys.stderr)
     if errors:
         return 1
-    print('Renewal architecture boundaries: OK (catalog, documents, studies, settings, chess core, infrastructure and design system)')
+    print(f'Renewal architecture boundaries: checked {feature_count} feature directories; '
+          f'{debt_count} exact debt entries remain (not completion certification). '
+          'Retirement, chess core, infrastructure, design system and catalog gates passed.')
     return 0
 
 

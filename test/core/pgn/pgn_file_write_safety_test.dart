@@ -1,3 +1,7 @@
+library;
+
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
+
 /// What the viewer is allowed to do to a PGN file the reader owns.
 ///
 /// A save patches the games it changed into the file as it currently stands
@@ -19,7 +23,6 @@
 /// tested elsewhere; what is asserted here is the property that matters to
 /// the reader: **a save may add, and may change the game it was told to
 /// change, but nothing else in the file may disappear.**
-library;
 
 import 'package:chess_auto_prep/app/runtime_settings.dart';
 import 'package:chess_auto_prep/app/engine_runtime.dart';
@@ -43,7 +46,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:chess_auto_prep/core/pgn_viewer_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/pgn_viewer_controller.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
@@ -193,6 +196,9 @@ List<String> _allComments(PgnGame<PgnNodeData> game) {
 Future<PgnViewerController> _openTheFile(_MemoryStorage storage) async {
   storage.writeBehindOurBack(_path, _fileText());
   final controller = PgnViewerController(
+    positionIndex: createViewerPositionIndex(),
+    openings: createViewerOpenings(),
+    solitaireRepository: createViewerSolitaire(),
     window: FakeDesktopFullscreenPort(),
     collectionDecoder: const IsolatePgnCollectionDecoder(),
     collectionFilter: const IsolatePgnCollectionFilter(),
@@ -501,6 +507,9 @@ void main() {
     await c.flushPendingMetadata();
 
     final reopened = PgnViewerController(
+      positionIndex: createViewerPositionIndex(),
+      openings: createViewerOpenings(),
+      solitaireRepository: createViewerSolitaire(),
       window: FakeDesktopFullscreenPort(),
       collectionDecoder: const IsolatePgnCollectionDecoder(),
       collectionFilter: const IsolatePgnCollectionFilter(),

@@ -11,7 +11,8 @@ library;
 import 'package:dartchess/dartchess.dart' show Position;
 import 'package:flutter/foundation.dart';
 
-import '../core/pgn/solitaire_controller.dart' show SolitaireGuess;
+import '../features/documents/controllers/solitaire_controller.dart'
+    show SolitaireGuess;
 import '../models/solitaire_trophy.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import '../utils/eval_constants.dart' show effectiveCpFromScores;
