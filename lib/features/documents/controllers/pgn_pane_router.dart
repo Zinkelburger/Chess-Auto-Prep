@@ -8,7 +8,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-import 'pgn_viewer_handle.dart';
+import '../repositories/pgn_viewer_handle.dart';
 
 class PgnPaneRouter {
   const PgnPaneRouter({

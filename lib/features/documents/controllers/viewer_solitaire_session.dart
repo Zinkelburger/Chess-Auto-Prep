@@ -15,10 +15,9 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../repositories/viewer_solitaire_repository.dart';
 
-import '../../services/solitaire_trophy_service.dart';
-import 'pgn_viewer_handle.dart';
+import '../repositories/pgn_viewer_handle.dart';
 import 'solitaire_controller.dart';
 
 /// The choices offered before a session starts. Mutable while the setup strip
@@ -84,6 +83,8 @@ class SolitaireSetup {
 
 class ViewerSolitaireSession {
   ViewerSolitaireSession({
+    required this.repository,
+    required this.onError,
     required this.handle,
     required this.hasGames,
     required this.userPlaysWhite,
@@ -94,6 +95,12 @@ class ViewerSolitaireSession {
     controller.onStepPending = _showBefore;
     controller.onStepShown = _showAfter;
   }
+
+  final ViewerSolitaireRepository repository;
+  final void Function(String) onError;
+  bool _disposed = false;
+  int _settingsRevision = 0;
+  int _trophyRevision = 0;
 
   /// Board + movetext the session drives. Held directly rather than through a
   /// supplier because the controller never reassigns it.
@@ -117,9 +124,6 @@ class ViewerSolitaireSession {
   /// re-exporting all of it.
   final SolitaireController controller = SolitaireController();
 
-  static const _revealDelayKey = 'solitaire_reveal_delay_sec';
-  static const _includeVariationsKey = 'solitaire_include_variations';
-
   bool get isActive => controller.active;
 
   /// The pending setup while the setup strip is open; null otherwise.
@@ -141,7 +145,8 @@ class ViewerSolitaireSession {
 
   /// Fold newly awarded trophies into the cached count.
   void noteTrophiesEarned(int count) {
-    if (count <= 0) return;
+    if (_disposed || count <= 0) return;
+    _trophyRevision++;
     totalTrophyCount += count;
     onChanged();
   }
@@ -158,19 +163,23 @@ class ViewerSolitaireSession {
   }
 
   Future<void> loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    controller.revealDelaySec =
-        prefs.getInt(_revealDelayKey) ??
-        SolitaireController.defaultRevealDelaySec;
-    _includeVariations = prefs.getBool(_includeVariationsKey) ?? false;
-    final trophies = await SolitaireTrophyService.instance.loadAll();
-    totalTrophyCount = trophies.length;
+    final revision = ++_settingsRevision;
+    final trophyRevision = _trophyRevision;
+    final settings = await repository.load();
+    if (_disposed || revision != _settingsRevision) return;
+    controller.revealDelaySec = settings.revealDelaySeconds;
+    _includeVariations = settings.includeVariations;
+    if (trophyRevision == _trophyRevision) {
+      totalTrophyCount = settings.trophyCount;
+    }
   }
 
   Future<void> setRevealDelay(int seconds) async {
+    if (_disposed) return;
+    final revision = ++_settingsRevision;
+    await repository.saveRevealDelay(seconds);
+    if (_disposed || revision != _settingsRevision) return;
     controller.revealDelaySec = seconds;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_revealDelayKey, seconds);
     onChanged();
   }
 
@@ -234,10 +243,13 @@ class ViewerSolitaireSession {
     if (s == null || s.userMovesToGuess == 0) return;
     setup = null;
     _includeVariations = s.includeVariations;
+    _settingsRevision++;
     unawaited(
-      SharedPreferences.getInstance().then(
-        (p) => p.setBool(_includeVariationsKey, s.includeVariations),
-      ),
+      repository.saveIncludeVariations(s.includeVariations).catchError((
+        Object _,
+      ) {
+        if (!_disposed) onError('Could not save solitaire settings.');
+      }),
     );
     _start(
       userIsWhite: s.userIsWhite,
@@ -406,6 +418,8 @@ class ViewerSolitaireSession {
   }
 
   void dispose() {
+    _disposed = true;
+    _settingsRevision++;
     controller.removeListener(_onControllerChanged);
     controller.dispose();
   }

@@ -10,9 +10,17 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../chess_core/moves/move_tree_view.dart';
-import '../../utils/chess_utils.dart' show isNullMoveSan;
-import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
+import '../../../chess_core/moves/move_tree_view.dart';
+import '../../../utils/chess_utils.dart' show isNullMoveSan;
+import '../../../chess_core/pgn/mainline_positions.dart';
+import '../../../chess_core/pgn/pgn_game_view.dart';
+
+/// Read-only game data needed to derive a drill, independent of its owner.
+abstract interface class SolitaireGameView {
+  List<PgnMoveSnapshot> get moveHistory;
+  MainlinePositions get mainline;
+  Map<int, List<MoveNodeView>> get variationsByPly;
+}
 
 /// One move the solver meets, with where it lives in the game.
 class SolitaireStep {
@@ -86,7 +94,7 @@ class SolitaireScript {
 /// never part of a drill. Null-move plies (`--` / `Z0`) are walked through
 /// but never asked.
 SolitaireScript buildSolitaireScript(
-  ViewerGameController model, {
+  SolitaireGameView model, {
   int fromMainlinePly = 0,
   bool includeVariations = false,
 }) {

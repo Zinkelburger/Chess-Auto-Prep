@@ -17,16 +17,18 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../constants/engine_defaults.dart';
-import '../../models/opening_tree.dart';
-import '../../models/pgn_game_entry.dart';
-import '../../services/opening_tree_builder.dart';
+import '../repositories/viewer_opening_repository.dart';
+import '../repositories/viewer_computation.dart';
+import '../../../models/opening_tree.dart';
+import '../../../models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart' as pgn;
-import '../../utils/chess_utils.dart' show recentMoveTrailSquares, tryParseFen;
-import '../../utils/fen_utils.dart';
+import '../../../utils/chess_utils.dart'
+    show recentMoveTrailSquares, tryParseFen;
+import '../../../utils/fen_utils.dart';
 
 class ViewerOpeningTree {
   ViewerOpeningTree({
+    required this.repository,
     required this.isActive,
     required this.onChanged,
     required this.filteredGames,
@@ -37,6 +39,11 @@ class ViewerOpeningTree {
     this.onReclaimFocus,
     this.gameStartFen,
   });
+
+  final ViewerOpeningRepository repository;
+  ViewerComputation<ViewerOpeningResult>? _task;
+  bool _disposed = false;
+  bool get _active => !_disposed && isActive();
 
   /// Whether the owning view is still mounted/active.
   final bool Function() isActive;
@@ -110,6 +117,8 @@ class ViewerOpeningTree {
   /// Reset tree state when a new file is loaded.
   void resetForNewFile() {
     _generation++;
+    _task?.cancel();
+    _task = null;
     _mainlineIndex = null;
     _indexedGames = const [];
     buildingTree = false;
@@ -126,6 +135,8 @@ class ViewerOpeningTree {
   /// The saved return position is dropped too — it belongs to the old slice.
   void clearTree() {
     _generation++;
+    _task?.cancel();
+    _task = null;
     _mainlineIndex = null;
     _indexedGames = const [];
     _cursorStartFen = openingTree?.cursorRoot.fen ?? _cursorStartFen;
@@ -180,12 +191,13 @@ class ViewerOpeningTree {
   /// Show the tree and put the board on the saved tree cursor (or, on first
   /// open, on the current game FEN).
   Future<void> enter() async {
+    if (!_active) return;
     showOpeningTree = true;
     _leftForGame = false;
     onChanged();
     if (openingTree == null) {
       if (filteredGames().isNotEmpty) await rebuild();
-      onReclaimFocus?.call();
+      if (_active && showOpeningTree) onReclaimFocus?.call();
       return;
     }
     _restoreCursorOntoBoard(preferSaved: true);
@@ -195,6 +207,8 @@ class ViewerOpeningTree {
   }
 
   Future<void> rebuild() async {
+    if (!_active) return;
+    _task?.cancel();
     final generation = ++_generation;
     final boardFen = currentFen();
     _cursorStartFen = openingTree?.cursorRoot.fen ?? _cursorStartFen;
@@ -216,28 +230,26 @@ class ViewerOpeningTree {
     try {
       final games = List<PgnGameEntry>.of(filteredGames());
       final variations = includeVariations;
-      final tree = await OpeningTreeBuilder.buildTree(
-        pgnList: games.map((g) => g.pgnText).toList(),
-        username: '',
-        userIsWhite: null,
-        strictPlayerMatching: false,
+      final task = _task = repository.buildTree(
+        [
+          for (final game in games)
+            (
+              headers: Map<String, String>.unmodifiable(game.headers),
+              pgnText: game.pgnText,
+            ),
+        ],
         includeVariations: variations,
-        preserveSetupRoots: true,
-        maxDepth: kOpeningTreeMaxDepth,
         onProgress: (processed, total) {
-          if (!isActive() || generation != _generation) return;
+          if (!_active || generation != _generation) return;
           treeBuildProcessed = processed;
           treeBuildTotal = total;
           onChanged();
         },
       );
-      if (!isActive() || generation != _generation) return;
-      final mainlineIndex = variations
-          ? null
-          : await compute(pgn.buildMainlineFenIndex, [
-              for (final g in games) (headers: g.headers, pgnText: g.pgnText),
-            ]);
-      if (!isActive() || generation != _generation) return;
+      final result = await task.result;
+      if (!_active || generation != _generation) return;
+      final tree = result.tree;
+      final mainlineIndex = result.mainlineIndex;
       _mainlineIndex = mainlineIndex;
       _indexedGames = games;
       openingTree = tree;
@@ -249,7 +261,7 @@ class ViewerOpeningTree {
       }
       onChanged();
     } catch (e) {
-      if (!isActive() || generation != _generation) return;
+      if (!_active || generation != _generation) return;
       buildingTree = false;
       openingTree = null;
       treeBuildProcessed = 0;
@@ -434,5 +446,12 @@ class ViewerOpeningTree {
         // indices out of range. Skip those rather than crash the tree panel.
         if (ai >= 0 && ai < all.length) ?entryToFiltered[all[ai]],
     ];
+  }
+
+  void dispose() {
+    _disposed = true;
+    _generation++;
+    _task?.cancel();
+    _task = null;
   }
 }

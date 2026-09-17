@@ -8,7 +8,7 @@ library;
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
 
-import 'package:chess_auto_prep/core/pgn/pgn_dummy_mainline.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_dummy_mainline.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart'
     show isNullMoveSan, playSanOrNullMove;
 import 'package:chess_auto_prep/utils/fen_utils.dart';

@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/pgn/pgn_workspace.dart';
+import 'package:chess_auto_prep/features/documents/controllers/pgn_workspace.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_workspace_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

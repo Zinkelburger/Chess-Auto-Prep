@@ -1,5 +1,6 @@
 import 'app/generation_dependencies.dart';
 import 'features/generation/controllers/generation_publication_controller.dart';
+import 'app/viewer_dependencies.dart';
 import 'app/repertoire_dependencies.dart';
 import 'features/repertoires/repositories/repertoire_document_repository.dart';
 import 'features/repertoires/repositories/repertoire_decoder.dart';
@@ -225,6 +226,9 @@ class ChessAutoPrepApp extends StatelessWidget {
           ),
           Provider<PgnViewerLifetime>(
             create: (ctx) => PgnViewerLifetime(
+              positionIndex: createViewerPositionIndex(),
+              openings: createViewerOpenings(),
+              solitaireRepository: createViewerSolitaire(),
               window: createViewerWindowPort(),
               preferences: createViewerPreferencesRepository(),
               collectionDecoder: createPgnCollectionDecoder(),

@@ -1,15 +1,14 @@
-/// The slice of the PGN viewer widget's control surface that core-layer
-/// code is allowed to touch.
+/// Reader commands available to the document-feature host.
 ///
-/// `PgnViewerController` (core) drives the board through this interface;
+/// `PgnViewerController` (documents) drives the board through this interface;
 /// `PgnViewerWidgetController` (widgets) implements it against the live
-/// widget state. Core must never import the widget layer directly — add
+/// widget state. Controllers must never import the widget layer directly — add
 /// members here instead when the controller needs a new capability.
 library;
 
-import '../../chess_core/moves/move_tree_view.dart';
-import 'solitaire_reveal.dart';
-import 'solitaire_script.dart';
+import '../../../chess_core/moves/move_tree_view.dart';
+import '../models/solitaire_reveal.dart';
+import '../models/solitaire_script.dart';
 
 abstract interface class PgnViewerHandle {
   /// Step one mainline/variation move back.

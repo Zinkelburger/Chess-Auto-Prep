@@ -13,8 +13,8 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/material.dart';
 
-import '../../core/pgn/mainline_positions.dart';
-import '../../core/pgn/solitaire_reveal.dart';
+import '../../chess_core/pgn/mainline_positions.dart';
+import '../../features/documents/models/solitaire_reveal.dart';
 import '../../chess_core/moves/move_tree_view.dart';
 import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
     show MoveClassification, classifyMove, cpToWinningChance, initialWinChance;

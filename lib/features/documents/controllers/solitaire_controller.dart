@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../utils/safe_change_notifier.dart';
-import 'solitaire_reveal.dart';
-import 'solitaire_script.dart';
+import '../../../utils/safe_change_notifier.dart';
+import '../models/solitaire_reveal.dart';
+import '../models/solitaire_script.dart';
 
-export 'solitaire_reveal.dart' show SolitaireReveal;
-export 'solitaire_script.dart' show SolitaireScript, SolitaireStep;
+export '../models/solitaire_reveal.dart' show SolitaireReveal;
+export '../models/solitaire_script.dart' show SolitaireScript, SolitaireStep;
 
 enum SolitaireFeedback { correct, incorrect }
 
