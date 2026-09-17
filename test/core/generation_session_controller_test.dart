@@ -1,3 +1,4 @@
+import '../support/generation_publication_fixture.dart';
 // GenerationSessionController drives engines and isolates for real runs, so
 // these tests cover only what is unit-testable without an engine: initial
 // state, the generated-tree bundle lifecycle, resume-refusal plumbing in
@@ -15,7 +16,9 @@ import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
+import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/jobs/generation_phase.dart';
+import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';
 import 'package:chess_auto_prep/services/master_games/master_games_service.dart';
 import 'package:chess_auto_prep/services/master_games/twic_client.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +28,33 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const _fenAfterE4 =
     'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+
+class _FailingExitLifecycle implements EngineLifecycle {
+  _FailingExitLifecycle({this.failPause = false});
+  final bool failPause;
+  void Function()? onEnter;
+  int entries = 0;
+  int exits = 0;
+  @override
+  Future<void> enterGeneration(int threads) async {
+    entries++;
+    onEnter?.call();
+  }
+
+  @override
+  Future<void> exitGeneration() async {
+    exits++;
+    if (!failPause) throw StateError('engine release failed');
+  }
+
+  @override
+  Future<void> pauseGeneration() async {
+    if (failPause) throw StateError('engine pause failed');
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 BuildTree _smallTree({
   String rootFen = kStandardStartFen,
@@ -58,7 +88,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('initial state is idle with no tree and clean progress', () {
-    final controller = GenerationSessionController();
+    final controller = GenerationSessionController(
+      publication: generationPublicationFixture(),
+    );
 
     expect(controller.isGenerating, isFalse);
     expect(controller.isPaused, isFalse);
@@ -84,7 +116,9 @@ void main() {
 
   group('generated tree lifecycle', () {
     test('onTreeBuilt publishes the bundle and notifies', () {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       var notified = 0;
       controller.addListener(() => notified++);
 
@@ -101,7 +135,9 @@ void main() {
     });
 
     test('onTreeBuilt reads play_as_white from the config snapshot', () {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
 
       controller.onTreeBuilt(
         _smallTree(configSnapshot: {'play_as_white': false}),
@@ -112,7 +148,9 @@ void main() {
     });
 
     test('clearTree drops the bundle and notifies', () {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       controller.onTreeBuilt(_smallTree());
       var notified = 0;
       controller.addListener(() => notified++);
@@ -130,7 +168,9 @@ void main() {
     test(
       'a legacy partial tree from another position refuses cleanly',
       () async {
-        final controller = GenerationSessionController();
+        final controller = GenerationSessionController(
+          publication: generationPublicationFixture(),
+        );
         var notified = 0;
         controller.addListener(() => notified++);
 
@@ -163,7 +203,9 @@ void main() {
 
   group('progress plumbing', () {
     test('progress.update stores every field it is given', () {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
 
       controller.progress.update(
         nodes: 42,
@@ -188,7 +230,9 @@ void main() {
     });
 
     test('rapid updates coalesce into a throttled trailing notify', () async {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       var notified = 0;
       controller.addListener(() => notified++);
 
@@ -207,7 +251,9 @@ void main() {
 
   group('idle guards', () {
     test('pause/resume/cancel/finishNow are no-ops when idle', () {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       var notified = 0;
       controller.addListener(() => notified++);
 
@@ -226,7 +272,9 @@ void main() {
     });
 
     test('exportSnapshot refuses without an active build', () async {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
 
       final (ok, message) = await controller.exportSnapshot(
         repertoireName: 'Snap',
@@ -239,15 +287,71 @@ void main() {
     });
 
     test('snapshotNameSuggestion falls back when no run is active', () {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       expect(controller.snapshotNameSuggestion(), 'Generated d0 snapshot');
       controller.dispose();
     });
   });
 
   group('dispose safety', () {
+    for (final failPause in [false, true]) {
+      test(
+        'engine ${failPause ? 'pause' : 'cleanup'} failure settles the job and releases run ownership',
+        () async {
+          final lifecycle = _FailingExitLifecycle(failPause: failPause);
+          final controller = GenerationSessionController(
+            publication: generationPublicationFixture(),
+            engineLifecycle: lifecycle,
+          );
+          lifecycle.onEnter = failPause
+              ? controller.pauseBuild
+              : controller.cancelBuild;
+          final job = RepertoireJob(
+            id: 'cleanup',
+            type: JobType.generation,
+            label: 'Test',
+          );
+          controller.currentJob = job;
+          final request = GenerationRequest(
+            config: const TreeBuildConfig(
+              startFen: kStandardStartFen,
+              playAsWhite: true,
+              maxPly: 1,
+              downloadMasterGamesIfMissing: false,
+            ),
+            repertoireFilePath: '/test.pgn',
+            buildRootFen: kStandardStartFen,
+            lineMovePrefix: const [],
+            repertoireStartFen: kStandardStartFen,
+            existingTree: _smallTree(),
+            onLinesSaved: (_) => fail('Cancelled run published lines'),
+          );
+          await controller.startBuild(request);
+          expect(controller.isGenerating, isFalse);
+          expect(controller.currentJob, isNull);
+          expect(controller.activeConfig, isNull);
+          expect(
+            controller.lastError,
+            contains(
+              failPause ? 'engine pause failed' : 'engine release failed',
+            ),
+          );
+          expect(job.status, JobStatus.failed);
+          await controller.startBuild(request);
+          expect(lifecycle.entries, 2);
+          expect(lifecycle.exits, 2);
+          controller.dispose();
+          job.dispose();
+        },
+      );
+    }
+
     test('dispose cancels the pending throttle timer', () async {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       var notified = 0;
       controller.addListener(() => notified++);
 
@@ -261,7 +365,9 @@ void main() {
     });
 
     test('late progress updates after dispose are swallowed', () async {
-      final controller = GenerationSessionController();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      );
       controller.dispose();
 
       // A straggling build callback landing after teardown must not throw:
@@ -349,7 +455,9 @@ void main() {
     test('an empty database parks the run before the engine is claimed, '
         'and cancelling there is felt at once', () async {
       final svc = await emptyService();
-      final controller = GenerationSessionController()..masterGames = () => svc;
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      )..masterGames = () => svc;
 
       final run = controller.startBuild(requestWith(download: true));
       await until(() => controller.isAwaitingMasterGames);
@@ -374,7 +482,9 @@ void main() {
     test('"start now without them" stops the wait and the download it '
         'started', () async {
       final svc = await emptyService();
-      final controller = GenerationSessionController()..masterGames = () => svc;
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      )..masterGames = () => svc;
 
       final run = controller.startBuild(requestWith(download: true));
       await until(() => controller.isAwaitingMasterGames);
@@ -389,17 +499,40 @@ void main() {
       await run;
       expect(controller.isGenerating, isFalse);
       // Ours to cancel, since this run started it.
-      await until(() => !svc.isSyncing);
+      // Cancellation finishes the issue already in flight. Release the fake
+      // response and await the actual completion contract, not a scheduler race.
+      hold.complete();
+      await svc.syncCompletion.timeout(const Duration(seconds: 5));
       expect(svc.isSyncing, isFalse);
       controller.dispose();
+    });
+
+    test('dispose releases a parked run and forbids another run', () async {
+      final svc = await emptyService();
+      final controller = GenerationSessionController(
+        publication: generationPublicationFixture(),
+      )..masterGames = () => svc;
+      final request = requestWith(download: true);
+      final run = controller.startBuild(request);
+      await until(() => controller.isAwaitingMasterGames);
+      expect(controller.isAwaitingMasterGames, isTrue);
+      controller.dispose();
+      await run.timeout(const Duration(seconds: 5));
+      expect(controller.isGenerating, isFalse);
+      expect(controller.generatedTree, isNull);
+      await controller.startBuild(request);
+      expect(controller.isGenerating, isFalse);
+      hold.complete();
+      await svc.syncCompletion.timeout(const Duration(seconds: 5));
     });
 
     test(
       'Stockfish expectimax skips master downloads even when a legacy preset enables them',
       () async {
         final svc = await emptyService();
-        final controller = GenerationSessionController()
-          ..masterGames = () => svc;
+        final controller = GenerationSessionController(
+          publication: generationPublicationFixture(),
+        )..masterGames = () => svc;
 
         // Refused for an unrelated reason (a resume from another position), so
         // the pipeline stops before the engine — what matters is that it did

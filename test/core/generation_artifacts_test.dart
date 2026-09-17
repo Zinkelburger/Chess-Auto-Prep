@@ -4,7 +4,6 @@
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_artifacts.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/services/generation/course/course_composer.dart';
 import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -54,10 +53,6 @@ void main() {
     expect(
       GenerationArtifactStore.probesPathFor('/r/x.pgn'),
       '/r/x_expectimax.json',
-    );
-    expect(
-      GenerationArtifactStore.modelGamesPathFor('/r/x.pgn'),
-      '/r/x_model_games.pgn',
     );
   });
 
@@ -134,36 +129,6 @@ void main() {
         store.writeDatabase('/r/x.pgn', probeTrees: [_tree(_afterE4)]),
         throwsA(isA<StateError>()),
       );
-    });
-  });
-
-  group('writeModelGames', () {
-    const empty = ComposedCourse(title: 't', entries: [], outline: []);
-    const withGames = ComposedCourse(
-      title: 't',
-      entries: [],
-      outline: [],
-      modelGamePgns: [
-        '[Event "a"]\n\n1. e4 1-0\n',
-        '[Event "b"]\n\n1. d4 1-0\n',
-      ],
-    );
-
-    test('writes the companion collection and returns its path', () async {
-      final path = await store.writeModelGames(withGames, '/r/x.pgn');
-      expect(path, '/r/x_model_games.pgn');
-      expect(storage.files[path], withGames.modelGamesPgn());
-    });
-
-    test('a course without model games removes a stale companion', () async {
-      storage.files['/r/x_model_games.pgn'] = 'old';
-      expect(await store.writeModelGames(empty, '/r/x.pgn'), isNull);
-      expect(storage.files, isEmpty);
-    });
-
-    test('a failed write is reported as nothing written', () async {
-      storage.failWrites = true;
-      expect(await store.writeModelGames(withGames, '/r/x.pgn'), isNull);
     });
   });
 }
