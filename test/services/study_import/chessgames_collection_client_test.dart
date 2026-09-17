@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/studies/models/import_source.dart';
 import 'package:chess_auto_prep/infrastructure/studies/chessgames_collection_client.dart';
 import 'package:flutter_test/flutter_test.dart';
 

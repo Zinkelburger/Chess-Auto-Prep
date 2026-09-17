@@ -12,6 +12,7 @@ library;
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 
 import 'package:chess_auto_prep/app/study_dependencies.dart';
+import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import 'package:chess_auto_prep/utils/atomic_file.dart';
 
 import 'dart:async';
@@ -240,7 +241,9 @@ void main() {
   });
 
   StudyImportController createController() {
-    final controller = createStudyImportController();
+    final controller = createStudyImportController(
+      documents: LegacyPgnDocumentStore(storage),
+    );
     addTearDown(() async {
       await controller.shutdown();
       controller.dispose();

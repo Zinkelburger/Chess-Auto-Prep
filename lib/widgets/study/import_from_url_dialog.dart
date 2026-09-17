@@ -12,11 +12,10 @@ import '../../l10n/generated/app_localizations.dart';
 import '../../l10n/study_import_labels.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/services.dart';
 
 import '../../services/lichess_auth_service.dart';
-import '../../infrastructure/studies/chessgames_collection_client.dart'
-    show parsePastedGameIds;
 import '../../features/studies/repositories/study_import_repository.dart';
 import 'package:provider/provider.dart';
 import '../../features/studies/models/import_source.dart';
@@ -369,7 +368,7 @@ class _PasteGameIdsDialogState extends State<_PasteGameIdsDialog> {
 
   void _onChanged(String value) {
     final ids = parsePastedGameIds(value);
-    if (ids.length == _ids.length) return;
+    if (listEquals(ids, _ids)) return;
     setState(() => _ids = ids);
   }
 

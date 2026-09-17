@@ -388,6 +388,9 @@ class _StudyScreenState extends State<StudyScreen> {
       session: session,
       chooseCopyDestination: _chooseExportDestination,
     );
+    if (mounted && !session.state.dirty && !session.state.uncertain) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
   }
 
   /// Open a PGN file from disk: every game becomes a chapter appended to

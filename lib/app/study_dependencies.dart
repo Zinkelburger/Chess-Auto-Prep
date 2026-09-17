@@ -36,9 +36,11 @@ WorkspaceRecoveryStore<StudyWorkspaceSnapshot> createStudyRecoveryStore() =>
       ),
     );
 
-/// Downloads belong to the application, not the Study route.
+/// Downloads belong to the application, not the Study route. A null platform
+/// selection preserves the Windows/macOS storage adapter until their native
+/// document commit protocols pass the platform adoption gates.
 StudyImportController createStudyImportController({
-  PgnDocumentStore? documents,
+  required PgnDocumentStore? documents,
 }) {
   final storage = StorageFactory.instance;
   final store = documents ?? LegacyPgnDocumentStore(storage);
