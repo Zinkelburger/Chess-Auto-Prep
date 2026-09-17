@@ -8,7 +8,7 @@ library;
 
 import 'dart:math' as math;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 
 /// Below this Maia frequency, an engine-best move is considered "hard to
 /// find" and its ease is capped at [kEngineBestEaseCap] rather than trusted

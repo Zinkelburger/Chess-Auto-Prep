@@ -2,7 +2,7 @@
 library;
 
 import 'package:dartchess/dartchess.dart';
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/chess_utils.dart';
 
 /// Promotion pieces in the order their UCI moves are enumerated.

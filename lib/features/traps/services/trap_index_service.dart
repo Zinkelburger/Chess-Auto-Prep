@@ -5,8 +5,8 @@ library;
 
 import 'dart:math' show max;
 
-import '../../../models/trap_line_info.dart';
-import '../../../services/eval/eval_canonicalize.dart';
+import '../../../chess_core/generation/trap_line_info.dart';
+import '../../../chess_core/position/eval_canonicalize.dart';
 
 class TrapIndexService {
   TrapIndexService(List<TrapLineInfo> traps)

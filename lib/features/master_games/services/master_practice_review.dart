@@ -22,7 +22,8 @@ library;
 
 import 'package:dartchess/dartchess.dart' show Chess, Move, Position;
 
-import '../../../services/eval/eval_canonicalize.dart' show canonicalizeFen4;
+import '../../../chess_core/position/eval_canonicalize.dart'
+    show canonicalizeFen4;
 import '../../../services/master_games/master_games_db.dart';
 import '../../../utils/chess_utils.dart' show sanToUci, uciToSan;
 import '../../../utils/movetext_builder.dart';

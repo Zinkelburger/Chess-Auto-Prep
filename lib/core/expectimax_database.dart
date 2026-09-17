@@ -10,7 +10,7 @@ library;
 
 import 'package:path/path.dart' as p;
 
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../services/generation/expectimax_probe.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';

@@ -6,8 +6,8 @@
 library;
 
 import 'trap_reply.dart';
-import '../utils/chess_utils.dart' show formatPackedEval;
-import '../utils/movetext_builder.dart';
+import '../../utils/chess_utils.dart' show formatPackedEval;
+import '../../utils/movetext_builder.dart';
 
 class TrapLineInfo {
   /// SAN moves from root to the trap position.

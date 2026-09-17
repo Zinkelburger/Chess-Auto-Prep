@@ -7,6 +7,8 @@
   contracts and the Viewer game, collection-load, filter and session owners live in `features/documents/`; Study ownership lives in
   `features/studies/`; pure PGN text/replay utilities live in `chess_core/pgn/`;
   stored engine verdicts and annotation transforms live in `chess_core/analysis/`;
+  generated tree/trap values and pure artifact codecs live in
+  `chess_core/generation/`; persistent FEN identity lives in `chess_core/position/`;
   training sessions/settings and injected persistence contracts live in
   `features/training/`; guarded generation publication lives in
   `features/generation/`;

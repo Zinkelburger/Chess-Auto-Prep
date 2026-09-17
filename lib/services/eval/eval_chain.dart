@@ -1,7 +1,7 @@
 /// Shared 3-phase eval resolution (cache → local → API → Stockfish).
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/fen_utils.dart';
 import '../eval_cache.dart';
 import '../generation/generation_config.dart';

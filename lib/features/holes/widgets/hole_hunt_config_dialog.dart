@@ -9,7 +9,7 @@ library;
 import 'package:provider/provider.dart';
 
 import 'package:flutter/material.dart';
-import '../../../features/settings/controllers/bulk_analysis_settings.dart';
+import '../../settings/controllers/bulk_analysis_settings.dart';
 
 import '../../../services/maia/maia_factory.dart';
 import '../../../theme/app_text_styles.dart';

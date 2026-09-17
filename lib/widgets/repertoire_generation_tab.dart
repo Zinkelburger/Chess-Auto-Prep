@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 import '../features/documents/models/pgn_document.dart';
 import '../core/generation_session_controller.dart';
 import '../core/generation_session_types.dart';
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../features/repertoires/models/repertoire_metadata.dart';
 import '../services/generation/generation_config.dart';
 import 'generation/training_plan_card.dart';

@@ -108,7 +108,7 @@ facade merely to keep its tests green.
 |---|---|---|
 | Completed: Viewer owner cutover (`141b5271` ancestry) | Deleted `PgnViewerController`, forwarding methods and mirrored errors; all consumers use the collection/editor/filter/presentation/tree owners. One session transition contract owns abandonment across the six reviewed paths. | Zero class/API references; no replacement facade; delayed work cannot publish after replacement; open/edit/save/recovery/navigation/close parity through final app wiring. |
 | Completed: Builder history (`09aeb6ed`) | Native append/undo provenance and private opening graph ownership. Deleted decoded-only history authorization, old append APIs and mutable graph exposure. | Native revision/history conflicts, successive/per-move undo, failed mutation retention and all graph consumers use the final projection. Entire Builder remains unfinished until the later closure below. |
-| Completed: generation publication and read-only recovery | Versioned publication and all authoritative readers use the artifact repository; old artifact writers/path ownership, persistence methods and loader shims are deleted. Builder Actions provides legacy tree/probe/trap/partial inspection and original-byte export through that final repository. | Stale/interrupted output cannot replace current artifacts; existing files remain accessible and untouched. Legacy source identity is unproven, so automatic legacy resume/current-analysis adoption remain explicitly unsupported. Other Generation workflows, retained-proposal browsing and platform gates remain open. |
+| Completed: generation publication, read-only recovery and pure artifact domain | Versioned publication and all authoritative readers use the artifact repository; old artifact writers/path ownership, persistence methods and loader shims are deleted. Builder Actions provides legacy tree/probe/trap/partial inspection and original-byte export through that final repository. Artifact codecs/models have one pure `chess_core/generation` home; the old serialization/model paths and mixed probe-codec dependency are removed. | Stale/interrupted output cannot replace current artifacts; existing files remain accessible and untouched. Legacy source identity is unproven, so automatic legacy resume/current-analysis adoption remain explicitly unsupported. Other Generation workflows, retained-proposal browsing and platform gates remain open. |
 | Completed: settings/engine (`f1109c5b`) | Typed engine/bulk/board settings and constructor-owned engines. Deleted the three old settings singletons, engine service global access and interim bind APIs; application composition injects BoardEngine, StockfishPool and EngineSearchBudget configuration. | One writer per key, serialized changes/failure/retry/restart, captured job configuration, production caller cutover and resource/scheduling parity. No temporary settings-to-engine binding. |
 | Next: finish existing migrated workflows | Close catalog, Study, Builder, Viewer and Training end to end: remaining host/provider/lifetime bridges, durable Builder recovery, final settings/session ownership, and all applicable UI/parity gates. Keep separate dependency-ordered cutovers where each deletes a complete responsibility. | No remaining temporary owner in each declared-complete workflow. Existing extracted code is reused or simplified; do not restart another extraction cycle. |
 | Then: engine/jobs and remaining domains | Replace each remaining workflow from the capability inventory, including actual worker/process ownership and all writers/readers. Consolidate singular `repertoire/` into its final domain as its remaining responsibilities retire. Adopt design-system controls while deleting each superseded control/theme dependency. | Dependency-ordered cutovers, shared-file parity and safety, native resource cleanup, feature and UI contracts; no second implementation or leftover theme owner for migrated surfaces. |
@@ -117,8 +117,8 @@ facade merely to keep its tests green.
 The rows identify replacement boundaries, not four new frameworks. Viewer
 ownership retirement is verified; active parallel work closes Builder
 workspace/scratch recovery with facade deletion and Study import/publication.
-The generation publication/read-only recovery responsibility is complete as
-specified above; it does not certify the whole Generation feature. Do not count
+The generation publication/read-only recovery and pure artifact domain
+responsibilities are complete as specified above; it does not certify the whole Generation feature. Do not count
 an infrastructure decoder alone as user-facing
 migration parity. Each agent must report final runtime wiring, concrete deletions
 and behavior/failure evidence before integration.
@@ -165,14 +165,16 @@ replacement for the full inventory and parity checks.
 **Review corrections to the completion gates (2026-09-17).** These requirements
 apply to the complete replacement, including its existing UI and helper files:
 
-- ARCH-01/ARCH-02: inventory the whole production dependency graph, including
-  `features/*/services/` and shared `lib/models/` types. The current checker does
-  not forbid all legacy-service imports from feature service folders; an
-  `enforced` classification therefore cannot establish this gate. Close those
-  edges through final pure algorithms or injected contracts, move each canonical
-  domain type with all consumers, and extend checker regression cases to cover
-  alternate folder placement. Do not rename files to evade a rule or expand the
-  debt baseline to claim success. The remaining wider checker coverage is open.
+- ARCH-01/ARCH-02: continue inventorying the whole production dependency graph,
+  including feature services and shared `lib/models/` types. Enforced/complete
+  feature services now reject transitive legacy-service imports, exports,
+  conditional alternatives and parts; regression cases cover alternate owner
+  paths. Pure generation artifact codecs/models also pass the transitive
+  pure-Dart gate, closing that service loophole. Wider shared-model and workflow
+  coverage remains open: an `enforced` classification alone does not certify a
+  complete workflow. Close remaining edges through final pure algorithms or
+  injected contracts, move each canonical domain type with all consumers, and
+  never rename files to evade a rule or expand the debt baseline to claim success.
 - UI-01: controllers expose typed failure/status data; widgets resolve ARB copy,
   including retry, empty, recovery and error states. Remove English error mirrors
   and raw exception display in the same consumer cutover. Keep the ban on
@@ -4224,3 +4226,36 @@ focused regression checks rather than claiming a new full-suite run.
 Final `scripts/ci.sh analyze lint` passed with 63 existing informational findings,
 zero warnings/errors, no new boundary debt and the retirement gate passing. All
 96 local documentation links resolve; whitespace checks pass.
+
+
+### Generation artifact domain closure (2026-09-17)
+
+The final artifact service previously imported `services/generation/expectimax_probe.dart`
+for a codec, which also imported build-run/subtree and operational configuration
+owners. `tree_serialization.dart` combined the wire format with Flutter timing
+output, worker scheduling and an unused transposition-map population hook.
+
+The final pure `chess_core/generation/` owner now contains the canonical generated
+tree/trap values and synchronous tree/probe codecs. All production and test/tool
+consumers import those canonical paths. `GenerationArtifacts` captures the
+mutable tree synchronously and owns off-isolate encoding; the domain codec no
+longer schedules workers, logs Flutter diagnostics or mutates a caller's FenMap.
+The shared exact four-field persistent FEN reducer lives in `chess_core/position/`.
+Old `models/{build_tree_node,trap_line_info,trap_reply}.dart`,
+`services/generation/tree_serialization.dart`, `services/eval/eval_canonicalize.dart`
+and `serializeTreeInIsolate` are retired with no forwarding exports. The probe
+codec is removed from the graft/rescore library, so reading saved artifacts no
+longer imports the generation engine dependency closure.
+
+The checker follows every enforced/complete feature service through project
+imports, exports, conditional branches and parts, rejecting any legacy service
+owner. The pure artifact closure also rejects native, Flutter and isolate
+imports. New regression cases cover indirect dependencies, moved owner paths,
+retired forwarders and separate scheduling; the exact debt ledger is unchanged.
+
+Compatibility preserves existing v3/v4 tree defaults, parent/index identity,
+probe framing and tolerant legacy entries, trap/reply defaults, persistent FEN
+keys, and opaque historical configuration. Operational `TreeBuildConfig`,
+probe graft/rescore, trap extraction and build/engine orchestration remain
+unfinished responsibilities outside this codec cutover. This does not certify
+the complete Generation feature or add legacy resume/proposal-browser parity.

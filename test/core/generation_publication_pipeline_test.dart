@@ -11,7 +11,7 @@ import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/core/generation_session_types.dart';
 import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
 import 'package:chess_auto_prep/infrastructure/generation/storage_generation_draft_repository.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/jobs/repertoire_job.dart';

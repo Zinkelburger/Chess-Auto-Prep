@@ -1,7 +1,7 @@
 /// Export the policy chosen by the same Bellman scorer used for valuation.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';

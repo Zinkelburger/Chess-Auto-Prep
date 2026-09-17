@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/coherence_service.dart';
 import 'package:chess_auto_prep/services/fp_growth.dart';
 

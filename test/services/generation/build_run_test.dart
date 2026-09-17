@@ -4,7 +4,7 @@ library;
 
 import 'package:chess_auto_prep/utils/chess_utils.dart' show playUciMove;
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/build_run.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';

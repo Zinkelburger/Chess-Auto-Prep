@@ -36,7 +36,8 @@ import '../../models/repertoire_review_entry.dart' show RepertoireReviewEntry;
 import '../../services/asked_questions_store.dart';
 import '../../services/generation/tree_my_ease.dart'
     show computeLinePlayability;
-import '../../services/generation/tree_serialization.dart' show deserializeTree;
+import '../../chess_core/generation/tree_serialization.dart'
+    show deserializeTree;
 import '../../services/line_metrics_helpers.dart' show walkTreeForLine;
 import '../../services/repertoire_review_service.dart';
 import '../../services/repertoire_service.dart';

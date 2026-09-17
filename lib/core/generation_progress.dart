@@ -7,7 +7,7 @@ library;
 
 import 'dart:async';
 
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../services/jobs/generation_job_display.dart';
 import '../services/jobs/repertoire_job.dart';
 

@@ -2019,7 +2019,17 @@ manifest, payload hashes, source revision and current pointer before adoption;
 stale runs, edited payloads and interrupted selection cannot replace a newer
 selected generation. Old generations and failed proposals remain on disk.
 
-`GenerationArtifacts` owns typed serialization and complete-bundle staging.
+`GenerationArtifacts` owns snapshot capture, isolate scheduling and complete-bundle
+staging. The synchronous v3/v4 tree and versioned probe codecs and canonical
+`BuildTree`/`BuildTreeNode`, `TrapLineInfo` and `TrapReply` values live in
+`chess_core/generation/`. The shared persistent four-field FEN reducer lives in
+`chess_core/position/eval_canonicalize.dart`. This dependency closure contains no
+legacy services, Flutter, native I/O or isolate scheduling. Saved configuration
+stays historical JSON; the decoder does not consult operational `TreeBuildConfig`
+or current CPU limits. `tree_serialization.dart` preserves the existing wire
+format and metadata/index reconstruction; `expectimax_probe_codec.dart` composes
+that format without importing build/engine helpers. Probe graft/rescore and trap extraction remain generation
+algorithms outside the artifact codec boundary.
 Generation, saved-tree reopening, probe updates, resumable partials, the active
 Builder tree panes, traps and training source loading use this repository.
 Resume/discard carries the observed generation ID. Chapter changes invalidate
@@ -2120,7 +2130,7 @@ renewal work; Windows/macOS native verification remains open.
 | `analysis/discovery_result.dart` | Engine discovery lines (MultiPV) |
 | `analysis/move_analysis_result.dart` | Per-move analysis in game review |
 | `analysis_player_info.dart` | Player metadata for analysis; `accounts` (the chess.com/lichess handles an opponent's merged game-set came from — what makes it re-downloadable) and `group` (event name); `displayName` is the first `;`-segment of the username |
-| `build_tree_node.dart` | **Generated tree node**: eval, ease, myEase, expectimax, traps, `pvContinuationMove`, `engineInjected`, children, serialization |
+| `chess_core/generation/build_tree_node.dart` | **Generated tree node**: eval, ease, myEase, expectimax, traps, `pvContinuationMove`, `engineInjected`, children, serialization |
 | `engine_evaluation.dart` | Single eval result |
 | `engine_weakness_result.dart` | Weak square / position analysis output |
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
@@ -2165,8 +2175,8 @@ renewal work; Windows/macOS native verification remains open.
 
 | File | Purpose |
 |------|---------|
-| **models/trap_line_info.dart** | Trap metadata + optional `allReplies`, `fen`, `refutationMove`, `refutationEvalCp` |
-| **models/trap_reply.dart** | Opponent reply classification at trap position |
+| **chess_core/generation/trap_line_info.dart** | Trap metadata + optional `allReplies`, `fen`, `refutationMove`, `refutationEvalCp` |
+| **chess_core/generation/trap_reply.dart** | Opponent reply classification at trap position |
 | **services/trap_index_service.dart** | FEN/prefix indexes, repertoire & line metrics, ETV |
 | **widgets/trap_detail_card.dart** | Narrative trap UI, reply table, hoverable move path |
 | **widgets/trap_move_indicator.dart** | Orange dot for pre-trap PGN moves, enriched multi-line tooltip (mistake desc, popularity, reach, score) |
@@ -2395,7 +2405,6 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `eval/lichess_eval_provider.dart` | `ExternalEvalProvider` over the store, converting the published White-relative scores into the white-normalized cp / side-to-move mate the rest of the app uses |
 | `eval/lichess_eval_controller.dart` | Owns the two stages behind one progress bar — resumable range download, then the import isolate — with a free-space guard, Jobs-pane integration, and delete-the-archive / delete-everything. Points `EvalDatabaseSettings` at the store and switches it on when the build finishes |
 | `eval_cache.dart` | Eval cache facade (SQLite v2): Stockfish evals + `maia_cache` table keyed by `(fen, elo)` (policy JSON, win prob); `MaiaCache` get/put with L1 in-memory mirror; get/put await idempotent `init()` so background warm-up in `main` cannot leave early writes memory-only; fire-and-forget writes use `putEvalCpWhiteSoon`; shared by generation, audit, and interactive engine panes |
-| `eval/eval_canonicalize.dart` | FEN normalization for lookup |
 
 #### Generation pipeline
 
@@ -2415,7 +2424,6 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `generation/repertoire_selector.dart` | Mark repertoire moves on tree (3 objectives; novelty weight and tie-breaks on top) |
 | `generation/trap_extractor.dart` | Trap candidate collection |
 | `generation/fen_map.dart` | Transposition map keyed by 4-field canonical FEN (`canonicalizeFen`); `freeze()` after `GeneratedRepertoire.fromTree`; shared cycle helpers `isTranspositionCycle` / `enterFenPath` / `enterPositionOnce`; `resolveTransposition(node, fenMap)` follows canonical FEN when a leaf has children elsewhere |
-| `generation/tree_serialization.dart` | tree.json read/write (`pv_continuation_move`, `engine_injected`) |
 | `generation/tree_build_progress.dart` | Progress callbacks |
 
 #### Repertoire & PGN

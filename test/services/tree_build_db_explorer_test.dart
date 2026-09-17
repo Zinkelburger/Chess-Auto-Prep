@@ -16,8 +16,8 @@ import '../support/eval_cache_fixture.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/position/eval_canonicalize.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/services/eval_cache.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';

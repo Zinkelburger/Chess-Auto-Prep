@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/repertoires/controllers/repertoire_controller.dart';
 import '../core/generation_session_controller.dart';
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../chess_core/moves/move_tree_view.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';

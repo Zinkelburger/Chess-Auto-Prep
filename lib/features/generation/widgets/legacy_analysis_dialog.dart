@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../design_system/theme/app_spacing.dart';
 import '../../../design_system/theme/app_typography.dart';
 import '../../../l10n/generated/app_localizations.dart';
-import '../../../models/build_tree_node.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
 import '../../../utils/chess_utils.dart' show formatPackedEval;
 import '../controllers/legacy_analysis_controller.dart';
 import '../models/generation_artifacts.dart';

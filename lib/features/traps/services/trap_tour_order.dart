@@ -6,7 +6,7 @@
 /// [TrapTourBar], which meant callers reached through a widget to sort a list.
 library;
 
-import '../../../models/trap_line_info.dart';
+import '../../../chess_core/generation/trap_line_info.dart';
 
 /// Tour order: most trick surplus first (matches the traps browser default).
 List<TrapLineInfo> sortTrapsForTour(List<TrapLineInfo> traps) {

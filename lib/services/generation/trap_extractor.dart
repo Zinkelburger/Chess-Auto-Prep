@@ -6,11 +6,11 @@
 /// surplus descending.
 library;
 
-import '../../models/build_tree_node.dart';
-import '../../models/trap_line_info.dart';
-import '../../models/trap_reply.dart';
+import '../../chess_core/generation/build_tree_node.dart';
+import '../../chess_core/generation/trap_line_info.dart';
+import '../../chess_core/generation/trap_reply.dart';
 import '../../utils/ease_utils.dart' show winProbability;
-import '../eval/eval_canonicalize.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 import 'trap_score.dart';
 
 class TrapExtractor {

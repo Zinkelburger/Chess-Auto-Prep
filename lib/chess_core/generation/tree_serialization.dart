@@ -5,13 +5,9 @@
 library;
 
 import 'dart:convert';
-import 'dart:isolate';
 
-import 'package:flutter/foundation.dart';
-
-import '../../models/build_tree_node.dart';
+import 'build_tree_node.dart';
 import '../../utils/fen_utils.dart' as fen_utils;
-import 'fen_map.dart';
 
 // ── Serialization ────────────────────────────────────────────────────────
 
@@ -28,7 +24,7 @@ String serializeTree(BuildTree tree, {bool indent = true}) =>
 /// Built iteratively (an explicit stack, no recursion) and cheaply enough to
 /// run on the UI isolate: this is the consistent point-in-time snapshot a
 /// pause or cancel takes of a live tree, after which the expensive part —
-/// turning it into text — can leave the isolate via [serializeTreeInIsolate].
+/// turning it into text — can be scheduled by the artifact application service.
 Map<String, dynamic> serializeTreeJson(BuildTree tree) => <String, dynamic>{
   'format': 'opening_tree',
   'version': 4,
@@ -44,18 +40,6 @@ Map<String, dynamic> serializeTreeJson(BuildTree tree) => <String, dynamic>{
 String encodeTreeJson(Map<String, dynamic> json, {bool indent = true}) => indent
     ? const JsonEncoder.withIndent('  ').convert(json)
     : jsonEncode(json);
-
-/// [serializeTree] with the text encoding done on a worker isolate.
-///
-/// The document is captured synchronously — atomic with respect to the
-/// async build loop — and only the plain-data document crosses the isolate
-/// boundary.  Sending the [BuildTree] itself would copy every node with its
-/// parent back-pointer, which costs about as much as the encode it was meant
-/// to move off the UI isolate.
-Future<String> serializeTreeInIsolate(BuildTree tree, {bool indent = true}) {
-  final json = serializeTreeJson(tree);
-  return Isolate.run(() => encodeTreeJson(json, indent: indent));
-}
 
 /// [root] and its whole subtree as nested maps, depth-first with an
 /// explicit stack.
@@ -176,36 +160,16 @@ extension _PruneReasonWire on PruneReason {
 // ── Deserialization ──────────────────────────────────────────────────────
 
 /// Decode a JSON string into a [BuildTree].
-///
-/// Optionally populates a [fenMap] with canonical nodes for transposition
-/// resolution in post-build phases.
-BuildTree deserializeTree(String jsonStr, {FenMap? fenMap}) {
-  final sw = Stopwatch()..start();
-  final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-  final jsonParseMs = sw.elapsedMilliseconds;
-  return deserializeTreeJson(data, fenMap: fenMap, jsonParseMs: jsonParseMs);
-}
+BuildTree deserializeTree(String jsonStr) =>
+    deserializeTreeJson(jsonDecode(jsonStr) as Map<String, dynamic>);
 
 /// Decode an already-parsed v4 document (see [serializeTreeJson]).
-BuildTree deserializeTreeJson(
-  Map<String, dynamic> data, {
-  FenMap? fenMap,
-  int jsonParseMs = 0,
-}) {
-  final sw = Stopwatch()..start();
-  final version = (data['version'] as num?)?.toInt() ?? 3;
-
+BuildTree deserializeTreeJson(Map<String, dynamic> data) {
   final configData = data['config'] as Map<String, dynamic>? ?? const {};
   final treeData = data['tree'] as Map<String, dynamic>;
 
-  sw.reset();
   final idToNode = <int, BuildTreeNode>{};
   final root = _nodeFromJson(treeData, null, idToNode);
-  final nodeBuiltMs = sw.elapsedMilliseconds;
-
-  if (fenMap != null) {
-    fenMap.populate(root);
-  }
 
   final totalNodes =
       (data['total_nodes'] as num?)?.toInt() ?? root.countSubtree();
@@ -221,21 +185,9 @@ BuildTree deserializeTreeJson(
 
   // Populate the flat index from the map we already built during parsing,
   // then compute subtreeSize and sort children in a single pass.
-  sw.reset();
   tree.nodeIndex.addAll(idToNode);
   tree.computeMetadata();
   tree.sortAllChildren();
-  final metadataMs = sw.elapsedMilliseconds;
-
-  debugPrint(
-    '[deserializeTree] jsonParse=${jsonParseMs}ms, '
-    'nodeBuild=${nodeBuiltMs}ms, '
-    'metadata+sort=${metadataMs}ms, '
-    'version=$version, '
-    'nodeIndex=${tree.nodeIndex.length} entries, '
-    'totalNodes=$totalNodes',
-  );
-
   return tree;
 }
 

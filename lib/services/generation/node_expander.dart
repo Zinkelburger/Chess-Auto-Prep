@@ -29,7 +29,7 @@ library;
 import 'dart:async';
 
 import '../../models/analysis/discovery_result.dart';
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../eval/db_move_list.dart';
 import '../maia/maia_factory.dart';
 import '../maia/maia_service.dart';

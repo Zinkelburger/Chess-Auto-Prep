@@ -4,7 +4,7 @@
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generated_repertoire.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 BuildTree _smallTree() {

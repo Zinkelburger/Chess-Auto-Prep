@@ -4,7 +4,7 @@ library;
 import 'dart:collection';
 import 'dart:math' as math;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 
 /// Tracks and throttles Phase 1 build progress callbacks.
 ///

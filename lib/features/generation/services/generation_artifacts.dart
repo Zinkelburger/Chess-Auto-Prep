@@ -1,15 +1,15 @@
 /// Tree codecs and complete bundle staging over the artifact authority.
 library;
 
+import '../../../chess_core/generation/expectimax_probe_codec.dart';
 import 'dart:convert';
 import 'dart:isolate';
 
 import '../models/generation_artifacts.dart';
 import '../repositories/generation_artifact_repository.dart';
-import '../../../models/build_tree_node.dart';
-import '../../../models/trap_line_info.dart';
-import '../../../services/generation/expectimax_probe.dart';
-import '../../../services/generation/tree_serialization.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
+import '../../../chess_core/generation/trap_line_info.dart';
+import '../../../chess_core/generation/tree_serialization.dart';
 
 /// Authoritative saved trees; unverified legacy outputs require a separate,
 /// explicit preview and are never used to resume or extend a generated cache.
@@ -39,6 +39,16 @@ class LegacyAnalysisItem {
 class GenerationArtifacts {
   GenerationArtifacts(this.repository);
   final GenerationArtifactRepository repository;
+
+  /// Capture the mutable tree before yielding, then encode only its detached
+  /// document on a worker isolate. The codec itself is synchronous pure Dart.
+  static Future<String> encodeTreeSnapshot(
+    BuildTree tree, {
+    bool indent = true,
+  }) {
+    final document = serializeTreeJson(tree);
+    return Isolate.run(() => encodeTreeJson(document, indent: indent));
+  }
 
   Future<LegacyAnalysisInspection> inspectLegacy(String path) async {
     final snapshot = await repository.readLegacy(path);
@@ -134,7 +144,7 @@ class GenerationArtifacts {
     required List<BuildTree> probes,
     required List<TrapLineInfo> traps,
   }) async {
-    final treeJson = await serializeTreeInIsolate(tree);
+    final treeJson = await encodeTreeSnapshot(tree);
     final probesJson = await Isolate.run(
       () => ExpectimaxProbeCodec.encode(probes),
     );
@@ -152,7 +162,7 @@ class GenerationArtifacts {
     BuildTree tree,
     GenerationArtifactRun run,
   ) async {
-    final json = await serializeTreeInIsolate(tree, indent: false);
+    final json = await encodeTreeSnapshot(tree, indent: false);
     final proposal = await repository.prepare(run, {
       GenerationArtifactKind.partial: json,
     });
@@ -224,7 +234,7 @@ class GenerationArtifacts {
     );
     final treeJson = mainTree == null
         ? null
-        : await serializeTreeInIsolate(mainTree);
+        : await encodeTreeSnapshot(mainTree);
     final proposal = await repository.prepare(run, {
       GenerationArtifactKind.probes: probesJson,
       GenerationArtifactKind.tree: treeJson,

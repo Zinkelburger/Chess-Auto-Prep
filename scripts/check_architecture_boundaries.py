@@ -89,6 +89,31 @@ def pure_dependency_violations(sources: dict[str, str], roots: list[str]) -> lis
     return errors
 
 
+def legacy_service_dependency_violations(sources: dict[str, str], roots: list[str]) -> list[str]:
+    """Final artifact domain and enforced feature services cannot hide legacy
+    service owners behind a model, export, conditional import, or part.
+
+    Runtime scheduling remains allowed in application services; pure domain
+    roots independently pass the stricter pure_dependency_violations check.
+    """
+    errors = []
+    for root in roots:
+        pending = [(root, [root])]
+        seen = set()
+        while pending:
+            path, chain = pending.pop()
+            if path in seen or path not in sources:
+                continue
+            seen.add(path)
+            for uri in dependency_uris(without_comments(sources[path])):
+                target = project_target(path, uri)
+                if target.startswith('lib/services/'):
+                    errors.append(f"{root}: legacy service dependency chain {' -> '.join([*chain, target])}")
+                elif target:
+                    pending.append((target, [*chain, target]))
+    return errors
+
+
 def violations(relative: str, source: str, *, include_retirements: bool = True) -> list[str]:
     path = Path(relative)
     errors = retirement_violations(relative, source, RETIREMENTS) if include_retirements else []
@@ -191,6 +216,16 @@ def check(root: Path) -> tuple[list[str], int, int]:
     pure_roots.extend(path for path in sources if path.startswith(('lib/features/training/models/', 'lib/features/training/repositories/', 'lib/features/generation/models/', 'lib/features/generation/repositories/')))
     errors.extend(pure_dependency_violations(sources, pure_roots))
     ledger = json.loads((root / 'scripts/architecture_feature_debt.json').read_text())
+    # Apply the final service boundary from feature state, not a filename
+    # allowlist. Moving an owner within an enforced feature cannot evade it.
+    service_roots = [
+        path for path in sources
+        if path.startswith('lib/features/')
+        and 'services' in Path(path).parts[3:-1]
+        and ledger['features'].get(Path(path).parts[2]) in ('enforced', 'complete')
+    ]
+    domain_roots = [path for path in sources if path.startswith('lib/chess_core/generation/')]
+    errors.extend(legacy_service_dependency_violations(sources, service_roots + domain_roots))
     retirements = json.loads((root / 'scripts/architecture_retirements.json').read_text())
     observed_features = {path.name for path in (root / 'lib/features').iterdir() if path.is_dir()}
     feature_findings = []

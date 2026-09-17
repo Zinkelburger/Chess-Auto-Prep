@@ -1,11 +1,11 @@
 import 'dart:convert';
 
+import 'package:chess_auto_prep/chess_core/generation/expectimax_probe_codec.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/features/generation/models/generation_artifacts.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
-import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';
 
 BuildTree legacyRecoveryTree({bool complete = true}) {

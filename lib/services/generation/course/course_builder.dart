@@ -21,7 +21,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import '../../../models/build_tree_node.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
 import '../../../utils/fen_utils.dart';
 import '../../master_games/master_games_db.dart';
 import '../../master_games/master_model_games.dart';

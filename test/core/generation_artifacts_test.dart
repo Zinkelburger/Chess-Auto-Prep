@@ -3,8 +3,8 @@
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/generation_artifacts_fixture.dart';
@@ -44,6 +44,21 @@ void main() {
     repository = MemoryGenerationArtifacts();
     store = GenerationArtifacts(repository);
   });
+
+  test(
+    'async tree encoding captures the tree before the caller can edit it',
+    () async {
+      final tree = _tree(kStandardStartFen);
+      final expected = serializeTree(tree, indent: false);
+      final pending = GenerationArtifacts.encodeTreeSnapshot(
+        tree,
+        indent: false,
+      );
+      tree.root.engineEvalCp = 999;
+      tree.root.children.clear();
+      expect(await pending, expected);
+    },
+  );
 
   test('a complete staged bundle round-trips tree, probes and traps', () async {
     final run = await store.repository.begin('/r/x.pgn', {});
