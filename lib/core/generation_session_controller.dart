@@ -1041,7 +1041,7 @@ class GenerationSessionController extends ChangeNotifier
 
   // ── Partial tree save ────────────────────────────────────────────────
 
-  /// Persist the in-progress tree to `{repertoire}_partial_tree.json`.
+  /// Select an immutable partial generation captured by the active run.
   Future<void> _savePartialTree() async {
     final tree = buildService.currentTree;
     if (tree == null) return;

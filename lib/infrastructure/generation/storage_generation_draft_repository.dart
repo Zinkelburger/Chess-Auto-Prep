@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:path/path.dart' as p;
+
+import 'generation_namespace.dart';
 
 import '../../features/documents/models/pgn_document.dart';
 import '../../features/generation/models/generation_publication.dart';
@@ -15,7 +16,7 @@ class StorageGenerationDraftRepository implements GenerationDraftRepository {
   StorageGenerationDraftRepository(
     this.storage, {
     Future<void> Function(String)? prepareDirectory,
-  }) : _prepareDirectory = prepareDirectory ?? _prepareNativeDirectory;
+  }) : _prepareDirectory = prepareDirectory ?? prepareGenerationDirectory;
   final StorageService storage;
   final Future<void> Function(String) _prepareDirectory;
 
@@ -64,30 +65,6 @@ class StorageGenerationDraftRepository implements GenerationDraftRepository {
       );
     } catch (error) {
       throw GenerationStagingFailed(manifest, error);
-    }
-  }
-
-  /// Reserve only inside the source's existing parent. Refuse files and links
-  /// at every internal namespace component, and refuse an existing run. This
-  /// prevents accidental path collisions from redirecting recovery output.
-  static Future<void> _prepareNativeDirectory(String runDirectory) async {
-    final sourceDirectory = p.dirname(runDirectory);
-    final namespace = p.dirname(sourceDirectory);
-    if (!await Directory(p.dirname(namespace)).exists()) {
-      throw FileSystemException('Source directory is absent', runDirectory);
-    }
-    for (final path in [namespace, sourceDirectory, runDirectory]) {
-      final type = await FileSystemEntity.type(path, followLinks: false);
-      if (type == FileSystemEntityType.notFound) {
-        await Directory(path).create();
-      } else if (type != FileSystemEntityType.directory ||
-          path == runDirectory) {
-        throw FileSystemException('Generation namespace collision', path);
-      }
-      if (await FileSystemEntity.type(path, followLinks: false) !=
-          FileSystemEntityType.directory) {
-        throw FileSystemException('Generation directory changed', path);
-      }
     }
   }
 

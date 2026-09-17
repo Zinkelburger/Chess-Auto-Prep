@@ -8,7 +8,7 @@
 ///
 /// A source is one of:
 ///
-///  * a repertoire `.pgn` — parsed once; its `<name>_tree.json`, when the
+///  * a repertoire `.pgn` — parsed once; its verified generated tree, when the
 ///    generator wrote one, is read separately by [playabilityFromTree] so the
 ///    owner can show the first queue before the tree is decoded;
 ///  * a repertoire *folder* — every chapter `.pgn` under it, recursively,
@@ -167,7 +167,7 @@ class TrainingSourceLoader implements TrainingSourceRepository {
     return files;
   }
 
-  /// Per-line playability from the repertoire's generated `<name>_tree.json`,
+  /// Per-line playability from the repertoire's verified artifact generation,
   /// 0 (hardest) to 1 (easiest), keyed by line id.
   ///
   /// Empty when there is no tree or it cannot be read: playability only

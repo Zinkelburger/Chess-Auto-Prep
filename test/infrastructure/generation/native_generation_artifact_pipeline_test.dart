@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
 import 'package:chess_auto_prep/core/generation_session_types.dart';
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/infrastructure/training/training_source_loader.dart';
+import 'package:chess_auto_prep/services/asked_questions_store.dart';
 import 'package:chess_auto_prep/features/generation/controllers/generation_publication_controller.dart';
 import 'package:chess_auto_prep/features/generation/models/generation_artifacts.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
@@ -22,6 +25,24 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../services/generation/engine_fakes.dart';
+import '../../services/training/training_fakes.dart';
+
+class _FailSelection extends StorageGenerationArtifactRepository {
+  _FailSelection({required super.storage, required super.documents});
+  String? proposalPath;
+  @override
+  Future<void> select(
+    GenerationArtifactRun run,
+    GenerationArtifactProposal proposal, {
+    PgnSnapshot? publishedSource,
+  }) async {
+    proposalPath = proposal.manifestPath;
+    throw GenerationArtifactFailure(
+      'Injected selection failure',
+      proposalPath: proposal.manifestPath,
+    );
+  }
+}
 
 class _Lifecycle implements EngineLifecycle {
   @override
@@ -54,8 +75,12 @@ BuildTree _tree({bool complete = true}) {
       parent: root,
     )..engineEvalCp = -20,
   );
-  return BuildTree(root: root, totalNodes: 2, maxPlyReached: 1, buildComplete: complete)
-    ..computeMetadata();
+  return BuildTree(
+    root: root,
+    totalNodes: 2,
+    maxPlyReached: 1,
+    buildComplete: complete,
+  )..computeMetadata();
 }
 
 class _GatedBuild extends TreeBuildService {
@@ -190,6 +215,19 @@ void main() {
         await File('${p.withoutExtension(path)}_tree.json').exists(),
         isFalse,
       );
+      final loader = TrainingSourceLoader(
+        repertoireService: FakeRepertoireService(),
+        reviewService: FakeReviewService(),
+        askedQuestions: AskedQuestionsStore(),
+        artifacts: repository,
+      );
+      final lines = [
+        fakeLine('generated', ['e4']),
+      ];
+      expect(
+        (await loader.playabilityFromTree(path, lines)).keys,
+        contains('generated'),
+      );
       final fen = playUciMove(kStandardStartFen, 'd2d4')!;
       final pool = FakeStockfishPool();
       pool.discoveryByFen[fen] = DiscoveryResult(
@@ -222,6 +260,35 @@ void main() {
         (await repository.read(path)).generationId,
         isNot(selected.generationId),
       );
+      // Existing legacy files cannot override a source-invalidated generation.
+      await File(
+        '${p.withoutExtension(path)}_tree.json',
+      ).writeAsString(selected.payloads[GenerationArtifactKind.tree]!);
+      await File(path).writeAsString('[Event "External"]\n\n1. c4 *\n');
+      expect(await loader.playabilityFromTree(path, lines), isEmpty);
+      expect(await artifacts.readTraps(path), isNull);
+      await again.loadSavedTreeFor(path);
+      expect(again.generatedTree, isNull);
+    },
+  );
+
+  test(
+    'source saved but artifact selection failed reports retained proposal',
+    () async {
+      final failing = _FailSelection(storage: storage, documents: documents);
+      artifacts = GenerationArtifacts(failing);
+      final first = controller();
+      await first.startBuild(request(tree: _tree()));
+      expect(await File(path).readAsString(), contains('e4'));
+      expect(first.lastError, contains('Generated PGN saved'));
+      expect(first.lastError, contains(failing.proposalPath!));
+      expect(await File(failing.proposalPath!).exists(), isTrue);
+      expect(
+        (await repository.read(path)).origin,
+        GenerationArtifactOrigin.absent,
+      );
+      expect(first.generatedTree, isNull);
+      expect(first.isGenerating, isFalse);
     },
   );
 

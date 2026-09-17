@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/features/traps/controllers/trap_session_controller.dart';
@@ -45,6 +46,26 @@ TrapSessionController _controller(
 }
 
 void main() {
+  test(
+    'an old chapter read cannot replace a newer chapter trap selection',
+    () async {
+      final pending = Completer<List<TrapLineInfo>?>();
+      final current = _trap(['d4'], fen: _fenB);
+      final session = TrapSessionController(
+        loadFile: (path) async => path == 'old' ? pending.future : [current],
+      );
+      final old = session.loadFromFile('old');
+      session.endTourForRepertoireSwitch();
+      await session.loadFromFile('new');
+      pending.complete([
+        _trap(['e4'], fen: _fenA),
+      ]);
+      await old;
+      expect(session.traps, [current]);
+      session.dispose();
+    },
+  );
+
   group('loading', () {
     test('builds an index from the sidecar file', () async {
       final session = _controller({

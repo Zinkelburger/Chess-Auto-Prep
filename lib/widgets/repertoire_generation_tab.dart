@@ -206,11 +206,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     }
   }
 
-  /// Confirms before throwing away an unfinished build.
-  ///
-  /// The file is the only copy of a search that may have run for hours, and
-  /// deleting it is not undoable — so this asks first and says what is being
-  /// lost, the way deleting a saved preset does.
+  /// Confirms before removing an unfinished build from automatic resume.
+  /// Its immutable artifact generation remains in recovery history.
   Future<void> _confirmDiscardPartialTree(BuildTree tree) async {
     final path = widget.currentRepertoire?.filePath;
     final generation = _savedPartialGeneration;

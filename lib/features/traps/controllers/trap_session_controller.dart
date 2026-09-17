@@ -16,7 +16,7 @@ import '../../../utils/safe_change_notifier.dart';
 import '../services/trap_index_service.dart';
 import '../services/trap_tour_order.dart';
 
-/// Reads a repertoire's trap sidecar file. Injectable so tests do not need
+/// Reads a repertoire’s verified trap artifacts. Injectable so tests do not need
 /// one on disk.
 typedef TrapFileLoader = Future<List<TrapLineInfo>?> Function(String filePath);
 
@@ -43,7 +43,7 @@ class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// Trap the tour should open on, or null to start from the top.
   TrapLineInfo? get tourInitialTrap => _tourInitialTrap;
 
-  /// Reads the trap sidecar next to [filePath] and replaces the current set.
+  /// Reads the selected trap generation for [filePath] and replaces the current set.
   Future<void> loadFromFile(String filePath) async {
     final generation = ++_loadGeneration;
     final traps = await _loadFile(filePath);
@@ -55,7 +55,7 @@ class TrapSessionController extends ChangeNotifier with SafeChangeNotifier {
   ///
   /// A build's own bundle is consistent with the tree it just built, so it
   /// wins over the file. Repertoires loaded from disk have no bundle in
-  /// memory, so [fallbackFilePath] re-reads the sidecar instead.
+  /// memory, so [fallbackFilePath] re-reads the selected artifacts instead.
   Future<void> adoptFromBuild(
     TrapIndexService? bundleIndex, {
     String? fallbackFilePath,

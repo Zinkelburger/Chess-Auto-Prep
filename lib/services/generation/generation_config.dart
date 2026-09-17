@@ -1004,8 +1004,8 @@ class TreeBuildConfig {
   /// **This map is a persisted format, not an internal detail.** It is written
   /// to three places that outlive the process and are read back later:
   ///
-  ///  * `<repertoire>_tree.json` (see `tree_serialization.dart`)
-  ///  * the partial-tree file a paused build resumes from — [fromJson] on
+  ///  * the selected artifact generation’s tree (see `tree_serialization.dart`)
+  ///  * the selected partial tree a paused build resumes from — [fromJson] on
   ///    `tree.configSnapshot` is what restores the settings of a build started
   ///    days ago
   ///  * user-saved generation presets (`generation_presets.dart`)
