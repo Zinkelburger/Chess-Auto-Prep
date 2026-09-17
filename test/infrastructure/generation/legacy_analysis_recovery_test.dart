@@ -93,6 +93,32 @@ void main() {
   );
 
   test(
+    'an edited legacy model-game companion stays readable and exports exact bytes',
+    () async {
+      final file = File(p.join(root.path, 'Main_model_games.pgn'));
+      final bytes = [
+        0xef,
+        0xbb,
+        0xbf,
+        ...utf8.encode('[Event "User edited companion"]\n\n1. c4 *'),
+      ];
+      await file.writeAsBytes(bytes);
+      final entry = (await repository.listRecovery(chapter)).entries.first;
+      final inspected = await GenerationArtifacts(
+        repository,
+      ).inspectRecovery(entry);
+      final companion = inspected.snapshot.files.singleWhere(
+        (f) => f.kind == GenerationRecoveryFileKind.modelGames,
+      );
+      expect(companion.text, contains('User edited companion'));
+      final destination = p.join(root.path, 'Recovered companion.pgn');
+      await repository.exportRecovery(companion, destination);
+      expect(await File(destination).readAsBytes(), bytes);
+      expect(await file.readAsBytes(), bytes);
+    },
+  );
+
+  test(
     'malformed entry and unsafe file do not hide healthy probes or partial',
     () async {
       await original(GenerationArtifactKind.tree).writeAsString('{broken');

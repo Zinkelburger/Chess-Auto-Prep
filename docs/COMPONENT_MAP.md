@@ -2043,7 +2043,11 @@ decodes probes.
 Builder → Actions → **Recover generated outputs…** opens the single production
 `GenerationRecoveryDialog`, owned by `GenerationRecoveryController`.
 `GenerationArtifactRepository.listRecovery` catalogs retained run directories
-under `.cap-generation/<chapter>/` and the older sidecar set. Selecting an output
+under `.cap-generation/<chapter>/` and the older JSON/model-games sidecar set. Empty/error Builder
+Actions opens the same dialog with an initial source chooser. `listRecoverySources`
+discovers namespaces under the configured repertoire root without following
+links or entering hidden trash/staging folders; a deleted chapter remains
+reachable. Entire deleted repertoires must first use library restore. Selecting an output
 lazily loads it through `readRecovery`; `GenerationArtifacts.inspectRecovery`
 uses the pure codecs off the UI isolate. There is no second browser or writer.
 
@@ -2073,9 +2077,8 @@ analysis, transfer it into training, or resume any output. The normal generation
 flow alone can resume a validated current partial. PGN commit and artifact
 selection remain separate transactions: a cache-selection failure after PGN
 commit reports the saved PGN and retained output, without replay. Automatic
-legacy resume, retention/garbage collection, cross-file atomicity and recovery
-navigation for chapters no longer present in the Builder catalog remain outside
-this responsibility.
+legacy resume, retention/garbage collection and cross-file atomicity remain
+outside this responsibility.
 
 ### `lib/core/`
 

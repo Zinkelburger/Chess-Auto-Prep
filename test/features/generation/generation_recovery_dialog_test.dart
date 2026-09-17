@@ -164,9 +164,22 @@ void main() {
         }
 
         await show(find.byKey(const ValueKey('recovery-source-Main.pgn')), 160);
+        final namespace = directory.parent.parent;
+        final held = namespace.renameSync('${namespace.path}-held');
+        final outside = Directory(p.join(root.path, 'outside'))..createSync();
+        Link(namespace.path).createSync(outside.path);
         await tester.tap(
           find.byKey(const ValueKey('recovery-source-Main.pgn')),
         );
+        await _waitRecovery(tester);
+        await show(
+          find.textContaining('Retained outputs could not be listed'),
+          160,
+        );
+        Link(namespace.path).deleteSync();
+        held.renameSync(namespace.path);
+        await show(find.text('Refresh'), -160);
+        await tester.tap(find.text('Refresh'));
         await _waitRecovery(tester);
         await show(find.text('Choose saved output'), 160);
         await tester.tap(find.text('Choose saved output'));

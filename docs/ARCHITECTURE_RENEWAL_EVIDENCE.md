@@ -2614,3 +2614,80 @@ The initial analyzer run found one unused legacy import and two new CLI-test
 infos; those were corrected before the passing rerun. No UI behavior changed,
 so this cutover reuses the preceding inspected recovery screenshots rather than
 claiming a new platform/UI validation. No full-suite or non-Linux gate is claimed.
+
+
+### Retained generation recovery completion (2026-09-17)
+
+The existing recovery flow now covers retained PGN/model-game proposals,
+artifact versions/unfinished outputs, manifests/receipts and legacy sidecars,
+including user-edited `_model_games.pgn` companions.
+`GenerationRecoveryController`/`GenerationRecoveryDialog` replace the two
+legacy-only owners; their old files, types, `readLegacy`, `inspectLegacy`,
+`exportLegacy` and app entrypoint are retired without forwarding bridges.
+The existing artifact repository adds source discovery, catalog/read and captured
+export; `GenerationArtifacts` keeps pure-codec scheduling. No second browser,
+writer, dependency container or generic repository framework was introduced.
+
+Empty/error/loaded Builder Actions all reach **Recover generated outputs…**.
+A source chooser scans repository-owned namespaces under the configured library
+root, including deleted chapters, without following links or entering hidden
+trash/staging. Whole deleted repertoires first require the library's existing
+folder restore. Selecting a run lazily observes fixed known filenames only;
+manifest paths never authorize a read. Directory replacement is rejected,
+missing/malformed/edited siblings remain individually inspectable, and captured
+immutable bytes remain exportable even when decoding fails or originals change.
+
+The view displays recorded source/config/run, source-revision comparison,
+checksum differences and selection/publication evidence. No receipt does not
+mean unpublished; an old artifact directory does not mean never selected.
+Recovery does not adopt analysis or resume retained output, including apparently
+matching source records. Export uses the existing native exclusive-install
+transaction and displays a potentially installed destination after uncertain
+acknowledgement. The source PGN, selection pointer and original retained bytes
+are never changed by inspection/export. Owner epoch checks reject late reads;
+closing while the destination picker is pending cannot export, and repeated
+clicks cannot start duplicate exports.
+
+Native fixtures exercise source-conflict PGN/model staging, committed PGN with
+missing publication receipt, selected versus unselected/edited artifact records,
+interrupted manifest-first staging, malformed manifest fixed-path reads,
+namespace failure/retry, symlink/replaced-directory refusal, orphan discovery,
+legacy BOM/gzip/malformed-byte recovery, collision and uncertain export. The
+production widget journeys cover Actions entrypoints, orphan source selection,
+enumeration failure→Refresh, PGN inspection/export and legacy tree/trap parity,
+including 640×480 and 200% text. Controller tests retain delayed selection,
+disposal, duplicate-export and picker-error coverage.
+
+Headless Linux application evidence uses only the disposable driver profile:
+[source chooser after restart](images/renewal-generation-recovery-sources.png),
+[retained PGN/provenance](images/renewal-generation-recovery-pgn.png),
+[isolated missing model-game failure](images/renewal-generation-recovery-missing.png),
+and [native export result](images/renewal-generation-recovery-export.png).
+The real native folder picker selected the disposable Documents directory; the
+exported `.pgn` bytes matched the captured original exactly. The app runtime
+restart rediscovered the deleted chapter namespace; the preview was stopped.
+No real user library was used.
+
+Development corrections: the first new storage fixture omitted the existing
+`expectedContent` named argument; fixed before native coverage passed. Widget
+fixtures initially awaited settling during native asynchronous reads or targeted
+unscrolled controls; they now wait for owner completion and exercise visible
+scroll controls. A new enumeration-category regression caught a read/enumerate
+assignment swapped during editing; corrected and covered through repository and
+visible retry journeys. These failed intermediate runs are not passing evidence.
+
+Remaining limits: no automatic legacy/retained-output adoption or resume, no
+retention/garbage collection or cross-file atomicity, no macOS/Windows validation,
+and no large-history performance certification. Whole Generation remains
+unfinished. This closes inspection/export accessibility for retained outputs in
+the repertoire library; external chapter namespaces remain reachable when that
+chapter is opened, and whole deleted repertoire containers use library restore.
+
+Final local checks on the merged `29fbb4b0` baseline: analyze/lint pass with 63
+existing infos, zero warnings/errors; 44 architecture regression cases pass and
+1,459 exact debt entries are unchanged. The nine-file production/native/recovery
+batch passes 68 tests with zero failures/skips. After adding the historical
+model-games companion, its seven-test native legacy recovery file passes,
+including exact edited/BOM PGN export. All 107 local links in the affected plan,
+evidence, component map and generation README resolve; `git diff --check` passes.
+No full-suite, release, engine-performance or non-Linux gate is claimed.

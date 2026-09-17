@@ -257,6 +257,8 @@ class _GenerationRecoveryDialogState extends State<GenerationRecoveryDialog> {
                         const Divider(),
                         if (_controller.loading)
                           const Center(child: CircularProgressIndicator())
+                        else if (_controller.chapterPath == null)
+                          const SizedBox.shrink()
                         else if (inspection == null ||
                             (inspection.items.isEmpty &&
                                 inspection.snapshot.files.isEmpty))

@@ -406,6 +406,7 @@ class StorageGenerationArtifactRepository
         GenerationRecoveryFileKind.probes: '${base}_expectimax.json',
         GenerationRecoveryFileKind.traps: '${base}_traps.json',
         GenerationRecoveryFileKind.partial: '${base}_partial_tree.json',
+        GenerationRecoveryFileKind.modelGames: '${base}_model_games.pgn',
       }.entries) {
         final file = await _observeRecoveryFile(item.key, item.value);
         if (file != null) files.add(file);
