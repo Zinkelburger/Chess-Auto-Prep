@@ -6,6 +6,7 @@ import 'package:widgetbook/widgetbook.dart';
 import 'repertoire_cases.dart';
 import 'document_cases.dart';
 import 'workspace_cases.dart';
+import 'appearance_cases.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,8 +14,8 @@ void main() {
   runApp(const RenewalWidgetbook());
 }
 
-/// Local development catalog. No account, settings, engine or disk owner is
-/// constructed; use cases supply memory repositories and picker/navigation fakes.
+/// Local development catalog. No account, global settings, engine or disk IO is
+/// initialized; use cases supply memory repositories and picker/navigation fakes.
 class RenewalWidgetbook extends StatelessWidget {
   const RenewalWidgetbook({
     super.key,
@@ -41,6 +42,7 @@ class RenewalWidgetbook extends StatelessWidget {
       ...repertoireCases(),
       ...documentCases(),
       ...workspaceCases(),
+      ...appearanceCases(),
     ],
   );
 }

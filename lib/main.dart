@@ -1,8 +1,11 @@
 import 'l10n/generated/app_localizations.dart';
 import 'infrastructure/settings/fresh_desktop_preferences_store.dart';
+import 'infrastructure/settings/shared_preferences_app_settings_repository.dart';
 import 'dart:async';
 
 import 'app/app_dependencies.dart';
+import 'app/themed_application.dart';
+import 'features/settings/repositories/app_settings_repository.dart';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -73,6 +76,11 @@ Future<void> _initializeApp() async {
   // than one that was never offered. It reads the asset manifest, so it costs
   // a manifest parse rather than a disk round-trip.
   await Future.wait([
+    // Start in the saved appearance without flashing the default. A settings
+    // read failure stays recoverable from Appearance rather than blocking boot.
+    SharedPreferencesAppSettingsRepository.instance.appearance
+        .ensureLoaded()
+        .catchError((Object _) {}),
     EngineSettings.instance.loadFromPrefs(),
     BulkAnalysisSettings.instance.ensureLoaded(),
     EvalDatabaseSettings.instance.load(),
@@ -163,11 +171,13 @@ class StartupErrorApp extends StatelessWidget {
 }
 
 class ChessAutoPrepApp extends StatelessWidget {
-  const ChessAutoPrepApp({super.key});
+  const ChessAutoPrepApp({super.key, this.settings});
+  final AppSettingsRepository? settings;
 
   @override
   Widget build(BuildContext context) {
     return AppDependencies(
+      settings: settings,
       documentStore: createPlatformDocumentStore(),
       child: MultiProvider(
         providers: [
@@ -211,11 +221,7 @@ class ChessAutoPrepApp extends StatelessWidget {
         // so a change in Settings repaints them in place.
         child: DisplaySettingsScope(
           settings: BoardDisplaySettings.instance,
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            title: 'Chess Auto Prep',
-            theme: AppTheme.dark(),
+          child: ThemedApplication(
             // Keep the semantics tree empty unless explicitly enabled —
             // GNOME's accessibility bus can enable Flutter's semantics tree
             // and then assert every frame on our recognizer-per-span movetext
@@ -228,7 +234,6 @@ class ChessAutoPrepApp extends StatelessWidget {
               return ExcludeSemantics(child: wrapped);
             },
             home: const AppUpdateHost(child: MainScreen()),
-            debugShowCheckedModeBanner: false,
           ),
         ),
       ),

@@ -441,9 +441,28 @@ workspace migration. No process-crash recovery is implied by draft retention.
 
 `lib/design_system/theme/` owns `AppTheme`, `AppTypography`, `AppSpacing`,
 `AppMotion` and the interpolated `WorkspaceTheme` extension. Both light and dark
-factories register the same roles; widgets resolve the current theme. The app
-still opens in its existing dark appearance. Light/system appearance preferences
-and unmigrated screens are not yet certified.
+factories register the same roles; widgets resolve the current theme.
+`app/themed_application.dart` observes only the committed appearance section and
+wires both themes and `ThemeMode` into the production `MaterialApp`. Dark remains
+the default; Light and System are persisted through Settings → Appearance.
+System follows desktop brightness while explicit choices override it.
+
+`features/settings/models/app_appearance.dart` is the stable enum contract;
+`AppSettingsRepository.appearance` and `appearanceSettingsProvider` expose its
+loading/saving/failed/committed state. `infrastructure/settings/persisted_appearance.dart`
+serializes writes to the `app_appearance` preference, reads back before confirming,
+and reconciles write errors. Unknown values stay untouched until an explicit
+choice; failed loads/saves require explicit Retry or Reload saved choice.
+Changing themes preserves the app navigator, active routes, drafts and focus.
+The existing analysis/board/data reset does not reset appearance.
+
+Shared Actions/mode menus, breadcrumbs, contextual hints and chapter-picker rows now resolve theme
+colors. `app/legacy_theme_boundary.dart` explicitly contains fixed dark panels:
+legacy modes; Builder/Trainer root content; Builder planning/audit pages; library
+outline; and legacy settings forms. The library catalog, pickers, creation/recovery,
+settings navigation and Appearance page use the selected app theme. Remove each
+boundary with its owning feature migration; these dark interiors are not certified
+light-mode implementations.
 
 `lib/design_system/components/` is the canonical home for `ListSearchField`,
 `showNameEntryDialog`, `confirmAction`, `ItemTitle`, `EmptyStatePlaceholder` and
@@ -452,7 +471,7 @@ All existing callers import these implementations; the old files were removed.
 Catalog/create/paste UI now uses resolved foreground, error, surface and type
 roles. Shared neutral values and font names have one owner; remaining dark
 `AppColors`/`AppTextStyles` consumers are listed with migration owners in
-`scripts/legacy_theme_consumers.json` (257 at this checkpoint). Architecture
+`scripts/legacy_theme_consumers.json` (252 after the appearance checkpoint). Architecture
 lint rejects new consumers and requires removing retired ledger entries. It
 also excludes feature/storage dependencies from the design system and literal
 colors/type sizes from migrated widgets.
@@ -2045,7 +2064,7 @@ release smoke testing. No release or update is triggered by these tests.
 | `app_text_styles.dart` | Shared text roles (`body`, `muted`, `caption`, `mono`, `title`, …) built from `AppColors` / near-white ink. `forTheme(context, style)` adapts these roles to dark ink on light feature surfaces while retaining the dark palette. Wired into `ThemeData.textTheme` in `app_theme.dart`. Prefer these over ad-hoc `Colors.grey` / hard-coded sizes. |
 | `pgn_text_styles.dart` | Movetext domain styles (`move`, `moveNumber`, `comment` upright, `variation`, `branchChip`, …) on top of `AppColors` + `AppTextStyles`. Single knobs file for PGN viewer/editor look. Ephemeral (scratch/solitaire) moves stay italic. |
 
-**Style convention:** new and touched UI should use `AppColors` / `AppTextStyles` / `theme.textTheme` (and domain packs like `PgnTextStyles`) instead of inline `Colors.grey[n]` or one-off `TextStyle(fontSize: …)`. Gradual migration of legacy call sites is tracked in FUTURE_FEATURES.
+**Style convention:** migrated UI uses `design_system/` typography and resolved theme roles. `AppColors`, `AppTextStyles` and domain packs remain only for the named legacy owners in `scripts/legacy_theme_consumers.json`; do not introduce new consumers. The [UI guide](agents/ui.md) owns current conventions.
 
 ---
 

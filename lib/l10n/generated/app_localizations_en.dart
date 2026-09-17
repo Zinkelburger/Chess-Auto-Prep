@@ -403,4 +403,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get back => 'Back';
+
+  @override
+  String get appearance => 'Appearance';
+
+  @override
+  String get appearanceDark => 'Dark';
+
+  @override
+  String get appearanceLight => 'Light';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLoading => 'Loading appearance…';
+
+  @override
+  String get appearanceSaving => 'Saving appearance…';
+
+  @override
+  String get appearanceFailed =>
+      'Could not confirm the appearance setting. Your last confirmed appearance is still applied.';
+
+  @override
+  String get appearanceReload => 'Reload saved choice';
+
+  @override
+  String get appearanceSystemHelp =>
+      'System follows your desktop’s light or dark appearance.';
 }

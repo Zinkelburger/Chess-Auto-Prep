@@ -29,6 +29,10 @@ The Workspace / Navigation case retains a draft, nested catalog search and
 creation form across a mode round trip using the production shell and focus
 branch. Its surrounding editor and mode selector are illustrative.
 
+Settings / Appearance uses the production control with memory-only saved/failure
+scenarios. The catalog's theme addon controls the fixture surface independently
+of the simulated saved choice; production theme wiring has separate app tests.
+
 Reset a case by leaving it and returning. Fixtures are illustrative UI states,
 not persistence/recovery tests; the native repository journeys test those.
 

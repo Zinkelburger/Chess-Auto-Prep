@@ -32,9 +32,12 @@ using production widgets and a guarded ledger of remaining legacy theme users.
 The shared save session/status interaction now preserves drafts across conflicts,
 reload and exclusive copies, with scripted catalog cases; repertoire creation
 uses the shared status control and preserves input on a naming collision.
-Legacy editor adoption, persisted drafts and close guards are still pending.
+Persisted Dark/Light/System appearance now drives the app theme, with explicit
+failure/retry feedback and retained navigation/drafts. Shared menu/breadcrumb and
+chapter-picker colors adapt; fixed dark legacy interiors remain bounded until
+migration. Legacy editor adoption, persisted drafts and close guards are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional
-splitting of existing chapters, remaining localization, appearance persistence/accessibility and full slice
+splitting of existing chapters, remaining localization, legacy appearance migration/accessibility and full slice
 gates remain unfinished. The staged rewrite, shared PGN mutation API, UI design
 principles, storage preservation gates and milestone sequence live in
 [ARCHITECTURE_RENEWAL.md](ARCHITECTURE_RENEWAL.md). That document is the canonical

@@ -8,8 +8,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-
 class InfoHint extends StatelessWidget {
   const InfoHint(this.message, {super.key, this.size = 16});
 
@@ -30,7 +28,7 @@ class InfoHint extends StatelessWidget {
       child: Icon(
         Icons.info_outline,
         size: size,
-        color: AppColors.onSurfaceMuted,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     );
   }

@@ -500,5 +500,41 @@
   "back": "Back",
   "@back": {
     "description": "Workspace navigation: back"
+  },
+  "appearance": "Appearance",
+  "@appearance": {
+    "description": "Appearance settings: appearance"
+  },
+  "appearanceDark": "Dark",
+  "@appearanceDark": {
+    "description": "Appearance settings: appearanceDark"
+  },
+  "appearanceLight": "Light",
+  "@appearanceLight": {
+    "description": "Appearance settings: appearanceLight"
+  },
+  "appearanceSystem": "System",
+  "@appearanceSystem": {
+    "description": "Appearance settings: appearanceSystem"
+  },
+  "appearanceLoading": "Loading appearance…",
+  "@appearanceLoading": {
+    "description": "Appearance settings: appearanceLoading"
+  },
+  "appearanceSaving": "Saving appearance…",
+  "@appearanceSaving": {
+    "description": "Appearance settings: appearanceSaving"
+  },
+  "appearanceFailed": "Could not confirm the appearance setting. Your last confirmed appearance is still applied.",
+  "@appearanceFailed": {
+    "description": "Appearance settings: appearanceFailed"
+  },
+  "appearanceReload": "Reload saved choice",
+  "@appearanceReload": {
+    "description": "Appearance settings: appearanceReload"
+  },
+  "appearanceSystemHelp": "System follows your desktop’s light or dark appearance.",
+  "@appearanceSystemHelp": {
+    "description": "Appearance settings: appearanceSystemHelp"
   }
 }

@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/widgets/app_overflow_menu.dart';
 import 'package:chess_auto_prep/widgets/app_settings_button.dart';
 import 'package:chess_auto_prep/widgets/settings/settings_navigation.dart';
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,6 +26,8 @@ void main() {
       ChangeNotifierProvider.value(
         value: app,
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Consumer<AppState>(
             builder: (context, app, _) => Scaffold(
               appBar: AppBar(

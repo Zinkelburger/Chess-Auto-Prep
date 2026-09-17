@@ -24,9 +24,12 @@ Reserve native engine startup for explicit engine and desktop integration tests.
 Migrated UI uses `lib/design_system/`: resolve typography through
 `AppTypography`, standard colors through `Theme.of(context).colorScheme`, and
 workspace surfaces through `WorkspaceTheme.of(context)`. Use `AppSpacing` for
-shared spacing/widths. The canonical `AppTheme` provides light/dark fixtures;
-production retains its existing dark default while the remaining appearance
-settings and legacy screens migrate. Never add fixed colors or font sizes to a
+shared spacing/widths. The canonical `AppTheme` supplies production and fixture
+light/dark themes. `ThemedApplication` applies the committed Dark/Light/System
+preference (default Dark). Migrated widgets read the resolved theme; do not
+subscribe to platform brightness individually. `app/legacy_theme_boundary.dart`
+keeps fixed-color legacy interiors dark until their owning workflow migrates;
+remove the matching boundary and theme ledger entry when completing migration. Never add fixed colors or font sizes to a
 migrated feature or design-system component.
 
 Legacy `AppTextStyles`/`AppColors` remain for unmigrated owners only; the explicit

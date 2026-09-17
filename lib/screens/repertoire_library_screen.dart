@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../app/legacy_theme_boundary.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/repertoires/controllers/repertoire_catalog_controller.dart';
 import '../design_system/layout/workspace_navigation_controller.dart';
@@ -214,95 +215,99 @@ class _RepertoireLibraryScreenState
           ),
         ),
         if (_folder != null)
-          Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1040),
-              child: ListenableBuilder(
-                listenable: _outline,
-                builder: (context, _) {
-                  final path = _outline.activeChapterPath;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Organize your repertoire',
-                              style: AppTextStyles.title,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Drag chapters into folders and lines between chapters. Right-click for more actions.',
-                              style: AppTextStyles.muted,
-                            ),
-                            const SizedBox(height: 16),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 8,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                FilledButton.icon(
-                                  onPressed: () => _train(_folder!.filePath),
-                                  icon: const Icon(Icons.school_outlined),
-                                  label: const Text('Train repertoire'),
-                                ),
-                                if (path != null) ...[
-                                  OutlinedButton.icon(
-                                    onPressed: () => _read(path),
-                                    icon: const Icon(Icons.menu_book_outlined),
-                                    label: const Text('Read chapter'),
-                                  ),
-                                  OutlinedButton.icon(
-                                    onPressed: () => _train(path),
+          LegacyThemeBoundary(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1040),
+                child: ListenableBuilder(
+                  listenable: _outline,
+                  builder: (context, _) {
+                    final path = _outline.activeChapterPath;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Organize your repertoire',
+                                style: AppTextStyles.title,
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Drag chapters into folders and lines between chapters. Right-click for more actions.',
+                                style: AppTextStyles.muted,
+                              ),
+                              const SizedBox(height: 16),
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: () => _train(_folder!.filePath),
                                     icon: const Icon(Icons.school_outlined),
-                                    label: const Text('Train chapter'),
+                                    label: const Text('Train repertoire'),
                                   ),
-                                  TextButton.icon(
-                                    onPressed: () {
-                                      if (!mounted) return;
-                                      context.read<AppState>().handOff(
-                                        OpenBuilder(
-                                          repertoirePath: path,
-                                          reloadFromDisk: true,
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(Icons.edit_outlined),
-                                    label: const Text('Build chapter'),
-                                  ),
-                                  Text(
-                                    p.basenameWithoutExtension(path),
-                                    style: AppTextStyles.muted,
-                                  ),
+                                  if (path != null) ...[
+                                    OutlinedButton.icon(
+                                      onPressed: () => _read(path),
+                                      icon: const Icon(
+                                        Icons.menu_book_outlined,
+                                      ),
+                                      label: const Text('Read chapter'),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: () => _train(path),
+                                      icon: const Icon(Icons.school_outlined),
+                                      label: const Text('Train chapter'),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        if (!mounted) return;
+                                        context.read<AppState>().handOff(
+                                          OpenBuilder(
+                                            repertoirePath: path,
+                                            reloadFromDisk: true,
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(Icons.edit_outlined),
+                                      label: const Text('Build chapter'),
+                                    ),
+                                    Text(
+                                      p.basenameWithoutExtension(path),
+                                      style: AppTextStyles.muted,
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: RepertoireOutlinePanel(
-                          controller: _outline,
-                          showPositionFilter: false,
-                          onOpenChapter: (path) {
-                            if (!mounted) return;
-                            _outline.setActiveChapter(path);
-                          },
-                          onOpenLine: (path, line) =>
-                              _read(path, gameIndex: line.gameIndex),
-                          onTrainChapter: (path) => _train(path),
-                          onTrainLine: (path, line) =>
-                              _train(path, lineId: line.id),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: RepertoireOutlinePanel(
+                            controller: _outline,
+                            showPositionFilter: false,
+                            onOpenChapter: (path) {
+                              if (!mounted) return;
+                              _outline.setActiveChapter(path);
+                            },
+                            onOpenLine: (path, line) =>
+                                _read(path, gameIndex: line.gameIndex),
+                            onTrainChapter: (path) => _train(path),
+                            onTrainLine: (path, line) =>
+                                _train(path, lineId: line.id),
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           )

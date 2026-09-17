@@ -2,6 +2,8 @@
 /// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
+import '../app/legacy_theme_boundary.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -276,7 +278,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     if (_configRouteOpen) return;
     _configRouteOpen = true;
     await _workspaceNavigation.push(
-      MaterialPageRoute<void>(
+      LegacyPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
           title: cutOnly
@@ -339,7 +341,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
     final isWhite = _controller.isRepertoireWhite;
     final label = _controller.currentRepertoire?.name;
     await _workspaceNavigation.push(
-      MaterialPageRoute<void>(
+      LegacyPageRoute<void>(
         builder: (_) => BuildConfigScreen(
           repertoireName: _configRouteTitle,
           title: 'Check this chapter',
@@ -868,7 +870,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
             playAsWhite: isWhite,
           );
     final result = await _workspaceNavigation.push<PlanBuildResult>(
-      MaterialPageRoute(
+      LegacyPageRoute<PlanBuildResult>(
         fullscreenDialog: true,
         builder: (_) => PlanBuildScreen(
           isWhite: isWhite,
@@ -1021,7 +1023,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
           absorbing: _controller.isLoading && _lastRepertoireId != null,
           child: ExcludeFocus(
             excluding: _controller.isLoading && _lastRepertoireId != null,
-            child: root.appBar,
+            child: LegacyThemeBoundary(child: root.appBar),
           ),
         ),
       ),
@@ -1029,7 +1031,7 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
         mode: AppMode.repertoire,
         navigation: _workspaceNavigation,
       ),
-      body: root.body,
+      body: LegacyThemeBoundary(child: root.body),
     );
   }
 

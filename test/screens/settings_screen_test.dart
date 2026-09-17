@@ -3,6 +3,7 @@ import 'package:chess_auto_prep/models/board_display_settings.dart';
 import 'package:chess_auto_prep/models/engine_settings.dart';
 import 'package:chess_auto_prep/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,6 +20,8 @@ void main() {
       ChangeNotifierProvider<AppState>(
         create: (_) => AppState(),
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: ThemeData.dark(),
           home: const SettingsScreen(),
         ),
@@ -93,6 +96,8 @@ void main() {
       ChangeNotifierProvider(
         create: (_) => AppState(),
         child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: SettingsScreen(initialMode: AppMode.study),
         ),
       ),
@@ -241,6 +246,8 @@ void main() {
       ChangeNotifierProvider<AppState>(
         create: (_) => AppState(),
         child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           theme: ThemeData.dark(),
           home: Builder(
             builder: (context) => Scaffold(

@@ -25,8 +25,8 @@ import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/training/chapter_layout.dart' show ChapterSummary;
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
+import '../design_system/theme/workspace_theme.dart';
+import '../design_system/theme/app_typography.dart';
 import '../utils/app_messages.dart';
 import '../utils/safe_file_name.dart';
 import '../design_system/components/confirm_dialog.dart';
@@ -172,7 +172,11 @@ class _ChapterListBodyState extends State<ChapterListBody> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
               const SizedBox(height: 16),
               Text(_loadError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -213,7 +217,7 @@ class _ChapterListBodyState extends State<ChapterListBody> {
               ? Center(
                   child: Text(
                     'No chapter matches "$_search".',
-                    style: const TextStyle(color: AppColors.onSurfaceMuted),
+                    style: AppTypography.secondary(context),
                   ),
                 )
               : ListView.builder(
@@ -284,12 +288,12 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceInset,
+                      color: WorkspaceTheme.of(context).inset,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.menu_book,
-                      color: AppColors.onSurfaceSoft,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       size: 20,
                     ),
                   ),
@@ -301,19 +305,10 @@ class _ChapterListBodyState extends State<ChapterListBody> {
                         ItemTitle(
                           chapter.name,
                           maxLines: 2,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppTypography.bodyStrong(context),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          summary,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.ink,
-                          ),
-                        ),
+                        Text(summary, style: AppTypography.secondary(context)),
                       ],
                     ),
                   ),
@@ -381,16 +376,18 @@ class _ChapterListBodyState extends State<ChapterListBody> {
               child: ItemTitle(
                 section.name,
                 maxLines: 2,
-                style: TextStyle(
+                style: AppTypography.body(context).copyWith(
                   fontWeight: matches ? FontWeight.w500 : FontWeight.normal,
-                  color: matches ? AppColors.ink : AppColors.onSurfaceMuted,
+                  color: matches
+                      ? Theme.of(context).colorScheme.onSurface
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Text(
               '${section.lineCount} line${section.lineCount == 1 ? '' : 's'}',
-              style: AppTextStyles.muted.copyWith(color: AppColors.ink),
+              style: AppTypography.secondary(context),
             ),
           ],
         ),

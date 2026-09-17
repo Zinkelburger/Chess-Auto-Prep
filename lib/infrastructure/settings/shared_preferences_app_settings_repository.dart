@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'persisted_appearance.dart';
 
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -50,10 +51,15 @@ class SharedPreferencesRepertoireBooks implements RepertoireBooksPreferences {
 }
 
 class SharedPreferencesAppSettingsRepository implements AppSettingsRepository {
-  SharedPreferencesAppSettingsRepository({RepertoireBooksPreferences? books})
-    : repertoireBooks = PersistedRepertoireBooks(
-        books ?? SharedPreferencesRepertoireBooks(),
-      );
+  SharedPreferencesAppSettingsRepository({
+    RepertoireBooksPreferences? books,
+    AppearancePreferences? appearance,
+  }) : repertoireBooks = PersistedRepertoireBooks(
+         books ?? SharedPreferencesRepertoireBooks(),
+       ),
+       appearance = PersistedAppearance(
+         appearance ?? SharedPreferencesAppearance(),
+       );
 
   /// Transitional process owner shared by startup and the old Games adapter.
   /// Retire the singleton when those callers receive app-scoped injection.
@@ -61,6 +67,8 @@ class SharedPreferencesAppSettingsRepository implements AppSettingsRepository {
 
   @override
   final PersistedRepertoireBooks repertoireBooks;
+  @override
+  final PersistedAppearance appearance;
 }
 
 typedef _BooksEdit = RepertoireBooks Function(RepertoireBooks current);

@@ -1,6 +1,11 @@
 /// Flat shared preferences and directly editable view settings.
 library;
 
+import '../app/legacy_theme_boundary.dart';
+import '../design_system/theme/app_typography.dart';
+import '../features/settings/widgets/appearance_settings.dart';
+import '../l10n/generated/app_localizations.dart';
+
 import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
@@ -63,6 +68,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late ViewSettingsRegistry _registry;
   final _navigationScroll = ScrollController();
   bool get _global => _mode == null;
+  String _sectionLabel(int index) => index == 7
+      ? AppLocalizations.of(context).appearance
+      : _sections[index].label;
   static const _sections = [
     (
       label: 'Accounts',
@@ -100,6 +108,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       label: 'Shortcuts',
       icon: Icons.keyboard_outlined,
       words: 'keyboard keys reference',
+    ),
+    (
+      label: 'Appearance',
+      icon: Icons.brightness_6_outlined,
+      words: 'theme light dark system display',
     ),
   ];
   static const _views = [
@@ -213,8 +226,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       .split(RegExp(r'\s+'))
       .every((term) => '$label $words'.toLowerCase().contains(term));
   List<Widget> _navigation() => [
-    for (final i in [0, 1, 3])
-      if (_matches(_sections[i].label, _sections[i].words)) _globalNavTile(i),
+    for (final i in [7, 0, 1, 3])
+      if (_matches(_sectionLabel(i), _sections[i].words)) _globalNavTile(i),
     for (final view in _views)
       if (view.mode.isAvailable && _matches(view.label, view.words))
         ListTile(
@@ -222,24 +235,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           dense: true,
           minTileHeight: 38,
           selected: _mode == view.mode,
-          selectedTileColor: AppColors.accent.withValues(alpha: .12),
+          selectedTileColor: Theme.of(
+            context,
+          ).colorScheme.primary.withValues(alpha: .12),
           title: Text(
             view.label,
             style: _mode == view.mode
-                ? AppTextStyles.bodyStrong
-                : AppTextStyles.body,
+                ? AppTypography.bodyStrong(context)
+                : AppTypography.body(context),
           ),
           onTap: () => _selectView(view.mode),
         ),
     for (final i in [4, 5, 6])
-      if (_matches(_sections[i].label, _sections[i].words)) _globalNavTile(i),
+      if (_matches(_sectionLabel(i), _sections[i].words)) _globalNavTile(i),
   ];
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AppColors.surface,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     appBar: AppBar(
-      title: const Text('Settings', style: AppTextStyles.bodyStrong),
+      title: Text('Settings', style: AppTypography.bodyStrong(context)),
       automaticallyImplyLeading: false,
       actions: [
         ShortcutIconButton(
@@ -270,18 +285,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             builder: (context, _) => IndexedStack(
               index: _global
                   ? _selected
-                  : 7 + _views.indexWhere((v) => v.mode == _mode),
+                  : _sections.length +
+                        _views.indexWhere((v) => v.mode == _mode),
               children: [
                 for (var i = 0; i < _sections.length; i++)
                   if (!_visitedGlobals.contains(i))
                     const SizedBox.shrink()
+                  else if (i == 7)
+                    const AppearanceSettings()
                   else if (i == 4)
-                    const DatabasesScreen(embedded: true)
+                    const LegacyThemeBoundary(
+                      child: DatabasesScreen(embedded: true),
+                    )
                   else
-                    _globalPage(i, compact),
+                    LegacyThemeBoundary(child: _globalPage(i, compact)),
                 for (final view in _views)
                   if (_visitedViews.contains(view.mode))
-                    _viewContent(view.mode)
+                    LegacyThemeBoundary(child: _viewContent(view.mode))
                   else
                     const SizedBox.shrink(),
               ],
@@ -350,12 +370,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     dense: true,
     minTileHeight: 38,
     selected: _global && _selected == index,
-    selectedTileColor: AppColors.accent.withValues(alpha: .12),
+    selectedTileColor: Theme.of(
+      context,
+    ).colorScheme.primary.withValues(alpha: .12),
     title: Text(
-      _sections[index].label,
+      _sectionLabel(index),
       style: _global && _selected == index
-          ? AppTextStyles.bodyStrong
-          : AppTextStyles.body,
+          ? AppTypography.bodyStrong(context)
+          : AppTypography.body(context),
     ),
     onTap: () => _selectGlobal(index),
   );

@@ -767,6 +767,58 @@ This does not graduate UI-02 or milestone 1/2: persisted document sessions, deep
 interactive-engine visibility remain unverified. Appearance/settings, remaining
 recovery/platform/performance gates, owner review and PLAN-02 remain open.
 
+### Appearance checkpoint — persisted preference and migrated surfaces
+
+After navigation checkpoint `53c229bb`, `AppSettingsRepository.appearance` owns
+one typed Dark/Light/System preference. Dark preserves the product default;
+`app/themed_application.dart` selects the committed value and supplies both
+canonical themes to MaterialApp. System resolves desktop brightness; explicit
+choices stay stable. `features/settings/widgets/appearance_settings.dart` is a
+localized, adaptive control reachable through Settings → Appearance and settings
+search. It shows pending/failed choices separately from the applied value.
+
+SET-01/STATE-01: the infrastructure owner serializes updates to `app_appearance`,
+validates stored names, reads back successful writes and reconciles errors before
+reporting committed state. Unknown keys are preserved until a user chooses a
+replacement. Subscription/rebuild does not replay failed writes or failed loads;
+Retry and Reload saved choice are explicit. Book selections and unrelated keys
+remain independent. Native checks install the same fresh desktop preference
+backend as production, including a real read-only-file failure and repair.
+
+UI-01/UI-02: theme changes retain navigator identity, open routes, creation input
+and focus. Shared Actions/mode menus, breadcrumbs, contextual hints and chapter rows use resolved
+colors; the legacy-theme ledger shrinks from 257 to 252 owners. Settings chrome
+and catalog/create/recovery destinations use the selected theme. Fixed-color
+legacy modes, Builder/Trainer content and planning/audit pages, outline and old
+settings forms remain inside explicit `LegacyThemeBoundary`/`LegacyPageRoute`
+adapters. Retire those adapters with their feature owners; this is not a claim
+that every legacy pane has a complete light design. Settings Widgetbook cases
+use only memory contracts and actual production controls. The boundary gate now
+also rejects fixed colors/styles and legacy theme imports in settings widgets.
+
+Verification: 90 distinct focused regressions pass across preference contracts,
+appearance widgets, Widgetbook, settings/navigation, shared menus/breadcrumbs,
+Builder and chapter/course navigation. Those include both light/dark rendered
+chapter contrast, 200% text in a narrow window, OS-brightness changes, explicit
+overrides, slow/reentrant writes, invalid keys, failure/retry/read-back mismatch,
+and navigator/text/focus preservation. Twelve architecture-checker cases and
+`scripts/ci.sh analyze lint` pass with nine pre-existing informational findings.
+Four distinct Linux native journeys pass: read-only preference failure/repair;
+appearance change with an open creation draft and fresh-owner reload; Builder
+picker/filter/position/settings retention; creation draft through mode-menu round
+trips. All native tests use the runner's disposable profile.
+
+The headless production app was also stopped and relaunched as a new process:
+[Light remains selected after restart](images/renewal-appearance-restarted-light.png).
+The [creation form and toolbar in Light](images/renewal-appearance-creation-light.png)
+were inspected at 1280×720. The preview was stopped afterward. These are Linux
+checks, not Windows/macOS, native screen-reader, physical-display or release-suite
+evidence. Early compile issues and the final unused test import were corrected;
+no new analyzer findings remain.
+Remaining: migration of the bounded legacy interiors, OS/native accessibility
+and platform checks, physical-display/owner review, performance and the other
+first-slice gates. No change to the full renewal scope or milestone graduation.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

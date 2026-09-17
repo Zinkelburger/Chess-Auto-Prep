@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
+import '../app/legacy_theme_boundary.dart';
 import '../design_system/layout/workspace_branch.dart';
 import '../core/app_state.dart';
 import '../services/games_library/games_library_service.dart'
@@ -265,27 +266,27 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget _createModeView(AppMode mode) {
     switch (mode) {
       case AppMode.tactics:
-        return const _TacticsModeView();
+        return const LegacyThemeBoundary(child: _TacticsModeView());
       case AppMode.positionAnalysis:
-        return const AnalysisScreen();
+        return const LegacyThemeBoundary(child: AnalysisScreen());
       case AppMode.repertoire:
         return const RepertoireScreen();
       case AppMode.repertoireTrainer:
         return const RepertoireTrainingScreen();
       case AppMode.pgnViewer:
-        return const PgnViewerScreen();
+        return const LegacyThemeBoundary(child: PgnViewerScreen());
       case AppMode.study:
-        return const StudyScreen();
+        return const LegacyThemeBoundary(child: StudyScreen());
       case AppMode.engineTournament:
-        return const EngineTournamentScreen();
+        return const LegacyThemeBoundary(child: EngineTournamentScreen());
       case AppMode.bughouse:
-        return const BughouseScreen();
+        return const LegacyThemeBoundary(child: BughouseScreen());
       case AppMode.playersPrep:
-        return const PlayersPrepScreen();
+        return const LegacyThemeBoundary(child: PlayersPrepScreen());
       case AppMode.repertoireLibrary:
         return const RepertoireLibraryScreen();
       case AppMode.databases:
-        return const DatabasesScreen();
+        return const LegacyThemeBoundary(child: DatabasesScreen());
     }
   }
 }

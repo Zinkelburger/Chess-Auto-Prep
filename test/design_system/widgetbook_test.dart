@@ -6,6 +6,28 @@ import '../../widgetbook/main.dart';
 
 void main() {
   testWidgets(
+    'Widgetbook appearance uses production failure feedback at enlarged light scale',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final route = Uri(
+        path: '/',
+        queryParameters: {
+          'path': 'settings/appearance/write-failure',
+          'theme': '{name:Light}',
+          'text-scale': '{factor:2.0}',
+        },
+      ).toString();
+      await tester.pumpWidget(RenewalWidgetbook(initialRoute: route));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Light').last);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Could not confirm'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'Widgetbook retains the workspace draft and nested library filter',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(1600, 1000));

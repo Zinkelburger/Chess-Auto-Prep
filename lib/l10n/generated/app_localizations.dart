@@ -735,6 +735,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Back'**
   String get back;
+
+  /// Appearance settings: appearance
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearance;
+
+  /// Appearance settings: appearanceDark
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get appearanceDark;
+
+  /// Appearance settings: appearanceLight
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get appearanceLight;
+
+  /// Appearance settings: appearanceSystem
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get appearanceSystem;
+
+  /// Appearance settings: appearanceLoading
+  ///
+  /// In en, this message translates to:
+  /// **'Loading appearance…'**
+  String get appearanceLoading;
+
+  /// Appearance settings: appearanceSaving
+  ///
+  /// In en, this message translates to:
+  /// **'Saving appearance…'**
+  String get appearanceSaving;
+
+  /// Appearance settings: appearanceFailed
+  ///
+  /// In en, this message translates to:
+  /// **'Could not confirm the appearance setting. Your last confirmed appearance is still applied.'**
+  String get appearanceFailed;
+
+  /// Appearance settings: appearanceReload
+  ///
+  /// In en, this message translates to:
+  /// **'Reload saved choice'**
+  String get appearanceReload;
+
+  /// Appearance settings: appearanceSystemHelp
+  ///
+  /// In en, this message translates to:
+  /// **'System follows your desktop’s light or dark appearance.'**
+  String get appearanceSystemHelp;
 }
 
 class _AppLocalizationsDelegate

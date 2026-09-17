@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/repertoire_books.dart';
+import '../models/app_appearance.dart';
 import '../models/settings_state.dart';
 import '../repositories/app_settings_repository.dart';
 
@@ -27,3 +28,16 @@ final repertoireBooksSettingsProvider =
         );
       });
     }, retry: (count, error) => null);
+
+final appearanceSettingsProvider = StreamProvider<SettingsState<AppAppearance>>(
+  (ref) {
+    final appearance = ref.watch(appSettingsRepositoryProvider).appearance;
+    return Stream.multi((controller) {
+      final subscription = appearance.changes.listen(controller.addSync);
+      controller.addSync(appearance.state);
+      controller.onCancel = subscription.cancel;
+      unawaited(appearance.ensureLoaded().catchError((Object _) {}));
+    });
+  },
+  retry: (count, error) => null,
+);

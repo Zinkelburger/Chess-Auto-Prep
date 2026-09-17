@@ -2,6 +2,8 @@
 /// plus a tactics mode for training studies of custom puzzles.
 library;
 
+import '../app/legacy_theme_boundary.dart';
+
 import '../models/repertoire_review_entry.dart' show ReviewRating;
 
 import 'dart:async' show unawaited;
@@ -236,7 +238,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
   Widget build(BuildContext context) {
     return WorkspaceShell(
       navigation: _workspaceNavigation,
-      appBar: _buildAppBar(),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: LegacyThemeBoundary(child: _buildAppBar()),
+      ),
       destinationAppBar: WorkspaceDestinationToolbar(
         mode: AppMode.repertoireTrainer,
         navigation: _workspaceNavigation,
@@ -244,7 +249,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen> {
       body: BoardKeyboardScope(
         moveInputKey: _moveInputKey,
         bindings: () => _keyBindings,
-        child: _buildBody(),
+        child: LegacyThemeBoundary(child: _buildBody()),
       ),
     );
   }
