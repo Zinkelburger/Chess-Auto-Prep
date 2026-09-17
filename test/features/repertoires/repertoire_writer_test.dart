@@ -94,7 +94,7 @@ void main() {
     );
 
     test(
-      'appendMoveAtPath creates new game when no exact prefix match',
+      'repository append creates new game when no exact prefix match',
       () async {
         final result = await DocumentRepertoireRepository(
           NativePgnDocumentStore(),

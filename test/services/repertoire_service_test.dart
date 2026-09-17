@@ -424,7 +424,7 @@ void main() {
     });
   });
 
-  group('appendMoveAtPath', () {
+  group('repository append', () {
     late Directory tempDir;
     late RepertoireService service;
 
@@ -439,7 +439,7 @@ void main() {
       }
     });
 
-    test('appendMoveAtPath to empty repertoire creates first game', () async {
+    test('repository append to empty repertoire creates first game', () async {
       final filePath = '${tempDir.path}/empty.pgn';
       await File(filePath).writeAsString('');
 
@@ -455,7 +455,7 @@ void main() {
     });
 
     test(
-      'appendMoveAtPath extends existing game when prefix matches',
+      'repository append extends existing game when prefix matches',
       () async {
         final filePath = '${tempDir.path}/existing.pgn';
         await File(filePath).writeAsString('''
@@ -484,7 +484,7 @@ void main() {
     );
 
     test(
-      'appendMoveAtPath creates sibling game when no prefix matches',
+      'repository append creates sibling game when no prefix matches',
       () async {
         final filePath = '${tempDir.path}/sibling.pgn';
         await File(filePath).writeAsString('''
