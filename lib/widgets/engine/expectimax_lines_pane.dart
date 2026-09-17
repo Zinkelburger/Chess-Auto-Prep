@@ -18,7 +18,7 @@ import 'package:flutter/material.dart';
 
 import 'dart:async';
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../models/eval_database_settings.dart';
 import '../../services/coherence_service.dart';

@@ -20,7 +20,12 @@
     "lib/features/eval_tree/widgets/eval_tree_tab.dart",
     "lib/models/board_display_settings.dart",
     "lib/models/bulk_analysis_settings.dart",
-    "lib/models/engine_settings.dart"
+    "lib/models/engine_settings.dart",
+    "lib/models/build_tree_node.dart",
+    "lib/models/trap_line_info.dart",
+    "lib/models/trap_reply.dart",
+    "lib/services/generation/tree_serialization.dart",
+    "lib/services/eval/eval_canonicalize.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -32,6 +37,7 @@
     "PgnViewerController",
     "PgnPerspectiveButton",
     "GenerationArtifactStore",
-    "ExpectimaxProbeStore"
+    "ExpectimaxProbeStore",
+    "serializeTreeInIsolate"
   ]
 }

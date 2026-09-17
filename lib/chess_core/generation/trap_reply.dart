@@ -1,7 +1,7 @@
 /// Represents one opponent reply at a trap position.
 library;
 
-import '../constants/engine_defaults.dart';
+import '../../constants/engine_defaults.dart';
 
 enum TrapReplyClass { blunder, mistake, inaccuracy, acceptable, good }
 

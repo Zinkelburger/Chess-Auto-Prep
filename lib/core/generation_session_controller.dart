@@ -23,9 +23,9 @@ import '../features/generation/controllers/generation_publication_controller.dar
 import '../features/generation/models/generation_artifacts.dart';
 import '../features/documents/models/pgn_document.dart';
 import '../features/generation/models/generation_publication.dart';
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../models/eval_database_settings.dart';
-import '../models/trap_line_info.dart';
+import '../chess_core/generation/trap_line_info.dart';
 import '../services/coherence_service.dart';
 import '../services/engine/engine_interrupt.dart';
 import '../services/engine/engine_lifecycle.dart';
@@ -45,7 +45,6 @@ import '../services/generation/trap_extractor.dart';
 import '../services/generation/tree_build_progress.dart';
 import '../services/generation/tree_ease.dart';
 import '../services/generation/tree_my_ease.dart';
-import '../services/generation/tree_serialization.dart';
 import '../services/jobs/generation_phase.dart';
 import '../services/jobs/repertoire_job.dart';
 import '../services/master_games/master_games_db.dart';
@@ -971,7 +970,7 @@ class GenerationSessionController extends ChangeNotifier
   ) async {
     // The build is finished here (no concurrent mutator); the indented
     // encode of the whole tree runs off the UI isolate.
-    final treeJson = await serializeTreeInIsolate(tree);
+    final treeJson = await GenerationArtifacts.encodeTreeSnapshot(tree);
 
     await writeRunDebugDump(
       log: buildService.runLog,
@@ -1018,7 +1017,7 @@ class GenerationSessionController extends ChangeNotifier
     try {
       // Build has stopped (failure path) — serialize off the UI isolate.
       if (failedTree != null) {
-        failedTreeJson = await serializeTreeInIsolate(
+        failedTreeJson = await GenerationArtifacts.encodeTreeSnapshot(
           failedTree,
           indent: false,
         );

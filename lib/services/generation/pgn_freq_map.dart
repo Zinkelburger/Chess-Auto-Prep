@@ -14,7 +14,7 @@
 /// isolate-transferable.
 library;
 
-import '../eval/eval_canonicalize.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 
 const kDefaultStartFen =
     'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';

@@ -20,7 +20,7 @@
 /// build can end thousands of lines this way.
 library;
 
-import '../../../models/build_tree_node.dart' show PruneReason;
+import '../../../chess_core/generation/build_tree_node.dart' show PruneReason;
 import '../../../utils/chess_utils.dart';
 import '../../../utils/fen_utils.dart';
 import '../../engine/stockfish_pool.dart';

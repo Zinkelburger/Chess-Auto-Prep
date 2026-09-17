@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
+import 'package:chess_auto_prep/chess_core/position/eval_canonicalize.dart';
 import 'package:chess_auto_prep/services/generation/pgn_freq_map.dart';
 import 'package:chess_auto_prep/services/generation/pgn_game_scanner.dart';
 import 'package:chess_auto_prep/services/generation/pgn_lexer.dart';

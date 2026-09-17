@@ -2,9 +2,9 @@
 library;
 
 import '../features/traps/services/trap_index_service.dart';
-import '../models/build_tree_node.dart' show BuildTreeNode;
+import '../chess_core/generation/build_tree_node.dart' show BuildTreeNode;
 import '../models/repertoire_line.dart';
-import '../models/trap_line_info.dart';
+import '../chess_core/generation/trap_line_info.dart';
 import 'coherence_service.dart';
 import 'generation/tree_my_ease.dart';
 

@@ -4,7 +4,7 @@ library;
 import 'dart:convert';
 
 import '../../constants/engine_defaults.dart';
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/system_info.dart';
 import 'export/move_annotation.dart';
 import 'skeleton_plan.dart';

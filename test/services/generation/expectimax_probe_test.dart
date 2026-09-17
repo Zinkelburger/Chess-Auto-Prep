@@ -2,8 +2,9 @@
 // its root, finding which tree owns a node, re-scoring after a graft, and the
 // probe store's round trip.
 
+import 'package:chess_auto_prep/chess_core/generation/expectimax_probe_codec.dart';
 import 'package:chess_auto_prep/core/generated_repertoire.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
 import 'package:chess_auto_prep/services/generation/fen_map.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';

@@ -4,7 +4,7 @@ library;
 import 'dart:async';
 
 import '../features/documents/models/pgn_document.dart';
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';

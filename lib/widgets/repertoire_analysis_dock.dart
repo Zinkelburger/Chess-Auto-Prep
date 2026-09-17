@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../core/generation_session_controller.dart';
 import '../features/repertoires/controllers/builder_workspace_controller.dart';
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../features/settings/controllers/engine_settings.dart';
 import '../services/analysis_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';

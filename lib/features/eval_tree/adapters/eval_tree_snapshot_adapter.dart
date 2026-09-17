@@ -3,7 +3,7 @@
 /// depth) in one bottom-up pass.
 library;
 
-import '../../../models/build_tree_node.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
 import '../../../utils/san_token_utils.dart';
 import '../models/eval_tree_snapshot.dart';
 

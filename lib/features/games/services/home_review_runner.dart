@@ -23,8 +23,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../../features/settings/controllers/bulk_analysis_settings.dart';
-import '../../../features/settings/controllers/engine_settings.dart';
+import '../../settings/controllers/bulk_analysis_settings.dart';
+import '../../settings/controllers/engine_settings.dart';
 import '../../../services/games_library/games_library_service.dart'
     show GamesLibraryService, GamesPlatform;
 import '../../../utils/log.dart';

@@ -14,7 +14,7 @@ import '../features/eval_tree/adapters/eval_tree_snapshot_adapter.dart';
 import '../features/eval_tree/models/eval_tree_snapshot.dart';
 import '../features/eval_tree/services/eval_tree_line_metrics.dart';
 import '../features/traps/services/trap_index_service.dart';
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/trap_extractor.dart';

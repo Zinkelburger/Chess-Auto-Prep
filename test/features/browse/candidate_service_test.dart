@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/models/explorer_response.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';

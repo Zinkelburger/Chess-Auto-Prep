@@ -11,7 +11,7 @@ import 'package:chess_auto_prep/features/audit/models/audit_finding.dart';
 import 'package:chess_auto_prep/features/holes/services/hole_hunt_config.dart';
 import 'package:chess_auto_prep/features/holes/services/hole_scoring.dart';
 import 'package:chess_auto_prep/features/holes/services/trick_probe.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/services/run_control.dart';

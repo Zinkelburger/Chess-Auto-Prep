@@ -10,7 +10,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../utils/eval_constants.dart';
 import '../../utils/fen_utils.dart';
-import 'eval_canonicalize.dart';
+import '../../chess_core/position/eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
 typedef SqliteEvalDatabaseFactory = Future<Database> Function(String path);

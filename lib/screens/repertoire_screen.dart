@@ -85,7 +85,7 @@ import '../features/repertoire/widgets/repertoire_lines_side_panel.dart';
 import '../features/repertoire/widgets/repertoire_database_pane.dart';
 import '../features/traps/controllers/trap_session_controller.dart';
 import '../features/traps/services/trap_line_builder.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
 import '../theme/app_colors.dart';
 import '../widgets/layout/jobs_tab_content.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';

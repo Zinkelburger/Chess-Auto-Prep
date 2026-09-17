@@ -2,7 +2,7 @@
 /// Values are expected-score proxies; they are not calibrated human win rates.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../utils/ease_utils.dart' show winProbability;
 import '../../utils/findability.dart';
 import 'fen_map.dart';

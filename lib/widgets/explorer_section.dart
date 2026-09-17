@@ -12,14 +12,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../features/browse/widgets/browse_panel.dart';
 import '../features/repertoires/controllers/builder_workspace_controller.dart';
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/coherence_service.dart';
 import '../services/generation/fen_map.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
-import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/chess_core/generation/trap_line_info.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';

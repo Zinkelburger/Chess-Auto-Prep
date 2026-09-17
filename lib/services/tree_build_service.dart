@@ -15,7 +15,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
-import '../models/build_tree_node.dart';
+import '../chess_core/generation/build_tree_node.dart';
 import '../utils/fen_utils.dart';
 import 'engine/engine_interrupt.dart';
 import 'engine/engine_lifecycle.dart';

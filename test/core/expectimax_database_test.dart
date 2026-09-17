@@ -3,13 +3,13 @@
 
 import 'dart:async';
 
+import 'package:chess_auto_prep/chess_core/generation/expectimax_probe_codec.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/expectimax_database.dart';
 import 'package:chess_auto_prep/features/generation/services/generation_artifacts.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
-import 'package:chess_auto_prep/services/generation/expectimax_probe.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
-import 'package:chess_auto_prep/services/generation/tree_serialization.dart';
+import 'package:chess_auto_prep/chess_core/generation/tree_serialization.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/generation_artifacts_fixture.dart';

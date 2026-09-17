@@ -17,7 +17,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import '../../../models/build_tree_node.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
 import '../../../models/opening_tree.dart';
 import '../../../services/expectimax_line_service.dart';
 import '../../../services/generation/eca_calculator.dart';

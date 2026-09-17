@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/app_text_styles.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show formatPackedEval;

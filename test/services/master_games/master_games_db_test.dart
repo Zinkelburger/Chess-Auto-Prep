@@ -4,7 +4,7 @@ library;
 import 'dart:io';
 
 import 'package:chess_auto_prep/services/master_games/master_games_db.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/master_games/master_games_importer.dart';
 import 'package:chess_auto_prep/services/master_games/master_model_games.dart';
 import 'package:chess_auto_prep/services/master_games/movetext_codec.dart';

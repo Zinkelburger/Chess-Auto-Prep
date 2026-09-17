@@ -7,7 +7,7 @@ import 'dart:math' show pow;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../../models/build_tree_node.dart';
+import '../../../chess_core/generation/build_tree_node.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../services/coherence_service.dart';
 import '../../../services/generation/fen_map.dart';

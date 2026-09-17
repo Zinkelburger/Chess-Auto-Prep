@@ -5,7 +5,7 @@
 library;
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/chess_core/generation/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/generation_config.dart';
 import 'package:chess_auto_prep/widgets/engine/expectimax_lines_pane.dart';
 import 'package:flutter/material.dart';

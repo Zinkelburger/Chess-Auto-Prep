@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
+import 'package:chess_auto_prep/chess_core/position/eval_canonicalize.dart';
 import 'package:chess_auto_prep/services/eval/external_eval_provider.dart';
 import 'package:chess_auto_prep/services/eval/in_memory_eval_provider.dart';
 import 'package:flutter_test/flutter_test.dart';

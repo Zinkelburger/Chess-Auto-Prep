@@ -5,10 +5,40 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from check_architecture_boundaries import check, pure_dependency_violations, violations
+from check_architecture_boundaries import check, legacy_service_dependency_violations, pure_dependency_violations, violations
 
 
 class BoundariesTest(unittest.TestCase):
+    def test_artifact_domain_and_service_reject_hidden_legacy_owners(self):
+        for root in ('lib/features/generation/services/artifacts.dart',
+                     'lib/chess_core/generation/codec.dart'):
+            for directive in ("import '../../services/generation/build_run.dart';",
+                              "export '../../services/generation/build_run.dart';",
+                              "part '../../services/generation/build_run.dart';",
+                              "import 'safe.dart' if (dart.library.io) '../../services/generation/build_run.dart';"):
+                sources = {
+                    root: "import 'package:chess_auto_prep/utils/hidden/codec.dart';",
+                    'lib/utils/hidden/codec.dart': directive,
+                }
+                with self.subTest(root=root, directive=directive):
+                    errors = legacy_service_dependency_violations(sources, [root])
+                    self.assertEqual(len(errors), 1)
+                    self.assertIn('lib/services/generation/build_run.dart', errors[0])
+
+    def test_artifact_scheduling_stays_outside_pure_codec(self):
+        sources = {
+            'lib/features/generation/services/artifacts.dart': "import 'dart:isolate';",
+            'lib/chess_core/generation/codec.dart': "export 'dart:isolate';",
+        }
+        self.assertFalse(legacy_service_dependency_violations(sources, list(sources)))
+        self.assertEqual(len(pure_dependency_violations(sources, ['lib/chess_core/generation/codec.dart'])), 1)
+
+    def test_retired_artifact_libraries_cannot_return_as_forwarding_shims(self):
+        for path in ('lib/models/build_tree_node.dart', 'lib/models/trap_line_info.dart',
+                     'lib/models/trap_reply.dart', 'lib/services/generation/tree_serialization.dart',
+                     'lib/services/eval/eval_canonicalize.dart'):
+            self.assertTrue(violations(path, "export 'replacement.dart';"))
+
     def test_training_and_generation_owners_cannot_reintroduce_io(self):
         for feature in ('training', 'generation'):
             for layer in ('controllers', 'models', 'repositories'):
@@ -193,6 +223,21 @@ class FeatureDebtGateTest(unittest.TestCase):
     def errors(self):
         self.write_json('scripts/architecture_feature_debt.json', self.ledger)
         return check(self.root)[0]
+
+    def test_enforced_service_gate_selects_new_owner_paths_and_hidden_dependencies(self):
+        self.write(self.owner, 'class Session {}')
+        self.ledger['baseline'].clear()
+        self.write('lib/utils/codec.dart', "export '../services/hidden.dart';")
+        for state in ('enforced', 'complete'):
+            self.ledger['features']['tactics'] = state
+            for name in ('artifacts.dart', 'renamed.dart'):
+                path = f'lib/features/tactics/services/nested/{name}'
+                self.write(path, "import 'package:chess_auto_prep/utils/codec.dart';")
+                errors = self.errors()
+                self.assertTrue(any(path + ': legacy service dependency chain' in error for error in errors))
+                (self.root / path).unlink()
+        self.write('lib/chess_core/generation/new_codec.dart', "import '../../utils/codec.dart';")
+        self.assertTrue(any('new_codec.dart: legacy service dependency chain' in error for error in self.errors()))
 
     def test_existing_debt_is_visible_but_a_new_dependency_fails(self):
         self.assertEqual(self.errors(), [])

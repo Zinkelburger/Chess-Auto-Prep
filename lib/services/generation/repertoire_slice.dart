@@ -15,7 +15,7 @@
 /// drops, and the caller decides what to do about it.
 library;
 
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 import 'line_extractor.dart';

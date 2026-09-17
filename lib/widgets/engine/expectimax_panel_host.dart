@@ -13,7 +13,7 @@ import '../../constants/chess_constants.dart';
 import '../../core/generation_session_controller.dart';
 import '../../core/generation_session_types.dart';
 import '../../features/repertoires/controllers/builder_workspace_controller.dart';
-import '../../models/build_tree_node.dart';
+import '../../chess_core/generation/build_tree_node.dart';
 import '../../services/coherence_service.dart';
 import '../../services/generation/fen_map.dart';
 import '../../services/generation/generation_config.dart';
