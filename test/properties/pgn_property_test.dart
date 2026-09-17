@@ -749,7 +749,7 @@ void main() {
   // parser found — the game's own opening comment (`PgnGame.comments`,
   // machine tokens and all) and every variation. That text is not a preview:
   // the viewer splices it back over the stored game and writes the file
-  // (`PgnViewerController.persistMoveCommentsFor`), so a review pass deleted
+  // (`ViewerDocumentController.persistMoveCommentsFor`), so a review pass deleted
   // sidelines from the reader's own PGN. Both save paths now go through
   // `buildGameMovetext` (`_resave` here), which is what the comment editor's
   // `ViewerGameController.buildAnnotatedMovetext` always used.

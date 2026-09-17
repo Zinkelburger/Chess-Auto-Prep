@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
 import '../../support/fake_desktop_fullscreen_port.dart';
@@ -30,7 +31,7 @@ import 'package:chess_auto_prep/services/analysis_games_service.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
 import 'package:chess_auto_prep/features/tactics/models/tactics_position.dart';
 import 'package:chess_auto_prep/utils/atomic_file.dart';
-import 'package:chess_auto_prep/features/documents/controllers/pgn_viewer_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_document_controller.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
 import 'package:chess_auto_prep/models/repertoire_move_progress.dart';
@@ -326,7 +327,7 @@ void main() {
       final originalGame = game('1. e4 e5');
       await file.writeAsString(originalGame);
       final analysis = FakeAnalysis();
-      final c = PgnViewerController(
+      final c = ViewerDocumentController(
         positionIndex: createViewerPositionIndex(),
         openings: createViewerOpenings(),
         solitaireRepository: createViewerSolitaire(),
@@ -355,8 +356,8 @@ void main() {
       await file.writeAsString(
         '$originalGame\n\n${game('1. d4 d5', round: '2')}',
       );
-      c.setRating(5);
-      await c.doPersistMetadata();
+      c.editor.setRating(5);
+      await c.editor.doPersistMetadata();
       expect(await file.readAsString(), contains('1. d4 d5'));
       expect(await file.readAsString(), contains('[StudyRating'));
       c.filePath = null;

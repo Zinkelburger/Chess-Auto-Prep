@@ -11,7 +11,7 @@
 ///  * `pgn/viewer_opening_tree.dart` walks an `OpeningTree`: a
 ///    transposition-merged graph with its own `currentNode`, where "forward"
 ///    means the most-played continuation across merged nodes, not `children[0]`.
-///  * `PgnViewerController.navigateToStart/End` is a dispatcher over three
+///  * `ViewerDocumentController.navigateToStart/End` is a dispatcher over three
 ///    modes (solitaire / opening-tree / plain PGN) that delegates outward
 ///    rather than moving a cursor of its own.
 ///  * `tactics/tactics_solution_navigator.dart` indexes a flat SAN solution

@@ -10,7 +10,9 @@
     "lib/core/pgn_viewer_controller.dart",
     "lib/services/pgn_opening_headers.dart",
     "lib/services/training/",
-    "lib/models/training_settings.dart"
+    "lib/models/training_settings.dart",
+    "lib/features/documents/controllers/pgn_viewer_controller.dart",
+    "lib/widgets/pgn/pgn_perspective_button.dart"
   ],
   "symbols": [
     "PgnBatchWriter",
@@ -18,6 +20,8 @@
     "appendMoveAtPath",
     "appendMovesAtPath",
     "rebuildLine",
-    "reconcileInstalled"
+    "reconcileInstalled",
+    "PgnViewerController",
+    "PgnPerspectiveButton"
   ]
 }

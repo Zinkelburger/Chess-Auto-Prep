@@ -43,10 +43,10 @@ void main() {
       final context = tester.element(find.byType(AppModeSwitcher).first);
       context.read<AppState>().setMode(AppMode.pgnViewer);
       final lifetime = context.read<PgnViewerLifetime>();
-      final controller = lifetime.controller;
+      final controller = lifetime.document;
       await controller.loadFile(source.path);
       await tester.pumpAndSettle();
-      final game = controller.allGames.first;
+      final game = controller.collection.games.first;
       controller.persistMoveCommentsFor(
         game,
         '1. e4 {drill-only} e5 *',
@@ -59,25 +59,28 @@ void main() {
       expect(await back(), isTrue);
       await tester.pumpAndSettle();
       expect(game.pgnText, contains('drill-only'));
-      expect(controller.snapshotForSave()[game], isNot(contains('drill-only')));
+      expect(
+        controller.editor.snapshotForSave()[game],
+        isNot(contains('drill-only')),
+      );
       expect(await source.readAsString(), original);
 
       controller.setPerspective(const Perspective(mode: PerspectiveMode.black));
-      await controller.flushPendingMetadata();
+      await controller.editor.flushPendingMetadata();
       await tester.pumpAndSettle();
       final savedSource = await source.readAsString();
       expect(savedSource, startsWith('; Preserve this banner'));
       expect(savedSource, contains(second));
       expect(savedSource, contains('[StudyPerspective "black"]'));
       expect(savedSource, isNot(contains('drill-only')));
-      expect(controller.hasUnsavedChanges, isFalse);
-      expect(await controller.saveCopy(copy.path), isA<PgnSaved>());
+      expect(controller.editor.hasUnsavedChanges, isFalse);
+      expect(await controller.editor.saveCopy(copy.path), isA<PgnSaved>());
       await tester.pumpAndSettle();
       expect(await copy.readAsString(), isNot(contains('drill-only')));
       expect(await copy.readAsString(), contains(second));
       expect(await source.readAsString(), savedSource);
       expect(controller.filePath, copy.path);
-      await controller.saveSession();
+      await controller.reading.saveSession();
       await tester.pumpWidget(const SizedBox.shrink());
       await lifetime.shutdown();
       await tester.pumpAndSettle();
@@ -87,20 +90,23 @@ void main() {
       final nextContext = tester.element(find.byType(AppModeSwitcher).first);
       nextContext.read<AppState>().setMode(AppMode.pgnViewer);
       final next = nextContext.read<PgnViewerLifetime>();
-      for (var i = 0; i < 200 && next.controller.filePath != copy.path; i++) {
+      for (var i = 0; i < 200 && next.document.filePath != copy.path; i++) {
         await tester.pump(const Duration(milliseconds: 50));
       }
       await tester.pumpAndSettle();
-      expect(next.controller.filePath, copy.path);
+      expect(next.document.filePath, copy.path);
       expect(
-        next.controller.allGames.first.pgnText,
+        next.document.collection.games.first.pgnText,
         isNot(contains('drill-only')),
       );
-      expect(next.controller.boardFlipped, isTrue);
+      expect(next.document.presentation.boardFlipped, isTrue);
       await tester.tap(find.byTooltip(RegExp(r'^Next game')).first);
       await tester.pumpAndSettle();
-      expect(next.controller.currentGameIndex, 1);
-      expect(next.controller.filteredGames[1].pgnText, contains('keep this'));
+      expect(next.document.collection.selectedIndex, 1);
+      expect(
+        next.document.collection.visibleGames[1].pgnText,
+        contains('keep this'),
+      );
       expect(await source.readAsString(), savedSource);
       await tester.pumpWidget(const SizedBox.shrink());
       await next.shutdown();

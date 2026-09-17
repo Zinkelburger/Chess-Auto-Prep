@@ -1,5 +1,4 @@
-/// Solitaire ("guess the move") mode for the PGN viewer, extracted from
-/// `PgnViewerController`.
+/// Owns the Viewer setup and lifecycle for Solitaire ("guess the move").
 ///
 /// Sits between [SolitaireController] — which owns the guessing rules, timers
 /// and score, and knows nothing about a viewer — and the [PgnViewerHandle]
@@ -7,9 +6,6 @@
 /// the setup step before a session, starting one against the current game,
 /// routing a board move to either a guess or an exploratory variation, and
 /// writing the finished guess log back into the game.
-///
-/// `PgnViewerController` keeps its public solitaire API and delegates here, so
-/// call-sites in the screens are unchanged.
 library;
 
 import 'dart:async';

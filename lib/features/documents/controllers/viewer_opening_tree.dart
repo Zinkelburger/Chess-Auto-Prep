@@ -1,9 +1,5 @@
-/// Opening-tree mode for the PGN viewer, extracted from `PgnViewerController`.
-///
-/// Owns the tree state (build progress, current cursor, position cache) and the
-/// tree-mode navigation logic, driving the board through injected callbacks.
-/// `PgnViewerController` keeps its public tree getters/methods and delegates
-/// here, so existing call-sites are unchanged.
+/// Owns Viewer opening-tree construction, progress, cursor and position cache.
+/// Navigation drives the board through injected callbacks.
 ///
 /// Cursor ownership: the merged opening tree is its own exploration surface,
 /// not the current game's move list. Re-entering (T, or app-bar back after a

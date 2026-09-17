@@ -1,6 +1,6 @@
 /// Reader commands available to the document-feature host.
 ///
-/// `PgnViewerController` (documents) drives the board through this interface;
+/// `ViewerDocumentController` (documents) drives the board through this interface;
 /// `PgnViewerWidgetController` (widgets) implements it against the live
 /// widget state. Controllers must never import the widget layer directly — add
 /// members here instead when the controller needs a new capability.

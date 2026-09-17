@@ -60,10 +60,10 @@ void main() {
       await tester.pumpAndSettle();
       final appContext = tester.element(find.byType(AppModeSwitcher).first);
       final first = appContext.read<PgnViewerLifetime>();
-      first.controller.setAutoSave(false);
-      await first.controller.loadFile(file.path);
-      first.controller.persistMoveCommentsFor(
-        first.controller.allGames[1],
+      first.document.editor.setAutoSave(false);
+      await first.document.loadFile(file.path);
+      first.document.persistMoveCommentsFor(
+        first.document.collection.games[1],
         '1. d4 {Restart draft} d5 *',
       );
       expect(find.byType(PgnViewerScreen), findsNothing);
@@ -83,14 +83,14 @@ void main() {
       await tester.pumpAndSettle();
       appContext.read<AppState>().setMode(AppMode.pgnViewer);
       await tester.pumpAndSettle();
-      first.controller.goToGame(1);
+      first.document.reading.goToGame(1);
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip(RegExp(r'^Forward')).first);
       await tester.pumpAndSettle();
-      first.controller.toggleBoardFlipped();
+      first.document.presentation.toggleBoardFlipped();
       await tester.pumpAndSettle();
       await first.recovery.flush();
-      expect(first.controller.captureWorkspace().ply, 1);
+      expect(first.document.captureWorkspace().ply, 1);
       expect(await file.readAsString(), original);
       await tester.pumpWidget(const SizedBox.shrink());
       await first.shutdown();
@@ -132,14 +132,14 @@ void main() {
       final restored = tester
           .element(find.byType(PgnViewerScreen))
           .read<PgnViewerLifetime>();
-      expect(restored.controller.currentGameIndex, 1);
+      expect(restored.document.collection.selectedIndex, 1);
       expect(restored.reader.mainLineIndex, 1);
-      expect(restored.controller.boardFlipped, isTrue);
+      expect(restored.document.presentation.boardFlipped, isTrue);
       expect(
-        restored.controller.allGames[1].pgnText,
+        restored.document.collection.games[1].pgnText,
         contains('Restart draft'),
       );
-      await restored.controller.flushPendingMetadata();
+      await restored.document.editor.flushPendingMetadata();
       expect(await file.readAsString(), changed);
       await tester.tap(find.byKey(const ValueKey('pgn-save-recovery')));
       await tester.pumpAndSettle();
@@ -147,13 +147,13 @@ void main() {
       for (
         var i = 0;
         i < 100 &&
-            (restored.controller.saveActions.state.outcome is! PgnConflict ||
-                restored.controller.saveActions.state.busy);
+            (restored.document.editor.state.outcome is! PgnConflict ||
+                restored.document.editor.state.busy);
         i++
       ) {
         await tester.pump(const Duration(milliseconds: 50));
       }
-      expect(restored.controller.saveActions.state.outcome, isA<PgnConflict>());
+      expect(restored.document.editor.state.outcome, isA<PgnConflict>());
       await tester.tap(find.byKey(const ValueKey('document-save-copy')));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -161,7 +161,11 @@ void main() {
         'Recovered restart',
       );
       await tester.tap(find.byKey(const ValueKey('pgn-copy-confirm')));
-      for (var i = 0; i < 100 && restored.controller.hasUnsavedChanges; i++) {
+      for (
+        var i = 0;
+        i < 100 && restored.document.editor.hasUnsavedChanges;
+        i++
+      ) {
         await tester.pump(const Duration(milliseconds: 50));
       }
       expect(
@@ -211,16 +215,16 @@ void main() {
       context.read<AppState>().setMode(AppMode.pgnViewer);
       await tester.pumpAndSettle();
       final first = context.read<PgnViewerLifetime>();
-      await first.controller.loadFile(file.path);
+      await first.document.loadFile(file.path);
       await tester.pumpAndSettle();
-      first.controller.goToGame(1);
+      first.document.reading.goToGame(1);
       await tester.pumpAndSettle();
       for (var i = 0; i < 3; i++) {
         await tester.tap(find.byTooltip(RegExp(r'^Forward')).first);
         await tester.pumpAndSettle();
       }
       expect(first.reader.mainLineIndex, 3);
-      expect(first.controller.hasUnsavedChanges, isFalse);
+      expect(first.document.editor.hasUnsavedChanges, isFalse);
       await tester.pumpWidget(const SizedBox.shrink());
       await first.shutdown();
       await tester.pumpAndSettle();
@@ -239,10 +243,10 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
       }
       await tester.pumpAndSettle();
-      expect(restarted.controller.filePath, file.path);
-      expect(restarted.controller.currentGameIndex, 1);
+      expect(restarted.document.filePath, file.path);
+      expect(restarted.document.collection.selectedIndex, 1);
       expect(restarted.reader.mainLineIndex, 3);
-      expect(restarted.controller.recentFiles, contains(file.path));
+      expect(restarted.document.libraryState.recentFiles, contains(file.path));
       expect(await file.readAsString(), original);
       await tester.pumpWidget(const SizedBox.shrink());
       await restarted.shutdown();

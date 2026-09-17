@@ -8,7 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 
-import '../features/documents/controllers/pgn_viewer_controller.dart';
+import '../features/documents/controllers/viewer_document_controller.dart';
 import '../features/documents/controllers/workspace_recovery_controller.dart';
 import '../features/documents/models/pgn_workspace_snapshot.dart';
 import '../features/documents/repositories/desktop_fullscreen_port.dart';
@@ -43,7 +43,7 @@ class PgnViewerLifetime {
     required ViewerPreferencesRepository preferences,
     required WorkspaceRecoveryStore<PgnWorkspaceSnapshot> store,
   }) {
-    controller = PgnViewerController(
+    document = ViewerDocumentController(
       positionIndex: positionIndex,
       openings: openings,
       solitaireRepository: solitaireRepository,
@@ -62,33 +62,33 @@ class PgnViewerLifetime {
           }),
       onReclaimFocus: () => reclaimFocus?.call(),
     );
-    unawaited(controller.initializePresentation());
+    unawaited(document.presentation.initialize());
     recovery = WorkspaceRecoveryController<PgnWorkspaceSnapshot>(
-      workspace: controller,
+      workspace: document.changes,
       capture: () {
         reader.flushPendingComments();
-        return controller.captureWorkspace();
+        return document.captureWorkspace();
       },
       restoreSnapshot: (snapshot) async {
         reader.flushPendingComments();
-        await controller.restoreWorkspace(snapshot);
+        await document.restoreWorkspace(snapshot);
       },
       store: store,
     );
   }
   final reader = PgnViewerWidgetController();
   final analysis = GameAnalysisController();
-  late final PgnViewerController controller;
+  late final ViewerDocumentController document;
   late final WorkspaceRecoveryController<PgnWorkspaceSnapshot> recovery;
   VoidCallback? reclaimFocus;
   bool _disposed = false;
   Future<void>? _shutdown;
   Object get closeRevision {
     reader.flushPendingComments();
-    final state = controller.saveActions.state;
+    final state = document.editor.state;
     return (
-      controller.filePath,
-      controller.collectionRevision,
+      document.filePath,
+      document.collection.contentRevision,
       state.dirty,
       state.busy,
       state.uncertain,
@@ -99,8 +99,8 @@ class PgnViewerLifetime {
 
   Future<void> flushForClose() async {
     reader.flushPendingComments();
-    await controller.flushPendingMetadata();
-    await controller.saveSession();
+    await document.editor.flushPendingMetadata();
+    await document.reading.saveSession();
     await recovery.flush();
   }
 
@@ -109,12 +109,12 @@ class PgnViewerLifetime {
     reclaimFocus = null;
     reader.flushPendingComments();
     try {
-      await controller.saveSession();
+      await document.reading.saveSession();
       await recovery.shutdown();
     } finally {
       _disposed = true;
       recovery.dispose();
-      controller.dispose();
+      document.dispose();
       analysis.dispose();
     }
   }
@@ -135,10 +135,10 @@ WorkspaceRecoveryStore<PgnWorkspaceSnapshot> createPgnRecoveryStore() =>
 
 Future<String?> chooseViewerCopyDestination(
   BuildContext context,
-  PgnViewerController controller, {
+  ViewerDocumentController document, {
   String? name,
 }) async {
-  final path = controller.filePath;
+  final path = document.filePath;
   final directory = path == null
       ? (await AppPaths.documentsDirectory()).path
       : p.dirname(path);
@@ -166,12 +166,12 @@ class PgnViewerCloseHost extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) => PgnCloseGuard(
-    actions: lifetime.controller.saveActions,
-    workspace: lifetime.controller,
+    actions: lifetime.document.editor,
+    workspace: lifetime.document.changes,
     revision: () => lifetime.closeRevision,
     flush: lifetime.flushForClose,
     chooseCopyDestination: (context) =>
-        chooseViewerCopyDestination(context, lifetime.controller),
+        chooseViewerCopyDestination(context, lifetime.document),
     child: child,
   );
 }

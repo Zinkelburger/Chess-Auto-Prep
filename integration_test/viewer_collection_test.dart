@@ -50,40 +50,38 @@ void main() {
       context.read<AppState>().setMode(AppMode.pgnViewer);
       await tester.pumpAndSettle();
       final first = context.read<PgnViewerLifetime>();
-      final controller = first.controller;
+      final controller = first.document;
       await controller.loadFile(file.path);
       await tester.pumpAndSettle();
-      final fileOrder = controller.allGames;
-      final previousView = controller.filteredGames;
+      final fileOrder = controller.collection.games;
+      final previousView = controller.collection.visibleGames;
       controller.setSortMode(GameSortMode.dateDesc);
       await tester.pumpAndSettle();
-      expect(controller.filteredGames.map((g) => g.headers['Event']), [
-        'Newest',
-        'Middle',
-        'Oldest',
-      ]);
+      expect(
+        controller.collection.visibleGames.map((g) => g.headers['Event']),
+        ['Newest', 'Middle', 'Oldest'],
+      );
       expect(previousView.map((g) => g.headers['Event']), [
         'Oldest',
         'Newest',
         'Middle',
       ]);
-      expect(controller.allGames, same(fileOrder));
+      expect(controller.collection.games, same(fileOrder));
       controller.applySlice([0, 2], const SliceConfig.empty());
       await tester.pumpAndSettle();
-      expect(controller.filteredGames.map((g) => g.headers['Event']), [
-        'Middle',
-        'Oldest',
-      ]);
+      expect(
+        controller.collection.visibleGames.map((g) => g.headers['Event']),
+        ['Middle', 'Oldest'],
+      );
       controller.resetFilters();
       await tester.pumpAndSettle();
-      expect(controller.filteredGames.map((g) => g.headers['Event']), [
-        'Newest',
-        'Middle',
-        'Oldest',
-      ]);
+      expect(
+        controller.collection.visibleGames.map((g) => g.headers['Event']),
+        ['Newest', 'Middle', 'Oldest'],
+      );
       await tester.tap(find.byTooltip(RegExp(r'^Next game')).first);
       await tester.pumpAndSettle();
-      expect(controller.currentGameIndex, 1);
+      expect(controller.collection.selectedIndex, 1);
       await tester.tap(find.byTooltip(RegExp(r'^Forward')).first);
       await tester.pumpAndSettle();
       expect(first.reader.mainLineIndex, 1);
@@ -93,14 +91,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(await back(), isTrue);
       await tester.pumpAndSettle();
-      expect(controller.currentGameIndex, 1);
-      expect(controller.filteredGames.map((g) => g.headers['Event']), [
-        'Newest',
-        'Middle',
-        'Oldest',
-      ]);
+      expect(controller.collection.selectedIndex, 1);
+      expect(
+        controller.collection.visibleGames.map((g) => g.headers['Event']),
+        ['Newest', 'Middle', 'Oldest'],
+      );
       expect(first.reader.mainLineIndex, 1);
-      await controller.saveSession();
+      await controller.reading.saveSession();
       expect(await file.readAsString(), original);
       await tester.pumpWidget(const SizedBox.shrink());
       await first.shutdown();
@@ -114,17 +111,16 @@ void main() {
       await waitFor(
         tester,
         () =>
-            next.controller.filePath == file.path &&
+            next.document.filePath == file.path &&
             next.reader.mainLineIndex == 1,
       );
-      expect(next.controller.sortMode, GameSortMode.dateDesc);
-      expect(next.controller.currentGameIndex, 1);
-      expect(next.controller.filteredGames.map((g) => g.headers['Event']), [
-        'Newest',
-        'Middle',
-        'Oldest',
-      ]);
-      expect(next.controller.allGames.map((g) => g.headers['Event']), [
+      expect(next.document.collection.sortMode, GameSortMode.dateDesc);
+      expect(next.document.collection.selectedIndex, 1);
+      expect(
+        next.document.collection.visibleGames.map((g) => g.headers['Event']),
+        ['Newest', 'Middle', 'Oldest'],
+      );
+      expect(next.document.collection.games.map((g) => g.headers['Event']), [
         'Oldest',
         'Newest',
         'Middle',

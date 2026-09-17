@@ -1683,7 +1683,7 @@ Pure mainline lexing and Study-header rewriting now live in
 `chess_core/pgn/mainline_lexer.dart` and `chess_core/pgn/study_metadata.dart`.
 
 ```
-PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → PgnViewerController.loadFile(path)
+PgnViewerScreen._pickFile → `FilePicker.pickFile` (Linux: **XDG Desktop Portal only** in `file_picker` ≥10.3 — D-Bus `org.freedesktop.portal.FileChooser`; no zenity/kdialog fallback) → ViewerDocumentController.loadFile(path)
   → ViewerCollectionLoadController → PgnCollectionRepository.open (native Linux snapshot captures content and file revision; other hosts use the legacy adapter)
   → injected PgnCollectionDecoder → IsolatePgnCollectionDecoder → chess-core parseMultiGamePgn; lightweight headers/raw text in allGames / filteredGames; only the selected game is parsed into the reader
   → on failure: controller.errorMessage + debugPrint; screen shows SnackBar + inline error in empty state
@@ -1855,7 +1855,7 @@ Guess one side's moves of the loaded game; the game unfolds as you get them righ
 - **Trophies**: `detectSolitaireTrophies` evaluates each wrong attempt at a mainline position and compares it with the game move's eval (sideline guesses have no eval and are skipped). Trophies persist to `solitaire_trophies.json`, show as markers in the analysis tab, and the cabinet dialog is always listed in the viewer's overflow menu ("Solitaire trophies", with a hint while empty) so the loop is discoverable before the first one is earned.
 - **Toolbar adaptation**: in solitaire the `GameNavBar` shows game counter, Hint, Reveal, Fullscreen, Exit and Prev/Next; the app bar hides slice chips, opening tree, amend and perspective; the side-panel tabs, engine bar and Analysis tab are hidden. The engine bar is also hidden while the setup strip is open.
 
-Key files: `lib/features/documents/models/solitaire_script.dart` (`SolitaireStep`, `SolitaireScript`, `buildSolitaireScript`), `lib/features/documents/models/solitaire_reveal.dart`, `lib/features/documents/controllers/solitaire_controller.dart` (cursor over the script, hints, countdown, score, `SolitaireGuess`), `lib/features/documents/controllers/viewer_solitaire_session.dart` (`SolitaireSetup`, board glue, guess routing, note injection), `lib/features/documents/repositories/pgn_viewer_handle.dart` (the widget surface core may touch), `lib/features/documents/controllers/pgn_viewer_controller.dart` (delegating API, `onViewerGameLoaded`), `lib/widgets/pgn/solitaire_status_widgets.dart` (setup strip, status bar, completion banner), `lib/widgets/game_nav_bar.dart` (Hint/Reveal chips), `lib/screens/pgn_viewer_screen.dart` (confirm-on-leave, `H`/`R`/Enter/Esc bindings, analyse action), `lib/widgets/pgn/pgn_movetext_view.dart` + `pgn_movetext_variations.dart` (reveal-aware rendering), `lib/models/solitaire_trophy.dart`, `lib/services/solitaire_trophy_service.dart`, `lib/services/solitaire_trophy_detector.dart`, `lib/widgets/solitaire_trophy_cabinet.dart`.
+Key files: `lib/features/documents/models/solitaire_script.dart` (`SolitaireStep`, `SolitaireScript`, `buildSolitaireScript`), `lib/features/documents/models/solitaire_reveal.dart`, `lib/features/documents/controllers/solitaire_controller.dart` (cursor over the script, hints, countdown, score, `SolitaireGuess`), `lib/features/documents/controllers/viewer_solitaire_session.dart` (`SolitaireSetup`, board glue, guess routing, note injection), `lib/features/documents/repositories/pgn_viewer_handle.dart` (the widget surface core may touch), `lib/features/documents/controllers/viewer_reading_controller.dart` (selected-game lifecycle, `onViewerGameLoaded`), `lib/widgets/pgn/solitaire_status_widgets.dart` (setup strip, status bar, completion banner), `lib/widgets/game_nav_bar.dart` (Hint/Reveal chips), `lib/screens/pgn_viewer_screen.dart` (confirm-on-leave, `H`/`R`/Enter/Esc bindings, analyse action), `lib/widgets/pgn/pgn_movetext_view.dart` + `pgn_movetext_variations.dart` (reveal-aware rendering), `lib/models/solitaire_trophy.dart`, `lib/services/solitaire_trophy_service.dart`, `lib/services/solitaire_trophy_detector.dart`, `lib/widgets/solitaire_trophy_cabinet.dart`.
 
 ### Generate repertoire from PGN viewer games
 
@@ -1942,20 +1942,44 @@ migration remain pending.
 
 ### `lib/features/documents/` Viewer workspace
 
-The Viewer host, opening-tree owner, FEN-index owner, Solitaire session and
-workspace/router/autoplay controllers now live under feature controllers.
+`PgnViewerController` and its forwarding/error-mirroring API are deleted.
+`ViewerDocumentController` owns collection replacement, loading, filter publication
+and recovery transactions. `ViewerReadingController` owns the selected-game
+lifecycle and reading position; its tree, playback and Solitaire owners expose
+their own commands. `ViewerLibraryController` owns library discovery and ordered
+recent-file preferences. Collection membership, metadata and sorting belong to
+`ViewerCollectionController`; save state and writes belong to `PgnCollectionEditor`.
+The screen and controls consume these owners directly. Display errors are selected
+in the UI without copying child errors into document state. The leave dialog and
+recovery lifetime subscribe to the combined owner notifications, so editor save
+acknowledgments update their actual consumers.
+
+All document replacement paths use one abandonment contract: revoke collection,
+opening, filter and selection work before stopping index/tree work, playback,
+analysis and Solitaire. Pending editor writes retain their existing ledger and
+receipt semantics. A successful open reports adoption explicitly; a failed recent
+preference write cannot prevent selecting the requested game and move.
+
 `ViewerPositionIndexRepository`, `ViewerOpeningRepository`,
-`ViewerSolitaireRepository` and `ViewerAnalysisPort` are injected. Worker adapters
-own cancellation; resets and disposal invalidate late results. The v2 `.fenidx`
-wrapper fingerprints exact source game records, so metadata saves cannot
-revalidate a stale cache by refreshing file timestamps. Legacy v1 sidecars are
-disposable and rebuilt. Solitaire preference writes check platform acknowledgements.
+`ViewerSolitaireRepository` and `ViewerAnalysisPort` are injected. Cancellable
+worker adapters terminate owned work on reset/disposal; epoch checks reject late
+results from asynchronous ports. The v2 `.fenidx` wrapper fingerprints exact
+source game records, so metadata saves cannot revalidate a stale cache by
+refreshing file timestamps. Legacy v1 sidecars are disposable and rebuilt.
+Solitaire preference writes check platform acknowledgements.
+
+Viewer filter and Solitaire controls consume state/callbacks or the actual
+`SolitaireController`. Opening search captures a game identity; the screen ignores
+an entry removed while its dialog was open. These controls use the active theme;
+the unused perspective button and five legacy-theme ledger entries are deleted.
 
 Pure replay/serialization/opening-header helpers live in `chess_core/pgn/`;
 `sideline_tree.dart` lives in `chess_core/moves/`. Solitaire models are feature
-models. All `core/pgn/` files and the old Viewer host are retired without shims;
-the unused collection-merge helper was removed. `PgnViewerLifetime` still adapts
-the concrete reader and analysis controller until those UI/engine owners migrate.
+models. All `core/pgn/` files are retired without shims; the unused collection-merge
+helper was removed. `PgnViewerLifetime` composes and disposes the document owners
+and adapts the concrete reader/analysis ports. The remaining legacy screen,
+reader widgets and shared controls still require their broader workflow/UI gates;
+this owner cutover does not certify the whole Viewer renewal.
 
 ### `lib/features/generation/` publication owner
 

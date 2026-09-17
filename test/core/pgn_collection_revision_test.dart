@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import 'package:chess_auto_prep/features/documents/models/viewer_collection_load.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
@@ -12,7 +13,7 @@ import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_
 import 'package:chess_auto_prep/infrastructure/documents/shared_preferences_viewer_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/storage_pgn_collection_repository.dart';
 
-import 'package:chess_auto_prep/features/documents/controllers/pgn_viewer_controller.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_document_controller.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
 import 'package:chess_auto_prep/services/game_analysis_controller.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart' as pgn;
@@ -67,7 +68,7 @@ class _IndexedStorage extends _MemoryStorage {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late PgnViewerController controller;
+  late ViewerDocumentController controller;
   late PgnGameEntry game;
   late _IndexedStorage storage;
 
@@ -78,7 +79,7 @@ void main() {
     );
     StorageFactory.instanceForTest = storage;
     final analysis = _Analysis();
-    controller = PgnViewerController(
+    controller = ViewerDocumentController(
       positionIndex: createViewerPositionIndex(),
       openings: createViewerOpenings(),
       solitaireRepository: createViewerSolitaire(),
@@ -104,7 +105,7 @@ void main() {
     );
     controller.adoptDecodedCollection(DecodedPgnCollection([game], ''));
     addTearDown(() async {
-      await controller.flushPendingMetadata();
+      await controller.editor.flushPendingMetadata();
       controller.dispose();
       analysis.dispose();
       StorageFactory.instanceForTest = null;
@@ -114,11 +115,11 @@ void main() {
   test(
     'adopting an empty collection advances revision before notification',
     () {
-      final before = controller.collectionRevision;
+      final before = controller.collection.contentRevision;
       final observed = <int>[];
-      controller.addListener(() {
-        if (controller.allGames.isEmpty) {
-          observed.add(controller.collectionRevision);
+      controller.changes.addListener(() {
+        if (controller.collection.games.isEmpty) {
+          observed.add(controller.collection.contentRevision);
         }
       });
 
@@ -131,28 +132,28 @@ void main() {
 
   test('save-state notifications preserve unrelated load failures', () {
     controller.errorMessage = 'The requested file could not be opened';
-    controller.setAutoSave(false);
+    controller.editor.setAutoSave(false);
     expect(controller.errorMessage, 'The requested file could not be opened');
-    controller.setRating(3);
+    controller.editor.setRating(3);
     expect(controller.errorMessage, 'The requested file could not be opened');
   });
 
   test('rating changes refresh filter headers before listeners run', () {
-    final source = controller.allGames;
-    final before = controller.collectionRevision;
+    final source = controller.collection.games;
+    final before = controller.collection.contentRevision;
     final observed = <(int, String?)>[];
-    controller.addListener(() {
+    controller.changes.addListener(() {
       observed.add((
-        controller.collectionRevision,
+        controller.collection.contentRevision,
         game.headers['StudyRating'],
       ));
     });
 
-    controller.setRating(4);
+    controller.editor.setRating(4);
 
-    expect(controller.allGames, same(source));
+    expect(controller.collection.games, same(source));
     expect(observed.single, (before + 1, '4'));
-    controller.setRating(0);
+    controller.editor.setRating(0);
     expect(observed.last, (before + 2, null));
   });
 
@@ -160,11 +161,11 @@ void main() {
     test(
       'movetext revision reaches listeners with writeToFile=$writeToFile',
       () {
-        final source = controller.allGames;
-        final before = controller.collectionRevision;
+        final source = controller.collection.games;
+        final before = controller.collection.contentRevision;
         final observed = <(int, String)>[];
-        controller.addListener(() {
-          observed.add((controller.collectionRevision, game.pgnText));
+        controller.changes.addListener(() {
+          observed.add((controller.collection.contentRevision, game.pgnText));
         });
 
         controller.persistMoveCommentsFor(
@@ -173,7 +174,7 @@ void main() {
           writeToFile: writeToFile,
         );
 
-        expect(controller.allGames, same(source));
+        expect(controller.collection.games, same(source));
         expect(observed.single.$1, before + 1);
         expect(observed.single.$2, contains('1. d4 d5 *'));
         controller.persistMoveCommentsFor(
@@ -204,14 +205,14 @@ void main() {
             ),
           ], ''),
         );
-        final before = controller.collectionRevision;
+        final before = controller.collection.contentRevision;
         controller.persistMoveCommentsFor(
           game,
           '1. d4 d5 *',
           writeToFile: writeToFile,
         );
-        expect(controller.collectionRevision, before);
-        expect(controller.hasUnsavedChanges, isFalse);
+        expect(controller.collection.contentRevision, before);
+        expect(controller.editor.hasUnsavedChanges, isFalse);
         expect(game.pgnText, original);
       },
     );
@@ -221,14 +222,14 @@ void main() {
     'metadata rewrite refreshes the raw PGN snapshot before notifying',
     () async {
       controller.filePath = '/virtual/games.pgn';
-      controller.setRating(3);
-      final before = controller.collectionRevision;
+      controller.editor.setRating(3);
+      final before = controller.collection.contentRevision;
       final observed = <(int, String)>[];
-      controller.addListener(() {
-        observed.add((controller.collectionRevision, game.pgnText));
+      controller.changes.addListener(() {
+        observed.add((controller.collection.contentRevision, game.pgnText));
       });
 
-      await controller.doPersistMetadata();
+      await controller.editor.doPersistMetadata();
 
       expect(observed, isNotEmpty);
       expect(observed.first.$1, greaterThan(before));
@@ -246,35 +247,37 @@ void main() {
       while (controller.isPreparingCollection) {
         await Future<void>.delayed(Duration.zero);
       }
-      final index = controller.fenIndex;
+      final index = controller.positionIndexController.value;
       expect(index, isNotNull);
 
-      controller.setRating(4);
-      expect(controller.fenIndex, same(index));
-      final before = controller.collectionRevision;
-      controller.addListener(() {
-        if (controller.collectionRevision > before) {
-          expect(controller.fenIndex, isNull);
+      controller.editor.setRating(4);
+      expect(controller.positionIndexController.value, same(index));
+      final before = controller.collection.contentRevision;
+      controller.changes.addListener(() {
+        if (controller.collection.contentRevision > before) {
+          expect(controller.positionIndexController.value, isNull);
         }
       });
 
       controller.persistMoveCommentsFor(
-        controller.allGames.single,
+        controller.collection.games.single,
         '1. d4 d5 *',
         writeToFile: false,
       );
 
-      expect(controller.collectionRevision, greaterThan(before));
-      expect(controller.fenIndex, isNull);
+      expect(controller.collection.contentRevision, greaterThan(before));
+      expect(controller.positionIndexController.value, isNull);
     },
   );
 
   test('perspective header and text are visible at the new revision', () async {
-    controller.perspective = const Perspective(mode: PerspectiveMode.black);
-    final before = controller.collectionRevision;
+    controller.presentation.restoreBoard(
+      perspective: const Perspective(mode: PerspectiveMode.black),
+    );
+    final before = controller.collection.contentRevision;
     final observed = <int>[];
-    controller.addListener(() {
-      observed.add(controller.collectionRevision);
+    controller.changes.addListener(() {
+      observed.add(controller.collection.contentRevision);
       expect(game.headers['StudyPerspective'], 'black');
       expect(game.pgnText, contains('[StudyPerspective "black"]'));
     });
@@ -289,15 +292,15 @@ void main() {
   test(
     'navigation, sorting and slicing leave content revision unchanged',
     () async {
-      final before = controller.collectionRevision;
+      final before = controller.collection.contentRevision;
 
-      controller.goToGame(0);
+      controller.reading.goToGame(0);
       controller.setSortMode(GameSortMode.dateDesc);
       controller.applySlice([0], const SliceConfig.empty());
       controller.resetFilters();
       await Future<void>.delayed(Duration.zero);
 
-      expect(controller.collectionRevision, before);
+      expect(controller.collection.contentRevision, before);
     },
   );
 }
