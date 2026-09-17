@@ -1573,6 +1573,46 @@ presentation, document/session/undo/performance parity, legacy hierarchy/bridge
 retirement, milestones 4–7 and non-Linux/release gates. This completes neither
 milestone 3 nor the full renewal.
 
+### Shared document viewport checkpoint (2026-09-17)
+
+The bounded editor viewport now lives in the design system as
+`layout/anchored_document_viewport.dart`. Its `DocumentRows` contract exposes
+immutable row identity/index information without chess models or feature imports.
+`features/documents/widgets/move_text_viewport.dart` is the editor-specific
+adapter: node-to-row lookup remains with the feature, and navigation does not
+recreate the full row index. Study and Builder already use this shared component.
+Distant selections now choose their anchor during the build update, so an
+unmounted destination appears in its first frame. Local selection inside a tall
+wrapped row retains the exact-item reveal behavior.
+
+The existing PGN Viewer still uses its rich eager document renderer. Replacing
+that requires a row index for prose, diagrams, engine notes, inline variations,
+focused branches and editors, plus preservation of the reading pane's anchors
+and bookmarks. This checkpoint extracts the common viewport; it does not claim
+that Viewer rendering is bounded yet.
+
+Verification (Linux, this checkpoint): 18 focused tests pass, covering generic
+50,000-row first-frame jumps, bounded mounted rows, stable row state after
+insertion, empty/replaced documents, editor virtualization at 20,000 nodes,
+200% text, tall move runs, retained drafts, cache updates and autosave. Two native
+journeys pass: large Study open/jump/edit/save (open 1,738 ms, distant jump 546 ms,
+RSS 762,712,064 bytes) and Builder annotation/glyph save, mode change and reload.
+These debug timings remain diagnostics rather than frame/allocation certification.
+Analyze/lint passes with nine existing informational notices, no warnings/errors,
+and all 18 boundary-checker regression cases pass. No selected cases are skipped.
+
+The first run of the new state-retention tests used `ValueKey<int>` finders for `ValueKey<Object>` fields;
+correcting the test finders resolved those failures.
+
+The headless production app opened the disposable “Large course viewport” Study
+and selected its Nf6 move. The inspected [1280×720 screenshot](images/renewal-shared-document-viewport.png)
+shows the selected move, wrapped annotations, corresponding board and annotation
+field. Recovery banners are from the test profile. The preview was stopped.
+
+Milestones 1/2 and 3 remain partial. Viewer adoption, document/session/undo/
+performance parity, hierarchy/bridge retirement, milestones 4–7 and non-Linux/
+release gates remain unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

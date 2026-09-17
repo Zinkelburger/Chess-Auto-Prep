@@ -548,10 +548,14 @@ selected chapter. Inline rename rejects a switched document/destination.
 bounded move runs and variable-height prose/editor rows. Its iterative traversal
 preserves variation order and numbering without recursion or chess replay. Linked
 addresses share ancestors; move selection uses node IDs, materializing a path only
-for an action. `features/documents/widgets/move_text_viewport.dart` lazily mounts
-rows around a movable anchor with 240 pixels of prefetch. Distant navigation can
-anchor at a row without laying out its predecessors; selection reveals the exact
-chip even in a tall wrapped run. Stable keys support row reconciliation.
+for an action. `design_system/layout/anchored_document_viewport.dart` owns bounded row mounting
+around a movable anchor, with 240 pixels of prefetch. It receives a feature-free
+`DocumentRows` identity/index contract. `features/documents/widgets/move_text_viewport.dart`
+adapts editor layout and node selection to that contract without copying the
+index on navigation. Distant selections mount their row in the first build,
+without laying out preceding rows; selection reveals the exact chip even in a
+tall wrapped run. Stable row keys preserve widget state through insertion.
+The PGN Viewer's rich reader has not yet adopted this shared viewport.
 `InteractivePgnEditor` retains at most 96 recently built rows, reuses them across
 cursor changes, and retains the single inline comment draft across eviction.
 The layout index itself remains O(nodes + prose), rebuilt on content revisions;
