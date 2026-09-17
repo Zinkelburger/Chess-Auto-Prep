@@ -10,6 +10,7 @@ import '../core/repertoire_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../services/coherence_service.dart';
 import '../services/generation/fen_map.dart';

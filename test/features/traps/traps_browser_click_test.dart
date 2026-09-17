@@ -7,7 +7,7 @@ import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/models/trap_reply.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_line_builder.dart';
 import 'package:chess_auto_prep/features/traps/widgets/traps_browser.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 
 TrapLineInfo _scandiTrap() {
   return const TrapLineInfo(

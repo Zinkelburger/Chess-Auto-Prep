@@ -14,9 +14,13 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import '../../../core/move_navigation.dart';
 import '../../repertoires/models/repertoire_metadata.dart';
 import '../models/study_document.dart';
+import '../models/study_projection.dart';
+import '../../../chess_core/moves/move_tree_snapshot.dart';
+import 'study_projection_cache.dart';
 import '../models/study_workspace_snapshot.dart';
 import '../../../chess_core/pgn/pgn_text.dart'
     show splitPgnIntoGames, extractHeaders, stripBom, countPgnGames;
@@ -95,13 +99,16 @@ class StudyController extends ChangeNotifier
   }
 
   StudyDocument _doc = StudyDocument.fresh('Untitled study');
-  StudyDocument get doc => _doc;
+  final _projections = StudyProjectionCache();
+  StudyDocumentProjection get doc => _projections.read(_doc, _editRevision);
 
   int _chapterIndex = 0;
   int get chapterIndex => _chapterIndex;
-  StudyChapter get chapter => _doc.chapters[_chapterIndex];
+  StudyChapter get _chapter => _doc.chapters[_chapterIndex];
+  MoveTree get _tree => _chapter.tree;
+  StudyChapterProjection get chapter => doc.chapters[_chapterIndex];
   @override
-  MoveTree get tree => chapter.tree;
+  MoveTreeSnapshot get tree => chapter.tree;
 
   TreePath _path = TreePath.empty;
 
@@ -132,7 +139,7 @@ class StudyController extends ChangeNotifier
 
   void _faceChapterOrientation() {
     if (_doc.chapters.isEmpty) return;
-    _flipped = chapter.orientation == Side.black;
+    _flipped = _chapter.orientation == Side.black;
   }
 
   /// Bumped whenever the active document is (re)assigned — [openStudy],
@@ -166,18 +173,19 @@ class StudyController extends ChangeNotifier
   Timer? _autoSaveTimer;
 
   /// Studies on disk (refreshed by [refreshStudyList]).
-  List<RepertoireMetadata> availableStudies = [];
+  List<RepertoireMetadata> _availableStudies = const [];
+  List<RepertoireMetadata> get availableStudies => _availableStudies;
 
   /// Board position at the cursor.
   Position get currentPosition =>
-      tryParseFen(tree.fenAt(_path)) ?? Chess.initial;
+      tryParseFen(_tree.fenAt(_path)) ?? Chess.initial;
 
   // ── File management ──────────────────────────────────────────────────
 
   Future<void> refreshStudyList() async {
     final studies = await _library.list();
     if (isDisposed) return;
-    availableStudies = studies;
+    _availableStudies = List.unmodifiable(studies);
     notifyListeners();
   }
 
@@ -251,7 +259,7 @@ class StudyController extends ChangeNotifier
       _autoSaveBlocked = true;
       _chapterIndex = snapshot.chapter.clamp(0, _doc.chapters.length - 1);
       final cursor = TreePath.from(snapshot.cursor);
-      _path = tree.isValidPath(cursor) ? cursor : TreePath.empty;
+      _path = _tree.isValidPath(cursor) ? cursor : TreePath.empty;
       _flipped = snapshot.flipped;
     } finally {
       _adopting = false;
@@ -353,7 +361,15 @@ class StudyController extends ChangeNotifier
     final int firstIndex;
     if (_doc.filePath == path) {
       firstIndex = _doc.chapters.length;
-      _doc.chapters.addAll(chapters);
+      _doc.chapters.addAll([
+        for (final chapter in chapters)
+          StudyChapter(
+            name: chapter.name,
+            orientation: chapter.orientation,
+            headers: chapter.headers,
+            tree: chapter.tree.copyWithFreshIds(),
+          ),
+      ]);
       _markDirty();
       if (!await flushSave()) throw StateError(saveError ?? 'Study not saved');
     } else {
@@ -842,6 +858,7 @@ class StudyController extends ChangeNotifier
   void clearChapterAnnotations(int index) {
     if (index < 0 || index >= _doc.chapters.length) return;
     _doc.chapters[index].tree.clearAnnotations();
+    _projections.changed(_doc.chapters[index]);
     _markDirty();
   }
 
@@ -849,8 +866,9 @@ class StudyController extends ChangeNotifier
   /// parked on a deleted sideline retreats to its last mainline ancestor.
   void clearChapterVariations(int index) {
     if (index < 0 || index >= _doc.chapters.length) return;
-    final sanLine = index == _chapterIndex ? tree.sanSequenceAt(_path) : null;
+    final sanLine = index == _chapterIndex ? _tree.sanSequenceAt(_path) : null;
     _doc.chapters[index].tree.clearVariations();
+    _projections.changed(_doc.chapters[index]);
     if (sanLine != null) _reanchorCursor(sanLine);
     _markDirty();
   }
@@ -858,7 +876,7 @@ class StudyController extends ChangeNotifier
   /// Replace the current chapter's starting position with [fen]. The
   /// chapter's moves are cleared — they were rooted in the old position.
   void setChapterStartingPosition(String fen) {
-    final old = chapter;
+    final old = _chapter;
     _doc.chapters[_chapterIndex] = StudyChapter(
       name: old.name,
       headers: Map<String, String>.from(old.headers),
@@ -873,17 +891,21 @@ class StudyController extends ChangeNotifier
   }
 
   /// Whether the current chapter has any moves (something to train).
-  bool get chapterHasMoves => tree.roots.isNotEmpty;
+  bool get chapterHasMoves => _tree.roots.isNotEmpty;
 
   void deleteChapter(int index) {
     if (_doc.chapters.length <= 1) return; // keep at least one
     if (index < 0 || index >= _doc.chapters.length) return;
+    final active = _chapter;
     _doc.chapters.removeAt(index);
-    if (_chapterIndex >= _doc.chapters.length) {
-      _chapterIndex = _doc.chapters.length - 1;
+    final activeIndex = _doc.chapters.indexOf(active);
+    if (activeIndex >= 0) {
+      _chapterIndex = activeIndex;
+    } else {
+      _chapterIndex = index.clamp(0, _doc.chapters.length - 1);
+      _path = TreePath.empty;
+      _faceChapterOrientation();
     }
-    _path = TreePath.empty;
-    _faceChapterOrientation();
     _markDirty();
   }
 
@@ -893,8 +915,9 @@ class StudyController extends ChangeNotifier
   /// (goBack / goForward / goToStart / goToEnd come from [MoveNavigation].)
   @override
   void jump(TreePath target) {
-    if (!tree.isValidPath(target)) return;
-    _path = target;
+    if (!_tree.isValidPath(target)) return;
+    if (_path == target) return;
+    _path = TreePath.from(target.indices);
     notifyListeners();
   }
 
@@ -916,16 +939,26 @@ class StudyController extends ChangeNotifier
   /// Play [san] at the cursor: follows an existing child or adds a new node
   /// (a variation when the move differs from the mainline continuation).
   bool playSan(String san) {
-    final path = tree.addMove(_path, san);
+    final version = _tree.version;
+    final path = _tree.addMove(_path, san);
     if (path == null) return false;
     _path = path;
-    _markDirty();
+    if (_tree.version == version) {
+      notifyListeners();
+    } else {
+      _projections.changed(_chapter, path: path);
+      _markDirty();
+    }
     return true;
   }
 
   void setComment(TreePath path, String? comment) {
-    tree.setComment(path, comment);
-    _markDirty();
+    final version = _tree.version;
+    _tree.setComment(path, comment);
+    if (_tree.version != version) {
+      _projections.changed(_chapter, path: path);
+      _markDirty();
+    }
   }
 
   /// Comment at the cursor, annotation tokens and all — the chapter's
@@ -935,50 +968,59 @@ class StudyController extends ChangeNotifier
   /// Board shapes (`[%cal]`/`[%csl]` arrows and circles) live in here, so the
   /// study screen reads and rewrites this rather than keeping shapes in a
   /// parallel structure that a PGN round-trip would drop.
-  String? get cursorComment => tree.commentAt(_path);
+  String? get cursorComment => _tree.commentAt(_path);
 
   void toggleNag(TreePath path, int nagId) {
-    tree.toggleNag(path, nagId);
+    if (_tree.nodeAt(path) == null) return;
+    _tree.toggleNag(path, nagId);
+    _projections.changed(_chapter, path: path);
     _markDirty();
   }
 
   void deleteAt(TreePath path) {
-    tree.deleteAt(path);
-    // If the cursor was inside the deleted subtree, retreat to its parent.
-    if (path.isAncestorOf(_path) || !tree.isValidPath(_path)) {
-      _path = path.parent;
-    }
+    if (!_tree.isValidPath(path) || path.isEmpty && _tree.isEmpty) return;
+    final sanLine = _tree.sanSequenceAt(_path);
+    _tree.deleteAt(path);
+    _projections.changed(_chapter, path: path.parent);
+    // Surviving siblings shift indexes; a removed cursor retreats to the
+    // deepest surviving ancestor instead of silently selecting another line.
+    _reanchorCursor(sanLine);
     _markDirty();
   }
 
   void promote(TreePath path) {
-    final onCursorLine = path.isAncestorOf(_path);
-    final sanLine = tree.sanSequenceAt(_path);
-    tree.promoteVariation(path);
-    if (onCursorLine) _reanchorCursor(sanLine);
+    final sanLine = _tree.sanSequenceAt(_path);
+    final version = _tree.version;
+    _tree.promoteVariation(path);
+    if (_tree.version == version) return;
+    _projections.changed(_chapter, path: path.parent);
+    _reanchorCursor(sanLine);
     _markDirty();
   }
 
   /// Recursively promote so [target] lies on the mainline (same algorithm as
   /// RepertoireController.makeMainLine).
   void makeMainLine(TreePath target) {
-    if (target.isEmpty) return;
-    final sanLine = tree.sanSequenceAt(_path);
+    if (target.isEmpty || !_tree.isValidPath(target) || target.isMainline) {
+      return;
+    }
+    final sanLine = _tree.sanSequenceAt(_path);
     final indices = target.toList();
     for (int depth = 0; depth < indices.length; depth++) {
       if (indices[depth] != 0) {
-        tree.promoteVariation(TreePath(indices.sublist(0, depth + 1)));
+        _tree.promoteVariation(TreePath(indices.sublist(0, depth + 1)));
         indices[depth] = 0;
       }
     }
     _reanchorCursor(sanLine);
+    _projections.changed(_chapter);
     _markDirty();
   }
 
   /// After a structural change, re-locate the cursor by replaying its SAN
   /// sequence (paths shift when siblings reorder).
   void _reanchorCursor(List<String> sanLine) {
-    _path = tree.pathForSans(sanLine);
+    _path = _tree.pathForSans(sanLine);
   }
 
   @override

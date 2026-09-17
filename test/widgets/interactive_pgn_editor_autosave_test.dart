@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:flutter/material.dart';

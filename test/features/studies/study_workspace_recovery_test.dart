@@ -6,7 +6,7 @@ import 'package:chess_auto_prep/features/documents/controllers/workspace_recover
 import 'package:chess_auto_prep/features/studies/models/study_document.dart';
 import 'package:chess_auto_prep/features/documents/repositories/workspace_recovery_store.dart';
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import '../../support/scripted_document_store.dart';
 import '../../support/study_fixture.dart';
 import '../../support/memory_workspace_recovery_store.dart';

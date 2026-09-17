@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
 import 'package:flutter/material.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/documents/controllers/workspace_recovery_controller.dart';
 import 'package:chess_auto_prep/features/documents/widgets/workspace_recovery_host.dart';

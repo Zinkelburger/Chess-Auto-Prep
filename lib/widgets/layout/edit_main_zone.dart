@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import '../interactive_pgn_editor.dart';
 

@@ -7,7 +7,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart';
 
 void main() {

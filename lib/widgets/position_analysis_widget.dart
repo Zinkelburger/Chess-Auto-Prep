@@ -37,6 +37,7 @@ import '../features/holes/services/hole_hunt_service.dart';
 import '../features/holes/widgets/holes_report_panel.dart';
 import '../models/board_annotation.dart';
 import '../models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
 import '../theme/app_colors.dart';

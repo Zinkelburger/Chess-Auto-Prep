@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 
 import '../constants/chess_constants.dart';
 import '../models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
 import '../features/repertoires/models/repertoire_metadata.dart';

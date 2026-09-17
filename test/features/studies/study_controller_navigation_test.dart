@@ -1,7 +1,7 @@
 import '../../support/study_fixture.dart';
 import 'package:chess_auto_prep/core/move_navigation.dart';
 import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// [StudyController] used to hand-roll goBack/goForward/goToStart/goToEnd over
@@ -12,11 +12,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// 1.d4 branching from the root.
 StudyController _controllerWithLine() {
   final c = memoryStudy();
-  final t = c.tree;
-  final e4 = t.addMove(TreePath.empty, 'e4')!;
-  final e5 = t.addMove(e4, 'e5')!;
-  t.addMove(e5, 'Nf3');
-  t.addMove(TreePath.empty, 'd4'); // sideline: second root
+  c.playSan('e4');
+  c.playSan('e5');
+  c.playSan('Nf3');
+  c.goToStart();
+  c.playSan('d4');
+  c.goToStart();
   return c;
 }
 

@@ -13,6 +13,7 @@ import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_sto
 import 'package:chess_auto_prep/infrastructure/documents/file_workspace_recovery_store.dart';
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
 import 'package:chess_auto_prep/screens/study_screen.dart';
+import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
 import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 
 void main() {
@@ -92,6 +93,34 @@ void main() {
       expect(study.flipped, isTrue);
       expect(study.autoSaveEnabled, isFalse);
       expect(await file.readAsString(), external);
+      final recovered = study.doc;
+      final commentField = find.descendant(
+        of: find.byType(InteractivePgnEditor),
+        matching: find.byType(TextField),
+      );
+      await tester.tap(commentField);
+      await tester.enterText(commentField, 'Continued');
+      await tester.pumpAndSettle();
+      final editor = tester.state(
+        find.descendant(
+          of: find.byType(InteractivePgnEditor),
+          matching: find.byType(EditableText),
+        ),
+      );
+      await tester.enterText(commentField, 'Continued after recovery');
+      await tester.pumpAndSettle();
+      expect(
+        tester.state(
+          find.descendant(
+            of: find.byType(InteractivePgnEditor),
+            matching: find.byType(EditableText),
+          ),
+        ),
+        same(editor),
+      );
+      expect(study.cursorComment, 'Continued after recovery');
+      expect(recovered.toPgn(), isNot(contains('Continued')));
+      expect(await file.readAsString(), external);
       await tester.tap(find.byKey(const ValueKey('study-save-recovery')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('document-save')));
@@ -110,7 +139,7 @@ void main() {
       expect(study.dirty, isFalse);
       expect(
         await File(study.doc.filePath!).readAsString(),
-        contains('Recovered note'),
+        allOf(contains('Recovered note'), contains('Continued after recovery')),
       );
       expect(await file.readAsString(), external);
       await tester

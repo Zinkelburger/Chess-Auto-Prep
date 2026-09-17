@@ -3,7 +3,7 @@ import 'package:chess_auto_prep/features/documents/models/document_save_state.da
 import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
 import 'package:chess_auto_prep/features/studies/models/study_document.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../../support/scripted_document_store.dart';
 import '../../support/study_fixture.dart';
@@ -311,7 +311,9 @@ void main() {
       study.setComment(TreePath.empty, 'later source note');
       expect(await export.save(), isA<PgnSaved>());
       expect(export.state.content, contains('exported note'));
-      expect(study.doc, same(document));
+      expect(study.doc.session, document.session);
+      expect(document.toPgn(), contains('exported note'));
+      expect(document.toPgn(), isNot(contains('later source note')));
       expect(study.state.baseline, same(baseline));
       expect(study.doc.toPgn(), contains('later source note'));
       expect(study.dirty, isTrue);

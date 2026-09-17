@@ -31,17 +31,61 @@ import '../../../chess_core/pgn/pgn_text.dart'
     show extractHeaders, splitPgnIntoGames, stripBom;
 import '../../../utils/fen_utils.dart' show isWhiteToMove;
 import '../../../models/move_tree.dart';
+import '../../../chess_core/moves/move_tree_view.dart';
 
-class StudyChapter {
+/// Read-only chapter values and the shared PGN serialization contract.
+abstract class StudyChapterData {
+  String get name;
+  Side get orientation;
+  Map<String, String> get headers;
+  MoveTreeView get tree;
+  String get intro => tree.rootComment ?? '';
+
+  /// Result header token used to terminate the movetext ("*" when absent).
+  String get result => headers['Result'] ?? '*';
+
+  /// The chapter as one PGN game.  [studyName] goes into the Lichess-style
+  /// `[Event "Study: Chapter"]` and `[StudyName]` tags; omit it for a chapter
+  /// that is not (yet) part of a named study.
+  String toPgn({String? studyName}) {
+    final study = studyName?.trim();
+    final lines = <String>[];
+    final event = study == null || study.isEmpty ? name : '$study: $name';
+    lines.add('[Event "${StudyChapter._escape(event)}"]');
+    if (study != null && study.isNotEmpty) {
+      lines.add('[StudyName "${StudyChapter._escape(study)}"]');
+    }
+    lines.add('[ChapterName "${StudyChapter._escape(name)}"]');
+    for (final entry in headers.entries) {
+      if (StudyChapter.ownedHeaders.contains(entry.key)) continue;
+      lines.add('[${entry.key} "${StudyChapter._escape(entry.value)}"]');
+    }
+    lines.add('[Orientation "${orientation.name}"]');
+    if (tree.startingFen != kStandardStartFen) {
+      lines.add('[FEN "${tree.startingFen}"]');
+      lines.add('[SetUp "1"]');
+    }
+
+    final moveText = tree.toPgnMoveText();
+    final body = moveText.isEmpty ? result : '$moveText $result';
+    return '${lines.join('\n')}\n\n$body\n';
+  }
+}
+
+class StudyChapter extends StudyChapterData {
+  @override
   String name;
 
   /// Which side the board shows at the bottom when the chapter opens.
+  @override
   Side orientation;
 
   /// Original PGN headers minus the ones this model owns (see the library
   /// doc).  Preserved so tags like ECO or Annotator survive a round-trip.
+  @override
   final Map<String, String> headers;
 
+  @override
   final MoveTree tree;
 
   /// The chapter's own note, written before its first move — where a Lichess
@@ -51,6 +95,7 @@ class StudyChapter {
   /// lives in the tree with every other comment and is written out by
   /// [MoveTree.toPgnMoveText]. A second copy here would be written twice and
   /// would drift the moment the editor set a comment on the empty path.
+  @override
   String get intro => tree.rootComment ?? '';
   set intro(String value) => tree.rootComment = value;
 
@@ -119,36 +164,6 @@ class StudyChapter {
     );
   }
 
-  /// Result header token used to terminate the movetext ("*" when absent).
-  String get result => headers['Result'] ?? '*';
-
-  /// The chapter as one PGN game.  [studyName] goes into the Lichess-style
-  /// `[Event "Study: Chapter"]` and `[StudyName]` tags; omit it for a chapter
-  /// that is not (yet) part of a named study.
-  String toPgn({String? studyName}) {
-    final study = studyName?.trim();
-    final lines = <String>[];
-    final event = study == null || study.isEmpty ? name : '$study: $name';
-    lines.add('[Event "${_escape(event)}"]');
-    if (study != null && study.isNotEmpty) {
-      lines.add('[StudyName "${_escape(study)}"]');
-    }
-    lines.add('[ChapterName "${_escape(name)}"]');
-    for (final entry in headers.entries) {
-      if (ownedHeaders.contains(entry.key)) continue;
-      lines.add('[${entry.key} "${_escape(entry.value)}"]');
-    }
-    lines.add('[Orientation "${orientation.name}"]');
-    if (tree.startingFen != kStandardStartFen) {
-      lines.add('[FEN "${tree.startingFen}"]');
-      lines.add('[SetUp "1"]');
-    }
-
-    final moveText = tree.toPgnMoveText();
-    final body = moveText.isEmpty ? result : '$moveText $result';
-    return '${lines.join('\n')}\n\n$body\n';
-  }
-
   /// The chapter name a PGN game's headers describe.
   ///
   /// `ChapterName` wins; failing that, `Event` with a leading
@@ -213,13 +228,23 @@ class StudyChapter {
       value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
 }
 
-class StudyDocument {
+abstract class StudyDocumentData {
+  String? get filePath;
+  String get name;
+  List<StudyChapterData> get chapters;
+  String toPgn() => chapters.map((c) => c.toPgn(studyName: name)).join('\n');
+}
+
+class StudyDocument extends StudyDocumentData {
   /// Absolute path of the backing `.pgn` file (`null` until first save).
+  @override
   String? filePath;
 
   /// Display name (the file's basename).
+  @override
   String name;
 
+  @override
   final List<StudyChapter> chapters;
 
   StudyDocument({
@@ -255,5 +280,6 @@ class StudyDocument {
     return StudyDocument(name: name, filePath: filePath, chapters: chapters);
   }
 
+  @override
   String toPgn() => chapters.map((c) => c.toPgn(studyName: name)).join('\n');
 }

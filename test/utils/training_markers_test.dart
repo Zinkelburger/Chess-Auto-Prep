@@ -1,4 +1,5 @@
 import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show filterDisplayComment;
 import 'package:chess_auto_prep/utils/training_markers.dart';

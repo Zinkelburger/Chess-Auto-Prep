@@ -6,7 +6,7 @@ import 'package:chess_auto_prep/features/studies/controllers/study_controller.da
 import 'package:chess_auto_prep/features/studies/models/study_document.dart';
 import 'package:chess_auto_prep/features/studies/widgets/study_close_guard.dart';
 import 'package:chess_auto_prep/infrastructure/settings/shared_preferences_app_settings_repository.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import '../../support/memory_appearance_preferences.dart';

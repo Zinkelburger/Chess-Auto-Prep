@@ -18,7 +18,7 @@ import '../features/studies/widgets/study_save_button.dart';
 import '../features/documents/widgets/document_save_dialog.dart';
 import '../design_system/components/name_entry_dialog.dart';
 import '../l10n/generated/app_localizations.dart';
-import '../models/move_tree.dart' show TreePath;
+import '../chess_core/moves/tree_path.dart';
 import '../services/repertoire_line_ids.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
@@ -435,7 +435,6 @@ class _StudyScreenState extends State<StudyScreen> {
     final path = doc.filePath;
     if (path == null) return;
     final chapters = List.of(doc.chapters);
-    final versions = [for (final c in chapters) c.tree.version];
     final summaries = [
       for (final c in chapters) PgnDeletionSummary.tree(c.tree),
     ];
@@ -454,12 +453,6 @@ class _StudyScreenState extends State<StudyScreen> {
         !identical(_study.doc, doc) ||
         doc.chapters.length != chapters.length) {
       return;
-    }
-    for (var i = 0; i < chapters.length; i++) {
-      if (!identical(doc.chapters[i], chapters[i]) ||
-          chapters[i].tree.version != versions[i]) {
-        return;
-      }
     }
     await _study.deleteStudy(path);
   }
@@ -494,6 +487,7 @@ class _StudyScreenState extends State<StudyScreen> {
   /// position. Existing moves are rooted in the old position, so replacing
   /// it clears them (after confirmation).
   Future<void> _editChapterPosition() async {
+    final chapter = _study.chapter;
     if (_study.chapterHasMoves) {
       final confirmed = await confirmAction(
         context,
@@ -512,7 +506,7 @@ class _StudyScreenState extends State<StudyScreen> {
       initialFen: _study.currentPosition.fen,
       actionLabel: 'Set chapter position',
     );
-    if (position == null) return;
+    if (!mounted || position == null || _study.chapter != chapter) return;
     _study.setChapterStartingPosition(position.fen);
   }
 
@@ -610,13 +604,13 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _editChapterAt(int index) async {
-    final edit = await showEditChapterDialog(
-      context,
-      chapter: _study.doc.chapters[index],
-    );
-    if (edit == null) return;
+    final chapter = _study.doc.chapters[index];
+    final edit = await showEditChapterDialog(context, chapter: chapter);
+    if (!mounted || edit == null) return;
+    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    if (currentIndex < 0) return;
     _study.updateChapter(
-      index,
+      currentIndex,
       name: edit.name,
       orientation: edit.orientation,
       headers: edit.headers,
@@ -630,7 +624,6 @@ class _StudyScreenState extends State<StudyScreen> {
 
   Future<void> _clearAnnotationsAt(int index) async {
     final chapter = _study.doc.chapters[index];
-    final version = chapter.tree.version;
     final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
@@ -640,14 +633,13 @@ class _StudyScreenState extends State<StudyScreen> {
           'from "${chapter.name}". The moves stay.',
       confirmLabel: 'Clear',
     );
-    if (!mounted || !confirmed || chapter.tree.version != version) return;
+    if (!mounted || !confirmed) return;
     final currentIndex = _study.doc.chapters.indexOf(chapter);
     if (currentIndex >= 0) _study.clearChapterAnnotations(currentIndex);
   }
 
   Future<void> _clearVariationsAt(int index) async {
     final chapter = _study.doc.chapters[index];
-    final version = chapter.tree.version;
     final summary = PgnDeletionSummary.variations(chapter.tree);
     final confirmed = await confirmAction(
       context,
@@ -657,7 +649,7 @@ class _StudyScreenState extends State<StudyScreen> {
           'including sideline annotations. The main line and its notes stay.',
       confirmLabel: 'Clear',
     );
-    if (!mounted || !confirmed || chapter.tree.version != version) return;
+    if (!mounted || !confirmed) return;
     final currentIndex = _study.doc.chapters.indexOf(chapter);
     if (currentIndex >= 0) _study.clearChapterVariations(currentIndex);
   }
@@ -679,7 +671,6 @@ class _StudyScreenState extends State<StudyScreen> {
       return;
     }
     final chapter = _study.doc.chapters[index];
-    final version = chapter.tree.version;
     final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
@@ -687,7 +678,7 @@ class _StudyScreenState extends State<StudyScreen> {
       message: 'Remove ${summary.description}, including all annotations.',
       confirmLabel: 'Delete',
     );
-    if (!mounted || !confirmed || chapter.tree.version != version) return;
+    if (!mounted || !confirmed) return;
     final currentIndex = _study.doc.chapters.indexOf(chapter);
     if (currentIndex >= 0) _study.deleteChapter(currentIndex);
   }

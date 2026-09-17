@@ -7,6 +7,7 @@ import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter/material.dart';
 
 import '../../features/studies/models/study_document.dart';
+import '../../features/studies/models/study_projection.dart';
 import '../../theme/app_text_styles.dart';
 
 /// The edited fields.  [headers] is the complete replacement tag set.
@@ -24,7 +25,7 @@ class ChapterEdit {
 
 Future<ChapterEdit?> showEditChapterDialog(
   BuildContext context, {
-  required StudyChapter chapter,
+  required StudyChapterProjection chapter,
 }) => showDialog<ChapterEdit>(
   context: context,
   builder: (_) => _EditChapterDialog(chapter: chapter),
@@ -33,7 +34,7 @@ Future<ChapterEdit?> showEditChapterDialog(
 class _EditChapterDialog extends StatefulWidget {
   const _EditChapterDialog({required this.chapter});
 
-  final StudyChapter chapter;
+  final StudyChapterProjection chapter;
 
   @override
   State<_EditChapterDialog> createState() => _EditChapterDialogState();

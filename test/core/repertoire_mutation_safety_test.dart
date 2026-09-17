@@ -5,8 +5,9 @@ import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 import 'package:chess_auto_prep/services/repertoire_file_editor.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_service.dart';
 import 'package:chess_auto_prep/utils/atomic_file.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,7 +25,11 @@ void main() {
     directory = await Directory.systemTemp.createTemp('mutation-safety-');
     file = File(p.join(directory.path, 'chapter.pgn'));
     await file.writeAsString(original);
-    storage = StorageFactory.instance;
+    storage = IOStorageService(
+      documentsRoot: directory,
+      supportRoot: Directory(p.join(directory.path, 'support')),
+    );
+    StorageFactory.instanceForTest = storage;
     controller = RepertoireController();
     await controller.setRepertoire(
       RepertoireMetadata(
@@ -37,7 +42,7 @@ void main() {
   });
 
   tearDown(() async {
-    StorageFactory.instanceForTest = storage;
+    StorageFactory.instanceForTest = null;
     controller.dispose();
     await directory.delete(recursive: true);
   });

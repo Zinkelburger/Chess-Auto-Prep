@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/features/repertoires/models/repertoire_metadata.dart';
 
 /// Replay [moves] from [startingFen] (or standard start) and return the FEN.
@@ -61,6 +63,20 @@ void assertNavigationInvariants(RepertoireController controller) {
 }
 
 void main() {
+  late io.Directory storageRoot;
+  setUp(() async {
+    storageRoot = await io.Directory.systemTemp.createTemp(
+      'repertoire-storage-',
+    );
+    StorageFactory.instanceForTest = IOStorageService(
+      documentsRoot: storageRoot,
+      supportRoot: io.Directory('${storageRoot.path}/support'),
+    );
+  });
+  tearDown(() async {
+    StorageFactory.instanceForTest = null;
+    await storageRoot.delete(recursive: true);
+  });
   group('setPositionFromMoveHistory', () {
     test(
       'setPositionFromMoveHistory preserves full move history from startpos',

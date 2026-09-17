@@ -7,6 +7,7 @@
 library;
 
 import '../../../models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import '../../../models/trap_line_info.dart';
 import '../../../models/trap_reply.dart';
 

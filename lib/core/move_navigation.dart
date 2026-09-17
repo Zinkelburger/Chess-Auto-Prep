@@ -21,9 +21,11 @@
 library;
 
 import '../models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
+import '../chess_core/moves/move_tree_view.dart';
 
 /// Resolving a SAN sequence to a [TreePath].
-extension MoveTreeSanPaths on MoveTree {
+extension MoveTreeSanPaths on MoveTreeView {
   /// The deepest path whose moves match [sans] from the root: the first
   /// sibling with each SAN is followed, and the walk stops at the first move
   /// the tree does not have. Stable under sibling reordering, which is why
@@ -43,7 +45,7 @@ extension MoveTreeSanPaths on MoveTree {
 
 mixin MoveNavigation {
   /// The move tree being navigated.
-  MoveTree get tree;
+  MoveTreeView get tree;
 
   /// The current cursor.
   TreePath get path;

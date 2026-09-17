@@ -51,8 +51,12 @@ Failed recovery writes block replacement; exports leave the current source intac
 Viewer now has app-lifetime ownership and shared durable checkpoints/startup
 discovery for current/retained drafts, original game text, uncertain writes and
 game/mainline cursor/orientation. Close protection works before the reader opens.
-Private game cores/immutable projections, undo receipts, variation-cursor/filter/
-panel restoration and large-document performance evidence remain pending.
+Study now keeps its editable document private and publishes immutable cached
+chapter/tree projections, with incremental local-edit updates, stable annotation
+focus and detached prior revisions. Viewer/Builder private-core adoption,
+Study cursor/visible-window subscription work, undo receipts, variation-cursor/
+filter/panel restoration and complete large-document performance evidence remain
+pending.
 Other editors' persisted drafts, clean workspace/session restoration, archive
 purging, builder-draft checks and job shutdown coordination are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional

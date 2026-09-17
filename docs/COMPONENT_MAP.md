@@ -473,6 +473,41 @@ integration offer. This prevents GTK's modal first-run prompt (outside Flutter's
 layer-tree screenshots) from swallowing native input/close events. Explicit
 fixture choices remain intact; the user's desktop preferences are never touched.
 
+#### Study document projections
+
+`StudyController` privately owns the mutable `StudyDocument` and `MoveTree`.
+Its public `doc`, `chapter` and `tree` getters return detached immutable values
+from `features/studies/models/study_projection.dart` and
+`chess_core/moves/move_tree_snapshot.dart`. Document/chapter equality includes
+session identity, projection kind, chapter key where applicable and revision;
+it is separate from the native save baseline. Old values retain their headers,
+annotations, glyphs and descendants after later edits. Submitted chapters and
+isolate-decoded nodes are copied on adoption, including mutable NAG lists.
+
+`StudyProjectionCache` belongs to the controller. Navigation and save-status
+notifications reuse the existing document/tree projections. Unchanged chapters
+retain their projections, including across reorder. Ordinary edits reconcile
+changed node IDs and their ancestors, sharing immutable unaffected branches;
+chapter-wide clears rebuild that chapter. Initial/bulk construction is iterative.
+The immutable tree's stable editing identity is separate from its content revision,
+so annotation fields keep focus as typing produces new views. Root-list reconciliation
+still scales with the number of root variations; first materialization remains
+proportional to document size. Synthetic 20,000-node measurements are regression
+evidence, not a completed native frame/allocation budget.
+
+`chess_core/moves/tree_path.dart` is the canonical cursor value;
+`move_tree_view.dart` supplies shared read-only navigation, and
+`chess_core/pgn/move_text_writer.dart` serializes both immutable and mutable
+views. Legacy mutable parsing stays in `models/move_tree_pgn.dart` for its
+unmigrated owners. `InteractivePgnEditor` takes the read-only contract; glyph
+changes require a host callback. Study dialogs retain chapter projections and
+reject edits/deletes when that chapter revision is no longer current. Promoting
+or removing siblings and deleting another chapter preserve the viewed position.
+
+Study's legacy screen notification fan-out, dedicated cursor/visible-window
+projections, undo receipts, bulk/decode allocation and native frame measurements,
+and Viewer/Builder private-core adoption remain unfinished.
+
 #### Workspace restart recovery
 
 `features/studies/models/study_workspace_snapshot.dart` captures name, source path,
@@ -1622,7 +1657,7 @@ Used by:
 | `snapshot_exporter.dart` | Mid-run export of lines found so far to a new repertoire file | `export`, `nameSuggestion` |
 | `generation_session_types.dart` | `GenerationRequest` (+ `expectimaxProbe`, `resolveLinePrefix`), `GeneratedLineExport`, `TreeAnalysis`, `ExtractedLines`, `ExpectimaxProbeTarget` (+ `moves`, `probeConfig`, `movePvConfig`) | — |
 | `game_sorting.dart` | Comparators behind the PGN viewer's `GameSortMode`s | `sortGamesInPlace`, `compareGamesBy*` |
-| `move_navigation.dart` | `MoveNavigation` mixin (back/forward/start/end over a `MoveTree` + `TreePath`) and `MoveTree.pathForSans` | `goBack`, `goForward`, `goToStart`, `goToEnd`, `pathForSans` |
+| `move_navigation.dart` | `MoveNavigation` mixin (back/forward/start/end over `MoveTreeView` + `TreePath`) and `MoveTreeView.pathForSans` | `goBack`, `goForward`, `goToStart`, `goToEnd`, `pathForSans` |
 | `features/audit/controllers/audit_session_controller.dart` | **Audit session state** — owns `RepertoireAuditService` + result, live findings, progress, config, interrupted snapshot; handles persistence via `AuditPersistence`; `onLiveFinding` creates a new list on each addition (avoids stale-reference bugs in widget comparisons) | `pause`, `resume`, `cancel`, `saveProgress`, `tryRestore`, `launch`, `launchResume`, `startFresh`, `onAuditingChanged`, `onResultReady`, `onLiveFinding`, `onProgress` |
 | `features/coverage/controllers/coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
@@ -1648,8 +1683,8 @@ Used by:
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
 | `board_display_settings.dart` | `BoardDisplaySettings` — global board and move preferences: `BoardCoordinates` (none / inside / outside / every square) `PieceNotation` (letters / figurines), and opt-in legal-move dots (off by default; explicit feature hints such as bughouse drop targets remain available). Persisted; reached through `BoardDisplaySettings.of(context)`, which rebuilds the caller when a `DisplaySettingsScope` (planted above `MaterialApp`) is present and falls back to the singleton in bare widget tests |
 | `explorer_response.dart` | Opening explorer answer shape: `LichessDatabase` (which database is being asked), moves with counts, plus the games a source lists for the position (`ExplorerGame`, tagged with the `ExplorerGameSource` it can be fetched from — Lichess, masters or the local TWIC database) |
-| `move_tree.dart` | Editable PGN move tree (`MoveNode`, `TreePath`, `MoveTree`). FEN cached per node. PGN round-trip via `fromPgn`/`toPgn`, delegating movetext parsing/writing to `move_tree_pgn.dart` (`MoveTreePgnCodec`). Used by `RepertoireController` as the single source of truth for the move cursor. |
-| `move_tree_pgn.dart` | `MoveTreePgnCodec` — dartchess game tree → `MoveNode`s, and `MoveNode`s → PGN movetext (variations, starting comments, NAGs) |
+| `move_tree.dart` | Editable PGN move tree (`MoveNode`, `MoveTree`). FEN cached per node; NAG lists copied on fresh-ID adoption. Cursor and read contracts live in `chess_core/moves/`. PGN parsing delegates to `move_tree_pgn.dart`; writing uses `chess_core/pgn/move_text_writer.dart`. Used by `RepertoireController` as the single source of truth for the move cursor. |
+| `move_tree_pgn.dart` | `MoveTreePgnCodec` — dartchess game tree → editable `MoveNode`s, preserving variations, starting comments and NAGs |
 | `legal_destination_cache.dart` | `LegalDestinationCache` — bounded LRU of legal moves and their destination FENs per position, behind the opening tree's one-ply transposition scan |
 | `opening_tree_transfer.dart` | `OpeningTreeTransfer` — flat id-keyed encoding of an `OpeningTree` for isolate transfer (`toTransferJson` / `fromTransferJson` delegate here) |
 | `opening_tree.dart` | In-memory statistics tree indexed by FEN. Cursor walks by FEN (so 1.d4 Nf6 2.e3 c5 and 1.d4 c5 2.e3 Nf6 land on the same node). Off-book positions still list **one-ply transpositions** (`continuations` / `viaTransposition`). `hasMove`, `appendLine` / `appendLineFromFen` (null-move passes skip a node). `updateStats(null)` counts frequency without a fake draw; `hasWdl` hides the W/D/L bar on course trees |

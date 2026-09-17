@@ -1114,6 +1114,60 @@ milestones 1/2 or 3, start/finish milestones 4–7, or certify non-Linux native 
 release gates. Checkpoint acknowledgement is the recovery boundary; edits not
 yet checkpointed can still be lost on abrupt process termination.
 
+### Study private-core and projection checkpoint (2026-09-17)
+
+After shared recovery checkpoint `2c8d421d`, Study's public document/chapter/tree
+access returns immutable projections. The controller alone retains the editable
+core. Widgets cannot cast the values back to that core; lists, headers and NAGs
+are detached and unmodifiable. Import/adoption also copies NAG arrays, closing an
+input alias. Commands distinguish navigation along an existing move from an edit,
+and reject invalid/no-op cursor/comment actions without dirtying the document.
+
+Document and chapter projection keys contain the session, kind, chapter identity
+where applicable and content revision. Disk baselines remain separate. Navigation
+and save-status changes reuse document projections; unrelated chapters remain
+identical across edits and reorder. A measured initial 20,000-node full copy took
+up to 35 ms in the debug fixture, motivating incremental reconciliation by changed
+node and ancestor IDs. Ordinary local edits share unchanged immutable subtrees;
+bulk clears deliberately rebuild their chapter. Later runs varied up to 49 ms
+for full materialization; 100 local updates plus identity assertions took about
+20–22 ms total. These synthetic debug measurements establish the optimization's
+purpose, not compliance with end-to-end frame or allocation budgets.
+
+Pure cursor/read contracts now live under `chess_core/moves/` and the shared
+movetext writer under `chess_core/pgn/`, with callers updated and no re-export
+shim. The shared PGN editor uses read-only contracts and explicit mutation
+callbacks, including its legacy scratch host. A stable tree editing identity
+keeps annotation field state/focus while revisions change. Study confirmations
+use immutable chapter identity/revision, and sibling/chapter removal preserves
+the selected position rather than following a shifted list index.
+
+Verification (Linux, this checkpoint):
+
+- `scripts/ci.sh analyze lint` passes with the nine existing informational notices;
+  architecture boundary checks and all 13 checker tests pass.
+- All 381 focused tests pass across Study, immutable snapshots, move navigation,
+  PGN parsing/serialization, editor focus/stale menus, repertoire save/undo safety,
+  Viewer game models and study selection. This includes 20,000-node deep/wide
+  construction and batched edits/reorder/deletion against the private core's PGN.
+- Native Study restart/edit/conflict/copy, document-close and Viewer restart
+  journeys pass. The Study journey types through two immutable revisions, verifies
+  field identity and preserved prior text, and saves both recovered and newly
+  typed notes to an exclusive copy without changing the externally edited source.
+- Headless production preview: played `e4 e5`, entered and extended an annotation
+  across revisions, verified the field kept focus and both board and movetext
+  retained the position. Inspected the [1280×720 screenshot](images/renewal-study-projections.png).
+  The preview used only disposable data and was stopped after inspection.
+- Broader tests exposed repertoire fixtures that still depended on platform path
+  discovery without a Flutter binding. Explicit disposable `IOStorageService`
+  roots now let those cases reach their intended conflict/undo assertions.
+
+This advances STATE-02 and ARCH-01 without graduating milestone 3. Dedicated
+cursor/visible-window projections, narrower subscriptions, undo receipts,
+Viewer/Builder private ownership, complete session restoration, decoder/object
+construction/GC profiling and native large-document frame budgets remain pending.
+Milestones 4–7 and non-Linux/release gates remain unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

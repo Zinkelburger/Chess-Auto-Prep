@@ -4,21 +4,17 @@
 library;
 
 import '../../support/study_fixture.dart';
+import 'package:chess_auto_prep/features/studies/models/study_workspace_snapshot.dart';
 
 import 'package:chess_auto_prep/features/studies/controllers/study_controller.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
-import 'package:chess_auto_prep/features/studies/models/study_document.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:dartchess/dartchess.dart' show Side;
 import 'package:flutter_test/flutter_test.dart';
 
 StudyController _study() {
   final c = memoryStudy();
-  c.doc.chapters
-    ..clear()
-    ..addAll([
-      StudyChapter(name: 'White chapter', orientation: Side.white),
-      StudyChapter(name: 'Black chapter', orientation: Side.black),
-    ]);
+  c.renameChapter(0, 'White chapter');
+  c.addChapter('Black chapter', orientation: Side.black);
   c.selectChapter(0);
   return c;
 }
@@ -130,8 +126,16 @@ void main() {
     });
 
     test('without a name the PGN tags decide, study prefix stripped', () async {
-      final c = _study();
-      c.doc.name = 'Repertoire';
+      final c = memoryStudy();
+      addTearDown(c.dispose);
+      await c.restoreWorkspace(
+        StudyWorkspaceSnapshot(
+          name: 'Repertoire',
+          path: '',
+          content: '*',
+          dirty: false,
+        ),
+      );
       await c.importChapters(
         '[Event "Repertoire: Najdorf"]\n\n1. e4 c5 *\n',
         orientation: Side.black,

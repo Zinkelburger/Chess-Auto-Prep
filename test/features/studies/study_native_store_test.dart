@@ -4,7 +4,7 @@ import 'package:chess_auto_prep/features/studies/controllers/study_controller.da
 import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_store.dart';
 import 'package:chess_auto_prep/infrastructure/studies/legacy_study_library_repository.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

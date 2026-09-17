@@ -64,7 +64,6 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
   Future<void> _delete(int index) async {
     if (_study.doc.chapters.length <= 1) return;
     final chapter = _study.doc.chapters[index];
-    final version = chapter.tree.version;
     final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
@@ -72,7 +71,7 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
       message: 'Remove ${summary.description}, including all annotations.',
       confirmLabel: 'Delete',
     );
-    if (!confirmed || !mounted || chapter.tree.version != version) return;
+    if (!confirmed || !mounted) return;
     final currentIndex = _study.doc.chapters.indexOf(chapter);
     if (currentIndex >= 0) setState(() => _study.deleteChapter(currentIndex));
   }
