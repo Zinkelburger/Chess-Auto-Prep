@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/generation_artifacts.dart';
 import 'package:chess_auto_prep/core/generation_session_controller.dart';
@@ -51,90 +53,98 @@ BuildTree _completedTree() {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  for (final conflict in [false, true]) {
-    test(
-      'full pipeline ${conflict ? 'fails a stale source without reporting lines saved' : 'publishes once before reporting saved lines'}',
-      () async {
-        final directory = await Directory.systemTemp.createTemp(
-          'generation-pipeline-',
-        );
-        addTearDown(() => directory.delete(recursive: true));
-        final path = p.join(directory.path, 'Main.pgn');
-        final documents = Store()..current = snapshot('original', path: path);
-        final storage = MemoryStorage();
-        final lifecycle = _Lifecycle();
-        if (conflict) {
-          lifecycle.onEnter = () {
-            documents.current = snapshot(
-              'external edit',
-              path: path,
-              revision: '2',
-            );
-          };
-        }
-        final controller = GenerationSessionController(
-          publication: GenerationPublicationController(
-            documents: documents,
-            drafts: StorageGenerationDraftRepository(
-              storage,
-              prepareDirectory: (_) async {},
-            ),
-          ),
-          artifacts: GenerationArtifactStore(storage: () => storage),
-          engineLifecycle: lifecycle,
-        );
-        addTearDown(controller.dispose);
-        final job = RepertoireJob(
-          id: 'pipeline',
-          type: JobType.generation,
-          label: 'Generate',
-        );
-        addTearDown(job.dispose);
-        controller.currentJob = job;
-        final saved = <GeneratedLineExport>[];
-        await controller.startBuild(
-          GenerationRequest(
-            config: const TreeBuildConfig(
-              startFen: kStandardStartFen,
-              playAsWhite: true,
-              maxPly: 1,
-              useMasterGames: false,
-              downloadMasterGamesIfMissing: false,
-              verifyFinal: false,
-              modelGameCount: 0,
-              refutationLines: false,
-              alternativeLines: false,
-              engineTailPlies: 0,
-            ),
-            repertoireFilePath: path,
-            buildRootFen: kStandardStartFen,
-            lineMovePrefix: const [],
-            repertoireStartFen: kStandardStartFen,
-            existingTree: _completedTree(),
-            onLinesSaved: (lines) {
-              expect(documents.saves, hasLength(1));
-              saved.addAll(lines);
-            },
-          ),
-        );
-        expect(controller.isGenerating, isFalse);
-        expect(documents.saves, hasLength(1));
-        if (conflict) {
-          expect(job.status, JobStatus.failed);
-          expect(controller.lastError, contains('manifest.json'));
-          expect(saved, isEmpty);
-          expect(documents.current.content, 'external edit');
-          expect(
-            storage.files.keys.any((path) => path.endsWith('_tree.json')),
-            isFalse,
+  for (final outcome in ['success', 'conflict', 'refresh failure']) {
+    final conflict = outcome == 'conflict';
+    final refreshFails = outcome == 'refresh failure';
+    test('full pipeline: $outcome', () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'generation-pipeline-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final path = p.join(directory.path, 'Main.pgn');
+      final documents = Store()..current = snapshot('original', path: path);
+      final storage = MemoryStorage();
+      final lifecycle = _Lifecycle();
+      if (conflict) {
+        lifecycle.onEnter = () {
+          documents.current = snapshot(
+            'external edit',
+            path: path,
+            revision: '2',
           );
-        } else {
-          expect(controller.lastError, isNull);
-          expect(job.status, JobStatus.completed);
-          expect(saved, isNotEmpty);
-          expect(documents.current.content, contains('e4'));
-        }
-      },
-    );
+        };
+      }
+      final controller = GenerationSessionController(
+        publication: GenerationPublicationController(
+          documents: documents,
+          drafts: StorageGenerationDraftRepository(
+            storage,
+            prepareDirectory: (_) async {},
+          ),
+        ),
+        artifacts: GenerationArtifactStore(storage: () => storage),
+        engineLifecycle: lifecycle,
+      );
+      addTearDown(controller.dispose);
+      final job = RepertoireJob(
+        id: 'pipeline',
+        type: JobType.generation,
+        label: 'Generate',
+      );
+      addTearDown(job.dispose);
+      controller.currentJob = job;
+      final saved = <PgnSnapshot>[];
+      await controller.startBuild(
+        GenerationRequest(
+          config: const TreeBuildConfig(
+            startFen: kStandardStartFen,
+            playAsWhite: true,
+            maxPly: 1,
+            useMasterGames: false,
+            downloadMasterGamesIfMissing: false,
+            verifyFinal: false,
+            modelGameCount: 0,
+            refutationLines: false,
+            alternativeLines: false,
+            engineTailPlies: 0,
+          ),
+          repertoireFilePath: path,
+          buildRootFen: kStandardStartFen,
+          lineMovePrefix: const [],
+          repertoireStartFen: kStandardStartFen,
+          existingTree: _completedTree(),
+          onPublished: (receipt) async {
+            expect(documents.saves, hasLength(1));
+            expect(receipt.content, documents.current.content);
+            saved.add(receipt);
+            await Future<void>.delayed(Duration.zero);
+            if (refreshFails) throw StateError('decode unavailable');
+          },
+        ),
+      );
+      expect(controller.isGenerating, isFalse);
+      expect(documents.saves, hasLength(1));
+      if (conflict) {
+        expect(job.status, JobStatus.failed);
+        expect(controller.lastError, contains('manifest.json'));
+        expect(saved, isEmpty);
+        expect(documents.current.content, 'external edit');
+        expect(
+          storage.files.keys.any((path) => path.endsWith('_tree.json')),
+          isFalse,
+        );
+      } else if (refreshFails) {
+        expect(job.status, JobStatus.failed);
+        expect(controller.lastError, contains('Generated PGN saved'));
+        expect(controller.lastError, contains('could not refresh'));
+        expect(saved, hasLength(1));
+        expect(documents.current.content, contains('e4'));
+      } else {
+        expect(controller.lastError, isNull);
+        expect(job.status, JobStatus.completed);
+        expect(saved, isNotEmpty);
+        expect(documents.current.content, contains('e4'));
+      }
+    });
   }
 }

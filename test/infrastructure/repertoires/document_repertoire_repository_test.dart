@@ -83,18 +83,23 @@ void main() {
         '[Event "Edited"]\n\n1. e4 e5 {mine} *',
         expectedContent: first,
       );
-      expect(saved, contains('[LineID "one"]'));
-      expect(saved, contains('[Custom "keep"]'));
+      expect(saved!.linePgn, contains('[LineID "one"]'));
+      expect(saved.linePgn, contains('[Custom "keep"]'));
       expect(store.current.content, startsWith('// Preserve banner'));
       expect(store.current.content, contains(other));
-      expect(saved, splitRepertoireDocument(store.current.content).games.first);
+      expect(
+        saved.linePgn,
+        splitRepertoireDocument(store.current.content).games.first,
+      );
+      expect(saved.documentPgn, store.current.content);
+      expect(saved.lineIndex, 0);
       final next = await repository.updateLineContent(
         '/main.pgn',
         'one',
-        saved!.replaceFirst('{mine}', '{next}'),
-        expectedContent: saved,
+        saved.linePgn.replaceFirst('{mine}', '{next}'),
+        expectedContent: saved.linePgn,
       );
-      expect(next, contains('{next}'));
+      expect(next!.linePgn, contains('{next}'));
     },
   );
 
@@ -151,18 +156,18 @@ void main() {
       final next = await repository.updateLineContent(
         '/main.pgn',
         id,
-        saved!.replaceFirst('Nf3', 'Nf3 {later edit}'),
-        expectedContent: saved,
+        saved!.linePgn.replaceFirst('Nf3', 'Nf3 {later edit}'),
+        expectedContent: saved.linePgn,
       );
-      expect(next, contains('{later edit}'));
+      expect(next!.linePgn, contains('{later edit}'));
       expect(store.saves, hasLength(2));
-      store.current = snapshot('$next\n\n$next');
+      store.current = snapshot('${next.linePgn}\n\n${next.linePgn}');
       await expectLater(
         repository.updateLineContent(
           '/main.pgn',
           id,
           game,
-          expectedContent: next!,
+          expectedContent: next.linePgn,
         ),
         throwsA(isA<AtomicWriteConflict>()),
       );

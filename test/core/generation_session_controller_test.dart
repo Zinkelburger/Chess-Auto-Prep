@@ -185,7 +185,7 @@ void main() {
           buildRootFen: kStandardStartFen,
           lineMovePrefix: const [],
           repertoireStartFen: kStandardStartFen,
-          onLinesSaved: (_) {},
+          onPublished: (_) {},
           existingTree: _smallTree(rootFen: _fenAfterE4),
         );
 
@@ -326,7 +326,7 @@ void main() {
             lineMovePrefix: const [],
             repertoireStartFen: kStandardStartFen,
             existingTree: _smallTree(),
-            onLinesSaved: (_) => fail('Cancelled run published lines'),
+            onPublished: (_) => fail('Cancelled run published lines'),
           );
           await controller.startBuild(request);
           expect(controller.isGenerating, isFalse);
@@ -442,7 +442,7 @@ void main() {
           buildRootFen: kStandardStartFen,
           lineMovePrefix: const [],
           repertoireStartFen: kStandardStartFen,
-          onLinesSaved: (_) {},
+          onPublished: (_) {},
         );
 
     /// Lets the pipeline run until [ready], without a real clock.
@@ -547,7 +547,7 @@ void main() {
           buildRootFen: kStandardStartFen,
           lineMovePrefix: const [],
           repertoireStartFen: kStandardStartFen,
-          onLinesSaved: (_) {},
+          onPublished: (_) {},
           existingTree: _smallTree(rootFen: _fenAfterE4),
         );
         await controller.startBuild(request);

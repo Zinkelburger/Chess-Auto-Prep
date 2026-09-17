@@ -32,7 +32,7 @@ class MemoryDocuments implements RepertoireDocumentRepository {
   }
 
   @override
-  Future<String?> updateLineContent(
+  Future<RepertoireLineSaveReceipt?> updateLineContent(
     String path,
     String lineId,
     String content, {
@@ -41,7 +41,7 @@ class MemoryDocuments implements RepertoireDocumentRepository {
     if (failure case final error?) throw error;
     if (files[path] != expectedContent) return null;
     files[path] = content;
-    return content;
+    return (documentPgn: content, linePgn: content, lineIndex: 0);
   }
 
   @override

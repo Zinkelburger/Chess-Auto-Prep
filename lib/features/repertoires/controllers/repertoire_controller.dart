@@ -15,6 +15,7 @@ import '../../../models/opening_tree.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../../../utils/san_token_utils.dart';
+import '../../documents/models/pgn_document.dart';
 import '../models/repertoire_metadata.dart';
 import '../repositories/repertoire_decoder.dart';
 import '../repositories/repertoire_document_repository.dart';
@@ -246,9 +247,8 @@ class RepertoireController
     updateTree: updateTree,
     notify: notify,
   );
-  void appendNewLines(
-    Iterable<({List<String> moves, String title, String pgn})> entries,
-  ) => _document.appendNewLines(entries);
+  Future<void> Function(PgnSnapshot) get publishedDocumentReceiver =>
+      _document.publishedDocumentReceiver;
   void appendMoveToExistingLine(
     List<String> prefix,
     String newMove, {
