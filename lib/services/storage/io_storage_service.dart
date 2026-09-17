@@ -20,7 +20,7 @@ import '../../utils/log.dart';
 import '../../utils/safe_file_name.dart';
 import '../game_store/game_store.dart';
 import '../game_store/game_store_service.dart';
-import '../training/move_attempt_store.dart';
+import '../../infrastructure/training/move_attempt_store.dart';
 import 'app_paths.dart';
 import 'file_mutation_service.dart';
 import 'pgn_game_count_cache.dart';

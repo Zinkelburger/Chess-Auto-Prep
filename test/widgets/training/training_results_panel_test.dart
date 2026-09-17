@@ -1,8 +1,8 @@
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
 import 'package:chess_auto_prep/services/repertoire_review_service.dart';
-import 'package:chess_auto_prep/services/training/training_phase.dart';
+import 'package:chess_auto_prep/features/training/models/training_phase.dart';
 import 'package:chess_auto_prep/widgets/training/training_results_panel.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';

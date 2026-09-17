@@ -19,6 +19,9 @@
 ///    and no tree.
 library;
 
+import 'package:chess_auto_prep/features/training/repositories/training_answers.dart';
+import '../../features/training/repositories/training_source_repository.dart';
+
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart' show debugPrint, listEquals;
@@ -28,44 +31,17 @@ import '../../models/repertoire_line.dart';
 import '../../features/repertoires/models/repertoire_metadata.dart';
 import '../../models/repertoire_move_progress.dart';
 import '../../models/repertoire_review_entry.dart' show RepertoireReviewEntry;
-import '../asked_questions_store.dart';
-import '../generation/tree_my_ease.dart' show computeLinePlayability;
-import '../generation/tree_serialization.dart' show deserializeTree;
-import '../line_metrics_helpers.dart' show walkTreeForLine;
-import '../repertoire_review_service.dart';
-import '../repertoire_service.dart';
-import '../storage/storage_factory.dart';
-import '../storage/storage_service.dart';
+import '../../services/asked_questions_store.dart';
+import '../../services/generation/tree_my_ease.dart'
+    show computeLinePlayability;
+import '../../services/generation/tree_serialization.dart' show deserializeTree;
+import '../../services/line_metrics_helpers.dart' show walkTreeForLine;
+import '../../services/repertoire_review_service.dart';
+import '../../services/repertoire_service.dart';
+import '../../services/storage/storage_factory.dart';
+import '../../services/storage/storage_service.dart';
 
-/// Everything a training session needs from a freshly loaded source.
-class LoadedTrainingSource {
-  const LoadedTrainingSource({
-    required this.lines,
-    required this.reviewByLine,
-    required this.moveProgress,
-    required this.otherRepertoires,
-    required this.isFolder,
-  });
-
-  /// Parsed lines in file order. Empty when the source holds nothing to train.
-  final List<RepertoireLine> lines;
-
-  /// Review entries keyed by [RepertoireLine.id], synced and already saved.
-  final Map<String, RepertoireReviewEntry> reviewByLine;
-
-  /// Per-move streaks keyed `"<lineId>:<moveIndex>"`.
-  final Map<String, RepertoireMoveProgress> moveProgress;
-
-  /// Stored entries belonging to sources other than this one.
-  final List<RepertoireReviewEntry> otherRepertoires;
-
-  /// True when the source was a folder of chapter files. Folders and studies
-  /// have no generated tree, so [TrainingSourceLoader.playabilityFromTree]
-  /// only applies to a single repertoire file.
-  final bool isFolder;
-}
-
-class TrainingSourceLoader {
+class TrainingSourceLoader implements TrainingSourceRepository {
   TrainingSourceLoader({
     required this.repertoireService,
     required this.reviewService,
@@ -86,6 +62,7 @@ class TrainingSourceLoader {
   /// reports the load was superseded the loader stops and returns null
   /// without writing anything further. [onStatus] hears what the loader is
   /// doing, in words the owner can show under its spinner.
+  @override
   Future<LoadedTrainingSource?> load(
     RepertoireMetadata source, {
     required bool isStudy,
@@ -195,6 +172,7 @@ class TrainingSourceLoader {
   /// first queue is not held up by decoding a multi-MB tree. [isStale] is
   /// polled between the file read and the decode so a superseded load does
   /// not spin up an isolate for nothing.
+  @override
   Future<Map<String, double>> playabilityFromTree(
     String filePath,
     List<RepertoireLine> lines, {

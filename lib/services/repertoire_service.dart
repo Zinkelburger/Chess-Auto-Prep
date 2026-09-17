@@ -27,7 +27,7 @@ import 'repertoire_file_editor.dart';
 import '../chess_core/pgn/repertoire_line_ids.dart';
 import 'storage/storage_factory.dart';
 import 'storage/storage_service.dart';
-import 'training/chapter_layout.dart' show ChapterSummary;
+import '../features/training/models/chapter_layout.dart' show ChapterSummary;
 
 /// A game cut from a chapter file and parsed once: the parse tree, the raw
 /// text it came from, and its position in the file.

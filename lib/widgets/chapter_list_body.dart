@@ -24,7 +24,7 @@ import '../features/repertoires/models/repertoire_metadata.dart';
 import '../chess_core/pgn/pgn_text.dart' as pgn;
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
-import '../services/training/chapter_layout.dart' show ChapterSummary;
+import '../features/training/models/chapter_layout.dart' show ChapterSummary;
 import '../design_system/theme/workspace_theme.dart';
 import '../design_system/theme/app_typography.dart';
 import '../utils/app_messages.dart';

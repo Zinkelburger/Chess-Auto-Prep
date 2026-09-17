@@ -1,4 +1,5 @@
-import 'package:chess_auto_prep/models/training_settings.dart';
+import 'package:chess_auto_prep/infrastructure/training/preferences_training_settings.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
 import 'package:chess_auto_prep/widgets/training/training_settings_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +28,7 @@ void main() {
         home: Scaffold(
           body: StatefulBuilder(
             builder: (context, setState) => TrainingSettingsPanel(
+              saveSettings: () => PreferencesTrainingSettings().save(settings),
               settings: settings,
               trainingMode: TrainingMode.repertoire,
               repetitionMode: repetition,
@@ -68,8 +70,8 @@ void main() {
     );
     await tester.enterText(find.byKey(const Key('training-depth')), '8');
     await tester.pumpAndSettle();
-    expect((await TrainingSettings.load()).newLinesPerSession, 12);
-    expect((await TrainingSettings.load()).trainingDepth, 8);
+    expect((await PreferencesTrainingSettings().load()).newLinesPerSession, 12);
+    expect((await PreferencesTrainingSettings().load()).trainingDepth, 8);
     expect(tester.takeException(), isNull);
   });
 

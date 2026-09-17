@@ -3,52 +3,54 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../features/repertoires/controllers/repertoire_controller.dart';
-import '../../models/line_status.dart';
-import '../../models/repertoire_line.dart';
-import '../../features/repertoires/models/repertoire_metadata.dart';
-import '../../models/repertoire_move_progress.dart';
-import '../../models/repertoire_review_entry.dart'
+import '../../repertoires/controllers/repertoire_controller.dart';
+import '../../../models/line_status.dart';
+import '../../../models/repertoire_line.dart';
+import '../../repertoires/models/repertoire_metadata.dart';
+import '../../../models/repertoire_move_progress.dart';
+import '../../../models/repertoire_review_entry.dart'
     show RepertoireReviewEntry, ReviewRating;
-import '../../models/completed_move.dart';
-import '../../models/training_settings.dart';
-import '../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
-import '../../utils/safe_change_notifier.dart';
-import '../asked_questions_store.dart';
-import '../repertoire_review_service.dart';
-import '../repertoire_service.dart';
-import 'chapter_layout.dart';
+import '../../../models/completed_move.dart';
+import '../models/training_settings.dart';
+import '../../../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
+import '../../../utils/safe_change_notifier.dart';
+import '../repositories/training_answers.dart';
+import '../repositories/training_review_repository.dart';
+import '../repositories/training_settings_repository.dart';
+import '../models/chapter_layout.dart';
 import 'drill_phase.dart';
-import 'move_display.dart';
-export 'move_display.dart' show MoveDisplayInfo;
-import 'move_validation.dart' as validation;
+import '../models/move_display.dart';
+export '../models/move_display.dart' show MoveDisplayInfo;
+import '../models/move_validation.dart' as validation;
 import 'chapter_scope.dart';
 import 'learn_phase.dart';
 import 'replay_phase.dart';
 import 'review_progress_store.dart';
-import 'training_phase.dart';
+import '../models/training_phase.dart';
 import 'training_run.dart';
-import 'training_source_loader.dart';
-import 'training_window.dart';
+import '../repositories/training_source_repository.dart';
+import '../models/training_window.dart';
 
 /// Manages repertoire training session state: phases, line queue, move validation,
 /// progress persistence, and session statistics.
 class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
-  final RepertoireService repertoireService;
-  final RepertoireReviewService reviewService;
+  final TrainingHeaderRepository headers;
+  final TrainingSourceRepository _loader;
+  final TrainingSettingsRepository configuration;
+  final TrainingReviewRepository reviewService;
 
   /// Remembers the ask-once prompts (currently "sort into chapters?") so a
   /// file is never asked twice.
-  final AskedQuestionsStore askedQuestions;
+  final TrainingAnswers askedQuestions;
 
   TrainingSessionController({
     required this.session,
-    RepertoireService? repertoireService,
-    RepertoireReviewService? reviewService,
-    AskedQuestionsStore? askedQuestions,
-  }) : repertoireService = repertoireService ?? RepertoireService(),
-       reviewService = reviewService ?? RepertoireReviewService(),
-       askedQuestions = askedQuestions ?? AskedQuestionsStore() {
+    required this.headers,
+    required TrainingSourceRepository source,
+    required this.configuration,
+    required this.reviewService,
+    required this.askedQuestions,
+  }) : _loader = source {
     session.addListener(_onSessionChanged);
     learn = LearnPhase(this);
     replay = ReplayPhase(this);
@@ -65,13 +67,6 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// The quiz itself: opponent moves play, the user answers theirs.
   late final DrillPhase drill;
 
-  /// Parses the source and syncs its review state; see [loadRepertoire].
-  late final TrainingSourceLoader _loader = TrainingSourceLoader(
-    repertoireService: repertoireService,
-    reviewService: reviewService,
-    askedQuestions: askedQuestions,
-  );
-
   final RepertoireController session;
 
   // -- Data --
@@ -83,9 +78,15 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// user is looking at right now.
   late final ReviewProgressStore progress = ReviewProgressStore(
     reviewService: reviewService,
-    repertoireService: repertoireService,
+    headers: headers,
     settings: () => settings,
     repertoireId: () => repertoireId,
+    onError: (failure) {
+      if (_disposed) return;
+      _retryFailure = progress.flushHeaders;
+      error = 'Could not mirror training progress: $failure';
+      notifyListeners();
+    },
   );
 
   Map<String, RepertoireReviewEntry> get reviewMap => progress.byLine;
@@ -194,6 +195,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   /// Transition to idle (no repertoire loaded, not loading).
   void setIdle() {
+    _cancelSourceWork();
     isLoading = false;
     error = null;
     notifyListeners();
@@ -242,6 +244,9 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _settingsGeneration++;
+    chapterScope.cancelPending();
     _loadGeneration++;
     _lineGeneration++;
     learn.cancelPending();
@@ -254,12 +259,58 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     super.dispose();
   }
 
+  int _settingsGeneration = 0;
+  bool _disposed = false;
+
   Future<void> loadSettings() async {
-    settings = await TrainingSettings.load();
+    final generation = ++_settingsGeneration;
+    final loaded = await configuration.load();
+    if (_disposed || generation != _settingsGeneration) return;
+    settings = loaded;
     notifyListeners();
   }
 
+  Future<void> Function()? _retryFailure;
+
+  Future<void> retryFailure() async {
+    final retry = _retryFailure;
+    _retryFailure = null;
+    error = null;
+    notifyListeners();
+    if (retry != null) {
+      await retry();
+    } else {
+      await loadRepertoire();
+    }
+  }
+
+  void _cancelSourceWork() {
+    _retryFailure = null;
+    error = null;
+    _loadGeneration++;
+    _lineGeneration++;
+    learn.cancelPending();
+    chapterScope.cancelPending();
+    currentLine = null;
+    waitingForUser = false;
+    run.clear();
+    runComplete = false;
+  }
+
+  Future<void> saveSettings() async {
+    final generation = ++_settingsGeneration;
+    try {
+      await configuration.save(settings.snapshot());
+    } catch (e) {
+      if (_disposed || generation != _settingsGeneration) return;
+      _retryFailure = saveSettings;
+      error = 'Could not save training settings: $e';
+      notifyListeners();
+    }
+  }
+
   void setRepertoire(RepertoireMetadata? value) {
+    _cancelSourceWork();
     repertoire = value;
     sourceIsStudy = false;
     trainingMode = TrainingMode.repertoire;
@@ -271,6 +322,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// (start FEN + solution mainline).  Defaults to tactics mode with linear
   /// repetition; both stay user-switchable.
   void setStudySource(RepertoireMetadata value) {
+    _cancelSourceWork();
     repertoire = value;
     sourceIsStudy = true;
     trainingMode = TrainingMode.tactics;
@@ -300,9 +352,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
     if (sourceIsStudy || colorOverrideIsWhite == isWhite) return;
     colorOverrideIsWhite = isWhite;
     final filePath = repertoire?.filePath;
-    // Reload before the write: the user should see the board flip now, not
-    // after a file round-trip.
-    final reloaded = loadRepertoire();
+    final generation = _loadGeneration;
     if (filePath != null) {
       if (isWhite == null) {
         await askedQuestions.forget(
@@ -318,7 +368,12 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
         );
       }
     }
-    await reloaded;
+    if (_disposed ||
+        generation != _loadGeneration ||
+        repertoire?.filePath != filePath) {
+      return;
+    }
+    await loadRepertoire();
   }
 
   /// Switch between spaced repetition and linear scheduling.  Rebuilds the
@@ -365,13 +420,14 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       final filePath = source.filePath;
       // A hand-set colour beats everything: it exists precisely because the
       // file and the inference between them got it wrong.
-      colorOverrideIsWhite = loadIsStudy
+      final loadedColor = loadIsStudy
           ? null
           : await askedQuestions.boolAnswerFor(
               AskedQuestion.trainingColor,
               subject: filePath,
             );
       if (stale()) return;
+      colorOverrideIsWhite = loadedColor;
       final loaded = await _loader.load(
         source,
         isStudy: loadIsStudy,
@@ -383,7 +439,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
           notifyListeners();
         },
       );
-      if (loaded == null) return;
+      if (stale() || loaded == null) return;
       if (loaded.lines.isEmpty) {
         error = loadIsStudy
             ? 'No chapters with moves to train.'
@@ -468,6 +524,7 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// rebuild and repaint if it says something changed".
   late final ChapterScope chapterScope = ChapterScope(
     askedQuestions: askedQuestions,
+    saveSettings: configuration.save,
     settings: () => settings,
     lines: () => lines,
     sourceIsStudy: () => sourceIsStudy,
@@ -910,15 +967,29 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   /// but no spaced-repetition scheduling (the line stays "new" for SRS).
   Future<void> _recordLinearCompletion() async {
     final line = currentLine;
-    if (line == null) return;
+    if (line == null || _linearCompletionGeneration == _lineGeneration) return;
+    final generation = _lineGeneration;
+    _linearCompletionGeneration = generation;
     _linearDone.add(line.id);
     // Drop the finished line from the queue synchronously so the results
     // panel's remaining count (and set-complete detection) are accurate.
     dueQueue = _buildQueue();
 
     final hadMistake = lineHadMistake;
+    try {
+      await progress.recordCompletion(line, hadMistake: hadMistake);
+    } catch (e) {
+      if (_disposed || generation != _lineGeneration) return;
+      _linearCompletionGeneration = null;
+      _linearDone.remove(line.id);
+      dueQueue = _buildQueue();
+      _retryFailure = _recordLinearCompletion;
+      error = 'Could not save completion: $e';
+      notifyListeners();
+      return;
+    }
+    if (_disposed || generation != _lineGeneration) return;
     _tallySessionResult(hadMistake: hadMistake);
-    await progress.recordCompletion(line, hadMistake: hadMistake);
     notifyListeners();
   }
 
@@ -941,12 +1012,23 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
   }
 
   bool _ratingInFlight = false;
+  int? _ratedGeneration;
+  int? _linearCompletionGeneration;
 
   Future<void> rateLine(ReviewRating rating) async {
-    if (_ratingInFlight) return;
+    if (_disposed || _ratingInFlight || _ratedGeneration == _lineGeneration) {
+      return;
+    }
     _ratingInFlight = true;
+    final generation = _lineGeneration;
     try {
       await _recordLineRating(rating);
+    } catch (e) {
+      if (!_disposed && generation == _lineGeneration) {
+        _retryFailure = () => rateLine(rating);
+        error = 'Could not save rating: $e';
+        notifyListeners();
+      }
     } finally {
       _ratingInFlight = false;
     }
@@ -962,8 +1044,11 @@ class TrainingSessionController extends ChangeNotifier with SafeChangeNotifier {
       return;
     }
 
+    final generation = _lineGeneration;
     final hadMistake = lineHadMistake;
     await progress.recordRating(line, rating, hadMistake: hadMistake);
+    if (_disposed || generation != _lineGeneration) return;
+    _ratedGeneration = generation;
     // This line has already been corrected; a low rating schedules another
     // review, rather than mixing an old line into this learning run.
     run.skip(line.id);

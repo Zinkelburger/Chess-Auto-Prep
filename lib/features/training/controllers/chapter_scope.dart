@@ -8,7 +8,7 @@
 ///     declined chapters for this file.
 ///  2. *Does this file look chapter-organised?* — [detectChapterLayout] plus
 ///     the once-per-file "sort into chapters?" answer stored in
-///     [AskedQuestionsStore].
+///     [TrainingAnswers].
 ///  3. *What is training scoped to right now?* — [activeChapter].
 ///
 /// Deliberately knows nothing about queues, notification, or persistence of
@@ -17,20 +17,23 @@
 /// rebuild and notify.
 library;
 
-import '../../models/repertoire_line.dart';
-import '../../models/training_settings.dart';
-import '../asked_questions_store.dart';
-import 'chapter_layout.dart';
+import 'package:chess_auto_prep/features/training/repositories/training_answers.dart';
+
+import '../../../models/repertoire_line.dart';
+import '../models/training_settings.dart';
+import '../models/chapter_layout.dart';
 
 class ChapterScope {
   ChapterScope({
     required this.askedQuestions,
+    required this.saveSettings,
     required this._settings,
     required this._lines,
     required this._sourceIsStudy,
   });
 
-  final AskedQuestionsStore askedQuestions;
+  final TrainingAnswers askedQuestions;
+  final Future<void> Function(TrainingSettings) saveSettings;
 
   /// Read through suppliers rather than held copies: the owner reassigns its
   /// `settings` and `lines` fields wholesale (a settings reload, a new file),
@@ -184,6 +187,7 @@ class ChapterScope {
   /// The chapter grouping source changed — the old filter may not exist under
   /// the new scheme, so drop it and re-detect.
   void onSettingsChanged() {
+    cancelPending();
     activeChapter = null;
     // The delimiter feeds name-prefix detection, so what the file *could* be
     // grouped by can change with the setting.
@@ -191,6 +195,9 @@ class ChapterScope {
         ? null
         : detectChapterLayout(lines, delimiter: settings.chapterDelimiter);
   }
+
+  int _generation = 0;
+  void cancelPending() => _generation++;
 
   /// Work out whether this newly loaded file looks chapter-organised, and
   /// whether the user has already answered for it. Clears the active filter,
@@ -200,6 +207,7 @@ class ChapterScope {
   /// caller runs across awaits and a concurrent handoff can flip the live
   /// field underneath it, so the load must decide from its own snapshot.
   Future<void> resolveLayout(String filePath, {required bool isStudy}) async {
+    final generation = ++_generation;
     activeChapter = null;
     declined = false;
     pendingPrompt = null;
@@ -217,6 +225,7 @@ class ChapterScope {
       AskedQuestion.chapterLayout,
       subject: filePath,
     );
+    if (generation != _generation) return;
     if (stored == false) {
       declined = true;
       return;
@@ -239,6 +248,7 @@ class ChapterScope {
     if (layout != null && (pendingPrompt != null || !names.contains(chapter))) {
       pendingPrompt = layout;
       await answerPrompt(true, filePath: filePath);
+      if (layout != _detectedLayout) return false;
     }
     if (!names.contains(chapter)) return false;
     activeChapter = chapter;
@@ -248,7 +258,7 @@ class ChapterScope {
   Future<void> _applyMode(ChapterGroupingMode mode) async {
     if (settings.chapterGrouping == mode) return;
     settings.chapterGrouping = mode;
-    await settings.save();
+    await saveSettings(settings);
   }
 
   /// Answer the "sort into chapters?" prompt. The choice is remembered per
@@ -266,6 +276,7 @@ class ChapterScope {
     required String? filePath,
     void Function()? onApplied,
   }) async {
+    final generation = ++_generation;
     final proposal = pendingPrompt;
     pendingPrompt = null;
     declined = !useChapters;
@@ -273,6 +284,7 @@ class ChapterScope {
     if (useChapters && proposal != null) {
       await _applyMode(proposal.mode);
     }
+    if (generation != _generation) return;
     onApplied?.call();
     if (filePath == null) return;
     await askedQuestions.record(

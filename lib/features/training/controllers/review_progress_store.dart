@@ -13,25 +13,28 @@ library;
 
 import 'dart:async';
 
-import '../../models/repertoire_line.dart';
-import '../../models/repertoire_move_progress.dart';
-import '../../models/repertoire_review_entry.dart'
+import '../../../models/repertoire_line.dart';
+import '../../../models/repertoire_move_progress.dart';
+import '../../../models/repertoire_review_entry.dart'
     show RepertoireReviewEntry, ReviewRating;
-import '../../models/repertoire_review_history_entry.dart';
-import '../../models/training_settings.dart';
-import '../repertoire_review_service.dart';
-import '../repertoire_service.dart';
+import '../../../models/repertoire_review_history_entry.dart';
+import '../models/training_settings.dart';
+import '../repositories/training_review_repository.dart';
 
 class ReviewProgressStore {
   ReviewProgressStore({
     required this.reviewService,
-    required this.repertoireService,
+    required this.headers,
     required this._settings,
     required this._repertoireId,
-  });
+    this.onError,
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now;
 
-  final RepertoireReviewService reviewService;
-  final RepertoireService repertoireService;
+  final DateTime Function() _now;
+  final void Function(Object)? onError;
+  final TrainingReviewRepository reviewService;
+  final TrainingHeaderRepository headers;
 
   /// Read through suppliers: the owner reassigns its settings object on a
   /// reload and its repertoire id on every source change.
@@ -66,47 +69,59 @@ class ReviewProgressStore {
   static const headerFlushDelay = Duration(seconds: 4);
 
   Timer? _headerFlushTimer;
-  final Map<String, RepertoireReviewEntry> _pendingHeaders = {};
-
-  /// The file [_pendingHeaders] belong to — not necessarily the one loaded
-  /// now, so a source switch flushes them where they came from.
-  String? _pendingHeadersPath;
+  final Map<String, Map<String, RepertoireReviewEntry>> _pendingHeaders = {};
+  Future<void>? _headerFlush;
+  bool _disposed = false;
 
   void _queueHeaderWrite(
     String sourcePath,
     String lineId,
     RepertoireReviewEntry entry,
   ) {
-    if (_pendingHeadersPath != null && _pendingHeadersPath != sourcePath) {
-      unawaited(flushHeaders());
-    }
-    _pendingHeadersPath = sourcePath;
-    _pendingHeaders[lineId] = entry;
+    (_pendingHeaders[sourcePath] ??= {})[lineId] = entry;
     _headerFlushTimer?.cancel();
-    _headerFlushTimer = Timer(
-      headerFlushDelay,
-      () => unawaited(flushHeaders()),
+    if (_disposed) {
+      unawaited(flushHeaders());
+    } else {
+      _headerFlushTimer = Timer(
+        headerFlushDelay,
+        () => unawaited(flushHeaders()),
+      );
+    }
+  }
+
+  /// Failed mirrors remain pending; the authoritative CSV outcome is preserved.
+  Future<void> flushHeaders() {
+    _headerFlushTimer?.cancel();
+    _headerFlushTimer = null;
+    return _headerFlush ??= _flushHeaders().whenComplete(
+      () => _headerFlush = null,
     );
   }
 
-  /// Write any deferred schedules into the PGN. Call when a run ends or the
-  /// source changes; harmless when there is nothing pending.
-  Future<void> flushHeaders() async {
-    _headerFlushTimer?.cancel();
-    _headerFlushTimer = null;
-    final path = _pendingHeadersPath;
-    final batch = Map.of(_pendingHeaders);
-    _pendingHeaders.clear();
-    _pendingHeadersPath = null;
-    // No file (nothing loaded) means nothing to mirror into; the reviews CSV
-    // already holds the schedule either way.
-    if (path == null || path.isEmpty || batch.isEmpty) return;
-    await repertoireService.files.updateManyLineReviewHeaders(path, batch);
+  Future<void> _flushHeaders() async {
+    while (_pendingHeaders.isNotEmpty) {
+      final path = _pendingHeaders.keys.first;
+      final batch = Map<String, RepertoireReviewEntry>.of(
+        _pendingHeaders[path]!,
+      );
+      try {
+        if (path.isNotEmpty &&
+            !await headers.updateManyLineReviewHeaders(path, batch)) {
+          throw StateError('Training source could not be updated: $path');
+        }
+      } catch (e) {
+        onError?.call(e);
+        return;
+      }
+      final pending = _pendingHeaders[path]!;
+      pending.removeWhere((key, value) => identical(batch[key], value));
+      if (pending.isEmpty) _pendingHeaders.remove(path);
+    }
   }
 
-  /// Stop the pending flush timer. The batch itself is dropped: the CSV
-  /// already has it, and a disposed store has no business writing files.
   void dispose() {
+    _disposed = true;
     _headerFlushTimer?.cancel();
     _headerFlushTimer = null;
   }
@@ -138,6 +153,12 @@ class ReviewProgressStore {
     String sessionType = 'trainer',
   }) async {
     final sourcePath = line.sourcePath ?? repertoireId;
+    final pending = _outcomes[_outcomeKey(sourcePath, line)];
+    if (pending != null) {
+      await _resumeOutcome(pending);
+      _queueHeaderWrite(sourcePath, line.persistedId, pending.updated);
+      return pending.updated;
+    }
     final existing = byLine[line.id] ?? _freshEntry(line);
     final updated = reviewService
         .applyRating(existing, rating)
@@ -170,6 +191,11 @@ class ReviewProgressStore {
     String sessionType = 'linear',
   }) async {
     final sourcePath = line.sourcePath ?? repertoireId;
+    final pending = _outcomes[_outcomeKey(sourcePath, line)];
+    if (pending != null) {
+      await _resumeOutcome(pending);
+      return;
+    }
     final existing = byLine[line.id] ?? _freshEntry(line);
     byLine[line.id] = existing.copyWith(
       passCount: hadMistake ? existing.passCount : existing.passCount + 1,
@@ -194,22 +220,46 @@ class ReviewProgressStore {
     required bool hadMistake,
     required String sessionType,
   }) async {
-    // Both writes belong to the source that completed the line. A source
-    // switch can replace these maps while the first write is in flight.
-    final savedReviews = byLine.values.toList();
-    final savedMoves = moveProgress.values.toList();
-    await reviewService.saveAll(savedReviews, repertoireId: sourcePath);
-    await reviewService.saveMoveProgress(savedMoves, repertoireId: sourcePath);
-    await reviewService.appendHistory([
-      RepertoireReviewHistoryEntry(
+    final outcome = _TrainingOutcome(
+      key: _outcomeKey(sourcePath, line),
+      sourcePath: sourcePath,
+      updated: byLine[line.id]!,
+      reviews: byLine.values.toList(),
+      moves: moveProgress.values.toList(),
+      history: RepertoireReviewHistoryEntry(
         repertoireId: sourcePath,
         lineId: line.persistedId,
-        timestampUtc: DateTime.now().toUtc(),
+        timestampUtc: _now().toUtc(),
         rating: rating,
         hadMistake: hadMistake,
         sessionType: sessionType,
       ),
-    ]);
+    );
+    _outcomes[outcome.key] = outcome;
+    await _resumeOutcome(outcome);
+  }
+
+  final Map<String, _TrainingOutcome> _outcomes = {};
+  String _outcomeKey(String sourcePath, RepertoireLine line) =>
+      '${sourcePath.length}:$sourcePath${line.persistedId}';
+
+  Future<void> _resumeOutcome(_TrainingOutcome outcome) async {
+    if (!outcome.reviewsSaved) {
+      await reviewService.saveAll(
+        outcome.reviews,
+        repertoireId: outcome.sourcePath,
+      );
+      outcome.reviewsSaved = true;
+    }
+    if (!outcome.movesSaved) {
+      await reviewService.saveMoveProgress(
+        outcome.moves,
+        repertoireId: outcome.sourcePath,
+      );
+      outcome.movesSaved = true;
+    }
+    await reviewService.appendHistory([outcome.history]);
+    _outcomes.remove(outcome.key);
   }
 
   Future<void> setExcluded(RepertoireLine line, bool excluded) async {
@@ -275,7 +325,7 @@ class ReviewProgressStore {
     Set<String>? within,
     void Function()? onApplied,
   }) async {
-    final now = DateTime.now().toUtc();
+    final now = _now().toUtc();
     final history = <RepertoireReviewHistoryEntry>[];
     final headerUpdates = <String, RepertoireReviewEntry>{};
     int seeded = 0;
@@ -336,10 +386,7 @@ class ReviewProgressStore {
     // Fold in anything still waiting so the two writes cannot race for the
     // same file, then write once.
     await flushHeaders();
-    await repertoireService.files.updateManyLineReviewHeaders(
-      sourcePath,
-      headerUpdates,
-    );
+    await headers.updateManyLineReviewHeaders(sourcePath, headerUpdates);
     return headerUpdates.length;
   }
 
@@ -395,4 +442,24 @@ class ReviewProgressStore {
         lineId: line.persistedId,
         lineName: line.name,
       );
+}
+
+/// A retry resumes only failed persistence stages, without applying SM-2 twice.
+class _TrainingOutcome {
+  _TrainingOutcome({
+    required this.key,
+    required this.sourcePath,
+    required this.updated,
+    required this.reviews,
+    required this.moves,
+    required this.history,
+  });
+  final String key;
+  final String sourcePath;
+  final RepertoireReviewEntry updated;
+  final List<RepertoireReviewEntry> reviews;
+  final List<RepertoireMoveProgress> moves;
+  final RepertoireReviewHistoryEntry history;
+  bool reviewsSaved = false;
+  bool movesSaved = false;
 }
