@@ -23,7 +23,7 @@ class _RejectingPreferences extends InMemorySharedPreferencesStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
-    'native partial save is reconciled, retained and safely retried after restart',
+    'platform adapter partial save is reconciled, retried and retained after restart',
     () async {
       SharedPreferences.setMockInitialValues({});
       final backend = _RejectingPreferences();

@@ -218,33 +218,51 @@ void main() {
     await expectLater(worker.evaluateFen('unused', 8), throwsStateError);
   });
 
-  test('queued pool provisioning and crash recovery retain captured settings', () async {
-    var config = EngineConfiguration({'engine_settings.hash_mb': 64});
-    final first = _FakeConnection()..readyGate = Completer<void>();
-    final connections = <_FakeConnection>[];
-    final pool = StockfishPool(settings: () => config, budget: engines.budget,
-      createConnection: () async { final connection = connections.isEmpty ? first : _FakeConnection(); connections.add(connection); return connection; });
-    addTearDown(pool.dispose);
-    final initial = pool.ensureWorkers(1);
-    await Future<void>.delayed(Duration.zero);
-    config = EngineConfiguration({'engine_settings.hash_mb': 128});
-    final queued = pool.ensureWorkers(1);
-    config = EngineConfiguration({'engine_settings.hash_mb': 256});
-    first.readyGate!.complete();
-    await initial;
-    await queued;
-    expect(pool.effectiveSettings.hashMb, 128);
-    expect(first.commands, contains('setoption name Hash value 128'));
-    first.crash();
-    for (var i = 0; i < 20 && connections.length < 2; i++) { await Future<void>.delayed(Duration.zero); }
-    await Future<void>.delayed(Duration.zero);
-    expect(connections, hasLength(2));
-    expect(connections.last.commands, contains('setoption name Hash value 128'));
-    expect(pool.effectiveSettings.hashMb, 128);
-    await pool.ensureWorkers(1);
-    expect(pool.effectiveSettings.hashMb, 256);
-    expect(connections.last.commands, contains('setoption name Hash value 256'));
-  });
+  test(
+    'queued pool provisioning and crash recovery retain captured settings',
+    () async {
+      var config = EngineConfiguration({'engine_settings.hash_mb': 64});
+      final first = _FakeConnection()..readyGate = Completer<void>();
+      final connections = <_FakeConnection>[];
+      final pool = StockfishPool(
+        settings: () => config,
+        budget: engines.budget,
+        createConnection: () async {
+          final connection = connections.isEmpty ? first : _FakeConnection();
+          connections.add(connection);
+          return connection;
+        },
+      );
+      addTearDown(pool.dispose);
+      final initial = pool.ensureWorkers(1);
+      await Future<void>.delayed(Duration.zero);
+      config = EngineConfiguration({'engine_settings.hash_mb': 128});
+      final queued = pool.ensureWorkers(1);
+      config = EngineConfiguration({'engine_settings.hash_mb': 256});
+      first.readyGate!.complete();
+      await initial;
+      await queued;
+      expect(pool.effectiveSettings.hashMb, 128);
+      expect(first.commands, contains('setoption name Hash value 128'));
+      first.crash();
+      for (var i = 0; i < 20 && connections.length < 2; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      await Future<void>.delayed(Duration.zero);
+      expect(connections, hasLength(2));
+      expect(
+        connections.last.commands,
+        contains('setoption name Hash value 128'),
+      );
+      expect(pool.effectiveSettings.hashMb, 128);
+      await pool.ensureWorkers(1);
+      expect(pool.effectiveSettings.hashMb, 256);
+      expect(
+        connections.last.commands,
+        contains('setoption name Hash value 256'),
+      );
+    },
+  );
 
   test('pool startup failure disposes its process', () async {
     final conn = _FakeConnection()..failReady = true;

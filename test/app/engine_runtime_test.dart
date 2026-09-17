@@ -89,7 +89,10 @@ void main() {
       );
       addTearDown(settings.dispose);
       addTearDown(runtime.dispose);
-      await expectLater(runtime.lease.run(() async => runtime.pool.acquire()), throwsStateError);
+      await expectLater(
+        runtime.lease.run(() async => runtime.pool.acquire()),
+        throwsStateError,
+      );
       expect(runtime.lease.isBusy, isFalse);
       fail = false;
       final release = Completer<void>();

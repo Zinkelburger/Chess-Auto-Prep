@@ -5,12 +5,10 @@
 library;
 
 import 'engine_lifecycle.dart';
-import 'stockfish_pool.dart';
 
 class GenerationLease {
-  GenerationLease({required this.lifecycle, required this.pool});
+  GenerationLease({required this.lifecycle});
   final EngineLifecycle lifecycle;
-  final StockfishPool pool;
 
   bool _held = false;
   bool get isBusy => _held || lifecycle.state == EngineState.generating;

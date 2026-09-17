@@ -67,6 +67,63 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final executable = Platform.environment['STOCKFISH_EXECUTABLE'];
   test(
+    'native runtime retires all owned PIDs and a new lifetime starts cleanly',
+    () async {
+      await runtimeSettings.engine.edit({
+        'engine_settings.cores': 1,
+        'engine_settings.hash_mb': 16,
+      });
+      final connections = <Native>[];
+      EngineRuntime create() => EngineRuntime(
+        settings: runtimeSettings.engine,
+        createConnection: () async {
+          final connection = Native(await Process.start(executable!, []));
+          connections.add(connection);
+          return connection;
+        },
+      );
+      final first = create();
+      addTearDown(first.dispose);
+      await first.board.createSession().prepare();
+      await first.pool.ensureWorkers(1);
+      expect(connections, hasLength(2));
+      final pids = connections.map((c) => c.process.pid).toList();
+      first.dispose();
+      await Future.wait(
+        connections.map((c) => c.done),
+      ).timeout(const Duration(seconds: 5));
+      expect(first.budget.activeThreads, 0);
+      expect(first.pool.workerCount, 0);
+      expect(
+        pids.every((pid) => !Directory('/proc/$pid').existsSync()),
+        isTrue,
+      );
+      final restarted = create();
+      addTearDown(restarted.dispose);
+      final session = restarted.board.createSession();
+      await session.prepare();
+      final result = await session.discover(
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        depth: 5,
+        multiPv: 1,
+        whiteToMove: true,
+      );
+      expect(result?.lines, isNotEmpty);
+      restarted.dispose();
+      await connections.last.done.timeout(const Duration(seconds: 5));
+      expect(
+        Directory('/proc/${connections.last.process.pid}').existsSync(),
+        isFalse,
+      );
+      debugPrint(
+        'NATIVE RUNTIME: retired PIDs $pids, restarted PID ${connections.last.process.pid}, zero remaining owned processes',
+      );
+    },
+    skip: executable == null || !Platform.isLinux
+        ? 'Set STOCKFISH_EXECUTABLE on Linux for the native runtime check'
+        : false,
+  );
+  test(
     'native process pauses at zero CPU, reuses PID/config, and exits on last detach',
     () async {
       SharedPreferences.setMockInitialValues({});

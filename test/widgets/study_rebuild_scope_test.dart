@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import '../support/runtime_settings.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
@@ -18,7 +20,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/board_engine_fixture.dart';
 import '../support/study_fixture.dart';
 
+RuntimeSettings? _settings;
+RuntimeSettings get settings => _settings ??= testRuntimeSettings();
 void main() {
+  setUp(() {
+    _settings = null;
+    addTearDown(() => _settings?.dispose());
+  });
   setUp(() {
     SharedPreferences.setMockInitialValues({});
 
@@ -30,7 +38,9 @@ void main() {
     (tester) async {
       final study = memoryStudy();
       addTearDown(study.dispose);
-      await tester.pumpWidget(
+      await pumpRuntimeWidget(
+        tester,
+        settings,
         MaterialApp(
           home: Builder(
             builder: (context) => Scaffold(
@@ -62,7 +72,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Second'), findsNothing);
       expect(tester.takeException(), isNull);
-      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpRuntimeWidget(tester, settings, const SizedBox.shrink());
     },
   );
 
@@ -87,7 +97,9 @@ void main() {
       onClearVariations: (_) {},
       onDelete: (_) {},
     );
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      settings,
       MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -203,7 +215,7 @@ void main() {
     expect(board(), same(movedBoard));
     expect(engine(), same(movedEngine));
     expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpRuntimeWidget(tester, settings, const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
 }

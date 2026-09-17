@@ -1,3 +1,5 @@
+import 'package:chess_auto_prep/app/runtime_settings.dart';
+import '../support/runtime_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,7 +8,13 @@ import 'package:chess_auto_prep/models/position_analysis.dart';
 import 'package:chess_auto_prep/widgets/position_analysis_widget.dart';
 import '../support/board_engine_fixture.dart';
 
+RuntimeSettings? _settings;
+RuntimeSettings get settings => _settings ??= testRuntimeSettings();
 void main() {
+  setUp(() {
+    _settings = null;
+    addTearDown(() => _settings?.dispose());
+  });
   setUp(useScriptedBoardEngine);
 
   testWidgets(
@@ -34,8 +42,8 @@ void main() {
           ),
         ),
       );
-      await tester.pumpWidget(host(0));
-      await tester.pumpWidget(host(1));
+      await pumpRuntimeWidget(tester, settings, host(0));
+      await pumpRuntimeWidget(tester, settings, host(1));
       await tester.pumpAndSettle();
       expect(find.text('PGN'), findsNothing);
       expect(find.text('Try moves'), findsOneWidget);
@@ -57,7 +65,9 @@ void main() {
   testWidgets('stacks analysis panes cleanly on narrow layouts', (
     tester,
   ) async {
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      settings,
       const MaterialApp(
         home: Scaffold(
           body: Center(
@@ -91,7 +101,9 @@ void main() {
       );
     }
 
-    await tester.pumpWidget(
+    await pumpRuntimeWidget(
+      tester,
+      settings,
       MaterialApp(
         home: Scaffold(
           body: Center(

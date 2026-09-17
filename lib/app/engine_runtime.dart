@@ -34,7 +34,7 @@ class EngineRuntime {
       saveEnabled: (enabled) =>
           settings.edit({'engine_lifecycle.toggle_on': enabled}),
     );
-    lease = GenerationLease(lifecycle: lifecycle, pool: pool);
+    lease = GenerationLease(lifecycle: lifecycle);
   }
   late final EngineSearchBudget budget;
   late final StockfishPool pool;

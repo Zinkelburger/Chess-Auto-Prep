@@ -28,7 +28,9 @@ class SettingsSectionStatus<C extends SectionConfiguration<C>>
                 SettingsPhase.unloaded => 'Loading saved preferences…',
                 SettingsPhase.saving => 'Saving preferences…',
                 SettingsPhase.failed =>
-                  'Preferences were not saved. ${state.error}',
+                  state.draft == null
+                      ? 'Saved preferences could not be loaded.'
+                      : 'Preferences were not saved. Your changes are kept for retry.',
                 SettingsPhase.ready => policy,
               }, style: Theme.of(context).textTheme.bodySmall),
             ),

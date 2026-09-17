@@ -326,21 +326,23 @@ class _TacticsModeView extends StatelessWidget {
           create: (_) => TacticsDatabase(),
         ),
         ChangeNotifierProvider<TacticsSessionController>(
-          create: (ctx) => TacticsSessionController(
-            database: ctx.read<TacticsDatabase>(),
-            // "Accept other winning moves" asks Stockfish about a move
-            // that is not the stored answer; the session option gates it.
-            alternativeJudge: EngineAlternativeJudge(
-              evaluate: ctx.read<StockfishPool>().evaluateFen,
-              engineReady: () async {
-                if (ctx.read<EngineLifecycle>().state == EngineState.generating)
-                  return false;
-                final pool = ctx.read<StockfishPool>();
-                await pool.ensureWorkers(1);
-                return pool.workerCount > 0;
-              },
-            ).judge,
-          ),
+          create: (ctx) {
+            final pool = ctx.read<StockfishPool>();
+            final lifecycle = ctx.read<EngineLifecycle>();
+            return TacticsSessionController(
+              database: ctx.read<TacticsDatabase>(),
+              // "Accept other winning moves" asks Stockfish about a move
+              // that is not the stored answer; the session option gates it.
+              alternativeJudge: EngineAlternativeJudge(
+                evaluate: pool.evaluateFen,
+                engineReady: () async {
+                  if (lifecycle.state == EngineState.generating) return false;
+                  await pool.ensureWorkers(1);
+                  return pool.workerCount > 0;
+                },
+              ).judge,
+            );
+          },
         ),
         ChangeNotifierProvider<TacticsImportCoordinator>(
           create: (ctx) => TacticsImportCoordinator(

@@ -309,28 +309,40 @@ void main() {
     expect(h.coordinator.imports.map((p) => p.username), ['me', 'me2']);
   });
 
-  test('review captures configuration across accounts and applies edits next run', () async {
-    SharedPreferences.setMockInitialValues({});
-    await runtimeSettings.load();
-    final h = build(lichess: 'me', chesscom: 'me2');
-    addTearDown(h.games.dispose);
-    addTearDown(h.runner.dispose);
-    final originalDepth = runtimeSettings.bulk.depth;
-    final originalCores = runtimeSettings.engine.cores;
-    h.coordinator.afterImport = () async {
-      await runtimeSettings.bulk.setDepth(originalDepth + 1);
-      await runtimeSettings.engine.edit({'engine_settings.cores': 1});
-      expect(h.runner.depth, originalDepth);
-      expect(h.runner.cores, originalCores);
-    };
-    await h.runner.start();
-    expect(h.coordinator.imports.map((p) => p.depth), [originalDepth, originalDepth]);
-    expect(h.coordinator.imports.map((p) => p.cores), [originalCores, originalCores]);
-    h.coordinator.afterImport = null;
-    await h.runner.start();
-    expect(h.coordinator.imports.skip(2).map((p) => p.depth), [originalDepth + 1, originalDepth + 1]);
-    expect(h.coordinator.imports.skip(2).map((p) => p.cores), [1, 1]);
-  });
+  test(
+    'review captures configuration across accounts and applies edits next run',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      await runtimeSettings.load();
+      final h = build(lichess: 'me', chesscom: 'me2');
+      addTearDown(h.games.dispose);
+      addTearDown(h.runner.dispose);
+      final originalDepth = runtimeSettings.bulk.depth;
+      final originalCores = runtimeSettings.engine.cores;
+      h.coordinator.afterImport = () async {
+        await runtimeSettings.bulk.setDepth(originalDepth + 1);
+        await runtimeSettings.engine.edit({'engine_settings.cores': 1});
+        expect(h.runner.depth, originalDepth);
+        expect(h.runner.cores, originalCores);
+      };
+      await h.runner.start();
+      expect(h.coordinator.imports.map((p) => p.depth), [
+        originalDepth,
+        originalDepth,
+      ]);
+      expect(h.coordinator.imports.map((p) => p.cores), [
+        originalCores,
+        originalCores,
+      ]);
+      h.coordinator.afterImport = null;
+      await h.runner.start();
+      expect(h.coordinator.imports.skip(2).map((p) => p.depth), [
+        originalDepth + 1,
+        originalDepth + 1,
+      ]);
+      expect(h.coordinator.imports.skip(2).map((p) => p.cores), [1, 1]);
+    },
+  );
 
   test('with no username there is nothing to start', () {
     SharedPreferences.setMockInitialValues({});

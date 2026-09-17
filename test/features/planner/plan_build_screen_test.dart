@@ -122,7 +122,10 @@ const _blackGames = '''
 RuntimeSettings? _settings;
 RuntimeSettings get settings => _settings ??= testRuntimeSettings();
 void main() {
-  setUp(() { _settings = null; addTearDown(() => _settings?.dispose()); });
+  setUp(() {
+    _settings = null;
+    addTearDown(() => _settings?.dispose());
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -138,7 +141,9 @@ void main() {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await pumpRuntimeWidget(tester, settings,
+    await pumpRuntimeWidget(
+      tester,
+      settings,
       MaterialApp(
         home: Builder(
           builder: (context) => Scaffold(
@@ -407,7 +412,9 @@ void main() {
     tester.view.physicalSize = const Size(960, 500);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await pumpRuntimeWidget(tester, settings,
+    await pumpRuntimeWidget(
+      tester,
+      settings,
       MaterialApp(
         home: PlanBuildScreen(
           isWhite: false,
@@ -445,7 +452,9 @@ void main() {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-      await pumpRuntimeWidget(tester, settings,
+      await pumpRuntimeWidget(
+        tester,
+        settings,
         MaterialApp(
           home: PlanBuildScreen(
             isWhite: false,
