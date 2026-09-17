@@ -6,6 +6,8 @@
 /// shared [PgnViewerController].
 library;
 
+import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';

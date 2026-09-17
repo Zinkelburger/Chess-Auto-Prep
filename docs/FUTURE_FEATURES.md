@@ -89,7 +89,11 @@ parsing. Accepted Viewer filters now have a pure owner with immutable snapshots,
 latest-request acceptance, failed-query recovery and recomputation after in-place
 source edits. The slice mixin is retired; matching predicates and worker scheduling
 have separate chess-core/infrastructure homes. The full filter workspace injects
-its matcher. Legacy collection presentation/widget ownership, generation inline
+its matcher. Board orientation/fullscreen now have a pure presentation owner,
+with injected native operations, serialized intent, failure/retry and app-lifetime
+listener disposal. The last Viewer part/mixin is retired; perspective edits share
+the collection save/recovery path and preserve drill-only annotations on screen.
+Legacy collection presentation/widget ownership, generation inline
 filter wiring, remaining Builder storage/
 session ownership and draft recovery, incremental editor indexing, undo receipts, variation-cursor/panel
 restoration and complete large-document performance evidence remain pending.

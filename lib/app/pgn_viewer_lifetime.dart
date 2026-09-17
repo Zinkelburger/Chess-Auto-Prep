@@ -1,22 +1,22 @@
 import 'dart:async';
 import 'dart:io';
 
-import '../features/documents/repositories/pgn_collection_filter.dart';
-
-import '../features/documents/repositories/pgn_library_repository.dart';
-import '../features/documents/repositories/pgn_collection_decoder.dart';
-
-import '../features/documents/repositories/viewer_preferences_repository.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
-import 'package:file_picker/file_picker.dart';
+
 import '../core/pgn_viewer_controller.dart';
 import '../features/documents/controllers/workspace_recovery_controller.dart';
 import '../features/documents/models/pgn_workspace_snapshot.dart';
+import '../features/documents/repositories/desktop_fullscreen_port.dart';
+import '../features/documents/repositories/pgn_collection_decoder.dart';
+import '../features/documents/repositories/pgn_collection_filter.dart';
 import '../features/documents/repositories/pgn_collection_repository.dart';
+import '../features/documents/repositories/pgn_library_repository.dart';
+import '../features/documents/repositories/viewer_preferences_repository.dart';
 import '../features/documents/repositories/workspace_recovery_store.dart';
-import '../features/documents/widgets/pgn_copy_destination_dialog.dart';
 import '../features/documents/widgets/pgn_close_guard.dart';
+import '../features/documents/widgets/pgn_copy_destination_dialog.dart';
 import '../infrastructure/documents/file_workspace_recovery_store.dart';
 import '../infrastructure/documents/pgn_workspace_codec.dart';
 import '../services/game_analysis_controller.dart';
@@ -28,6 +28,7 @@ import '../widgets/pgn_viewer_widget.dart';
 /// Retire this bridge as the reader/analysis interfaces migrate to the feature.
 class PgnViewerLifetime {
   PgnViewerLifetime({
+    required DesktopFullscreenPort window,
     required PgnCollectionRepository repository,
     required PgnCollectionDecoder collectionDecoder,
     required PgnCollectionFilter collectionFilter,
@@ -36,6 +37,7 @@ class PgnViewerLifetime {
     required WorkspaceRecoveryStore<PgnWorkspaceSnapshot> store,
   }) {
     controller = PgnViewerController(
+      window: window,
       collectionRepository: repository,
       collectionDecoder: collectionDecoder,
       collectionFilter: collectionFilter,
@@ -50,6 +52,7 @@ class PgnViewerLifetime {
           }),
       onReclaimFocus: () => reclaimFocus?.call(),
     );
+    unawaited(controller.initializePresentation());
     recovery = WorkspaceRecoveryController<PgnWorkspaceSnapshot>(
       workspace: controller,
       capture: () {

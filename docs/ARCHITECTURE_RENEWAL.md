@@ -1842,6 +1842,68 @@ and theme/localization, complete session/undo parity, Builder storage/recovery,
 later features and non-Linux/release gates. Milestones 1/2 and 3 remain partial;
 4–7 remain unfinished.
 
+### Viewer board and window ownership checkpoint (2026-09-17)
+
+After filter checkpoint `fe2df868`, the last Viewer controller part/mixin is
+retired. `features/documents/controllers/viewer_presentation_controller.dart`
+owns board perspective, orientation and serialized fullscreen intent without
+Flutter or native dependencies. `viewer_perspective.dart` is the canonical
+immutable value/header model; collection-player detection now lives in
+`chess_core/pgn/pgn_collection_players.dart`. All callers use canonical imports.
+The old window part and direct `windowManager` calls/listeners in the Viewer
+controller and screen are removed. Transitive purity checks cover the new owner.
+
+App startup injects `DesktopFullscreenPort`, implemented by the native
+`WindowFullscreenAdapter`. The listener belongs to the app-lifetime Viewer owner,
+so screen mounting no longer controls native state observation. Initialization
+subscribes before reading current state and retains newer events over stale
+snapshots. Native operations serialize, rapid toggles use pending intent, and
+Escape during pending entry schedules exit. Failures release pending intent,
+retain the last accepted state and allow retry. Disposal detaches the listener;
+late acknowledgements, errors and retained callbacks cannot notify or reclaim
+focus. Window errors cannot overwrite newer unrelated document errors during
+ordinary board changes or successful retry.
+
+Orientation preserves the current side for absent or ambiguous player names,
+including the same exact name on both sides and empty names. Exact full-name
+matches take precedence over surname fallback. Manual flips become the reading
+preference for later games without changing an active solitaire session's side.
+`PgnCollectionEditor` now owns the perspective-header mutation and its baseline,
+conflict/recovery and save behavior. A new regression reproduced a lost metadata
+edit when screen-only drill annotations were present: the stored-text overlay
+hid the perspective update. The editor updates that overlay's header separately,
+so explicit perspective edits save while temporary drill annotations stay out
+of the PGN. The failing regression now passes.
+
+Verification: all 152 selected unit/widget regressions pass across Viewer,
+collection helpers/revisions, session restoration, saves, recovery, data integrity
+and screen/shortcut behavior. All 57 follow-up cases pass, including 14 pure
+presentation-owner cases, native-channel listener lifecycle/dispatch tests, error
+ownership and perspective save/conflict/drill-overlay regressions. These batches
+overlap. Both Linux native journeys pass: Settings orientation selection, explicit
+save with exact unrelated-byte preservation, F11/Escape presentation, app-owner
+reconstruction and reopened perspective; plus the existing filter apply/reopen/
+clear journey. No selected cases are skipped.
+
+The first native test failed because it searched for a standard Back button;
+it now uses the production Close settings control. Initial extraction compiler
+errors from a subclass constructor, canonical import and library-directive order
+were corrected before the passing batches. Analyze/lint passes with nine existing
+informational notices and 18 architecture-checker cases.
+
+The headless production app reopened the saved native fixture with Black at the
+bottom; inspected screenshots show the [reader](images/renewal-viewer-perspective.png)
+and [persisted orientation setting](images/renewal-viewer-perspective-settings.png).
+The recovery banners belong to the disposable profile. The preview was stopped
+before final checks. Xvfb native tests exercise plugin calls and the app's fullscreen
+presentation; they do not certify a real window manager's physical fullscreen
+transitions, Windows/macOS, separate-process restart or full release gates.
+
+Remaining: private collection ownership, scoped reader/widgets, complete session/
+undo/panel parity, Builder storage/recovery, theme/localization migration, later
+feature migrations and platform/performance/release gates. Milestones 1/2 and 3
+remain partial; 4–7 are unfinished. This is not full-renewal completion.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

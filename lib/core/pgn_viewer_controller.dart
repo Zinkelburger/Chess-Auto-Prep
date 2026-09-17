@@ -1,119 +1,58 @@
 import 'dart:async';
 
-import '../features/documents/controllers/viewer_filter_controller.dart';
-import '../features/documents/models/viewer_filter_selection.dart';
-import '../features/documents/repositories/pgn_collection_filter.dart';
-
-import '../features/documents/repositories/pgn_library_repository.dart';
-import '../features/documents/controllers/viewer_collection_load_controller.dart';
-import '../features/documents/models/viewer_collection_load.dart';
-import '../features/documents/repositories/pgn_collection_decoder.dart';
-
-import 'package:chess_auto_prep/chess_core/pgn/study_metadata.dart';
-
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:window_manager/window_manager.dart';
 
-import 'pgn/auto_play_engine.dart';
-import 'pgn/pgn_collection_helpers.dart';
-export 'pgn/pgn_collection_helpers.dart';
-import 'pgn/pgn_fen_index.dart';
-import '../features/documents/models/viewer_session.dart';
-import '../features/documents/repositories/viewer_preferences_repository.dart';
+import '../chess_core/pgn/pgn_collection_players.dart';
+import '../features/documents/controllers/pgn_collection_editor.dart';
+import '../features/documents/controllers/viewer_collection_load_controller.dart';
+import '../features/documents/controllers/viewer_filter_controller.dart';
+import '../features/documents/controllers/viewer_presentation_controller.dart';
 import '../features/documents/controllers/viewer_session_controller.dart';
-import '../services/pgn_opening_headers.dart';
-import 'pgn/viewer_opening_tree.dart';
-import 'pgn/viewer_solitaire_session.dart';
+import '../features/documents/models/pgn_document.dart';
+import '../features/documents/models/pgn_workspace_snapshot.dart';
+import '../features/documents/models/viewer_collection_load.dart';
+import '../features/documents/models/viewer_filter_selection.dart';
+import '../features/documents/models/viewer_perspective.dart';
+import '../features/documents/models/viewer_session.dart';
+import '../features/documents/repositories/desktop_fullscreen_port.dart';
+import '../features/documents/repositories/document_save_actions.dart';
+import '../features/documents/repositories/pgn_collection_decoder.dart';
+import '../features/documents/repositories/pgn_collection_filter.dart';
+import '../features/documents/repositories/pgn_collection_repository.dart';
+import '../features/documents/repositories/pgn_library_repository.dart';
+import '../features/documents/repositories/viewer_preferences_repository.dart';
 import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart';
 import '../models/pgn_game_entry.dart';
-export '../models/pgn_game_entry.dart';
-import '../features/documents/controllers/pgn_collection_editor.dart';
-import '../features/documents/repositories/pgn_collection_repository.dart';
-import '../features/documents/models/pgn_document.dart';
-import '../features/documents/models/pgn_workspace_snapshot.dart';
-import '../features/documents/repositories/document_save_actions.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/opening_book_service.dart';
+import '../services/pgn_opening_headers.dart';
+import '../utils/chess_utils.dart';
+import '../utils/safe_change_notifier.dart';
 import 'game_sorting.dart';
+import 'pgn/auto_play_engine.dart';
+import 'pgn/pgn_fen_index.dart';
 import 'pgn/pgn_viewer_handle.dart';
 import 'pgn/solitaire_controller.dart';
+import 'pgn/viewer_opening_tree.dart';
+import 'pgn/viewer_solitaire_session.dart';
+
+export '../models/pgn_game_entry.dart';
 export 'pgn/solitaire_controller.dart'
     show SolitaireController, SolitaireGuess, SolitaireStep;
 export 'pgn/viewer_solitaire_session.dart' show SolitaireSetup;
-import '../utils/safe_change_notifier.dart';
-import '../utils/chess_utils.dart';
-
-part 'pgn/pgn_viewer_controller_window.dart';
-
-/// Board perspective mode persisted as [StudyPerspective] header on first game.
-enum PerspectiveMode { white, black, player }
-
-@immutable
-class Perspective {
-  final PerspectiveMode mode;
-
-  /// Only meaningful when [mode] is [PerspectiveMode.player].
-  final String playerName;
-
-  const Perspective({this.mode = PerspectiveMode.white, this.playerName = ''});
-
-  String toHeaderValue() => switch (mode) {
-    PerspectiveMode.white => 'white',
-    PerspectiveMode.black => 'black',
-    PerspectiveMode.player => playerName,
-  };
-
-  static Perspective fromHeaderValue(String value) {
-    final v = value.trim();
-    if (v.isEmpty || v == 'white' || v == 'auto') {
-      return const Perspective();
-    }
-    if (v == 'black') return const Perspective(mode: PerspectiveMode.black);
-    return Perspective(mode: PerspectiveMode.player, playerName: v);
-  }
-
-  /// The perspective a freshly loaded collection should open in.
-  ///
-  /// An explicit `StudyPerspective` header wins. Failing that, a collection
-  /// of two or more games that share one protagonist opens from that
-  /// player's side. Otherwise the reader's [current] preference carries over:
-  /// a single game has no protagonist beyond whoever is looking at it, and an
-  /// explicit flip on the previous collection stays in force.
-  static Perspective forCollection(
-    List<PgnGameEntry> entries, {
-    required Perspective current,
-  }) {
-    final raw = entries.isNotEmpty
-        ? (entries.first.headers['StudyPerspective'] ?? '')
-        : '';
-    if (raw.trim().isNotEmpty) return Perspective.fromHeaderValue(raw);
-    if (entries.length < 2) return current;
-    final protagonist = detectProtagonistFrom(entries);
-    if (protagonist == null) return current;
-    return Perspective(mode: PerspectiveMode.player, playerName: protagonist);
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      other is Perspective &&
-      other.mode == mode &&
-      other.playerName == playerName;
-
-  @override
-  int get hashCode => Object.hash(mode, playerName);
-}
 
 /// Business logic and state for the PGN Viewer screen.
 ///
 /// Collection edits and persistence belong to the injected [PgnCollectionEditor].
 /// Filter selection and request lifetime belong to [ViewerFilterController].
-/// Legacy presentation/window responsibilities remain until their workflows migrate.
-class PgnViewerController extends ChangeNotifier
-    with SafeChangeNotifier, _WindowOps {
+/// Board/window state belongs to [ViewerPresentationController]. Remaining
+/// collection and reader presentation migrate with their workflows.
+class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   PgnViewerController({
+    required DesktopFullscreenPort window,
     required this.collectionRepository,
     required this.collectionDecoder,
     required this.collectionFilter,
@@ -151,6 +90,11 @@ class PgnViewerController extends ChangeNotifier
         _fenIndex.markStale();
       },
     )..addListener(_onEditorChanged);
+    _presentation = ViewerPresentationController(
+      window: window,
+      onChanged: _onPresentationChanged,
+      onReclaimFocus: onReclaimFocus,
+    );
   }
 
   final PgnCollectionRepository collectionRepository;
@@ -243,11 +187,9 @@ class PgnViewerController extends ChangeNotifier
   Future<PgnWriteResult?> saveCopy(String path) => _editor.saveCopy(path);
   bool canReplaceCollection() => _editor.canReplaceCollection();
   void discardChanges() => _editor.discardChanges();
-  @override
   void rememberPersistedGame(PgnGameEntry game) =>
       _editor.rememberPersistedGame(game);
   void setRating(int stars) => _editor.setRating(stars);
-  @override
   Future<void> persistMetadata() => _editor.persistMetadata();
   Future<void> doPersistMetadata() => _editor.doPersistMetadata();
   Map<PgnGameEntry, String> snapshotForSave() => _editor.snapshotForSave();
@@ -268,10 +210,8 @@ class PgnViewerController extends ChangeNotifier
 
   final PgnViewerHandle pgnWidgetController;
   final GameAnalysisController analysisController;
-  @override
   final bool Function() isActive;
   final void Function(void Function() callback)? schedulePostFrame;
-  @override
   final VoidCallback? onReclaimFocus;
 
   static bool _alwaysActive() => true;
@@ -288,7 +228,6 @@ class PgnViewerController extends ChangeNotifier
   /// and a screen that reuses an already-loaded collection would otherwise
   /// show the pre-patch text, graph and all missing.
   DateTime? loadedFileModified;
-  @override
   List<PgnGameEntry> allGames = [];
 
   /// Monotonic version of the loaded collection's headers and movetext.
@@ -299,13 +238,11 @@ class PgnViewerController extends ChangeNotifier
   int get collectionRevision => _collectionRevision;
   int _collectionRevision = 0;
 
-  @override
   void _markCollectionChanged() {
     _collectionRevision++;
     _filters.sourceChanged();
   }
 
-  @override
   List<PgnGameEntry> filteredGames = [];
   bool get hasActiveFilters => _filters.selection.active;
 
@@ -353,7 +290,6 @@ class PgnViewerController extends ChangeNotifier
     if (asBlack > 0 && asWhite == 0) protagonistFixedSide = Side.black;
   }
 
-  @override
   int currentGameIndex = 0;
   Position currentPosition = Chess.initial;
 
@@ -466,11 +402,43 @@ class PgnViewerController extends ChangeNotifier
   /// leaving via T so the remounted game widget is not at move 1.
   String? _gameCursorFen;
 
-  @override
-  bool boardFlipped = false;
+  late final ViewerPresentationController _presentation;
+  bool get boardFlipped => _presentation.boardFlipped;
+  set boardFlipped(bool value) => _presentation.restoreBoard(flipped: value);
+  Perspective get perspective => _presentation.perspective;
+  set perspective(Perspective value) =>
+      _presentation.restoreBoard(perspective: value);
+  bool get isFullScreen => _presentation.isFullScreen;
+  Future<void> initializePresentation() => _presentation.initialize();
+  Future<void> toggleFullScreen() => _presentation.toggleFullScreen();
+  Future<void> exitFullScreen() => _presentation.exitFullScreen();
 
-  @override
-  Perspective perspective = const Perspective();
+  String? _lastWindowError;
+  void _onPresentationChanged() {
+    if (isDisposed || !isActive()) return;
+    final next = _presentation.error == null
+        ? null
+        : 'Could not change the window view. Try again.';
+    if (next != _lastWindowError) {
+      if (next != null || errorMessage == _lastWindowError) errorMessage = next;
+      _lastWindowError = next;
+    }
+    notifyListeners();
+  }
+
+  Map<String, String>? get _currentHeaders =>
+      currentGameIndex >= 0 && currentGameIndex < filteredGames.length
+      ? filteredGames[currentGameIndex].headers
+      : null;
+  void orientBoardForCurrentGame() => _presentation.orient(_currentHeaders);
+  void setPerspective(Perspective value) {
+    _presentation.setPerspective(value, _currentHeaders);
+    unawaited(persistPerspective());
+  }
+
+  Future<void> persistPerspective() =>
+      _editor.setPerspectiveHeader(perspective.toHeaderValue());
+  void toggleBoardFlipped() => _presentation.toggleBoardFlipped();
 
   late final ViewerOpeningTree _viewerTree = ViewerOpeningTree(
     isActive: isActive,
@@ -603,6 +571,7 @@ class PgnViewerController extends ChangeNotifier
     unawaited(saveSession());
     _collectionLoads.dispose();
     _filters.dispose();
+    _presentation.dispose();
     _openingEpoch++;
     _fenIndex.cancel();
     _autoPlay.dispose();

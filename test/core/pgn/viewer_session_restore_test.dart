@@ -1,3 +1,4 @@
+import '../../support/fake_desktop_fullscreen_port.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -86,6 +87,7 @@ void main() {
     ViewerPreferencesRepository? preferences,
   ]) {
     final controller = PgnViewerController(
+      window: FakeDesktopFullscreenPort(),
       collectionDecoder: const IsolatePgnCollectionDecoder(),
       collectionFilter: const IsolatePgnCollectionFilter(),
       library: StoragePgnLibraryRepository(

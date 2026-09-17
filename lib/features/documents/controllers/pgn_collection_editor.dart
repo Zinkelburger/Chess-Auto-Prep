@@ -526,6 +526,33 @@ class PgnCollectionEditor extends ChangeNotifier
     onReclaimFocus?.call();
   }
 
+  /// Perspective is a collection edit: track its original bytes and use the
+  /// same conflict/recovery/save path as ratings and annotations.
+  Future<void> setPerspectiveHeader(String value) async {
+    if (isDisposed || allGames.isEmpty) return;
+    final first = allGames.first;
+    final pgn = upsertPgnHeader(first.pgnText, 'StudyPerspective', value);
+    if (first.headers['StudyPerspective'] == value && first.pgnText == pgn) {
+      return;
+    }
+    rememberPersistedGame(first);
+    first.headers['StudyPerspective'] = value;
+    first.pgnText = pgn;
+    // Keep drill-only annotations on screen, while saving the requested
+    // header against the persisted movetext rather than hiding this edit.
+    if (_screenOnlyMovetext.containsKey(first)) {
+      _screenOnlyMovetext[first] = upsertPgnHeader(
+        _screenOnlyMovetext[first]!,
+        'StudyPerspective',
+        value,
+      );
+    }
+    _editedGames.add(first);
+    onContentChanged(resetIndex: false);
+    notifyListeners();
+    await persistMetadata();
+  }
+
   Future<void> persistMetadata() async {
     persistDebounce?.cancel();
     persistDebounce = null;

@@ -1,3 +1,6 @@
+import '../support/fake_desktop_fullscreen_port.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_collection_players.dart';
+import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/features/documents/repositories/pgn_collection_filter.dart';
@@ -52,6 +55,7 @@ class _FakeAnalysisController extends GameAnalysisController {
 class _GatedOpeningController extends PgnViewerController {
   _GatedOpeningController()
     : super(
+        window: FakeDesktopFullscreenPort(),
         collectionDecoder: const IsolatePgnCollectionDecoder(),
         collectionFilter: const IsolatePgnCollectionFilter(),
         library: StoragePgnLibraryRepository(
@@ -105,13 +109,24 @@ class _ControlledFilter implements PgnCollectionFilter {
   }
 }
 
+class _FailingWindow extends FakeDesktopFullscreenPort {
+  bool fail = true;
+  @override
+  Future<void> setFullScreen(bool value) async {
+    if (fail) throw StateError('window failed');
+    await super.setFullScreen(value);
+  }
+}
+
 PgnViewerController _makeController({
+  FakeDesktopFullscreenPort? window,
   PgnCollectionDecoder decoder = const IsolatePgnCollectionDecoder(),
   PgnCollectionFilter matcher = const IsolatePgnCollectionFilter(),
 }) {
   // A detached widget controller behaves as a no-op stub (its methods guard on
   // a null attached state), so it is safe to use without mounting a widget.
   return PgnViewerController(
+    window: window ?? FakeDesktopFullscreenPort(),
     collectionDecoder: decoder,
     collectionFilter: matcher,
     library: StoragePgnLibraryRepository(
@@ -596,6 +611,30 @@ void main() {
   });
 
   group('perspective', () {
+    test(
+      'window failure is retryable and cannot replace newer unrelated errors',
+      () async {
+        final window = _FailingWindow();
+        final c = _makeController(window: window);
+        addTearDown(c.dispose);
+        await c.toggleFullScreen();
+        expect(c.errorMessage, contains('Could not change the window'));
+        c.errorMessage = 'Newer document failure';
+        c.toggleBoardFlipped();
+        expect(c.errorMessage, 'Newer document failure');
+        window.fail = false;
+        await c.toggleFullScreen();
+        expect(c.isFullScreen, isTrue);
+        expect(c.errorMessage, 'Newer document failure');
+        window.fail = true;
+        await c.exitFullScreen();
+        expect(c.errorMessage, contains('Could not change the window'));
+        window.fail = false;
+        await c.exitFullScreen();
+        expect(c.errorMessage, isNull);
+      },
+    );
+
     test('setPerspective updates the field and notifies', () {
       final c = _makeController();
       var notifications = 0;

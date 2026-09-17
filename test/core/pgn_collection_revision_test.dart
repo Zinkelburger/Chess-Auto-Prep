@@ -1,3 +1,5 @@
+import '../support/fake_desktop_fullscreen_port.dart';
+import 'package:chess_auto_prep/features/documents/models/viewer_perspective.dart';
 import 'dart:async';
 
 import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
@@ -75,6 +77,7 @@ void main() {
     StorageFactory.instanceForTest = storage;
     final analysis = _Analysis();
     controller = PgnViewerController(
+      window: FakeDesktopFullscreenPort(),
       collectionDecoder: const IsolatePgnCollectionDecoder(),
       collectionFilter: const IsolatePgnCollectionFilter(),
       library: StoragePgnLibraryRepository(

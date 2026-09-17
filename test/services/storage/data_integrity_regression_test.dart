@@ -1,3 +1,4 @@
+import '../../support/fake_desktop_fullscreen_port.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:isolate';
@@ -324,6 +325,7 @@ void main() {
       await file.writeAsString(originalGame);
       final analysis = FakeAnalysis();
       final c = PgnViewerController(
+        window: FakeDesktopFullscreenPort(),
         collectionDecoder: const IsolatePgnCollectionDecoder(),
         collectionFilter: const IsolatePgnCollectionFilter(),
         library: StoragePgnLibraryRepository(

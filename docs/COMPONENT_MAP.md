@@ -1525,8 +1525,27 @@ source revisions. The generation inline editor still calls the infrastructure
 compute helper until its own workflow migrates. Full collection presentation,
 filter-widget theme/localization and broader session ownership remain unfinished.
 
-The editor owns rating/comment changes, screen-only solitaire substitutions,
-per-game persisted baselines, the autosave timer and serialized writes. It captures
+`features/documents/controllers/viewer_presentation_controller.dart` owns
+board orientation and fullscreen intent without Flutter or native imports.
+`viewer_perspective.dart` holds immutable perspective values, header conversion
+and exact-name/surname orientation; absent or ambiguous players retain the current
+orientation. Collection player detection lives in
+`chess_core/pgn/pgn_collection_players.dart`. Manual flips become the reading
+preference for later games without changing an active solitaire side.
+
+The final Viewer part/mixin is retired. Startup injects `DesktopFullscreenPort`;
+`infrastructure/desktop/window_fullscreen_adapter.dart` owns the native listener
+for the Viewer app lifetime, independently of screen mounts. Initial reads cannot
+overwrite newer native events. Rapid toggles/exit requests serialize behind the
+in-flight operation and retain the latest intent; errors remain retryable, and
+disposal detaches events and ignores late completions. The host reports window
+errors without erasing newer document errors. The remaining collection and reader
+presentation still use the legacy host and widgets.
+
+The editor owns rating/comment/perspective changes, screen-only solitaire substitutions,
+per-game persisted baselines, the autosave timer and serialized writes. Perspective
+changes update the stored-text header separately from any drill-only annotations,
+so changing the view neither loses the header edit nor saves temporary guesses. It captures
 an outgoing collection before awaiting and only updates the active collection's
 mtime/index if that collection still owns the receipt. Later edits stay dirty.
 Failures block queued/automatic source writes; already queued snapshots still

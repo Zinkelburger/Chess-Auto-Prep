@@ -70,6 +70,67 @@ void main() {
   tearDown(() => editor.dispose());
 
   test(
+    'perspective saves only the changed first game through its baseline',
+    () async {
+      games.add(game('Second'));
+      editor.adoptPersistedGames(games);
+      final original = games.first.pgnText;
+      final other = games.last.pgnText;
+      await editor.setPerspectiveHeader('black');
+      expect(editor.hasUnsavedChanges, isTrue);
+      expect(repository.writes, isEmpty);
+      expect(await editor.saveChanges(), isTrue);
+      expect(repository.writes.single.keys.single, original);
+      expect(
+        repository.writes.single.values.single,
+        contains('[StudyPerspective "black"]'),
+      );
+      expect(games.last.pgnText, other);
+      expect(editor.hasUnsavedChanges, isFalse);
+    },
+  );
+
+  test(
+    'perspective conflicts retain the new view without replacing the source',
+    () async {
+      repository.outcome = () async => const PgnConflict(null);
+      await editor.setPerspectiveHeader('black');
+      expect(await editor.saveChanges(), isFalse);
+      expect(editor.hasUnsavedChanges, isTrue);
+      expect(
+        repository.recoveries.single,
+        contains('[StudyPerspective "black"]'),
+      );
+      expect(editor.canReplaceCollection(), isFalse);
+    },
+  );
+
+  test(
+    'perspective saves while solitaire annotations stay screen-only',
+    () async {
+      final original = games.first.pgnText;
+      editor.persistMoveCommentsFor(
+        games.first,
+        '1. e4 {revealed in drill} *',
+        writeToFile: false,
+      );
+      await editor.setPerspectiveHeader('black');
+      expect(editor.hasUnsavedChanges, isTrue);
+      expect(await editor.saveChanges(), isTrue);
+      expect(repository.writes.single.keys.single, original);
+      expect(
+        repository.writes.single.values.single,
+        contains('[StudyPerspective "black"]'),
+      );
+      expect(
+        repository.writes.single.values.single,
+        isNot(contains('revealed in drill')),
+      );
+      expect(games.first.pgnText, contains('revealed in drill'));
+    },
+  );
+
+  test(
     'a submitted receipt leaves later edits dirty and next save uses it',
     () async {
       final gate = Completer<PgnWriteResult>();

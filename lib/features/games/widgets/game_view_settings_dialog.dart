@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/pgn_viewer_controller.dart' show Perspective;
+import '../../documents/models/viewer_perspective.dart';
 import '../../../theme/app_text_styles.dart';
 import '../../../utils/app_shortcuts.dart';
 import '../../../widgets/game_nav_bar.dart' show kAutoPlaySpeeds;

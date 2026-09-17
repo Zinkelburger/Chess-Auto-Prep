@@ -21,6 +21,8 @@
 /// change, but nothing else in the file may disappear.**
 library;
 
+import '../../support/fake_desktop_fullscreen_port.dart';
+
 import 'dart:async';
 
 import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
@@ -184,6 +186,7 @@ List<String> _allComments(PgnGame<PgnNodeData> game) {
 Future<PgnViewerController> _openTheFile(_MemoryStorage storage) async {
   storage.writeBehindOurBack(_path, _fileText());
   final controller = PgnViewerController(
+    window: FakeDesktopFullscreenPort(),
     collectionDecoder: const IsolatePgnCollectionDecoder(),
     collectionFilter: const IsolatePgnCollectionFilter(),
     library: StoragePgnLibraryRepository(
@@ -434,6 +437,7 @@ void main() {
     await c.flushPendingMetadata();
 
     final reopened = PgnViewerController(
+      window: FakeDesktopFullscreenPort(),
       collectionDecoder: const IsolatePgnCollectionDecoder(),
       collectionFilter: const IsolatePgnCollectionFilter(),
       library: StoragePgnLibraryRepository(

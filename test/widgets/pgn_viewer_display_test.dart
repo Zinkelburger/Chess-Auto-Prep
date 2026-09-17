@@ -1,3 +1,4 @@
+import '../support/fake_desktop_fullscreen_port.dart';
 import 'dart:io';
 
 import 'package:chess_auto_prep/infrastructure/documents/isolate_pgn_collection_filter.dart';
@@ -87,6 +88,7 @@ void main() {
       directory.deleteSync(recursive: true);
     });
     lifetime = PgnViewerLifetime(
+      window: FakeDesktopFullscreenPort(),
       collectionDecoder: const IsolatePgnCollectionDecoder(),
       collectionFilter: const IsolatePgnCollectionFilter(),
       library: StoragePgnLibraryRepository(

@@ -27,7 +27,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
-import 'package:window_manager/window_manager.dart';
 
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
@@ -116,7 +115,7 @@ class PgnViewerScreen extends StatefulWidget {
 }
 
 class _PgnViewerScreenState extends State<PgnViewerScreen>
-    with WindowListener, _AppBarBuildersMixin, _PaneBuildersMixin {
+    with _AppBarBuildersMixin, _PaneBuildersMixin {
   @override
   late final PgnViewerController _controller;
   @override
@@ -223,7 +222,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     widget.lifetime.reclaimFocus = _reclaimFocus;
     _controller.addListener(_onControllerUpdate);
     MyRepertoireSettings.instance.addListener(_onRepertoireDesignationsChanged);
-    windowManager.addListener(this);
     // Leaving the Book tab hands the board back to the game: the tab you are
     // reading owns the board, so flipping between them is a comparison of the
     // same position rather than two viewers fighting over one board.
@@ -729,7 +727,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void dispose() {
     _unregisterHistoryContext?.call();
     _appState?.removeListener(_onAppStateChanged);
-    windowManager.removeListener(this);
     MyRepertoireSettings.instance.removeListener(
       _onRepertoireDesignationsChanged,
     );
@@ -741,12 +738,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _focusNode.dispose();
     super.dispose();
   }
-
-  @override
-  void onWindowLeaveFullScreen() => _controller.onWindowLeaveFullScreen();
-
-  @override
-  void onWindowEnterFullScreen() => _controller.onWindowEnterFullScreen();
 
   @override
   void _reclaimFocus() =>
