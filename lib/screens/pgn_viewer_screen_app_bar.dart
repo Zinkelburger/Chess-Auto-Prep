@@ -52,7 +52,9 @@ mixin _AppBarBuildersMixin on State<PgnViewerScreen> {
             Expanded(
               flex: 2,
               child: PgnSliceChips(
-                controller: _controller,
+                config: _controller.activeSliceConfig,
+                onRemoveChip: (index) =>
+                    unawaited(_controller.removeSliceChip(index)),
                 onOpenSliceDialog: _openSliceDialog,
               ),
             ),

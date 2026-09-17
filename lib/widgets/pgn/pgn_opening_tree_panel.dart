@@ -1,19 +1,17 @@
 /// Opening-tree side panel for the PGN Viewer.
 ///
-/// Extracted from `pgn_viewer_screen.dart`. A section widget that
-/// renders the opening-tree header, build progress, the [OpeningTreeWidget],
-/// and the "games at this position" list. It reads all state and issues all
-/// actions through the shared [PgnViewerController] (the screen's view-model),
-/// so behavior is identical to the inlined version.
+/// Renders a read-only opening graph and a captured list of matching games.
+/// The owning workspace supplies navigation and mutation actions.
 library;
 
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../features/documents/controllers/pgn_viewer_controller.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/app_text_styles.dart';
+import '../../chess_core/moves/opening_graph.dart';
+import '../../models/opening_tree.dart' show WdlPerspective;
+import '../../models/pgn_game_entry.dart';
+import '../../design_system/theme/app_typography.dart';
 import '../game_nav_item.dart';
 import '../game_search_dialog.dart';
 import '../layout/edit_context_split_handle.dart';
@@ -21,9 +19,41 @@ import '../opening_tree_widget.dart';
 import 'pgn_tree_games_list.dart';
 
 class PgnOpeningTreePanel extends StatefulWidget {
-  final PgnViewerController controller;
+  PgnOpeningTreePanel({
+    super.key,
+    required this.tree,
+    required this.gameCount,
+    required this.includeVariations,
+    required this.building,
+    required this.processed,
+    required this.total,
+    required List<String> currentMoveSequence,
+    required this.wdlPerspective,
+    required List<PgnGameEntry> matchingGames,
+    required this.currentMatchingIndex,
+    required this.onIncludeVariationsChanged,
+    required this.onMoveSelected,
+    required this.onGoBack,
+    required this.onGoForward,
+    required this.onGameSelected,
+  }) : currentMoveSequence = List.unmodifiable(currentMoveSequence),
+       matchingGames = List.unmodifiable(matchingGames);
 
-  const PgnOpeningTreePanel({super.key, required this.controller});
+  final OpeningGraph? tree;
+  final int gameCount;
+  final bool includeVariations;
+  final bool building;
+  final int processed;
+  final int total;
+  final List<String> currentMoveSequence;
+  final WdlPerspective wdlPerspective;
+  final List<PgnGameEntry> matchingGames;
+  final int currentMatchingIndex;
+  final ValueChanged<bool> onIncludeVariationsChanged;
+  final ValueChanged<String> onMoveSelected;
+  final VoidCallback onGoBack;
+  final VoidCallback onGoForward;
+  final ValueChanged<PgnGameEntry> onGameSelected;
 
   static const minTreeHeight = 80.0;
   static const minGamesHeight = 180.0;
@@ -36,26 +66,28 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
   /// Fraction of the pane given to the tree above the games list.
   double _splitRatio = 0.55;
 
-  PgnViewerController get controller => widget.controller;
-
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppColors.outline)),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
+              ),
+            ),
           ),
           child: Row(
             children: [
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  '${controller.filteredGames.length} games',
-                  style: AppTextStyles.subtitle.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  '${widget.gameCount} games',
+                  style: AppTypography.bodyStrong(
+                    context,
+                  ).copyWith(fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -64,10 +96,10 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Checkbox(
-                    value: controller.treeIncludeVariations,
+                    value: widget.includeVariations,
                     onChanged: (value) {
                       if (!mounted || value == null) return;
-                      controller.setTreeIncludeVariations(value);
+                      widget.onIncludeVariationsChanged(value);
                     },
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -75,18 +107,18 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
                   GestureDetector(
                     onTap: () {
                       if (!mounted) return;
-                      controller.setTreeIncludeVariations(
-                        !controller.treeIncludeVariations,
+                      widget.onIncludeVariationsChanged(
+                        !widget.includeVariations,
                       );
                     },
-                    child: const Text(
+                    child: Text(
                       'Include variations',
-                      style: AppTextStyles.muted,
+                      style: AppTypography.secondary(context),
                     ),
                   ),
                 ],
               ),
-              if (controller.buildingTree)
+              if (widget.building)
                 Flexible(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -99,12 +131,13 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          controller.treeBuildTotal > 0
-                              ? 'Building ${controller.treeBuildProcessed} / ${controller.treeBuildTotal}'
+                          widget.total > 0
+                              ? 'Building ${widget.processed} / ${widget.total}'
                               : 'Building tree...',
-                          style: AppTextStyles.caption.copyWith(
-                            fontSize: 12,
-                            color: AppColors.onSurfaceSoft,
+                          style: AppTypography.caption(context).copyWith(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -115,7 +148,7 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
             ],
           ),
         ),
-        if (controller.buildingTree)
+        if (widget.building)
           Expanded(
             child: Center(
               child: Column(
@@ -128,34 +161,32 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    controller.treeBuildTotal > 0
-                        ? 'Building tree... ${controller.treeBuildProcessed} / ${controller.treeBuildTotal} games'
+                    widget.total > 0
+                        ? 'Building tree... ${widget.processed} / ${widget.total} games'
                         : 'Building tree...',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.onSurfaceSoft,
+                    style: AppTypography.caption(context).copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  if (controller.treeBuildTotal > 0)
+                  if (widget.total > 0)
                     SizedBox(
                       width: 220,
                       child: LinearProgressIndicator(
-                        value:
-                            controller.treeBuildProcessed /
-                            controller.treeBuildTotal,
+                        value: widget.processed / widget.total,
                       ),
                     ),
                 ],
               ),
             ),
           )
-        else if (controller.openingTree == null)
+        else if (widget.tree == null)
           Expanded(
             child: Center(
               child: Text(
                 'No tree available.\nLoad games to build.',
                 textAlign: TextAlign.center,
-                style: AppTextStyles.muted.copyWith(fontSize: 14),
+                style: AppTypography.body(context),
               ),
             ),
           )
@@ -167,14 +198,14 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
 
   Widget _buildTreeAndGames() {
     final tree = OpeningTreeWidget(
-      tree: controller.openingTree!,
-      onMoveSelected: controller.onTreeMoveSelected,
-      onGoBack: controller.onTreeGoBack,
-      onGoForward: controller.onTreeGoForward,
-      currentMoveSequence: controller.treeCurrentMoveSequence,
-      wdlPerspective: controller.wdlPerspective,
+      tree: widget.tree!,
+      onMoveSelected: widget.onMoveSelected,
+      onGoBack: widget.onGoBack,
+      onGoForward: widget.onGoForward,
+      currentMoveSequence: widget.currentMoveSequence,
+      wdlPerspective: widget.wdlPerspective,
     );
-    final matching = controller.gamesAtTreePosition();
+    final matching = widget.matchingGames;
     if (matching.isEmpty) return tree;
 
     return LayoutBuilder(
@@ -202,13 +233,15 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
             ),
             Expanded(
               child: PgnTreeGamesList(
-                games: [for (final i in matching) controller.filteredGames[i]],
-                currentFen: controller.openingTree!.currentFen,
-                currentIndex: matching.indexOf(controller.currentGameIndex),
-                onGameSelected: (i) => controller.loadGameFromTree(matching[i]),
+                games: matching,
+                currentFen: widget.tree!.currentFen,
+                currentIndex: widget.currentMatchingIndex,
+                onGameSelected: (i) => widget.onGameSelected(matching[i]),
                 onSearch: () => openTreePositionGameSearch(
                   context: context,
-                  controller: controller,
+                  games: matching,
+                  currentIndex: widget.currentMatchingIndex,
+                  onSelected: widget.onGameSelected,
                 ),
               ),
             ),
@@ -234,21 +267,18 @@ class _PgnOpeningTreePanelState extends State<PgnOpeningTreePanel> {
 /// current position. Returns true if a game was loaded.
 Future<bool> openTreePositionGameSearch({
   required BuildContext context,
-  required PgnViewerController controller,
+  required List<PgnGameEntry> games,
+  required int currentIndex,
+  required ValueChanged<PgnGameEntry> onSelected,
 }) async {
-  final matching = controller.gamesAtTreePosition();
-  if (matching.isEmpty) return false;
-  final games = [
-    for (final i in matching)
-      GameNavItem.fromEntry(controller.filteredGames[i]),
-  ];
-  final current = matching.indexOf(controller.currentGameIndex);
+  final captured = List<PgnGameEntry>.of(games);
+  if (captured.isEmpty) return false;
   final selected = await showGameSearchDialog(
     context: context,
-    games: games,
-    currentIndex: current < 0 ? 0 : current,
+    games: [for (final game in captured) GameNavItem.fromEntry(game)],
+    currentIndex: currentIndex < 0 ? 0 : currentIndex,
   );
-  if (selected == null) return false;
-  controller.loadGameFromTree(matching[selected]);
+  if (!context.mounted || selected == null) return false;
+  onSelected(captured[selected]);
   return true;
 }
