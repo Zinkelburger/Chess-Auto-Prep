@@ -2152,6 +2152,107 @@ remaining legacy presentation, outline/generation editors and complete native
 undo provenance are still unfinished. Later training, jobs, platform and release
 gates remain open.
 
+### Parallel renewal execution brief (2026-09-17)
+
+The product owner renewed authorization to **finish the whole plan**, explicitly
+requested subagents, larger completed workflows, improved testability/safety and
+legacy removal. Starting integration baseline: `9036708c`. The goal remains the
+complete acceptance register, not a count of extracted classes. Local `main` and
+its verified backup are the deliverable; publication is not requested.
+
+**PLAN-02 decision: bounded repair and consolidation.** The first slice remains
+partial. Its controller/repository overrides, native document mutations, catalog
+recovery, shared save interaction and retained shell are exercised by the earlier
+checkpoints. However, there is no recorded product-owner visual acceptance,
+complete profile-mode budget, full-profile restore rehearsal or native
+Windows/macOS evidence. These are unresolved gates, not implicit passes. The
+large accumulation of checkpoints has not retired whole legacy workflows. The
+renewed instruction authorizes independent repairs in later owners while these
+gaps are closed; it does not graduate milestone 2 or waive an acceptance ID.
+
+| Owner | Bounded outcome | Required evidence | Budget / midpoint |
+|-------|-----------------|-------------------|-------------------|
+| `builder_renewal` | Builder document loading, destination and queued edits have one injected session owner; failed switches retain the current document; remove superseded host ownership/test hooks | ARCH-01, DATA-02/03, STATE-01/02, TEST-01; current Builder/Trainer callers remain functional | 4 active hours: 2 implementation, 1 regression tests, 1 integration reserve; midpoint after production wiring |
+| `training_renewal` | Training source, progress and preference dependencies are injected; session phases own lifecycle; preserve persisted history and retire migrated `services/training` owners | ARCH-01, DATA-06, SET-01, STATE-01, TEST-01; deterministic source/settings/cancellation failure tests | 6 active hours: 3 implementation, 2 parity tests, 1 integration reserve; midpoint after source/session cutover |
+| `generation_renewal` | Generation stages recoverable run output and validates source revision before publication; edited companion files survive; pending writes cannot outlive their run | ARCH-01, DATA-02/05/07, STATE-01, PROC-01, TEST-01; stale source, interrupted publication, disposal and duplicate-job tests | 6 active hours: 3 implementation, 2 failure tests, 1 integration reserve; midpoint after publication wiring |
+| Integrating agent | Reconcile source-backed inventory and acceptance register, rehearse cross-store restore, enforce new boundaries, validate merged production code and integrate local main | PLAN-01/02, DATA-06, ARCH-01, TEST-01; exact committed branch/backup evidence | 4 active hours: 1 inventory, 1 restore rehearsal, 2 review/integration reserve; midpoint after restore result |
+
+No package spike or visual redesign is part of this repair batch. Queue/build
+waits are not active effort. Owners report their midpoint, removed production
+owners, exact checks and remaining compatibility dependencies. At a budget cap,
+finish and back up the safe checkpoint; record a revised bounded scope before
+further expansion. Full renewal remains active until every applicable gate has
+current evidence. Platform and visual-review gaps remain explicitly unverified.
+
+The integration midpoint restore rehearsal passed on Linux:
+`test/infrastructure/profile_restore_rehearsal_test.dart` closes all fixture
+writers, copies Documents/Support plus synthetic book preferences, restores into
+a different disposable profile, and deletes the source. It verifies exact PGN
+bytes (BOM, variations, NAGs, custom tags), SQLite integrity/foreign keys/schema,
+source-game IDs and position rows, then explicitly relocates chapter/history/book
+references. Native-to-compatible-adapter rollback reopens current data and
+preserves annotations and new SQL games written after cutover; the original
+backup stays unchanged. This is DATA-06 evidence for the tested **stopped-profile
+protocol**, not a live backup feature, native preference export, crash-consistent
+cross-store snapshot or proof for all remaining domain formats. No user data or
+credentials enter the fixture. A formatting parse failure in the new PGN fixture
+was corrected before the passing run.
+
+### Persisted authority and native inventory (2026-09-17)
+
+This ledger supplements the workflow map below. It is based on source at
+`9036708c`; it does not inspect the user's profile. Stable reference contracts,
+not filenames alone, determine what a restore must preserve.
+
+| Authority / owner | Format and location | References, migration and restore contract |
+|-------------------|---------------------|---------------------------------------------|
+| Repertoire catalog and document adapters | `Documents/repertoires/<book>/<chapter>.pgn`; course/color comments and standard/custom PGN tags | Absolute chapter/folder paths plus `[LineID]`; directory journals relocate four training files and both book selections. Preserve BOM, annotations, variations, NAGs and unknown headers; old readers retain PGN compatibility. |
+| Study and Viewer document repositories | `Documents/studies/*.pgn`, `pgn_collections/` and user-selected PGNs | `[GameId]` links to saved games; document snapshots/recovery manifests carry edit context and revision. Retain unsaved recovery separately from committed PGNs. External files require a separately selected backup source. |
+| Saved game store | `Support/app_games.db`, `gameStoreSchemaVersion = 2` | `games.id`, `(collection, game_key)` and `positions.game_id`; `game_trash` is recovery authority. Tactics source games may have no PGN copy. Upgrade snapshots use SQLite `VACUUM INTO`; newer schemas are refused. Stop all writers for a cross-store filesystem copy. |
+| Master games | `Support/master_games.db`, schema 4 | Downloaded game/book index; may be rebuilt from available inputs. User-imported offline inputs must be retained separately before declaring their database disposable. Preserve schema guard and importer/reader compatibility. |
+| Repertoire review service and move attempts | Three `Documents/repertoire_*.csv` files plus `repertoire_move_attempts.jsonl` | Chapter path, line ID and move index; CSV quoting/version-2 backup protects punctuation/multiline fields. Row merging rejects competing edits. JSONL unknown fields survive reference migration. No scheduling/schema change is authorized by an ownership move. |
+| Tactics database | `Documents/tactics_sets/*.pgn`; legacy CSV inputs | Puzzle provenance and scheduling fields; `ChessAutoPrep-Analyzed-v1` completion marker and source GameId commit together. Preserve source archive and legacy input until migration verifies; failed decode cannot authorize pruning. |
+| Player corpus | `Documents/analysis_games/player-<sha256>/current.json` and retained `versions/` | Identity hashes platform plus normalized username; current manifest chooses PGN+metadata generation. Derived indexes/evals are keyed by corpus fingerprint; tombstones must survive restore. |
+| Opponents | `Documents/opponents/people.json` (`chess-auto-prep/people@1`) and `tournaments/<id>.json` | Tournament fields refer to person IDs. Preserve those IDs and unknown/unreadable originals; MCP handoff is a separate import file, not a second writer. |
+| Engine/bughouse tournaments | `Documents/engine_tournaments/<id>/tournament.json`, `games.pgn`, `engines.json`; `Documents/bughouse_matches/<id>/match.json` | Tournament IDs, game order and custom engine paths; external executables/assets are dependencies, not embedded user data. Keep partially completed runs and their metadata together. |
+| Generation and audit | Chapter-adjacent generation artifacts, source PGN and hunt report store | Source/run/config identity and companion PGN provenance are required. Existing unguarded writers are a repair target, not certified safe by this inventory. |
+| Recovery namespaces | `.cap-pgn-history/`, directory staging/trash, `repertoire-mutations/`, `.cap-reference-history/`, workspace recovery | Preserve unfinished journals with payloads and exact original bytes; do not purge them or copy just the current PGN while a writer is active. |
+| Preferences | Platform SharedPreferences file | Typed book/appearance owners coexist with legacy engine, eval, display, training and Viewer keys. Retain current names; do not run old/new writers for the same key. See key ledger below. |
+| Credentials | Legacy SharedPreferences OAuth/PAT keys | `lichess_access_token`, `lichess_refresh_token`, expiry, username and PAT flag remain owned by `LichessAuthService`. These are **not ordinary settings backup data**. Vault migration/restart/disconnect is still SEC-01 work; no new plaintext credential path is introduced. |
+
+Preference key ownership is explicit at each migration boundary:
+
+- Books: `my_repertoire_white_paths` and `my_repertoire_black_paths`, through
+  `PersistedRepertoireBooks`; appearance through `PersistedAppearance`.
+- Training: `trainer_*` keys and `trainer_uncapped_default_v1`; move persistence
+  out of `TrainingSettings` into the injected training adapter without changing
+  keys, defaults or scheduling semantics.
+- Engine: `engine_settings.*`; bulk depth uses `engine_settings.bulk_depth` with
+  legacy `tactics_import.depth` read compatibility. Effective job configuration
+  must be captured once; remaining whole-object writes need SET-01 migration.
+- Eval: `eval.cdbdirect.*`, `eval.lichess.*`, `expectimax.chessdb_api` and
+  `expectimax.probe_plies`; display: `display.board_coordinates`,
+  `display.piece_notation`, `display.legal_moves`.
+- Viewer: the key ledger in `SharedPreferencesViewerRepository` retains file,
+  game and recent-session identity. Game review counts use `game_review.counts`.
+  Account labels/fetch times remain in `AppState`; secrets stay out of this owner.
+
+| Native dependency / source of truth | Ownership and host prerequisite | Current evidence limit |
+|-------------------------------------|---------------------------------|------------------------|
+| Stockfish executable; `tools/assets.lock.json` | UCI process/worker owner, bounded stop/kill; target-specific bundled artifact and source/license obligations | Linux engine fixtures/native journeys exist; forced-parent-death and packaged host matrix are not complete |
+| Hivemind + ONNX Runtime/network; same asset lock | Separate engine process; optional assets, Windows private runtime package, retained model/engine licenses | Source/payload hashes are pinned. Host loader and descendant termination remain host-specific gates |
+| Maia ONNX Runtime plugin | FFI session/tensor handles with worker ownership; target ABI/plugin bundle | App/native memory and shutdown budget is still unverified; process isolation cannot protect an in-process FFI crash |
+| `document_file_io` private package | Native identity/read/flush handles behind document adapter; repository AGPL-3.0 | Linux package/journeys verified in earlier checkpoints. Windows replacement and macOS full-sync remain unavailable locally |
+| SQLite and cdbdirect | Database/FFI handle owners; pinned lockfile/native asset build | Saved-game schemas/upgrade guards exist; full backup and host ABI checks are scoped separately |
+| Desktop plugins | File picker, path provider, preferences, window manager/screen retriever, launcher/share/package info and JNI; exact versions in `pubspec.lock` | Generated plugin registrants enumerate Linux/Windows/macOS builds. Registration is not install/signing/vault/screen-reader evidence |
+
+The available verification host is Linux. Windows/macOS signed installation,
+vault availability, native screen reader, forced-parent-death and update checks
+are unverified. No certificate/account or remote telemetry is introduced.
+Full-profile restore, measured profile-mode edit/frame/memory budgets, user-task
+timing and visual acceptance must still receive executable or human evidence;
+this inventory alone does not pass PLAN-01, DATA-06 or OPS-02.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
