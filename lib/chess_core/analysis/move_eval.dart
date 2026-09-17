@@ -12,11 +12,12 @@
 /// everywhere.
 library;
 
-import '../utils/chess_utils.dart' show formatEvalDisplay;
-import '../utils/ease_utils.dart' show winningChanceFromCp;
-import '../utils/eval_constants.dart';
-import '../utils/fen_utils.dart';
-import '../utils/pgn_comment_utils.dart' show formatEvalCommentValue;
+import 'package:chess_auto_prep/utils/chess_utils.dart' show formatEvalDisplay;
+import 'package:chess_auto_prep/utils/ease_utils.dart' show winningChanceFromCp;
+import 'package:chess_auto_prep/utils/eval_constants.dart';
+import 'package:chess_auto_prep/utils/fen_utils.dart';
+import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
+    show formatEvalCommentValue;
 
 /// Eval at a single ply (after the move is played).
 class MoveEval {

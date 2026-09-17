@@ -1,6 +1,6 @@
 /// Conversion from the viewer's game state back to dartchess PGN trees.
 ///
-/// [ViewerGameModel] holds a flat mainline plus a [SidelineForest]; the file
+/// [ViewerGameController] holds a flat mainline plus a [SidelineForest]; the file
 /// wants one tree where index 0 of every `children` list is the mainline
 /// continuation and later indices are the alternatives. These functions do
 /// that inversion of `extractPgnVariations`, dropping ephemeral (scratch)
@@ -10,7 +10,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../models/move_tree.dart';
+import '../../chess_core/moves/move_tree_view.dart';
 import '../../chess_core/pgn/pgn_game_copy.dart';
 import 'pgn_analysis_variations.dart';
 import 'sideline_tree.dart';
@@ -27,7 +27,7 @@ PgnNode<PgnNodeData> buildViewerPgnTree({
   var parent = root;
 
   void addSidelines(int ply) {
-    for (final sideline in sidelines[ply] ?? const <MoveNode>[]) {
+    for (final sideline in sidelines[ply] ?? const <MoveNodeView>[]) {
       if (sideline.isEphemeral) continue;
       parent.children.add(_pgnChildFor(sideline));
     }
@@ -47,18 +47,24 @@ PgnNode<PgnNodeData> buildViewerPgnTree({
   return root;
 }
 
-PgnChildNode<PgnNodeData> _pgnChildFor(MoveNode node) {
-  final child = PgnChildNode<PgnNodeData>(pgnNodeDataFor(node));
-  for (final c in node.children) {
-    if (c.isEphemeral) continue;
-    child.children.add(_pgnChildFor(c));
+PgnChildNode<PgnNodeData> _pgnChildFor(MoveNodeView node) {
+  final root = PgnChildNode<PgnNodeData>(pgnNodeDataFor(node));
+  final pending = [(node, root)];
+  while (pending.isNotEmpty) {
+    final (source, target) = pending.removeLast();
+    for (final child in source.children) {
+      if (child.isEphemeral) continue;
+      final copied = PgnChildNode<PgnNodeData>(pgnNodeDataFor(child));
+      target.children.add(copied);
+      pending.add((child, copied));
+    }
   }
-  return child;
+  return root;
 }
 
 /// The move data a sideline [node] serialises as: its SAN plus a trimmed
 /// comment and a copy of its NAGs, each omitted when empty.
-PgnNodeData pgnNodeDataFor(MoveNode node) {
+PgnNodeData pgnNodeDataFor(MoveNodeView node) {
   final comment = node.comment?.trim();
   final nags = node.nags;
   return PgnNodeData(

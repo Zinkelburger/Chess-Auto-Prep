@@ -5,7 +5,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/models/pgn_filter_models.dart';
-import 'package:chess_auto_prep/services/pgn_position_replay.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart';
 import 'package:chess_auto_prep/services/pgn_slice_filter.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 

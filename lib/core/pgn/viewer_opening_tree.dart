@@ -21,7 +21,7 @@ import '../../constants/engine_defaults.dart';
 import '../../models/opening_tree.dart';
 import '../../models/pgn_game_entry.dart';
 import '../../services/opening_tree_builder.dart';
-import '../../services/pgn_position_replay.dart' as pgn;
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart' as pgn;
 import '../../utils/chess_utils.dart' show recentMoveTrailSquares, tryParseFen;
 import '../../utils/fen_utils.dart';
 

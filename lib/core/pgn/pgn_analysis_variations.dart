@@ -4,7 +4,8 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../services/pgn_position_replay.dart' show startPositionFromGame;
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart'
+    show startPositionFromGame;
 import '../../utils/chess_utils.dart' show playSanOrNullMove;
 import '../../utils/pgn_comment_utils.dart';
 

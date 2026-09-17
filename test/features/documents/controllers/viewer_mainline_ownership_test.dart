@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
-import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -12,7 +12,7 @@ void main() {
     'load detaches parsed input and publishes immutable mainline/headers',
     () {
       final source = parsePgnGame(sourceText);
-      final model = ViewerGameModel()..load(source);
+      final model = ViewerGameController()..load(source);
       final moves = model.moveHistory;
       final metadata = model.game!;
       final before = model.buildAnnotatedMovetext();
@@ -39,7 +39,7 @@ void main() {
   );
 
   test('navigation reuses the view; annotations share untouched moves', () {
-    final model = ViewerGameModel()..load(parsePgnGame(sourceText));
+    final model = ViewerGameController()..load(parsePgnGame(sourceText));
     final initial = model.moveHistory;
     final positions = model.mainline;
     model.goToMainLineMove(2);
@@ -71,7 +71,7 @@ void main() {
   });
 
   test('late comment and glyph commands cannot target a replacement game', () {
-    final model = ViewerGameModel()..load(parsePgnGame(sourceText));
+    final model = ViewerGameController()..load(parsePgnGame(sourceText));
     final old = model.moveHistory.first;
     final session = model.session;
     model.load(parsePgnGame('1. d4 d5 *'));
@@ -89,7 +89,7 @@ void main() {
   test(
     'annotation adoption detaches input and retains move and cursor identity',
     () {
-      final model = ViewerGameModel()..load(parsePgnGame(sourceText));
+      final model = ViewerGameController()..load(parsePgnGame(sourceText));
       model.goToMainLineMove(2);
       final old = model.moveHistory;
       final memo = model.mainline;
@@ -122,7 +122,7 @@ void main() {
   test(
     'same SAN from another starting position is not an annotation update',
     () {
-      final model = ViewerGameModel()..load(parsePgnGame('1. e4 e5 *'));
+      final model = ViewerGameController()..load(parsePgnGame('1. e4 e5 *'));
       final before = model.moveHistory;
       final metadata = model.game;
       final afterD4 = Chess.initial.play(Chess.initial.parseSan('d4')!);
@@ -145,7 +145,7 @@ void main() {
       const review = '1. e4 {[%eval 0.1]} e5 {[%eval 3] [%pv c5,Nf3]} *';
       final parsed = parsePgnGame(review);
       final before = parsed.makePgn();
-      final model = ViewerGameModel()..load(parsed);
+      final model = ViewerGameController()..load(parsed);
       expect(parsed.makePgn(), before);
       final flag = model.didMaterializeAnalysis;
       final live = model.moveHistory;
@@ -158,7 +158,7 @@ void main() {
   test(
     'serialization preserves variation introductions without changing source views',
     () {
-      final model = ViewerGameModel()..load(parsePgnGame(sourceText));
+      final model = ViewerGameController()..load(parsePgnGame(sourceText));
       final history = model.moveHistory;
       final text = model.buildAnnotatedMovetext();
       expect(text, contains('Sideline introduction'));

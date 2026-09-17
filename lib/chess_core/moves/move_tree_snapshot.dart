@@ -34,38 +34,16 @@ final class MoveTreeSnapshot extends MoveTreeView {
     required Set<int> changedNodeIds,
     Object? identity,
   }) {
-    final copied = <int, MoveNodeSnapshot>{};
-    final priorRoots = {
-      for (final node in previous?.roots ?? <MoveNodeSnapshot>[]) node.id: node,
-    };
-    final pending = [
-      for (final node in source.roots) (node, priorRoots[node.id], false),
-    ];
-    while (pending.isNotEmpty) {
-      final (node, prior, visited) = pending.removeLast();
-      if (prior != null && !changedNodeIds.contains(node.id)) {
-        copied[node.id] = prior;
-      } else if (!visited) {
-        pending.add((node, prior, true));
-        final priorChildren = {
-          for (final child in prior?.children ?? <MoveNodeSnapshot>[])
-            child.id: child,
-        };
-        pending.addAll(
-          node.children.map((child) => (child, priorChildren[child.id], false)),
-        );
-      } else {
-        copied[node.id] = MoveNodeSnapshot._(node, [
-          for (final child in node.children) copied[child.id]!,
-        ]);
-      }
-    }
     return MoveTreeSnapshot._(
       previous?.identity ?? identity ?? Object(),
       source.startingFen,
       source.rootComment,
       source.version,
-      List.unmodifiable([for (final node in source.roots) copied[node.id]!]),
+      MoveNodeSnapshot.captureAll(
+        source.roots,
+        previous: previous?.roots,
+        changedNodeIds: changedNodeIds,
+      ),
     );
   }
 
@@ -91,6 +69,42 @@ final class MoveNodeSnapshot implements MoveNodeView {
       nags = node.nags == null ? null : List.unmodifiable(node.nags!),
       isEphemeral = node.isEphemeral,
       children = List.unmodifiable(children);
+
+  /// Capture a detached forest, sharing unchanged branches when the owner
+  /// supplies every changed node and ancestor ID. Omit [previous] for bulk edits.
+  static List<MoveNodeSnapshot> captureAll(
+    List<MoveNodeView> roots, {
+    List<MoveNodeSnapshot>? previous,
+    Set<int> changedNodeIds = const {},
+  }) {
+    final copied = <int, MoveNodeSnapshot>{};
+    final priorRoots = {
+      for (final node in previous ?? <MoveNodeSnapshot>[]) node.id: node,
+    };
+    final pending = [
+      for (final node in roots) (node, priorRoots[node.id], false),
+    ];
+    while (pending.isNotEmpty) {
+      final (node, prior, visited) = pending.removeLast();
+      if (prior != null && !changedNodeIds.contains(node.id)) {
+        copied[node.id] = prior;
+      } else if (!visited) {
+        pending.add((node, prior, true));
+        final priorChildren = {
+          for (final child in prior?.children ?? <MoveNodeSnapshot>[])
+            child.id: child,
+        };
+        pending.addAll(
+          node.children.map((child) => (child, priorChildren[child.id], false)),
+        );
+      } else {
+        copied[node.id] = MoveNodeSnapshot._(node, [
+          for (final child in node.children) copied[child.id]!,
+        ]);
+      }
+    }
+    return List.unmodifiable([for (final node in roots) copied[node.id]!]);
+  }
 
   @override
   final int id;

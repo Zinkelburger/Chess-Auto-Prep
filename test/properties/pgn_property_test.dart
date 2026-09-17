@@ -10,6 +10,8 @@
 /// reports the seed and a shrunk counterexample.
 library;
 
+import 'package:chess_auto_prep/chess_core/pgn/quality_nags.dart';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -64,7 +66,7 @@ List<List<String>> _tokensOf(List<PgnNodeData> nodes) => [
 
 /// Re-serialize a whole parsed game the way every path that rewrites a stored
 /// game does: `GameAnalysisController._rebuildMovetext` and the comment
-/// editor's `ViewerGameModel.buildAnnotatedMovetext` both come through
+/// editor's `ViewerGameController.buildAnnotatedMovetext` both come through
 /// [buildGameMovetext], and both land in the same slot of the same file.
 String _resave(PgnGame<PgnNodeData> game) => _pgn(
   Map<String, String>.from(game.headers),
@@ -750,7 +752,7 @@ void main() {
   // (`PgnViewerController.persistMoveCommentsFor`), so a review pass deleted
   // sidelines from the reader's own PGN. Both save paths now go through
   // `buildGameMovetext` (`_resave` here), which is what the comment editor's
-  // `ViewerGameModel.buildAnnotatedMovetext` always used.
+  // `ViewerGameController.buildAnnotatedMovetext` always used.
   group('a re-save is lossless', () {
     test('minimal counterexample: an intro comment and a sideline', () {
       const headers = '[Event "a"]\n[Result "1-0"]\n\n';

@@ -16,7 +16,8 @@ import '../models/solitaire_trophy.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import '../utils/eval_constants.dart' show effectiveCpFromScores;
 import 'engine/stockfish_pool.dart';
-import 'move_eval.dart' show MoveEval;
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
+    show MoveEval;
 
 /// A guess must beat the game move by at least this much to earn a trophy.
 /// Below it the "improvement" is engine noise between two reasonable moves.

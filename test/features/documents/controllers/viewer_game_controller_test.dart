@@ -1,16 +1,16 @@
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 
-ViewerGameModel _loaded(String pgn) {
-  final model = ViewerGameModel();
+ViewerGameController _loaded(String pgn) {
+  final model = ViewerGameController();
   model.load(PgnGame.parsePgn(pgn));
   return model;
 }
 
 void main() {
-  group('ViewerGameModel', () {
+  group('ViewerGameController', () {
     test('addMove kinds: follow, extend (editing), sideline', () {
       final m = _loaded('1. e4 e5 *');
 
@@ -61,11 +61,13 @@ void main() {
         m.materializePreviewLine(2, ['Bc4', 'Nf6', 'd3', 'bad'], 2),
         isTrue,
       );
-      expect(m.analysisPath, [root, reply]);
-      expect(reply.children.single.san, 'd3');
-      expect(reply.children.single.isEphemeral, isTrue);
+      expect(m.analysisPath.map((node) => node.id), [root.id, reply.id]);
+      expect(reply.children, isEmpty);
+      final currentReply = m.findNodeById(reply.id)!;
+      expect(currentReply.children.single.san, 'd3');
+      expect(currentReply.children.single.isEphemeral, isTrue);
       expect(m.currentPosition.fen, reply.fen);
-      expect(m.variationsByPly[2], [root]);
+      expect(m.variationsByPly[2]!.single.id, root.id);
       expect(m.buildAnnotatedMovetext(), isNot(contains('d3')));
     });
 

@@ -25,9 +25,9 @@ import 'engine/engine_lifecycle.dart';
 import 'engine/eval_worker.dart';
 import 'engine/stockfish_pool.dart';
 import 'eval_cache.dart';
-import 'game_eval_annotations.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
 import 'maia/maia_factory.dart';
-import 'move_eval.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 
 /// Elo assumed for a player whose header carries none, for Maia.
 const int _kDefaultElo = 2200;

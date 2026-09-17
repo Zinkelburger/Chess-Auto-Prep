@@ -66,8 +66,12 @@ capture the current owner revision before UI rebuilds and retain their destinati
 across chapter changes. Viewer now detaches parsed input and exposes immutable
 headers/mainline annotations with stable move identities; stale mainline editor
 callbacks are rejected after game replacement. Serialization works on copies and
-preserves variation introductions separately from trailing notes. Its mutable
-sideline forest, legacy controller/widget ownership, remaining Builder storage/
+preserves variation introductions separately from trailing notes. Its variation forest
+and cursor are now private in the document-feature game controller, with immutable
+projections sharing untouched branches and refreshed focused-reader scopes. Pure
+analysis/replay helpers have canonical chess-core paths, and the controller runs
+without Flutter. Legacy collection controller/widget ownership, async load
+lifetime, nested annotation reconciliation, remaining Builder storage/
 session ownership and draft recovery, Viewer movetext windowing, incremental
 editor indexing, undo receipts, variation-cursor/filter/panel
 restoration and complete large-document performance evidence remain pending.

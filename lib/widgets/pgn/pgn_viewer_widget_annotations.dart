@@ -20,7 +20,7 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
   // ── Amend-mode annotation panel ──
 
   /// The variation node the amend panel targets, or null when on the mainline.
-  MoveNode? get _panelVariationTarget =>
+  MoveNodeView? get _panelVariationTarget =>
       _analysisPath.isNotEmpty ? _analysisPath.last : null;
 
   /// The mainline move index the amend panel targets (the move the board
@@ -37,16 +37,17 @@ mixin _PgnViewerAnnotations on _PgnViewerWidgetStateBase {
     return '${coords.moveNumber}${coords.isWhite ? '.' : '...'}$san';
   }
 
-  void _togglePanelNodeNag(MoveNode node, int nagId) {
-    setState(() => _m.toggleNodeNag(node, nagId));
+  void _togglePanelNodeNag(MoveNodeView node, int nagId) {
+    if (!_m.toggleNodeNag(node, nagId)) return;
+    _refreshAfterCommentEdit();
     _notifyCommentsChanged();
   }
 
   /// Set the comment on a variation [node]. Invoked by the annotation panel,
   /// possibly as a debounce flush after navigation moved off [node] (or during
   /// panel dispose) — hence the object binding and the `mounted` guard.
-  void _setPanelNodeComment(MoveNode node, String text) {
-    _m.setNodeComment(node, text);
+  void _setPanelNodeComment(MoveNodeView node, String text) {
+    if (!_m.setNodeComment(node, text)) return;
     _refreshAfterCommentEdit();
     _notifyCommentsChanged();
   }

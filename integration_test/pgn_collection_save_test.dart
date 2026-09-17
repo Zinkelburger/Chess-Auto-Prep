@@ -9,6 +9,8 @@ import 'package:chess_auto_prep/main.dart';
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
 import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -76,7 +78,44 @@ void main() {
       expect(archived, isNotEmpty);
       expect(await File(archived.first.path).readAsString(), original);
 
+      await tester.tap(find.text('c5', findRichText: true).last);
+      await tester.pumpAndSettle();
+      await tester.tap(input);
+      await tester.pumpAndSettle();
+      await tester.enterText(input, 'Native sideline saved note');
+      expect(
+        tester.widget<TextField>(input).controller!.text,
+        'Native sideline saved note',
+      );
+      await tester.tap(find.byTooltip('Good move').last);
+      await tester.pump();
+      expect(
+        tester
+            .widget<PgnAnnotationPanel>(find.byType(PgnAnnotationPanel))
+            .comment,
+        'Native sideline saved note',
+      );
+      for (var i = 0; i < 100; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        if ((await file.readAsString()).contains(
+          'Native sideline saved note',
+        )) {
+          break;
+        }
+      }
+      final edited = await file.readAsString();
+      final game = parsePgnGame(splitPgnIntoGames(edited).first);
+      final sideline = game.moves.children.first.children[1].data;
+      expect(sideline.san, 'c5');
+      expect(sideline.startingComments, ['Native variation introduction']);
+      expect(sideline.comments, ['Native sideline saved note']);
+      expect(sideline.nags, [1]);
+      expect(edited, contains('Native editor saved note'));
+      expect(edited, contains(other));
+
       await file.writeAsString('; Changed externally\n\n$other\n');
+      await tester.tap(input);
+      await tester.pumpAndSettle();
       await tester.enterText(input, 'Retain this conflicted edit');
       for (var i = 0; i < 100; i++) {
         await tester.pump(const Duration(milliseconds: 100));

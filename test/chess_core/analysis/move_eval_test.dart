@@ -2,7 +2,7 @@
 /// a verdict contributes to a move.
 library;
 
-import 'package:chess_auto_prep/services/move_eval.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _e4 = MoveEval(

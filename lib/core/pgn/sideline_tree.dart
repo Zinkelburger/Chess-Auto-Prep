@@ -4,11 +4,12 @@
 /// the roots of the variations that branch there, each a [MoveNode] subtree.
 /// These helpers are the tree walks every mutation on that forest needs —
 /// locating a node, its ancestry, and its scratch (ephemeral) descendants —
-/// kept out of [ViewerGameModel] so the model reads as game logic, not
+/// kept out of [ViewerGameController] so the model reads as game logic, not
 /// recursion.
 library;
 
 import '../../models/move_tree.dart';
+import '../../chess_core/moves/move_tree_view.dart';
 
 /// Sidelines keyed by the 0-based mainline ply they branch from: key `p`
 /// holds alternatives to the mainline move at index `p`.
@@ -17,60 +18,81 @@ typedef SidelineForest = Map<int, List<MoveNode>>;
 /// Where [SidelineForestEdits.removeNode] found the node it deleted.
 typedef RemovedSidelineNode = ({int branchPly, bool wasRoot});
 
-/// Subtree walks over a single sideline node.
-extension MoveNodeSubtree on MoveNode {
-  /// This node's root-first path down to [target] (both inclusive), matched
-  /// by [MoveNode.id]; null when [target] is not in this subtree.
-  List<MoveNode>? pathTo(MoveNode target) => _pathTo(target, const []);
+/// Iterative queries shared by mutable owners and detached snapshots.
+extension MoveNodeSubtree on MoveNodeView {
+  /// Root-first path to [target], matched by stable node ID.
+  List<MoveNodeView>? pathTo(MoveNodeView target) => pathToId(target.id);
 
-  List<MoveNode>? _pathTo(MoveNode target, List<MoveNode> prefix) {
-    final path = [...prefix, this];
-    if (id == target.id) return path;
-    for (final child in children) {
-      final found = child._pathTo(target, path);
-      if (found != null) return found;
+  List<MoveNodeView>? pathToId(int targetId) {
+    final path = <MoveNodeView>[];
+    final pending = [(this, false)];
+    while (pending.isNotEmpty) {
+      final (node, leaving) = pending.removeLast();
+      if (leaving) {
+        path.removeLast();
+        continue;
+      }
+      path.add(node);
+      if (node.id == targetId) return path;
+      pending.add((node, true));
+      for (final child in node.children.reversed) {
+        pending.add((child, false));
+      }
     }
     return null;
   }
 
-  /// The node with [targetId] in this subtree (this node included), or null.
-  MoveNode? findById(int targetId) {
-    if (id == targetId) return this;
-    for (final child in children) {
-      final hit = child.findById(targetId);
-      if (hit != null) return hit;
+  MoveNodeView? findById(int targetId) {
+    final pending = [this];
+    while (pending.isNotEmpty) {
+      final node = pending.removeLast();
+      if (node.id == targetId) return node;
+      pending.addAll(node.children.reversed);
     }
     return null;
   }
 
-  /// Whether this node or any descendant is a scratch (ephemeral) move.
-  bool get subtreeHasEphemeral =>
-      isEphemeral || children.any((c) => c.subtreeHasEphemeral);
+  bool get subtreeHasEphemeral {
+    final pending = [this];
+    while (pending.isNotEmpty) {
+      final node = pending.removeLast();
+      if (node.isEphemeral) return true;
+      pending.addAll(node.children);
+    }
+    return false;
+  }
+}
 
-  /// Drop every ephemeral descendant, leaving this node itself alone.
+/// Only the private mutable owner may edit trees.
+extension MutableMoveNodeSubtree on MoveNode {
   void removeEphemeralDescendants() {
-    children.removeWhere((c) => c.isEphemeral);
-    for (final child in children) {
-      child.removeEphemeralDescendants();
+    final pending = [this];
+    while (pending.isNotEmpty) {
+      final node = pending.removeLast();
+      node.children.removeWhere((child) => child.isEphemeral);
+      pending.addAll(node.children);
     }
   }
 
-  /// Detach the child with [targetId] from wherever it sits below this node.
-  /// Returns whether it was found.
   bool removeDescendant(int targetId) {
-    final before = children.length;
-    children.removeWhere((c) => c.id == targetId);
-    if (children.length < before) return true;
-    return children.any((c) => c.removeDescendant(targetId));
+    final pending = [this];
+    while (pending.isNotEmpty) {
+      final node = pending.removeLast();
+      final before = node.children.length;
+      node.children.removeWhere((child) => child.id == targetId);
+      if (node.children.length != before) return true;
+      pending.addAll(node.children.reversed);
+    }
+    return false;
   }
 }
 
 /// Read-only walks over the whole forest.
-extension SidelineForestQueries on SidelineForest {
+extension SidelineForestQueries on Map<int, List<MoveNodeView>> {
   /// Root-first path from one of this forest's roots down to [target], or
   /// null when [target] lives nowhere in it. Restricted to the roots at
   /// [branchPly] when given.
-  List<MoveNode>? pathToNode(MoveNode target, {int? branchPly}) {
+  List<MoveNodeView>? pathToNode(MoveNodeView target, {int? branchPly}) {
     final rootLists = branchPly == null ? values : [?this[branchPly]];
     for (final roots in rootLists) {
       for (final root in roots) {
@@ -82,7 +104,7 @@ extension SidelineForestQueries on SidelineForest {
   }
 
   /// The node with [id], wherever it lives; null when absent.
-  MoveNode? findNodeById(int id) {
+  MoveNodeView? findNodeById(int id) {
     for (final roots in values) {
       for (final root in roots) {
         final hit = root.findById(id);

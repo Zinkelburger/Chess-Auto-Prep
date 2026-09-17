@@ -19,6 +19,7 @@ dependencies:
 
   # Chess functionality
   dartchess: ^0.13.1
+  meta: ^1.19.0
 
   # UI and state management
   cupertino_icons: ^1.0.6

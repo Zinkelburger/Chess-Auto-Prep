@@ -10,9 +10,9 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
-import '../../models/move_tree.dart';
+import '../../chess_core/moves/move_tree_view.dart';
 import '../../utils/chess_utils.dart' show isNullMoveSan;
-import 'viewer_game_model.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 
 /// One move the solver meets, with where it lives in the game.
 class SolitaireStep {
@@ -27,14 +27,14 @@ class SolitaireStep {
   final int? mainlinePly;
 
   /// The sideline node, when this is a sideline move.
-  final MoveNode? node;
+  final MoveNodeView? node;
 
   /// Mainline ply the sideline branches from; -1 for a mainline move.
   final int branchPly;
 
   /// The sideline node this move is played from, or null when it is played
   /// from a mainline position (a mainline move, or a sideline root).
-  final MoveNode? parentNode;
+  final MoveNodeView? parentNode;
 
   /// The first move of a sideline. It is shown, never guessed — it is the
   /// premise of the line ("suppose instead 12.Be2").
@@ -86,7 +86,7 @@ class SolitaireScript {
 /// never part of a drill. Null-move plies (`--` / `Z0`) are walked through
 /// but never asked.
 SolitaireScript buildSolitaireScript(
-  ViewerGameModel model, {
+  ViewerGameController model, {
   int fromMainlinePly = 0,
   bool includeVariations = false,
 }) {
@@ -100,11 +100,11 @@ SolitaireScript buildSolitaireScript(
   /// which the movetext prints right after it, so they are drilled right
   /// after it is guessed and before its line resumes.
   void walkLine(
-    MoveNode first,
+    MoveNodeView first,
     Position before,
-    List<MoveNode> alternatives,
+    List<MoveNodeView> alternatives,
     int branchPly,
-    MoveNode? parentNode, {
+    MoveNodeView? parentNode, {
     required bool premise,
   }) {
     var node = first;

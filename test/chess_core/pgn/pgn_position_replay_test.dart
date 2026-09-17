@@ -4,7 +4,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chess_auto_prep/services/pgn_position_replay.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart';
 import 'package:chess_auto_prep/services/pgn_slice_filter.dart'
     show parseTargetFen, gameMatchesSequence;
 import 'package:chess_auto_prep/utils/chess_utils.dart' show playSanOrNullMove;

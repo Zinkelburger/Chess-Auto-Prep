@@ -12,7 +12,7 @@
 /// does not, for callers that only want to look.
 library;
 
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 
 class LruMap<K, V> {
   /// [maxEntries] must be positive; the map holds at most that many entries.

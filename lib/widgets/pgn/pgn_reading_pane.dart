@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-import '../../models/move_tree.dart';
+import '../../chess_core/moves/move_tree_view.dart';
+import '../../core/pgn/sideline_tree.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart' show coordsAtPly;
@@ -12,10 +13,10 @@ import 'pgn_reading_scroll.dart';
 /// A sideline is identified by its actual first move, including for games
 /// starting from a FEN. No generated chapter names or separate variation index.
 class PgnReadingBranch {
-  final MoveNode root;
+  final MoveNodeView root;
   final int ply;
   final int branchPly;
-  final MoveNode? parent;
+  final MoveNodeView? parent;
   const PgnReadingBranch(this.root, this.ply, this.branchPly, this.parent);
 }
 
@@ -38,12 +39,13 @@ class PgnReadingPane extends StatefulWidget {
 
   /// Keep the quoted passage on screen while its moves play on the board.
   final bool previewingComment;
-  final List<MoveNode> analysisPath;
+  final List<MoveNodeView> analysisPath;
+  final Map<int, List<MoveNodeView>> variationsByPly;
   final int branchPly;
   final int startingMoveNumber;
   final bool startingWhiteTurn;
   final VoidCallback onMainline;
-  final void Function(MoveNode, int) onNode;
+  final void Function(MoveNodeView, int) onNode;
   final PgnDocumentBuilder documentBuilder;
 
   const PgnReadingPane({
@@ -54,6 +56,7 @@ class PgnReadingPane extends StatefulWidget {
     this.continuationPicker,
     this.previewingComment = false,
     required this.analysisPath,
+    required this.variationsByPly,
     required this.branchPly,
     required this.startingMoveNumber,
     required this.startingWhiteTurn,
@@ -139,7 +142,7 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
     final path = widget.analysisPath;
     return [
       for (var i = 0; i < path.length; i++)
-        if (i == 0 || path[i - 1].children.firstOrNull != path[i])
+        if (i == 0 || path[i - 1].children.firstOrNull?.id != path[i].id)
           PgnReadingBranch(
             path[i],
             widget.branchPly + i,
@@ -167,6 +170,16 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
   @override
   void didUpdateWidget(PgnReadingPane oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.variationsByPly, widget.variationsByPly)) {
+      _scope = _refreshBranch(_scope);
+      for (var i = 0; i < _bookmarks.length; i++) {
+        final bookmark = _bookmarks[i];
+        _bookmarks[i] = (
+          scope: _refreshBranch(bookmark.scope),
+          offset: bookmark.offset,
+        );
+      }
+    }
     if (oldWidget.selection != widget.selection && !widget.previewingComment) {
       if (_scope != null &&
           !widget.analysisPath.any((n) => n.id == _scope!.root.id)) {
@@ -176,6 +189,21 @@ class PgnReadingPaneState extends State<PgnReadingPane> {
       _browsing = false;
       _scheduleAnchor();
     }
+  }
+
+  PgnReadingBranch? _refreshBranch(PgnReadingBranch? branch) {
+    if (branch == null) return null;
+    final path = widget.variationsByPly.pathToNode(
+      branch.root,
+      branchPly: branch.branchPly,
+    );
+    if (path == null) return null;
+    return PgnReadingBranch(
+      path.last,
+      branch.branchPly + path.length - 1,
+      branch.branchPly,
+      path.length > 1 ? path[path.length - 2] : null,
+    );
   }
 
   @override

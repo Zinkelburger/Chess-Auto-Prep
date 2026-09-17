@@ -22,7 +22,7 @@ const _kMaxInlineVariationPlies = 4;
 List<InlineSpan>? _buildInlineVariationAtPly(
   PgnMovetextView view,
   int ply, {
-  bool Function(MoveNode node)? nodeVisible,
+  bool Function(MoveNodeView node)? nodeVisible,
 }) {
   var roots = view.variationsByPly[ply];
   if (roots == null || roots.length != 1) return null;
@@ -30,7 +30,7 @@ List<InlineSpan>? _buildInlineVariationAtPly(
   var node = roots.single;
   if (nodeVisible != null && !nodeVisible(node)) return null;
 
-  final line = <MoveNode>[];
+  final line = <MoveNodeView>[];
   while (true) {
     if ((node.comment?.trim().isNotEmpty ?? false) ||
         (node.startingComment?.trim().isNotEmpty ?? false)) {
@@ -83,11 +83,11 @@ List<InlineSpan>? _buildInlineVariationAtPly(
 List<Widget> _buildVariationRowsAtPly(
   PgnMovetextView view,
   int ply, {
-  bool Function(MoveNode node)? nodeVisible,
+  bool Function(MoveNodeView node)? nodeVisible,
   required Map<int, bool> branchVisibility,
   required ValueChanged<int> onToggleBranch,
 }) => [
-  for (final root in view.variationsByPly[ply] ?? <MoveNode>[])
+  for (final root in view.variationsByPly[ply] ?? <MoveNodeView>[])
     if (nodeVisible == null || nodeVisible(root))
       if (_isRepeatedProseReference(view, root, ply))
         _buildProseReference(view, root, ply)
@@ -107,7 +107,11 @@ List<Widget> _buildVariationRowsAtPly(
 // Course exporters encode clickable mentions as duplicate one-move RAVs.
 // Keep the nodes intact, but read a leaf repeating the principal move as prose.
 // Editing, NAGs, scratch analysis and actual continuations retain their rows.
-bool _isRepeatedProseReference(PgnMovetextView view, MoveNode node, int ply) =>
+bool _isRepeatedProseReference(
+  PgnMovetextView view,
+  MoveNodeView node,
+  int ply,
+) =>
     !view.editMode &&
     !node.isEphemeral &&
     node.children.isEmpty &&
@@ -118,7 +122,7 @@ bool _isRepeatedProseReference(PgnMovetextView view, MoveNode node, int ply) =>
     node.san == view.moveHistory[ply].san &&
     filterDisplayComment(node.comment ?? '').isNotEmpty;
 
-Widget _buildProseReference(PgnMovetextView view, MoveNode node, int ply) {
+Widget _buildProseReference(PgnMovetextView view, MoveNodeView node, int ply) {
   final coords = _coordsAtPly(view, ply);
   final rendered = _renderProseComment(
     view,
@@ -133,13 +137,13 @@ Widget _buildProseReference(PgnMovetextView view, MoveNode node, int ply) {
 
 Widget _buildVariationDocument(
   PgnMovetextView view,
-  MoveNode root, {
+  MoveNodeView root, {
   required int ply,
   required int branchPly,
   required int depth,
   required Map<int, bool> branchVisibility,
   required ValueChanged<int> onToggleBranch,
-  bool Function(MoveNode)? nodeVisible,
+  bool Function(MoveNodeView)? nodeVisible,
   String? leadingLabel,
 }) {
   final containsCurrent = view.analysisPath.any((n) => n.id == root.id);
@@ -207,9 +211,9 @@ Widget _buildVariationDocument(
   }
 
   if (open) {
-    MoveNode? cursor = root;
+    MoveNodeView? cursor = root;
     var index = ply;
-    var alternatives = <MoveNode>[];
+    var alternatives = <MoveNodeView>[];
     while (cursor != null) {
       final node = cursor;
       final introduction = node.startingComment;
@@ -394,7 +398,7 @@ Widget _buildVariationDocument(
 /// A tappable SAN chip inside a sideline row.
 InlineSpan _variationMoveSpan(
   PgnMovetextView view,
-  MoveNode node,
+  MoveNodeView node,
   int depth,
   int branchPly, {
   bool attachKey = true,

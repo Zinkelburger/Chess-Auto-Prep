@@ -7,13 +7,13 @@
 /// wrong tries — are always shown.
 library;
 
-import '../../models/move_tree.dart';
+import '../../chess_core/moves/move_tree_view.dart';
 
 class SolitaireReveal {
   /// Mainline moves at index `< mainlinePly` are visible.
   final int mainlinePly;
 
-  /// Sideline nodes revealed so far (by [MoveNode.id]).
+  /// Sideline nodes revealed so far (by [MoveNodeView.id]).
   final Set<int> nodeIds;
 
   /// True while sidelines are being drilled: a saved sideline is hidden until
@@ -30,7 +30,7 @@ class SolitaireReveal {
   const SolitaireReveal.mainline(int ply) : this(mainlinePly: ply);
 
   /// Whether a sideline [node] branching at [branchPly] may be shown.
-  bool isNodeVisible(MoveNode node, int branchPly) {
+  bool isNodeVisible(MoveNodeView node, int branchPly) {
     if (node.isEphemeral) return true;
     if (nodeIds.contains(node.id)) return true;
     return !hidesUnreachedSidelines && branchPly < mainlinePly;

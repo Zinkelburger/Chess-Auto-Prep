@@ -12,25 +12,31 @@
 library;
 
 import 'package:dartchess/dartchess.dart';
-import '../../chess_core/pgn/pgn_game_copy.dart';
-import '../../chess_core/pgn/pgn_game_view.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_copy.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_game_view.dart';
 
-import '../../models/move_tree.dart';
-import '../../services/game_eval_annotations.dart' show annotateGameMoveQuality;
-import '../../services/pgn_position_replay.dart' show startPositionFromGame;
-import '../../utils/fen_utils.dart';
-import '../../utils/pgn_comment_utils.dart'
+import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/move_tree_view.dart';
+import 'package:chess_auto_prep/chess_core/moves/move_tree_snapshot.dart';
+import 'package:chess_auto_prep/chess_core/pgn/sideline_projection_cache.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart'
+    show annotateGameMoveQuality;
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart'
+    show startPositionFromGame;
+import 'package:chess_auto_prep/utils/fen_utils.dart';
+import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show buildGameMovetext, joinComments;
-import '../../utils/pgn_nags.dart';
-import 'mainline_positions.dart';
-import 'pgn_analysis_variations.dart';
-import 'pgn_dummy_mainline.dart';
-import 'pgn_variation_extractor.dart';
-import 'sideline_tree.dart';
-import 'solitaire_reveal.dart';
-import 'viewer_game_serializer.dart' as serializer;
+import 'package:chess_auto_prep/chess_core/pgn/quality_nags.dart';
+import 'package:chess_auto_prep/core/pgn/mainline_positions.dart';
+import 'package:chess_auto_prep/core/pgn/pgn_analysis_variations.dart';
+import 'package:chess_auto_prep/core/pgn/pgn_dummy_mainline.dart';
+import 'package:chess_auto_prep/core/pgn/pgn_variation_extractor.dart';
+import 'package:chess_auto_prep/core/pgn/sideline_tree.dart';
+import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
+import 'package:chess_auto_prep/core/pgn/viewer_game_serializer.dart'
+    as serializer;
 
-/// What [ViewerGameModel.addMove] did with the move.
+/// What [ViewerGameController.addMove] did with the move.
 enum ViewerMoveKind {
   /// Not legal at the current position.
   illegal,
@@ -45,7 +51,13 @@ enum ViewerMoveKind {
   variation,
 }
 
-class ViewerGameModel {
+class ViewerGameController {
+  Position get startPosition => _startPosition;
+  Position get currentPosition => _currentPosition;
+  int get mainLineIndex => _mainLineIndex;
+  int get activeBranchPly => _activeBranchPly;
+  bool get didMaterializeAnalysis => _didMaterializeAnalysis;
+
   PgnGame? _game;
   PgnGameMetadata? _metadata;
   PgnGameMetadata? get game => _metadata;
@@ -83,44 +95,103 @@ class ViewerGameModel {
           identical(_moveIdentities[_moveHistory[index]], expectedMove));
 
   /// Whether the last load/adoption converted legacy PVs to stored variations.
-  bool didMaterializeAnalysis = false;
+  bool _didMaterializeAnalysis = false;
   List<PgnNodeData> _moveHistory = [];
-  Position startPosition = Chess.initial;
-  Position currentPosition = Chess.initial;
+  Position _startPosition = Chess.initial;
+  Position _currentPosition = Chess.initial;
 
   /// Sidelines: ply (0-based mainline index of the branch point) → roots.
-  SidelineForest variationsByPly = {};
+  SidelineForest _variationsByPly = {};
+  final _sidelineViews = SidelineProjectionCache();
 
-  int mainLineIndex = 0;
+  Map<int, List<MoveNodeSnapshot>> get variationsByPly =>
+      _sidelineViews.read(_variationsByPly);
+
+  List<MoveNodeSnapshot>? _pathView;
+  List<MoveNode>? _pathSource;
+  Map<int, List<MoveNodeSnapshot>>? _pathForest;
+  List<MoveNodeSnapshot> get analysisPath {
+    final forest = variationsByPly;
+    if (identical(_pathSource, _analysisPath) &&
+        identical(_pathForest, forest)) {
+      return _pathView!;
+    }
+    var candidates = forest[_activeBranchPly] ?? const <MoveNodeSnapshot>[];
+    final path = <MoveNodeSnapshot>[];
+    for (final owned in _analysisPath) {
+      final snapshot = candidates.firstWhere((node) => node.id == owned.id);
+      path.add(snapshot);
+      candidates = snapshot.children;
+    }
+    _pathSource = _analysisPath;
+    _pathForest = forest;
+    return _pathView = List.unmodifiable(path);
+  }
+
+  /// The mutable objects are resolved inside the owner, never from a caller.
+  (int, List<MoveNode>)? _locate(int id, {int? branchPly}) {
+    for (final entry in _variationsByPly.entries) {
+      if (branchPly != null && entry.key != branchPly) continue;
+      for (final root in entry.value) {
+        final path = root.pathToId(id);
+        if (path != null) return (entry.key, path.cast<MoveNode>());
+      }
+    }
+    return null;
+  }
+
+  void _markPath(int ply, List<MoveNode> path) =>
+      _sidelineViews.changed(ply, ancestry: path.map((node) => node.id));
+
+  bool _promotePath(int ply, List<MoveNode> path) {
+    if (!path.any((node) => node.isEphemeral)) return false;
+    _markPath(ply, path);
+    for (final node in path) {
+      node.isEphemeral = false;
+    }
+    return true;
+  }
+
+  int _mainLineIndex = 0;
 
   /// Mainline ply of the sideline the cursor is in; -1 on the mainline.
-  int activeBranchPly = -1;
+  int _activeBranchPly = -1;
 
   /// Root-first sideline nodes from the branch point to the cursor; empty
   /// on the mainline.
-  List<MoveNode> analysisPath = [];
+  List<MoveNode> _analysisPath = [];
 
   /// What a running solitaire session lets the reader see: mainline
   /// navigation never walks past its frontier ply, and sidelines it has not
   /// reached cannot be entered. Null when no session is running.
-  SolitaireReveal? reveal;
+  SolitaireReveal? _reveal;
+  SolitaireReveal? get reveal => _reveal;
+  set reveal(SolitaireReveal? value) {
+    _reveal = value == null
+        ? null
+        : SolitaireReveal(
+            mainlinePly: value.mainlinePly,
+            nodeIds: Set.unmodifiable(value.nodeIds),
+            hidesUnreachedSidelines: value.hidesUnreachedSidelines,
+          );
+  }
 
   /// Solitaire mainline frontier, or null when no session is running.
   int? get revealedPly => reveal?.mainlinePly;
 
   /// Whether a sideline node may be shown or entered right now.
-  bool isNodeVisible(MoveNode node, int branchPly) =>
+  bool isNodeVisible(MoveNodeView node, int branchPly) =>
       reveal?.isNodeVisible(node, branchPly) ?? true;
 
-  bool get hasAnalysis => variationsByPly.values.any((l) => l.isNotEmpty);
+  bool get hasAnalysis => _variationsByPly.values.any((l) => l.isNotEmpty);
 
-  bool get hasEphemeralMoves => variationsByPly.hasEphemeral;
+  bool get hasEphemeralMoves => _variationsByPly.hasEphemeral;
 
   /// The board after each mainline ply, computed once and extended as the
   /// mainline grows.  Every navigation reads from here instead of replaying
   /// the game from the start.
   MainlinePositions get mainline =>
-      MainlinePositions.of(_moveHistory, startPosition);
+      MainlinePositions.of(_moveHistory, _startPosition);
 
   // ── Load ─────────────────────────────────────────────────────────────
 
@@ -132,14 +203,15 @@ class ViewerGameModel {
     _mainlineChanged();
     _moveIdentities = Expando('Viewer move identities');
     promoteNullMoveDummyMainline(parsed.moves);
-    didMaterializeAnalysis = annotateGameMoveQuality(parsed);
+    _didMaterializeAnalysis = annotateGameMoveQuality(parsed);
     _game = parsed;
     _metadata = PgnGameMetadata.capture(parsed);
     _moveHistory = parsed.moves.mainline().toList();
-    startPosition = startPositionFromGame(parsed);
-    currentPosition = startPosition;
-    variationsByPly = extractPgnVariations(parsed, startPosition);
-    mainLineIndex = 0;
+    _startPosition = startPositionFromGame(parsed);
+    _currentPosition = _startPosition;
+    _variationsByPly = extractPgnVariations(parsed, _startPosition);
+    _sidelineViews.reset();
+    _mainLineIndex = 0;
     _leaveSideline();
   }
 
@@ -155,18 +227,19 @@ class ViewerGameModel {
   /// stored sidelines — in which case the caller must reload.
   bool adoptAnnotations(PgnGame parsed) {
     parsed = copyParsedPgn(parsed);
-    if (startPositionFromGame(parsed).fen != startPosition.fen) return false;
+    if (startPositionFromGame(parsed).fen != _startPosition.fen) return false;
     promoteNullMoveDummyMainline(parsed.moves);
     final materialized = annotateGameMoveQuality(parsed);
     final incoming = parsed.moves.mainline().toList();
     if (!_sameMainline(incoming)) return false;
-    final storedRoots = extractPgnVariations(parsed, startPosition);
+    final storedRoots = extractPgnVariations(parsed, _startPosition);
     if (!_sameStoredSidelines(storedRoots, incoming)) return false;
 
     for (final MapEntry(key: ply, value: roots) in storedRoots.entries) {
-      _mergeSidelines(variationsByPly.putIfAbsent(ply, () => []), roots);
+      _sidelineViews.changed(ply);
+      _mergeSidelines(_variationsByPly.putIfAbsent(ply, () => []), roots);
     }
-    didMaterializeAnalysis = materialized;
+    _didMaterializeAnalysis = materialized;
     _mainlineChanged();
     _game = parsed;
     _metadata = PgnGameMetadata.capture(parsed);
@@ -194,10 +267,10 @@ class ViewerGameModel {
     SidelineForest storedRoots,
     List<PgnNodeData> incoming,
   ) {
-    for (final ply in {...storedRoots.keys, ...variationsByPly.keys}) {
+    for (final ply in {...storedRoots.keys, ..._variationsByPly.keys}) {
       final theirs = storedRoots[ply] ?? const <MoveNode>[];
       final mine = [
-        for (final n in variationsByPly[ply] ?? const <MoveNode>[])
+        for (final n in _variationsByPly[ply] ?? const <MoveNode>[])
           if (!n.isEphemeral) n,
       ];
       final best = ply < incoming.length
@@ -219,21 +292,25 @@ class ViewerGameModel {
   /// comments, and scratch continuations survive an arriving analysis pass.
   /// [source] order wins; nodes only in [target] keep their place after it.
   static void _mergeSidelines(List<MoveNode> target, List<MoveNode> source) {
-    final ordered = <MoveNode>[];
-    for (final node in source) {
-      final existing = _siblingWithSan(target, node.san);
-      if (existing == null) {
-        ordered.add(node);
-      } else {
-        existing.isEphemeral = false;
-        _mergeSidelines(existing.children, node.children);
-        ordered.add(existing);
+    final pending = [(target, source)];
+    while (pending.isNotEmpty) {
+      final (destination, incoming) = pending.removeLast();
+      final ordered = <MoveNode>[];
+      for (final node in incoming) {
+        final existing = _siblingWithSan(destination, node.san);
+        if (existing == null) {
+          ordered.add(node);
+        } else {
+          existing.isEphemeral = false;
+          pending.add((existing.children, node.children));
+          ordered.add(existing);
+        }
       }
+      ordered.addAll(destination.where((node) => !ordered.contains(node)));
+      destination
+        ..clear()
+        ..addAll(ordered);
     }
-    ordered.addAll(target.where((n) => !ordered.contains(n)));
-    target
-      ..clear()
-      ..addAll(ordered);
   }
 
   // ── Navigation ───────────────────────────────────────────────────────
@@ -244,8 +321,8 @@ class ViewerGameModel {
     final frontier = revealedPly;
     if (frontier != null && moveIndex > frontier) moveIndex = frontier;
     if (moveIndex < 0 || moveIndex > _moveHistory.length) return false;
-    mainLineIndex = moveIndex;
-    currentPosition = mainline.at(moveIndex);
+    _mainLineIndex = moveIndex;
+    _currentPosition = mainline.at(moveIndex);
     _leaveSideline();
     return true;
   }
@@ -257,19 +334,20 @@ class ViewerGameModel {
 
   /// Move the cursor onto [targetNode] inside the sidelines rooted at
   /// [branchPly]. Returns false when the node can't be located.
-  bool goToAnalysisNode(MoveNode targetNode, int branchPly) {
-    if (!isNodeVisible(targetNode, branchPly)) return false;
-    final path = variationsByPly.pathToNode(targetNode, branchPly: branchPly);
-    if (path == null) return false;
+  bool goToAnalysisNode(MoveNodeView targetNode, int branchPly) {
+    final location = _locate(targetNode.id, branchPly: branchPly);
+    if (location == null) return false;
+    final (_, path) = location;
+    if (!isNodeVisible(path.last, branchPly)) return false;
 
-    mainLineIndex = branchPly;
-    activeBranchPly = branchPly;
+    _mainLineIndex = branchPly;
+    _activeBranchPly = branchPly;
     // Every sideline node carries the board after its move, so the target
     // is one lookup rather than a replay of the branch prefix and the path.
-    currentPosition = path.isEmpty
+    _currentPosition = path.isEmpty
         ? mainline.at(branchPly)
         : path.last.position;
-    analysisPath = path;
+    _analysisPath = path;
     return true;
   }
 
@@ -277,9 +355,9 @@ class ViewerGameModel {
   /// comment's move run without touching the trees; the model just records
   /// the anchored mainline index and the preview board.
   void setInlinePreviewPosition(int baseIndex, Position pos) {
-    mainLineIndex = baseIndex;
+    _mainLineIndex = baseIndex;
     _leaveSideline();
-    currentPosition = pos;
+    _currentPosition = pos;
   }
 
   /// Give a comment/PV preview normal ancestry before a user edits it.
@@ -291,7 +369,7 @@ class ViewerGameModel {
     if (cursor <= 0 || cursor > sans.length) return false;
     final previewed = _replay(mainline.tryAt(baseIndex), sans.take(cursor));
     if (previewed == null) return false;
-    if (normalizeFen(previewed.fen) != normalizeFen(currentPosition.fen)) {
+    if (normalizeFen(previewed.fen) != normalizeFen(_currentPosition.fen)) {
       return false;
     }
     final frontier = revealedPly;
@@ -324,23 +402,23 @@ class ViewerGameModel {
   /// The four cursor fields as one value, so a navigation can be snapshotted
   /// and restored without listing them twice.
   _Cursor get _cursor => (
-    mainLineIndex: mainLineIndex,
-    activeBranchPly: activeBranchPly,
-    analysisPath: List.of(analysisPath),
-    position: currentPosition,
+    mainLineIndex: _mainLineIndex,
+    activeBranchPly: _activeBranchPly,
+    analysisPath: List.of(_analysisPath),
+    position: _currentPosition,
   );
 
   set _cursor(_Cursor value) {
-    mainLineIndex = value.mainLineIndex;
-    activeBranchPly = value.activeBranchPly;
-    analysisPath = value.analysisPath;
-    currentPosition = value.position;
+    _mainLineIndex = value.mainLineIndex;
+    _activeBranchPly = value.activeBranchPly;
+    _analysisPath = value.analysisPath;
+    _currentPosition = value.position;
   }
 
-  /// Put the cursor back on the mainline at [mainLineIndex].
+  /// Put the cursor back on the mainline at [_mainLineIndex].
   void _leaveSideline() {
-    analysisPath = [];
-    activeBranchPly = -1;
+    _analysisPath = [];
+    _activeBranchPly = -1;
   }
 
   // ── Adding moves ─────────────────────────────────────────────────────
@@ -353,33 +431,33 @@ class ViewerGameModel {
     required bool editing,
     required bool allowMainline,
   }) {
-    final newPos = _tryPlay(currentPosition, san);
+    final newPos = _tryPlay(_currentPosition, san);
     if (newPos == null) return ViewerMoveKind.illegal;
-    final onMainline = analysisPath.isEmpty && allowMainline;
+    final onMainline = _analysisPath.isEmpty && allowMainline;
 
     // Amend mode at the end of the mainline: extend it rather than fork.
-    if (editing && onMainline && mainLineIndex == _moveHistory.length) {
+    if (editing && onMainline && _mainLineIndex == _moveHistory.length) {
       final added = PgnNodeData(san: san);
       _moveHistory.add(added);
       _mainlineChanged(added);
-      mainLineIndex = _moveHistory.length;
-      currentPosition = newPos;
+      _mainLineIndex = _moveHistory.length;
+      _currentPosition = newPos;
       return ViewerMoveKind.extendedMainline;
     }
 
     // The game's own next move: follow it instead of duplicating it as a
     // sideline beside itself.
     if (onMainline &&
-        mainLineIndex < _moveHistory.length &&
-        _moveHistory[mainLineIndex].san == san) {
-      mainLineIndex++;
-      currentPosition = newPos;
+        _mainLineIndex < _moveHistory.length &&
+        _moveHistory[_mainLineIndex].san == san) {
+      _mainLineIndex++;
+      _currentPosition = newPos;
       return ViewerMoveKind.followedMainline;
     }
 
-    if (analysisPath.isEmpty) {
-      final ply = mainLineIndex;
-      final roots = variationsByPly.putIfAbsent(ply, () => []);
+    if (_analysisPath.isEmpty) {
+      final ply = _mainLineIndex;
+      final roots = _variationsByPly.putIfAbsent(ply, () => []);
       var root = _siblingWithSan(roots, san);
       if (root == null) {
         root = MoveNode(
@@ -388,22 +466,24 @@ class ViewerGameModel {
           position: newPos,
           isEphemeral: !editing,
         );
+        _sidelineViews.changed(ply, ancestry: const []);
         roots.add(root);
       }
-      analysisPath = [root];
-      activeBranchPly = ply;
+      _analysisPath = [root];
+      _activeBranchPly = ply;
     } else {
-      final (node, _) = analysisPath.last.addChild(
-        san,
-        newPos.fen,
-        isEphemeral: !editing,
-      );
-      analysisPath = [...analysisPath, node];
+      final parent = _analysisPath.last;
+      final previousCount = parent.children.length;
+      final (node, _) = parent.addChild(san, newPos.fen, isEphemeral: !editing);
+      if (parent.children.length != previousCount) {
+        _markPath(_activeBranchPly, _analysisPath);
+      }
+      _analysisPath = [..._analysisPath, node];
     }
     // Include an existing scratch node when the user plays it in an editable
     // reader, as well as every ancestor needed to serialize a legal line.
-    if (editing) promoteNodeLineage(analysisPath.last);
-    currentPosition = newPos;
+    if (editing) _promotePath(_activeBranchPly, _analysisPath);
+    _currentPosition = newPos;
     return ViewerMoveKind.variation;
   }
 
@@ -412,12 +492,16 @@ class ViewerGameModel {
   /// sideline — without navigating into it (solitaire wrong attempts, shown
   /// live). Returns whether a node was added.
   bool recordVariationMove(String san) {
-    final newPos = _tryPlay(currentPosition, san);
+    final newPos = _tryPlay(_currentPosition, san);
     if (newPos == null) return false;
-    final siblings = analysisPath.isNotEmpty
-        ? analysisPath.last.children
-        : variationsByPly.putIfAbsent(mainLineIndex, () => []);
+    final siblings = _analysisPath.isNotEmpty
+        ? _analysisPath.last.children
+        : _variationsByPly.putIfAbsent(_mainLineIndex, () => []);
     if (_siblingWithSan(siblings, san) != null) return false;
+    _markPath(
+      _analysisPath.isEmpty ? _mainLineIndex : _activeBranchPly,
+      _analysisPath,
+    );
     siblings.add(
       MoveNode(san: san, fen: newPos.fen, position: newPos, isEphemeral: true),
     );
@@ -425,7 +509,8 @@ class ViewerGameModel {
   }
 
   /// The sideline node with [id], wherever it lives; null when absent.
-  MoveNode? findNodeById(int id) => variationsByPly.findNodeById(id);
+  MoveNodeSnapshot? findNodeById(int id) =>
+      variationsByPly.findNodeById(id) as MoveNodeSnapshot?;
 
   // ── Solitaire results ────────────────────────────────────────────────
 
@@ -437,15 +522,21 @@ class ViewerGameModel {
     var changed = false;
     for (final MapEntry(key: parentId, value: sans)
         in wrongByParentId.entries) {
-      final parent = findNodeById(parentId);
-      final from = parent?.positionOrNull;
-      if (parent == null || from == null) continue;
+      final location = _locate(parentId);
+      if (location == null) continue;
+      final (ply, path) = location;
+      final parent = path.last;
+      final from = parent.positionOrNull;
+      if (from == null) continue;
       for (final san in sans) {
-        if (_saveAlternative(parent.children, from, san)) changed = true;
+        if (_saveAlternative(parent.children, from, san)) {
+          _markPath(ply, [...path, _siblingWithSan(parent.children, san)!]);
+          changed = true;
+        }
       }
       // A saved child under an ephemeral ancestor would be dropped by the
       // serializer.
-      promoteNodeLineage(parent);
+      if (_promotePath(ply, path)) changed = true;
     }
     return changed;
   }
@@ -460,9 +551,12 @@ class ViewerGameModel {
       if (ply < 0 || ply >= _moveHistory.length || sans.isEmpty) continue;
       final from = mainline.tryAt(ply);
       if (from == null) continue;
-      final roots = variationsByPly.putIfAbsent(ply, () => []);
+      final roots = _variationsByPly.putIfAbsent(ply, () => []);
       for (final san in sans) {
-        if (_saveAlternative(roots, from, san)) changed = true;
+        if (_saveAlternative(roots, from, san)) {
+          _sidelineViews.changed(ply);
+          changed = true;
+        }
       }
     }
     return changed;
@@ -529,56 +623,67 @@ class ViewerGameModel {
   /// Drop every ephemeral node (roots and children) and leave any variation
   /// the cursor was in.
   void clearAnalysis() {
-    variationsByPly.removeEphemeral();
-    _leaveSideline();
+    for (final entry in _variationsByPly.entries) {
+      if (entry.value.any((node) => node.subtreeHasEphemeral)) {
+        _sidelineViews.changed(entry.key);
+      }
+    }
+    _variationsByPly.removeEphemeral();
+    goToMainLineMove(_mainLineIndex);
   }
 
-  /// Delete the sideline node with [nodeId] wherever it lives; the cursor
-  /// retreats out of the deleted subtree.
-  void deleteAnalysisNode(int nodeId) {
-    final removed = variationsByPly.removeNode(nodeId);
-    if (removed == null) return;
-    if (removed.wasRoot) {
-      if (activeBranchPly == removed.branchPly && analysisPath.isNotEmpty) {
-        _leaveSideline();
+  /// Delete a node, retreating the board/cursor to its surviving parent.
+  bool deleteAnalysisNode(int nodeId) {
+    final location = _locate(nodeId);
+    if (location == null) return false;
+    final (ply, path) = location;
+    _markPath(ply, path);
+    _variationsByPly.removeNode(nodeId);
+    if (_variationsByPly[ply]?.isEmpty ?? false) _variationsByPly.remove(ply);
+    if (_analysisPath.any((node) => node.id == nodeId)) {
+      if (path.length == 1) {
+        goToMainLineMove(ply);
+      } else {
+        goToAnalysisNode(path[path.length - 2], ply);
       }
-      return;
     }
-    final depth = analysisPath.indexWhere((n) => n.id == nodeId);
-    if (depth == -1) return;
-    if (depth == 0) {
-      _leaveSideline();
-    } else {
-      analysisPath = analysisPath.sublist(0, depth);
-      goToAnalysisNode(analysisPath.last, activeBranchPly);
-    }
+    return true;
   }
 
   // ── Annotations ──────────────────────────────────────────────────────
 
-  /// Mark [node] and every ancestor up to its variation root as saved: the
-  /// serializer drops ephemeral nodes wholesale, so an annotation or
-  /// permanent move under an ephemeral ancestor would never reach the file.
-  void promoteNodeLineage(MoveNode node) {
-    final path = variationsByPly.pathToNode(node);
-    if (path == null) return;
-    for (final n in path) {
-      n.isEphemeral = false;
-    }
+  /// Promote only live nodes; a retained view of a deleted/replaced game is
+  /// rejected rather than mutating a detached object and emitting a false save.
+  bool promoteNodeLineage(MoveNodeView node) {
+    final location = _locate(node.id);
+    if (location == null) return false;
+    return _promotePath(location.$1, location.$2);
   }
 
-  void toggleNodeNag(MoveNode node, int nagId) {
-    promoteNodeLineage(node);
+  bool toggleNodeNag(MoveNodeView target, int nagId) {
+    final location = _locate(target.id);
+    if (location == null) return false;
+    final (ply, path) = location;
+    _markPath(ply, path);
+    _promotePath(ply, path);
+    final node = path.last;
     final next = toggleQualityNag(node.nags, nagId);
     node.nags = next.isEmpty ? null : next;
+    return true;
   }
 
-  /// Set the comment on a sideline [node]; a non-empty comment promotes the
-  /// node's lineage so it persists.
-  void setNodeComment(MoveNode node, String text) {
+  /// Set a live sideline's comment; non-empty prose promotes its ancestry.
+  bool setNodeComment(MoveNodeView target, String text) {
+    final location = _locate(target.id);
+    if (location == null) return false;
+    final (ply, path) = location;
+    final node = path.last;
     final trimmed = text.trim();
-    if (trimmed.isNotEmpty) promoteNodeLineage(node);
+    if ((node.comment ?? '') == trimmed) return false;
+    _markPath(ply, path);
+    if (trimmed.isNotEmpty) _promotePath(ply, path);
     node.comment = trimmed.isEmpty ? null : trimmed;
+    return true;
   }
 
   bool toggleMainlineNag(int moveIndex, int nagId, {Object? expectedMove}) {
@@ -615,7 +720,7 @@ class ViewerGameModel {
   String buildAnnotatedMovetext() => buildGameMovetext(
     moves: serializer.buildViewerPgnTree(
       moveHistory: _moveHistory,
-      sidelines: variationsByPly,
+      sidelines: _variationsByPly,
     ),
     comments: _game?.comments ?? const [],
     fen: _game?.headers['FEN'],
@@ -624,8 +729,8 @@ class ViewerGameModel {
 
   /// Move data from the game start to [node]: the mainline up to the branch
   /// point, then the variation path. Null when the node can't be located.
-  List<PgnMoveSnapshot>? lineToVariationNode(MoveNode node, int branchPly) {
-    final path = variationsByPly.pathToNode(node, branchPly: branchPly);
+  List<PgnMoveSnapshot>? lineToVariationNode(MoveNodeView node, int branchPly) {
+    final path = _variationsByPly.pathToNode(node, branchPly: branchPly);
     if (path == null) return null;
     return [
       for (var i = 0; i < branchPly && i < _moveHistory.length; i++)

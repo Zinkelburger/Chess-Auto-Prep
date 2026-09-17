@@ -1,7 +1,7 @@
 import 'package:chess_auto_prep/core/pgn/pgn_collection_helpers.dart';
 import 'package:chess_auto_prep/core/slice_filter_controller.dart';
 import 'package:chess_auto_prep/chess_core/pgn/pgn_text.dart';
-import 'package:chess_auto_prep/services/pgn_position_replay.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart';
 import 'package:chess_auto_prep/services/pgn_slice_filter.dart';
 import 'package:flutter_test/flutter_test.dart';
 

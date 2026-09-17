@@ -2,10 +2,38 @@
 """Regression cases for the migrated dependency gate."""
 import unittest
 
-from check_architecture_boundaries import violations
+from check_architecture_boundaries import pure_dependency_violations, violations
 
 
 class BoundariesTest(unittest.TestCase):
+    def test_pure_dependency_gate_follows_transitive_exports(self):
+        sources = {
+            'lib/chess_core/root.dart': "import '../utils/cache.dart';",
+            'lib/utils/cache.dart': "export 'hidden.dart';",
+            'lib/utils/hidden.dart': "import 'package:flutter/foundation.dart';",
+        }
+        errors = pure_dependency_violations(sources, ['lib/chess_core/root.dart'])
+        self.assertEqual(len(errors), 1)
+        self.assertIn('lib/utils/hidden.dart -> package:flutter/foundation.dart', errors[0])
+
+    def test_pure_dependency_gate_handles_cycles_and_ignores_unrelated_ui(self):
+        sources = {
+            'lib/chess_core/root.dart': "import 'package:chess_auto_prep/chess_core/leaf.dart';",
+            'lib/chess_core/leaf.dart': "import 'root.dart';\nimport 'package:meta/meta.dart';",
+            'lib/widgets/ui.dart': "import 'package:flutter/widgets.dart';",
+        }
+        self.assertFalse(pure_dependency_violations(sources, ['lib/chess_core/root.dart']))
+
+    def test_pure_dependency_gate_checks_parts_and_conditional_branches(self):
+        sources = {
+            'lib/chess_core/root.dart': "import 'safe.dart' if (dart.library.io) 'native.dart';\npart 'part.dart';",
+            'lib/chess_core/safe.dart': '',
+            'lib/chess_core/native.dart': "import 'dart:io';",
+            'lib/chess_core/part.dart': "import 'dart:ui';",
+        }
+        errors = pure_dependency_violations(sources, ['lib/chess_core/root.dart'])
+        self.assertEqual(len(errors), 2)
+
     def test_single_game_parser_boundary_also_covers_legacy_consumers(self):
         direct = 'final game = PgnGame.parsePgn(text);'
         self.assertTrue(violations('lib/services/legacy.dart', direct))

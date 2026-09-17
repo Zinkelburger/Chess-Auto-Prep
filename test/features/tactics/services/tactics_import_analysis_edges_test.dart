@@ -17,7 +17,7 @@ import 'dart:io';
 import 'package:chess_auto_prep/features/tactics/services/tactics_database.dart';
 import 'package:chess_auto_prep/features/tactics/services/tactics_import_service.dart';
 import 'package:chess_auto_prep/services/eval_cache.dart';
-import 'package:chess_auto_prep/services/game_eval_annotations.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
 import 'package:chess_auto_prep/services/game_store/game_store_service.dart';
 import 'package:chess_auto_prep/services/games_library/game_review_store.dart';
 import 'package:chess_auto_prep/services/maia/maia_factory.dart';

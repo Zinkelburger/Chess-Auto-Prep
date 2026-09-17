@@ -13,8 +13,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/pgn/mainline_positions.dart';
 import '../../core/pgn/solitaire_reveal.dart';
-import '../../models/move_tree.dart';
-import '../../services/move_eval.dart'
+import '../../chess_core/moves/move_tree_view.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
     show MoveClassification, classifyMove, cpToWinningChance, initialWinChance;
 import '../../theme/app_colors.dart';
 import '../../theme/pgn_text_styles.dart';
@@ -72,13 +72,13 @@ class PgnMovetextView extends StatefulWidget {
   final MainlinePositions? mainlinePositions;
 
   /// ply (0-based mainline index) -> root variation nodes branching there.
-  final Map<int, List<MoveNode>> variationsByPly;
+  final Map<int, List<MoveNodeView>> variationsByPly;
 
   /// 1-based index of the current mainline position (0 = start).
   final int mainLineIndex;
 
   /// Path into the current variation (empty = on the mainline).
-  final List<MoveNode> analysisPath;
+  final List<MoveNodeView> analysisPath;
 
   /// Mainline index whose comment is being edited inline, or null.
   final int? editingCommentIndex;
@@ -111,10 +111,10 @@ class PgnMovetextView extends StatefulWidget {
   onShowMoveContextMenu;
   final void Function(int moveIndex, String text) onSaveComment;
   final VoidCallback onCancelEditingComment;
-  final void Function(MoveNode node, int branchPly) onGoToAnalysisNode;
+  final void Function(MoveNodeView node, int branchPly) onGoToAnalysisNode;
 
   /// Right-click on a variation node (copy line / add to study / delete menu).
-  final void Function(MoveNode node, int branchPly, Offset globalPosition)?
+  final void Function(MoveNodeView node, int branchPly, Offset globalPosition)?
   onShowVariationContextMenu;
 
   /// What a running solitaire session lets the reader see: mainline moves

@@ -7,7 +7,7 @@
 /// members here instead when the controller needs a new capability.
 library;
 
-import '../../models/move_tree.dart';
+import '../../chess_core/moves/move_tree_view.dart';
 import 'solitaire_reveal.dart';
 import 'solitaire_script.dart';
 
@@ -45,7 +45,7 @@ abstract interface class PgnViewerHandle {
   void goToMainLineIndex(int moveIndex);
 
   /// Navigate onto a sideline [node] branching from mainline ply [branchPly].
-  void goToVariationNode(MoveNode node, int branchPly);
+  void goToVariationNode(MoveNodeView node, int branchPly);
 
   /// Current 0-based mainline half-move index.
   int get mainLineIndex;
@@ -88,7 +88,7 @@ abstract interface class PgnViewerHandle {
   void addGuessAnnotations(Map<int, String> notes);
 
   /// Append solitaire guess notes to sideline moves ([notes] keyed by
-  /// [MoveNode.id]).
+  /// [MoveNodeView.id]).
   void addGuessNodeAnnotations(Map<int, String> notes);
 
   /// Persist the user's wrong solitaire guesses as real sideline variations,
@@ -98,6 +98,6 @@ abstract interface class PgnViewerHandle {
 
   /// Persist wrong guesses made inside a sideline as saved alternatives under
   /// the node they were played from ([wrongByParentId] keyed by
-  /// [MoveNode.id]).
+  /// [MoveNodeView.id]).
   void addGuessNodeVariations(Map<int, List<String>> wrongByParentId);
 }

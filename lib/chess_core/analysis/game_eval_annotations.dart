@@ -12,11 +12,12 @@ library;
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
 import 'package:dartchess/dartchess.dart';
 
-import '../core/pgn/pgn_analysis_variations.dart';
-import '../core/pgn/pgn_dummy_mainline.dart';
-import '../utils/chess_utils.dart' show isNullMoveSan, playSanOrNullMove;
-import '../utils/pgn_comment_utils.dart';
-import 'move_eval.dart';
+import 'package:chess_auto_prep/core/pgn/pgn_analysis_variations.dart';
+import 'package:chess_auto_prep/core/pgn/pgn_dummy_mainline.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart'
+    show isNullMoveSan, playSanOrNullMove;
+import 'package:chess_auto_prep/utils/pgn_comment_utils.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 
 // ---------------------------------------------------------------------------
 // Start position and mainline replay
@@ -306,7 +307,7 @@ void _editFirstComment(PgnNodeData node, String Function(String) edit) {
 /// reader's file (`PgnViewerController.persistMoveCommentsFor`). Serializing
 /// the mainline alone deleted every variation and the game's opening
 /// comment from that file. Same writer as the comment editor's
-/// `ViewerGameModel.buildAnnotatedMovetext`, which lands in the same slot.
+/// `ViewerGameController.buildAnnotatedMovetext`, which lands in the same slot.
 String buildAnalyzedMovetext(PgnGame<PgnNodeData> game) {
   annotateGameMoveQuality(game);
   return buildGameMovetext(

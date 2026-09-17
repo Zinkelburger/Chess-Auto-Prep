@@ -7,16 +7,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
 import 'package:chess_auto_prep/core/pgn/solitaire_controller.dart';
 import 'package:chess_auto_prep/core/pgn/solitaire_script.dart' as scripts;
-import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 import 'package:chess_auto_prep/core/pgn/viewer_solitaire_session.dart';
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/move_tree_view.dart';
 
 class _NoTrophiesStorage extends IOStorageService {
   @override
   Future<String?> readFile(String path) async => null;
 }
 
-/// A handle over a real [ViewerGameModel], recording what the session asks of
+/// A handle over a real [ViewerGameController], recording what the session asks of
 /// the board so each test can assert on the commands rather than on a live
 /// widget.
 class _FakeHandle implements PgnViewerHandle {
@@ -24,7 +24,7 @@ class _FakeHandle implements PgnViewerHandle {
     model.load(PgnGame.parsePgn('[Event "?"]\n\n$movetext'));
   }
 
-  final model = ViewerGameModel();
+  final model = ViewerGameController();
 
   final List<String> ephemeralMoves = [];
   final List<String> variationMoves = [];
@@ -96,7 +96,7 @@ class _FakeHandle implements PgnViewerHandle {
   }
 
   @override
-  void goToVariationNode(MoveNode node, int branchPly) {
+  void goToVariationNode(MoveNodeView node, int branchPly) {
     jumpedToNodes.add(node.san);
     model.goToAnalysisNode(node, branchPly);
   }

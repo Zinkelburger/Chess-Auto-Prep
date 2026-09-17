@@ -17,7 +17,7 @@ import 'package:chess_auto_prep/utils/chess_utils.dart'
         playSanOrNullMove,
         plyBeforeMove,
         recentMoveTrailSquares;
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/move_tree_view.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
@@ -33,7 +33,7 @@ import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
 import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
 import 'package:chess_auto_prep/core/pgn/solitaire_script.dart'
     as solitaire_script;
-import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 
 part 'pgn/pgn_viewer_widget_navigation.dart';
 part 'pgn/pgn_viewer_widget_move_edits.dart';
@@ -94,7 +94,7 @@ class PgnViewerWidgetController implements PgnViewerHandle {
   }
 
   @override
-  void goToVariationNode(MoveNode node, int branchPly) {
+  void goToVariationNode(MoveNodeView node, int branchPly) {
     _state?._goToAnalysisNode(node, branchPly);
   }
 
@@ -336,16 +336,16 @@ abstract class _PgnViewerWidgetStateBase extends State<PgnViewerWidget> {
   /// forwarding getters below (so the renderer call sites and the mixins'
   /// read-only logic stay unchanged) and mutates it only inside the thin
   /// setState wrappers in the part-file mixins.
-  final ViewerGameModel _m = ViewerGameModel();
+  final ViewerGameController _m = ViewerGameController();
 
   PgnGameMetadata? get _game => _m.game;
   List<PgnMoveSnapshot> get _moveHistory => _m.moveHistory;
   int get _mainLineIndex => _m.mainLineIndex;
   Position get _currentPosition => _m.currentPosition;
   Position get _startPosition => _m.startPosition;
-  Map<int, List<MoveNode>> get _variationsByPly => _m.variationsByPly;
+  Map<int, List<MoveNodeView>> get _variationsByPly => _m.variationsByPly;
   int get _activeBranchPly => _m.activeBranchPly;
-  List<MoveNode> get _analysisPath => _m.analysisPath;
+  List<MoveNodeView> get _analysisPath => _m.analysisPath;
 
   // Inline-comment line preview: steps the board through a clickable analysis
   // line embedded in a comment WITHOUT injecting it into the move tree, so the
@@ -446,7 +446,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
   }
 
   /// Try to take [pgnText]'s annotations onto the loaded game in place.
-  /// See [ViewerGameModel.adoptAnnotations].
+  /// See [ViewerGameController.adoptAnnotations].
   bool _adoptAnnotations(String? pgnText) {
     if (pgnText == null || _isLoading || _m.game == null) return false;
     try {
@@ -765,6 +765,7 @@ class _PgnViewerWidgetState extends _PgnViewerWidgetStateBase
               _inlineAnchorFen,
             ),
             analysisPath: _analysisPath,
+            variationsByPly: _variationsByPly,
             branchPly: _activeBranchPly,
             startingMoveNumber: _startPosition.fullmoves,
             startingWhiteTurn: _startPosition.turn == Side.white,

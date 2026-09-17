@@ -7,7 +7,7 @@ import 'package:chess_auto_prep/features/games/models/recent_game.dart';
 import 'package:chess_auto_prep/features/games/services/game_deviation_service.dart';
 import 'package:chess_auto_prep/features/games/services/game_moments.dart';
 import 'package:chess_auto_prep/features/games/services/game_review_summary.dart';
-import 'package:chess_auto_prep/services/move_eval.dart'
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
     show MoveClassification;
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';

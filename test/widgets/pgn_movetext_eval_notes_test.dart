@@ -13,8 +13,8 @@ import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart';
 
 import 'package:chess_auto_prep/widgets/pgn_viewer_widget.dart';
-import 'package:chess_auto_prep/services/game_eval_annotations.dart';
-import 'package:chess_auto_prep/services/move_eval.dart';
+import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

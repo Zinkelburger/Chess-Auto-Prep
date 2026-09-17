@@ -12,7 +12,7 @@ import '../constants/chess_constants.dart';
 import '../utils/chess_utils.dart' show playSanOrNullMove, tryParseFen;
 import '../utils/fen_utils.dart';
 import '../chess_core/pgn/pgn_parser.dart';
-import '../utils/pgn_nags.dart';
+import '../chess_core/pgn/quality_nags.dart';
 import '../chess_core/moves/move_tree_view.dart';
 import '../chess_core/moves/tree_path.dart';
 import 'move_tree_pgn.dart';

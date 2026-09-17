@@ -8,7 +8,7 @@ import 'package:chess_auto_prep/features/games/services/game_moments.dart';
 import 'package:chess_auto_prep/features/games/services/game_review_summary.dart';
 import 'package:chess_auto_prep/features/games/widgets/game_card.dart';
 import 'package:chess_auto_prep/features/games/widgets/repertoire_line_panel.dart';
-import 'package:chess_auto_prep/services/move_eval.dart'
+import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart'
     show MoveClassification;
 import 'package:chess_auto_prep/services/games_library/game_filter.dart';
 import 'package:chess_auto_prep/services/games_library/games_library_service.dart';

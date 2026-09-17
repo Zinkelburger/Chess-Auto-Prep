@@ -6,7 +6,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 
 const _header = '[Event "Pin"]\n[Result "*"]\n\n';
 const _plain =
@@ -17,8 +17,8 @@ const _annotated =
     '1. e4 {[%eval 0.20]} e5 {[%eval 0.15]} (1... c5 {Sicilian}) '
     '2. Nf3 \$1 {[%eval 0.25]} Nc6 {[%eval 3.00] [%pv Nf6,Bc4]} *\n';
 
-ViewerGameModel _loaded(String pgn) {
-  final model = ViewerGameModel();
+ViewerGameController _loaded(String pgn) {
+  final model = ViewerGameController();
   model.load(PgnGame.parsePgn(pgn));
   return model;
 }

@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/core/pgn/viewer_opening_tree.dart';
-import 'package:chess_auto_prep/core/pgn/viewer_game_model.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/services/opening_tree_builder.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
@@ -16,7 +16,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('reader uses the same FEN setup without a SetUp tag', () {
-    final model = ViewerGameModel()..load(PgnGame.parsePgn(chapter));
+    final model = ViewerGameController()..load(PgnGame.parsePgn(chapter));
     expect(normalizeFen(model.startPosition.fen), normalizeFen(setupFen));
     expect(model.mainline.reachablePlies, 3);
   });

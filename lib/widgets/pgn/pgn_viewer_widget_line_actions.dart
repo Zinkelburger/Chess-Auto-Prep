@@ -98,7 +98,7 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
   }
 
   void _showVariationContextMenu(
-    MoveNode node,
+    MoveNodeView node,
     int branchPly,
     Offset globalPosition,
   ) {
@@ -106,7 +106,7 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
   }
 
   Future<void> _runVariationContextMenu(
-    MoveNode node,
+    MoveNodeView node,
     int branchPly,
     Offset globalPosition,
   ) async {
@@ -154,8 +154,10 @@ mixin _PgnViewerLineActions on _PgnViewerWidgetStateBase {
 
   /// Move data from the game start to [node]: the mainline up to the branch
   /// point, then the variation path. Null when the node can't be located.
-  List<PgnMoveSnapshot>? _lineToVariationNode(MoveNode node, int branchPly) =>
-      _m.lineToVariationNode(node, branchPly);
+  List<PgnMoveSnapshot>? _lineToVariationNode(
+    MoveNodeView node,
+    int branchPly,
+  ) => _m.lineToVariationNode(node, branchPly);
 
   /// Serialize a single line to PGN: `[FEN]`/`[SetUp]` headers when the game
   /// starts from a custom position, then numbered movetext (comments and

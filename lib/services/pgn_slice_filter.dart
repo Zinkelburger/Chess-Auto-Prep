@@ -13,7 +13,7 @@ import 'package:dartchess/dartchess.dart';
 import '../models/pgn_filter_models.dart';
 import '../utils/chess_utils.dart' show playSanOrNullMove;
 import '../utils/fen_utils.dart';
-import 'pgn_position_replay.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart';
 
 // ── Field matching ───────────────────────────────────────────────────────────
 

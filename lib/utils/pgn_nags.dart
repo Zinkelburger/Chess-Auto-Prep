@@ -11,6 +11,7 @@ library;
 import 'dart:ui' show Color;
 
 import '../theme/app_colors.dart';
+import '../chess_core/pgn/quality_nags.dart';
 
 // ---------------------------------------------------------------------------
 // NAG (Numeric Annotation Glyph) constants and helpers
@@ -44,9 +45,6 @@ const kMoveNags = [
   NagInfo(2, '?', 'Mistake', AppColors.nagMistake),
   NagInfo(4, '??', 'Blunder', AppColors.nagBlunder),
 ];
-
-/// Whether [id] is one of the six mutually exclusive move-quality verdicts.
-bool _isQualityNag(int id) => id >= 1 && id <= 6;
 
 /// Lookup NAG info by ID. Returns null for unknown NAGs.
 NagInfo? nagInfoById(int id) {
@@ -124,7 +122,7 @@ Color nagColor(int id) => nagInfoById(id)?.color ?? AppColors.onSurfaceMuted;
 int? primaryQualityNag(List<int>? nags) {
   if (nags == null) return null;
   for (final n in nags) {
-    if (_isQualityNag(n)) return n;
+    if (isQualityNag(n)) return n;
   }
   return null;
 }
@@ -136,22 +134,7 @@ String qualityNagSuffix(List<int>? nags) {
   if (nags == null) return '';
   final buf = StringBuffer();
   for (final n in nags) {
-    if (_isQualityNag(n)) buf.write(nagSymbol(n));
+    if (isQualityNag(n)) buf.write(nagSymbol(n));
   }
   return buf.toString();
-}
-
-/// Toggle move-quality NAG [nagId] on a move's [current] NAG list, returning
-/// the new list. The six quality glyphs (ids 1–6) are mutually exclusive:
-/// setting one clears the others, and setting the one already present removes
-/// it. Non-quality NAGs are preserved. The result may be empty (callers store
-/// `null` for an empty NAG list).
-List<int> toggleQualityNag(List<int>? current, int nagId) {
-  final existing = current ?? const <int>[];
-  final others = [
-    for (final n in existing)
-      if (!_isQualityNag(n)) n,
-  ];
-  final alreadyOn = existing.contains(nagId);
-  return <int>[if (!alreadyOn && _isQualityNag(nagId)) nagId, ...others];
 }

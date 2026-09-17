@@ -1407,6 +1407,64 @@ legacy controller, widget mixins, asynchronous load lifetime and eager movetext
 rendering remain to migrate. Full hierarchy/legacy retirement, editor session/
 undo/performance gates, milestones 4–7 and non-Linux/release gates are unfinished.
 
+### Viewer variation ownership and hierarchy checkpoint (2026-09-17)
+
+After mainline checkpoint `24c7d331`, the canonical game owner is
+`features/documents/controllers/viewer_game_controller.dart` (`ViewerGameController`).
+The old `core/pgn/viewer_game_model.dart` path is removed. Parsed games, mainline,
+variation forest and navigation fields are private. Public variation nodes and
+cursor paths are immutable snapshots; commands resolve stable IDs inside the
+owner and reject targets from deleted/replaced trees. Solitaire reveal sets are
+also detached on adoption.
+
+`chess_core/pgn/sideline_projection_cache.dart` shares unchanged plies and branch
+snapshots. It uses the same iterative node-capture algorithm as Study/Builder;
+navigation reuses the forest, and annotation edits recapture their ancestry.
+Tree queries, deletion, scratch cleanup, engine-line merging and serialization
+are iterative. Removing the selected subtree or clearing scratch analysis now
+retreats both cursor and board. Focused reading scopes/bookmarks refresh their
+node values when a projection changes, preserving reading position while showing
+the latest annotations.
+
+Stored engine verdicts and annotation transforms moved from `services/` to
+`chess_core/analysis/`; position replay/index codecs moved to `chess_core/pgn/`.
+Imports and corresponding tests use their canonical paths without re-export
+bridges. Numeric quality-NAG rules are separate from UI glyph styling. The
+plain-Dart diagnostic exposed a hidden Flutter import through the LRU cache's
+test annotation; it now imports `meta` directly, with the already locked version
+declared as a dependency. The lint gate follows project imports, exports, parts
+and conditional alternatives to reject framework/native-I/O dependencies in
+chess core and this game owner.
+
+Verification (Linux, this checkpoint):
+
+| Check | Result |
+|---|---|
+| Unit/widget regression | 750 distinct cases pass across the 748-case broad run and focused reruns: document/Study owners, move-tree snapshots, Viewer/solitaire, parser/replay/analysis, collection filters, training reader, PGN properties, annotation-panel behavior and LRU behavior. No selected cases skipped. |
+| Deep sideline | A 20,000-ply line passes load, detached projection, navigation, annotation adoption, edit, serialization and deletion without recursive traversal failure. |
+| Plain Dart | `tools/bench/viewer_document_bench.dart` runs without Flutter. On the shared 20,000-node fixture: parse 88,293 µs, adopt 156,128 µs, first projection 31,989 µs, deep edit plus projection 2,627 µs; all 98 untouched variation roots shared. RSS 278,675,456 bytes. These are one-run diagnostics, not allocation/native frame certification. |
+| Architecture gate | All 18 boundary-checker regressions pass, including transitive, export, part, conditional-import and cycle cases. |
+| Analysis and lint | Pass with nine existing analyzer info notices; no errors or warnings. |
+| Native integration | Five journeys pass: collection mainline/variation annotation and glyph save plus conflict/copy recovery; exclusive copy/export; close/restart recovery; Builder annotation/glyph save/reload; large Study open/jump/edit/save. Study open 1,311 ms, distant jump 658 ms, RSS 778,928,128 bytes. |
+
+The first ownership regressions caught old mutable-reference assumptions and an
+incorrect interpretation of `addChild`'s second result (mainline status, not
+insertion status). Changed-child detection now compares the owned child count;
+scratch promotion invalidates the changed child as well as its ancestors.
+Glyph actions now flush pending prose first, and same-target rebuilds preserve
+text while its debounce is pending. The focused host-echo regression checks that
+the immediate serialized result includes both edits. The native journey initially
+failed to enter its second note: a field-level assertion showed empty input
+before the glyph action. Its fixture now explicitly focuses the field and verifies
+entered text before asserting saved annotations. Two nonexistent focused-test
+paths were also corrected to the actual Viewer widget suite.
+
+Remaining: legacy collection orchestration, async game-load lifetime, nested
+annotation reconciliation, Viewer movetext windowing, scoped presentation state,
+workspace/undo/performance parity and remaining hierarchy/bridge retirement.
+Milestones 1/2 and 3 remain partial; milestones 4–7 and non-Linux/release gates
+remain unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

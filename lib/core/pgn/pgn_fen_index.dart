@@ -8,7 +8,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-import '../../services/pgn_position_replay.dart' as pgn;
+import 'package:chess_auto_prep/chess_core/pgn/pgn_position_replay.dart' as pgn;
 import '../../services/storage/storage_factory.dart';
 import '../../utils/isolate_task.dart';
 

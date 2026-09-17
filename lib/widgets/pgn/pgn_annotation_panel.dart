@@ -129,7 +129,9 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
       // New target: flush any pending edit for the old one, then re-seed.
       _flushDebounce(oldWidget.onCommentChanged);
       _controller.text = widget.comment;
-    } else if (!_focusNode.hasFocus && widget.comment != _controller.text) {
+    } else if (!_focusNode.hasFocus &&
+        !(_debounce?.isActive ?? false) &&
+        widget.comment != _controller.text) {
       // Same target updated externally (e.g. solitaire notes appended).
       _controller.text = widget.comment;
     }
@@ -280,7 +282,12 @@ class PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                     color: nag.color,
                     isActive: widget.nags.contains(nag.id),
                     onTap: enabled && widget.glyphsEnabled
-                        ? () => widget.onToggleNag(nag.id)
+                        ? () {
+                            // This action serializes the move immediately;
+                            // include its pending prose before saving the glyph.
+                            _flushDebounce(widget.onCommentChanged);
+                            widget.onToggleNag(nag.id);
+                          }
                         : null,
                   ),
               ],

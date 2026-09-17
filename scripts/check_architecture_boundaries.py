@@ -3,10 +3,42 @@
 from pathlib import Path
 import re
 import json
+import posixpath
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTIVE = re.compile(r"^\s*(?:import|export)\s+['\"]([^'\"]+)['\"]", re.M)
+DEPENDENCIES = re.compile(r"^\s*(?:import|export|part)\s+([^;]+);", re.M)
+
+
+def pure_dependency_violations(sources: dict[str, str], roots: list[str]) -> list[str]:
+    """Follow project imports/exports/parts, including conditional alternatives.
+
+    Converted chess code and the Viewer game owner must run without Flutter or
+    native I/O even when a dependency still has a legacy utility path.
+    """
+    errors = []
+    for root in roots:
+        pending = [(root, [root])]
+        seen = set()
+        while pending:
+            path, chain = pending.pop()
+            if path in seen or path not in sources:
+                continue
+            seen.add(path)
+            for directive in DEPENDENCIES.findall(sources[path]):
+                for uri in re.findall(r"['\"]([^'\"]+)['\"]", directive):
+                    if uri in ('dart:ui', 'dart:io', 'dart:ffi', 'dart:isolate') or uri.startswith(('package:flutter', 'package:riverpod')):
+                        errors.append(f"{root}: impure dependency chain {' -> '.join([*chain, uri])}")
+                        continue
+                    if uri.startswith('package:chess_auto_prep/'):
+                        target = 'lib/' + uri.split('/', 1)[1]
+                    elif ':' not in uri:
+                        target = posixpath.normpath(posixpath.join(posixpath.dirname(path), uri))
+                    else:
+                        continue
+                    pending.append((target, [*chain, target]))
+    return errors
 
 
 def violations(relative: str, source: str) -> list[str]:
@@ -59,6 +91,10 @@ def violations(relative: str, source: str) -> list[str]:
 
 def main() -> int:
     errors = []
+    sources = {path.relative_to(ROOT).as_posix(): path.read_text() for path in (ROOT / 'lib').rglob('*.dart')}
+    pure_roots = [path for path in sources if path.startswith('lib/chess_core/')]
+    pure_roots.append('lib/features/documents/controllers/viewer_game_controller.dart')
+    errors.extend(pure_dependency_violations(sources, pure_roots))
     for folder in ('lib/features/repertoires', 'lib/features/documents', 'lib/features/settings', 'lib/features/studies', 'lib/chess_core', 'lib/infrastructure', 'lib/design_system', 'widgetbook'):
         for path in (ROOT / folder).rglob('*.dart'):
             errors.extend(violations(path.relative_to(ROOT).as_posix(), path.read_text()))
