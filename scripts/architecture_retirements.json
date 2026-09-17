@@ -1,0 +1,18 @@
+{
+  "paths": [
+    "lib/core/repertoire_controller.dart",
+    "lib/core/repertoire_writer.dart",
+    "lib/core/repertoire_authoring.dart",
+    "lib/core/move_navigation.dart",
+    "lib/services/repertoire_line_expansion.dart",
+    "lib/services/course_chapter_headers.dart",
+    "lib/core/pgn/",
+    "lib/core/pgn_viewer_controller.dart",
+    "lib/services/pgn_opening_headers.dart",
+    "lib/services/training/",
+    "lib/models/training_settings.dart"
+  ],
+  "symbols": [
+    "PgnBatchWriter"
+  ]
+}

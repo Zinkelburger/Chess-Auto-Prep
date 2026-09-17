@@ -123,14 +123,36 @@ retain app-level legacy engine bindings. The parent reconciles shared compositio
 combined callers. At a budget limit, back up the branch and revise the remaining
 work; do not land an incomplete layer just to report a checkpoint.
 
-**Make incompleteness visible.** Extend the architecture checker to discover all
-feature directories. Until all violations are removed, classify every directory
-and keep exact existing violations in an explicit baseline; unknown directories,
-new violations and restored retired APIs fail. A completed feature has no
-baseline entries. Ratchet removals immediately; the final gate requires an empty
-baseline. This is planned checker work, not a claim that the current six-feature
-allowlist enforces it. Moving code to `legacy_features/` alone earns no migration
-credit and is not a replacement for the full inventory and checks.
+**Make incompleteness visible.** The architecture checker now discovers every
+`lib/features/` directory and checks its imports, singleton access and widget
+theme boundaries. [The explicit debt ledger](../scripts/architecture_feature_debt.json)
+classifies all 23 existing directories: six `enforced` directories retain their
+zero-debt gate, and 17 are `unfinished`. No directory is declared `complete`.
+`enforced` certifies only these static boundaries, not workflow completion or
+runtime wiring. The ledger records 1,493 exact existing dependency/offending-line
+entries at initialization; repeated lines retain their occurrence counts. This
+replaces file-wide singleton/theme allowances, so another violation in an
+already indebted file still fails. The baseline records debt, not certification.
+
+Unknown directories, new violations, stale classifications and resolved entries
+left in the baseline fail `scripts/ci.sh lint`. Remove resolved entries with the
+code change; do not expand the ledger to silence a regression. When a source-line
+fingerprint changes without resolving its existing violation, review that exact
+entry rather than regenerating the baseline. New directories require an explicit
+classification and start without debt. Both `enforced` and `complete` require
+zero baseline entries. Completion additionally requires the production/parity
+proof below; the final application gate requires an empty baseline.
+
+[The retirement manifest](../scripts/architecture_retirements.json) rejects
+restored library paths (including forwarding shims), imports of those paths,
+and retired API names anywhere in production Dart outside comments. A trailing
+slash retires a whole directory. Retirement is unconditional and cannot be
+accepted into the debt ledger. Add each deleted path/API with its completed
+cutover. Existing transitive purity, infrastructure, design-system, catalog and
+legacy-theme-consumer checks remain active. These static checks do not prove
+runtime ownership or certify code outside their declared boundary rules. Moving
+code to `legacy_features/` alone earns no migration credit and is not a
+replacement for the full inventory and parity checks.
 
 **Definition of done per cutover.** Final production wiring + deleted old
 owner/APIs/callers + no temporary scaffolding + passing behavior/failure checks +
@@ -207,14 +229,14 @@ editor/presentation errors with the facade so consumers observe the owning state
 Parent owns this slice from `d6abb6d1`, with five active hours including one
 validation reserve; midpoint is direct consumer wiring with the facade removed.
 
-The current host is still 1,609 lines after its path move. The current checker
-covers six feature directories and leaves 17 outside those rules. A read-only
-application of the same direct-boundary rules to all 23 directories found 414
-violations. These are explicit unfinished work, not certified new architecture.
-The final checker must discover all feature directories and fail on those
-violations; it must not silently skip newly added directories. Prefer completing
-that coverage and the actual migrations over a cosmetic move to `legacy_features/`.
-If an interim quarantine is needed, name it openly and remove it before completion.
+The Viewer host was still 1,609 lines after its path move. The initial
+read-only audit applied the six-feature checker's direct rules to all 23
+directories and found 414 coarse file/rule diagnostics. The implemented
+whole-feature gate above replaces that hidden exclusion with an exact debt
+ledger; its 1,493 initial entries count individual offending lines and duplicate
+occurrences, so the counts use different units. Neither passing the ratchet nor
+moving code to `legacy_features/` certifies migration. The named owners and
+consumers still have to be deleted with the actual workflow cutovers.
 
 Make the entire first-party application understandable, testable and consistent:
 each workflow has a clear owner, each datum has one authoritative writer, and

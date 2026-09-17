@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Regression cases for the migrated dependency gate."""
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
-from check_architecture_boundaries import RETIRED_BUILDER_LIBRARIES, pure_dependency_violations, violations
+from check_architecture_boundaries import check, pure_dependency_violations, violations
 
 
 class BoundariesTest(unittest.TestCase):
@@ -25,7 +28,9 @@ class BoundariesTest(unittest.TestCase):
         self.assertTrue(violations('lib/core/generation_session_controller.dart', 'final writer = PgnBatchWriter();'))
 
     def test_retired_builder_libraries_cannot_return_as_forwarding_shims(self):
-        for path in RETIRED_BUILDER_LIBRARIES:
+        for path in ('lib/core/repertoire_controller.dart', 'lib/core/repertoire_writer.dart',
+                     'lib/core/repertoire_authoring.dart', 'lib/core/move_navigation.dart',
+                     'lib/services/repertoire_line_expansion.dart', 'lib/services/course_chapter_headers.dart'):
             self.assertTrue(violations(path, "export 'replacement.dart';"))
 
     def test_retired_viewer_libraries_cannot_return_as_forwarding_shims(self):
@@ -149,6 +154,140 @@ class BoundariesTest(unittest.TestCase):
     def test_injected_domain_dependencies_are_allowed(self):
         self.assertFalse(violations('lib/features/repertoires/controllers/example.dart', "import '../repositories/repertoire_catalog_repository.dart';"))
         self.assertFalse(violations('lib/infrastructure/repertoires/store.dart', "import '../../features/repertoires/repositories/repertoire_catalog_repository.dart';"))
+
+
+class FeatureDebtGateTest(unittest.TestCase):
+    """Exercise the real repository scan against small production-shaped trees."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.owner = 'lib/features/tactics/controllers/session.dart'
+        self.debt = f'{self.owner}: forbidden dependency dart:io'
+        self.ledger = {'features': {'tactics': 'unfinished'}, 'baseline': [self.debt]}
+        self.write(self.owner, "import 'dart:io';")
+        self.write_json('scripts/legacy_theme_consumers.json', {})
+        self.write_json('scripts/architecture_retirements.json', {
+            'paths': ['lib/core/pgn/', 'lib/features/documents/controllers/pgn_viewer_controller.dart'],
+            'symbols': ['PgnViewerController'],
+        })
+
+    def write(self, path, source):
+        destination = self.root / path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(source)
+
+    def write_json(self, path, data):
+        self.write(path, json.dumps(data))
+
+    def errors(self):
+        self.write_json('scripts/architecture_feature_debt.json', self.ledger)
+        return check(self.root)[0]
+
+    def test_existing_debt_is_visible_but_a_new_dependency_fails(self):
+        self.assertEqual(self.errors(), [])
+        self.write(self.owner, "import 'dart:io';\nimport 'dart:ffi';")
+        self.assertTrue(any('dart:ffi [new violation' in error for error in self.errors()))
+
+    def test_unknown_directory_is_rejected_even_when_empty_or_clean(self):
+        (self.root / 'lib/features/new_domain').mkdir()
+        self.assertTrue(any('new_domain/: unclassified' in error for error in self.errors()))
+        self.write('lib/features/new_domain/models/state.dart', 'class State {}')
+        self.assertTrue(any('new_domain/: unclassified' in error for error in self.errors()))
+        self.ledger['features']['new_domain'] = 'enforced'
+        self.assertEqual(self.errors(), [])
+
+    def test_loose_feature_source_cannot_avoid_classification(self):
+        self.write('lib/features/loose.dart', 'class Session {}')
+        self.assertTrue(any('must belong to a classified directory' in error for error in self.errors()))
+
+    def test_removed_violation_requires_baseline_to_shrink(self):
+        self.write(self.owner, "import '../repositories/port.dart';")
+        self.assertTrue(any('stale baseline' in error for error in self.errors()))
+        self.ledger['baseline'].clear()
+        self.assertEqual(self.errors(), [])
+        self.write(self.owner, "import 'dart:io';")
+        self.assertTrue(any('new violation' in error for error in self.errors()))
+
+    def test_completed_and_enforced_features_cannot_keep_debt(self):
+        for state in ('enforced', 'complete'):
+            self.ledger['features']['tactics'] = state
+            self.assertTrue(any('only unfinished' in error for error in self.errors()))
+        self.ledger['baseline'].clear()
+        self.write(self.owner, 'class Session {}')
+        self.assertEqual(self.errors(), [])
+
+    def test_deleted_feature_requires_both_classification_and_debt_removal(self):
+        (self.root / self.owner).unlink()
+        (self.root / 'lib/features/tactics/controllers').rmdir()
+        (self.root / 'lib/features/tactics').rmdir()
+        errors = self.errors()
+        self.assertTrue(any('stale feature classification' in error for error in errors))
+        self.assertTrue(any('stale baseline' in error for error in errors))
+
+    def test_singleton_baseline_does_not_exempt_other_calls_in_same_file(self):
+        line = 'final engine = Engine.instance;'
+        self.write(self.owner, line)
+        self.ledger['baseline'] = [f'{self.owner}: global singleton access bypasses injection: {line}']
+        self.assertEqual(self.errors(), [])
+        self.write(self.owner, line + '\nfinal storage = Storage.instance;')
+        self.assertTrue(any('Storage.instance' in error and 'new violation' in error for error in self.errors()))
+        # Duplicating an existing violation must not hide behind set equality.
+        self.write(self.owner, line + '\n' + line)
+        self.assertTrue(any('new violation' in error for error in self.errors()))
+
+    def test_theme_baseline_does_not_exempt_new_appearance_debt(self):
+        (self.root / self.owner).unlink()
+        path = 'lib/features/tactics/widgets/panel.dart'
+        line = 'final color = Colors.red;'
+        self.write(path, line)
+        self.ledger['baseline'] = [f'{path}: widget bypasses active theme/typography: {line}']
+        self.assertEqual(self.errors(), [])
+        self.write(path, line + '\nfinal style = TextStyle(fontSize: 12);')
+        self.assertTrue(any('fontSize' in error and 'new violation' in error for error in self.errors()))
+
+    def test_retirement_cannot_be_baselined_or_hidden_by_path_move(self):
+        self.write(self.owner, 'PgnViewerController? owner;')
+        self.ledger['baseline'] = [f'{self.owner}: retired API PgnViewerController; use its final owner']
+        self.assertTrue(any('retired API' in error for error in self.errors()))
+        self.ledger['baseline'].clear()
+        self.write(self.owner, 'class Session {}')
+        self.write('lib/services/renamed.dart', 'final owner = PgnViewerController.create();')
+        self.assertTrue(any('renamed.dart: retired API' in error for error in self.errors()))
+
+    def test_retired_forwarder_or_reference_is_rejected(self):
+        self.write('lib/core/pgn/shim.dart', "export '../../features/documents/models/document.dart';")
+        self.assertTrue(any('shim.dart: retired library' in error for error in self.errors()))
+        (self.root / 'lib/core/pgn/shim.dart').unlink()
+        self.write(self.owner, "import '../../../core/pgn/shim.dart';")
+        self.assertTrue(any('dependency on retired library' in error for error in self.errors()))
+
+    def test_retired_names_in_comments_are_not_consumers(self):
+        self.write(self.owner, "// PgnViewerController was deleted.\n/* PgnViewerController */")
+        self.ledger['baseline'].clear()
+        self.assertEqual(self.errors(), [])
+
+    def test_retired_constructor_inside_interpolation_still_fails(self):
+        self.write(self.owner, "final message = '${PgnViewerController()}';")
+        self.ledger['baseline'].clear()
+        self.assertTrue(any('retired API' in error for error in self.errors()))
+
+    def test_conditional_import_cannot_hide_new_native_dependency(self):
+        self.write(self.owner, "import 'port.dart' if (dart.library.io) 'dart:io';")
+        self.ledger['baseline'].clear()
+        self.assertTrue(any('forbidden dependency dart:io' in error for error in self.errors()))
+
+    def test_normalized_package_import_cannot_hide_infrastructure(self):
+        self.write(self.owner, "import 'package:chess_auto_prep/features/tactics/../../infrastructure/store.dart';")
+        self.ledger['baseline'].clear()
+        self.assertTrue(any('forbidden dependency' in error for error in self.errors()))
+
+    def test_stale_or_nonfeature_baseline_is_not_an_exemption(self):
+        self.ledger['baseline'].append('lib/services/legacy.dart: forbidden dependency dart:io')
+        self.assertTrue(any('only feature findings' in error for error in self.errors()))
+        self.ledger['features']['tactics'] = 'migrated-ish'
+        self.assertTrue(any('invalid feature state' in error for error in self.errors()))
 
 
 if __name__ == '__main__':
