@@ -14,6 +14,10 @@ import 'package:chess_auto_prep/infrastructure/documents/file_workspace_recovery
 import 'package:chess_auto_prep/services/storage/app_paths.dart';
 import 'package:chess_auto_prep/screens/study_screen.dart';
 import 'package:chess_auto_prep/widgets/interactive_pgn_editor.dart';
+import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
+import 'package:chess_auto_prep/widgets/engine/inline_engine_bar.dart';
+import 'package:chess_auto_prep/widgets/study/study_board_pane.dart';
+import 'package:chess_auto_prep/widgets/study/study_chapter_sidebar.dart';
 import 'package:chess_auto_prep/widgets/app_mode_switcher.dart';
 
 void main() {
@@ -94,6 +98,17 @@ void main() {
       expect(study.autoSaveEnabled, isFalse);
       expect(await file.readAsString(), external);
       final recovered = study.doc;
+      final boardFinder = find.descendant(
+        of: find.byType(StudyBoardPane),
+        matching: find.byType(ChessBoardWidget),
+      );
+      final chapterListFinder = find.descendant(
+        of: find.byType(StudyChapterSidebar),
+        matching: find.byType(ReorderableListView),
+      );
+      final beforeBoard = tester.widget(boardFinder);
+      final beforeList = tester.widget(chapterListFinder);
+      final beforeEngine = tester.widget(find.byType(InlineEngineBar));
       final commentField = find.descendant(
         of: find.byType(InteractivePgnEditor),
         matching: find.byType(TextField),
@@ -119,6 +134,9 @@ void main() {
         same(editor),
       );
       expect(study.cursorComment, 'Continued after recovery');
+      expect(tester.widget(boardFinder), same(beforeBoard));
+      expect(tester.widget(chapterListFinder), same(beforeList));
+      expect(tester.widget(find.byType(InlineEngineBar)), same(beforeEngine));
       expect(recovered.toPgn(), isNot(contains('Continued')));
       expect(await file.readAsString(), external);
       await tester.tap(find.byKey(const ValueKey('study-save-recovery')));

@@ -106,7 +106,61 @@ class StudyController extends ChangeNotifier
   int get chapterIndex => _chapterIndex;
   StudyChapter get _chapter => _doc.chapters[_chapterIndex];
   MoveTree get _tree => _chapter.tree;
-  StudyChapterProjection get chapter => doc.chapters[_chapterIndex];
+  StudyChapterProjection chapterAt(int index) =>
+      _projections.readChapter(_doc, _doc.chapters[index]);
+  StudyChapterProjection get chapter => chapterAt(_chapterIndex);
+  int indexOfChapter(StudyChapterProjection snapshot) {
+    if (_projections.sessionFor(_doc) != snapshot.session) return -1;
+    final index = chapterList.chapters.indexWhere(
+      (item) => item.key == snapshot.key,
+    );
+    return index >= 0 && chapterAt(index) == snapshot ? index : -1;
+  }
+
+  StudyChapterListProjection get chapterList =>
+      _projections.readChapterList(_doc, _editRevision);
+  StudyTitle get title => (
+    session: _projections.sessionFor(_doc),
+    name: _doc.name,
+    filePath: _doc.filePath,
+    canRename: _doc.filePath != null && _studyPaths.contains(_doc.filePath),
+  );
+
+  StudyCursorProjection? _cursor;
+  Object? _cursorInputs;
+  int _viewRevision = 0;
+  StudyCursorProjection get cursor {
+    final session = _projections.sessionFor(_doc);
+    final key = _projections.chapterKey(_doc, _chapter);
+    final inputs = (session, key, _tree.version, _path, _flipped);
+    if (_cursor != null && _cursorInputs == inputs) return _cursor!;
+    _cursorInputs = inputs;
+    final position = _tree.positionAt(_path);
+    final comment = _tree.commentAt(_path);
+    final nags = _tree.nodeAt(_path)?.nags ?? const <int>[];
+    final old = _cursor;
+    if (old != null &&
+        old.session == session &&
+        old.chapterKey == key &&
+        old.path == _path &&
+        old.flipped == _flipped &&
+        old.position.fen == position.fen &&
+        old.comment == comment &&
+        listEquals(old.nags, nags)) {
+      return old;
+    }
+    return _cursor = StudyCursorProjection(
+      session: session,
+      chapterKey: key,
+      revision: ++_viewRevision,
+      path: _path,
+      position: position,
+      flipped: _flipped,
+      comment: comment,
+      nags: nags,
+    );
+  }
+
   @override
   MoveTreeSnapshot get tree => chapter.tree;
 
@@ -174,6 +228,7 @@ class StudyController extends ChangeNotifier
 
   /// Studies on disk (refreshed by [refreshStudyList]).
   List<RepertoireMetadata> _availableStudies = const [];
+  Set<String> _studyPaths = const {};
   List<RepertoireMetadata> get availableStudies => _availableStudies;
 
   /// Board position at the cursor.
@@ -186,6 +241,7 @@ class StudyController extends ChangeNotifier
     final studies = await _library.list();
     if (isDisposed) return;
     _availableStudies = List.unmodifiable(studies);
+    _studyPaths = {for (final study in studies) study.filePath};
     notifyListeners();
   }
 
@@ -599,6 +655,7 @@ class StudyController extends ChangeNotifier
   }
 
   void _markDirty() {
+    _projections.edited();
     _editRevision++;
     _dirty = true;
     _scheduleAutoSave();

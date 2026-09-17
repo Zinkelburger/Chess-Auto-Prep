@@ -15,6 +15,7 @@ import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../features/studies/controllers/study_controller.dart';
 import '../features/studies/widgets/study_save_button.dart';
+import '../features/studies/widgets/study_selector.dart';
 import '../features/documents/widgets/document_save_dialog.dart';
 import '../design_system/components/name_entry_dialog.dart';
 import '../l10n/generated/app_localizations.dart';
@@ -79,7 +80,6 @@ class _StudyScreenState extends State<StudyScreen> {
   void initState() {
     super.initState();
     _study = context.read<StudyController>();
-    _study.addListener(_onStudyChanged);
     unawaited(_study.refreshStudyList());
     _seenImportGeneration = _import.resultGeneration;
     _import.addListener(_onImportResult);
@@ -115,15 +115,15 @@ class _StudyScreenState extends State<StudyScreen> {
     if (!mounted) return;
     final chapterIndex = handoff.chapterIndex;
     final chapterName = handoff.chapterName;
-    if (chapterIndex != null && _study.doc.chapters.isNotEmpty) {
+    if (chapterIndex != null && _study.chapterList.chapters.isNotEmpty) {
       // Browse↔Edit toggle: the producer showed this same file, index is
       // exact.
       _study.selectChapter(
-        chapterIndex.clamp(0, _study.doc.chapters.length - 1),
+        chapterIndex.clamp(0, _study.chapterList.chapters.length - 1),
       );
     } else if (chapterName != null) {
       // Last match: add-to-study appends, and names aren't unique.
-      final index = _study.doc.chapters.lastIndexWhere(
+      final index = _study.chapterList.chapters.lastIndexWhere(
         (c) => c.name == chapterName,
       );
       if (index >= 0) _study.selectChapter(index);
@@ -138,16 +138,8 @@ class _StudyScreenState extends State<StudyScreen> {
   void dispose() {
     _appStateRef?.removeListener(_onAppStateChanged);
     _import.removeListener(_onImportResult);
-    _study.removeListener(_onStudyChanged);
     _focusNode.dispose();
     super.dispose();
-  }
-
-  void _onStudyChanged() {
-    if (!mounted) return;
-    setState(() {});
-    // Save failures stay visible in the toolbar and recovery panel. A long
-    // transient toast would obscure the board and duplicate that interaction.
   }
 
   // ── Keyboard ─────────────────────────────────────────────────────────
@@ -247,7 +239,7 @@ class _StudyScreenState extends State<StudyScreen> {
   Future<void> _importFromUrl() async {
     final plan = await ImportFromUrlDialog.show(
       context,
-      canAppend: _study.doc.filePath != null,
+      canAppend: _study.title.filePath != null,
     );
     if (plan == null || !mounted) return;
 
@@ -276,10 +268,10 @@ class _StudyScreenState extends State<StudyScreen> {
 
     await _study.createStudyFromPgn(plan.name, plan.pgn);
     if (!mounted) return;
-    final chapters = _study.doc.chapters.length;
+    final chapters = _study.chapterList.chapters.length;
     showAppSnackBar(
       context,
-      'Imported "${_study.doc.name}" — $chapters '
+      'Imported "${_study.title.name}" — $chapters '
       'chapter${chapters == 1 ? '' : 's'}.',
     );
   }
@@ -412,7 +404,7 @@ class _StudyScreenState extends State<StudyScreen> {
       context,
       title: l10n.studyExportTitle,
       fieldLabel: l10n.studyExportName,
-      initialValue: '${_study.doc.name}.pgn',
+      initialValue: '${_study.title.name}.pgn',
       allowUnchanged: true,
       confirmLabel: l10n.saveCopy,
       cancelLabel: l10n.cancel,
@@ -514,7 +506,7 @@ class _StudyScreenState extends State<StudyScreen> {
   /// Trainer's tactics mode: each chapter is one puzzle — starting FEN,
   /// solution mainline, comments shown as annotations.
   Future<void> _train({required bool wholeStudy}) async {
-    final path = _study.doc.filePath;
+    final path = _study.title.filePath;
     if (path == null) {
       showAppSnackBar(
         context,
@@ -576,7 +568,7 @@ class _StudyScreenState extends State<StudyScreen> {
   /// PGN viewer, parked on the same chapter. The viewer's own toggle comes
   /// straight back here.
   Future<void> _browseInViewer() async {
-    final path = _study.doc.filePath;
+    final path = _study.title.filePath;
     if (path == null) {
       showAppSnackBar(
         context,
@@ -590,7 +582,7 @@ class _StudyScreenState extends State<StudyScreen> {
     context.read<AppState>().switchToPgnViewer(
       path: path,
       gameIndex: _study.chapterIndex,
-      historyLabel: 'PGN: ${_study.doc.name}',
+      historyLabel: 'PGN: ${_study.title.name}',
     );
   }
 
@@ -600,14 +592,13 @@ class _StudyScreenState extends State<StudyScreen> {
       study: _study,
       editChapter: _editChapterAt,
     );
-    if (mounted) setState(() {});
   }
 
   Future<void> _editChapterAt(int index) async {
-    final chapter = _study.doc.chapters[index];
+    final chapter = _study.chapterAt(index);
     final edit = await showEditChapterDialog(context, chapter: chapter);
     if (!mounted || edit == null) return;
-    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    final currentIndex = _study.indexOfChapter(chapter);
     if (currentIndex < 0) return;
     _study.updateChapter(
       currentIndex,
@@ -623,7 +614,7 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _clearAnnotationsAt(int index) async {
-    final chapter = _study.doc.chapters[index];
+    final chapter = _study.chapterAt(index);
     final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
@@ -634,12 +625,12 @@ class _StudyScreenState extends State<StudyScreen> {
       confirmLabel: 'Clear',
     );
     if (!mounted || !confirmed) return;
-    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    final currentIndex = _study.indexOfChapter(chapter);
     if (currentIndex >= 0) _study.clearChapterAnnotations(currentIndex);
   }
 
   Future<void> _clearVariationsAt(int index) async {
-    final chapter = _study.doc.chapters[index];
+    final chapter = _study.chapterAt(index);
     final summary = PgnDeletionSummary.variations(chapter.tree);
     final confirmed = await confirmAction(
       context,
@@ -650,7 +641,7 @@ class _StudyScreenState extends State<StudyScreen> {
       confirmLabel: 'Clear',
     );
     if (!mounted || !confirmed) return;
-    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    final currentIndex = _study.indexOfChapter(chapter);
     if (currentIndex >= 0) _study.clearChapterVariations(currentIndex);
   }
 
@@ -662,7 +653,7 @@ class _StudyScreenState extends State<StudyScreen> {
   }
 
   Future<void> _deleteChapterAt(int index) async {
-    if (_study.doc.chapters.length <= 1) {
+    if (_study.chapterList.chapters.length <= 1) {
       showAppSnackBar(
         context,
         'A study needs at least one chapter.',
@@ -670,7 +661,7 @@ class _StudyScreenState extends State<StudyScreen> {
       );
       return;
     }
-    final chapter = _study.doc.chapters[index];
+    final chapter = _study.chapterAt(index);
     final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
@@ -679,7 +670,7 @@ class _StudyScreenState extends State<StudyScreen> {
       confirmLabel: 'Delete',
     );
     if (!mounted || !confirmed) return;
-    final currentIndex = _study.doc.chapters.indexOf(chapter);
+    final currentIndex = _study.indexOfChapter(chapter);
     if (currentIndex >= 0) _study.deleteChapter(currentIndex);
   }
 
@@ -705,88 +696,113 @@ class _StudyScreenState extends State<StudyScreen> {
                   ),
                 ),
               ),
-              if (_study.doc.filePath != null) ...[
-                const SizedBox(width: 12),
-                Flexible(
-                  child: PgnSaveStatus(
-                    filePath: _study.doc.filePath,
-                    autoSave: _study.autoSaveEnabled,
-                    saving: _study.state.busy,
-                    dirty: _study.dirty,
-                    error: _study.saveError,
-                  ),
-                ),
-              ],
+              Flexible(
+                child:
+                    StudySelector<
+                      ({
+                        String? path,
+                        bool autoSave,
+                        bool saving,
+                        bool dirty,
+                        String? error,
+                      })
+                    >(
+                      study: _study,
+                      select: (owner) => (
+                        path: owner.title.filePath,
+                        autoSave: owner.autoSaveEnabled,
+                        saving: owner.state.busy,
+                        dirty: owner.dirty,
+                        error: owner.saveError,
+                      ),
+                      builder: (context, view) => view.path == null
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding: const EdgeInsets.only(left: 12),
+                              child: PgnSaveStatus(
+                                filePath: view.path,
+                                autoSave: view.autoSave,
+                                saving: view.saving,
+                                dirty: view.dirty,
+                                error: view.error,
+                              ),
+                            ),
+                    ),
+              ),
             ],
           ),
           actions: [
             StudySaveButton(study: _study),
             // Only visible while a collection download is running.
             const StudyImportStatusChip(),
-            AppOverflowMenu(
-              entries: [
-                AppMenuEntry(
-                  heading: 'Study',
-                  label: 'New study',
-                  icon: Icons.library_add_outlined,
-                  onRun: () => unawaited(_newStudy()),
-                ),
-                AppMenuEntry(
-                  heading: 'Import',
-                  label: 'From URL…',
-                  icon: Icons.link,
-                  onRun: () => unawaited(_importFromUrl()),
-                ),
-                AppMenuEntry(
-                  label: 'PGN file as chapters…',
-                  icon: Icons.description_outlined,
-                  onRun: () => unawaited(_importPgn()),
-                ),
-                if (_study.doc.filePath != null) ...[
+            StudySelector<bool>(
+              study: _study,
+              select: (owner) => owner.title.filePath != null,
+              builder: (context, hasFile) => AppOverflowMenu(
+                entries: [
                   AppMenuEntry(
-                    heading: 'Export',
-                    label: 'Copy study PGN',
-                    icon: Icons.copy,
-                    onRun: () => unawaited(_exportPgn()),
+                    heading: 'Study',
+                    label: 'New study',
+                    icon: Icons.library_add_outlined,
+                    onRun: () => unawaited(_newStudy()),
                   ),
                   AppMenuEntry(
-                    label: 'Save study PGN as…',
+                    heading: 'Import',
+                    label: 'From URL…',
+                    icon: Icons.link,
+                    onRun: () => unawaited(_importFromUrl()),
+                  ),
+                  AppMenuEntry(
+                    label: 'PGN file as chapters…',
                     icon: Icons.description_outlined,
-                    onRun: () => unawaited(_saveStudyAs()),
+                    onRun: () => unawaited(_importPgn()),
                   ),
-                ],
-                AppMenuEntry(
-                  heading: 'Train',
-                  label: 'Train this chapter',
-                  icon: Icons.school_outlined,
-                  onRun: () => _train(wholeStudy: false),
-                ),
-                AppMenuEntry(
-                  label: 'Train whole study',
-                  icon: Icons.school_outlined,
-                  onRun: () => _train(wholeStudy: true),
-                ),
-                AppMenuEntry(
-                  heading: 'Board',
-                  label: 'Flip board',
-                  icon: Icons.swap_vert,
-                  onRun: _study.toggleFlipped,
-                ),
-                AppMenuEntry(
-                  heading: 'Explore',
-                  label: 'Browse in PGN viewer',
-                  icon: Icons.open_in_new,
-                  enabled: _study.doc.filePath != null,
-                  onRun: _browseInViewer,
-                ),
-                if (_study.doc.filePath != null)
+                  if (hasFile) ...[
+                    AppMenuEntry(
+                      heading: 'Export',
+                      label: 'Copy study PGN',
+                      icon: Icons.copy,
+                      onRun: () => unawaited(_exportPgn()),
+                    ),
+                    AppMenuEntry(
+                      label: 'Save study PGN as…',
+                      icon: Icons.description_outlined,
+                      onRun: () => unawaited(_saveStudyAs()),
+                    ),
+                  ],
                   AppMenuEntry(
-                    heading: 'Manage',
-                    label: 'Delete study…',
-                    icon: Icons.delete_outline,
-                    onRun: () => unawaited(_deleteCurrentStudy()),
+                    heading: 'Train',
+                    label: 'Train this chapter',
+                    icon: Icons.school_outlined,
+                    onRun: () => _train(wholeStudy: false),
                   ),
-              ],
+                  AppMenuEntry(
+                    label: 'Train whole study',
+                    icon: Icons.school_outlined,
+                    onRun: () => _train(wholeStudy: true),
+                  ),
+                  AppMenuEntry(
+                    heading: 'Board',
+                    label: 'Flip board',
+                    icon: Icons.swap_vert,
+                    onRun: _study.toggleFlipped,
+                  ),
+                  AppMenuEntry(
+                    heading: 'Explore',
+                    label: 'Browse in PGN viewer',
+                    icon: Icons.open_in_new,
+                    enabled: hasFile,
+                    onRun: _browseInViewer,
+                  ),
+                  if (hasFile)
+                    AppMenuEntry(
+                      heading: 'Manage',
+                      label: 'Delete study…',
+                      icon: Icons.delete_outline,
+                      onRun: () => unawaited(_deleteCurrentStudy()),
+                    ),
+                ],
+              ),
             ),
             const AppModeSwitcher(),
             const AppSettingsButton(mode: AppMode.study),
@@ -854,7 +870,7 @@ class _StudyScreenState extends State<StudyScreen> {
   /// `PopupMenuButton` can host a text field, and a course-sized study is a
   /// scroll hunt without one.
   Future<void> _pickStudy() async {
-    final current = _study.doc;
+    final current = _study.title;
     final picked = await showSearchablePicker<String>(
       context: context,
       title: 'Switch study',
@@ -873,21 +889,25 @@ class _StudyScreenState extends State<StudyScreen> {
       ],
       emptyMessage: 'No studies yet — import or create one.',
     );
-    if (picked != null && picked != current.filePath) {
+    if (mounted &&
+        picked != null &&
+        picked != current.filePath &&
+        _study.title.session == current.session) {
       await _study.openStudy(picked);
     }
   }
 
   Future<void> _pickChapter() async {
-    final picked = await showSearchablePicker<int>(
+    final list = _study.chapterList;
+    final picked = await showSearchablePicker<Object>(
       context: context,
       title: 'Go to chapter',
       searchHint: 'Search chapters',
-      selected: _study.chapterIndex,
+      selected: list.chapters[_study.chapterIndex].key,
       items: [
-        for (final (i, chapter) in _study.doc.chapters.indexed)
+        for (final (i, chapter) in list.chapters.indexed)
           PickerItem(
-            value: i,
+            value: chapter.key,
             label: chapter.name,
             subtitle: 'Chapter ${i + 1}',
             icon: Icons.bookmark_outline,
@@ -895,6 +915,12 @@ class _StudyScreenState extends State<StudyScreen> {
       ],
       emptyMessage: 'This study has no chapters yet.',
     );
-    if (picked != null) _study.selectChapter(picked);
+    if (!mounted || picked == null || _study.title.session != list.session) {
+      return;
+    }
+    final index = _study.chapterList.chapters.indexWhere(
+      (chapter) => chapter.key == picked,
+    );
+    if (index >= 0) _study.selectChapter(index);
   }
 }

@@ -7,6 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../features/studies/controllers/study_controller.dart';
+import '../../features/studies/widgets/study_selector.dart';
+import '../../features/studies/models/study_projection.dart';
+import '../../chess_core/moves/tree_path.dart';
+import '../../chess_core/moves/move_tree_snapshot.dart';
 import '../../utils/app_messages.dart';
 import '../engine/inline_engine_bar.dart';
 import '../interactive_pgn_editor.dart';
@@ -36,10 +40,14 @@ class StudySidePane extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        InlineEngineBar(
-          fen: study.currentPosition.fen,
-          previewFlipped: study.flipped,
-          onLineMoveTapped: onEngineLine,
+        StudySelector<(String, bool)>(
+          study: study,
+          select: (owner) => (owner.cursor.position.fen, owner.cursor.flipped),
+          builder: (context, view) => InlineEngineBar(
+            fen: view.$1,
+            previewFlipped: view.$2,
+            onLineMoveTapped: onEngineLine,
+          ),
         ),
         const Divider(height: 1),
         if (compact) ...[
@@ -56,20 +64,24 @@ class StudySidePane extends StatelessWidget {
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: InteractivePgnEditor(
-              tree: study.tree,
-              currentPath: study.path,
-              showAnnotationPanel: true,
-              onJump: study.jump,
-              onCommentChanged: study.setComment,
-              onToggleNag: study.toggleNag,
-              onDelete: study.deleteAt,
-              onPromote: study.promote,
-              onMakeMainLine: study.makeMainLine,
-              onCopyToClipboard: (text, message) {
-                unawaited(Clipboard.setData(ClipboardData(text: text)));
-                showAppSnackBar(context, message);
-              },
+            child: StudySelector<(MoveTreeSnapshot, TreePath)>(
+              study: study,
+              select: (owner) => (owner.tree, owner.path),
+              builder: (context, view) => InteractivePgnEditor(
+                tree: view.$1,
+                currentPath: view.$2,
+                showAnnotationPanel: true,
+                onJump: study.jump,
+                onCommentChanged: study.setComment,
+                onToggleNag: study.toggleNag,
+                onDelete: study.deleteAt,
+                onPromote: study.promote,
+                onMakeMainLine: study.makeMainLine,
+                onCopyToClipboard: (text, message) {
+                  unawaited(Clipboard.setData(ClipboardData(text: text)));
+                  showAppSnackBar(context, message);
+                },
+              ),
             ),
           ),
         ),
@@ -99,7 +111,14 @@ class _CompactChapterBar extends StatelessWidget {
   final StudyChapterActions actions;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      StudySelector<(StudyChapterListProjection, int)>(
+        study: study,
+        select: (owner) => (owner.chapterList, owner.chapterIndex),
+        builder: (context, _) => _buildBar(context),
+      );
+
+  Widget _buildBar(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
@@ -121,9 +140,12 @@ class _CompactChapterBar extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        study.doc.chapters.isEmpty
+                        study.chapterList.chapters.isEmpty
                             ? 'No chapters'
-                            : study.doc.chapters[study.chapterIndex].name,
+                            : study
+                                  .chapterList
+                                  .chapters[study.chapterIndex]
+                                  .name,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodyMedium,
                       ),
@@ -141,6 +163,7 @@ class _CompactChapterBar extends StatelessWidget {
             onPressed: onAddChapter,
           ),
           PopupMenuButton<Object>(
+            key: ObjectKey(study.chapterList.chapters[study.chapterIndex].key),
             tooltip: 'Chapter actions',
             onSelected: (action) => action is ChapterAction
                 ? actions.run(action, study.chapterIndex)
@@ -152,7 +175,7 @@ class _CompactChapterBar extends StatelessWidget {
               ),
               const PopupMenuDivider(),
               ...StudyChapterActions.menuItems(
-                canDelete: study.doc.chapters.length > 1,
+                canDelete: study.chapterList.chapters.length > 1,
               ),
             ],
             child: const Padding(

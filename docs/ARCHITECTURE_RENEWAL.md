@@ -1168,6 +1168,48 @@ Viewer/Builder private ownership, complete session restoration, decoder/object
 construction/GC profiling and native large-document frame budgets remain pending.
 Milestones 4–7 and non-Linux/release gates remain unfinished.
 
+### Study selected-view checkpoint (2026-09-17)
+
+After private-core checkpoint `f62f6d4b`, Study separates chapter metadata and
+cursor projections from full document/chapter snapshots. Metadata and identity
+reads never touch move nodes; `chapterAt` copies only the requested chapter.
+Cursor values have their own view revision and retain identity across edits
+elsewhere, metadata renames and save-status changes. Cached whole-document views
+are invalidated on edits so unused older trees are not retained by the cache.
+
+The legacy screen-wide listener is removed. Selected subscriptions independently
+update the title, save indicator, menu availability, chapter list/selection,
+engine position/orientation and editor tree/cursor. The board compares only its
+position, orientation and shapes, so ordinary prose and glyph edits leave it
+unchanged. A repaint boundary preserves the board's painted layer across prose
+and glyph updates; shape changes replace it. Chapter metadata subscriptions also
+keep the manager current when imports or other actions change the chapter list.
+The chapter picker resolves stable keys after its dialog. Chapter row keys survive
+metadata changes/reorder; inline rename
+refuses a switched document or destination. `StudySelector` uses the existing
+Provider bridge strictly as a read subscription; it does not introduce a second
+action/document owner. Riverpod/bridge retirement remains part of the migration.
+
+Focused evidence covers zero node reads for metadata, lazy chapter materialization,
+pending edits surviving interleaved metadata reads, independent immutable cursor
+revisions, stale chapter action checks and actual production-widget identity
+across prose/glyph/shape/cursor/library updates. All 127 focused Study, editor,
+save-safety and startup tests pass, including chapter-manager updates and retained
+board paint layers. A synthetic 20,000-node course (100 chapters) reads metadata
+without touching any move root and materializes only the selected 200-node chapter;
+one debug run measured approximately 1.2 ms and 1.7 ms respectively. These are
+diagnostics, not parsing, retained-memory or native-frame budget certification.
+All three native Linux journeys pass: Study restart recovery, save-conflict
+recovery and application close with dirty documents. Analysis/lint pass with
+nine existing informational analyzer notices. In the disposable headless app,
+restored the prior Study draft and edited its annotation; inspected the
+[1280×720 Study workspace](images/renewal-study-selected-views.png). Windows/macOS
+and the complete release suite were not run for this checkpoint.
+This advances STATE-02 and UI-02; it does not
+complete the large-document gate. Visible movetext windowing, parsing/GC/retained
+memory/native frame budgets, undo receipts, other editors and milestones 4–7
+remain unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

@@ -13,6 +13,8 @@ import 'package:flutter/material.dart';
 import '../../design_system/components/item_title.dart';
 
 import '../../features/studies/controllers/study_controller.dart';
+import '../../features/studies/models/study_projection.dart';
+import '../../features/studies/widgets/study_selector.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import 'study_chapter_actions.dart';
@@ -56,7 +58,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
   bool get _filtering => _filter.trim().isNotEmpty;
 
   List<int> _visibleIndices() {
-    final chapters = widget.study.doc.chapters;
+    final chapters = widget.study.chapterList.chapters;
     if (!_filtering) return [for (var i = 0; i < chapters.length; i++) i];
     final query = _filter.trim().toLowerCase();
     return [
@@ -102,9 +104,16 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      StudySelector<(StudyChapterListProjection, int)>(
+        study: widget.study,
+        select: (study) => (study.chapterList, study.chapterIndex),
+        builder: (context, _) => _buildList(context),
+      );
+
+  Widget _buildList(BuildContext context) {
     final theme = Theme.of(context);
-    final chapters = widget.study.doc.chapters;
+    final chapters = widget.study.chapterList.chapters;
     final visible = _visibleIndices();
     _revealActive(visible);
 
@@ -168,7 +177,7 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
                   onReorderItem: _onReorder,
                   itemBuilder: (context, row) => _buildRow(
                     row,
-                    key: ObjectKey(chapters[row]),
+                    key: ObjectKey(chapters[row].key),
                     canReorder: chapters.length > 1,
                   ),
                 ),
@@ -179,9 +188,9 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
 
   Widget _buildRow(int index, {required Key? key, required bool canReorder}) {
     final theme = Theme.of(context);
-    final chapter = widget.study.doc.chapters[index];
+    final chapter = widget.study.chapterList.chapters[index];
     final active = index == widget.study.chapterIndex;
-    final result = chapter.headers['Result'];
+    final result = chapter.result;
     final showResult = result != null && result.isNotEmpty && result != '*';
 
     final ordinal = Text(
@@ -236,9 +245,14 @@ class _StudyChapterSidebarState extends State<StudyChapterSidebar> {
               ),
               tooltip: 'Chapter actions',
               padding: EdgeInsets.zero,
-              onSelected: (action) => widget.actions.run(action, index),
+              onSelected: (action) {
+                final current = widget.study.chapterList.chapters.indexWhere(
+                  (item) => item.key == chapter.key,
+                );
+                if (current >= 0) widget.actions.run(action, current);
+              },
               itemBuilder: (_) => StudyChapterActions.menuItems(
-                canDelete: widget.study.doc.chapters.length > 1,
+                canDelete: widget.study.chapterList.chapters.length > 1,
               ),
             ),
           ],

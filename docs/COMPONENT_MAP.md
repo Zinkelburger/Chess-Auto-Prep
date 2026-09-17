@@ -484,9 +484,13 @@ it is separate from the native save baseline. Old values retain their headers,
 annotations, glyphs and descendants after later edits. Submitted chapters and
 isolate-decoded nodes are copied on adoption, including mutable NAG lists.
 
-`StudyProjectionCache` belongs to the controller. Navigation and save-status
-notifications reuse the existing document/tree projections. Unchanged chapters
-retain their projections, including across reorder. Ordinary edits reconcile
+`StudyProjectionCache` belongs to the controller. `chapterAt` materializes only
+its requested chapter; title and `StudyChapterListProjection` reads never traverse
+move nodes. `StudyCursorProjection` carries the current position, path, comment,
+glyphs and orientation under its own view revision. Edits elsewhere and save-status
+changes preserve that cursor projection. Unchanged chapters retain their projections,
+including across reorder. Editing invalidates any cached whole-document projection
+so it cannot pin superseded trees while the UI consumes only smaller views. Ordinary edits reconcile
 changed node IDs and their ancestors, sharing immutable unaffected branches;
 chapter-wide clears rebuild that chapter. Initial/bulk construction is iterative.
 The immutable tree's stable editing identity is separate from its content revision,
@@ -504,9 +508,21 @@ changes require a host callback. Study dialogs retain chapter projections and
 reject edits/deletes when that chapter revision is no longer current. Promoting
 or removing siblings and deleting another chapter preserve the viewed position.
 
-Study's legacy screen notification fan-out, dedicated cursor/visible-window
-projections, undo receipts, bulk/decode allocation and native frame measurements,
-and Viewer/Builder private-core adoption remain unfinished.
+`StudySelector` adapts the existing injected Study controller through read-only
+Provider subscriptions, with explicit projection equality. It owns no commands
+or second document state. `StudyScreen` no longer installs a screen-wide rebuild
+listener: title, save indicator, menu availability, chapter list/selection, engine
+position/orientation and editor tree/cursor subscribe separately. The board compares
+position/orientation and parsed shapes, so prose and glyph edits do not rebuild it.
+A board repaint boundary also preserves its painted layer during those edits;
+shape changes repaint it. The chapter manager uses the same metadata subscription,
+and the chapter picker resolves a stable chapter key after its async dialog.
+Chapter rows use stable chapter keys; current-chapter menu identity follows the
+selected chapter. Inline rename rejects a switched document/destination.
+
+Visible-movetext windowing, Riverpod/legacy bridge retirement, undo receipts,
+bulk/decode allocation and native frame measurements, and Viewer/Builder
+private-core adoption remain unfinished.
 
 #### Workspace restart recovery
 

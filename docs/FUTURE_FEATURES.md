@@ -54,9 +54,12 @@ game/mainline cursor/orientation. Close protection works before the reader opens
 Study now keeps its editable document private and publishes immutable cached
 chapter/tree projections, with incremental local-edit updates, stable annotation
 focus and detached prior revisions. Viewer/Builder private-core adoption,
-Study cursor/visible-window subscription work, undo receipts, variation-cursor/
-filter/panel restoration and complete large-document performance evidence remain
-pending.
+visible-movetext windowing, undo receipts, variation-cursor/filter/panel
+restoration and complete large-document performance evidence remain pending.
+Study now has independent cursor/metadata projections and scoped subscriptions;
+metadata reads avoid tree materialization and ordinary annotation edits leave the
+board/engine/sidebar unchanged. Its existing Provider bridge still needs retirement
+with the broader presentation migration.
 Other editors' persisted drafts, clean workspace/session restoration, archive
 purging, builder-draft checks and job shutdown coordination are still pending.
 Legacy unjournaled trash adoption, remaining settings/writers, transactional

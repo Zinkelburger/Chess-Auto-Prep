@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 import '../../design_system/components/item_title.dart';
 
 import '../../features/studies/controllers/study_controller.dart';
+import '../../features/studies/models/study_projection.dart';
+import '../../features/studies/widgets/study_selector.dart';
 import '../../models/pgn_deletion_summary.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
@@ -47,7 +49,7 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
   /// chapters by their *real* index, so filtering never has to renumber
   /// rename / delete / select.
   List<int> get _visibleIndices {
-    final chapters = _study.doc.chapters;
+    final chapters = _study.chapterList.chapters;
     return [
       for (var i = 0; i < chapters.length; i++)
         if (matchesSearch(_search, chapters[i].name)) i,
@@ -58,12 +60,11 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
 
   Future<void> _edit(int index) async {
     await widget.editChapter(index);
-    if (mounted) setState(() {});
   }
 
   Future<void> _delete(int index) async {
-    if (_study.doc.chapters.length <= 1) return;
-    final chapter = _study.doc.chapters[index];
+    if (_study.chapterList.chapters.length <= 1) return;
+    final chapter = _study.chapterAt(index);
     final summary = PgnDeletionSummary.tree(chapter.tree);
     final confirmed = await confirmAction(
       context,
@@ -72,13 +73,20 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
       confirmLabel: 'Delete',
     );
     if (!confirmed || !mounted) return;
-    final currentIndex = _study.doc.chapters.indexOf(chapter);
-    if (currentIndex >= 0) setState(() => _study.deleteChapter(currentIndex));
+    final currentIndex = _study.indexOfChapter(chapter);
+    if (currentIndex >= 0) _study.deleteChapter(currentIndex);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final chapters = _study.doc.chapters;
+  Widget build(BuildContext context) =>
+      StudySelector<(StudyChapterListProjection, int)>(
+        study: _study,
+        select: (owner) => (owner.chapterList, owner.chapterIndex),
+        builder: (context, _) => _buildDialog(context),
+      );
+
+  Widget _buildDialog(BuildContext context) {
+    final chapters = _study.chapterList.chapters;
     final onlyOne = chapters.length <= 1;
     final visible = _visibleIndices;
 
@@ -117,7 +125,10 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
               child: ListSearchField(
                 hintText: 'Search chapters',
-                onChanged: (value) => setState(() => _search = value),
+                onChanged: (value) {
+                  if (!mounted) return;
+                  setState(() => _search = value);
+                },
               ),
             ),
             const Divider(height: 1),
@@ -142,14 +153,14 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                 // so these are final positions.
                 onReorderItem: (oldIndex, newIndex) {
                   if (_isFiltering) return;
-                  setState(() => _study.reorderChapter(oldIndex, newIndex));
+                  _study.reorderChapter(oldIndex, newIndex);
                 },
                 itemBuilder: (context, position) {
                   final index = visible[position];
                   final chapter = chapters[index];
                   final isCurrent = index == _study.chapterIndex;
                   return ListTile(
-                    key: ValueKey('${chapter.name}#$index'),
+                    key: ObjectKey(chapter.key),
                     dense: true,
                     leading: _isFiltering
                         ? const Icon(
@@ -177,7 +188,7 @@ class _ChapterManagerDialogState extends State<_ChapterManagerDialog> {
                         ? const Text('Open now', style: AppTextStyles.caption)
                         : null,
                     onTap: () {
-                      setState(() => _study.selectChapter(index));
+                      _study.selectChapter(index);
                     },
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
