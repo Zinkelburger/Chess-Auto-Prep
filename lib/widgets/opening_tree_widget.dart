@@ -2,6 +2,7 @@
 /// Similar to openingtree.com's interface
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show listEquals;
@@ -23,7 +24,7 @@ import '../utils/movetext_builder.dart';
 
 class OpeningTreeWidget extends StatefulWidget {
   final bool showCopyMoves;
-  final OpeningTree tree;
+  final OpeningGraph tree;
   final Function(String fen)? onPositionSelected;
   final Function(String move)? onMoveSelected;
 
@@ -99,7 +100,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
   /// a sort, and the pane rebuilds on every engine tick and hover.
   _PositionView? _view;
 
-  _PositionView _viewFor(OpeningTree tree) {
+  _PositionView _viewFor(OpeningGraph tree) {
     final current = _view;
     final coverageResult = widget.coverageResult;
     if (current != null &&
@@ -521,7 +522,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
 
   /// One-line position stats, with the reach annotation appended when the
   /// protagonist's color is known and we're past the starting position.
-  Widget _buildStatsLine(PositionGroup position, ReachEstimate? reach) {
+  Widget _buildStatsLine(OpeningPositionView position, ReachEstimate? reach) {
     final showReach =
         reach != null &&
         widget.tree.inBook &&
@@ -598,9 +599,9 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
 
     // Node chain aligned with the SAN list: chain[i] is the node reached by
     // moves[i], so each token can inspect its own frequency and siblings.
-    final reversedChain = <OpeningTreeNode>[];
+    final reversedChain = <OpeningNodeView>[];
     for (
-      OpeningTreeNode? n = currentNode;
+      OpeningNodeView? n = currentNode;
       n != null && n.parent != null;
       n = n.parent
     ) {
@@ -653,7 +654,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
   /// points — a move they sometimes replace with something else. Null when
   /// the move isn't theirs, they always play it, or no protagonist colour is
   /// known (repertoire/PGN-viewer trees).
-  String? _branchPointTip(OpeningTreeNode node) {
+  String? _branchPointTip(OpeningNodeView node) {
     final protagonistIsWhite = widget.protagonistIsWhite;
     final parent = node.parent;
     if (protagonistIsWhite == null || parent == null) return null;
@@ -831,10 +832,10 @@ class _PositionView {
     required this.coverage,
   });
 
-  final OpeningTree tree;
+  final OpeningGraph tree;
   final List<RepertoireLine> lines;
   final String fen;
-  final PositionGroup group;
-  final List<PositionGroup> continuations;
+  final OpeningPositionView group;
+  final List<OpeningPositionView> continuations;
   final CoverageIndex? coverage;
 }

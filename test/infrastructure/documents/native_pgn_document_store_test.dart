@@ -153,8 +153,32 @@ void main() {
       final result = await failed.save(before, 'installed');
       expect(result, isA<PgnWriteUncertain>());
       expect((result as PgnWriteUncertain).observed!.content, 'installed');
+      expect(result.installedRevision, result.observed!.revision);
       expect(file.readAsStringSync(), 'installed');
       expect(await store.save(before, 'duplicate retry'), isA<PgnConflict>());
+    },
+  );
+  test(
+    'same-text impostor after installation carries no provenance proof',
+    () async {
+      final before = await seed();
+      final racing = NativePgnDocumentStore(
+        flushDirectory: (path) async {
+          if (path == root.path) {
+            final impostor = File('${root.path}/impostor')
+              ..writeAsStringSync('installed');
+            impostor.renameSync(file.path);
+            throw const FileSystemException(
+              'flush failed after external replacement',
+            );
+          }
+          await syncDirectory(path);
+        },
+      );
+      final result =
+          await racing.save(before, 'installed') as PgnWriteUncertain;
+      expect(result.observed!.content, 'installed');
+      expect(result.installedRevision, isNull);
     },
   );
   test(

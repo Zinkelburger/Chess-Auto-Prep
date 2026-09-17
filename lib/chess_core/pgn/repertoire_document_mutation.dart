@@ -17,17 +17,15 @@ class AppendMoveStep {
   final String content;
 }
 
-/// The before-content and logical steps of the same validated commit.
-/// A successful empty step list represents a no-op, never an undo entry.
-class AppendMovesResult {
-  AppendMovesResult({
-    required this.success,
+/// Pure logical preparation, not evidence that any file was committed.
+/// An empty step list is a no-op. Native receipts bind this plan to storage.
+class RepertoireAppendPlan {
+  RepertoireAppendPlan({
     required this.previousContent,
     required this.updatedContent,
     required List<AppendMoveStep> steps,
   }) : steps = List.unmodifiable(steps);
 
-  final bool success;
   final String previousContent;
   final String updatedContent;
   final List<AppendMoveStep> steps;
@@ -121,8 +119,8 @@ bool _startsWithEventTag(String content, int start, int end) {
 }
 
 /// Pure preparation shared with sessions which have no backing file. Disk
-/// callers must validate [AppendMovesResult.previousContent] at commit.
-AppendMovesResult prepareAppendMoves(
+/// callers must validate [RepertoireAppendPlan.previousContent] at commit.
+RepertoireAppendPlan prepareAppendMoves(
   String content,
   List<String> pathFromRoot,
   List<String> newSans, {
@@ -174,8 +172,7 @@ AppendMovesResult prepareAppendMoves(
     );
     prefix = next;
   }
-  return AppendMovesResult(
-    success: true,
+  return RepertoireAppendPlan(
     previousContent: content,
     updatedContent: steps.isEmpty ? content : steps.last.content,
     steps: steps,

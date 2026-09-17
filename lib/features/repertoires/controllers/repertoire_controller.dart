@@ -11,7 +11,7 @@ import '../../../chess_core/moves/move_navigation.dart';
 import '../../../chess_core/moves/move_tree_snapshot.dart';
 import '../../../chess_core/moves/tree_path.dart';
 import '../../../models/move_tree.dart';
-import '../../../models/opening_tree.dart';
+import '../../../chess_core/moves/opening_graph.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../../../utils/san_token_utils.dart';
@@ -54,9 +54,12 @@ class RepertoireController
     currentMoveSequence: () => currentMoveSequence,
   );
 
+  Future<T> runDocumentMutation<T>(Future<T> Function() action) =>
+      _document.runDocumentMutation(action);
+
   RepertoireMetadata? get currentRepertoire => _document.currentRepertoire;
   String? get repertoirePgn => _document.repertoirePgn;
-  OpeningTree? get openingTree => _document.openingTree;
+  OpeningGraph? get openingGraph => _document.openingGraph;
   List<RepertoireLine> get repertoireLines => _document.repertoireLines;
   bool get isLoading => _document.isLoading;
   String? get loadError => _document.loadError;
