@@ -4,6 +4,8 @@ library;
 
 import 'dart:async';
 
+import '../../documents/models/pgn_document.dart';
+
 import '../../../chess_core/pgn/repertoire_headers.dart';
 import '../../../chess_core/pgn/repertoire_line_expansion.dart';
 import '../../../chess_core/pgn/repertoire_pgn_text.dart';
@@ -249,30 +251,65 @@ class RepertoireDocumentSession {
     required int generation,
     required Map<String, String> originals,
   }) async {
-    final success = await documents.updateLineContent(
+    final previousLine = originals[lineId]!;
+    final saved = await documents.updateLineContent(
       filePath,
       lineId,
       newPgn,
-      expectedContent: originals[lineId]!,
+      expectedContent: previousLine,
     );
-    if (success == null) return false;
-    originals[lineId] = success;
+    if (saved == null) return false;
+    // The file is already committed. Even a failed presentation refresh must
+    // keep a retained editor callback bound to the acknowledged game.
+    originals[lineId] = saved.linePgn;
     if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
       return true;
     }
 
-    final idx = _repertoireLines.indexWhere((l) => l.id == lineId);
-    if (idx != -1) {
-      // Swap in a fresh list: consumers (lines browser) rebuild their
-      // display/search indexes only when the list identity changes.
-      final updated = List.of(_repertoireLines);
-      updated[idx] = _authoring.rebuildLine(updated[idx], success);
-      _repertoireLines = updated;
-      if (_selectedPgnLine?.id == lineId) {
-        _selectedPgnLine = updated[idx];
+    final previousBaseline = _repertoirePgn;
+    try {
+      final loaded = await decoder.build(
+        saved.documentPgn,
+        fallbackIsWhite: _isRepertoireWhite,
+      );
+      if (!isCurrent(generation) || _currentRepertoire?.filePath != filePath) {
+        return true;
       }
+      // Another document action may finish while decoding. Its source receipt
+      // already includes this save; do not replace it with an older snapshot.
+      if (_repertoirePgn != previousBaseline) return true;
+      final selectedId = _selectedPgnLine?.id;
+      final selectedWasSaved =
+          selectedId == lineId ||
+          _selectedPgnLine?.fullPgn.trim() == previousLine.trim();
+      // Derive everything before replacing the session. This also incorporates
+      // external changes to other games that the line transaction preserved.
+      final acknowledgedLines = _lineOriginals;
+      _applyLoaded(loaded);
+      // Existing editor callbacks share these acknowledgements. Keep their
+      // target preconditions across a refresh (including move-derived ids).
+      for (final line in loaded.lines) {
+        acknowledgedLines.putIfAbsent(line.id, () => line.fullPgn);
+      }
+      _lineOriginals = acknowledgedLines;
+      _currentRepertoire = _currentRepertoire!.copyWith(
+        gameCount: loaded.lines.length,
+      );
+      _selectedPgnLine = null;
+      for (final line in loaded.lines) {
+        if (selectedWasSaved
+            ? line.gameIndex == saved.lineIndex
+            : line.id == selectedId) {
+          _selectedPgnLine = line;
+        }
+      }
+      _loadError = null;
+    } catch (error) {
+      if (!isCurrent(generation)) return true;
+      _loadError = 'Line was saved, but refresh failed: $error';
+      onChanged();
+      rethrow;
     }
-
     onChanged();
     return true;
   }
@@ -292,21 +329,56 @@ class RepertoireDocumentSession {
     if (notify) onChanged();
   }
 
-  /// Append many lines with a single listener notification — generation can
-  /// produce hundreds of lines and per-line notifies rebuild every listener
-  /// each time.
-  void appendNewLines(
-    Iterable<({List<String> moves, String title, String pgn})> entries,
-  ) {
-    final next = List.of(_repertoireLines);
-    var any = false;
-    for (final e in entries) {
-      _appendLineInto(next, e.moves, e.title, e.pgn, updateTree: true);
-      any = true;
-    }
-    if (!any) return;
-    _commitAppendedLines(next);
-    onChanged();
+  /// Capture the destination session before a generator leaves its config UI.
+  /// Re-read after draining editor saves: an edit committed after publication
+  /// must not be replaced in memory with the earlier generation receipt.
+  Future<void> Function(PgnSnapshot) get publishedDocumentReceiver {
+    final expectedGeneration = _loadGeneration;
+    final path = _repertoireFilePath;
+    return (saved) async {
+      if (!isCurrent(expectedGeneration) ||
+          _isLoading ||
+          path == null ||
+          saved.path != path) {
+        return;
+      }
+      final generation = ++_loadGeneration;
+      final position = List<String>.of(currentMoveSequence());
+      final selectedId = _selectedPgnLine?.id;
+      _requestedRepertoire = _currentRepertoire;
+      onLoadStarted();
+      _loadError = null;
+      _setLoading(true);
+      try {
+        await _flushPendingLineSaves();
+        if (!isCurrent(generation)) return;
+        final current = await documents.read(path);
+        if (!isCurrent(generation)) return;
+        if (!current.exists) {
+          throw StateError('The published chapter is no longer available.');
+        }
+        final loaded = await decoder.build(
+          current.pgn,
+          fallbackIsWhite: _isRepertoireWhite,
+        );
+        if (!isCurrent(generation)) return;
+        _applyLoaded(loaded);
+        _currentRepertoire = _currentRepertoire!.copyWith(
+          gameCount: loaded.lines.length,
+        );
+        _selectedPgnLine = null;
+        for (final line in loaded.lines) {
+          if (line.id == selectedId) _selectedPgnLine = line;
+        }
+        onNavigate(position);
+      } catch (error) {
+        if (!isCurrent(generation)) return;
+        _loadError = 'Generated PGN was saved, but refresh failed: $error';
+        rethrow;
+      } finally {
+        if (isCurrent(generation)) _setLoading(false);
+      }
+    };
   }
 
   /// Build one new line into [target] and mirror it into the opening tree.

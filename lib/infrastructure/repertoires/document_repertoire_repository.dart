@@ -108,7 +108,7 @@ class DocumentRepertoireRepository implements RepertoireDocumentRepository {
   }
 
   @override
-  Future<String?> updateLineContent(
+  Future<RepertoireLineSaveReceipt?> updateLineContent(
     String path,
     String lineId,
     String content, {
@@ -144,7 +144,7 @@ class DocumentRepertoireRepository implements RepertoireDocumentRepository {
     // retained by the merge; future saves advance only from this receipt.
     final savedGame = splitRepertoireDocument(updated).games[index];
     _requireSaved(path, await documents.save(before, updated));
-    return savedGame;
+    return (documentPgn: updated, linePgn: savedGame, lineIndex: index);
   }
 
   @override

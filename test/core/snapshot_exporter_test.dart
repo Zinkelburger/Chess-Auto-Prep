@@ -103,7 +103,7 @@ class _Session {
       buildRootFen: kStandardStartFen,
       lineMovePrefix: const [],
       repertoireStartFen: kStandardStartFen,
-      onLinesSaved: (_) {},
+      onPublished: (_) {},
     );
   }
 

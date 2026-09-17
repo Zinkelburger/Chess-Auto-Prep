@@ -12,6 +12,7 @@ import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../features/documents/models/pgn_document.dart';
 import '../core/generation_session_controller.dart';
 import '../core/generation_session_types.dart';
 import '../models/build_tree_node.dart';
@@ -46,7 +47,8 @@ class RepertoireGenerationTab extends StatefulWidget {
   /// that starts from the initial position).
   final String repertoireStartFen;
 
-  final void Function(List<GeneratedLineExport> lines) onLinesSaved;
+  /// Capture a fresh chapter receiver for each run, including repeated builds.
+  final Future<void> Function(PgnSnapshot) Function() createPublicationReceiver;
   final GenerationSessionController generationController;
 
   /// Move sequences of the lines the repertoire already holds, so the
@@ -65,7 +67,7 @@ class RepertoireGenerationTab extends StatefulWidget {
     required this.currentRepertoire,
     required this.currentMoveSequence,
     required this.repertoireStartFen,
-    required this.onLinesSaved,
+    required this.createPublicationReceiver,
     required this.generationController,
     this.existingLineMoves = const [],
     this.onCreateStudy,
@@ -318,7 +320,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       lineMovePrefix: List.unmodifiable(widget.currentMoveSequence),
       repertoireStartFen: widget.repertoireStartFen,
       existingTree: existingTree,
-      onLinesSaved: widget.onLinesSaved,
+      onPublished: widget.createPublicationReceiver(),
       existingLineKeys: {
         for (final moves in widget.existingLineMoves)
           GenerationRequest.lineKey(moves),

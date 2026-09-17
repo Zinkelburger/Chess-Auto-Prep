@@ -842,7 +842,7 @@ class GenerationSessionController extends ChangeNotifier
     lastCourseOutline = course.outline;
     lastModelGameNote = built.modelGameNote;
 
-    final saved = <GeneratedLineExport>[];
+    final saved = <String>[];
     _duplicatesSkipped = 0;
     for (final entry in course.entries) {
       // Already in the file: writing it again would only duplicate it.
@@ -852,22 +852,20 @@ class GenerationSessionController extends ChangeNotifier
         _duplicatesSkipped++;
         continue;
       }
-      saved.add(
-        GeneratedLineExport(
-          moves: entry.movesSan,
-          title: entry.variationName,
-          pgn: entry.pgn,
-        ),
-      );
+      saved.add(entry.pgn);
     }
     if (_cancelRequested || isDisposed) return;
     final result = await _publication.publish(
       _publicationSource!,
-      games: saved.map((line) => line.pgn),
+      games: saved,
       modelGames: course.modelGamePgns.isEmpty ? null : course.modelGamesPgn(),
     );
     switch (result) {
-      case GenerationPublished(:final staged, :final receiptError):
+      case GenerationPublished(
+        :final staged,
+        :final snapshot,
+        :final receiptError,
+      ):
         final path = staged.modelGamesPath;
         if (path != null) {
           lastModelGameNote = '$lastModelGameNote Model games saved to $path.';
@@ -877,7 +875,16 @@ class GenerationSessionController extends ChangeNotifier
               '$lastModelGameNote PGN saved; publication receipt needs '
               'reconciliation at ${staged.manifestPath}.';
         }
-        if (saved.isNotEmpty && !isDisposed) request.onLinesSaved(saved);
+        if (!isDisposed) {
+          try {
+            await request.onPublished(snapshot);
+          } catch (error) {
+            throw StateError(
+              'Generated PGN saved to ${snapshot.path}, but the open chapter '
+              'could not refresh: $error',
+            );
+          }
+        }
         if (_cancelRequested) {
           lastRunSummary = 'Generated PGN saved before cancellation.';
         }

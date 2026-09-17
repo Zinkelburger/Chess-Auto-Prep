@@ -1,5 +1,13 @@
 import '../../../chess_core/pgn/repertoire_document_mutation.dart';
 
+/// Exact acknowledged document and target game after a line edit. Consumers
+/// advance their full-document baseline only from this committed result.
+typedef RepertoireLineSaveReceipt = ({
+  String documentPgn,
+  String linePgn,
+  int lineIndex,
+});
+
 /// Chapter storage boundary. Replacements require the captured decoded content;
 /// adapters also validate the observed document revision at publication.
 abstract interface class RepertoireDocumentRepository {
@@ -16,7 +24,7 @@ abstract interface class RepertoireDocumentRepository {
     required String expectedContent,
   });
   Future<int> deleteLinesAt(String path, Map<int, String> expectedGames);
-  Future<String?> updateLineContent(
+  Future<RepertoireLineSaveReceipt?> updateLineContent(
     String path,
     String lineId,
     String content, {

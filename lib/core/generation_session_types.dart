@@ -1,26 +1,15 @@
 /// Value types passed into and out of the generation session controller.
 library;
 
+import 'dart:async';
+
+import '../features/documents/models/pgn_document.dart';
 import '../models/build_tree_node.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
 import '../services/generation/line_pruner.dart';
-
-/// One exported line from a completed generation run.
-class GeneratedLineExport {
-  /// Full SAN move list from the repertoire's starting position.
-  final List<String> moves;
-  final String title;
-  final String pgn;
-
-  const GeneratedLineExport({
-    required this.moves,
-    required this.title,
-    required this.pgn,
-  });
-}
 
 /// Everything a generation run needs, captured at start time so the run is
 /// independent of any widget lifecycle.
@@ -46,8 +35,9 @@ class GenerationRequest {
   /// Partial tree to resume, or null for a fresh build.
   final BuildTree? existingTree;
 
-  /// Called once with every exported line after the PGN file is written.
-  final void Function(List<GeneratedLineExport> lines) onLinesSaved;
+  /// Awaited once after source publication. The host adopts the committed
+  /// document under its captured chapter session, before another run starts.
+  final FutureOr<void> Function(PgnSnapshot saved) onPublished;
 
   /// Move sequences (from the repertoire's start, as [lineKey] strings) the
   /// repertoire file already holds.  A generated line that matches one is
@@ -66,7 +56,7 @@ class GenerationRequest {
     required this.buildRootFen,
     required this.lineMovePrefix,
     required this.repertoireStartFen,
-    required this.onLinesSaved,
+    required this.onPublished,
     this.existingTree,
     this.existingLineKeys = const {},
     this.expectimaxOnly = false,
@@ -81,12 +71,12 @@ class GenerationRequest {
     required this.lineMovePrefix,
   }) : repertoireFilePath = target.repertoireFilePath,
        repertoireStartFen = target.repertoireStartFen,
-       onLinesSaved = _ignoreLines,
+       onPublished = _ignorePublication,
        existingTree = null,
        existingLineKeys = const {},
        expectimaxOnly = true;
 
-  static void _ignoreLines(List<GeneratedLineExport> lines) {}
+  static void _ignorePublication(PgnSnapshot saved) {}
 
   /// The identity of a line for duplicate detection: its SAN moves from the
   /// repertoire start, space-joined.

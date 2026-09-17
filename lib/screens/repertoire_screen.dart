@@ -316,12 +316,8 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
                 // the generated ones.
                 if (droppedKeys.contains(line.moves.join(' '))) line,
             ]),
-            onLinesSaved: (lines) {
-              _controller.appendNewLines([
-                for (final l in lines)
-                  (moves: l.moves, title: l.title, pgn: l.pgn),
-              ]);
-            },
+            createPublicationReceiver: () =>
+                _controller.publishedDocumentReceiver,
             onCreateStudy: (name, pgn) async {
               final study = context.read<StudyController>();
               final app = context.read<AppState>();
