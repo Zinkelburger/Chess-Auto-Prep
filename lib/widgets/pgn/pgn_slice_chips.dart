@@ -54,7 +54,7 @@ class PgnSliceChips extends StatelessWidget {
               ),
             SizedBox(
               key: ValueKey(('applied-filter', i)),
-              width: 112,
+              width: 112 * MediaQuery.textScalerOf(context).scale(1),
               height: 20 + 28 * MediaQuery.textScalerOf(context).scale(1),
               child: Material(
                 color: WorkspaceTheme.of(context).inset,
@@ -69,29 +69,10 @@ class PgnSliceChips extends StatelessWidget {
                           onTap: onOpenSliceDialog,
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(8, 4, 0, 4),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  labels[i].value,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.secondary(context)
-                                      .copyWith(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurface,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                ),
-                                Text(
-                                  labels[i].detail,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.caption(context),
-                                ),
-                              ],
+                            child: _label(
+                              context,
+                              labels[i].value,
+                              labels[i].detail,
                             ),
                           ),
                         ),
@@ -126,6 +107,42 @@ class PgnSliceChips extends StatelessWidget {
             icon: const Icon(Icons.add, size: 16),
             label: Text(labels.isEmpty ? 'Filter games' : 'Add filter'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _label(BuildContext context, String value, String detail) {
+    final valueStyle = AppTypography.secondary(context).copyWith(
+      color: Theme.of(context).colorScheme.onSurface,
+      fontWeight: FontWeight.w500,
+    );
+    final detailStyle = AppTypography.caption(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final twoLineHeight =
+        (scaler.scale(valueStyle.fontSize!) * (valueStyle.height ?? 1)).ceil() +
+        (scaler.scale(detailStyle.fontSize!) * (detailStyle.height ?? 1))
+            .ceil();
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: valueStyle,
+          ),
+          // The app bar has a fixed height. Keep the scaled value readable when
+          // its secondary line cannot fit; the edit/remove tooltips retain both.
+          if (constraints.maxHeight >= twoLineHeight)
+            Text(
+              detail,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: detailStyle,
+            ),
         ],
       ),
     );

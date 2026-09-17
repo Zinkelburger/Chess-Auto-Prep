@@ -148,7 +148,14 @@ class SolitaireSetupStrip extends StatelessWidget {
                     selected: includeVariations,
                     onSelected: (v) => onIncludeVariationsChanged(v),
                     visualDensity: VisualDensity.compact,
-                    labelStyle: AppTypography.caption(context),
+                    selectedColor: theme.colorScheme.primaryContainer,
+                    backgroundColor: theme.colorScheme.surfaceContainerLow,
+                    checkmarkColor: theme.colorScheme.onPrimaryContainer,
+                    labelStyle: AppTypography.caption(context).copyWith(
+                      color: includeVariations
+                          ? theme.colorScheme.onPrimaryContainer
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               _Field(

@@ -36,7 +36,7 @@ SolitaireSetupStrip setup({
 }) => SolitaireSetupStrip(
   userIsWhite: true,
   fromCurrentMove: false,
-  includeVariations: false,
+  includeVariations: true,
   canStartHere: true,
   hasSidelines: true,
   startHereLabel: 'after 13.Nf3',
@@ -188,7 +188,7 @@ void main() {
     final controller = SolitaireController()..revealDelaySec = 0;
     addTearDown(controller.dispose);
     controller.start(
-      script: SolitaireScript(
+      script: const SolitaireScript(
         steps: [
           SolitaireStep(san: 'e4', before: Chess.initial, mainlinePly: 0),
         ],
@@ -213,6 +213,32 @@ void main() {
     await tester.tap(find.text('Reveal'));
     expect([hints, reveals], [1, 1]);
   });
+
+  testWidgets(
+    'completion actions use supplied commands without a Viewer facade',
+    (tester) async {
+      final controller = SolitaireController();
+      addTearDown(controller.dispose);
+      final calls = <String>[];
+      await tester.pumpWidget(
+        host(
+          SolitaireCompleteBanner(
+            controller: controller,
+            onNextGame: () => calls.add('next'),
+            onCopyPgn: () => calls.add('copy'),
+            onAddToStudy: () => calls.add('study'),
+            onAnalyse: () => calls.add('analyse'),
+            onExit: () => calls.add('exit'),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Copy PGN'));
+      await tester.tap(find.text('Add to study…'));
+      await tester.tap(find.text('Next game (↓)'));
+      await tester.tap(find.text('Exit solitaire'));
+      expect(calls, ['copy', 'study', 'next', 'exit']);
+    },
+  );
 
   testWidgets(
     'tree variation control delegates without owning a mutable tree',
@@ -272,6 +298,38 @@ void main() {
     },
   );
 
+  testWidgets(
+    'filter chips remain usable in the fixed app bar at 200 percent',
+    (tester) async {
+      var removed = false;
+      await tester.pumpWidget(
+        host(
+          SizedBox(
+            height: kToolbarHeight,
+            child: PgnSliceChips(
+              config: const SliceConfig(
+                headerFilters: [
+                  HeaderFilterConfig(
+                    field: 'Event',
+                    mode: MatchMode.exact,
+                    value: 'Candidates',
+                  ),
+                ],
+              ),
+              onRemoveChip: (_) => removed = true,
+              onOpenSliceDialog: () {},
+            ),
+          ),
+          scale: 2,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.byTooltip('Edit Event is Candidates'), findsOneWidget);
+      await tester.tap(find.byTooltip('Remove Event is Candidates'));
+      expect(removed, isTrue);
+    },
+  );
+
   for (final theme in [AppTheme.dark(), AppTheme.light()]) {
     for (final scale in [1.0, 1.5, 2.0]) {
       testWidgets(
@@ -280,6 +338,45 @@ void main() {
           await tester.binding.setSurfaceSize(const Size(900, 1000));
           addTearDown(() => tester.binding.setSurfaceSize(null));
           await tester.pumpWidget(host(setup(), theme: theme, scale: scale));
+          expect(tester.takeException(), isNull);
+          final chip = tester.widget<FilterChip>(find.byType(FilterChip));
+          final foreground = chip.labelStyle!.color!;
+          final background = chip.selectedColor!;
+          final a = foreground.computeLuminance();
+          final b = background.computeLuminance();
+          expect(
+            (a > b ? a + .05 : b + .05) / (a > b ? b + .05 : a + .05),
+            greaterThanOrEqualTo(4.5),
+          );
+          final solitaire = SolitaireController();
+          addTearDown(solitaire.dispose);
+          await tester.pumpWidget(
+            host(
+              SolitaireStatusBar(
+                controller: solitaire,
+                onHint: () {},
+                onReveal: () {},
+                onExit: () {},
+              ),
+              theme: theme,
+              scale: scale,
+            ),
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(
+            host(
+              SolitaireCompleteBanner(
+                controller: solitaire,
+                onNextGame: () {},
+                onCopyPgn: () {},
+                onAddToStudy: () {},
+                onAnalyse: () {},
+                onExit: () {},
+              ),
+              theme: theme,
+              scale: scale,
+            ),
+          );
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(host(toolbar(), theme: theme, scale: scale));
           expect(tester.takeException(), isNull);
