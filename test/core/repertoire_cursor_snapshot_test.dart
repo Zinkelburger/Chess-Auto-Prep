@@ -34,7 +34,8 @@ void main() {
       expect(identical(c.position, c.position), isTrue);
 
       c.goToStart();
-      expect(identical(c.position, c.tree.startingPosition), isTrue);
+      expect(c.tree.startingPosition.fen, c.position.fen);
+      expect(identical(c.position, c.position), isTrue);
       expect(c.position.fen, Chess.initial.fen);
       c.dispose();
     });

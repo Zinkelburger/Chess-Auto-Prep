@@ -12,6 +12,8 @@ import 'package:flutter/foundation.dart';
 
 import '../constants/chess_constants.dart';
 import '../models/move_tree.dart';
+import '../chess_core/moves/move_tree_projection_cache.dart';
+import '../chess_core/moves/move_tree_snapshot.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
@@ -89,10 +91,11 @@ class RepertoireController
 
   // ── Tree + path (single source of truth) ─────────────────────────
 
-  /// The editable PGN move tree.
+  /// The mutable draft is private; widgets only receive detached values.
   MoveTree _tree = MoveTree();
+  final _treeProjection = MoveTreeProjectionCache();
   @override
-  MoveTree get tree => _tree;
+  MoveTreeSnapshot get tree => _treeProjection.read(_tree);
 
   TreePath _cursor = TreePath.empty;
 
@@ -251,6 +254,7 @@ class RepertoireController
   /// cursor).  Equivalent to old `userSelectedTreeMove`.
   void playMoveAtTreePath(TreePath basePath, String sanMove) {
     final versionBefore = _tree.version;
+    _treeProjection.changed(_tree, path: basePath);
     final newPath = _tree.addMove(basePath, sanMove);
     if (newPath == null) return;
     if (_tree.version == versionBefore) {
@@ -272,13 +276,14 @@ class RepertoireController
 
   /// Atomically navigate to a specific position within a line.
   void navigateToLineMove(List<String> fullPath, {int? targetIndex}) {
+    final versionBefore = _tree.version;
     _ensureMovesInTree(fullPath);
     final tp = _pathForMoveSequence(fullPath);
-    if (targetIndex != null && targetIndex >= 0 && targetIndex < tp.length) {
-      jump(tp.take(targetIndex + 1));
-    } else {
-      jump(tp);
-    }
+    final target =
+        targetIndex != null && targetIndex >= 0 && targetIndex < tp.length
+        ? tp.take(targetIndex + 1)
+        : tp;
+    _jumpAfterLineEntry(target, versionBefore);
   }
 
   /// Append [lineMoves] from the current position and jump to [lineMoveIndex].
@@ -286,10 +291,20 @@ class RepertoireController
     if (lineMoves.isEmpty) return;
     final base = currentMoveSequence;
     final full = [...base, ...lineMoves];
+    final versionBefore = _tree.version;
     _ensureMovesInTree(full);
     final clamped = lineMoveIndex.clamp(0, lineMoves.length - 1);
     final tp = _pathForMoveSequence(full);
-    jump(tp.take(base.length + clamped + 1));
+    _jumpAfterLineEntry(tp.take(base.length + clamped + 1), versionBefore);
+  }
+
+  void _jumpAfterLineEntry(TreePath target, int versionBefore) {
+    if (_tree.version == versionBefore) {
+      jump(target);
+    } else {
+      _path = target;
+      _notifyStructureChanged();
+    }
   }
 
   /// Jump to a specific move index in the history.
@@ -395,13 +410,14 @@ class RepertoireController
   /// Load a pre-built tree (e.g. an annotated trap line) and place the
   /// cursor at [cursor], falling back to the mainline end when invalid.
   /// [label] is surfaced as the PGN pane title while the tree is shown.
+  /// Adoption detaches all mutable nodes/lists from the caller.
   void loadAnnotatedTree(MoveTree tree, {TreePath? cursor, String? label}) {
     _selectedPgnLine = null;
     _annotatedLineLabel = label;
-    _tree = tree;
-    _path = cursor != null && tree.isValidPath(cursor)
+    _tree = tree.copyWithFreshIds();
+    _path = cursor != null && _tree.isValidPath(cursor)
         ? cursor
-        : tree.mainlineEndFrom(TreePath.empty);
+        : _tree.mainlineEndFrom(TreePath.empty);
     _notifyStructureChanged();
   }
 
@@ -428,6 +444,7 @@ class RepertoireController
     final oldCursor = _path;
     final generation = _loadGeneration;
     final newCursor = target.parent;
+    _treeProjection.changed(_tree, path: target.parent);
     _tree.deleteAt(target);
     _path = _tree.isValidPath(newCursor) ? newCursor : TreePath.empty;
     final after = _tree.toPgnMoveText();
@@ -452,6 +469,7 @@ class RepertoireController
   /// which is stable under any reordering.
   void promoteVariation(TreePath target) {
     final cursorSans = _tree.sanSequenceAt(_path);
+    _treeProjection.changed(_tree, path: target.parent);
     _tree.promoteVariation(target);
     _path = _pathForMoveSequence(cursorSans);
     _notifyStructureChanged();
@@ -465,6 +483,7 @@ class RepertoireController
     for (int depth = 0; depth < indices.length; depth++) {
       if (indices[depth] != 0) {
         final pathAtDepth = TreePath(indices.sublist(0, depth + 1));
+        _treeProjection.changed(_tree, path: pathAtDepth.parent);
         _tree.promoteVariation(pathAtDepth);
         indices[depth] = 0;
       }
@@ -475,12 +494,14 @@ class RepertoireController
 
   /// Update comment on the node at [target].
   void setCommentAtPath(TreePath target, String? comment) {
+    _treeProjection.changed(_tree, path: target);
     _tree.setComment(target, comment);
     _notifyStructureChanged();
   }
 
   /// Toggle a move-quality NAG glyph on the node at [target].
   void toggleNagAtPath(TreePath target, int nagId) {
+    _treeProjection.changed(_tree, path: target);
     _tree.toggleNag(target, nagId);
     _notifyStructureChanged();
   }
@@ -510,6 +531,7 @@ class RepertoireController
 
   /// Ensure a SAN sequence exists in the tree (adding nodes as needed).
   void _ensureMovesInTree(List<String> moves) {
+    _treeProjection.changed(_tree, path: _tree.pathForSans(moves));
     var parentPath = TreePath.empty;
     for (final san in moves) {
       final result = _tree.addMove(parentPath, san);
@@ -623,7 +645,7 @@ class RepertoireController
     _lineSaveTail,
     _lineSaveFailure,
     _pendingLineSave,
-    _tree,
+    _treeProjection.sessionFor(_tree),
     _tree.version,
   );
 

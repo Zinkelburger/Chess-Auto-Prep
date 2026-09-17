@@ -6,7 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/move_tree_view.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import '../interactive_pgn_editor.dart';
@@ -16,6 +16,7 @@ class EditMainZone extends StatelessWidget {
     super.key,
     required this.tree,
     required this.currentPath,
+    this.snapshotForSave,
     this.onJump,
     this.onCommentChanged,
     this.onToggleNag,
@@ -34,7 +35,8 @@ class EditMainZone extends StatelessWidget {
     this.ephemeralTitle,
   });
 
-  final MoveTree tree;
+  final MoveTreeView tree;
+  final MoveTreeView Function()? snapshotForSave;
   final TreePath currentPath;
   final ValueChanged<TreePath>? onJump;
   final void Function(TreePath path, String? comment)? onCommentChanged;
@@ -60,6 +62,7 @@ class EditMainZone extends StatelessWidget {
   Widget build(BuildContext context) {
     return InteractivePgnEditor(
       tree: tree,
+      snapshotForSave: snapshotForSave,
       currentPath: currentPath,
       onJump: onJump,
       onCommentChanged: onCommentChanged,

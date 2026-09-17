@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart' show mapEquals;
 
-import '../../../chess_core/moves/move_tree_snapshot.dart';
+import '../../../chess_core/moves/move_tree_projection_cache.dart';
 import '../../../models/move_tree.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import '../models/study_document.dart';
@@ -16,21 +16,16 @@ class StudyProjectionCache {
   StudyDocumentProjection? _document;
   final _chapters = <StudyChapter, (MoveTree, StudyChapterProjection)>{};
 
-  final _changedNodes = <StudyChapter, Set<int>>{};
-  final _bulkChanges = <StudyChapter>{};
+  final _trees = <StudyChapter, MoveTreeProjectionCache>{};
 
   /// A previously requested whole-document view must not pin superseded trees
   /// while the UI now reads only the active chapter and lightweight metadata.
   void edited() => _document = null;
 
   void changed(StudyChapter chapter, {TreePath? path}) {
-    if (path == null) {
-      _bulkChanges.add(chapter);
-    } else {
-      _changedNodes
-          .putIfAbsent(chapter, () => {})
-          .addAll(chapter.tree.nodeListAt(path).map((node) => node.id));
-    }
+    _trees
+        .putIfAbsent(chapter, MoveTreeProjectionCache.new)
+        .changed(chapter.tree, path: path);
   }
 
   final _chapterKeys = <StudyChapter, Object>{};
@@ -45,8 +40,7 @@ class StudyProjectionCache {
       _list = null;
       _chapters.clear();
       _chapterKeys.clear();
-      _changedNodes.clear();
-      _bulkChanges.clear();
+      _trees.clear();
     }
     return _session;
   }
@@ -71,23 +65,9 @@ class StudyProjectionCache {
         mapEquals(old.headers, chapter.headers)) {
       return old;
     }
-    final MoveTreeSnapshot tree;
-    if (sameTree) {
-      tree = old.tree;
-    } else if (sameSource &&
-        !_bulkChanges.contains(chapter) &&
-        _changedNodes.containsKey(chapter)) {
-      tree = MoveTreeSnapshot.revise(
-        chapter.tree,
-        previous: old!.tree,
-        changedNodeIds: _changedNodes[chapter]!,
-      );
-    } else {
-      tree = MoveTreeSnapshot.capture(
-        chapter.tree,
-        identity: sameSource ? old!.tree.identity : null,
-      );
-    }
+    final tree = _trees
+        .putIfAbsent(chapter, MoveTreeProjectionCache.new)
+        .read(chapter.tree);
     final next = StudyChapterProjection(
       session: _session,
       key: chapterKey(source, chapter),
@@ -98,8 +78,6 @@ class StudyProjectionCache {
       tree: tree,
     );
     _chapters[chapter] = (chapter.tree, next);
-    _changedNodes.remove(chapter);
-    _bulkChanges.remove(chapter);
     return next;
   }
 
@@ -142,8 +120,7 @@ class StudyProjectionCache {
     final current = source.chapters.toSet();
     _chapters.removeWhere((chapter, _) => !current.contains(chapter));
     _chapterKeys.removeWhere((chapter, _) => !current.contains(chapter));
-    _changedNodes.removeWhere((chapter, _) => !current.contains(chapter));
-    _bulkChanges.removeWhere((chapter) => !current.contains(chapter));
+    _trees.removeWhere((chapter, _) => !current.contains(chapter));
   }
 
   StudyDocumentProjection read(StudyDocument source, int editRevision) {

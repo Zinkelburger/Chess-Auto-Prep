@@ -1305,6 +1305,60 @@ Incremental indexing, worker placement decisions, Viewer/Builder private cores,
 undo/session parity, presentation bridge retirement and milestones 4–7 remain
 unfinished. Windows/macOS native checks and full release gates were not run.
 
+### Builder private move-tree ownership checkpoint (2026-09-17)
+
+After PGN decoding checkpoint `548c6ca6`, `RepertoireController.tree` returns a
+cached immutable `MoveTreeSnapshot`. The mutable draft remains private; importing
+an annotated tree copies its nodes, lists and annotations with fresh IDs. Even
+the close-revision token now contains an opaque session identity instead of a
+mutable tree reference. Old projections retain their values after later edits.
+
+Study and Builder now use `chess_core/moves/move_tree_projection_cache.dart` for
+tree projection. Owners record ancestor paths before mutation; local edits share
+untouched branches, bulk changes recapture, replacement rotates editing identity,
+and cursor-only changes reuse the exact view. Study retains its chapter metadata
+and selection caches. Builder line-entry commands now report structure changes
+when they insert moves even if the requested cursor was already selected.
+
+Builder's editor/analysis wrappers accept the shared read-only contract. Its
+session-scoped `snapshotForSave` supplier captures the controller's current
+revision synchronously after an edit, before the widget rebuilds. This is needed
+because serializing the displayed immutable revision would otherwise save the
+previous content. The debounce still retains both the captured text and original
+destination across chapter switches. The native journey also exposed a missing
+Builder glyph callback; the displayed buttons now invoke the controller and save
+through this same boundary.
+
+Verification (Linux, this checkpoint):
+
+| Check | Result |
+|---|---|
+| Unit/widget regression | 443 distinct cases pass across the broader run and focused reruns: repertoire controllers/writers, navigation, mutable/immutable move models, Study, traps, training-session controller, Builder screen, editor/autosave and scoped Study rebuilds. No skipped cases in this selected scope. |
+| Ownership and capture | Tests reject mutable-list writes, preserve old annotations, detach imported trees, share untouched branches, retain opaque close tokens, restore draft undo and capture edits before any host rebuild or chapter switch. |
+| 20,000-node Builder fixture | First projection 33,494 µs; deep annotation plus revised projection 2,311 µs. The 99 untouched root branches retain identity; navigation reuses the full view. These debug timings exclude parsing/adoption and do not certify allocation or frame budgets. |
+| Native integration | Five journeys pass: Builder annotations/glyph save and reload; two existing workspace navigation/draft journeys; large Study open/jump/edit/save; Study conflict/reload/retained-draft/exclusive-copy recovery. Large Study open 1,240 ms, jump 643 ms, RSS after edit/save 781,115,392 bytes. |
+| Analysis and lint | Pass with nine existing analyzer info notices; all 15 architecture-checker tests pass. |
+
+A disposable headless app check also typed a comment, toggled the Builder glyph
+and inspected both the saved PGN (including earlier variation/annotation text)
+and the [1280×720 Builder screenshot](images/renewal-builder-projection.png).
+The preview was stopped. Existing recovery banners in the disposable profile
+belong to earlier recovery checks.
+
+The first broader run exposed four writer-undo fixture failures because storage
+roots were not injected. Writer and undo fixtures now use disposable storage and
+dispose their controllers; their ten cases pass. A mistyped rebuild-test path was
+corrected to `test/widgets/study_rebuild_scope_test.dart`, whose two cases pass.
+The first native Builder run failed on its disconnected glyph action; the actual
+production callback was fixed before the complete native rerun passed.
+
+This advances STATE-02 and ARCH-01 for Builder's edited tree; it does not migrate
+the whole legacy repertoire coordinator. Storage/session collaborators, Builder
+draft recovery, remaining undo receipts, scoped presentation subscriptions and
+Provider retirement remain pending. Viewer private-core adoption and windowing,
+complete editor parity/performance gates, milestones 4–7 and non-Linux/release
+gates also remain unfinished.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts

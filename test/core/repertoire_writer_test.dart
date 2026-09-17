@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
@@ -15,6 +17,11 @@ void main() {
 
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('repertoire_writer_test');
+      StorageFactory.instanceForTest = IOStorageService(
+        documentsRoot: tempDir,
+        supportRoot: tempDir,
+        repertoiresRoot: tempDir,
+      );
       filePath = '${tempDir.path}/test.pgn';
       await File(filePath).writeAsString('''
 // Color: White
@@ -40,6 +47,8 @@ void main() {
     });
 
     tearDown(() async {
+      controller.dispose();
+      StorageFactory.instanceForTest = null;
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }

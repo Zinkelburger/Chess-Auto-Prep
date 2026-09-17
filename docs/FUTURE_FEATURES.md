@@ -60,7 +60,11 @@ Production single-game PGN parsing now shares a guarded chess-core entry point;
 long annotated lines avoid quadratic upstream copying, and move replay/fresh-ID
 adoption handle deep lines iteratively. The native 20,000-node debug journey opens
 in 1.3 seconds, with profile-mode memory/frame gates still pending.
-Viewer/Builder private-core adoption, Viewer movetext windowing, incremental
+Builder now publishes immutable cached move-tree views and detaches caller-owned
+trees at adoption. Study and Builder share the projection cache; Builder autosaves
+capture the current owner revision before UI rebuilds and retain their destination
+across chapter changes. Viewer private-core adoption, remaining Builder storage/
+session ownership and draft recovery, Viewer movetext windowing, incremental
 editor indexing, undo receipts, variation-cursor/filter/panel
 restoration and complete large-document performance evidence remain pending.
 Study now has independent cursor/metadata projections and scoped subscriptions;

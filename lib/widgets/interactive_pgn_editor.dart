@@ -1,6 +1,6 @@
 /// Interactive PGN editor widget for repertoire building.
 ///
-/// Pure view: receives a [MoveTree] + [TreePath] from the controller and
+/// Pure view: receives a [MoveTreeView] + [TreePath] from the controller and
 /// fires callbacks for user actions.  No internal move state.
 library;
 
@@ -34,6 +34,11 @@ import 'pgn/pgn_annotation_panel.dart';
 class InteractivePgnEditor extends StatefulWidget {
   /// The move tree to display (owned by controller).
   final MoveTreeView tree;
+
+  /// Read the owner's latest revision synchronously after a mutation callback.
+  /// Autosave captures it before a widget rebuild or chapter switch can occur.
+  /// The supplier must remain scoped to the displayed editing session.
+  final MoveTreeView Function()? snapshotForSave;
 
   /// Current cursor path (owned by controller).
   final TreePath currentPath;
@@ -99,6 +104,7 @@ class InteractivePgnEditor extends StatefulWidget {
     super.key,
     required this.tree,
     required this.currentPath,
+    this.snapshotForSave,
     this.onJump,
     this.onCommentChanged,
     this.onToggleNag,
@@ -363,7 +369,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         : (widget.lineTitle?.trim().isNotEmpty ?? false)
         ? widget.lineTitle!.trim()
         : 'Repertoire Line';
-    return widget.tree.toPgn(
+    final tree = widget.snapshotForSave?.call() ?? widget.tree;
+    return tree.toPgn(
       event: title,
       white: _whiteHeader(),
       black: _blackHeader(),

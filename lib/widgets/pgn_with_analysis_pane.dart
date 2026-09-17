@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/repertoire_controller.dart';
 import '../core/generation_session_controller.dart';
 import '../models/build_tree_node.dart';
-import '../models/move_tree.dart';
+import '../chess_core/moves/move_tree_view.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../services/coherence_service.dart';
@@ -25,7 +25,7 @@ import 'repertoire_analysis_dock.dart';
 /// Analysis dock on top, PGN editor below (resizable split).
 class PgnWithAnalysisPane extends StatefulWidget {
   final RepertoireController controller;
-  final MoveTree tree;
+  final MoveTreeView tree;
   final TreePath currentPath;
   final ValueChanged<TreePath>? onJump;
   final void Function(TreePath, String?)? onCommentChanged;
@@ -243,8 +243,16 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
   }
 
   Widget _buildPgnEditor() {
+    final displayedTree = widget.tree;
+    final owner = widget.controller;
     return EditMainZone(
-      tree: widget.tree,
+      tree: displayedTree,
+      snapshotForSave: () {
+        final current = owner.tree;
+        return identical(current.identity, displayedTree.identity)
+            ? current
+            : displayedTree;
+      },
       currentPath: widget.currentPath,
       lineTitle: _selectedLineTitle(),
       onJump: widget.onJump,

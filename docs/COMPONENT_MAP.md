@@ -44,7 +44,7 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026, post 7-phase remedi
 
 **June 2026 remediation (7-phase refactor):** Repertoire metadata is typed (`RepertoireMetadata` replaces `Map<String, dynamic>`). `AppState` no longer tracks a global saved-games list. `RepertoireController` navigation funnels through `playMove` / `playMoveAtTreePath` (removed `userPlayedMove`, `_isInternalUpdate`). `GenerationSessionController.dispose()` stops an in-flight build. Lines browser uses typed `LineSortBy` / `LineMetricsFilter`, 300 ms search debounce, and lazy grouped `ListView.builder` rows. PGN editor memoizes move widgets and delegates clipboard/persist I/O to parent callbacks. Coherence FP-Growth runs in `Isolate.run`. `EngineLifecycle.enterGeneration` / `exitGeneration` are serialized via `_serialExec`. Startup failures surface via `runZonedGuarded` → `StartupErrorApp`; repertoire load failures via `RepertoireController.loadError`. Deleted unused `ease_calculator.dart`. New extractions: `GenerationConfigForm`, `RepertoireShortcuts`.
 
-**Repertoire navigation model:** `RepertoireController` owns a `MoveTree` (editable PGN tree) and a `TreePath` cursor. All navigation goes through `controller.jump(path)`. `controller.awaitLoaded()` returns a Future that completes when the current load finishes (Completer-based); used by `repertoire_screen` for deep-link line navigation and generation seeding instead of listener polling. The PGN editor (`InteractivePgnEditor`) is a pure view that receives `tree` + `currentPath` as props and fires `onJump` / `onCommentChanged` / `onDelete` / `onPromote` / `onMakeMainLine` callbacks. Clipboard writes wired in `EditMainZone` via `onCopyToClipboard`; debounced line saves use `onAutoSave` (falls back to `onLineEdited`) and optional `onDirty`. The "Save to Repertoire" button and `onLineSaved`/`onPersistNewLine` callbacks have been removed — lines are auto-saved.
+**Repertoire navigation model:** `RepertoireController` privately owns a mutable `MoveTree` and a `TreePath` cursor. Its public `tree` is a cached immutable `MoveTreeSnapshot`; loading an annotated caller-owned tree adopts a detached copy with fresh node IDs. All navigation goes through `controller.jump(path)`. `controller.awaitLoaded()` returns a Future that completes when the current load finishes (Completer-based); used by `repertoire_screen` for deep-link line navigation and generation seeding instead of listener polling. The PGN editor (`InteractivePgnEditor`) is a pure view that receives `tree` + `currentPath` as props and fires `onJump` / `onCommentChanged` / `onDelete` / `onPromote` / `onMakeMainLine` callbacks. Clipboard writes wired in `EditMainZone` via `onCopyToClipboard`; debounced line saves use `onAutoSave` (falls back to `onLineEdited`) and optional `onDirty`. The "Save to Repertoire" button and `onLineSaved`/`onPersistNewLine` callbacks have been removed — lines are auto-saved. The editor's injected `snapshotForSave` supplier captures the owner's latest immutable revision synchronously after an edit, before the next widget rebuild. The supplier is scoped to the displayed tree identity; the pending save still captures its original content and destination before chapter changes.
 
 **PGN context menu (right-click):** Uses Flutter's built-in `showMenu` API (Overlay-based, avoids Stack/Positioned layout issues). Menu items: Add Comment (focuses comment TextField), Promote Variation (non-mainline only), Make Main Line (recursive promote to root, non-mainline only), Duplicate Line (copies full line to clipboard), Copy PGN from Here, View in Lines (existing-line only; switches to Lines tab), Delete from Here. When the context menu is open, all moves from root to the right-clicked position are highlighted (blueGrey background). Delete from Here records a draft-only undo via `RepertoireWriter.recordDraftUndo()`, making it reversible with Ctrl+Z without replacing the chapter on disk.
 
@@ -534,9 +534,18 @@ cursor changes, and retains the single inline comment draft across eviction.
 The layout index itself remains O(nodes + prose), rebuilt on content revisions;
 this does not complete incremental indexing, parsing/allocation or frame budgets.
 
-Riverpod/legacy bridge retirement, undo receipts,
-bulk/decode allocation and native frame measurements, and Viewer/Builder
-private-core adoption remain unfinished.
+`chess_core/moves/move_tree_projection_cache.dart` shares lazy immutable tree
+projection between Study and Builder. Owners record changed ancestor paths before
+mutation; untouched branches are shared, bulk changes recapture, and replacing
+the private source rotates an opaque editing identity. Cursor notifications reuse
+the exact snapshot. Builder's close revision also exposes an opaque identity,
+never the mutable core. Line-entry operations that insert moves notify structural
+subscribers even when the visible cursor does not move.
+
+Riverpod/legacy bridge retirement, undo receipts, bulk/decode allocation and
+native frame measurements, and Viewer private-core adoption remain unfinished.
+Builder still owns legacy storage/session collaborators and needs the remaining
+feature ownership, draft recovery and presentation migrations.
 
 #### Workspace restart recovery
 

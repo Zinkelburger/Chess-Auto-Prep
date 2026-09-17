@@ -281,6 +281,7 @@ mixin _RepertoireTabContent
       onJump: (path) => _controller.jump(path),
       onCommentChanged: (path, comment) =>
           _controller.setCommentAtPath(path, comment),
+      onToggleNag: _controller.toggleNagAtPath,
       onDelete: (path) => _controller.deleteAtPath(path),
       onPromote: (path) => _controller.promoteVariation(path),
       onMakeMainLine: (path) => _controller.makeMainLine(path),
