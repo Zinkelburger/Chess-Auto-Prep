@@ -19,6 +19,7 @@ import '../theme/pgn_text_styles.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import '../chess_core/moves/move_tree_view.dart';
+import '../chess_core/moves/move_tree_snapshot.dart';
 import 'package:chess_auto_prep/chess_core/pgn/move_text_writer.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
@@ -146,6 +147,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // Cache only visible/recent rows. The pure index contains no widget trees,
   // and linked addresses avoid copying every ancestor path during indexing.
   MoveTextLayout? _layout;
+  final _commentCache = MoveTextCommentCache();
   MoveTreeView? _layoutTree;
   int _layoutVersion = -1;
   int? _layoutEditingNode;
@@ -700,7 +702,18 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         !identical(_layoutTree, widget.tree) ||
         _layoutVersion != widget.tree.version ||
         _layoutEditingNode != editingNode) {
-      _layout = MoveTextLayout.capture(widget.tree, editingNodeId: editingNode);
+      final tree = widget.tree;
+      final revised =
+          _layoutEditingNode == editingNode && tree is MoveTreeSnapshot
+          ? _layout?.reviseAnnotations(tree, comments: _commentCache)
+          : null;
+      _layout =
+          revised ??
+          MoveTextLayout.capture(
+            tree,
+            editingNodeId: editingNode,
+            comments: _commentCache,
+          );
       _layoutTree = widget.tree;
       _layoutVersion = widget.tree.version;
       _layoutEditingNode = editingNode;

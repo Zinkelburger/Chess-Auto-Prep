@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:chess_auto_prep/models/repertoire_review_entry.dart';
-import 'package:chess_auto_prep/models/training_settings.dart';
-import 'package:chess_auto_prep/services/training/review_progress_store.dart';
+import 'package:chess_auto_prep/features/training/models/training_settings.dart';
+import 'package:chess_auto_prep/features/training/controllers/review_progress_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'training_fakes.dart';
@@ -31,7 +31,7 @@ void main() {
         var source = '/first.pgn';
         final store = ReviewProgressStore(
           reviewService: reviews,
-          repertoireService: FakeRepertoireService(),
+          headers: FakeRepertoireService().files,
           settings: () => TrainingSettings(),
           repertoireId: () => source,
         );

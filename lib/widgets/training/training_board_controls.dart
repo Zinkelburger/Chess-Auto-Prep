@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../../features/repertoires/controllers/repertoire_controller.dart';
 import '../../models/repertoire_line.dart';
-import '../../services/training/training_phase.dart';
-import '../../services/training/training_session_controller.dart';
+import '../../features/training/models/training_phase.dart';
+import '../../features/training/controllers/training_session_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../theme/pgn_text_styles.dart';

@@ -6,8 +6,30 @@ from check_architecture_boundaries import RETIRED_BUILDER_LIBRARIES, pure_depend
 
 
 class BoundariesTest(unittest.TestCase):
+    def test_training_and_generation_owners_cannot_reintroduce_io(self):
+        for feature in ('training', 'generation'):
+            for layer in ('controllers', 'models', 'repositories'):
+                path = f'lib/features/{feature}/{layer}/owner.dart'
+                for uri in ('dart:io', 'package:shared_preferences/shared_preferences.dart',
+                            'package:chess_auto_prep/infrastructure/storage.dart',
+                            '../../../services/storage/storage_factory.dart'):
+                    with self.subTest(path=path, uri=uri):
+                        self.assertTrue(violations(path, f"import '{uri}';"))
+                self.assertTrue(violations(path, 'final store = StorageFactory.instance;'))
+                self.assertFalse(violations(path, "import '../repositories/port.dart';"))
+
+    def test_retired_training_and_generation_writers_stay_retired(self):
+        self.assertTrue(violations('lib/services/training/phase.dart', "export 'new_owner.dart';"))
+        self.assertTrue(violations('lib/models/training_settings.dart', "export 'new_owner.dart';"))
+        self.assertTrue(violations('lib/services/generation/pgn_export.dart', 'class PgnBatchWriter {}'))
+        self.assertTrue(violations('lib/core/generation_session_controller.dart', 'final writer = PgnBatchWriter();'))
+
     def test_retired_builder_libraries_cannot_return_as_forwarding_shims(self):
         for path in RETIRED_BUILDER_LIBRARIES:
+            self.assertTrue(violations(path, "export 'replacement.dart';"))
+
+    def test_retired_viewer_libraries_cannot_return_as_forwarding_shims(self):
+        for path in ('lib/core/pgn/workspace.dart', 'lib/core/pgn_viewer_controller.dart', 'lib/services/pgn_opening_headers.dart'):
             self.assertTrue(violations(path, "export 'replacement.dart';"))
 
     def test_pure_dependency_gate_follows_transitive_exports(self):

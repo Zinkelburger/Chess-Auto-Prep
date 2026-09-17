@@ -11,6 +11,7 @@ class RepertoireSelectorPanel extends StatelessWidget {
   final bool canStartTraining;
   final VoidCallback onSelectRepertoire;
   final VoidCallback? onStartTraining;
+  final VoidCallback? onRetry;
 
   /// Opens the loaded repertoire in the Builder. Shown beside the error so an
   /// empty repertoire has a way forward other than picking a different one.
@@ -25,6 +26,7 @@ class RepertoireSelectorPanel extends StatelessWidget {
     required this.canStartTraining,
     required this.onSelectRepertoire,
     this.onStartTraining,
+    this.onRetry,
     this.onOpenInBuilder,
   });
 
@@ -57,6 +59,8 @@ class RepertoireSelectorPanel extends StatelessWidget {
               runSpacing: 8,
               alignment: WrapAlignment.center,
               children: [
+                if (onRetry != null)
+                  FilledButton(onPressed: onRetry, child: const Text('Retry')),
                 if (onOpenInBuilder != null)
                   FilledButton(
                     onPressed: onOpenInBuilder,

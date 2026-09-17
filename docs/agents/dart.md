@@ -7,6 +7,9 @@
   contracts and the Viewer game, collection-load, filter and session owners live in `features/documents/`; Study ownership lives in
   `features/studies/`; pure PGN text/replay utilities live in `chess_core/pgn/`;
   stored engine verdicts and annotation transforms live in `chess_core/analysis/`;
+  training sessions/settings and injected persistence contracts live in
+  `features/training/`; guarded generation publication lives in
+  `features/generation/`;
   typed settings contracts and state live in `features/settings/`; the older singular
   `features/repertoire/` still owns unmigrated document/generation workflows.
 - `lib/app/` constructs dependencies. `lib/infrastructure/` adapts external

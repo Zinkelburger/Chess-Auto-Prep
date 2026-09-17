@@ -1,6 +1,6 @@
 import 'package:chess_auto_prep/widgets/common/horizontal_wheel_scroll.dart';
 import 'package:flutter/material.dart';
-import '../../core/pgn/pgn_workspace.dart';
+import '../../features/documents/controllers/pgn_workspace.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 

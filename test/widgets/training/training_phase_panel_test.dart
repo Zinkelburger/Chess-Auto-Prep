@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/models/repertoire_line.dart';
-import 'package:chess_auto_prep/services/training/training_phase.dart';
+import 'package:chess_auto_prep/features/training/models/training_phase.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/widgets/training/training_board_controls.dart';
 import 'package:dartchess/dartchess.dart' show Chess;

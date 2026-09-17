@@ -1,5 +1,5 @@
 import 'package:chess_auto_prep/chess_core/pgn/pgn_parser.dart';
-import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_reveal.dart';
 import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:dartchess/dartchess.dart';

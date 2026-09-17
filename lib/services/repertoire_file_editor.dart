@@ -9,6 +9,8 @@
 /// or by line id, resolved with the same rule the trainer assigns ids by.
 library;
 
+import '../features/training/repositories/training_review_repository.dart';
+
 import 'dart:io' as io;
 import '../chess_core/pgn/repertoire_document_mutation.dart';
 
@@ -47,7 +49,7 @@ class _CachedLineIds {
 
 /// Reads and rewrites the games of repertoire chapter files. Stateless
 /// apart from the process-wide line-id memo; construct freely.
-class RepertoireFileEditor {
+class RepertoireFileEditor implements TrainingHeaderRepository {
   const RepertoireFileEditor();
 
   /// One entry per edited file; bounded by the handful of chapters a
@@ -255,6 +257,7 @@ class RepertoireFileEditor {
   /// headers of every line in [entriesByLineId] with a single read and one
   /// atomic write. A per-line loop over [updateLineReviewHeaders] would
   /// reread and rewrite the whole file once per line.
+  @override
   Future<bool> updateManyLineReviewHeaders(
     String filePath,
     Map<String, RepertoireReviewEntry> entriesByLineId,

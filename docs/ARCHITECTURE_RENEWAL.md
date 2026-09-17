@@ -1,6 +1,6 @@
 # Architecture renewal
 
-**Status: Partial — S0 verified on Linux; milestones 1/2 and 3 in progress; milestones 4–7 not started.** Planning baseline: 2026-09-16. This is the canonical
+**Status: Partial — S0 verified on Linux; milestones 1/2–5 in progress; milestones 6–7 not started.** Planning baseline: 2026-09-16. This is the canonical
 rewrite plan. [FUTURE_FEATURES.md](FUTURE_FEATURES.md) tracks feature backlog;
 [COMPONENT_MAP.md](COMPONENT_MAP.md) describes implemented behavior. Update
 milestone evidence and selected decisions here as work proceeds.
@@ -50,6 +50,7 @@ ID when a requirement changes. IDs stay stable if milestones are rearranged.
 | PLAN-01 | Record authorized scope, parity inventory, named owners, defaults and bounded time/performance budgets before widening implementation. | [Working method](#working-method-checks-and-sizing) |
 | PLAN-02 | After the first slice, record continue, bounded repair or stop against the baseline; unresolved gates are not passes. | [Continuation](#continuation-decision-after-milestone-2) |
 | ARCH-01 | Migrated widgets/controllers cannot bypass injected domain boundaries; legacy singleton access is confined to injected bridge adapters. Verify import boundaries and feature wiring. | [Dependencies](#target-layout-and-dependency-rules) |
+| ARCH-02 | A completed workflow deletes its superseded owners, forwarding APIs and production consumers; no re-export shims, duplicate writers or permanent legacy bridge remain. All feature directories are covered by the final boundary gate. Report concrete deletions and parity evidence; line counts alone are not proof. | [Retirement gate](#retirement-is-part-of-each-workflow) |
 | DATA-01 | Reproduce each reported overwrite/undo race on current code; independently fix confirmed cases and retain regressions before rewrite-dependent writes. | [Safety prerequisite](#safety-prerequisite-on-current-code) |
 | DATA-02 | Create never replaces; every save/update validates its baseline through the shared mutation boundary. Exercise concurrent creation, stale saves and competing writers. | [PGN API](#one-safe-pgn-mutation-api-and-shared-save-interaction) |
 | DATA-03 | Undo snapshots come from the validated mutation baseline; only a proven history chain may advance its expected revision after undo. Preserve external edits and per-move/successive undo; test conflicts and failures. | [Undo receipts](#undo-receipt-provenance-and-history) |
@@ -2152,6 +2153,207 @@ remaining legacy presentation, outline/generation editors and complete native
 undo provenance are still unfinished. Later training, jobs, platform and release
 gates remain open.
 
+### Parallel renewal execution brief (2026-09-17)
+
+The product owner renewed authorization to **finish the whole plan**, explicitly
+requested subagents, larger completed workflows, improved testability/safety and
+legacy removal. Starting integration baseline: `9036708c`. The goal remains the
+complete acceptance register, not a count of extracted classes. Local `main` and
+its verified backup are the deliverable; publication is not requested.
+
+**PLAN-02 decision: bounded repair and consolidation.** The first slice remains
+partial. Its controller/repository overrides, native document mutations, catalog
+recovery, shared save interaction and retained shell are exercised by the earlier
+checkpoints. However, there is no recorded product-owner visual acceptance,
+complete profile-mode budget, full-profile restore rehearsal or native
+Windows/macOS evidence. These are unresolved gates, not implicit passes. The
+large accumulation of checkpoints has not retired whole legacy workflows. The
+renewed instruction authorizes independent repairs in later owners while these
+gaps are closed; it does not graduate milestone 2 or waive an acceptance ID.
+
+| Owner | Bounded outcome | Required evidence | Budget / midpoint |
+|-------|-----------------|-------------------|-------------------|
+| `builder_renewal` | Builder document loading, destination and queued edits have one injected session owner; failed switches retain the current document; remove superseded host ownership/test hooks | ARCH-01, DATA-02/03, STATE-01/02, TEST-01; current Builder/Trainer callers remain functional | 4 active hours: 2 implementation, 1 regression tests, 1 integration reserve; midpoint after production wiring |
+| `training_renewal` | Training source, progress and preference dependencies are injected; session phases own lifecycle; preserve persisted history and retire migrated `services/training` owners | ARCH-01, DATA-06, SET-01, STATE-01, TEST-01; deterministic source/settings/cancellation failure tests | 6 active hours: 3 implementation, 2 parity tests, 1 integration reserve; midpoint after source/session cutover |
+| `generation_renewal` | Generation stages recoverable run output and validates source revision before publication; edited companion files survive; pending writes cannot outlive their run | ARCH-01, DATA-02/05/07, STATE-01, PROC-01, TEST-01; stale source, interrupted publication, disposal and duplicate-job tests | 6 active hours: 3 implementation, 2 failure tests, 1 integration reserve; midpoint after publication wiring |
+| Integrating agent | Reconcile source-backed inventory and acceptance register, rehearse cross-store restore, enforce new boundaries, validate merged production code and integrate local main | PLAN-01/02, DATA-06, ARCH-01, TEST-01; exact committed branch/backup evidence | 4 active hours: 1 inventory, 1 restore rehearsal, 2 review/integration reserve; midpoint after restore result |
+
+No package spike or visual redesign is part of this repair batch. Queue/build
+waits are not active effort. Owners report their midpoint, removed production
+owners, exact checks and remaining compatibility dependencies. At a budget cap,
+finish and back up the safe checkpoint; record a revised bounded scope before
+further expansion. Full renewal remains active until every applicable gate has
+current evidence. Platform and visual-review gaps remain explicitly unverified.
+
+The integration midpoint restore rehearsal passed on Linux:
+`test/infrastructure/profile_restore_rehearsal_test.dart` closes all fixture
+writers, copies Documents/Support plus synthetic book preferences, restores into
+a different disposable profile, and deletes the source. It verifies exact PGN
+bytes (BOM, variations, NAGs, custom tags), SQLite integrity/foreign keys/schema,
+source-game IDs and position rows, then explicitly relocates chapter/history/book
+references. Native-to-compatible-adapter rollback reopens current data and
+preserves annotations and new SQL games written after cutover; the original
+backup stays unchanged. This is DATA-06 evidence for the tested **stopped-profile
+protocol**, not a live backup feature, native preference export, crash-consistent
+cross-store snapshot or proof for all remaining domain formats. No user data or
+credentials enter the fixture. A formatting parse failure in the new PGN fixture
+was corrected before the passing run.
+
+Profile-mode baseline budgets, selected before measurement: the existing
+20,000-node annotated Study fixture must open/decode/receive within 5 seconds;
+30 warm distant-navigation commands and 30 comment-edit/projection commands
+must each have p95 at most 50 ms; RSS growth over
+that bounded sequence must stay within 64 MiB. These are initial regression
+ceilings on the two-CPU Linux runner, not a claim of 60 Hz rendering. Frame
+build/raster times and GC counts are captured separately by the native Flutter
+performance binding. `scripts/ci.sh profile` uses the existing bounded headless
+runner and writes `build/renewal_performance.json`, including failure evidence.
+It refuses a debug run. Undo, allocation attribution, image memory and
+other hosts remain additional STATE-02 measurements; navigation does not certify
+them. This extends the integrating agent's scope by one active hour (half an
+hour harness, half an hour validation) to replace debug-only evidence.
+
+The first profile run exposed an unmet frame budget despite passing command
+latencies: distant navigation built below 7 ms, while repeated comment edits
+built near 398 ms. The existing stage diagnostic isolated full row-index
+comment filtering at 363 ms. The repair preserves filtered paragraphs for
+unchanged move nodes with weak cache keys and checks source text for mutable
+legacy callers. The profile gate now requires p99 frame builds within 32 ms on
+the bounded headless host, in addition to command/memory budgets. This is a
+regression ceiling, not a 60 Hz/GPU claim: headless raster timings reported
+near zero and cannot establish production GPU latency. Study performance repair
+adds one active hour within the authorized scope. The second profile's Dart
+assertions passed, but its shell wrapper failed because the wrapper was edited
+while executing; the complete command must pass on the final source.
+
+The final complete profile command **passed** after immutable annotation
+revisions began reusing unchanged rows and the redundant document-wide row-key
+map was removed. Structural/paragraph-count changes still use full indexing;
+mutable legacy callers never enter the snapshot reuse path. On the recorded
+fixture, open/decode/receive took 302 ms and first frame 987 ms; navigation p95
+was 0.153 ms, edit/projection p95 0.304 ms, navigation frame p99 6.913 ms and
+edit frame p99 **9.346 ms** (worst 11.951 ms). RSS decreased during the bounded
+sequence. [Recorded scalar report](evidence/renewal-linux-profile.json) retains
+budgets and scope limitations. Eighteen focused layout/editor tests passed,
+including annotation parity, structural fallback, paragraph keys, immutable
+rows, 20,000-node navigation, 200% wrapping and draft eviction/autosave behavior.
+
+### Larger ownership completions (2026-09-17)
+
+| Source commit / requirement | Production change and retired owner | Evidence and remaining scope |
+|-----------------------------|-------------------------------------|------------------------------|
+| `b4c22ad1` / ARCH-01, DATA-02/03, STATE-01/02, TEST-01 | `RepertoireDocumentSession` owns load epochs, destination, parsed document/metadata and pending edit queue. Host shrinks from 781 to 281 lines; production test hooks removed. Public line collections are defensive immutable copies. | 243 focused tests, six final session tests, four native journeys and a standalone Dart VM probe passed. Failed loads retain destination, board, selection, color/root and undo together; pending save failures keep blocking navigation/close. [Inspected recovery screenshot](images/renewal-builder-document-recovery.png). Opening graph privacy, scratch recovery and native undo provenance remain. |
+| `1e104097` / ARCH-01, DATA-06, STATE-01, TEST-01 | All 14 `services/training/` libraries retired. Session/phase/progress owners and pure settings have canonical training paths; app composition injects source/review/header/answers/config ports, with filesystem/preferences adapters under infrastructure. | 232 focused tests passed, including source/chapter/settings/rating races, duplicate completion, partial-write retry and failed header mirror. Analyze/lint passed with nine existing infos. [Inspected production Retry component](images/renewal-training-retry.png). Existing CSV/JSONL formats and identities retained. In-memory retry is not crash-resume or cross-file atomicity; ordinary settings still require one app-scoped writer and explicit active-sitting policy. |
+| `a7d8dfd7` / DATA-02/07, PROC-01, ARCH-01, TEST-01 | Per-session generation publication captures source/config before work; stages complete course/model output and a manifest in a retained run directory; commits once through the document store and records a separate receipt. `PgnBatchWriter`, blind companion overwrite/delete and public partial-tree save are retired. | 99 affected tests passed, including actual full-pipeline source conflicts, native staging and cancellation/disposal/engine failure lifecycles. Analyze/lint passed with 12 infos. Old companions survive; conflicts/uncertain writes report retained manifests and never auto-replay. Tree/probe/trap/partial caches and a recovery browser remain. |
+| `8231b2bc` / ARCH-01, STATE-01, PROC-01, TEST-01 | Retired `core/pgn_viewer_controller.dart` and all `core/pgn/` owners after injecting index storage, cancellable computation, opening data, Solitaire settings/trophies and analysis ports. Removed unused collection merge helper and its obsolete mirror tests. | 339 broad tests passed; five transient load failures were fixed and the affected files passed in a 48-test rerun. Four native Viewer workflows passed, plus adapter failure checks and analyze/lint. [Inspected tree/board screenshot](images/renewal-viewer-workspace.png). Disposable `.fenidx` v1 is rebuilt as source-fingerprinted v2. Concrete reader/analysis construction remains an explicit app bridge. |
+| `c83a895d` / DATA-02/07, STATE-01, TEST-01 | Removed `GeneratedLineExport`, `onLinesSaved` and `appendNewLines`. Generation awaits a complete committed-document receipt; Builder validates the receiving session and atomically refreshes it. Ordinary line saves now return a complete document baseline and refresh it before later actions. | 125 affected tests and 34 final receipt/adapter/pipeline tests passed; analyze/lint passed. Replayed callbacks, A→B→A handoffs, late decode, failed refresh, external other-game edits and line-save→append→undo are covered. Full decode per acknowledged line edit is a remaining large-chapter cost. |
+| `a455747d` / SET-01, STATE-01, TEST-01 | One app-scoped training settings owner serializes immutable field patches. Concurrent panels share committed/draft/failure state and retry. Running sittings, including auto-next, freeze their effective configuration; edits apply to the next sitting. | 204 focused tests passed with no skips; analyze/lint passed. Native production panels exercised save failure→Retry→persist→restart with synthetic preferences. [Inspected failure UI](images/renewal-training-settings-failed.png). Legacy keys/defaults preserved. Drafts remain in memory, cross-process serialization and atomic multi-key preferences are not claimed. |
+
+An accidentally broad training test command was interrupted after roughly
+4,000 passes, eight skips and one unidentified failure. A captured integration
+run subsequently completed with **6,396 passes, 11 skips and one failure**:
+the MainScreen test fixture lacked the newly required training document
+dependency. `a455747d` fixes that fixture through production boundaries; the
+final combined suite **passed with 6,408 tests and 11 skips**. Those skips include
+opt-in engine/live-network checks and documented existing algorithm cases, not
+11 newly passing release gates. Merged analyze/lint passed with 13 informational
+findings and no warnings/errors; boundary regressions (23), check-dispatch
+regressions and the worktree helper's six tests passed. The check launcher
+now rejects misplaced focused targets
+before starting any named step; `scripts/ci.sh analyze lint` and
+`scripts/ci.sh test <targets>` are separate commands.
+
+The next independent bounded owners are Viewer host retirement (five active
+hours including one validation reserve, based on `9036708c`) and completion of
+training SET-01 (four active hours including one reserve, explicit dependency
+`1e104097`). The Viewer slice must replace implicit FEN-index/classification/
+Solitaire collaborators before retiring its remaining `core/` host. Training
+must serialize field edits through one app-scoped committed owner and prove
+concurrent panels, failure/retry/restart and current-sitting configuration.
+Midpoint is production wiring. These scopes continue the original whole-plan
+objective; they do not graduate milestones or erase the residual gates above.
+
+The generation follow-up extends the same document-authority repair by one
+active hour, including validation: generation hands Builder a committed document
+receipt rather than appended line deltas, and ordinary line saves must advance
+the whole-document baseline before a subsequent edit. The confirmed stale
+baseline is not left behind as an unrelated cleanup.
+
+After Viewer handoff, the next Builder owner has six active hours including one
+validation reserve for native-revision append/undo provenance and private opening
+graph ownership (DATA-03/04, STATE-02, ARCH-01). Its dependencies are `b4c22ad1`
+and the generation receipt follow-up; midpoint is production wiring. Durable
+scratch recovery remains a separate open requirement. The integrating owner's
+Study frame repair gets one further active hour to reuse immutable annotation
+rows after caching alone reduced, but did not meet, the 32 ms frame gate.
+
+The next two independent owners each have five active hours including one
+validation reserve. Generation completes DATA-07 for tree/probe/trap/partial
+artifacts through versioned bundles and one validated current manifest, wiring
+both producers and actual readers; it depends on `c83a895d` and the current
+training adapter. Settings completes SET-01 for engine, bulk-analysis and
+board-display keys through section owners and captured active-job configuration;
+it depends on `a455747d`, excludes credentials/external-eval database settings,
+and retains explicit injected read-only bridges for legacy engine lifetimes.
+Midpoint for each is production wiring. Parent integration owns shared docs,
+boundary gates and the combined checks; neither agent independently advances main.
+
+### Persisted authority and native inventory (2026-09-17)
+
+This ledger supplements the workflow map below. It is based on source at
+`9036708c`; it does not inspect the user's profile. Stable reference contracts,
+not filenames alone, determine what a restore must preserve.
+
+| Authority / owner | Format and location | References, migration and restore contract |
+|-------------------|---------------------|---------------------------------------------|
+| Repertoire catalog and document adapters | `Documents/repertoires/<book>/<chapter>.pgn`; course/color comments and standard/custom PGN tags | Absolute chapter/folder paths plus `[LineID]`; directory journals relocate four training files and both book selections. Preserve BOM, annotations, variations, NAGs and unknown headers; old readers retain PGN compatibility. |
+| Study and Viewer document repositories | `Documents/studies/*.pgn`, `pgn_collections/` and user-selected PGNs | `[GameId]` links to saved games; document snapshots/recovery manifests carry edit context and revision. Retain unsaved recovery separately from committed PGNs. External files require a separately selected backup source. |
+| Saved game store | `Support/app_games.db`, `gameStoreSchemaVersion = 2` | `games.id`, `(collection, game_key)` and `positions.game_id`; `game_trash` is recovery authority. Tactics source games may have no PGN copy. Upgrade snapshots use SQLite `VACUUM INTO`; newer schemas are refused. Stop all writers for a cross-store filesystem copy. |
+| Master games | `Support/master_games.db`, schema 4 | Downloaded game/book index; may be rebuilt from available inputs. User-imported offline inputs must be retained separately before declaring their database disposable. Preserve schema guard and importer/reader compatibility. |
+| Repertoire review service and move attempts | Three `Documents/repertoire_*.csv` files plus `repertoire_move_attempts.jsonl` | Chapter path, line ID and move index; CSV quoting/version-2 backup protects punctuation/multiline fields. Row merging rejects competing edits. JSONL unknown fields survive reference migration. No scheduling/schema change is authorized by an ownership move. |
+| Tactics database | `Documents/tactics_sets/*.pgn`; legacy CSV inputs | Puzzle provenance and scheduling fields; `ChessAutoPrep-Analyzed-v1` completion marker and source GameId commit together. Preserve source archive and legacy input until migration verifies; failed decode cannot authorize pruning. |
+| Player corpus | `Documents/analysis_games/player-<sha256>/current.json` and retained `versions/` | Identity hashes platform plus normalized username; current manifest chooses PGN+metadata generation. Derived indexes/evals are keyed by corpus fingerprint; tombstones must survive restore. |
+| Opponents | `Documents/opponents/people.json` (`chess-auto-prep/people@1`) and `tournaments/<id>.json` | Tournament fields refer to person IDs. Preserve those IDs and unknown/unreadable originals; MCP handoff is a separate import file, not a second writer. |
+| Engine/bughouse tournaments | `Documents/engine_tournaments/<id>/tournament.json`, `games.pgn`, `engines.json`; `Documents/bughouse_matches/<id>/match.json` | Tournament IDs, game order and custom engine paths; external executables/assets are dependencies, not embedded user data. Keep partially completed runs and their metadata together. |
+| Generation and audit | Chapter-adjacent generation artifacts, source PGN and hunt report store | Source/run/config identity and companion PGN provenance are required. Existing unguarded writers are a repair target, not certified safe by this inventory. |
+| Recovery namespaces | `.cap-pgn-history/`, directory staging/trash, `repertoire-mutations/`, `.cap-reference-history/`, workspace recovery | Preserve unfinished journals with payloads and exact original bytes; do not purge them or copy just the current PGN while a writer is active. |
+| Preferences | Platform SharedPreferences file | Typed book/appearance owners coexist with legacy engine, eval, display, training and Viewer keys. Retain current names; do not run old/new writers for the same key. See key ledger below. |
+| Credentials | Legacy SharedPreferences OAuth/PAT keys | `lichess_access_token`, `lichess_refresh_token`, expiry, username and PAT flag remain owned by `LichessAuthService`. These are **not ordinary settings backup data**. Vault migration/restart/disconnect is still SEC-01 work; no new plaintext credential path is introduced. |
+
+Preference key ownership is explicit at each migration boundary:
+
+- Books: `my_repertoire_white_paths` and `my_repertoire_black_paths`, through
+  `PersistedRepertoireBooks`; appearance through `PersistedAppearance`.
+- Training: `trainer_*` keys and `trainer_uncapped_default_v1`; move persistence
+  out of `TrainingSettings` into the injected training adapter without changing
+  keys, defaults or scheduling semantics.
+- Engine: `engine_settings.*`; bulk depth uses `engine_settings.bulk_depth` with
+  legacy `tactics_import.depth` read compatibility. Effective job configuration
+  must be captured once; remaining whole-object writes need SET-01 migration.
+- Eval: `eval.cdbdirect.*`, `eval.lichess.*`, `expectimax.chessdb_api` and
+  `expectimax.probe_plies`; display: `display.board_coordinates`,
+  `display.piece_notation`, `display.legal_moves`.
+- Viewer: the key ledger in `SharedPreferencesViewerRepository` retains file,
+  game and recent-session identity. Game review counts use `game_review.counts`.
+  Account labels/fetch times remain in `AppState`; secrets stay out of this owner.
+
+| Native dependency / source of truth | Ownership and host prerequisite | Current evidence limit |
+|-------------------------------------|---------------------------------|------------------------|
+| Stockfish executable; `tools/assets.lock.json` | UCI process/worker owner, bounded stop/kill; target-specific bundled artifact and source/license obligations | Linux engine fixtures/native journeys exist; forced-parent-death and packaged host matrix are not complete |
+| Hivemind + ONNX Runtime/network; same asset lock | Separate engine process; optional assets, Windows private runtime package, retained model/engine licenses | Source/payload hashes are pinned. Host loader and descendant termination remain host-specific gates |
+| Maia ONNX Runtime plugin | FFI session/tensor handles with worker ownership; target ABI/plugin bundle | App/native memory and shutdown budget is still unverified; process isolation cannot protect an in-process FFI crash |
+| `document_file_io` private package | Native identity/read/flush handles behind document adapter; repository AGPL-3.0 | Linux package/journeys verified in earlier checkpoints. Windows replacement and macOS full-sync remain unavailable locally |
+| SQLite and cdbdirect | Database/FFI handle owners; pinned lockfile/native asset build | Saved-game schemas/upgrade guards exist; full backup and host ABI checks are scoped separately |
+| Desktop plugins | File picker, path provider, preferences, window manager/screen retriever, launcher/share/package info and JNI; exact versions in `pubspec.lock` | Generated plugin registrants enumerate Linux/Windows/macOS builds. Registration is not install/signing/vault/screen-reader evidence |
+| Proposed credential vault | [flutter_secure_storage desktop prerequisites](https://pub.dev/packages/flutter_secure_storage#linux) | Linux preflight found `gnome-keyring-daemon`, but `pkg-config libsecret-1` lacks its development package and noninteractive sudo is unavailable. No vault dependency/migration has been installed or certified. |
+
+The available verification host is Linux. Windows/macOS signed installation,
+vault availability, native screen reader, forced-parent-death and update checks
+are unverified. No certificate/account or remote telemetry is introduced.
+Full-profile restore, measured profile-mode edit/frame/memory budgets, user-task
+timing and visual acceptance must still receive executable or human evidence;
+this inventory alone does not pass PLAN-01, DATA-06 or OPS-02.
+
 ### Initial parity and ownership inventory (milestone 0, partial)
 
 The starting tree has 885 files under `lib/` and 674 under `test/`; these counts
@@ -2235,6 +2437,57 @@ propagating a new appearance across the application.
   [working method](#working-method-checks-and-sizing).
 
 ## Outcome and scope
+
+### Retirement is part of each workflow
+
+The product owner's 2026-09-17 direction is explicit: retain the new architecture,
+demolish the old one. Ownership extraction and removal of an old *path* are
+checkpoints, not retirement when the same forwarding owner survives elsewhere.
+Every workflow declared complete must satisfy ARCH-02:
+
+- Name its superseded owner types, APIs and production callers before editing.
+  Delete them at cutover, with zero remaining imports, re-exports or callers.
+- Route widgets to the substantial state/command owners they actually use.
+  Composition and cross-owner transactions may have a small lifetime owner;
+  it must not reproduce the old forwarding facade under a different name.
+- Keep one state authority and writer. Old on-disk formats may be decoded by the
+  new infrastructure adapter; this does not require retaining the old service.
+- Run failure/lifecycle and user-workflow parity checks against the new wiring,
+  and add guards against restoring retired owner paths/types.
+- Publish production additions/deletions separately from tests and generated
+  files. A mandatory added-lines/deleted-lines ratio is not the gate: it rewards
+  compressed code, unrelated deletions and missing tests. Actual retired owners,
+  callers, writers and dependency edges are the required evidence.
+
+Remaining bridges make their workflow unfinished. Milestone 7 audits retirement
+across the application; it is not permission to postpone every deletion until
+the end. Temporary working checkpoints may exist while tests and cutover are in
+progress, and must not be reported as completed migrations.
+
+Immediate Viewer removal scope: delete `PgnViewerController` itself, migrate
+screen/widget consumers to collection/editor/filter/presentation/tree/Solitaire
+owners, and consolidate document-session cancellation before or with cutover.
+Invalidation must precede cancellation; cleanup must be idempotent, terminate
+owned workers/timers and prevent late publication while preserving pending save
+and recovery semantics. A single helper must not indiscriminately reset unrelated
+state or pretend an in-flight storage commit has been cancelled. The supplied
+six-row review identifies recovery adoption, file open, decoded adoption, pasted
+content load, retained-context replacement and close. Exercise every path with
+delayed collection/game/filter/index/analysis work, autoplay and Solitaire setup;
+verify the shared cancellation contract plus each path's explicit retained state.
+Keep data/cache revisions distinct from cancellation tokens. Remove mirrored
+editor/presentation errors with the facade so consumers observe the owning state.
+Parent owns this slice from `d6abb6d1`, with five active hours including one
+validation reserve; midpoint is direct consumer wiring with the facade removed.
+
+The current host is still 1,609 lines after its path move. The current checker
+covers six feature directories and leaves 17 outside those rules. A read-only
+application of the same direct-boundary rules to all 23 directories found 414
+violations. These are explicit unfinished work, not certified new architecture.
+The final checker must discover all feature directories and fail on those
+violations; it must not silently skip newly added directories. Prefer completing
+that coverage and the actual migrations over a cosmetic move to `legacy_features/`.
+If an interim quarantine is needed, name it openly and remove it before completion.
 
 Make the entire first-party application understandable, testable and consistent:
 each workflow has a clear owner, each datum has one authoritative writer, and
@@ -3386,7 +3639,7 @@ a process does not simulate lost hardware caches.
 S0 is **complete for the scoped Linux cases** and milestone 0 has a
 **partial inventory** above.
 Milestone 1/2 is **Partial** (implementation checkpoints above); milestone 3 is **Partial** (Study adoption checkpoint above); milestones
-4–7 are **Not started**. Each row yields a reviewable result; later
+4–5 are **Partial** (parallel ownership repairs below); 6–7 are **Not started**. Each row yields a reviewable result; later
 rows depend on the contracts established earlier, not on an unbounded framework
 build. Reorder later feature slices after the dependency inventory, with a
 recorded reason. No current mode is silently dropped.

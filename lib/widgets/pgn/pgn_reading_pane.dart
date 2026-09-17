@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../chess_core/moves/move_tree_view.dart';
-import '../../core/pgn/sideline_tree.dart';
+import '../../chess_core/moves/sideline_tree.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../utils/chess_utils.dart' show coordsAtPly;

@@ -1,4 +1,7 @@
 import 'dart:io';
+import 'package:provider/provider.dart' as legacy_provider;
+import 'training_dependencies.dart';
+import '../features/training/repositories/training_settings_repository.dart';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,6 +45,7 @@ class AppDependencies extends StatefulWidget {
     this.documentStore,
     this.settings,
     this.storedGames,
+    this.trainingSettings,
   });
 
   final Widget child;
@@ -49,12 +53,21 @@ class AppDependencies extends StatefulWidget {
   final PgnDocumentStore? documentStore;
   final AppSettingsRepository? settings;
   final StoredGameRepository? storedGames;
+  final TrainingSettingsRepository? trainingSettings;
 
   @override
   State<AppDependencies> createState() => _AppDependenciesState();
 }
 
 class _AppDependenciesState extends State<AppDependencies> {
+  late final _trainingSettings = createTrainingSettings();
+
+  @override
+  void dispose() {
+    _trainingSettings.dispose();
+    super.dispose();
+  }
+
   late final _storedGames = ArchiveStoredGameRepository(
     GameStoreService.instance.open,
   );
@@ -77,7 +90,10 @@ class _AppDependenciesState extends State<AppDependencies> {
     ],
     child: StoredGameScope(
       repository: widget.storedGames ?? _storedGames,
-      child: widget.child,
+      child: legacy_provider.Provider<TrainingSettingsRepository>.value(
+        value: widget.trainingSettings ?? _trainingSettings,
+        child: widget.child,
+      ),
     ),
   );
 }

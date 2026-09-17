@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/pgn_pane_router.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
+import 'package:chess_auto_prep/features/documents/controllers/pgn_pane_router.dart';
+import 'package:chess_auto_prep/features/documents/repositories/pgn_viewer_handle.dart';
 
 class _RecordingHandle implements PgnViewerHandle {
   final calls = <String>[];

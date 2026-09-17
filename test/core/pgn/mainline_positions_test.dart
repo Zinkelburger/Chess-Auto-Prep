@@ -1,4 +1,4 @@
-import 'package:chess_auto_prep/core/pgn/mainline_positions.dart';
+import 'package:chess_auto_prep/chess_core/pgn/mainline_positions.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
