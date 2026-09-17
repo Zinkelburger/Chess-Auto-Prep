@@ -30,6 +30,8 @@
     "rebuildLine",
     "reconcileInstalled",
     "PgnViewerController",
-    "PgnPerspectiveButton"
+    "PgnPerspectiveButton",
+    "GenerationArtifactStore",
+    "ExpectimaxProbeStore"
   ]
 }

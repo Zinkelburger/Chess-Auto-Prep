@@ -4085,3 +4085,31 @@ Production Linux screenshots were inspected for the
 profile left by the restart journey. The preview was stopped before the final
 checks. Existing leaf tests additionally cover active themes and 200% text scaling;
 these screenshots do not prove all UI-01 or non-Linux gates.
+
+### Legacy artifact recovery access (follow-up to `7032e719`)
+
+The artifact-authority cutover preserved sidecar files but left `readLegacy`
+without a production caller. This follow-up restores discoverable reading and
+export through Builder → Actions → Recover older analysis. One feature recovery
+controller and dialog consume the final artifact repository; no legacy owner,
+mutable sidecar writer, loader shim or forwarding facade returns. The retirement
+gate also forbids `GenerationArtifactStore` and `ExpectimaxProbeStore` symbols.
+
+The old capabilities were main-tree exploration/training metrics, probe/PV
+lookup, trap browsing and automatic partial resume/discard. Recovery now exposes
+tree/probe branches, saved evaluations/FENs/configuration, trap details and
+unfinished positions. Invalid files/entries fail independently. Native reads
+retain exact original bytes; explicit export uses exclusive native installation
+and preserves existing destinations. Export errors/uncertain acknowledgement are
+visible, technical detail is optional, and active exports keep the view open.
+Originals and selected current generations remain untouched; no export silently
+promotes old results to the current source.
+
+Legacy association cannot be proved from filenames, root FEN or configuration.
+Automatic legacy resume and insertion into current training/probe/trap data are
+therefore explicitly unsupported. Users can inspect/export old work or start a
+fresh build; only verified current-generation partials use the existing resume
+path. Export is the original artifact, not a PGN conversion that would lose
+analysis fields. This completes the production read-only recovery responsibility;
+it does not claim full legacy automatic-resume parity, cross-file atomicity, a
+browser for all retained generation proposals, or non-Linux certification.

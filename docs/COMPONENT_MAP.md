@@ -2021,15 +2021,33 @@ APIs, `ExpectimaxDatabase.persist`, trap filesystem helpers and obsolete eval-tr
 loader/tab implementations are deleted. `ExpectimaxProbeCodec` only encodes and
 decodes probes.
 
-Explicit infrastructure `readLegacy` decodes existing `_tree.json`,
-`_expectimax.json`, `_traps.json` and `_partial_tree.json` without modifying them.
-These lack source identity and are never silently selected, extended or resumed;
-the active readers consume verified generations. No legacy preview UI is added.
+Builder → Actions → **Recover older analysis…** opens the production
+`LegacyAnalysisDialog`. Its `LegacyAnalysisController` loads existing
+`_tree.json`, `_expectimax.json`, `_traps.json` and `_partial_tree.json` through
+`GenerationArtifactRepository.readLegacy`; `GenerationArtifacts.inspectLegacy`
+uses the existing tree/trap codecs off the UI isolate. Users browse tree/probe
+branches, evaluations, FENs, saved configuration and trap details. Each unreadable
+file/entry has its own localized failure; healthy siblings remain accessible.
+Technical diagnostics are optional.
+
+Native reads capture exact bytes with file identity checks. **Export original
+file…** chooses a destination folder and exclusively creates a new file from
+those captured bytes, preserving BOM, compression and even undecodable content.
+It never replaces a destination, changes the source files or selects an artifact
+generation. The view keeps its captured chapter identity; stale loads and closed
+file pickers cannot redirect an export. Refresh/reopen reads the originals again.
+
+Legacy files lack source revision evidence. The recovery view labels that
+provenance explicitly and does not transfer them into verified current analysis,
+training or the chapter. Legacy automatic resume is unsupported; unfinished
+positions/configuration remain inspectable/exportable, and users can start a
+fresh build. This is recovery access, not a claim of automatic-resume parity or
+lossless conversion of analysis into PGN.
 PGN commit and artifact selection are separate transactions: if the PGN saves
 but cache selection fails, the job reports the saved PGN and retained proposal,
-fails completion, and rejects the old cache for the new source. A recovery
-browser, retention/garbage-collection policy and cross-file atomicity remain
-outside this cutover.
+fails completion, and rejects the old cache for the new source. A browser for
+immutable failed proposals/current-generation history, retention/garbage-collection
+policy and cross-file atomicity remain outside this cutover.
 
 ### `lib/core/`
 

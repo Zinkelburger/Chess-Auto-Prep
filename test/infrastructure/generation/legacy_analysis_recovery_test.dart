@@ -115,6 +115,23 @@ void main() {
     },
   );
 
+  test('a corrupt probe entry does not hide other saved probes', () async {
+    final data =
+        jsonDecode(legacyRecoveryPayloads()[GenerationArtifactKind.probes]!)
+            as Map<String, dynamic>;
+    (data['trees'] as List).insert(0, '{broken');
+    await original(
+      GenerationArtifactKind.probes,
+    ).writeAsString(jsonEncode(data));
+    final result = await GenerationArtifacts(repository).inspectLegacy(chapter);
+    final probes = result.items
+        .where((item) => item.kind == GenerationArtifactKind.probes)
+        .toList();
+    expect(probes, hasLength(2));
+    expect(probes.first.error?.kind, GenerationArtifactFailureKind.decode);
+    expect(probes.last.tree?.totalNodes, 2);
+  });
+
   test(
     'export preserves exact BOM, gzip and malformed bytes after original changes',
     () async {
@@ -168,8 +185,9 @@ void main() {
       final interrupted = reopen(
         writer: AtomicFileWriter(
           testHook: (step) async {
-            if (step == AtomicWriteStep.tempFlushed)
+            if (step == AtomicWriteStep.tempFlushed) {
               throw StateError('disk failed');
+            }
           },
         ),
       );

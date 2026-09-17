@@ -11,7 +11,7 @@ import 'package:chess_auto_prep/infrastructure/documents/native_pgn_document_sto
 import 'package:chess_auto_prep/infrastructure/generation/storage_generation_artifact_repository.dart';
 import 'package:chess_auto_prep/l10n/generated/app_localizations.dart';
 import 'package:chess_auto_prep/services/storage/io_storage_service.dart';
-import 'package:file_picker_platform_interface/file_picker_platform_interface.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -46,7 +46,7 @@ void main() {
   testWidgets(
     'production Actions opens native recovery, navigates, exports and reopens',
     (tester) async {
-      final root = await Directory.systemTemp.createTemp(
+      final root = Directory.systemTemp.createTempSync(
         'legacy-recovery-widget-',
       );
       final originalPicker = FilePickerPlatform.instance;
@@ -153,7 +153,7 @@ void main() {
   testWidgets(
     'damaged tree remains exportable and an export failure is visible',
     (tester) async {
-      final root = await Directory.systemTemp.createTemp(
+      final root = Directory.systemTemp.createTempSync(
         'legacy-recovery-failure-',
       );
       addTearDown(() => root.deleteSync(recursive: true));
@@ -185,7 +185,7 @@ void main() {
       await tester.tap(find.byKey(const Key('legacy-analysis-export')));
       await _until(
         tester,
-        find.textContaining('existing destination is never replaced'),
+        find.textContaining('A file already exists at that destination'),
       );
       expect(damaged.readAsStringSync(), '{broken');
       expect(find.textContaining('Original file exported to'), findsNothing);

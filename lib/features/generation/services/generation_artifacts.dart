@@ -33,7 +33,7 @@ class LegacyAnalysisItem {
   final GenerationArtifactKind kind;
   final BuildTree? tree;
   final TrapLineInfo? trap;
-  final String? error;
+  final GenerationArtifactFailure? error;
 }
 
 class GenerationArtifacts {
@@ -54,7 +54,15 @@ class GenerationArtifacts {
               LegacyAnalysisItem(kind: entry.key, tree: deserializeTree(text)),
             );
           } catch (error) {
-            items.add(LegacyAnalysisItem(kind: entry.key, error: '$error'));
+            items.add(
+              LegacyAnalysisItem(
+                kind: entry.key,
+                error: GenerationArtifactFailure(
+                  '$error',
+                  kind: GenerationArtifactFailureKind.decode,
+                ),
+              ),
+            );
           }
         }
 
@@ -72,7 +80,10 @@ class GenerationArtifacts {
                   items.add(
                     LegacyAnalysisItem(
                       kind: entry.key,
-                      error: 'Invalid saved probe entry',
+                      error: const GenerationArtifactFailure(
+                        'Invalid saved probe entry',
+                        kind: GenerationArtifactFailureKind.decode,
+                      ),
                     ),
                   );
                 }
@@ -89,13 +100,27 @@ class GenerationArtifacts {
                   );
                 } catch (error) {
                   items.add(
-                    LegacyAnalysisItem(kind: entry.key, error: '$error'),
+                    LegacyAnalysisItem(
+                      kind: entry.key,
+                      error: GenerationArtifactFailure(
+                        '$error',
+                        kind: GenerationArtifactFailureKind.decode,
+                      ),
+                    ),
                   );
                 }
               }
           }
         } catch (error) {
-          items.add(LegacyAnalysisItem(kind: entry.key, error: '$error'));
+          items.add(
+            LegacyAnalysisItem(
+              kind: entry.key,
+              error: GenerationArtifactFailure(
+                '$error',
+                kind: GenerationArtifactFailureKind.decode,
+              ),
+            ),
+          );
         }
       }
       return items;

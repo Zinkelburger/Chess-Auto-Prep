@@ -825,15 +825,6 @@
   "@legacyAnalysisParent": {
     "description": "Legacy generation artifact recovery"
   },
-  "legacyAnalysisFailure": "Recovery issue: {details}",
-  "@legacyAnalysisFailure": {
-    "description": "Legacy generation artifact recovery",
-    "placeholders": {
-      "details": {
-        "type": "String"
-      }
-    }
-  },
   "legacyAnalysisExported": "Original file exported to {path}",
   "@legacyAnalysisExported": {
     "description": "Legacy generation artifact recovery",
@@ -863,5 +854,33 @@
         "type": "int"
       }
     }
+  },
+  "legacyAnalysisDiagnostics": "Technical details",
+  "@legacyAnalysisDiagnostics": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisLoadFailed": "Older analysis could not be loaded. Try refreshing.",
+  "@legacyAnalysisLoadFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisReadFailed": "This file could not be read safely. Other saved files remain available.",
+  "@legacyAnalysisReadFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisDecodeFailed": "This entry could not be decoded. You can still export its original file.",
+  "@legacyAnalysisDecodeFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisCollision": "A file already exists at that destination. Choose a different location; nothing was replaced.",
+  "@legacyAnalysisCollision": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisExportFailed": "The original file could not be exported. Choose another location or try again.",
+  "@legacyAnalysisExportFailed": {
+    "description": "Legacy analysis recovery failure"
+  },
+  "legacyAnalysisExportUncertain": "The export may have been saved, but completion could not be confirmed. Inspect the destination in Technical details before trying again.",
+  "@legacyAnalysisExportUncertain": {
+    "description": "Legacy analysis recovery failure"
   }
 }

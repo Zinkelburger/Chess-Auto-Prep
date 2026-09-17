@@ -201,7 +201,7 @@ class StorageGenerationArtifactRepository
     final base = p.withoutExtension(path);
     final payloads = <GenerationArtifactKind, String>{};
     final bytes = <GenerationArtifactKind, List<int>>{};
-    final failures = <GenerationArtifactKind, String>{};
+    final failures = <GenerationArtifactKind, GenerationArtifactFailure>{};
     for (final entry in {
       GenerationArtifactKind.tree: '${base}_tree.json',
       GenerationArtifactKind.probes: '${base}_expectimax.json',
@@ -228,7 +228,10 @@ class StorageGenerationArtifactRepository
           bytes[entry.key] = utf8.encode(text);
         }
       } catch (error) {
-        failures[entry.key] = error.toString();
+        failures[entry.key] = GenerationArtifactFailure(
+          error.toString(),
+          kind: GenerationArtifactFailureKind.read,
+        );
       }
     }
     return GenerationArtifactSnapshot(
@@ -279,6 +282,11 @@ class StorageGenerationArtifactRepository
             ? 'Export may already exist; inspect it before retrying: $error'
             : 'Export failed; an existing destination is never replaced: $error',
         proposalPath: destination,
+        kind: installed
+            ? GenerationArtifactFailureKind.uncertain
+            : error is AtomicNameCollision || error is NativeNameCollision
+            ? GenerationArtifactFailureKind.collision
+            : GenerationArtifactFailureKind.export,
       );
     }
   }

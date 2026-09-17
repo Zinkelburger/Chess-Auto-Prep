@@ -1159,12 +1159,6 @@ abstract class AppLocalizations {
   /// Legacy generation artifact recovery
   ///
   /// In en, this message translates to:
-  /// **'Recovery issue: {details}'**
-  String legacyAnalysisFailure(String details);
-
-  /// Legacy generation artifact recovery
-  ///
-  /// In en, this message translates to:
   /// **'Original file exported to {path}'**
   String legacyAnalysisExported(String path);
 
@@ -1179,6 +1173,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{nodes} saved nodes · depth {depth}'**
   String legacyAnalysisNodes(int nodes, int depth);
+
+  /// Legacy analysis recovery failure
+  ///
+  /// In en, this message translates to:
+  /// **'Technical details'**
+  String get legacyAnalysisDiagnostics;
+
+  /// Legacy analysis recovery failure
+  ///
+  /// In en, this message translates to:
+  /// **'Older analysis could not be loaded. Try refreshing.'**
+  String get legacyAnalysisLoadFailed;
+
+  /// Legacy analysis recovery failure
+  ///
+  /// In en, this message translates to:
+  /// **'This file could not be read safely. Other saved files remain available.'**
+  String get legacyAnalysisReadFailed;
+
+  /// Legacy analysis recovery failure
+  ///
+  /// In en, this message translates to:
+  /// **'This entry could not be decoded. You can still export its original file.'**
+  String get legacyAnalysisDecodeFailed;
+
+  /// Legacy analysis recovery failure
+  ///
+  /// In en, this message translates to:
+  /// **'A file already exists at that destination. Choose a different location; nothing was replaced.'**
+  String get legacyAnalysisCollision;
+
+  /// Legacy analysis recovery failure
+  ///
+  /// In en, this message translates to:
+  /// **'The original file could not be exported. Choose another location or try again.'**
+  String get legacyAnalysisExportFailed;
+
+  /// Legacy analysis recovery failure
+  ///
+  /// In en, this message translates to:
+  /// **'The export may have been saved, but completion could not be confirmed. Inspect the destination in Technical details before trying again.'**
+  String get legacyAnalysisExportUncertain;
 }
 
 class _AppLocalizationsDelegate

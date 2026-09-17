@@ -60,7 +60,7 @@ class _LegacyAnalysisDialogState extends State<LegacyAnalysisDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context);
     return Dialog(
       child: SizedBox(
         width: 1000,
@@ -72,184 +72,233 @@ class _LegacyAnalysisDialogState extends State<LegacyAnalysisDialog> {
             builder: (context, _) {
               final inspection = _controller.inspection;
               final selected = _selected;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          l10n.legacyAnalysisTitle,
-                          style: AppTypography.title(context),
+              return PopScope(
+                canPop: !_controller.exporting,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            l10n.legacyAnalysisTitle,
+                            style: AppTypography.title(context),
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        tooltip: l10n.closeDocumentInspection,
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  SelectableText(
-                    widget.path,
-                    style: AppTypography.caption(context),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    l10n.legacyAnalysisProvenance,
-                    style: AppTypography.body(context),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Wrap(
-                    spacing: AppSpacing.sm,
-                    children: [
-                      TextButton.icon(
-                        onPressed: _controller.loading || _controller.exporting
-                            ? null
-                            : () {
-                                setState(() {
-                                  _selected = null;
-                                  _node = null;
-                                });
-                                unawaited(_controller.load(widget.path));
-                              },
-                        icon: const Icon(Icons.refresh),
-                        label: Text(l10n.refresh),
-                      ),
-                      if (selected != null &&
-                          inspection?.snapshot.originalBytes.containsKey(
-                                selected.kind,
-                              ) ==
-                              true)
-                        OutlinedButton.icon(
-                          key: const Key('legacy-analysis-export'),
+                        IconButton(
+                          tooltip: l10n.closeDocumentInspection,
                           onPressed: _controller.exporting
                               ? null
-                              : () => unawaited(
-                                  _controller.export(
-                                    selected.kind,
-                                    () => widget.chooseExportDestination(
+                              : () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    SelectableText(
+                      widget.path,
+                      style: AppTypography.caption(context),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      l10n.legacyAnalysisProvenance,
+                      style: AppTypography.body(context),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      children: [
+                        TextButton.icon(
+                          onPressed:
+                              _controller.loading || _controller.exporting
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _selected = null;
+                                    _node = null;
+                                  });
+                                  unawaited(_controller.load(widget.path));
+                                },
+                          icon: const Icon(Icons.refresh),
+                          label: Text(l10n.refresh),
+                        ),
+                        if (selected != null &&
+                            inspection?.snapshot.originalBytes.containsKey(
+                                  selected.kind,
+                                ) ==
+                                true)
+                          OutlinedButton.icon(
+                            key: const Key('legacy-analysis-export'),
+                            onPressed: _controller.exporting
+                                ? null
+                                : () => unawaited(
+                                    _controller.export(
                                       selected.kind,
+                                      () => widget.chooseExportDestination(
+                                        selected.kind,
+                                      ),
                                     ),
                                   ),
-                                ),
-                          icon: const Icon(Icons.save_alt),
-                          label: Text(l10n.legacyAnalysisExport),
-                        ),
-                      if (_controller.exporting)
-                        const CircularProgressIndicator(),
-                    ],
-                  ),
-                  if (_controller.error case final error?)
-                    SelectableText(
-                      l10n.legacyAnalysisFailure('$error'),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  if (_controller.exportedPath case final path?)
-                    SelectableText(l10n.legacyAnalysisExported(path)),
-                  const Divider(),
-                  Expanded(
-                    child: _controller.loading
-                        ? const Center(child: CircularProgressIndicator())
-                        : inspection == null ||
-                              (inspection.items.isEmpty &&
-                                  inspection.snapshot.payloads.isEmpty)
-                        ? Center(child: Text(l10n.legacyAnalysisEmpty))
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              SizedBox(
-                                width: 220,
-                                child: ListView(
-                                  children: [
-                                    for (final kind
-                                        in GenerationArtifactKind.values)
-                                      if (inspection.snapshot.payloads
-                                              .containsKey(kind) ||
-                                          inspection.snapshot.readFailures
-                                              .containsKey(kind)) ...[
-                                        Padding(
-                                          padding: const EdgeInsets.all(
-                                            AppSpacing.sm,
-                                          ),
-                                          child: Text(
-                                            _label(kind, l10n),
-                                            style: AppTypography.bodyStrong(
-                                              context,
-                                            ),
-                                          ),
-                                        ),
-                                        if (!inspection.items.any(
-                                          (item) => item.kind == kind,
-                                        ))
-                                          ListTile(
-                                            title: Text(
-                                              l10n.legacyAnalysisNoEntries,
-                                            ),
-                                            onTap: () => _select(
-                                              LegacyAnalysisItem(kind: kind),
-                                            ),
-                                          ),
-                                        for (final (index, item)
-                                            in inspection.items
-                                                .where(
-                                                  (item) => item.kind == kind,
-                                                )
-                                                .indexed)
-                                          ListTile(
-                                            key: Key(
-                                              'legacy-${kind.name}-$index',
-                                            ),
-                                            selected: identical(selected, item),
-                                            leading: Icon(
-                                              item.error == null
-                                                  ? Icons.description_outlined
-                                                  : Icons.error_outline,
-                                            ),
-                                            title: Text(
-                                              item
-                                                          .tree
-                                                          ?.startMoves
-                                                          .isNotEmpty ==
-                                                      true
-                                                  ? item.tree!.startMoves
-                                                  : item.trap?.movesSan.join(
-                                                          ' ',
-                                                        ) ??
-                                                        l10n.legacyAnalysisEntry(
-                                                          index + 1,
-                                                        ),
-                                            ),
-                                            subtitle: item.error == null
-                                                ? null
-                                                : Text(
-                                                    l10n.legacyAnalysisUnreadable,
-                                                  ),
-                                            onTap: () => _select(item),
-                                          ),
-                                      ],
-                                  ],
-                                ),
-                              ),
-                              const VerticalDivider(),
-                              Expanded(
-                                child: selected == null
-                                    ? Center(
-                                        child: Text(l10n.legacyAnalysisSelect),
-                                      )
-                                    : _details(selected, l10n),
-                              ),
-                            ],
+                            icon: const Icon(Icons.save_alt),
+                            label: Text(l10n.legacyAnalysisExport),
                           ),
-                  ),
-                ],
+                        if (_controller.exporting)
+                          const CircularProgressIndicator(),
+                      ],
+                    ),
+                    if (_controller.error case final error?)
+                      _failure(error, l10n),
+                    if (_controller.exportedPath case final path?)
+                      SelectableText(l10n.legacyAnalysisExported(path)),
+                    const Divider(),
+                    Expanded(
+                      child: _controller.loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : inspection == null ||
+                                (inspection.items.isEmpty &&
+                                    inspection.snapshot.payloads.isEmpty)
+                          ? Center(child: Text(l10n.legacyAnalysisEmpty))
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SizedBox(
+                                  width: 220,
+                                  child: ListView(
+                                    children: [
+                                      for (final kind
+                                          in GenerationArtifactKind.values)
+                                        if (inspection.snapshot.payloads
+                                                .containsKey(kind) ||
+                                            inspection.snapshot.readFailures
+                                                .containsKey(kind)) ...[
+                                          Padding(
+                                            padding: const EdgeInsets.all(
+                                              AppSpacing.sm,
+                                            ),
+                                            child: Text(
+                                              _label(kind, l10n),
+                                              style: AppTypography.bodyStrong(
+                                                context,
+                                              ),
+                                            ),
+                                          ),
+                                          if (!inspection.items.any(
+                                            (item) => item.kind == kind,
+                                          ))
+                                            ListTile(
+                                              title: Text(
+                                                l10n.legacyAnalysisNoEntries,
+                                              ),
+                                              onTap: () => _select(
+                                                LegacyAnalysisItem(kind: kind),
+                                              ),
+                                            ),
+                                          for (final (index, item)
+                                              in inspection.items
+                                                  .where(
+                                                    (item) => item.kind == kind,
+                                                  )
+                                                  .indexed)
+                                            ListTile(
+                                              key: Key(
+                                                'legacy-${kind.name}-$index',
+                                              ),
+                                              selected: identical(
+                                                selected,
+                                                item,
+                                              ),
+                                              leading: Icon(
+                                                item.error == null
+                                                    ? Icons.description_outlined
+                                                    : Icons.error_outline,
+                                              ),
+                                              title: Text(
+                                                item
+                                                            .tree
+                                                            ?.startMoves
+                                                            .isNotEmpty ==
+                                                        true
+                                                    ? item.tree!.startMoves
+                                                    : item.trap?.movesSan.join(
+                                                            ' ',
+                                                          ) ??
+                                                          l10n.legacyAnalysisEntry(
+                                                            index + 1,
+                                                          ),
+                                              ),
+                                              subtitle: item.error == null
+                                                  ? null
+                                                  : Text(
+                                                      l10n.legacyAnalysisUnreadable,
+                                                    ),
+                                              onTap: () => _select(item),
+                                            ),
+                                        ],
+                                    ],
+                                  ),
+                                ),
+                                const VerticalDivider(),
+                                Expanded(
+                                  child: selected == null
+                                      ? Center(
+                                          child: Text(
+                                            l10n.legacyAnalysisSelect,
+                                          ),
+                                        )
+                                      : _details(selected, l10n),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
               );
             },
           ),
         ),
       ),
+    );
+  }
+
+  Widget _failure(Object error, AppLocalizations l10n) {
+    final message = switch (error) {
+      GenerationArtifactFailure(kind: GenerationArtifactFailureKind.read) =>
+        l10n.legacyAnalysisReadFailed,
+      GenerationArtifactFailure(kind: GenerationArtifactFailureKind.decode) =>
+        l10n.legacyAnalysisDecodeFailed,
+      GenerationArtifactFailure(
+        kind: GenerationArtifactFailureKind.collision,
+      ) =>
+        l10n.legacyAnalysisCollision,
+      GenerationArtifactFailure(kind: GenerationArtifactFailureKind.export) =>
+        l10n.legacyAnalysisExportFailed,
+      GenerationArtifactFailure(
+        kind: GenerationArtifactFailureKind.uncertain,
+      ) =>
+        l10n.legacyAnalysisExportUncertain,
+      _ => l10n.legacyAnalysisLoadFailed,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          message,
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+        ExpansionTile(
+          title: Text(l10n.legacyAnalysisDiagnostics),
+          children: [
+            SizedBox(
+              height: 100,
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  '$error',
+                  style: AppTypography.mono(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -268,8 +317,7 @@ class _LegacyAnalysisDialogState extends State<LegacyAnalysisDialog> {
           ),
           const SizedBox(height: AppSpacing.md),
         ],
-        if (item.error case final error?)
-          SelectableText(l10n.legacyAnalysisFailure(error)),
+        if (item.error case final error?) _failure(error, l10n),
         if (item.trap case final trap?) ...[
           SelectableText(
             trap.movesSan.join(' '),

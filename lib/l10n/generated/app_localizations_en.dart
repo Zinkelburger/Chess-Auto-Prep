@@ -655,11 +655,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get legacyAnalysisParent => 'Previous position';
 
   @override
-  String legacyAnalysisFailure(String details) {
-    return 'Recovery issue: $details';
-  }
-
-  @override
   String legacyAnalysisExported(String path) {
     return 'Original file exported to $path';
   }
@@ -673,4 +668,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String legacyAnalysisNodes(int nodes, int depth) {
     return '$nodes saved nodes · depth $depth';
   }
+
+  @override
+  String get legacyAnalysisDiagnostics => 'Technical details';
+
+  @override
+  String get legacyAnalysisLoadFailed =>
+      'Older analysis could not be loaded. Try refreshing.';
+
+  @override
+  String get legacyAnalysisReadFailed =>
+      'This file could not be read safely. Other saved files remain available.';
+
+  @override
+  String get legacyAnalysisDecodeFailed =>
+      'This entry could not be decoded. You can still export its original file.';
+
+  @override
+  String get legacyAnalysisCollision =>
+      'A file already exists at that destination. Choose a different location; nothing was replaced.';
+
+  @override
+  String get legacyAnalysisExportFailed =>
+      'The original file could not be exported. Choose another location or try again.';
+
+  @override
+  String get legacyAnalysisExportUncertain =>
+      'The export may have been saved, but completion could not be confirmed. Inspect the destination in Technical details before trying again.';
 }

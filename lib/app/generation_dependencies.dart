@@ -47,9 +47,7 @@ Future<void> showLegacyAnalysisRecovery(
     artifacts: artifacts,
     chooseExportDestination: (kind) async {
       final directory = await FilePicker.getDirectoryPath(
-        dialogTitle: AppLocalizations.of(
-          context,
-        )!.legacyAnalysisExportDirectory,
+        dialogTitle: AppLocalizations.of(context).legacyAnalysisExportDirectory,
       );
       if (directory == null) return null;
       return p.join(
