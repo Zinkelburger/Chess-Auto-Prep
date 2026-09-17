@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../../chess_core/moves/tree_path.dart';
+import '../../../chess_core/pgn/pgn_parser.dart';
 import '../../../models/move_tree.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../utils/safe_change_notifier.dart';
 import '../../../utils/pgn_utils.dart' show escapeHeaderValue;
 import '../../../constants/chess_constants.dart';
 import '../models/builder_workspace_snapshot.dart';
+import '../models/repertoire_metadata.dart';
 import '../repositories/repertoire_decoder.dart';
 import '../repositories/repertoire_document_repository.dart';
 import 'repertoire_board_controller.dart';
@@ -27,6 +29,7 @@ class BuilderWorkspaceController extends ChangeNotifier
       decoder: decoder,
       onChanged: _documentChanged,
       onLoadStarted: () {
+        _intentRevision++;
         _captureDraft();
         writer.invalidatePendingActions();
       },
@@ -38,6 +41,9 @@ class BuilderWorkspaceController extends ChangeNotifier
         });
         _activeKey = null;
         _dirty = false;
+        sourceChanged = false;
+        saveError = null;
+        _headers = const {};
         _title = 'Repertoire Line';
         _label = null;
       },
@@ -71,10 +77,12 @@ class BuilderWorkspaceController extends ChangeNotifier
   bool _dirty = false;
   int _boardStructure = 0;
   int _draftSequence = 0;
+  int _intentRevision = 0;
   bool sourceChanged = false;
   int _documentRevision = 0;
   String? _activeKey;
   String _title = 'Repertoire Line';
+  Map<String, String> _headers = const {};
   String? _label;
   String get title => _title;
   String? get annotatedLineLabel => _label;
@@ -84,7 +92,7 @@ class BuilderWorkspaceController extends ChangeNotifier
   bool _closed = false;
   int get structureVersion => _documentRevision + board.structureVersion;
   Object get closeRevision =>
-      (document.closeRevision, board.closeRevision, _editRevision);
+      (document.closeRevision, board.revision, _editRevision);
   List<BuilderDraft> get retainedDrafts => List.unmodifiable(_drafts.values);
 
   void _withoutCapture(void Function() action) {
@@ -106,6 +114,7 @@ class BuilderWorkspaceController extends ChangeNotifier
   void _boardChanged() {
     document.syncOpeningTree(board.moveHistory, board.cursorFens);
     if (!_suspended) {
+      _intentRevision++;
       final changed = _boardStructure != board.structureVersion;
       _boardStructure = board.structureVersion;
       if (changed) {
@@ -130,8 +139,12 @@ class BuilderWorkspaceController extends ChangeNotifier
     return _activeKey = key;
   }
 
+  Object? _serializedRevision;
+  String? _serializedContent;
   String _content() {
-    final headers = <String, String>{...?document.selectedPgnLine?.headers};
+    final revision = (board.structureVersion, _title, _headers);
+    if (_serializedRevision == revision) return _serializedContent!;
+    final headers = <String, String>{..._headers};
     headers['Event'] = _title;
     headers.putIfAbsent(
       'White',
@@ -146,7 +159,9 @@ class BuilderWorkspaceController extends ChangeNotifier
       headers['FEN'] = board.tree.startingFen;
       headers['SetUp'] = '1';
     }
-    return '${[for (final entry in headers.entries) '[${entry.key} "${escapeHeaderValue(entry.value)}"]'].join('\n')}\n\n${board.tree.toPgnMoveText()}';
+    _serializedRevision = revision;
+    return _serializedContent =
+        '${[for (final entry in headers.entries) '[${entry.key} "${escapeHeaderValue(entry.value)}"]'].join('\n')}\n\n${board.tree.toPgnMoveText()}';
   }
 
   void _captureDraft() {
@@ -201,9 +216,13 @@ class BuilderWorkspaceController extends ChangeNotifier
   }
 
   void selectLine(RepertoireLine line) {
+    _intentRevision++;
     _captureDraft();
     _saveLine = null;
     document.selectLine(line);
+    sourceChanged = false;
+    saveError = null;
+    _headers = Map.unmodifiable(line.headers);
     _title = line.name;
     _label = null;
     _activeKey =
@@ -217,6 +236,7 @@ class BuilderWorkspaceController extends ChangeNotifier
   }
 
   bool composePosition(String fen) {
+    _intentRevision++;
     _captureDraft();
     var accepted = false;
     _withoutCapture(() => accepted = board.setPositionFromFen(fen));
@@ -224,6 +244,7 @@ class BuilderWorkspaceController extends ChangeNotifier
     _saveLine = null;
     document.selectLine(null);
     _activeKey = null;
+    _headers = const {};
     _title = 'Repertoire Line';
     _label = null;
     _dirty = true;
@@ -234,10 +255,12 @@ class BuilderWorkspaceController extends ChangeNotifier
   }
 
   void composeMoves(List<String> moves) {
+    _intentRevision++;
     _captureDraft();
     _saveLine = null;
     document.selectLine(null);
     _activeKey = null;
+    _headers = const {};
     _title = 'Repertoire Line';
     _label = null;
     _withoutCapture(() => board.loadMoveSequence(moves));
@@ -252,6 +275,7 @@ class BuilderWorkspaceController extends ChangeNotifier
     _saveLine = null;
     document.selectLine(null);
     _activeKey = null;
+    _headers = const {};
     _title = 'Repertoire Line';
     _label = label;
     _withoutCapture(() => board.loadAnnotatedTree(tree, cursor: cursor));
@@ -270,15 +294,24 @@ class BuilderWorkspaceController extends ChangeNotifier
       );
   }
 
-  Future<void> saveScratchToChapter() async {
-    if (document.currentRepertoire == null || document.isLoading) return;
-    final key = _key;
-    final content = _content();
+  Future<void> saveDraftToChapter(
+    BuilderDraft draft,
+    RepertoireMetadata destination,
+  ) async {
+    final failure = document.lineSaveRevision;
     try {
-      await document.appendDraft(content);
-      _drafts.remove(key);
-      saveError = null;
-      sourceChanged = false;
+      await document.appendDraftTo(destination.filePath, draft.content);
+      if (_drafts[draft.key]?.content == draft.content)
+        _drafts.remove(draft.key);
+      if (_activeKey == draft.key && _content() == draft.content) {
+        _dirty = false;
+        saveError = null;
+        sourceChanged = false;
+        document.resolveCopiedLineFailure(failure);
+      }
+      if (document.currentRepertoire?.filePath == destination.filePath) {
+        await document.loadRepertoire();
+      }
       notifyListeners();
     } catch (error) {
       saveError = error;
@@ -297,21 +330,40 @@ class BuilderWorkspaceController extends ChangeNotifier
 
   Future<void> restoreWorkspace(BuilderWorkspaceSnapshot snapshot) async {
     _captureDraft();
-    for (final draft in snapshot.drafts) {
-      _drafts.putIfAbsent(draft.key, () => draft);
+    final restored = <String, BuilderDraft>{};
+    for (final incoming in snapshot.drafts) {
+      var draft = incoming;
+      final existing = _drafts[draft.key];
+      if (existing != null && existing.content != draft.content) {
+        String key;
+        do {
+          key = '${draft.key}\u0000recovered-${++_draftSequence}';
+        } while (_drafts.containsKey(key));
+        draft = draft.withKey(key);
+      }
+      _drafts[draft.key] = draft;
+      restored[incoming.key] = draft;
     }
-    if (snapshot.drafts.isEmpty) return;
+    if (restored.isEmpty) return;
     await openRetainedDraft(
-      _drafts[snapshot.activeKey] ?? snapshot.drafts.first,
+      restored[snapshot.activeKey] ?? restored.values.first,
     );
   }
 
   Future<void> openRetainedDraft(BuilderDraft draft) async {
+    final parsed = MoveTree.fromPgn(draft.content);
+    if (!parsed.isValidPath(TreePath(draft.cursor))) {
+      throw const FormatException(
+        'Recovered Builder cursor does not belong to its tree.',
+      );
+    }
     _captureDraft();
-    _saveLine = null;
     if (draft.repertoire != null) {
-      await document.setRepertoire(draft.repertoire!);
-      if (document.currentRepertoire != draft.repertoire ||
+      final loading = document.setRepertoire(draft.repertoire!);
+      final intent = _intentRevision;
+      await loading;
+      if (intent != _intentRevision ||
+          document.currentRepertoire != draft.repertoire ||
           document.loadError != null) {
         throw StateError(
           'The draft destination could not be opened. Its checkpoint is retained.',
@@ -330,16 +382,22 @@ class BuilderWorkspaceController extends ChangeNotifier
     sourceChanged = draft.lineId != null && target == null;
     document.selectLine(target);
     _saveLine = target == null ? null : document.selectedLineSaver;
-    _applyDraft(draft);
+    _applyDraft(draft, parsed: parsed);
     notifyListeners();
   }
 
-  void _applyDraft(BuilderDraft draft) {
-    final parsed = MoveTree.fromPgn(draft.content);
+  void _applyDraft(BuilderDraft draft, {MoveTree? parsed}) {
+    parsed ??= MoveTree.fromPgn(draft.content);
+    if (!parsed.isValidPath(TreePath(draft.cursor))) {
+      throw const FormatException(
+        'Recovered Builder cursor does not belong to its tree.',
+      );
+    }
     _withoutCapture(
-      () => board.loadAnnotatedTree(parsed, cursor: TreePath(draft.cursor)),
+      () => board.loadAnnotatedTree(parsed!, cursor: TreePath(draft.cursor)),
     );
     _activeKey = draft.key;
+    _headers = Map.unmodifiable(parsePgnGame(draft.content).headers);
     _title = draft.title;
     _label = draft.label;
     _dirty = true;

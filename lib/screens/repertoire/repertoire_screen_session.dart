@@ -242,6 +242,32 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     }
   }
 
+  Future<void> _saveCurrentDraft() async {
+    final snapshot = _controller.captureWorkspace();
+    final draft = snapshot.drafts
+        .where((draft) => draft.key == snapshot.activeKey)
+        .firstOrNull;
+    if (draft == null) return;
+    final pick = await _workspaceNavigation.push<ChapterPick>(
+      MaterialPageRoute(
+        builder: (context) => const RepertoireSelectionScreen(),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    final picked = pick.chapter;
+    final chapters = p.extension(picked.filePath).toLowerCase() == '.pgn'
+        ? [picked]
+        : await StorageFactory.instance.listChapters(picked.filePath);
+    if (!mounted || chapters.isEmpty) return;
+    try {
+      await _controller.saveDraftToChapter(draft, chapters.first);
+    } catch (error) {
+      if (mounted)
+        showAppSnackBar(context, 'Draft is retained: $error', isError: true);
+    }
+    _reclaimFocus();
+  }
+
   Future<void> _showRepertoireSelection() async {
     final pick = await _workspaceNavigation.push<ChapterPick>(
       MaterialPageRoute(

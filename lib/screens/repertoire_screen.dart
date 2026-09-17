@@ -1080,7 +1080,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       },
       child: WorkspaceRecoveryHost(
         recovery: context.read<BuilderLifetime>().recovery,
-        onRestored: () => setState(() {}),
+        onRestored: () {
+          if (mounted) setState(() {});
+        },
         id: 'builder',
         workspaceName: 'Builder',
         title: (snapshot) => snapshot.drafts.firstOrNull?.title ?? 'Builder',
@@ -1109,6 +1111,16 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                     padding: EdgeInsets.all(8),
                     child: Text(
                       'The source changed or is missing. Restored edits are a scratch line; save them to an explicit destination.',
+                    ),
+                  ),
+                if (_controller.captureWorkspace().activeKey != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const ValueKey('save-builder-draft-copy'),
+                      onPressed: _saveCurrentDraft,
+                      icon: const Icon(Icons.save_as),
+                      label: const Text('Save draft as a new line…'),
                     ),
                   ),
                 if (_controller.retainedDrafts.isNotEmpty)

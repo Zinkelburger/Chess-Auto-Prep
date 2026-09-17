@@ -11,7 +11,7 @@ import 'package:chess_auto_prep/infrastructure/documents/file_workspace_recovery
 import 'package:chess_auto_prep/infrastructure/repertoires/isolate_repertoire_decoder.dart';
 import 'repertoire_document_session_test.dart' show MemoryDocuments;
 import '../../support/repertoire_dependencies.dart'
-    show MemoryBuilderRecoveryStore;
+    show MemoryBuilderRecoveryStore, GatedRepertoireDecoder;
 
 const pgn = '[Event "Original"]\n[Result "*"]\n\n1. e4 e5 *';
 RepertoireMetadata chapter(String path) => RepertoireMetadata(
@@ -19,15 +19,31 @@ RepertoireMetadata chapter(String path) => RepertoireMetadata(
   name: path,
   lastModified: DateTime(2026),
 );
+
+class CopyDocuments extends MemoryDocuments {
+  Completer<void>? saveGate;
+  @override
+  Future<void> replace(
+    String path,
+    String content, {
+    required String expectedContent,
+  }) async {
+    await saveGate?.future;
+    if (files[path] != expectedContent)
+      throw StateError('Concurrent destination change');
+    files[path] = content;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  late MemoryDocuments documents;
+  late CopyDocuments documents;
   BuilderWorkspaceController workspace() => BuilderWorkspaceController(
     documents: documents,
     decoder: const IsolateRepertoireDecoder(),
   );
   setUp(() {
-    documents = MemoryDocuments()..files['/a'] = pgn;
+    documents = CopyDocuments()..files['/a'] = pgn;
     documents.files['/b'] = pgn;
   });
 
@@ -158,6 +174,152 @@ void main() {
       await lifetime.flushForClose();
       expect(store.snapshot!.drafts.single.content, contains('e5'));
       await lifetime.shutdown();
+    },
+  );
+
+  test(
+    'explicit copy preserves variations and headers, resolves only the copied draft',
+    () async {
+      final owner = workspace();
+      addTearDown(owner.dispose);
+      await owner.document.setRepertoire(chapter('/a'));
+      owner.composeMoves(['e4', 'e5']);
+      owner.board.jump(TreePath.empty);
+      owner.board.playMove('d4');
+      owner.board.setCommentAtPath(owner.board.path, 'variation note');
+      owner.setTitle('My "copy"');
+      final draft = owner.captureWorkspace().drafts.single;
+      final gate = documents.saveGate = Completer<void>();
+      final copying = owner.saveDraftToChapter(draft, chapter('/b'));
+      owner.setTitle('Newer edit');
+      gate.complete();
+      await copying;
+      expect(documents.files['/b'], contains('variation note'));
+      expect(documents.files['/b'], contains(r'My \"copy\"'));
+      expect(documents.files['/a'], pgn);
+      expect(owner.captureWorkspace().drafts.single.title, 'Newer edit');
+      final latest = owner.captureWorkspace().drafts.single;
+      await owner.saveDraftToChapter(latest, chapter('/b'));
+      expect(owner.captureWorkspace().needsRecovery, isFalse);
+    },
+  );
+
+  test(
+    'unknown recovery schema and invalid cursor retain an error instead of adopting empty data',
+    () async {
+      expect(
+        () => const BuilderWorkspaceCodec().decode({'version': 99}),
+        throwsFormatException,
+      );
+      final owner = workspace();
+      addTearDown(owner.dispose);
+      final invalid = BuilderDraft(
+        key: 'bad',
+        repertoire: null,
+        content: pgn,
+        sourcePgn: null,
+        lineId: null,
+        linePgn: null,
+        title: 'Bad',
+        cursor: [99],
+      );
+      await expectLater(
+        owner.restoreWorkspace(
+          BuilderWorkspaceSnapshot(drafts: [invalid], activeKey: 'bad'),
+        ),
+        throwsFormatException,
+      );
+      expect(owner.board.tree.isEmpty, isTrue);
+    },
+  );
+
+  test(
+    'restoring a same-key checkpoint retains both versions of unsaved work',
+    () async {
+      final first = workspace();
+      first.composeMoves(['e4']);
+      first.setTitle('Older');
+      final incoming = first.captureWorkspace();
+      first.dispose();
+      final current = workspace();
+      addTearDown(current.dispose);
+      current.composeMoves(['d4']);
+      current.setTitle('Newer');
+      await current.restoreWorkspace(incoming);
+      expect(current.title, 'Older');
+      expect(
+        current.captureWorkspace().drafts.map((d) => d.title),
+        containsAll(['Older', 'Newer']),
+      );
+    },
+  );
+
+  test(
+    'newer chapter intent prevents a late restore from replacing its board',
+    () async {
+      final decoder = GatedRepertoireDecoder();
+      final owner = BuilderWorkspaceController(
+        documents: documents,
+        decoder: decoder,
+      );
+      addTearDown(owner.dispose);
+      await owner.document.setRepertoire(chapter('/a'));
+      owner.composeMoves(['e4']);
+      final draft = owner.captureWorkspace().drafts.single;
+      final gate = Completer<void>();
+      decoder.beforeBuild = () => gate.future;
+      final restoring = owner.openRetainedDraft(draft);
+      final failed = expectLater(restoring, throwsStateError);
+      final newer = owner.document.setRepertoire(chapter('/b'));
+      gate.complete();
+      await Future.wait([failed, newer]);
+      expect(owner.document.currentRepertoire!.filePath, '/b');
+      expect(owner.board.moveHistory, isEmpty);
+      expect(
+        owner.retainedDrafts.any((item) => item.content == draft.content),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'copying a conflicted line resolves its failed writer without touching external source',
+    () async {
+      final owner = workspace();
+      addTearDown(owner.dispose);
+      await owner.document.setRepertoire(chapter('/a'));
+      owner.selectLine(owner.document.repertoireLines.single);
+      const external = '[Event "External"]\n\n1. d4 *';
+      documents.files['/a'] = external;
+      owner.board.setCommentAtPath(const TreePath([0]), 'my recovered comment');
+      await expectLater(
+        owner.document.flushDocumentForClose(),
+        throwsStateError,
+      );
+      await Future<void>.delayed(Duration.zero);
+      final draft = owner.captureWorkspace().drafts.single;
+      await owner.saveDraftToChapter(draft, chapter('/b'));
+      await owner.document.setRepertoire(chapter('/b'));
+      expect(owner.document.currentRepertoire!.filePath, '/b');
+      expect(documents.files['/a'], external);
+      expect(documents.files['/b'], contains('my recovered comment'));
+      expect(owner.captureWorkspace().needsRecovery, isFalse);
+    },
+  );
+
+  test(
+    'cursor capture reuses serialized tree and invalidates a prior close revision',
+    () {
+      final owner = workspace();
+      addTearDown(owner.dispose);
+      owner.composeMoves(['e4', 'e5', 'Nf3']);
+      final before = owner.captureWorkspace().drafts.single;
+      final close = owner.closeRevision;
+      owner.board.jump(TreePath.empty);
+      final after = owner.captureWorkspace().drafts.single;
+      expect(identical(before.content, after.content), isTrue);
+      expect(after.cursor, isEmpty);
+      expect(owner.closeRevision, isNot(close));
     },
   );
 

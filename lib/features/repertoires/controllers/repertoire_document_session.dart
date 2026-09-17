@@ -184,6 +184,7 @@ class RepertoireDocumentSession {
 
   Future<void> _lineSaveTail = Future.value();
   Object? _lineSaveFailure;
+  int _lineSaveRevision = 0;
 
   Future<T> runDocumentMutation<T>(Future<T> Function() action) {
     final result = _lineSaveTail.then((_) {
@@ -263,9 +264,11 @@ class RepertoireDocumentSession {
     );
     _lineSaveTail = result.then<void>(
       (saved) {
+        _lineSaveRevision++;
         _lineSaveFailure = saved ? null : 'The original line is unavailable.';
       },
       onError: (Object error, StackTrace _) {
+        _lineSaveRevision++;
         _lineSaveFailure = error;
       },
     );
@@ -674,13 +677,12 @@ class RepertoireDocumentSession {
     onChanged();
   }
 
-  /// An explicit new line keeps the editable variation tree and annotations.
-  Future<void> appendDraft(String pgn) async {
-    final filePath = _repertoireFilePath;
-    if (_disposed || filePath == null)
-      throw StateError('Choose a chapter first.');
-    final generation = _loadGeneration;
-    await runDocumentMutation(() async {
+  /// An explicit copy preserves the editable tree and never replaces its
+  /// original game. This independent destination can resolve a failed source
+  /// save, so it waits for the queue without requiring that source to recover.
+  Future<void> appendDraftTo(String filePath, String pgn) {
+    final result = _lineSaveTail.then((_) async {
+      if (_disposed) throw StateError('The document session is closed.');
       final existing = (await documents.read(filePath)).pgn;
       if (existing == null)
         throw StateError('The selected chapter is unavailable.');
@@ -690,8 +692,20 @@ class RepertoireDocumentSession {
         expectedContent: existing,
       );
     });
-    if (isCurrent(generation)) await loadRepertoire();
+    _lineSaveTail = result.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return result;
   }
+
+  /// Called only after the corresponding failed draft was durably copied to
+  /// the user's explicit destination. Newer failed edits remain unresolved.
+  void resolveCopiedLineFailure(int revision) {
+    if (revision == _lineSaveRevision) _lineSaveFailure = null;
+  }
+
+  int get lineSaveRevision => _lineSaveRevision;
 
   /// Imports PGN content into the current repertoire file.
   Future<int> importPgnContent(String pgnContent) async {

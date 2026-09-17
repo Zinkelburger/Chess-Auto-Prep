@@ -136,6 +136,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   /// the move flow), or null.
   TreePath? _editingCommentPath;
   String? _inlineCommentDraft;
+  String? _inlineOriginalComment;
 
   Timer? _autoSaveTimer;
   VoidCallback? _pendingAutoSave;
@@ -212,7 +213,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (!mounted) return;
     setState(() {
       _editingCommentPath = path;
-      _inlineCommentDraft = commentProse(widget.tree.commentAt(path) ?? '');
+      _inlineOriginalComment = widget.tree.commentAt(path);
+      _inlineCommentDraft = commentProse(_inlineOriginalComment ?? '');
     });
   }
 
@@ -822,11 +824,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   Widget _buildInlineCommentEditor(MoveNodeView node, TreePath path) {
     return PgnCommentEditor(
       initialText: _inlineCommentDraft ?? commentProse(node.comment ?? ''),
-      onChanged: (text) => _inlineCommentDraft = text,
+      onChanged: (text) {
+        _inlineCommentDraft = text;
+        _commitPanelComment(path, text);
+      },
       onSave: (text) =>
           _saveInlineComment(path, mergeCommentProse(node.comment ?? '', text)),
       onCancel: () {
         if (!mounted) return;
+        widget.onCommentChanged?.call(path, _inlineOriginalComment);
+        widget.onDirty?.call();
+        _scheduleAutoSave();
         setState(() => _editingCommentPath = null);
       },
     );

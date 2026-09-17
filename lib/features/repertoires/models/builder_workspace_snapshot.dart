@@ -23,6 +23,17 @@ class BuilderDraft {
   final String title;
   final List<int> cursor;
   final String? label;
+  BuilderDraft withKey(String value) => BuilderDraft(
+    key: value,
+    repertoire: repertoire,
+    content: content,
+    sourcePgn: sourcePgn,
+    lineId: lineId,
+    linePgn: linePgn,
+    title: title,
+    cursor: cursor,
+    label: label,
+  );
 }
 
 class BuilderWorkspaceSnapshot {
