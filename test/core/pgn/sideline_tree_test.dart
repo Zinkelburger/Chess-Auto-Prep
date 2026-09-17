@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chess_auto_prep/core/pgn/sideline_tree.dart';
+import 'package:chess_auto_prep/chess_core/moves/sideline_tree.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 
 MoveNode _node(String san, {bool ephemeral = false, List<MoveNode>? kids}) =>

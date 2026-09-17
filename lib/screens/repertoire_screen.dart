@@ -345,7 +345,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
   Future<void> _openAuditConfigRoute() async {
     if (_configRouteOpen) return;
     _configRouteOpen = true;
-    final tree = _controller.openingTree;
+    final tree = _controller.openingGraph;
     final path = _repertoireFilePath;
     final isWhite = _controller.isRepertoireWhite;
     final label = _controller.currentRepertoire?.name;
@@ -357,7 +357,7 @@ abstract class _RepertoireScreenStateBase extends State<RepertoireScreen>
           startSignal: _auditController,
           hasStarted: () => _auditController.isAuditing,
           child: AuditConfigPanel(
-            openingTree: _controller.openingTree,
+            openingTree: _controller.openingGraph,
             isWhiteRepertoire: _controller.isRepertoireWhite,
             currentFen: _controller.fen,
             currentMoveSequence: _controller.currentMoveSequence,

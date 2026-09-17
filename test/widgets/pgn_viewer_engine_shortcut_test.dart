@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
 import '../support/fake_desktop_fullscreen_port.dart';
 import 'dart:io';
 
@@ -62,6 +63,9 @@ void main() {
       directory.deleteSync(recursive: true);
     });
     lifetime = PgnViewerLifetime(
+      positionIndex: createViewerPositionIndex(),
+      openings: createViewerOpenings(),
+      solitaireRepository: createViewerSolitaire(),
       window: FakeDesktopFullscreenPort(),
       collectionDecoder: const IsolatePgnCollectionDecoder(),
       collectionFilter: const IsolatePgnCollectionFilter(),

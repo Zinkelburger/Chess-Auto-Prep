@@ -2,7 +2,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_analysis_variations.dart';
+import 'package:chess_auto_prep/chess_core/pgn/pgn_analysis_variations.dart';
 import 'package:chess_auto_prep/chess_core/analysis/game_eval_annotations.dart';
 
 const _review =

@@ -1,4 +1,5 @@
-import 'package:chess_auto_prep/core/pgn/viewer_opening_tree.dart';
+import 'package:chess_auto_prep/app/viewer_dependencies.dart';
+import 'package:chess_auto_prep/features/documents/controllers/viewer_opening_tree.dart';
 import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 import 'package:chess_auto_prep/models/pgn_game_entry.dart';
 import 'package:chess_auto_prep/services/opening_tree_builder.dart';
@@ -79,6 +80,7 @@ void main() {
       var games = [entry('1. e4 e5 *'), entry(chapter)];
       Position board = Chess.fromSetup(Setup.parseFen(setupFen));
       final viewer = ViewerOpeningTree(
+        repository: createViewerOpenings(),
         isActive: () => true,
         onChanged: () {},
         filteredGames: () => games,
@@ -140,6 +142,7 @@ void main() {
     final games = [entry(chapter)];
     Position board = Chess.fromSetup(Setup.parseFen(setupFen));
     final viewer = ViewerOpeningTree(
+      repository: createViewerOpenings(),
       isActive: () => true,
       onChanged: () {},
       filteredGames: () => games,

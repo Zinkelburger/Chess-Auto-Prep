@@ -1,3 +1,4 @@
+import 'package:chess_auto_prep/features/repertoires/models/repertoire_mutation_receipt.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
 import '../../support/repertoire_dependencies.dart';
@@ -80,7 +81,7 @@ void main() {
       expect(await File(filePath).readAsString(), before);
       expect(controller.repertoireLines.first.moves, ['e4', 'e5']);
       expect(controller.currentMoveSequence, ['e4', 'e5']);
-      expect(controller.openingTree!.hasMove(controller.fen, 'Nf3'), isFalse);
+      expect(controller.openingGraph!.hasMove(controller.fen, 'Nf3'), isFalse);
     });
 
     test('undo returns false when stack is empty', () async {
@@ -240,7 +241,7 @@ class _NoSnapshotRepository extends DocumentRepertoireRepository {
   _NoSnapshotRepository(super.documents);
 
   @override
-  Future<AppendMovesResult> append(
+  Future<RepertoireMutationReceipt> append(
     String filePath,
     List<String> pathFromRoot,
     List<String> newSans, {
@@ -254,11 +255,15 @@ class _NoSnapshotRepository extends DocumentRepertoireRepository {
       startingFen: startingFen,
       isWhiteRepertoire: isWhiteRepertoire,
     );
-    return AppendMovesResult(
-      success: real.success,
-      previousContent: real.previousContent,
-      updatedContent: real.updatedContent,
-      steps: const [],
+    return RepertoireMutationReceipt(
+      requestedDocumentPath: real.requestedDocumentPath,
+      before: real.before,
+      after: real.after,
+      mutation: RepertoireAppendPlan(
+        previousContent: real.before.content,
+        updatedContent: real.after.content,
+        steps: const [],
+      ),
     );
   }
 }

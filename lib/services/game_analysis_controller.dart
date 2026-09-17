@@ -14,8 +14,9 @@ import 'dart:async';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../features/documents/repositories/viewer_analysis_port.dart';
 import '../constants/chess_constants.dart';
-import '../core/pgn/pgn_dummy_mainline.dart';
+import '../chess_core/pgn/pgn_dummy_mainline.dart';
 import '../models/bulk_analysis_settings.dart';
 import '../utils/chess_utils.dart'
     show uciPvToSan, uciToSan, toStandardUci, isNullMoveSan;
@@ -32,7 +33,9 @@ import 'package:chess_auto_prep/chess_core/analysis/move_eval.dart';
 /// Elo assumed for a player whose header carries none, for Maia.
 const int _kDefaultElo = 2200;
 
-class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
+class GameAnalysisController extends ChangeNotifier
+    with SafeChangeNotifier
+    implements ViewerAnalysisPort {
   GameAnalysisController({
     Future<CachedGameAnalysis?> Function(String pgnText)? cachedAnalysisLoader,
   }) : _cachedAnalysisLoader =
@@ -78,6 +81,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
 
   // ── Loading cached analysis from PGN ────────────────────────────────────
 
+  @override
   Future<bool> tryLoadFromPgn(String pgnText) async {
     final generation = ++_generation;
     _resetSeries();
@@ -121,6 +125,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   /// Silent when there is nothing to fill, while a full analysis is running,
   /// while repertoire generation holds the engine, or when no engine can be
   /// started; a load of a different game in the meantime discards the result.
+  @override
   Future<void> fillMissingBestLines(
     String pgnText, {
     ValueChanged<String>? onAnnotatedMovetext,
@@ -174,6 +179,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     if (annotated != null) onAnnotatedMovetext(annotated);
   }
 
+  @override
   void clearEvals() {
     _generation++;
     _isAnalyzing = false;
@@ -478,6 +484,7 @@ class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
     );
   }
 
+  @override
   void cancel() {
     _generation++;
     _isCancelled = true;

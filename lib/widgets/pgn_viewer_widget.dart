@@ -32,9 +32,9 @@ import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'pgn/pgn_reading_pane.dart';
 import '../utils/app_shortcuts.dart';
 import 'shortcut_tooltip.dart';
-import 'package:chess_auto_prep/core/pgn/pgn_viewer_handle.dart';
-import 'package:chess_auto_prep/core/pgn/solitaire_reveal.dart';
-import 'package:chess_auto_prep/core/pgn/solitaire_script.dart'
+import 'package:chess_auto_prep/features/documents/repositories/pgn_viewer_handle.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_reveal.dart';
+import 'package:chess_auto_prep/features/documents/models/solitaire_script.dart'
     as solitaire_script;
 import 'package:chess_auto_prep/features/documents/controllers/viewer_game_controller.dart';
 

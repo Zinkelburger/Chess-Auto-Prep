@@ -46,13 +46,16 @@ void main() {
       store.current = before;
       opened.complete(PgnOpened(before));
       final receipt = await operation;
-      expect(receipt.steps, hasLength(2));
-      receipt.validate(requestedPath: ['e4', 'e5', 'Nf3', 'Nc6']);
-      expect(receipt.previousContent, before.content);
-      expect(receipt.updatedContent, contains('{external before}'));
-      expect(receipt.updatedContent, contains(second));
+      expect(receipt.mutation.steps, hasLength(2));
+      receipt.validate(
+        path: '/main.pgn',
+        requestedPath: ['e4', 'e5', 'Nf3', 'Nc6'],
+      );
+      expect(receipt.before.content, before.content);
+      expect(receipt.after.content, contains('{external before}'));
+      expect(receipt.after.content, contains(second));
       expect(store.saves.single, same(before));
-      expect(() => receipt.steps.clear(), throwsUnsupportedError);
+      expect(() => receipt.mutation.steps.clear(), throwsUnsupportedError);
     },
   );
 
@@ -200,7 +203,41 @@ void main() {
   });
 
   test(
-    'uncertain append is not retried; undo reconciles only its exact result',
+    'undo rejects a proven installation that drifted before reconciliation',
+    () async {
+      final expected = store.current;
+      store.onSave = (before, next) async {
+        final installed = snapshot(next, revision: 'installed');
+        store.current = snapshot(next, revision: 'external-same-text');
+        return PgnWriteUncertain(
+          error: StateError('ack lost'),
+          before: before,
+          observed: installed,
+          installedRevision: installed.revision,
+        );
+      };
+      await expectLater(repository.restore(expected, first), throwsStateError);
+      expect(store.current.revision.nativeIdentity, 'external-same-text');
+      expect(store.saves, hasLength(1));
+    },
+  );
+
+  test(
+    'mismatched save provenance cannot be accepted as an append receipt',
+    () async {
+      store.onSave = (before, next) async => PgnSaved(
+        before: snapshot(before.content, revision: 'impostor'),
+        after: snapshot(next, revision: 'after'),
+      );
+      await expectLater(
+        repository.append('/main.pgn', ['e4', 'e5'], ['Nf3']),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
+    'uncertain writes without native installation proof remain unresolved',
     () async {
       store.onSave = (before, next) async {
         store.current = snapshot(next, revision: 'installed');
@@ -215,13 +252,12 @@ void main() {
         throwsStateError,
       );
       expect(store.saves, hasLength(1));
-      final appended = store.current.content;
-      await repository.replace(
-        '/main.pgn',
-        content,
-        expectedContent: appended,
-        reconcileInstalled: true,
+      final appended = store.current;
+      await expectLater(
+        repository.restore(appended, content),
+        throwsStateError,
       );
+      // An uncertain legacy observation carries no installation proof.
       expect(store.current.content, content);
       store.onSave = (before, next) async {
         store.current = snapshot('unrelated', revision: 'other');
@@ -232,12 +268,7 @@ void main() {
         );
       };
       await expectLater(
-        repository.replace(
-          '/main.pgn',
-          first,
-          expectedContent: content,
-          reconcileInstalled: true,
-        ),
+        repository.restore(store.current, first),
         throwsStateError,
       );
       expect(store.current.content, 'unrelated');

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Focused local checks. Full batch checks run in .github/workflows/ci.yml.
-# ci.sh [analyze|lint|format|test [FILES/OPTIONS...]|tools|integration [FILES...]|full]
+# ci.sh [analyze|lint|format|test [FILES/OPTIONS...]|tools|integration [FILES...]|profile [FILE]|full]
 # ci.sh with -- COMMAND... runs any heavy command under the same limits.
 set -uo pipefail
 CALLER_PWD=$PWD
@@ -37,6 +37,9 @@ run_step() {
       if ! python3 scripts/test_architecture_boundaries.py; then
         bad=1
       fi
+      if ! python3 scripts/test_ci_dispatch.py; then
+        bad=1
+      fi
       if ! python3 scripts/check_architecture_boundaries.py; then
         bad=1
       fi
@@ -50,7 +53,9 @@ run_step() {
       ;;
     analyze)
       "${JOB[@]}" run -- "$FLUTTER" gen-l10n || return $?
-      "${JOB[@]}" run -- "$FLUTTER" analyze lib test integration_test widgetbook --no-fatal-infos
+      local targets=(lib test integration_test widgetbook)
+      [[ ! -d test_driver ]] || targets+=(test_driver)
+      "${JOB[@]}" run -- "$FLUTTER" analyze "${targets[@]}" --no-fatal-infos
       ;;
     test)
       "${JOB[@]}" run -- "$FLUTTER" gen-l10n || return $?
@@ -58,6 +63,16 @@ run_step() {
       ;;
     tools)
       "${JOB[@]}" run -- bash scripts/test_tools.sh
+      ;;
+    profile)
+      "${JOB[@]}" run -- "$FLUTTER" gen-l10n || return $?
+      local target=${1:-integration_test/renewal_performance_test.dart}
+      if [[ $# -gt 1 ]]; then
+        echo 'ci.sh profile accepts one integration target' >&2
+        return 2
+      fi
+      "${JOB[@]}" run --headless -- "$FLUTTER" drive --profile -d linux \
+        --driver=test_driver/renewal_profile_driver.dart --target="$target"
       ;;
     integration)
       "${JOB[@]}" run -- "$FLUTTER" gen-l10n || return $?
@@ -91,12 +106,24 @@ esac
 
 # A test followed by paths/options is a focused run; otherwise accept the
 # familiar list of named steps (e.g. analyze test lint).
-if [[ ( $1 == test || $1 == integration ) && $# -gt 1 ]]; then
+if [[ ( $1 == test || $1 == integration || $1 == profile ) && $# -gt 1 ]]; then
   case "$2" in
-    format|analyze|test|tools|lint|integration) ;;
+    format|analyze|test|tools|lint|integration|profile) ;;
     *) step=$1; shift; run_step "$step" "$@"; exit $? ;;
   esac
 fi
+# Validate the whole named-step batch before launching any job. Otherwise
+# `analyze lint test test/foo.dart` silently starts the entire suite and only
+# discovers the misplaced target after that expensive run has finished.
+for step in "$@"; do
+  case "$step" in
+    format|analyze|test|tools|lint|integration|profile) ;;
+    *)
+      echo "ci.sh: unknown step '$step'. Run focused tests separately: scripts/ci.sh test PATH..." >&2
+      exit 2
+      ;;
+  esac
+done
 for step in "$@"; do
   echo "── $step"
   run_step "$step" || exit $?

@@ -1,6 +1,6 @@
 // WS-C: tests for the extracted AutoPlayEngine (timer-driven playback logic).
 
-import 'package:chess_auto_prep/core/pgn/auto_play_engine.dart';
+import 'package:chess_auto_prep/features/documents/controllers/auto_play_engine.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -79,6 +79,35 @@ void main() {
       e.setSpeed(2.5);
       expect(e.delaySec, 2.5);
     });
+
+    test(
+      'a retained post-frame callback cannot restart playback after disposal',
+      () {
+        fakeAsync((async) {
+          final board = _FakeBoard(['a', 'b', 'c']);
+          void Function()? afterFrame;
+          final engine = AutoPlayEngine(
+            isActive: () => true,
+            currentFen: () => board.currentFen,
+            goForward: board.goForward,
+            hasNextGame: () => false,
+            nextGame: () {},
+            onChanged: () {},
+            schedulePostFrame: (callback) => afterFrame = callback,
+          );
+          engine.start();
+          async.elapse(const Duration(milliseconds: 300));
+          expect(board.currentFen, 'b');
+          engine.dispose();
+          afterFrame!();
+          engine.start();
+          async.elapse(const Duration(seconds: 5));
+          expect(engine.isPlaying, isFalse);
+          expect(board.currentFen, 'b');
+          expect(async.pendingTimers, isEmpty);
+        });
+      },
+    );
 
     test('dispose cancels the timer (no further ticks)', () {
       fakeAsync((async) {

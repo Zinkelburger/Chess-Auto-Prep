@@ -25,7 +25,7 @@ WORKFLOW_FILES = (
     '.claude/skills/run-chess-auto-prep/driver.py',
     'scripts/agent_job.py', 'scripts/agent_worktree.py', 'scripts/agent_integrate.py',
     'scripts/app_driver.py',
-    'scripts/ci.sh', 'scripts/doctor.sh', 'scripts/setup_agent_display.sh',
+    'scripts/ci.sh', 'scripts/test_ci_dispatch.py', 'scripts/doctor.sh', 'scripts/setup_agent_display.sh',
     'scripts/hooks/flutter_gate.sh', 'scripts/test_tools.sh',
     'scripts/health_log.sh',
     'scripts/oom_containment.sh', 'tools/test_agent_jobs.py',

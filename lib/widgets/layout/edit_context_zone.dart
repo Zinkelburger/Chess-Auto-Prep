@@ -585,10 +585,10 @@ class _EditContextZoneState extends State<EditContextZone> {
       );
     }
 
-    if (controller.openingTree == null) return null;
+    if (controller.openingGraph == null) return null;
 
     return OpeningTreeWidget(
-      tree: controller.openingTree!,
+      tree: controller.openingGraph!,
       repertoireLines: controller.repertoireLines,
       currentMoveSequence: controller.currentMoveSequence,
       onMoveSelected: controller.userSelectedTreeMove,

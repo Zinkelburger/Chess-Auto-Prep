@@ -9,10 +9,10 @@
 /// warning to the run and the others carry on.
 library;
 
+import 'package:chess_auto_prep/chess_core/moves/opening_graph.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../models/explorer_response.dart';
-import '../../../models/opening_tree.dart';
 import '../../../services/eval/db_move_list.dart';
 import '../../../services/maia/maia_factory.dart';
 import '../../../services/probability_service.dart';
@@ -56,12 +56,12 @@ class MissingReplyFinder {
   final AuditConfig config;
 
   /// The repertoire, for transposition checks.
-  final OpeningTree tree;
+  final OpeningGraph tree;
 
   final EnginePositionProbe _probe;
   final void Function(String message) _warn;
   final ExternalMoveProvider? _chessDb;
-  final OpeningTree? _clashTree;
+  final OpeningGraph? _clashTree;
   final ProbabilityService _lichess;
 
   MaiaEvaluator? get _maia =>
@@ -295,7 +295,7 @@ class MissingReplyFinder {
   void _addClashGaps(
     RepertoireWalkEntry entry,
     _GapCollector gaps,
-    OpeningTree clashTree,
+    OpeningGraph clashTree,
   ) {
     final clashNodes = clashTree.fenToNodes[normalizeFen(entry.fen)];
     if (clashNodes == null) return;

@@ -114,7 +114,7 @@ void main() {
       await controller.setRepertoire(_meta('/gone.pgn'));
 
       expect(controller.repertoirePgn, isNull);
-      expect(controller.openingTree, isNull);
+      expect(controller.openingGraph, isNull);
       expect(controller.repertoireLines, isEmpty);
       expect(controller.moveHistory, isEmpty);
       expect(controller.loadError, isNull);
@@ -143,7 +143,7 @@ void main() {
 
       expect(controller.loadError, startsWith('Failed to load repertoire:'));
       expect(controller.repertoirePgn, isNull);
-      expect(controller.openingTree, isNull);
+      expect(controller.openingGraph, isNull);
       expect(controller.repertoireLines, isEmpty);
       expect(controller.isLoading, isFalse);
     });
@@ -169,8 +169,8 @@ void main() {
       await controller.setRepertoire(_meta('/empty.pgn'));
 
       expect(controller.repertoirePgn, '');
-      expect(controller.openingTree, isNotNull);
-      expect(controller.openingTree!.totalGames, 0);
+      expect(controller.openingGraph, isNotNull);
+      expect(controller.openingGraph!.totalGames, 0);
       expect(controller.repertoireLines, isEmpty);
     });
 
@@ -227,7 +227,7 @@ void main() {
 
       await controller.setRepertoire(_meta('/m.pgn'));
 
-      expect(controller.openingTree, isNotNull);
+      expect(controller.openingGraph, isNotNull);
       expect(controller.needsColorSelection, isFalse);
     });
   });
@@ -453,7 +453,7 @@ void main() {
 
       await controller.setRepertoire(_meta('/b.pgn'));
       final winnerLines = controller.repertoireLines;
-      final winnerTree = controller.openingTree;
+      final winnerTree = controller.openingGraph;
 
       gate.complete();
       await loadA;
@@ -461,7 +461,7 @@ void main() {
       // A had a full LoadedRepertoire in hand and had to drop all of it —
       // not just the parts an epoch check happened to sit in front of.
       expect(identical(controller.repertoireLines, winnerLines), isTrue);
-      expect(identical(controller.openingTree, winnerTree), isTrue);
+      expect(identical(controller.openingGraph, winnerTree), isTrue);
       expect(controller.repertoireLines.single.moves, [
         'd4',
         'Nf6',
