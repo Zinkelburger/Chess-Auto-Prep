@@ -95,6 +95,8 @@ class BuilderWorkspaceCodec
       throw const FormatException('Missing active Builder draft');
     final copies = <BuilderCopyUncertainty>[];
     for (final copy in (data['copies'] as List? ?? const [])) {
+      if (!keys.contains(copy['draftKey']))
+        throw const FormatException('Missing uncertain Builder copy draft');
       final installed = copy['installed'];
       copies.add(
         BuilderCopyUncertainty(

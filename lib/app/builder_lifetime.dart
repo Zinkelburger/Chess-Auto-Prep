@@ -39,16 +39,23 @@ class BuilderLifetime {
   Future<void>? _shutdown;
   Future<void> flushForClose() async {
     // Checkpoint precedes waiting for a source writer: failures retain work.
-    await recovery.flush();
-    await workspace.document.flushDocumentForClose();
-    await recovery.flush();
+    while (true) {
+      final revision = workspace.closeRevision;
+      await recovery.flush();
+      await workspace.settleActions();
+      await workspace.document.flushDocumentForClose();
+      await recovery.flush();
+      if (revision == workspace.closeRevision) return;
+    }
   }
 
   Future<void> shutdown() => _shutdown ??= _close();
   Future<void> _close() async {
+    workspace.beginShutdown();
     try {
       await flushForClose();
     } finally {
+      await workspace.settleActions();
       try {
         await recovery.shutdown();
       } finally {

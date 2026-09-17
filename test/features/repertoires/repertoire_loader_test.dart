@@ -1,4 +1,3 @@
-import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 /// Direct tests for the repertoire load path's pure pieces —
 /// [parseRepertoireHeaders], [upsertMetadataComment] — and for
 /// [RepertoireLoader.build] as a value-producing function.
@@ -7,6 +6,8 @@ import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 /// `RepertoireController`; these pin the header grammar (line endings, BOM,
 /// casing, where the block may live) and what a partly broken PGN yields.
 library;
+
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
 
 import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
 import 'package:chess_auto_prep/infrastructure/documents/legacy_pgn_document_store.dart';
@@ -175,7 +176,10 @@ void main() {
         LegacyPgnDocumentStore(storage),
       );
       expect(await loader.read('/gone.pgn'), isA<PgnMissing>());
-      expect((await loader.read('/empty.pgn') as PgnOpened).snapshot.content, '');
+      expect(
+        (await loader.read('/empty.pgn') as PgnOpened).snapshot.content,
+        '',
+      );
     });
   });
 

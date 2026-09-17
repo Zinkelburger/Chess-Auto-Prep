@@ -22,12 +22,15 @@ void main() {
 
   test('read distinguishes missing, empty and failed documents', () async {
     store.onOpen = (_) async => const PgnMissing();
-    expect(await repository.read('/main.pgn'), (exists: false, pgn: null));
+    expect(await repository.read('/main.pgn'), isA<PgnMissing>());
     store.current = snapshot('');
     store.onOpen = null;
-    expect(await repository.read('/main.pgn'), (exists: true, pgn: ''));
+    expect(
+      (await repository.read('/main.pgn') as PgnOpened).snapshot.content,
+      '',
+    );
     store.onOpen = (_) async => PgnReadFailed(StateError('read failed'));
-    await expectLater(repository.read('/main.pgn'), throwsStateError);
+    expect(await repository.read('/main.pgn'), isA<PgnReadFailed>());
   });
 
   test(

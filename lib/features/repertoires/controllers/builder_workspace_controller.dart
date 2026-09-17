@@ -99,9 +99,36 @@ class BuilderWorkspaceController extends ChangeNotifier
   Future<bool> Function(String)? _saveLine;
   int _editRevision = 0;
   bool _closed = false;
+  bool _shuttingDown = false;
+  int _actionRevision = 0;
+  final Set<Future<void>> _actions = {};
+
+  Future<T> _ownAction<T>(Future<T> Function() action) async {
+    if (_closed || _shuttingDown) throw StateError('Builder is closing.');
+    final settled = Completer<void>();
+    _actions.add(settled.future);
+    _actionRevision++;
+    try {
+      return await action();
+    } finally {
+      _actions.remove(settled.future);
+      _actionRevision++;
+      settled.complete();
+    }
+  }
+
+  /// Joins the complete action, including its final durable checkpoint.
+  Future<void> settleActions() async {
+    while (_actions.isNotEmpty) {
+      await Future.wait(_actions.toList());
+    }
+  }
+
+  void beginShutdown() => _shuttingDown = true;
+
   int get structureVersion => _documentRevision + board.structureVersion;
   Object get closeRevision =>
-      (document.closeRevision, board.revision, _editRevision);
+      (document.closeRevision, board.revision, _editRevision, _actionRevision);
   List<BuilderDraft> get retainedDrafts => List.unmodifiable(_drafts.values);
 
   void _withoutCapture(void Function() action) {
@@ -313,6 +340,11 @@ class BuilderWorkspaceController extends ChangeNotifier
   Future<void> saveDraftToChapter(
     BuilderDraft draft,
     RepertoireMetadata destination,
+  ) => _ownAction(() => _saveDraftToChapter(draft, destination));
+
+  Future<void> _saveDraftToChapter(
+    BuilderDraft draft,
+    RepertoireMetadata destination,
   ) async {
     if (_uncertainCopies.containsKey(draft.key) ||
         !_pendingCopies.add(draft.key)) {
@@ -405,7 +437,10 @@ class BuilderWorkspaceController extends ChangeNotifier
 
   /// A fresh native observation may prove installation or prove that the old
   /// namespace remains untouched. Equal PGN text by itself proves neither.
-  Future<PgnOpenResult> inspectCopy(BuilderCopyUncertainty copy) async {
+  Future<PgnOpenResult> inspectCopy(BuilderCopyUncertainty copy) =>
+      _ownAction(() => _inspectCopy(copy));
+
+  Future<PgnOpenResult> _inspectCopy(BuilderCopyUncertainty copy) async {
     if (_pendingCopies.contains(copy.draftKey))
       return PgnReadFailed(StateError('Copy still pending.'));
     final result = await document.documents.read(copy.destination);
@@ -439,7 +474,10 @@ class BuilderWorkspaceController extends ChangeNotifier
 
   /// Explicit user acknowledgement after inspecting the observed copy. No
   /// append is retried and no document bytes are changed by this decision.
-  Future<void> acknowledgeInspectedCopy(BuilderCopyUncertainty copy) async {
+  Future<void> acknowledgeInspectedCopy(BuilderCopyUncertainty copy) =>
+      _ownAction(() => _acknowledgeInspectedCopy(copy));
+
+  Future<void> _acknowledgeInspectedCopy(BuilderCopyUncertainty copy) async {
     if (_pendingCopies.contains(copy.draftKey) ||
         !identical(_uncertainCopies[copy.draftKey], copy) ||
         copy.outcome.observed == null)
@@ -537,6 +575,10 @@ class BuilderWorkspaceController extends ChangeNotifier
     _headers = Map.unmodifiable(parsePgnGame(draft.content).headers);
     _title = draft.title;
     _label = draft.label;
+    // Retain exact checkpoint bytes until a structural/title edit requires a
+    // new serialization; parser defaults are not an edit to a restored copy.
+    _serializedRevision = (board.structureVersion, _title, _headers);
+    _serializedContent = draft.content;
     _dirty = true;
     _editRevision++;
   }

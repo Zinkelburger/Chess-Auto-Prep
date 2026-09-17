@@ -56,6 +56,20 @@ class CopyDocuments extends MemoryDocuments {
   }
 }
 
+class GatedRecoveryStore extends MemoryBuilderRecoveryStore {
+  Future<void> Function(BuilderWorkspaceSnapshot)? beforeWrite;
+  bool closed = false;
+  @override
+  Future<void> write(BuilderWorkspaceSnapshot value) async {
+    expect(closed, isFalse);
+    await beforeWrite?.call(value);
+    await super.write(value);
+  }
+
+  @override
+  Future<void> close() async => closed = true;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late CopyDocuments documents;
@@ -405,6 +419,250 @@ void main() {
       },
     );
   }
+
+  test(
+    'copy intent is checkpointed before publication and survives an interrupted acknowledgement',
+    () async {
+      BuilderWorkspaceSnapshot? durable;
+      late BuilderWorkspaceController owner;
+      owner = BuilderWorkspaceController(
+        documents: documents,
+        decoder: const IsolateRepertoireDecoder(),
+        checkpoint: () async {
+          durable = owner.captureWorkspace();
+          expect(documents.appendCalls, 0);
+          throw StateError('process stopped before publication');
+        },
+      );
+      owner.composeMoves(['e4']);
+      final draft = owner.captureWorkspace().drafts.single;
+      await expectLater(
+        owner.saveDraftToChapter(draft, chapter('/b')),
+        throwsStateError,
+      );
+      expect(documents.appendCalls, 0);
+      owner.dispose();
+      final encoded = const BuilderWorkspaceCodec().encode(durable!);
+      final restarted = workspace();
+      addTearDown(restarted.dispose);
+      await restarted.restoreWorkspace(
+        const BuilderWorkspaceCodec().decode(encoded),
+      );
+      expect(restarted.uncertainCopies, hasLength(1));
+      await expectLater(
+        restarted.saveDraftToChapter(
+          restarted.captureWorkspace().drafts.single,
+          chapter('/b'),
+        ),
+        throwsStateError,
+      );
+      await restarted.inspectCopy(restarted.uncertainCopies.single);
+      // No prior native baseline: observing equal source text does not prove an interrupted append did not happen.
+      expect(restarted.uncertainCopies, hasLength(1));
+      expect(documents.appendCalls, 0);
+    },
+  );
+
+  test(
+    'uncertain native install is not repeated and a proven installed revision resolves it',
+    () async {
+      final owner = workspace();
+      addTearDown(owner.dispose);
+      owner.composeMoves(['e4']);
+      final draft = owner.captureWorkspace().drafts.single;
+      final before = (await documents.read('/b') as PgnOpened).snapshot;
+      documents.files['/b'] = '${before.content}\n\n${draft.content}\n';
+      final after = (await documents.read('/b') as PgnOpened).snapshot;
+      documents.appendOutcome = PgnWriteUncertain(
+        error: 'ack lost',
+        before: before,
+        observed: after,
+        installedRevision: after.revision,
+        recoveryPath: '/journal',
+      );
+      await owner.saveDraftToChapter(draft, chapter('/b'));
+      expect(owner.uncertainCopies, hasLength(1));
+      await expectLater(
+        owner.saveDraftToChapter(draft, chapter('/b')),
+        throwsStateError,
+      );
+      final encoded = const BuilderWorkspaceCodec().encode(
+        owner.captureWorkspace(),
+      );
+      final restarted = workspace();
+      addTearDown(restarted.dispose);
+      await restarted.restoreWorkspace(
+        const BuilderWorkspaceCodec().decode(encoded),
+      );
+      expect(restarted.uncertainCopies.single.outcome.recoveryPath, '/journal');
+      await restarted.inspectCopy(restarted.uncertainCopies.single);
+      expect(restarted.uncertainCopies, isEmpty);
+      expect(restarted.captureWorkspace().needsRecovery, isFalse);
+      expect(documents.appendCalls, 1);
+    },
+  );
+
+  test(
+    'uncertain equal-text observation needs explicit inspected-copy acknowledgement',
+    () async {
+      final owner = workspace();
+      addTearDown(owner.dispose);
+      owner.composeMoves(['e4']);
+      final draft = owner.captureWorkspace().drafts.single;
+      final before = (await documents.read('/b') as PgnOpened).snapshot;
+      documents.files['/b'] = '${before.content}\n\n${draft.content}\n';
+      final observed = (await documents.read('/b') as PgnOpened).snapshot;
+      documents.appendOutcome = PgnWriteUncertain(
+        error: 'unproven copy',
+        before: before,
+        observed: observed,
+      );
+      await owner.saveDraftToChapter(draft, chapter('/b'));
+      await owner.inspectCopy(owner.uncertainCopies.single);
+      expect(owner.uncertainCopies, hasLength(1));
+      await expectLater(
+        owner.saveDraftToChapter(draft, chapter('/b')),
+        throwsStateError,
+      );
+      await owner.acknowledgeInspectedCopy(owner.uncertainCopies.single);
+      expect(owner.captureWorkspace().needsRecovery, isFalse);
+      expect(documents.appendCalls, 1);
+    },
+  );
+
+  for (final copyFirst in [true, false]) {
+    test(
+      'close joins whole copy including checkpoint, copyFirst=$copyFirst',
+      () async {
+        final store = GatedRecoveryStore();
+        final lifetime = BuilderLifetime(
+          documents: documents,
+          decoder: const IsolateRepertoireDecoder(),
+          store: store,
+        );
+        final owner = lifetime.workspace;
+        owner.composeMoves(['e4']);
+        final draft = owner.captureWorkspace().drafts.single;
+        final firstEntered = Completer<void>();
+        final firstGate = Completer<void>();
+        final finalEntered = Completer<void>();
+        final finalGate = Completer<void>();
+        store.beforeWrite = (snapshot) async {
+          if (!firstEntered.isCompleted) {
+            firstEntered.complete();
+            await firstGate.future;
+          }
+          if (documents.appendCalls > 0 &&
+              snapshot.uncertainCopies.isEmpty &&
+              !finalEntered.isCompleted) {
+            finalEntered.complete();
+            await finalGate.future;
+          }
+        };
+        var closed = false;
+        late Future<void> copy;
+        late Future<void> close;
+        final before = owner.closeRevision;
+        if (copyFirst) {
+          copy = owner.saveDraftToChapter(draft, chapter('/b'));
+          await firstEntered.future;
+          close = lifetime.flushForClose().then((_) => closed = true);
+        } else {
+          close = lifetime.flushForClose().then((_) => closed = true);
+          await firstEntered.future;
+          copy = owner.saveDraftToChapter(draft, chapter('/b'));
+        }
+        expect(owner.closeRevision, isNot(before));
+        expect(documents.appendCalls, 0);
+        firstGate.complete();
+        await finalEntered.future;
+        expect(closed, isFalse);
+        final shutdown = lifetime.shutdown();
+        await Future<void>.delayed(Duration.zero);
+        expect(store.closed, isFalse);
+        finalGate.complete();
+        await Future.wait([copy, close, shutdown]);
+        expect(closed, isTrue);
+        expect(store.closed, isTrue);
+        expect(store.snapshot!.needsRecovery, isFalse);
+        expect(documents.appendCalls, 1);
+      },
+    );
+  }
+
+  test(
+    'shutdown joins pending inspection and its observation checkpoint',
+    () async {
+      final store = GatedRecoveryStore();
+      final lifetime = BuilderLifetime(
+        documents: documents,
+        decoder: const IsolateRepertoireDecoder(),
+        store: store,
+      );
+      final owner = lifetime.workspace;
+      owner.composeMoves(['e4']);
+      final draft = owner.captureWorkspace().drafts.single;
+      documents.appendOutcome = const PgnWriteUncertain(
+        error: 'lost reply',
+        before: null,
+        observed: null,
+      );
+      await owner.saveDraftToChapter(draft, chapter('/b'));
+      documents.readGate = Completer<void>();
+      documents.readStarted = Completer<void>();
+      final inspect = owner.inspectCopy(owner.uncertainCopies.single);
+      await documents.readStarted!.future;
+      final shutdown = lifetime.shutdown();
+      await Future<void>.delayed(Duration.zero);
+      expect(store.closed, isFalse);
+      documents.readGate!.complete();
+      await inspect;
+      await shutdown;
+      expect(store.closed, isTrue);
+      expect(
+        store.snapshot!.uncertainCopies.single.outcome.observed,
+        isNotNull,
+      );
+      await expectLater(
+        owner.acknowledgeInspectedCopy(owner.uncertainCopies.single),
+        throwsStateError,
+      );
+    },
+  );
+
+  test('shutdown joins explicit copy acknowledgement checkpoint', () async {
+    final store = GatedRecoveryStore();
+    final lifetime = BuilderLifetime(
+      documents: documents,
+      decoder: const IsolateRepertoireDecoder(),
+      store: store,
+    );
+    final owner = lifetime.workspace;
+    owner.composeMoves(['e4']);
+    final draft = owner.captureWorkspace().drafts.single;
+    final observed = (await documents.read('/b') as PgnOpened).snapshot;
+    documents.appendOutcome = PgnWriteUncertain(
+      error: 'lost reply',
+      before: null,
+      observed: observed,
+    );
+    await owner.saveDraftToChapter(draft, chapter('/b'));
+    final entered = Completer<void>();
+    final gate = Completer<void>();
+    store.beforeWrite = (_) async {
+      if (!entered.isCompleted) entered.complete();
+      await gate.future;
+    };
+    final ack = owner.acknowledgeInspectedCopy(owner.uncertainCopies.single);
+    await entered.future;
+    final shutdown = lifetime.shutdown();
+    await Future<void>.delayed(Duration.zero);
+    expect(store.closed, isFalse);
+    gate.complete();
+    await Future.wait([ack, shutdown]);
+    expect(store.closed, isTrue);
+    expect(store.snapshot!.needsRecovery, isFalse);
+  });
 
   test(
     'native recovery store reopens annotations, custom FEN and cursor after lifetime ends',
