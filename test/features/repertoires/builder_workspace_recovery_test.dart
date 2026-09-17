@@ -4,6 +4,7 @@ import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_doc
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:chess_auto_prep/app/builder_lifetime.dart';
 import 'package:chess_auto_prep/chess_core/moves/tree_path.dart';
 import 'package:chess_auto_prep/features/repertoires/controllers/builder_workspace_controller.dart';
@@ -799,13 +800,14 @@ void main() {
             '${'long annotation ' * 200}revision $i',
           );
           final pending = owner.saveActiveLine();
-          if (sharedPending != null)
+          if (sharedPending != null) {
             expect(identical(pending, sharedPending), isTrue);
+          }
           sharedPending = pending;
         }
         timer.stop();
         // This is a recorded workload, not a timing assertion on a shared host.
-        print(
+        debugPrint(
           'Builder250 edits x3200-char annotation: ${timer.elapsedMilliseconds}ms; ${slow.writes.length} active write, one shared pending completion',
         );
         expect(slow.writes, hasLength(1));

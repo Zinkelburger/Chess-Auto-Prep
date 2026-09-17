@@ -285,7 +285,7 @@ class BuilderWorkspaceController extends ChangeNotifier
       return false;
     } finally {
       _lineSaveCaptures.remove(saving);
-      _lineSaveCompletions.remove(saving);
+      unawaited(_lineSaveCompletions.remove(saving));
     }
   }
 

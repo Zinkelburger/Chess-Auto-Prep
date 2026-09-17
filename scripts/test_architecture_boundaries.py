@@ -118,7 +118,7 @@ class BoundariesTest(unittest.TestCase):
         self.assertTrue(violations('lib/features/documents/widgets/viewport.dart', 'Engine.instance.start();'))
 
     def test_builder_hosts_use_injected_document_boundaries(self):
-        for path in ('lib/features/repertoires/controllers/repertoire_controller.dart', 'lib/features/repertoires/controllers/repertoire_writer.dart'):
+        for path in ('lib/features/repertoires/controllers/builder_workspace_controller.dart', 'lib/features/repertoires/controllers/repertoire_writer.dart'):
             for uri in ('dart:io', 'dart:isolate', '../services/storage/storage_factory.dart', '../services/repertoire_file_editor.dart', '../infrastructure/repertoires/store.dart'):
                 self.assertTrue(violations(path, f"import '{uri}';"))
             self.assertTrue(violations(path, 'StorageFactory.instance.readFile(path);'))
