@@ -59,6 +59,8 @@ class RepertoireDocumentSession {
 
   String? _repertoirePgn;
   String? get repertoirePgn => _repertoirePgn;
+  PgnRevision? _sourceRevision;
+  PgnRevision? get sourceRevision => _sourceRevision;
 
   OpeningTree? _openingTree;
   OpeningGraph? _openingGraph;
@@ -323,6 +325,7 @@ class RepertoireDocumentSession {
       // external changes to other games that the line transaction preserved.
       final acknowledgedLines = _lineOriginals;
       _applyLoaded(loaded);
+      _sourceRevision = saved.snapshot?.revision;
       // Existing editor callbacks share these acknowledgements. Keep their
       // target preconditions across a refresh (including move-derived ids).
       for (final line in loaded.lines) {
@@ -463,6 +466,7 @@ class RepertoireDocumentSession {
   }) {
     if (updatedPgnContent != null) {
       _repertoirePgn = updatedPgnContent;
+      _sourceRevision = null;
     }
 
     final startFen = startingFen() ?? kStandardStartFen;
@@ -554,6 +558,7 @@ class RepertoireDocumentSession {
 
       _currentRepertoire = repertoire;
       _applyLoaded(loaded);
+      _sourceRevision = (read as PgnOpened).snapshot.revision;
       _resetTree();
       onNavigateToRoot();
     } catch (e) {
@@ -611,6 +616,7 @@ class RepertoireDocumentSession {
   Map<String, String> _lineOriginals = {};
 
   void _applyLoaded(LoadedRepertoire loaded) {
+    _sourceRevision = null;
     _lineOriginals = {for (final line in loaded.lines) line.id: line.fullPgn};
     _repertoirePgn = loaded.pgn;
     // Ownership crosses the decoder boundary once; retaining/mutating a

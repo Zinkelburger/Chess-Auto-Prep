@@ -118,6 +118,7 @@ Future<AppState> _pumpScreen(
   required String repertoirePath,
   Size size = const Size(1600, 1000),
   RepertoireDecoder decoder = const IsolateRepertoireDecoder(),
+  BuilderLifetime? restoredLifetime,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -142,10 +143,12 @@ Future<AppState> _pumpScreen(
         ),
         Provider<RepertoireDecoder>.value(value: decoder),
         Provider<BuilderLifetime>(
-          create: (ctx) => testBuilderLifetime(
-            documents: ctx.read<RepertoireDocumentRepository>(),
-            decoder: ctx.read<RepertoireDecoder>(),
-          ),
+          create: (ctx) =>
+              restoredLifetime ??
+              testBuilderLifetime(
+                documents: ctx.read<RepertoireDocumentRepository>(),
+                decoder: ctx.read<RepertoireDecoder>(),
+              ),
           dispose: (_, lifetime) => lifetime.dispose(),
         ),
       ],
@@ -233,6 +236,35 @@ void main() {
         find.textContaining('source changed or is missing'),
         findsOneWidget,
       );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'first mounted Builder adopts the already restored document outline',
+    (tester) async {
+      final path = _writeRepertoire(tester);
+      final lifetime = testBuilderLifetime();
+      await tester.runAsync(
+        () => lifetime.workspace.document.setRepertoire(
+          RepertoireMetadata(
+            filePath: path,
+            name: 'Main',
+            lastModified: DateTime(2026),
+          ),
+        ),
+      );
+      lifetime.workspace.composeMoves(['d4']);
+      lifetime.workspace.setTitle('Restored before route');
+      await _pumpScreen(
+        tester,
+        repertoirePath: path,
+        restoredLifetime: lifetime,
+      );
+      await _settleUntil(tester, find.text('Italian Game'));
+      expect(find.text('No repertoire open'), findsNothing);
+      expect(lifetime.workspace.title, 'Restored before route');
+      expect(lifetime.workspace.board.moveHistory, ['d4']);
       expect(tester.takeException(), isNull);
     },
   );

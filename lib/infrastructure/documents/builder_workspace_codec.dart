@@ -40,6 +40,13 @@ class BuilderWorkspaceCodec
           'key': d.key,
           'content': d.content,
           'sourcePgn': d.sourcePgn,
+          'sourceRevision': d.sourceRevision == null
+              ? null
+              : {
+                  'documentId': d.sourceRevision!.documentId,
+                  'nativeIdentity': d.sourceRevision!.nativeIdentity,
+                  'sha256': d.sourceRevision!.sha256,
+                },
           'lineId': d.lineId,
           'linePgn': d.linePgn,
           'title': d.title,
@@ -58,8 +65,9 @@ class BuilderWorkspaceCodec
   };
   @override
   BuilderWorkspaceSnapshot decode(Map<String, dynamic> data) {
-    if (data['version'] != 1)
+    if (data['version'] != 1) {
       throw const FormatException('Unsupported Builder recovery version');
+    }
     final drafts = <BuilderDraft>[];
     final keys = <String>{};
     for (final raw in data['drafts'] as List) {
@@ -82,6 +90,14 @@ class BuilderWorkspaceCodec
                 ),
           content: raw['content'] as String,
           sourcePgn: raw['sourcePgn'] as String?,
+          sourceRevision: raw['sourceRevision'] == null
+              ? null
+              : PgnRevision(
+                  documentId: raw['sourceRevision']['documentId'] as String,
+                  nativeIdentity:
+                      raw['sourceRevision']['nativeIdentity'] as String,
+                  sha256: raw['sourceRevision']['sha256'] as String,
+                ),
           lineId: raw['lineId'] as String?,
           linePgn: raw['linePgn'] as String?,
           title: raw['title'] as String,
@@ -91,12 +107,14 @@ class BuilderWorkspaceCodec
       );
     }
     final active = data['activeKey'] as String?;
-    if (active != null && !keys.contains(active))
+    if (active != null && !keys.contains(active)) {
       throw const FormatException('Missing active Builder draft');
+    }
     final copies = <BuilderCopyUncertainty>[];
     for (final copy in (data['copies'] as List? ?? const [])) {
-      if (!keys.contains(copy['draftKey']))
+      if (!keys.contains(copy['draftKey'])) {
         throw const FormatException('Missing uncertain Builder copy draft');
+      }
       final installed = copy['installed'];
       copies.add(
         BuilderCopyUncertainty(

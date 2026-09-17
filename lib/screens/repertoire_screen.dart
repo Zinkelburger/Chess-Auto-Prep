@@ -511,6 +511,9 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
       final appState = context.read<AppState>();
       _appState = appState;
       appState.addListener(_onAppStateChanged);
+      // Recovery may restore the application-owned workspace before this
+      // route is first mounted. Adopt its existing document presentation.
+      _onRepertoireChanged();
 
       if (appState.hasPending<OpenBuilder>()) {
         _onAppStateChanged();
@@ -1145,12 +1148,13 @@ class _RepertoireScreenState extends _RepertoireScreenStateBase
                     try {
                       await _controller.openRetainedDraft(draft);
                     } catch (error) {
-                      if (mounted)
+                      if (context.mounted) {
                         showAppSnackBar(
                           context,
                           AppLocalizations.of(context).builderDraftRetained,
                           isError: true,
                         );
+                      }
                     }
                   },
                   child: Padding(

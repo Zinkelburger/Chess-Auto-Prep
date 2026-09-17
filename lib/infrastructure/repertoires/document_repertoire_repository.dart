@@ -218,8 +218,22 @@ class DocumentRepertoireRepository implements RepertoireDocumentRepository {
     // Return the exact game a subsequent read will observe, including headers
     // retained by the merge; future saves advance only from this receipt.
     final savedGame = splitRepertoireDocument(updated).games[index];
-    _requireSaved(path, await documents.save(before, updated));
-    return (documentPgn: updated, linePgn: savedGame, lineIndex: index);
+    final snapshot = _requireSaved(
+      path,
+      await documents.save(before, updated),
+      expected: before,
+    );
+    if (snapshot.path != path ||
+        snapshot.content != updated ||
+        snapshot.revision.documentId != before.revision.documentId) {
+      throw StateError('Invalid line save acknowledgement');
+    }
+    return (
+      documentPgn: updated,
+      snapshot: snapshot,
+      linePgn: savedGame,
+      lineIndex: index,
+    );
   }
 
   @override

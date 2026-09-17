@@ -9,6 +9,7 @@ class BuilderDraft {
     required this.repertoire,
     required this.content,
     required this.sourcePgn,
+    this.sourceRevision,
     required this.lineId,
     required this.linePgn,
     required this.title,
@@ -19,6 +20,7 @@ class BuilderDraft {
   final RepertoireMetadata? repertoire;
   final String content;
   final String? sourcePgn;
+  final PgnRevision? sourceRevision;
   final String? lineId;
   final String? linePgn;
   final String title;
@@ -29,6 +31,7 @@ class BuilderDraft {
     repertoire: repertoire,
     content: content,
     sourcePgn: sourcePgn,
+    sourceRevision: sourceRevision,
     lineId: lineId,
     linePgn: linePgn,
     title: title,

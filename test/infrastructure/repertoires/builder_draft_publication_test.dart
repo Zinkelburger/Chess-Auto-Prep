@@ -116,8 +116,9 @@ void main() {
         NativePgnDocumentStore(
           writer: AtomicFileWriter(
             testHook: (step) async {
-              if (step == AtomicWriteStep.tempFlushed)
+              if (step == AtomicWriteStep.tempFlushed) {
                 throw StateError('stage failed');
+              }
             },
           ),
         ),
@@ -136,8 +137,9 @@ void main() {
       final repository = DocumentRepertoireRepository(
         NativePgnDocumentStore(
           flushDirectory: (path) async {
-            if (path == root.path)
+            if (path == root.path) {
               throw StateError('directory acknowledgement lost');
+            }
             await syncDirectory(path);
           },
         ),

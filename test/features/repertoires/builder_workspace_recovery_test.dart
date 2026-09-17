@@ -30,8 +30,9 @@ class CopyDocuments extends MemoryDocuments {
   Future<PgnWriteResult> appendPgn(String path, String content) async {
     appendCalls++;
     final opened = await read(path);
-    if (opened is! PgnOpened)
+    if (opened is! PgnOpened) {
       return PgnWriteFailed(StateError('Missing destination'));
+    }
     final before = opened.snapshot;
     await saveGate?.future;
     if (appendOutcome case final outcome?) return outcome;
@@ -50,8 +51,9 @@ class CopyDocuments extends MemoryDocuments {
     required String expectedContent,
   }) async {
     await saveGate?.future;
-    if (files[path] != expectedContent)
+    if (files[path] != expectedContent) {
       throw StateError('Concurrent destination change');
+    }
     files[path] = content;
   }
 }
@@ -701,6 +703,45 @@ void main() {
       );
       expect(documents.files['/a'], original);
       expect(documents.files['/b'], contains('retained annotation'));
+    },
+  );
+
+  test(
+    'older checkpoint without native source evidence remains detached despite equal source text',
+    () async {
+      final first = workspace();
+      await first.document.setRepertoire(chapter('/a'));
+      final line = first.document.repertoireLines.single;
+      final snapshot = BuilderWorkspaceSnapshot(
+        activeKey: 'old',
+        drafts: [
+          BuilderDraft(
+            key: 'old',
+            repertoire: chapter('/a'),
+            content: line.fullPgn,
+            sourcePgn: first.document.repertoirePgn,
+            lineId: line.id,
+            linePgn: line.fullPgn,
+            title: 'Old checkpoint',
+            cursor: const [],
+          ),
+        ],
+      );
+      first.dispose();
+      final decoded = const BuilderWorkspaceCodec().decode(
+        const BuilderWorkspaceCodec().encode(snapshot),
+      );
+      final restarted = workspace();
+      addTearDown(restarted.dispose);
+      await restarted.restoreWorkspace(decoded);
+      expect(
+        restarted.document.repertoirePgn,
+        snapshot.drafts.single.sourcePgn,
+      );
+      expect(restarted.sourceChanged, isTrue);
+      expect(restarted.document.selectedPgnLine, isNull);
+      expect(await restarted.saveActiveLine(), isFalse);
+      expect(documents.files['/a'], pgn);
     },
   );
 

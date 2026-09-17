@@ -55,7 +55,12 @@ class MemoryDocuments implements RepertoireDocumentRepository {
     if (failure case final error?) throw error;
     if (files[path] != expectedContent) return null;
     files[path] = content;
-    return (documentPgn: content, linePgn: content, lineIndex: 0);
+    return (
+      documentPgn: content,
+      snapshot: (await read(path) as PgnOpened).snapshot,
+      linePgn: content,
+      lineIndex: 0,
+    );
   }
 
   @override

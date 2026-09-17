@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:chess_auto_prep/features/documents/models/pgn_document.dart';
+import 'package:chess_auto_prep/features/repertoires/repositories/repertoire_document_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:chess_auto_prep/app/builder_lifetime.dart';
@@ -10,6 +12,26 @@ import 'package:chess_auto_prep/infrastructure/documents/file_workspace_recovery
 import 'package:chess_auto_prep/infrastructure/documents/builder_workspace_codec.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/document_repertoire_repository.dart';
 import 'package:chess_auto_prep/infrastructure/repertoires/isolate_repertoire_decoder.dart';
+
+class FailingLineDocuments extends DocumentRepertoireRepository {
+  FailingLineDocuments(super.documents);
+  bool failWrites = false;
+  @override
+  Future<RepertoireLineSaveReceipt?> updateLineContent(
+    String path,
+    String lineId,
+    String content, {
+    required String expectedContent,
+  }) {
+    if (failWrites) throw StateError('scripted line write failure');
+    return super.updateLineContent(
+      path,
+      lineId,
+      content,
+      expectedContent: expectedContent,
+    );
+  }
+}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -82,4 +104,86 @@ void main() {
       await third.shutdown();
     },
   );
+  for (final replaceIdentity in [false, true]) {
+    testWidgets(
+      'recovery native source authorization after acknowledged save, replacement=$replaceIdentity',
+      (tester) async {
+        final root = await Directory.systemTemp.createTemp(
+          'builder-source-identity',
+        );
+        addTearDown(() => root.delete(recursive: true));
+        final file = File('${root.path}/source.pgn');
+        final store = NativePgnDocumentStore();
+        await store.create(file.path, '[Event "Original"]\n\n1. e4 e5 *');
+        final repository = FailingLineDocuments(store);
+        BuilderLifetime lifetime() => BuilderLifetime(
+          documents: repository,
+          decoder: const IsolateRepertoireDecoder(),
+          store: FileWorkspaceRecoveryStore<BuilderWorkspaceSnapshot>(
+            directory: () async => Directory('${root.path}/recovery'),
+            codec: const BuilderWorkspaceCodec(),
+          ),
+        );
+        final first = lifetime();
+        await first.workspace.document.setRepertoire(
+          RepertoireMetadata(
+            filePath: file.path,
+            name: 'Source',
+            lastModified: DateTime(2026),
+          ),
+        );
+        first.workspace.selectLine(
+          first.workspace.document.repertoireLines.single,
+        );
+        first.workspace.setTitle('Acknowledged title');
+        await first.workspace.document.flushDocumentForClose();
+        final acknowledged =
+            (await repository.read(file.path) as PgnOpened).snapshot;
+        expect(first.workspace.document.sourceRevision, acknowledged.revision);
+        repository.failWrites = true;
+        first.workspace.board.setCommentAtPath(
+          const TreePath([0]),
+          'Retained failed edit',
+        );
+        await expectLater(first.shutdown(), throwsStateError);
+        final original = await file.readAsString();
+        if (replaceIdentity) {
+          final replacement = File('${root.path}/replacement.pgn');
+          await replacement.writeAsString(original, flush: true);
+          await replacement.rename(file.path);
+          expect(
+            (await repository.read(file.path) as PgnOpened).snapshot.revision,
+            isNot(acknowledged.revision),
+          );
+        }
+        repository.failWrites = false;
+        final second = lifetime();
+        while (second.recovery.loading) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        expect(
+          await second.recovery.restore(second.recovery.listing.entries.single),
+          isTrue,
+        );
+        expect(second.workspace.sourceChanged, replaceIdentity);
+        expect(
+          second.workspace.document.selectedPgnLine == null,
+          replaceIdentity,
+        );
+        expect(
+          second.workspace.board.tree.toPgnMoveText(),
+          contains('Retained failed edit'),
+        );
+        second.workspace.setTitle('After restart');
+        await second.workspace.document.flushDocumentForClose();
+        if (replaceIdentity) {
+          expect(await file.readAsString(), original);
+        } else {
+          expect(await file.readAsString(), contains('After restart'));
+          expect(await file.readAsString(), contains('Retained failed edit'));
+        }
+        await second.shutdown();
+      },
+    );
+  }
 }

@@ -5,6 +5,7 @@ import '../models/repertoire_mutation_receipt.dart';
 /// advance their full-document baseline only from this committed result.
 typedef RepertoireLineSaveReceipt = ({
   String documentPgn,
+  PgnSnapshot? snapshot,
   String linePgn,
   int lineIndex,
 });

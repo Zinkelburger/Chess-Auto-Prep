@@ -213,6 +213,9 @@ class BuilderWorkspaceController extends ChangeNotifier
       repertoire: detached?.repertoire ?? document.currentRepertoire,
       content: _content(),
       sourcePgn: detached?.sourcePgn ?? document.repertoirePgn,
+      sourceRevision: detached != null
+          ? detached.sourceRevision
+          : document.sourceRevision,
       lineId: detached?.lineId ?? document.selectedPgnLine?.id,
       linePgn: detached?.linePgn ?? document.selectedPgnLine?.fullPgn,
       title: _title,
@@ -239,8 +242,9 @@ class BuilderWorkspaceController extends ChangeNotifier
     final key = _key;
     final content = _content();
     try {
-      if (!await save(content))
+      if (!await save(content)) {
         throw StateError('The original line is unavailable.');
+      }
       if (_closed) return true;
       if (_drafts[key]?.content == content) _drafts.remove(key);
       if (revision == _editRevision && key == _activeKey) {
@@ -331,11 +335,12 @@ class BuilderWorkspaceController extends ChangeNotifier
 
   void deleteDraftBranch(TreePath path) {
     final edit = board.deleteAtPath(path);
-    if (edit != null)
+    if (edit != null) {
       writer.recordDraftUndo(
         isCurrent: () => board.canRestore(edit),
         restore: () => board.restore(edit),
       );
+    }
   }
 
   Future<void> saveDraftToChapter(
@@ -424,8 +429,9 @@ class BuilderWorkspaceController extends ChangeNotifier
 
   void _resolveCopiedDraft(BuilderCopyUncertainty copy) {
     _uncertainCopies.remove(copy.draftKey);
-    if (_drafts[copy.draftKey]?.content == copy.content)
+    if (_drafts[copy.draftKey]?.content == copy.content) {
       _drafts.remove(copy.draftKey);
+    }
     if (_activeKey == copy.draftKey && _content() == copy.content) {
       _dirty = false;
       saveError = null;
@@ -442,8 +448,9 @@ class BuilderWorkspaceController extends ChangeNotifier
       _ownAction(() => _inspectCopy(copy));
 
   Future<PgnOpenResult> _inspectCopy(BuilderCopyUncertainty copy) async {
-    if (_pendingCopies.contains(copy.draftKey))
+    if (_pendingCopies.contains(copy.draftKey)) {
       return PgnReadFailed(StateError('Copy still pending.'));
+    }
     final result = await document.documents.read(copy.destination);
     if (!identical(_uncertainCopies[copy.draftKey], copy)) return result;
     if (result case PgnOpened(:final snapshot)) {
@@ -481,8 +488,9 @@ class BuilderWorkspaceController extends ChangeNotifier
   Future<void> _acknowledgeInspectedCopy(BuilderCopyUncertainty copy) async {
     if (_pendingCopies.contains(copy.draftKey) ||
         !identical(_uncertainCopies[copy.draftKey], copy) ||
-        copy.outcome.observed == null)
+        copy.outcome.observed == null) {
       return;
+    }
     _resolveCopiedDraft(copy);
     notifyListeners();
     await checkpoint();
@@ -548,13 +556,17 @@ class BuilderWorkspaceController extends ChangeNotifier
           document.loadError != null ||
           document.currentRepertoire != draft.repertoire;
     }
-    // Only an exact source match may reattach a recovered editor to autosave.
-    // Changed/missing sources retain the tree as scratch for an explicit save.
+    // Native identity and raw bytes evidence authorize reattachment. Decoded
+    // text equality and older checkpoints without evidence cannot do so.
     RepertoireLine? target;
-    if (!sourceUnavailable && document.repertoirePgn == draft.sourcePgn) {
+    if (!sourceUnavailable &&
+        draft.sourceRevision != null &&
+        document.sourceRevision == draft.sourceRevision &&
+        document.repertoirePgn == draft.sourcePgn) {
       for (final line in document.repertoireLines) {
-        if (line.id == draft.lineId && line.fullPgn == draft.linePgn)
+        if (line.id == draft.lineId && line.fullPgn == draft.linePgn) {
           target = line;
+        }
       }
     }
     sourceChanged =

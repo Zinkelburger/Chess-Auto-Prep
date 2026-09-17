@@ -267,12 +267,13 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
       );
       if (keep == true) await _controller.acknowledgeInspectedCopy(current);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         showAppSnackBar(
           context,
           AppLocalizations.of(context).builderCopyRetained,
           isError: true,
         );
+      }
     }
   }
 
@@ -296,12 +297,13 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
     try {
       await _controller.saveDraftToChapter(draft, chapters.first);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         showAppSnackBar(
           context,
           AppLocalizations.of(context).builderDraftRetained,
           isError: true,
         );
+      }
     }
     _reclaimFocus();
   }
@@ -569,8 +571,9 @@ mixin _RepertoireSessionHandlers on _RepertoireScreenStateBase {
 
   /// Switches the active chapter from the breadcrumb dropdown.
   Future<void> _onChapterSelected(RepertoireMetadata chapter) async {
-    if (chapter.filePath == _controller.document.currentRepertoire?.filePath)
+    if (chapter.filePath == _controller.document.currentRepertoire?.filePath) {
       return;
+    }
     await _controller.document.setRepertoire(chapter);
     _reclaimFocus();
   }
